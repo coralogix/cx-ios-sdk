@@ -3,7 +3,7 @@ Coralogix RUM SDK for iOS
 
 ## Installation
 
-To install this package, import `url here` in spm.
+To install this package, import `git@github.com:coralogix/cx-ios-sdk` in spm.
 
 ```swift
         let options = CoralogixExporterOptions(coralogixDomain: CoralogixDomain,
