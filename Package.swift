@@ -30,7 +30,8 @@ let package = Package(
                 .product(name: "OpenTelemetryProtocolExporter", package: "opentelemetry-swift"),
                 .product(name: "SignPostIntegration", package: "opentelemetry-swift"),
                 .product(name: "CrashReporter", package: "PLCrashReporter")
-            ]),
+            ],
+            path: "CoralogixRum/Sources/"),
         .testTarget(
             name: "CoralogixRumTests",
             dependencies: ["CoralogixRum"])
