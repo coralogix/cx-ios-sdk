@@ -20,7 +20,7 @@ public struct UserContext {
         self.userMetadata = userMetadata
     }
     
-    func getDictionary() -> [String: Any] {
+    public func getDictionary() -> [String: Any] {
         return [Keys.userId.rawValue: self.userId,
                 Keys.userName.rawValue: self.userName,
                 Keys.userEmail.rawValue: self.userEmail,

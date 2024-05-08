@@ -9,6 +9,7 @@ import Foundation
 import OpenTelemetrySdk
 import OpenTelemetryApi
 
+
 struct SessionContext {
     let sessionId: String
     let sessionCreationDate: TimeInterval
@@ -20,8 +21,8 @@ struct SessionContext {
     let userEmail: String
     let userMetadata: [String: String]?
     
-    init(otel: SpanData, versionMetadata: VersionMetadata, sessionMetadata: SessionMetadata, userMetadata: [String: String]?) {
-        if let pid = otel.attributes[Keys.pid.rawValue]?.description,
+    init(otel: SpanDataProtocol, versionMetadata: VersionMetadata, sessionMetadata: SessionMetadata, userMetadata: [String: String]?) {
+      if let pid = otel.getAttribute(forKey: Keys.pid.rawValue) as? String,
            let oldPid = sessionMetadata.oldPid,
            pid == oldPid,
            let oldSessionId = sessionMetadata.oldSessionId,
@@ -35,9 +36,9 @@ struct SessionContext {
         self.operatingSystem = Global.getOs()
         self.osVersion = Global.osVersionInfo()
         self.device = Global.getDeviceModel()
-        self.userId = otel.attributes[Keys.userId.rawValue]?.description ?? ""
-        self.userName = otel.attributes[Keys.userName.rawValue]?.description ?? ""
-        self.userEmail = otel.attributes[Keys.userEmail.rawValue]?.description ?? "" 
+        self.userId = otel.getAttribute(forKey: Keys.userId.rawValue) as? String ?? ""
+        self.userName = otel.getAttribute(forKey: Keys.userName.rawValue) as? String ?? ""
+        self.userEmail = otel.getAttribute(forKey: Keys.userEmail.rawValue) as? String ?? ""
         self.userMetadata = userMetadata
     }
     
