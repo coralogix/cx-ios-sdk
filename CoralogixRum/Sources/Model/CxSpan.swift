@@ -1,6 +1,5 @@
 //
 //  CxSpan.swift
-//  Elastiflix-iOS
 //
 //  Created by Coralogix DEV TEAM on 28/03/2024.
 //
@@ -14,10 +13,10 @@ public class CxSpan {
     let subsystemName: String
     let isErrorWithStacktrace: Bool = false
     var severity: Int = 0
-    let timeStamp: TimeInterval
+    var timeStamp: TimeInterval = 0
     let cxRum: CxRum
     
-    init(otelSpan: SpanData,
+    init(otelSpan: SpanDataProtocol,
          versionMetadata: VersionMetadata,
          sessionManager: SessionManager,
          userMetadata: [String: String]?,
@@ -25,11 +24,13 @@ public class CxSpan {
         self.applicationName = versionMetadata.appName
         self.versionMetadata = versionMetadata
         self.subsystemName = Keys.cxRum.rawValue
-        if let severity = otelSpan.attributes[Keys.severity.rawValue]?.description {
+        if let severity = otelSpan.getAttribute(forKey: Keys.severity.rawValue) as? String {
             self.severity = Int(severity) ?? 0
         }
-        self.timeStamp = otelSpan.startTime.timeIntervalSince1970
-        self.cxRum = CxRum(otelSpan: otelSpan,
+        if let timeStamp = otelSpan.getStartTime() {
+            self.timeStamp = timeStamp
+        }
+        self.cxRum = CxRum(otel: otelSpan,
                            versionMetadata: versionMetadata,
                            sessionManager: sessionManager,
                            userMetadata: userMetadata,

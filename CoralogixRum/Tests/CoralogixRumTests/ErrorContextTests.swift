@@ -2,7 +2,7 @@
 //  ErrorContextTests.swift
 //  
 //
-//  Created by Tomer Har Yoffi on 08/05/2024.
+//  Created by Coralogix DEV TEAM on 08/05/2024.
 //
 
 import XCTest

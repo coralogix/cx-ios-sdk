@@ -1,6 +1,5 @@
 //
 //  LogContext.swift
-//  Elastiflix-iOS
 //
 //  Created by Coralogix DEV TEAM on 28/03/2024.
 //

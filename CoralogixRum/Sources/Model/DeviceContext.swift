@@ -13,9 +13,9 @@ struct DeviceContext {
     let networkConnectionType: String
     let networkConnectionSubtype: String
     
-    init(otel: SpanData) {
-        self.networkConnectionType = otel.attributes[SemanticAttributes.networkConnectionType.rawValue]?.description ?? ""
-        self.networkConnectionSubtype = otel.attributes[SemanticAttributes.networkConnectionSubtype.rawValue]?.description ?? ""
+    init(otel: SpanDataProtocol) {
+        self.networkConnectionType = otel.getAttribute(forKey: SemanticAttributes.networkConnectionType.rawValue) as? String ?? ""
+        self.networkConnectionSubtype = otel.getAttribute(forKey: SemanticAttributes.networkConnectionSubtype.rawValue) as? String ?? ""
     }
     
     func getDictionary() -> [String: Any] {

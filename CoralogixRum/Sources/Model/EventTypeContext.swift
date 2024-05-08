@@ -1,6 +1,5 @@
 //
 //  EventTypeContext.swift
-//  Elastiflix-iOS
 //
 //  Created by Coralogix DEV TEAM on 01/04/2024.
 //
@@ -32,7 +31,7 @@ struct EventTypeContext {
         self.host = otel.getAttribute(forKey: SemanticAttributes.netPeerName.rawValue) as? String ?? ""
         self.schema = otel.getAttribute(forKey: SemanticAttributes.httpScheme.rawValue) as? String ?? ""
         self.statusText = otel.getStatus() ?? ""
-        self.duration = otel.getDuration() ?? 0
+        self.duration = otel.getEndTime() ?? 0
         self.responseContentLength = otel.getAttribute(forKey: SemanticAttributes.httpResponseBodySize.rawValue) as? String ?? ""
     }
     
