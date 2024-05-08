@@ -23,29 +23,29 @@ struct ErrorContext {
     let baseAddress: String
     let arch: String
     
-    init(otel: SpanData) {
-        self.domain = otel.attributes[Keys.domain.rawValue]?.description ?? ""
-        self.code = otel.attributes[Keys.code.rawValue]?.description ?? ""
-        self.localizedDescription = otel.attributes[Keys.localizedDescription.rawValue]?.description ?? ""
-        if let jsonString = otel.attributes[Keys.userInfo.rawValue]?.description,
+    init(otel: SpanDataProtocol) {
+        self.domain = otel.getAttribute(forKey: Keys.domain.rawValue) as? String ?? ""
+        self.code = otel.getAttribute(forKey: Keys.code.rawValue) as? String ?? ""
+        self.localizedDescription = otel.getAttribute(forKey: Keys.localizedDescription.rawValue) as? String ?? ""
+        if let jsonString = otel.getAttribute(forKey: Keys.userInfo.rawValue) as? String,
            let dict = Helper.convertJsonStringToDict(jsonString: jsonString) {
             self.userInfo = dict
         }
         
-        self.exceptionType = otel.attributes[Keys.exceptionType.rawValue]?.description ?? ""
-        self.crashTimestamp = otel.attributes[Keys.crashTimestamp.rawValue]?.description ?? ""
-        self.processName = otel.attributes[Keys.processName.rawValue]?.description ?? ""
-        self.applicationIdentifier = otel.attributes[Keys.applicationIdentifier.rawValue]?.description ?? ""
-        if let triggeredByThread = otel.attributes[Keys.triggeredByThread.rawValue]?.description {
+        self.exceptionType = otel.getAttribute(forKey: Keys.exceptionType.rawValue) as? String ?? ""
+        self.crashTimestamp = otel.getAttribute(forKey: Keys.crashTimestamp.rawValue) as? String ?? ""
+        self.processName = otel.getAttribute(forKey: Keys.processName.rawValue) as? String ?? ""
+        self.applicationIdentifier = otel.getAttribute(forKey: Keys.applicationIdentifier.rawValue) as? String ?? ""
+        if let triggeredByThread = otel.getAttribute(forKey: Keys.triggeredByThread.rawValue) as? String {
             self.triggeredByThread = Int(triggeredByThread) ?? -1
         }
         
-        if let jsonString = otel.attributes[Keys.originalStackTrace.rawValue]?.description,
+        if let jsonString = otel.getAttribute(forKey: Keys.originalStackTrace.rawValue) as? String,
            let data = Helper.convertJsonStringToArray(jsonString: jsonString) {
             self.originalStackTrace = data
         }
-        self.baseAddress = otel.attributes[Keys.baseAddress.rawValue]?.description ?? ""
-        self.arch = otel.attributes[Keys.arch.rawValue]?.description ?? ""
+        self.baseAddress = otel.getAttribute(forKey: Keys.baseAddress.rawValue) as? String ?? ""
+        self.arch = otel.getAttribute(forKey: Keys.arch.rawValue) as? String ?? ""
     }
     
     func getDictionary() -> [String: Any] {

@@ -13,14 +13,14 @@ struct EventContext {
     let source: String
     var severity: Int = 0
     
-    init(otel: SpanData) {
-        if let type = otel.attributes[Keys.eventType.rawValue]?.description {
+    init(otel: SpanDataProtocol) {
+        if let type = otel.getAttribute(forKey: Keys.eventType.rawValue) as? String {
             self.type = CoralogixEventType(rawValue: type) ?? .unknown
         }
         
-        self.source = otel.attributes[Keys.source.rawValue]?.description ?? ""
+        self.source = otel.getAttribute(forKey: Keys.source.rawValue) as? String ?? ""
         
-        if let severity = otel.attributes[Keys.severity.rawValue]?.description {
+        if let severity = otel.getAttribute(forKey:Keys.severity.rawValue) as? String {
             self.severity = Int(severity) ?? 0
         }
     }
