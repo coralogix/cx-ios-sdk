@@ -77,21 +77,6 @@ final class SessionContextTests: XCTestCase {
         XCTAssertEqual(prevDictionary[Keys.sessionId.rawValue] as? String, "session_001")
         XCTAssertEqual(prevDictionary[Keys.sessionCreationDate.rawValue] as? Int, 1609459200.milliseconds)
     }
-    
-    
-    class MockSpanData: SpanDataProtocol {
-        var attributes: [String: Any] = [:]
-
-        func getAttribute(forKey: String) -> Any? {
-            let attribute = attributes[forKey] as? AttributeValue
-            return attribute?.description
-        }
-
-        // Add initializer or other methods to set up the mock data as needed
-        init(attributes: [String: Any]) {
-            self.attributes = attributes
-        }
-    }
 }
 
 
