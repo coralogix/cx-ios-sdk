@@ -12,7 +12,6 @@ import OpenTelemetryApi
 @testable import CoralogixRum
 
 final class SessionContextTests: XCTestCase {
-    
     // Mock classes or structures if necessary
     var mockSpanData: SpanDataProtocol!
     var versionMetadata: VersionMetadata!
@@ -23,9 +22,9 @@ final class SessionContextTests: XCTestCase {
         mockSpanData = MockSpanData(attributes: [Keys.userId.rawValue: AttributeValue("12345"),
                                                  Keys.userName.rawValue: AttributeValue("John Doe"),
                                                  Keys.userEmail.rawValue: AttributeValue("john.doe@example.com")])
-        
         sessionMetadata = SessionMetadata(sessionId: "session_001",
-                                          sessionCreationDate: TimeInterval(1609459200))
+                                          sessionCreationDate: TimeInterval(1609459200),
+                                          keychain: MockKeyschainManager())
         versionMetadata = VersionMetadata(appName: "test-app", appVersion: "1.1.1")
     }
 

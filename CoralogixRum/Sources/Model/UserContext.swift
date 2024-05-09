@@ -6,7 +6,7 @@
 
 import Foundation
 
-public struct UserContext {
+public struct UserContext: Equatable {
     let userId: String
     let userName: String
     let userEmail: String
@@ -24,5 +24,9 @@ public struct UserContext {
                 Keys.userName.rawValue: self.userName,
                 Keys.userEmail.rawValue: self.userEmail,
                 Keys.userMetadata.rawValue: self.userMetadata]
+    }
+    
+    public static func == (lhs: UserContext, rhs: UserContext) -> Bool {
+        return lhs.userId == rhs.userId && lhs.userName == rhs.userName
     }
 }

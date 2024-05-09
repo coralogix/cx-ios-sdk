@@ -58,16 +58,23 @@ public struct VersionMetadata {
     }
 }
 
+protocol KeyChainProtocol {
+    func readStringFromKeychain(service: String, key: String) -> String?
+    func writeStringToKeychain(service: String, key: String, value: String)
+}
+
 public struct SessionMetadata {
     var sessionId: String
     var sessionCreationDate: TimeInterval
     var oldPid: String?
     var oldSessionId: String?
     var oldSessionTimeInterval: TimeInterval?
+    var keyChain: KeyChainProtocol?
     
-    init(sessionId: String, sessionCreationDate: TimeInterval) {
+    init(sessionId: String, sessionCreationDate: TimeInterval, keychain: KeyChainProtocol) {
         self.sessionId = sessionId
         self.sessionCreationDate = sessionCreationDate
+        self.keyChain = keychain
         self.loadPrevSession()
     }
     
@@ -81,9 +88,11 @@ public struct SessionMetadata {
         let keyPid = "pid"
         let keySessionId = "sessionId"
         let keySessionTimeInterval =  "sessionTimeInterval"
-        if let oldPid = self.readStringFromKeychain(service: service, key: keyPid),
-           let oldSessionId = self.readStringFromKeychain(service: service, key: keySessionId),
-           let oldSessionTimeInterval = self.readStringFromKeychain(service: service, key: keySessionTimeInterval) {
+        let newPid = getpid()
+        
+        if let oldPid = keyChain?.readStringFromKeychain(service: service, key: keyPid),
+           let oldSessionId = keyChain?.readStringFromKeychain(service: service, key: keySessionId),
+           let oldSessionTimeInterval = keyChain?.readStringFromKeychain(service: service, key: keySessionTimeInterval) {
             Log.d("OLD Process ID:\(oldPid)")
             Log.d("OLD Session ID:\(oldSessionId)")
             Log.d("OLD Session TimeInterval:\(oldSessionTimeInterval)")
@@ -92,63 +101,12 @@ public struct SessionMetadata {
             self.oldSessionTimeInterval = TimeInterval(oldSessionTimeInterval)
         }
         
-        let newPid = getpid()
         Log.d("NEW Process ID:\(newPid)")
         Log.d("NEW Session ID:\(sessionId)")
         Log.d("NEW Session TimeInterval:\(sessionCreationDate)")
 
-        saveStringToKeychain(service: service, key: keyPid, value: String(newPid))
-        saveStringToKeychain(service: service, key: keySessionId, value: sessionId)
-        saveStringToKeychain(service: service, key: keySessionTimeInterval, value: String(sessionCreationDate))
-    }
-    
-    // Function to read a string from Keychain
-    private func readStringFromKeychain(service: String, key: String) -> String? {
-        // Create the Keychain query dictionary
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: key,
-            kSecMatchLimit as String: kSecMatchLimitOne,
-            kSecReturnData as String: true
-        ]
-        
-        // Retrieve the item from the Keychain
-        var result: AnyObject?
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
-        guard status == errSecSuccess,
-              let data = result as? Data,
-              let stringValue = String(data: data, encoding: .utf8) else {
-            Log.e("Failed to read data from Keychain")
-            return nil
-        }
-        
-        return stringValue
-    }
-    
-    // Function to save a string into Keychain
-    private func saveStringToKeychain(service: String, key: String, value: String) {
-        // Convert the string value to Data
-        guard let data = value.data(using: .utf8) else {
-            Log.e("Failed to convert string to data")
-            return
-        }
-        
-        // Create the Keychain query dictionary
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: key,
-            kSecValueData as String: data
-        ]
-        
-        // Delete existing item before adding new one
-        SecItemDelete(query as CFDictionary)
-        
-        // Add the item to the Keychain
-        let status = SecItemAdd(query as CFDictionary, nil)
-        if status != errSecSuccess {
-            Log.e("Failed to save data to Keychain")
-        }
+        keyChain?.writeStringToKeychain(service: service, key: keyPid, value: String(newPid))
+        keyChain?.writeStringToKeychain(service: service, key: keySessionId, value: sessionId)
+        keyChain?.writeStringToKeychain(service: service, key: keySessionTimeInterval, value: String(sessionCreationDate))
     }
 }
