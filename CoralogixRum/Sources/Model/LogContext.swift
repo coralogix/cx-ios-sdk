@@ -1,6 +1,5 @@
 //
 //  LogContext.swift
-//  Elastiflix-iOS
 //
 //  Created by Coralogix DEV TEAM on 28/03/2024.
 //
@@ -12,9 +11,9 @@ struct LogContext {
     let message: String
     var data: [String: Any]?
     
-    init(otel: SpanData) {
-        self.message = otel.attributes[Keys.message.rawValue]?.description ?? ""
-        let jsonString = otel.attributes[Keys.data.rawValue]?.description ?? ""
+    init(otel: SpanDataProtocol) {
+        self.message = otel.getAttribute(forKey: Keys.message.rawValue) as? String ?? ""
+        let jsonString = otel.getAttribute(forKey: Keys.data.rawValue) as? String ?? ""
 
         if let data = Helper.convertJsonStringToDict(jsonString: jsonString) {
             self.data = data

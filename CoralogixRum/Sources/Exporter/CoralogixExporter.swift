@@ -1,6 +1,5 @@
 //
 //  CoralogixExporter.swift
-//  Elastiflix-iOS
 //
 //  Created by Coralogix DEV TEAM on 27/03/2024.
 //
@@ -104,7 +103,7 @@ public class CoralogixExporter: SpanExporter {
     }
     
     private func spanDatatoCxSpan(otelSpan: SpanData) -> [String: Any] {
-        return CxSpan(otelSpan: otelSpan,
+        return CxSpan(otel: otelSpan,
                       versionMetadata: self.versionMetadata,
                       sessionManager: self.sessionManager,
                       userMetadata: self.options.userContext?.userMetadata,

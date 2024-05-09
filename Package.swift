@@ -6,7 +6,7 @@ import PackageDescription
 let package = Package(
     name: "CoralogixRum",
     platforms: [
-        .iOS(.v13)
+        .iOS(.v15)
     ],
     products: [
         .library(
@@ -34,6 +34,7 @@ let package = Package(
             path: "CoralogixRum/Sources/"),
         .testTarget(
             name: "CoralogixRumTests",
-            dependencies: ["CoralogixRum"])
+            dependencies: ["CoralogixRum"],
+            path: "CoralogixRum/Tests/")
     ]
 )

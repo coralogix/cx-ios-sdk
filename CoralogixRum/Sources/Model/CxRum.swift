@@ -1,6 +1,5 @@
 //
 //  CxRum.swift
-//  Elastiflix-iOS
 //
 //  Created by Coralogix DEV TEAM on 28/03/2024.
 //
@@ -9,7 +8,7 @@ import Foundation
 import OpenTelemetrySdk
 
 struct CxRum {
-    let timeStamp: TimeInterval
+    var timeStamp: TimeInterval
     let eventTypeContext: EventTypeContext
     let mobileSdk: String
     let versionMetadata: VersionMetadata
@@ -19,44 +18,44 @@ struct CxRum {
     let eventContext: EventContext
     let logContext: LogContext
     let environment: String
-    let traceId: String
-    let spanId: String
+    var traceId: String = ""
+    var spanId: String = ""
     let errorContext: ErrorContext
     let deviceContext: DeviceContext
     let viewContext: String? = nil
     var labels: [String: Any]?
     
-    init(otelSpan: SpanData,
+    init(otel: SpanDataProtocol,
          versionMetadata: VersionMetadata,
          sessionManager: SessionManager,
          userMetadata: [String: String]?,
          labels: [String: Any]?) {
-        self.timeStamp = otelSpan.startTime.timeIntervalSince1970
-        self.eventTypeContext = EventTypeContext(otel: otelSpan)
+        self.timeStamp = otel.getStartTime() ?? Date().timeIntervalSince1970
+        self.eventTypeContext = EventTypeContext(otel: otel)
         self.mobileSdk = Global.iosSdk.rawValue
         self.versionMetadata = versionMetadata
         self.sessionManager = sessionManager
         
         if let sessionMetadata = sessionManager.getSessionMetadata() {
-            self.sessionContext = SessionContext(otel: otelSpan,
+            self.sessionContext = SessionContext(otel: otel,
                                                  versionMetadata: versionMetadata,
                                                  sessionMetadata: sessionMetadata,
                                                  userMetadata: userMetadata)
             if let prevSessionMetadata = sessionManager.getPrevSessionMetadata() {
-                self.prevSessionContext = SessionContext(otel: otelSpan,
+                self.prevSessionContext = SessionContext(otel: otel,
                                                          versionMetadata: versionMetadata,
                                                          sessionMetadata: prevSessionMetadata,
                                                          userMetadata: userMetadata)
             }
         }
-        self.eventContext = EventContext(otel: otelSpan)
-        self.environment = otelSpan.attributes[Keys.environment.rawValue]?.description ?? ""
-        self.traceId = otelSpan.traceId.hexString
-        self.spanId = otelSpan.spanId.hexString
-        self.errorContext = ErrorContext(otel: otelSpan)
-        self.deviceContext = DeviceContext(otel: otelSpan)
+        self.eventContext = EventContext(otel: otel)
+        self.environment = otel.getAttribute(forKey: Keys.environment.rawValue) as? String ?? ""
+        self.traceId = otel.getTraceId() ?? ""
+        self.spanId = otel.getSpanId() ?? ""
+        self.errorContext = ErrorContext(otel: otel)
+        self.deviceContext = DeviceContext(otel: otel)
         self.labels = labels
-        self.logContext = LogContext(otel: otelSpan)
+        self.logContext = LogContext(otel: otel)
     }
     
     func getDictionary() -> [String: Any] {

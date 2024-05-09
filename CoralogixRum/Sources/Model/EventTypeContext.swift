@@ -1,6 +1,5 @@
 //
 //  EventTypeContext.swift
-//  Elastiflix-iOS
 //
 //  Created by Coralogix DEV TEAM on 01/04/2024.
 //
@@ -20,20 +19,20 @@ struct EventTypeContext {
     let duration: TimeInterval
     let responseContentLength: String
     
-    init(otel: SpanData) {
-        self.method = otel.attributes[SemanticAttributes.httpMethod.rawValue]?.description ?? ""
+    init(otel: SpanDataProtocol) {
+        self.method = otel.getAttribute(forKey: SemanticAttributes.httpMethod.rawValue) as? String ?? ""
         
-        if let statusCode = otel.attributes[SemanticAttributes.httpStatusCode.rawValue]?.description {
+        if let statusCode = otel.getAttribute(forKey: SemanticAttributes.httpStatusCode.rawValue) as? String {
             self.statusCode = Int(statusCode) ?? 0
         }
         
-        self.url = otel.attributes[SemanticAttributes.httpUrl.rawValue]?.description ?? ""
-        self.fragments = otel.attributes[SemanticAttributes.httpTarget.rawValue]?.description ?? ""
-        self.host = otel.attributes[SemanticAttributes.netPeerName.rawValue]?.description ?? ""
-        self.schema = otel.attributes[SemanticAttributes.httpScheme.rawValue]?.description ?? ""
-        self.statusText = otel.status.description
-        self.duration = otel.endTime.timeIntervalSinceReferenceDate
-        self.responseContentLength = otel.attributes[SemanticAttributes.httpResponseBodySize.rawValue]?.description ?? ""
+        self.url = otel.getAttribute(forKey: SemanticAttributes.httpUrl.rawValue) as? String ?? ""
+        self.fragments = otel.getAttribute(forKey: SemanticAttributes.httpTarget.rawValue) as? String ?? ""
+        self.host = otel.getAttribute(forKey: SemanticAttributes.netPeerName.rawValue) as? String ?? ""
+        self.schema = otel.getAttribute(forKey: SemanticAttributes.httpScheme.rawValue) as? String ?? ""
+        self.statusText = otel.getStatus() ?? ""
+        self.duration = otel.getEndTime() ?? 0
+        self.responseContentLength = otel.getAttribute(forKey: SemanticAttributes.httpResponseBodySize.rawValue) as? String ?? ""
     }
     
     func getDictionary() -> [String: Any] {

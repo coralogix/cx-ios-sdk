@@ -33,7 +33,9 @@ public class SessionManager {
     }
     
     public func shutdown() {
-        self.sessionMetadata = SessionMetadata(sessionId: "", sessionCreationDate: 0)
+        self.sessionMetadata = SessionMetadata(sessionId: "",
+                                               sessionCreationDate: 0,
+                                               keychain: KeychainManager())
     }
     
     private func hasAnHourPassed(since timeInterval: TimeInterval) -> Bool {
@@ -51,7 +53,8 @@ public class SessionManager {
     private func setupSessionMetadata() {
         self.prevSessionMetadata = self.sessionMetadata
         self.sessionMetadata = SessionMetadata(sessionId: NSUUID().uuidString,
-                                               sessionCreationDate: Date().timeIntervalSince1970)
+                                               sessionCreationDate: Date().timeIntervalSince1970,
+                                               keychain: KeychainManager())
     }
     
     private func setupIdleTimer() {

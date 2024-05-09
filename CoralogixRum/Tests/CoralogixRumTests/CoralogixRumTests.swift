@@ -2,11 +2,109 @@ import XCTest
 @testable import CoralogixRum
 
 final class CoralogixRumTests: XCTestCase {
-    func testExample() throws {
-        // XCTest Documentation
-        // https://developer.apple.com/documentation/xctest
+    var options: CoralogixExporterOptions?
+    
+    override func setUpWithError() throws {
+        options = CoralogixExporterOptions(coralogixDomain: CoralogixDomain.US2,
+                                           userContext: nil,
+                                           environment: "PROD",
+                                           application: "TestApp-iOS",
+                                           version: "1.0",
+                                           publicKey: "token",
+                                           ignoreUrls: [], //[".*\\.il$", "https://www.coralogix.com/academy"],
+                                           ignoreErrors: [], //[".*errorcode=.*", "Im cusom Error"],
+                                           customDomainUrl: "url",
+                                           labels: ["item" : "banana", "itemPrice" : 1000],
+                                           debug: true)
+    }
+    
+    override func tearDownWithError() throws {
+        options = nil
+    }
+    
+    func testInit() {
+        let coralogixRum = CoralogixRum(options: options!)
+        
+        // Verify that options are set correctly
+        XCTAssertEqual(coralogixRum.options.application, "TestApp-iOS")
+        XCTAssertEqual(coralogixRum.options.version, "1.0")
+        
+        // Verify that isDebug flag is set correctly
+        XCTAssertTrue(CoralogixRum.isDebug)
+        
+        // Verify that isInitialized flag is set to true
+        XCTAssertTrue(CoralogixRum.isInitialized)
+    }
+    
+    // Test setUserContext method
+    func testSetUserContext() {
+        let coralogixRum = CoralogixRum(options: options!)
+        
+        let userContext = UserContext(userId: "1234",
+                                      userName: "Daffy Duck",
+                                      userEmail: "daffy.duck@coralogix.com",
+                                      userMetadata: ["age": "18", "profession" : "duck"])       
+        coralogixRum.setUserContext(userContext: userContext)
+        XCTAssertEqual(coralogixRum.options.userContext, userContext)
 
-        // Defining Test Cases and Test Methods
-        // https://developer.apple.com/documentation/xctest/defining_test_cases_and_test_methods
+        // Verify that userContext is set correctly
+        XCTAssertEqual(coralogixRum.options.userContext, userContext)
+    }
+    
+    func testSetLabels() {
+        let coralogixRum = CoralogixRum(options: options!)
+        if let labels = coralogixRum.options.labels {
+            XCTAssertEqual(labels.count, 2)
+            XCTAssertEqual(labels["item"] as? String, "banana")
+            XCTAssertEqual(labels["itemPrice"] as? Int, 1000)
+        }
+        
+        let newLabel = ["device": "iphone"]
+        coralogixRum.setLabels(labels: newLabel)
+        if let labels = coralogixRum.options.labels {
+            XCTAssertEqual(labels.count, 1)
+            XCTAssertEqual(labels["device"] as? String, "iphone")
+        }
+    }
+    
+    func testShutdown() {
+        let coralogixRum = CoralogixRum(options: options!)
+        coralogixRum.shutdown()
+        XCTAssertFalse(CoralogixRum.isInitialized)
+    }
+}
+
+class CoralogixExporterOptionsTests: XCTestCase {
+    
+    // Test initialization with required parameters
+    func testInit() {
+        // Arrange
+        let coralogixDomain = CoralogixDomain.US2 // Example domain
+        let userContext = UserContext(userId: "1234",
+                                      userName: "Daffy Duck",
+                                      userEmail: "daffy.duck@coralogix.com",
+                                      userMetadata: ["age": "18", "profession" : "duck"]) 
+        let environment = "development"
+        let application = "TestApp"
+        let version = "1.0"
+        let publicKey = "publicKey"
+        
+        // Act
+        let options = CoralogixExporterOptions(
+            coralogixDomain: coralogixDomain,
+            userContext: userContext,
+            environment: environment,
+            application: application,
+            version: version,
+            publicKey: publicKey
+        )
+        
+        // Assert
+        XCTAssertEqual(options.coralogixDomain, coralogixDomain)
+        XCTAssertEqual(options.userContext, userContext)
+        XCTAssertEqual(options.environment, environment)
+        XCTAssertEqual(options.application, application)
+        XCTAssertEqual(options.version, version)
+        XCTAssertEqual(options.publicKey, publicKey)
     }
 }
