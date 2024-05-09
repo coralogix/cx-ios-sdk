@@ -8,7 +8,6 @@ import Foundation
 import OpenTelemetrySdk
 import OpenTelemetryApi
 
-
 struct SessionContext {
     let sessionId: String
     let sessionCreationDate: TimeInterval

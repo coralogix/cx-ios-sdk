@@ -19,7 +19,7 @@ struct EventContext {
         
         self.source = otel.getAttribute(forKey: Keys.source.rawValue) as? String ?? ""
         
-        if let severity = otel.getAttribute(forKey:Keys.severity.rawValue) as? String {
+        if let severity = otel.getAttribute(forKey: Keys.severity.rawValue) as? String {
             self.severity = Int(severity) ?? 0
         }
     }
