@@ -16,7 +16,7 @@ public class CxSpan {
     var timeStamp: TimeInterval = 0
     let cxRum: CxRum
     
-    init(otelSpan: SpanDataProtocol,
+    init(otel: SpanDataProtocol,
          versionMetadata: VersionMetadata,
          sessionManager: SessionManager,
          userMetadata: [String: String]?,
@@ -24,13 +24,11 @@ public class CxSpan {
         self.applicationName = versionMetadata.appName
         self.versionMetadata = versionMetadata
         self.subsystemName = Keys.cxRum.rawValue
-        if let severity = otelSpan.getAttribute(forKey: Keys.severity.rawValue) as? String {
+        if let severity = otel.getAttribute(forKey: Keys.severity.rawValue) as? String {
             self.severity = Int(severity) ?? 0
         }
-        if let timeStamp = otelSpan.getStartTime() {
-            self.timeStamp = timeStamp
-        }
-        self.cxRum = CxRum(otel: otelSpan,
+        self.timeStamp = otel.getStartTime() ?? Date().timeIntervalSince1970
+        self.cxRum = CxRum(otel: otel,
                            versionMetadata: versionMetadata,
                            sessionManager: sessionManager,
                            userMetadata: userMetadata,

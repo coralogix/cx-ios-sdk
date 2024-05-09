@@ -37,7 +37,7 @@ final class CxSpanTests: XCTestCase {
     }
     
     func testInitialization() {
-        let cxSpan = CxSpan(otelSpan: mockSpanData,
+        let cxSpan = CxSpan(otel: mockSpanData,
                             versionMetadata: mockVersionMetadata,
                             sessionManager: mockSessionManager,
                             userMetadata: nil,
@@ -52,7 +52,7 @@ final class CxSpanTests: XCTestCase {
     }
     
     func testGetDictionary() {
-        let cxSpan = CxSpan(otelSpan: mockSpanData,
+        let cxSpan = CxSpan(otel: mockSpanData,
                             versionMetadata: mockVersionMetadata,
                             sessionManager: mockSessionManager,
                             userMetadata: nil,
