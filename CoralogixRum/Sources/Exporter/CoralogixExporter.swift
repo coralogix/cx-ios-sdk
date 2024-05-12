@@ -12,13 +12,16 @@ public class CoralogixExporter: SpanExporter {
     private var options: CoralogixExporterOptions
     private var versionMetadata: VersionMetadata
     private var sessionManager: SessionManager
+    private var networkManager: NetworkProtocol
 
     public init(options: CoralogixExporterOptions,
                 versionMetadata: VersionMetadata,
-                sessionManager: SessionManager) {
+                sessionManager: SessionManager,
+                networkManager: NetworkProtocol) {
         self.options = options
         self.versionMetadata = versionMetadata
         self.sessionManager = sessionManager
+        self.networkManager = networkManager
     }
 
     var pendingSpans: [SpanData] = []
@@ -106,6 +109,7 @@ public class CoralogixExporter: SpanExporter {
         return CxSpan(otel: otelSpan,
                       versionMetadata: self.versionMetadata,
                       sessionManager: self.sessionManager,
+                      networkManager: self.networkManager,
                       userMetadata: self.options.userContext?.userMetadata,
                       labels: self.options.labels).getDictionary()
     }

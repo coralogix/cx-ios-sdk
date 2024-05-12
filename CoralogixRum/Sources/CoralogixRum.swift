@@ -10,6 +10,8 @@ public class CoralogixRum {
     internal var versionMetadata: VersionMetadata
     internal var sessionInstrumentation: URLSessionInstrumentation?
     internal var sessionManager: SessionManager
+    internal var networkManager = NetworkManager()
+
     static var isDebug = false
     static var isInitialized = false
     
@@ -24,7 +26,8 @@ public class CoralogixRum {
         self.sessionManager = SessionManager()
         self.coralogixExporter = CoralogixExporter(options: options,
                                                    versionMetadata: self.versionMetadata,
-                                                   sessionManager: self.sessionManager)
+                                                   sessionManager: self.sessionManager,
+                                                   networkManager: self.networkManager)
         OpenTelemetry.registerTracerProvider(tracerProvider: TracerProviderBuilder()
             .add(spanProcessor: BatchSpanProcessor(spanExporter: self.coralogixExporter,
                                                    scheduleDelay: Double(Global.BatchSpan.scheduleDelay.rawValue),

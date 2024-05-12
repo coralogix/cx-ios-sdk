@@ -85,3 +85,9 @@ class MockKeyschainManager: KeyChainProtocol {
         }
     }
 }
+
+class MockNetworkManager: NetworkProtocol {
+    func getNetworkType() -> String {
+        return "5G"
+    }
+}

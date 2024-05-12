@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import UIKit
 
 class Helper {
     internal static func convertArrayToJsonString(array: [[String: Any]]) -> String {
