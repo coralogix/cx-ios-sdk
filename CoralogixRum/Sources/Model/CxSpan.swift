@@ -19,6 +19,7 @@ public class CxSpan {
     init(otel: SpanDataProtocol,
          versionMetadata: VersionMetadata,
          sessionManager: SessionManager,
+         networkManager: NetworkManager,
          userMetadata: [String: String]?,
          labels: [String: Any]?) {
         self.applicationName = versionMetadata.appName
@@ -31,6 +32,7 @@ public class CxSpan {
         self.cxRum = CxRum(otel: otel,
                            versionMetadata: versionMetadata,
                            sessionManager: sessionManager,
+                           networkManager: networkManager,
                            userMetadata: userMetadata,
                            labels: labels)
     }

@@ -14,6 +14,7 @@ struct CxRum {
     let versionMetadata: VersionMetadata
     var sessionContext: SessionContext?
     var prevSessionContext: SessionContext?
+    var networkManager: NetworkManager?
     var sessionManager: SessionManager?
     let eventContext: EventContext
     let logContext: LogContext
@@ -22,12 +23,14 @@ struct CxRum {
     var spanId: String = ""
     let errorContext: ErrorContext
     let deviceContext: DeviceContext
+    let deviceState: DeviceState
     let viewContext: String? = nil
     var labels: [String: Any]?
     
     init(otel: SpanDataProtocol,
          versionMetadata: VersionMetadata,
          sessionManager: SessionManager,
+         networkManager: NetworkManager,
          userMetadata: [String: String]?,
          labels: [String: Any]?) {
         self.timeStamp = otel.getStartTime() ?? Date().timeIntervalSince1970
@@ -35,6 +38,7 @@ struct CxRum {
         self.mobileSdk = Global.iosSdk.rawValue
         self.versionMetadata = versionMetadata
         self.sessionManager = sessionManager
+        self.networkManager = networkManager
         
         if let sessionMetadata = sessionManager.getSessionMetadata() {
             self.sessionContext = SessionContext(otel: otel,
@@ -56,6 +60,7 @@ struct CxRum {
         self.deviceContext = DeviceContext(otel: otel)
         self.labels = labels
         self.logContext = LogContext(otel: otel)
+        self.deviceState = DeviceState(networkManager: self.networkManager)
     }
     
     func getDictionary() -> [String: Any] {
@@ -71,7 +76,8 @@ struct CxRum {
         result[Keys.traceId.rawValue] = self.traceId
         result[Keys.spanId.rawValue] = self.spanId
         result[Keys.platform.rawValue] = Keys.mobile.rawValue
-        result[Keys.deviceState.rawValue] = self.deviceContext.getDictionary()
+        result[Keys.deviceContext.rawValue] = self.deviceContext.getDictionary()
+        result[Keys.deviceState.rawValue] = self.deviceState.getDictionary()
         
         if let prevSessionContext = self.prevSessionContext {
             result[Keys.prevSession.rawValue] = prevSessionContext.getPrevSessionDictionary()
