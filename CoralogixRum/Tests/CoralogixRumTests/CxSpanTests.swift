@@ -16,6 +16,7 @@ final class CxSpanTests: XCTestCase {
     var mockSpanData: SpanDataProtocol!
     var mockVersionMetadata: VersionMetadata!
     var mockSessionManager: SessionManager!
+    var mockNetworkManager: NetworkManager!
     
     override func setUpWithError() throws {
         mockSpanData = MockSpanData(attributes: [Keys.severity.rawValue: AttributeValue("3"),
@@ -28,18 +29,21 @@ final class CxSpanTests: XCTestCase {
                                     startTime: Date(), spanId: "20", traceId: "30")
         mockVersionMetadata = VersionMetadata(appName: "ExampleApp", appVersion: "1.1.1")
         mockSessionManager = SessionManager()
+        mockNetworkManager = NetworkManager()
     }
     
     override func tearDownWithError() throws {
         mockSpanData = nil
         mockVersionMetadata = nil
         mockSessionManager = nil
+        mockNetworkManager = nil
     }
     
     func testInitialization() {
         let cxSpan = CxSpan(otel: mockSpanData,
                             versionMetadata: mockVersionMetadata,
-                            sessionManager: mockSessionManager,
+                            sessionManager: mockSessionManager, 
+                            networkManager: mockNetworkManager,
                             userMetadata: nil,
                             labels: nil)
         
@@ -54,7 +58,8 @@ final class CxSpanTests: XCTestCase {
     func testGetDictionary() {
         let cxSpan = CxSpan(otel: mockSpanData,
                             versionMetadata: mockVersionMetadata,
-                            sessionManager: mockSessionManager,
+                            sessionManager: mockSessionManager, 
+                            networkManager: mockNetworkManager,
                             userMetadata: nil,
                             labels: nil)
         
@@ -81,8 +86,21 @@ final class CxSpanTests: XCTestCase {
             }
             
             if let deviceState = cxRum[Keys.deviceState.rawValue] as? [String: Any] {
-                XCTAssertEqual(deviceState[Keys.networkConnectionType.rawValue] as? String, "")
-                XCTAssertEqual(deviceState[Keys.networkConnectionSubtype.rawValue] as? String, "")
+                if let networkConnectionType = deviceState[Keys.networkConnectionType.rawValue] as? String {
+                    XCTAssertEqual(networkConnectionType, "")
+                }
+                
+                if let networkConnectionSubtype = deviceState[Keys.networkConnectionSubtype.rawValue] as? String {
+                    XCTAssertEqual(networkConnectionSubtype, "")
+                }
+                
+                if let battery = deviceState[Keys.battery.rawValue] as? String {
+                    XCTAssertEqual(battery, "-1.0")
+                }
+                
+                if let networkType = deviceState[Keys.networkType.rawValue] as? String {
+                    XCTAssertEqual(networkType, "No connection or unknown type")
+                }
             }
             
             if let sessionContext = cxRum[Keys.sessionContext.rawValue] as? [String: Any] {

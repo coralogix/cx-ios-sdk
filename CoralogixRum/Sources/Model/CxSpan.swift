@@ -19,7 +19,7 @@ public class CxSpan {
     init(otel: SpanDataProtocol,
          versionMetadata: VersionMetadata,
          sessionManager: SessionManager,
-         networkManager: NetworkManager,
+         networkManager: NetworkProtocol,
          userMetadata: [String: String]?,
          labels: [String: Any]?) {
         self.applicationName = versionMetadata.appName

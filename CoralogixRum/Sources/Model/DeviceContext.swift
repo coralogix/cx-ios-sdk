@@ -10,7 +10,6 @@ import OpenTelemetrySdk
 import OpenTelemetryApi
 import UIKit
 
-
 struct DeviceContext {
     let networkConnectionType: String
     let networkConnectionSubtype: String

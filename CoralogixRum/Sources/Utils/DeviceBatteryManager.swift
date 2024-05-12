@@ -2,7 +2,7 @@
 //  DeviceBatteryManager.swift
 //
 //
-//  Created by Tomer Har Yoffi on 12/05/2024.
+//  Created by Coralogix DEV TEAM on 12/05/2024.
 //
 
 import UIKit

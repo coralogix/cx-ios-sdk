@@ -14,7 +14,7 @@ struct CxRum {
     let versionMetadata: VersionMetadata
     var sessionContext: SessionContext?
     var prevSessionContext: SessionContext?
-    var networkManager: NetworkManager?
+    var networkManager: NetworkProtocol?
     var sessionManager: SessionManager?
     let eventContext: EventContext
     let logContext: LogContext
@@ -30,7 +30,7 @@ struct CxRum {
     init(otel: SpanDataProtocol,
          versionMetadata: VersionMetadata,
          sessionManager: SessionManager,
-         networkManager: NetworkManager,
+         networkManager: NetworkProtocol,
          userMetadata: [String: String]?,
          labels: [String: Any]?) {
         self.timeStamp = otel.getStartTime() ?? Date().timeIntervalSince1970

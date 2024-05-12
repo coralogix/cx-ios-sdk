@@ -15,6 +15,7 @@ final class CxRumTests: XCTestCase {
     var mockSpanData: SpanDataProtocol!
     var mockVersionMetadata: VersionMetadata!
     var mockSessionManager: SessionManager!
+    var mockNetworkManager: NetworkManager!
     
     override func setUpWithError() throws {
         mockSpanData = MockSpanData(attributes: [Keys.severity.rawValue: AttributeValue("3"),
@@ -27,12 +28,14 @@ final class CxRumTests: XCTestCase {
                                     startTime: Date(), spanId: "20", traceId: "30")
         mockVersionMetadata = VersionMetadata(appName: "ExampleApp", appVersion: "1.1.1")
         mockSessionManager = SessionManager()
+        mockNetworkManager = NetworkManager()
     }
     
     override func tearDownWithError() throws {
         mockSpanData = nil
         mockVersionMetadata = nil
         mockSessionManager = nil
+        mockNetworkManager = nil
     }
     
     func testInitialization() {
@@ -40,6 +43,7 @@ final class CxRumTests: XCTestCase {
             otel: mockSpanData,
             versionMetadata: mockVersionMetadata,
             sessionManager: mockSessionManager,
+            networkManager: mockNetworkManager,
             userMetadata: ["userId": "12345"],
             labels: ["key": "value"]
         )
@@ -63,6 +67,7 @@ final class CxRumTests: XCTestCase {
             otel: mockSpanData,
             versionMetadata: mockVersionMetadata,
             sessionManager: mockSessionManager,
+            networkManager: mockNetworkManager,
             userMetadata: ["userId": "12345"],
             labels: ["key": "value"]
         )

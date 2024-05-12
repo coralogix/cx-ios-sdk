@@ -12,12 +12,12 @@ public class CoralogixExporter: SpanExporter {
     private var options: CoralogixExporterOptions
     private var versionMetadata: VersionMetadata
     private var sessionManager: SessionManager
-    private var networkManager: NetworkManager
+    private var networkManager: NetworkProtocol
 
     public init(options: CoralogixExporterOptions,
                 versionMetadata: VersionMetadata,
                 sessionManager: SessionManager,
-                networkManager: NetworkManager) {
+                networkManager: NetworkProtocol) {
         self.options = options
         self.versionMetadata = versionMetadata
         self.sessionManager = sessionManager

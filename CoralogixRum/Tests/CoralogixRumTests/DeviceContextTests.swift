@@ -54,5 +54,10 @@ final class DeviceContextTests: XCTestCase {
         // Assert dictionary contents
         XCTAssertEqual(dictionary[Keys.networkConnectionType.rawValue] as? String, "WiFi")
         XCTAssertEqual(dictionary[Keys.networkConnectionSubtype.rawValue] as? String, "5G")
+        XCTAssertEqual(dictionary[Keys.emulator.rawValue] as? String, "true")
+        XCTAssertEqual(dictionary[Keys.device.rawValue] as? String, "iPhone")
+        XCTAssertEqual(dictionary[Keys.deviceName.rawValue] as? String, "iPhone15,4")
+        XCTAssertEqual(dictionary[Keys.operatingSystem.rawValue] as? String, "iOS")
+        XCTAssertEqual(dictionary[Keys.osVersion.rawValue] as? String, "Version 17.4 (Build 21E213)")
     }
 }

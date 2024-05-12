@@ -12,9 +12,9 @@ struct DeviceState {
     let networkType: String
     let deviceBatteryManager = DeviceBatteryManager()
     
-    init(networkManager: NetworkManager?) {
+    init(networkManager: NetworkProtocol?) {
         self.battery = String(deviceBatteryManager.getBatteryLevel())
-        self.networkType = networkManager?.networkType ?? ""
+        self.networkType = networkManager?.getNetworkType() ?? ""
     }
     
     func getDictionary() -> [String: Any] {

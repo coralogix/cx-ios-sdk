@@ -2,14 +2,18 @@
 //  NetworkManager.swift
 //
 //
-//  Created by Tomer Har Yoffi on 12/05/2024.
+//  Created by Coralogix DEV TEAM on 12/05/2024.
 //
 
 import Foundation
 import Network
 import CoreTelephony
 
-public class NetworkManager {
+public protocol NetworkProtocol {
+    func getNetworkType() -> String
+}
+
+public class NetworkManager: NetworkProtocol {
     let monitor = NWPathMonitor()
     var networkType = "No connection or unknown type"
     
@@ -18,7 +22,11 @@ public class NetworkManager {
         monitor.start(queue: .main)
     }
     
-    func checkConnectionType() {
+    public func getNetworkType() -> String {
+        return self.networkType
+    }
+    
+    private func checkConnectionType() {
         self.monitor.pathUpdateHandler = { path in
             if path.usesInterfaceType(.wifi) {
                 self.networkType = "WiFi"
