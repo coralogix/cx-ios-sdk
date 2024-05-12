@@ -15,7 +15,7 @@ struct DeviceContext {
     let networkConnectionSubtype: String
     let operatingSystem: String
     let osVersion: String
-    let emulator: String
+    let emulator: Bool
     let deviceName: String
     let deviceModel: String
     
@@ -25,7 +25,7 @@ struct DeviceContext {
         self.deviceModel = Global.getDeviceModel()
         self.operatingSystem = Global.getOs()
         self.osVersion = Global.osVersionInfo()
-        self.emulator = Global.isEmulator() ? "true" : "false"
+        self.emulator = Global.isEmulator()
         self.deviceName = Global.getDeviceName()
     }
     
