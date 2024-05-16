@@ -26,8 +26,8 @@ final class CoralogixRumTests: XCTestCase {
         let coralogixRum = CoralogixRum(options: options!)
         
         // Verify that options are set correctly
-        XCTAssertEqual(coralogixRum.options.application, "TestApp-iOS")
-        XCTAssertEqual(coralogixRum.options.version, "1.0")
+        XCTAssertEqual(coralogixRum.coralogixExporter.getOptions().application, "TestApp-iOS")
+        XCTAssertEqual(coralogixRum.coralogixExporter.getOptions().version, "1.0")
         
         // Verify that isDebug flag is set correctly
         XCTAssertTrue(CoralogixRum.isDebug)
@@ -45,15 +45,15 @@ final class CoralogixRumTests: XCTestCase {
                                       userEmail: "daffy.duck@coralogix.com",
                                       userMetadata: ["age": "18", "profession" : "duck"])       
         coralogixRum.setUserContext(userContext: userContext)
-        XCTAssertEqual(coralogixRum.options.userContext, userContext)
+        XCTAssertEqual(coralogixRum.coralogixExporter.getOptions().userContext, userContext)
 
         // Verify that userContext is set correctly
-        XCTAssertEqual(coralogixRum.options.userContext, userContext)
+        XCTAssertEqual(coralogixRum.coralogixExporter.getOptions().userContext, userContext)
     }
     
     func testSetLabels() {
         let coralogixRum = CoralogixRum(options: options!)
-        if let labels = coralogixRum.options.labels {
+        if let labels = coralogixRum.coralogixExporter.getOptions().labels {
             XCTAssertEqual(labels.count, 2)
             XCTAssertEqual(labels["item"] as? String, "banana")
             XCTAssertEqual(labels["itemPrice"] as? Int, 1000)
@@ -61,7 +61,7 @@ final class CoralogixRumTests: XCTestCase {
         
         let newLabel = ["device": "iphone"]
         coralogixRum.setLabels(labels: newLabel)
-        if let labels = coralogixRum.options.labels {
+        if let labels = coralogixRum.coralogixExporter.getOptions().labels {
             XCTAssertEqual(labels.count, 1)
             XCTAssertEqual(labels["device"] as? String, "iphone")
         }

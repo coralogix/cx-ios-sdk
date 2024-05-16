@@ -36,7 +36,7 @@ public struct CXViewModifier: SwiftUI.ViewModifier {
 
 @available(iOS 13, tvOS 13, *)
 public extension SwiftUI.View {
-    public func trackCXView(name: String, viewsHandler: SwiftUIViewHandler?) -> some View {
+    func trackCXView(name: String, viewsHandler: SwiftUIViewHandler?) -> some View {
         return modifier(CXViewModifier(name: name, viewsHandler: viewsHandler))
     }
 }

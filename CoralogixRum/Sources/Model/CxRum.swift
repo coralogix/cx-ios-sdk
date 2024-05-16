@@ -99,7 +99,7 @@ struct CxRum {
         }
         
         if let viewManager = self.viewManager {
-            if let isPidEqualToOldPid  = self.sessionContext?.isPidEqualToOldPid {
+            if let _  = self.sessionContext?.isPidEqualToOldPid {
                 result[Keys.viewContext.rawValue] = viewManager.getPrevDictionary()
             } else {
                 result[Keys.viewContext.rawValue] = viewManager.getDictionary()
