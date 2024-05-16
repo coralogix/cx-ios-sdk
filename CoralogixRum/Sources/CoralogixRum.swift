@@ -5,28 +5,24 @@ import URLSessionInstrumentation
 import Darwin
 
 public class CoralogixRum {
-    private var coralogixExporter: CoralogixExporter
-    internal var options: CoralogixExporterOptions
+    internal var coralogixExporter: CoralogixExporter
     internal var versionMetadata: VersionMetadata
     internal var sessionInstrumentation: URLSessionInstrumentation?
-    internal var sessionManager: SessionManager
     internal var networkManager = NetworkManager()
 
     static var isDebug = false
     static var isInitialized = false
-    
+
     public init(options: CoralogixExporterOptions) {
         if CoralogixRum.isInitialized { 
             Log.w("CoralogixRum allready Initialized")
         }
         
-        self.options = options
         self.versionMetadata = VersionMetadata(appName: options.application, appVersion: options.version)
         CoralogixRum.isDebug = options.debug
-        self.sessionManager = SessionManager()
         self.coralogixExporter = CoralogixExporter(options: options,
-                                                   versionMetadata: self.versionMetadata,
-                                                   sessionManager: self.sessionManager,
+                                                   versionMetadata: self.versionMetadata, 
+                                                   sessionManager: SessionManager(),
                                                    networkManager: self.networkManager)
         OpenTelemetry.registerTracerProvider(tracerProvider: TracerProviderBuilder()
             .add(spanProcessor: BatchSpanProcessor(spanExporter: self.coralogixExporter,
@@ -39,12 +35,10 @@ public class CoralogixRum {
     }
     
     public func setUserContext(userContext: UserContext) {
-        self.options.userContext = userContext
         self.coralogixExporter.updade(userContext: userContext)
     }
     
     public func setLabels(labels: [String: Any]) {
-        self.options.labels = labels
         self.coralogixExporter.updade(labels: labels)
     }
     
@@ -70,9 +64,13 @@ public class CoralogixRum {
     
     public func shutdown() {
         CoralogixRum.isInitialized = false
-        self.sessionManager.shutdown()
         self.coralogixExporter.shutdown()
     }
+}
+
+public struct CXView {
+    let identity: String
+    let name: String
 }
 
 public struct CoralogixExporterOptions {
@@ -130,5 +128,16 @@ public struct CoralogixExporterOptions {
         self.version = version
         self.customDomainUrl = customDomainUrl
         self.labels = labels
+    }
+}
+
+extension CoralogixRum: SwiftUIViewHandler {
+    public func notifyOnAppear(identity: String, name: String) {
+        let cxView = CXView(identity: identity, name: name)
+        self.coralogixExporter.add(view: cxView)
+    }
+
+    public func notifyOnDisappear(identity: String) {
+        self.coralogixExporter.delete(identity: identity)
     }
 }

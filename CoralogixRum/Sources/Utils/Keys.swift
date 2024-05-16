@@ -109,6 +109,10 @@ public enum Keys: String {
     case deviceName = "device_name"
     case battery
     case networkType = "network_type"
+    case view
+    case service = "com.coralogix.sdk"
+    case keySessionId = "sessionId"
+    case keySessionTimeInterval = "sessionTimeInterval"
 }
 
 public enum CoralogixLogSeverity: Int {

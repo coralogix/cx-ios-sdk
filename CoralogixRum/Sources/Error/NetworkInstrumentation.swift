@@ -27,10 +27,9 @@ extension CoralogixRum {
             let logSeverity = statusCode > 400 ?  CoralogixLogSeverity.error : CoralogixLogSeverity.info
             span.setAttribute(key: Keys.severity.rawValue, value: AttributeValue.int(logSeverity.rawValue))
         }
-        span.setAttribute(key: Keys.userId.rawValue, value: self.options.userContext?.userId ?? "")
-        span.setAttribute(key: Keys.userName.rawValue, value: self.options.userContext?.userName ?? "")
-        span.setAttribute(key: Keys.userEmail.rawValue, value: self.options.userContext?.userEmail ?? "")
-
-        span.setAttribute(key: Keys.environment.rawValue, value: self.options.environment)
+        span.setAttribute(key: Keys.userId.rawValue, value: self.coralogixExporter.getOptions().userContext?.userId ?? "")
+        span.setAttribute(key: Keys.userName.rawValue, value: self.coralogixExporter.getOptions().userContext?.userName ?? "")
+        span.setAttribute(key: Keys.userEmail.rawValue, value: self.coralogixExporter.getOptions().userContext?.userEmail ?? "")
+        span.setAttribute(key: Keys.environment.rawValue, value: self.coralogixExporter.getOptions().environment)
     }
 }

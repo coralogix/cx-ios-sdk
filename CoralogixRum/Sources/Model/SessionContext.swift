@@ -18,6 +18,7 @@ struct SessionContext {
     let userName: String
     let userEmail: String
     let userMetadata: [String: String]?
+    var isPidEqualToOldPid: Bool = false
     
     init(otel: SpanDataProtocol, versionMetadata: VersionMetadata, sessionMetadata: SessionMetadata, userMetadata: [String: String]?) {
       if let pid = otel.getAttribute(forKey: Keys.pid.rawValue) as? String,
@@ -27,6 +28,7 @@ struct SessionContext {
            let oldSessionCreationDate = sessionMetadata.oldSessionTimeInterval {
             self.sessionId = oldSessionId
             self.sessionCreationDate = oldSessionCreationDate
+            self.isPidEqualToOldPid = true
         } else {
             self.sessionId = sessionMetadata.sessionId
             self.sessionCreationDate = sessionMetadata.sessionCreationDate
