@@ -26,10 +26,12 @@ struct CxRum {
     let deviceState: DeviceState
     let viewContext: String? = nil
     var labels: [String: Any]?
+    var viewManager: ViewManager?
     
     init(otel: SpanDataProtocol,
          versionMetadata: VersionMetadata,
          sessionManager: SessionManager,
+         viewManager: ViewManager,
          networkManager: NetworkProtocol,
          userMetadata: [String: String]?,
          labels: [String: Any]?) {
@@ -39,6 +41,7 @@ struct CxRum {
         self.versionMetadata = versionMetadata
         self.sessionManager = sessionManager
         self.networkManager = networkManager
+        self.viewManager = viewManager
         
         if let sessionMetadata = sessionManager.getSessionMetadata() {
             self.sessionContext = SessionContext(otel: otel,
@@ -95,10 +98,17 @@ struct CxRum {
             result[Keys.logContext.rawValue] = self.logContext.getDictionary()
         }
         
+        if let viewManager = self.viewManager {
+            if let _  = self.sessionContext?.isPidEqualToOldPid {
+                result[Keys.viewContext.rawValue] = viewManager.getPrevDictionary()
+            } else {
+                result[Keys.viewContext.rawValue] = viewManager.getDictionary()
+            }
+        }
+        
         if let labels = self.labels {
             result[Keys.labels.rawValue] = labels
         }
-        result[Keys.viewContext.rawValue] = [Keys.viewController.rawValue: "Maor_222222"]
         return result
     }
 }

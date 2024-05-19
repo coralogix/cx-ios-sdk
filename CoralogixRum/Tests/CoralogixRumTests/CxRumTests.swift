@@ -16,6 +16,7 @@ final class CxRumTests: XCTestCase {
     var mockVersionMetadata: VersionMetadata!
     var mockSessionManager: SessionManager!
     var mockNetworkManager: NetworkManager!
+    var mockViewerManager: ViewManager!
     
     override func setUpWithError() throws {
         mockSpanData = MockSpanData(attributes: [Keys.severity.rawValue: AttributeValue("3"),
@@ -29,6 +30,7 @@ final class CxRumTests: XCTestCase {
         mockVersionMetadata = VersionMetadata(appName: "ExampleApp", appVersion: "1.1.1")
         mockSessionManager = SessionManager()
         mockNetworkManager = NetworkManager()
+        mockViewerManager = ViewManager(keyChain: KeychainManager())
     }
     
     override func tearDownWithError() throws {
@@ -43,6 +45,7 @@ final class CxRumTests: XCTestCase {
             otel: mockSpanData,
             versionMetadata: mockVersionMetadata,
             sessionManager: mockSessionManager,
+            viewManager: mockViewerManager,
             networkManager: mockNetworkManager,
             userMetadata: ["userId": "12345"],
             labels: ["key": "value"]
@@ -67,6 +70,7 @@ final class CxRumTests: XCTestCase {
             otel: mockSpanData,
             versionMetadata: mockVersionMetadata,
             sessionManager: mockSessionManager,
+            viewManager: mockViewerManager,
             networkManager: mockNetworkManager,
             userMetadata: ["userId": "12345"],
             labels: ["key": "value"]

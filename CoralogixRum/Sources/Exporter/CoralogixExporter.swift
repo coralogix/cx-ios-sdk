@@ -11,6 +11,7 @@ import OpenTelemetryApi
 public class CoralogixExporter: SpanExporter {
     private var options: CoralogixExporterOptions
     private var versionMetadata: VersionMetadata
+    private var viewManager: ViewManager
     private var sessionManager: SessionManager
     private var networkManager: NetworkProtocol
 
@@ -22,6 +23,7 @@ public class CoralogixExporter: SpanExporter {
         self.versionMetadata = versionMetadata
         self.sessionManager = sessionManager
         self.networkManager = networkManager
+        self.viewManager = ViewManager(keyChain: KeychainManager())
     }
 
     var pendingSpans: [SpanData] = []
@@ -33,12 +35,28 @@ public class CoralogixExporter: SpanExporter {
         }
     }
     
+    public func getOptions() -> CoralogixExporterOptions {
+        return self.options
+    }
+    
+    public func add(view: CXView) {
+        self.viewManager.add(view: view)
+    }
+    
+    public func delete(identity: String) {
+        self.viewManager.delete(identity: identity)
+    }
+    
     public func updade(userContext: UserContext) {
         self.options.userContext = userContext
     }
     
     public func updade(labels: [String: Any]) {
         self.options.labels = labels
+    }
+    
+    public func updade(view: ViewManager) {
+        self.viewManager = view
     }
     
     public func export(spans: [SpanData], explicitTimeout: TimeInterval?) -> OpenTelemetrySdk.SpanExporterResultCode {
@@ -98,7 +116,7 @@ public class CoralogixExporter: SpanExporter {
     }
    
     public func shutdown(explicitTimeout: TimeInterval?) {
-
+        self.sessionManager.shutdown()
     }
     
     func encodeSpans(spans: [SpanData]) -> [[String: Any]] {
@@ -109,7 +127,8 @@ public class CoralogixExporter: SpanExporter {
         return CxSpan(otel: otelSpan,
                       versionMetadata: self.versionMetadata,
                       sessionManager: self.sessionManager,
-                      networkManager: self.networkManager,
+                      networkManager: self.networkManager, 
+                      viewManager: self.viewManager,
                       userMetadata: self.options.userContext?.userMetadata,
                       labels: self.options.labels).getDictionary()
     }

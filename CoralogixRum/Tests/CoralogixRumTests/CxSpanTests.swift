@@ -17,6 +17,7 @@ final class CxSpanTests: XCTestCase {
     var mockVersionMetadata: VersionMetadata!
     var mockSessionManager: SessionManager!
     var mockNetworkManager: NetworkManager!
+    var mockViewManager: ViewManager!
     
     override func setUpWithError() throws {
         mockSpanData = MockSpanData(attributes: [Keys.severity.rawValue: AttributeValue("3"),
@@ -30,6 +31,7 @@ final class CxSpanTests: XCTestCase {
         mockVersionMetadata = VersionMetadata(appName: "ExampleApp", appVersion: "1.1.1")
         mockSessionManager = SessionManager()
         mockNetworkManager = NetworkManager()
+        mockViewManager = ViewManager(keyChain: KeychainManager())
     }
     
     override func tearDownWithError() throws {
@@ -44,6 +46,7 @@ final class CxSpanTests: XCTestCase {
                             versionMetadata: mockVersionMetadata,
                             sessionManager: mockSessionManager, 
                             networkManager: mockNetworkManager,
+                            viewManager: mockViewManager,
                             userMetadata: nil,
                             labels: nil)
         
@@ -60,6 +63,7 @@ final class CxSpanTests: XCTestCase {
                             versionMetadata: mockVersionMetadata,
                             sessionManager: mockSessionManager, 
                             networkManager: mockNetworkManager,
+                            viewManager: mockViewManager,
                             userMetadata: nil,
                             labels: nil)
         

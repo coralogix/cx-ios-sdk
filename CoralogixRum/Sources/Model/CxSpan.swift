@@ -20,6 +20,7 @@ public class CxSpan {
          versionMetadata: VersionMetadata,
          sessionManager: SessionManager,
          networkManager: NetworkProtocol,
+         viewManager: ViewManager,
          userMetadata: [String: String]?,
          labels: [String: Any]?) {
         self.applicationName = versionMetadata.appName
@@ -32,6 +33,7 @@ public class CxSpan {
         self.cxRum = CxRum(otel: otel,
                            versionMetadata: versionMetadata,
                            sessionManager: sessionManager,
+                           viewManager: viewManager,
                            networkManager: networkManager,
                            userMetadata: userMetadata,
                            labels: labels)
@@ -42,7 +44,7 @@ public class CxSpan {
         result[Keys.versionMetaData.rawValue] = versionMetadata.getDictionary()
         result[Keys.applicationName.rawValue] = self.applicationName
         result[Keys.subsystemName.rawValue] = self.subsystemName
-        result[Keys.severity.rawValue] =  self.severity
+        result[Keys.severity.rawValue] = self.severity
         result[Keys.timestamp.rawValue] = self.timeStamp.milliseconds
         result[Keys.text.rawValue] = [Keys.cxRum.rawValue: self.cxRum.getDictionary()]
         return result
@@ -57,6 +59,7 @@ public struct VersionMetadata {
         return [Keys.appName.rawValue: self.appName, Keys.appVersion.rawValue: self.appVersion]
     }
 }
+
 
 protocol KeyChainProtocol {
     func readStringFromKeychain(service: String, key: String) -> String?
@@ -84,15 +87,14 @@ public struct SessionMetadata {
     }
     
     mutating func loadPrevSession() {
-        let service = "com.coralogix.sdk"
-        let keyPid = "pid"
-        let keySessionId = "sessionId"
-        let keySessionTimeInterval =  "sessionTimeInterval"
         let newPid = getpid()
         
-        if let oldPid = keyChain?.readStringFromKeychain(service: service, key: keyPid),
-           let oldSessionId = keyChain?.readStringFromKeychain(service: service, key: keySessionId),
-           let oldSessionTimeInterval = keyChain?.readStringFromKeychain(service: service, key: keySessionTimeInterval) {
+        if let oldPid = keyChain?.readStringFromKeychain(service: Keys.service.rawValue, 
+                                                         key: Keys.pid.rawValue),
+           let oldSessionId = keyChain?.readStringFromKeychain(service: Keys.service.rawValue,
+                                                               key: Keys.keySessionId.rawValue),
+           let oldSessionTimeInterval = keyChain?.readStringFromKeychain(service: Keys.service.rawValue,
+                                                                         key: Keys.keySessionTimeInterval.rawValue) {
             Log.d("OLD Process ID:\(oldPid)")
             Log.d("OLD Session ID:\(oldSessionId)")
             Log.d("OLD Session TimeInterval:\(oldSessionTimeInterval)")
@@ -105,8 +107,14 @@ public struct SessionMetadata {
         Log.d("NEW Session ID:\(sessionId)")
         Log.d("NEW Session TimeInterval:\(sessionCreationDate)")
 
-        keyChain?.writeStringToKeychain(service: service, key: keyPid, value: String(newPid))
-        keyChain?.writeStringToKeychain(service: service, key: keySessionId, value: sessionId)
-        keyChain?.writeStringToKeychain(service: service, key: keySessionTimeInterval, value: String(sessionCreationDate))
+        keyChain?.writeStringToKeychain(service: Keys.service.rawValue,
+                                        key: Keys.pid.rawValue,
+                                        value: String(newPid))
+        keyChain?.writeStringToKeychain(service: Keys.service.rawValue,
+                                        key: Keys.keySessionId.rawValue,
+                                        value: sessionId)
+        keyChain?.writeStringToKeychain(service: Keys.service.rawValue,
+                                        key: Keys.keySessionTimeInterval.rawValue,
+                                        value: String(sessionCreationDate))
     }
 }
