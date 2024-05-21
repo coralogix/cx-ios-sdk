@@ -39,12 +39,12 @@ public class CoralogixExporter: SpanExporter {
         return self.options
     }
     
-    public func add(view: CXView) {
-        self.viewManager.add(view: view)
-    }
-    
-    public func delete(identity: String) {
-        self.viewManager.delete(identity: identity)
+    public func set(cxView: CXView) {
+        if cxView.state == .notifyOnAppear {
+            self.viewManager.set(cxView: cxView)
+        } else if cxView.state == .notifyOnDisappear {
+            self.viewManager.set(cxView: nil)
+        }
     }
     
     public func updade(userContext: UserContext) {

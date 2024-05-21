@@ -24,35 +24,35 @@ final class ViewManagerTests: XCTestCase {
     }
     
     func testAddView() {
-        let view1 = CXView(identity: "1", name: "View1")
-        viewManager.add(view: view1)
+        let view1 = CXView(state: .notifyOnAppear, name: "View1")
+        viewManager.set(cxView: view1)
         
         XCTAssertEqual(viewManager.getDictionary()[Keys.view.rawValue] as? String, "View1")
         XCTAssertEqual(mockKeyChain.storage[Keys.view.rawValue], "View1")
         
-        let view2 = CXView(identity: "2", name: "View2")
-        viewManager.add(view: view2)
+        let view2 = CXView(state: .notifyOnAppear, name: "View2")
+        viewManager.set(cxView: view2)
         
         XCTAssertEqual(viewManager.getDictionary()[Keys.view.rawValue] as? String, "View2")
         XCTAssertEqual(mockKeyChain.storage[Keys.view.rawValue], "View2")
     }
     
     func testDeleteView() {
-        let view1 = CXView(identity: "1", name: "View1")
-        let view2 = CXView(identity: "2", name: "View2")
-        viewManager.add(view: view1)
-        viewManager.add(view: view2)
+        let view1 = CXView(state: .notifyOnAppear, name: "View1")
+        let view2 = CXView(state: .notifyOnAppear,name: "View2")
+        viewManager.set(cxView: view1)
+        viewManager.set(cxView: view2)
         
-        viewManager.delete(identity: "2")
+        viewManager.set(cxView: view1)
         XCTAssertEqual(viewManager.getDictionary()[Keys.view.rawValue] as? String, "View1")
         
-        viewManager.delete(identity: "1")
+        viewManager.set(cxView: nil)
         XCTAssertTrue(viewManager.getDictionary().isEmpty)
     }
     
     func testGetDictionary() {
-        let view = CXView(identity: "1", name: "View1")
-        viewManager.add(view: view)
+        let view = CXView(state: .notifyOnAppear, name: "View1")
+        viewManager.set(cxView: view)
         
         let dict = viewManager.getDictionary()
         XCTAssertEqual(dict[Keys.view.rawValue] as? String, "View1")

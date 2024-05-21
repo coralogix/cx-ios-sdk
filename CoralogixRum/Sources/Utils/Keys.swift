@@ -199,7 +199,8 @@ public enum Global: String {
         return false
 #endif
     }
-    
+    // swiftlint:disable function_body_length
+    // swiftlint:disable cyclomatic_complexity
     public static func getDeviceName() -> String {
         switch identifier {
 #if os(iOS)
@@ -281,6 +282,8 @@ public enum Global: String {
         case "i386", "x86_64", "arm64": return ProcessInfo().environment["SIMULATOR_MODEL_IDENTIFIER"] ?? "iOS"
         default: return identifier
 #endif
+        // swiftlint:enable function_body_length
+        // swiftlint:enable cyclomatic_complexity
         }
     }
 }
