@@ -13,15 +13,13 @@ import Combine
 @available(iOS 13, tvOS 13, *)
 final class CXViewModifierTests: XCTestCase {
     
-    var mockHandler: MockSwiftUIViewHandler!
     var hostingController: UIHostingController<AnyView>!
     var window: UIWindow!
     
     override func setUp() {
         super.setUp()
-        mockHandler = MockSwiftUIViewHandler()
         let view = AnyView(Text("Hello, World!")
-            .trackCXView(name: "TestView", viewsHandler: mockHandler))
+            .trackCXView(name: "TestView"))
         hostingController = UIHostingController(rootView: view)
         window = UIWindow()
         window.rootViewController = hostingController
@@ -29,39 +27,35 @@ final class CXViewModifierTests: XCTestCase {
     }
     
     override func tearDown() {
-        mockHandler = nil
         hostingController = nil
         window = nil
         super.tearDown()
     }
     
-    func testNotifyOnAppear() {
-        let expectation = self.expectation(description: "View appeared")
-        
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-            XCTAssertTrue(self.mockHandler.onAppearCalled)
-            XCTAssertEqual(self.mockHandler.receivedName, "TestView")
-            expectation.fulfill()
-        }
-        
-        waitForExpectations(timeout: 2.0, handler: nil)
-    }
-}
-
-class MockSwiftUIViewHandler: SwiftUIViewHandler {
-    var onAppearCalled = false
-    var onDisappearCalled = false
-    var receivedIdentity: String?
-    var receivedName: String?
-    
-    func notifyOnAppear(identity: String, name: String) {
-        onAppearCalled = true
-        receivedIdentity = identity
-        receivedName = name
-    }
-    
-    func notifyOnDisappear(identity: String) {
-        onDisappearCalled = true
-        receivedIdentity = identity
-    }
+    func testViewModifierNotificationOnAppear() {
+           let exp = expectation(description: "Notification onAppear")
+           
+           let view = Text("Hello, world!")
+               .trackCXView(name: "TestView")
+           
+           let hostingController = UIHostingController(rootView: view)
+           
+           let observer = NotificationCenter.default.addObserver(
+               forName: .cxRUmNotification,
+               object: nil,
+               queue: .main
+           ) { notification in
+               if let cxView = notification.object as? CXView, cxView.state == .notifyOnAppear {
+                   XCTAssertEqual(cxView.name, "TestView")
+                   exp.fulfill()
+               }
+           }
+           
+           // Trigger viewDidAppear manually
+           hostingController.viewWillAppear(false)
+           hostingController.viewDidAppear(false)
+           
+           waitForExpectations(timeout: 1.0)
+           NotificationCenter.default.removeObserver(observer)
+       }
 }

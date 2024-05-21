@@ -6,48 +6,42 @@
 //
 
 import Foundation
+import UIKit
 
 public struct ViewManager {
-    private var viewStack: [CXView]
     var keyChain: KeyChainProtocol?
     var prevViewName: String?
+    var visibleView: CXView?
 
     init(keyChain: KeyChainProtocol?) {
-        self.viewStack = [CXView]()
         self.keyChain = keyChain
         if let viewName = keyChain?.readStringFromKeychain(service: Keys.service.rawValue, key: Keys.view.rawValue) {
             self.prevViewName = viewName
         }
     }
 
-    public mutating func add(view: CXView) {
-        if view.identity == viewStack.last?.identity{
-            return
-        }
-    
-        viewStack.removeAll(where: { $0.identity == view.identity })
-        viewStack.append(view)
+    public mutating func set(cxView: CXView?) {
 
-        keyChain?.writeStringToKeychain(service: Keys.service.rawValue, key: Keys.view.rawValue, value: view.name)
-        Log.d("add view: \(view.name)")
-    }
-
-    public mutating func delete(identity: String) {
-        guard identity == viewStack.last?.identity else {
-            if let view = viewStack.first(where: { $0.identity == identity }) {
-                Log.d("delete view: \(view.name)")
+        if let view = cxView {
+            if visibleView?.name == view.name {
+                return
             }
-            return viewStack.removeAll(where: { $0.identity == identity })
+            
+            if view.state == .notifyOnAppear {
+                Log.d("view: \(view.name) state: \(view.state.rawValue)")
+            }
+            keyChain?.writeStringToKeychain(service: Keys.service.rawValue,
+                                            key: Keys.view.rawValue,
+                                            value: view.name)
         }
-        let view = viewStack.removeLast()
-        Log.d("delete view: \(view.name)")
+        self.visibleView = cxView
     }
     
     func getDictionary() -> [String: Any] {
-        guard let view = viewStack.last else {
+        guard let visibleView = self.visibleView else {
             return [String: Any]()
         }
-        return [Keys.view.rawValue: view.name]
+        return [Keys.view.rawValue: visibleView.name]
     }
     
     func getPrevDictionary() -> [String: Any] {
@@ -56,4 +50,23 @@ public struct ViewManager {
         }
         return [Keys.view.rawValue: prevViewName]
     }
+}
+
+extension CoralogixRum {
+    public func initializeViewInstrumentation() {
+        UIViewController.performSwizzling()
+        NotificationCenter.default.addObserver(self, selector: #selector(handleNotification(notification:)), name: .cxRUmNotification, object: nil)
+    }
+    
+    @objc func handleNotification(notification: Notification) {
+        if let cxView = notification.object as? CXView {
+            self.coralogixExporter.set(cxView: cxView)
+        } else {
+            Log.d("Notification received with no object or with a different object type")
+        }
+    }
+}
+
+extension Notification.Name {
+    static let cxRUmNotification = Notification.Name("cxRumNotification")
 }

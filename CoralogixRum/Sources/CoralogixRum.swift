@@ -3,12 +3,14 @@ import OpenTelemetryApi
 import OpenTelemetrySdk
 import URLSessionInstrumentation
 import Darwin
+import UIKit
 
 public class CoralogixRum {
     internal var coralogixExporter: CoralogixExporter
     internal var versionMetadata: VersionMetadata
     internal var sessionInstrumentation: URLSessionInstrumentation?
     internal var networkManager = NetworkManager()
+    let notificationCenter = NotificationCenter.default
 
     static var isDebug = false
     static var isInitialized = false
@@ -17,7 +19,7 @@ public class CoralogixRum {
         if CoralogixRum.isInitialized { 
             Log.w("CoralogixRum allready Initialized")
         }
-        
+
         self.versionMetadata = VersionMetadata(appName: options.application, appVersion: options.version)
         CoralogixRum.isDebug = options.debug
         self.coralogixExporter = CoralogixExporter(options: options,
@@ -29,9 +31,16 @@ public class CoralogixRum {
                                                    scheduleDelay: Double(Global.BatchSpan.scheduleDelay.rawValue),
                                                    maxExportBatchSize: Global.BatchSpan.maxExportBatchSize.rawValue))
                 .build())
+        self.initializeViewInstrumentation()
         self.initializeCrashInstumentation()
-        self.configureSessionInstrumentation()
+        self.initializeSessionInstrumentation()
+
         CoralogixRum.isInitialized = true
+    }
+    
+    deinit {
+        // Remove observer to avoid memory leaks
+        NotificationCenter.default.removeObserver(self, name: .cxRUmNotification, object: nil)
     }
     
     public func setUserContext(userContext: UserContext) {
@@ -69,7 +78,12 @@ public class CoralogixRum {
 }
 
 public struct CXView {
-    let identity: String
+    enum AppState: String {
+        case notifyOnAppear
+        case notifyOnDisappear
+    }
+    
+    let state: AppState
     let name: String
 }
 
@@ -128,16 +142,5 @@ public struct CoralogixExporterOptions {
         self.version = version
         self.customDomainUrl = customDomainUrl
         self.labels = labels
-    }
-}
-
-extension CoralogixRum: SwiftUIViewHandler {
-    public func notifyOnAppear(identity: String, name: String) {
-        let cxView = CXView(identity: identity, name: name)
-        self.coralogixExporter.add(view: cxView)
-    }
-
-    public func notifyOnDisappear(identity: String) {
-        self.coralogixExporter.delete(identity: identity)
     }
 }

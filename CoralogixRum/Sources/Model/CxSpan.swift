@@ -60,7 +60,6 @@ public struct VersionMetadata {
     }
 }
 
-
 protocol KeyChainProtocol {
     func readStringFromKeychain(service: String, key: String) -> String?
     func writeStringToKeychain(service: String, key: String, value: String)

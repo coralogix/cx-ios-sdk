@@ -11,7 +11,7 @@ import OpenTelemetrySdk
 import URLSessionInstrumentation
 
 extension CoralogixRum {
-    public func configureSessionInstrumentation() {
+    public func initializeSessionInstrumentation() {
         self.sessionInstrumentation = URLSessionInstrumentation(configuration: URLSessionInstrumentationConfiguration(spanCustomization: self.spanCustomization, receivedResponse: self.receivedResponse))
     }
     
