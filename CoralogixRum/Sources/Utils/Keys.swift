@@ -137,7 +137,7 @@ enum CoralogixEventType: String {
 }
 
 public enum Global: String {
-    case iosSdk = "1.0.0"
+    case iosSdk = "1.0.3"
     case coralogixPath = "/browser/v1beta/logs"
     
     enum BatchSpan: Int {
