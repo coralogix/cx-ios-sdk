@@ -55,7 +55,7 @@ public struct ViewManager {
 extension CoralogixRum {
     public func initializeViewInstrumentation() {
         UIViewController.performSwizzling()
-        NotificationCenter.default.addObserver(self, selector: #selector(handleNotification(notification:)), name: .cxRUmNotification, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(handleNotification(notification:)), name: .cxRumNotification, object: nil)
     }
     
     @objc func handleNotification(notification: Notification) {
@@ -68,5 +68,5 @@ extension CoralogixRum {
 }
 
 extension Notification.Name {
-    static let cxRUmNotification = Notification.Name("cxRumNotification")
+    static let cxRumNotification = Notification.Name("cxRumNotification")
 }
