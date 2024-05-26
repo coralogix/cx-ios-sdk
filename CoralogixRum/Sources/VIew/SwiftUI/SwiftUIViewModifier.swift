@@ -15,11 +15,11 @@ public struct CXViewModifier: SwiftUI.ViewModifier {
     public func body(content: Content) -> some View {
         content.onAppear {
             let cxView = CXView(state: .notifyOnAppear, name: name)
-            NotificationCenter.default.post(name: .cxRUmNotification, object: cxView)
+            NotificationCenter.default.post(name: .cxRumNotification, object: cxView)
         }
         .onDisappear {
             let cxView = CXView(state: .notifyOnDisappear, name: name)
-            NotificationCenter.default.post(name: .cxRUmNotification, object: cxView)
+            NotificationCenter.default.post(name: .cxRumNotification, object: cxView)
         }
     }
 }

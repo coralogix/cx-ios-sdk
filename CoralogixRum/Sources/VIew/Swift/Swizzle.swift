@@ -86,7 +86,7 @@ private func updateCoralogixRum(window: UIWindow?, state: CXView.AppState) {
             }
             let name = viewController.viewControllerName
             let cxView = CXView(state: state, name: name)
-            NotificationCenter.default.post(name: .cxRUmNotification, object: cxView)
+            NotificationCenter.default.post(name: .cxRumNotification, object: cxView)
         }
     }
 }

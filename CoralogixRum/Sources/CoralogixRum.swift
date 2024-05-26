@@ -40,7 +40,7 @@ public class CoralogixRum {
     
     deinit {
         // Remove observer to avoid memory leaks
-        NotificationCenter.default.removeObserver(self, name: .cxRUmNotification, object: nil)
+        NotificationCenter.default.removeObserver(self, name: .cxRumNotification, object: nil)
     }
     
     public func setUserContext(userContext: UserContext) {
