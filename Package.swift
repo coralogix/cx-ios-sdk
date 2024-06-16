@@ -4,37 +4,45 @@
 import PackageDescription
 
 let package = Package(
-    name: "CoralogixRum",
+    name: "Coralogix",
     platforms: [
         .iOS(.v15)
     ],
     products: [
-        .library(
-            name: "CoralogixRum",
-            targets: ["CoralogixRum"])
+        .library(name: "Coralogix", type: .dynamic, targets: ["Coralogix"])
     ],
     dependencies: [
-        .package(url: "https://github.com/open-telemetry/opentelemetry-swift", from: "1.9.1"),
-        .package(url: "https://github.com/microsoft/plcrashreporter", from: "1.11.1")
     ],
     targets: [
+        .binaryTarget(
+            name: "CrashReporter",
+            path:"Coralogix/Frameworks/PLCrashReporter/CrashReporter.xcframework"
+        ),
+        .binaryTarget(
+            name: "OpenTelemetryApi",
+            path:"Coralogix/Frameworks/OpenTelemetryApi.xcframework"
+        ),
+        .binaryTarget(
+            name: "OpenTelemetrySdk",
+            path:"Coralogix/Frameworks/OpenTelemetrySdk.xcframework"
+        ),
         .target(
-            name: "CoralogixRum",
+            name: "Coralogix",
             dependencies: [
-                .product(name: "OpenTelemetryApi", package: "opentelemetry-swift"),
-                .product(name: "OpenTelemetrySdk", package: "opentelemetry-swift"),
-                .product(name: "OTLPHTTPExporter", package: "opentelemetry-swift"),
-                .product(name: "StdoutExporter", package: "opentelemetry-swift"),
-                .product(name: "URLSessionInstrumentation", package: "opentelemetry-swift"),
-                .product(name: "ResourceExtension", package: "opentelemetry-swift"),
-                .product(name: "OpenTelemetryProtocolExporter", package: "opentelemetry-swift"),
-                .product(name: "SignPostIntegration", package: "opentelemetry-swift"),
-                .product(name: "CrashReporter", package: "PLCrashReporter")
+                .target(name: "OpenTelemetryApi"),
+                .target(name: "OpenTelemetrySdk"),
+                .target(name: "CrashReporter"),
             ],
-            path: "CoralogixRum/Sources/"),
+            path: "Coralogix/Sources/",
+            resources: [
+                .copy("OpenTelemetryApi.xcframework"),
+                .copy("OpenTelemetrySDK.xcframework"),
+                .copy("CrashReporter.xcframework")
+            ]
+        ),
         .testTarget(
             name: "CoralogixRumTests",
-            dependencies: ["CoralogixRum"],
-            path: "CoralogixRum/Tests/")
+            dependencies: ["Coralogix"],
+            path: "Coralogix/Tests/")
     ]
 )
