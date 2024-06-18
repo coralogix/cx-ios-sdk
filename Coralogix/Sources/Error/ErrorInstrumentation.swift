@@ -50,11 +50,11 @@ extension CoralogixRum {
     }
     
     func logWith(severity: CoralogixLogSeverity, message: String, data: [String: Any]?) {
-        let span = tracer().spanBuilder(spanName: Keys.iosSdk.rawValue).startSpan()
+        var span = tracer().spanBuilder(spanName: Keys.iosSdk.rawValue).startSpan()
         span.setAttribute(key: Keys.message.rawValue, value: message)
-        span.setAttribute(key: Keys.severity.rawValue, value: AttributeValue.int(severity.rawValue))
-        span.setAttribute(key: Keys.source.rawValue, value: Keys.code.rawValue)
         span.setAttribute(key: Keys.eventType.rawValue, value: CoralogixEventType.log.rawValue)
+        span.setAttribute(key: Keys.source.rawValue, value: Keys.code.rawValue)
+        span.setAttribute(key: Keys.severity.rawValue, value: AttributeValue.int(severity.rawValue))
 
         if let data = data {
             span.setAttribute(key: Keys.data.rawValue, value: Helper.convertDictionayToJsonString(dict: data))
@@ -64,18 +64,35 @@ extension CoralogixRum {
         span.setAttribute(key: Keys.userName.rawValue, value: self.coralogixExporter.getOptions().userContext?.userName ?? "")
         span.setAttribute(key: Keys.userEmail.rawValue, value: self.coralogixExporter.getOptions().userContext?.userEmail ?? "" )
         span.setAttribute(key: Keys.environment.rawValue, value: self.coralogixExporter.getOptions().environment)
+        
+        if severity.rawValue == CoralogixLogSeverity.error.rawValue {
+            self.addSnapshotContext(to: &span)
+        }
         span.end()
     }
     
     private func getSpan() -> Span {
-        let span = tracer().spanBuilder(spanName: Keys.iosSdk.rawValue).startSpan()
+        var span = tracer().spanBuilder(spanName: Keys.iosSdk.rawValue).startSpan()
         span.setAttribute(key: Keys.eventType.rawValue, value: CoralogixEventType.error.rawValue)
         span.setAttribute(key: Keys.source.rawValue, value: Keys.console.rawValue)
         span.setAttribute(key: Keys.severity.rawValue, value: AttributeValue.int(CoralogixLogSeverity.error.rawValue))
+        
         span.setAttribute(key: Keys.userId.rawValue, value: self.coralogixExporter.getOptions().userContext?.userId ?? "")
         span.setAttribute(key: Keys.userName.rawValue, value: self.coralogixExporter.getOptions().userContext?.userName ?? "")
-        span.setAttribute(key: Keys.userEmail.rawValue, value: self.coralogixExporter.getOptions().userContext?.userEmail ?? "" )
-        span.setAttribute(key: Keys.environment.rawValue, value: self.coralogixExporter.getOptions().environment )
+        span.setAttribute(key: Keys.userEmail.rawValue, value: self.coralogixExporter.getOptions().userContext?.userEmail ?? "")
+        span.setAttribute(key: Keys.environment.rawValue, value: self.coralogixExporter.getOptions().environment)
+        
+        self.addSnapshotContext(to: &span)
         return span
+    }
+    
+    private func addSnapshotContext(to span: inout Span) {
+        self.sessionManager.incrementErrorCounter()
+        let snapshot = SnapshotConext(timestemp: Date(),
+                                      errorCount: self.sessionManager.getErrorCount(),
+                                      viewCount: self.viewManager.getUniqueViewCount())
+        let dict = Helper.convertDictionary(snapshot.getDictionary())
+        span.setAttribute(key: Keys.snapshotContext.rawValue,
+                          value: Helper.convertDictionayToJsonString(dict: dict))
     }
 }

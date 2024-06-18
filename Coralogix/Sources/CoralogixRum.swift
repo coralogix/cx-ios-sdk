@@ -4,10 +4,17 @@ import OpenTelemetrySdk
 import Darwin
 import UIKit
 
+extension Notification.Name {
+    static let cxRumNotification = Notification.Name("cxRumNotification")
+    static let cxRumNotificationSessionEnded = Notification.Name("cxRumNotificationSessionEnded")
+}
+
 public class CoralogixRum {
     internal var coralogixExporter: CoralogixExporter
     internal var versionMetadata: VersionMetadata
     internal var networkManager = NetworkManager()
+    internal var viewManager = ViewManager(keyChain: KeychainManager())
+    internal var sessionManager = SessionManager()
     internal var sessionInstrumentation: URLSessionInstrumentation?
     let notificationCenter = NotificationCenter.default
 
@@ -23,14 +30,16 @@ public class CoralogixRum {
         CoralogixRum.isDebug = options.debug
         self.coralogixExporter = CoralogixExporter(options: options,
                                                    versionMetadata: self.versionMetadata, 
-                                                   sessionManager: SessionManager(),
-                                                   networkManager: self.networkManager)
+                                                   sessionManager: self.sessionManager,
+                                                   networkManager: self.networkManager,
+                                                   viewManager: self.viewManager)
+        
         OpenTelemetry.registerTracerProvider(tracerProvider: TracerProviderBuilder()
             .add(spanProcessor: BatchSpanProcessor(spanExporter: self.coralogixExporter,
                                                    scheduleDelay: Double(Global.BatchSpan.scheduleDelay.rawValue),
                                                    maxExportBatchSize: Global.BatchSpan.maxExportBatchSize.rawValue))
                 .build())
-        self.initializeViewInstrumentation()
+        self.initializeNavigationInstrumentation()
         self.initializeSessionInstrumentation()
         self.initializeCrashInstumentation()
 

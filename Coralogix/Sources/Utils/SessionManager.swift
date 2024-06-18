@@ -14,10 +14,17 @@ public class SessionManager {
     private var lastActivityTime: Date?
     private var idleTimer: Timer?
     private let idleInterval: TimeInterval = 15 * 60  // 15 minutes in seconds
-    
+    private var errorCount: Int = 0
+    var lastSnapshotEventTime: Date?
+
     init() {
         self.setupSessionMetadata()
         self.setupIdleTimer()
+        self.updateActivityTime()
+    }
+    
+    public func incrementErrorCounter() {
+        errorCount += 1
     }
     
     public func getPrevSessionMetadata() -> SessionMetadata? {
@@ -36,6 +43,15 @@ public class SessionManager {
         self.sessionMetadata = SessionMetadata(sessionId: "",
                                                sessionCreationDate: 0,
                                                keychain: KeychainManager())
+        self.idleTimer?.invalidate()
+    }
+    
+    public func reset() {
+        self.errorCount = 0
+    }
+    
+    public func getErrorCount() -> Int {
+        return errorCount
     }
     
     private func hasAnHourPassed(since timeInterval: TimeInterval) -> Bool {
@@ -82,13 +98,14 @@ public class SessionManager {
         
         if timeSinceLastActivity > idleInterval {
             self.setupSessionMetadata()
+            NotificationCenter.default.post(name: .cxRumNotificationSessionEnded, object: nil)
             Log.d("Function has been idle for 15 minutes.")
         } else {
             let minutes = Int((idleInterval - timeSinceLastActivity) / 60)
             Log.d("Function is active. Idle in approximately \(minutes) minutes.")
         }
     }
-    
+
     deinit {
         idleTimer?.invalidate()
     }

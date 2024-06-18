@@ -21,8 +21,7 @@ public struct URLSessionInstrumentationConfiguration {
                 createdRequest: ((URLRequest, Span) -> Void)? = nil,
                 receivedResponse: ((URLResponse, DataOrFile?, Span) -> Void)? = nil,
                 receivedError: ((Error, DataOrFile?, HTTPStatus, Span) -> Void)? = nil,
-                delegateClassesToInstrument: [AnyClass]? = nil)
-    {
+                delegateClassesToInstrument: [AnyClass]? = nil) {
         self.shouldRecordPayload = shouldRecordPayload
         self.shouldInstrument = shouldInstrument
         self.shouldInjectTracingHeaders = shouldInjectTracingHeaders
