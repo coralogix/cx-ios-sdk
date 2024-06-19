@@ -18,12 +18,17 @@ public class CoralogixExporter: SpanExporter {
     public init(options: CoralogixExporterOptions,
                 versionMetadata: VersionMetadata,
                 sessionManager: SessionManager,
-                networkManager: NetworkProtocol) {
+                networkManager: NetworkProtocol,
+                viewManager: ViewManager) {
         self.options = options
         self.versionMetadata = versionMetadata
         self.sessionManager = sessionManager
         self.networkManager = networkManager
-        self.viewManager = ViewManager(keyChain: KeychainManager())
+        self.viewManager = viewManager
+        
+        NotificationCenter.default.addObserver(self,
+                                               selector: #selector(handleNotification(notification:)),
+                                               name: .cxRumNotificationSessionEnded, object: nil)
     }
 
     var pendingSpans: [SpanData] = []
@@ -117,10 +122,16 @@ public class CoralogixExporter: SpanExporter {
    
     public func shutdown(explicitTimeout: TimeInterval?) {
         self.sessionManager.shutdown()
+        self.viewManager.shutdown()
     }
     
     func encodeSpans(spans: [SpanData]) -> [[String: Any]] {
         return spans.map { self.spanDatatoCxSpan(otelSpan: $0) }
+    }
+    
+    @objc func handleNotification(notification: Notification) {
+        self.viewManager.reset()
+        self.sessionManager.reset()
     }
     
     private func spanDatatoCxSpan(otelSpan: SpanData) -> [String: Any] {

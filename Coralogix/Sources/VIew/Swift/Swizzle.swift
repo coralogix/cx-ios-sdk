@@ -13,10 +13,23 @@ extension UIViewController {
         let originalSelector = #selector(viewDidAppear(_:))
         let swizzledSelector = #selector(swizzled_viewDidAppear(_:))
         
-        guard let originalMethod = class_getInstanceMethod(UIViewController.self, originalSelector),
-              let swizzledMethod = class_getInstanceMethod(UIViewController.self, swizzledSelector) else { return }
-        
-        method_exchangeImplementations(originalMethod, swizzledMethod)
+        if let originalMethod = class_getInstanceMethod(UIViewController.self, originalSelector),
+           let swizzledMethod = class_getInstanceMethod(UIViewController.self, swizzledSelector) {
+            
+            let didAddMethod = class_addMethod(UIViewController.self,
+                                               originalSelector,
+                                               method_getImplementation(swizzledMethod),
+                                               method_getTypeEncoding(swizzledMethod))
+            
+            if didAddMethod {
+                class_replaceMethod(UIViewController.self,
+                                    swizzledSelector,
+                                    method_getImplementation(originalMethod),
+                                    method_getTypeEncoding(originalMethod))
+            } else {
+                method_exchangeImplementations(originalMethod, swizzledMethod)
+            }
+        }
     }()
     
     static let swizzleViewDidDisappear: Void = {
@@ -37,10 +50,16 @@ extension UIViewController {
     
     // This method will replace viewDidAppear
     @objc func swizzled_viewDidAppear(_ animated: Bool) {
-        updateCoralogixRum(window: self.getWindow(), state: .notifyOnAppear)
+        if self.isKind(of: UINavigationController.self) {
+            // Call the original viewDidAppear method for UINavigationController
+            swizzled_viewDidAppear(animated)
+        } else {
+            // Custom implementation for UIViewController
+            updateCoralogixRum(window: self.getWindow(), state: .notifyOnAppear)
 
-        // Call the original implementation
-        self.swizzled_viewDidAppear(animated)
+            // Call the original viewDidAppear
+            swizzled_viewDidAppear(animated)
+        }
     }
     
     @objc func swizzled_viewDidDisappear(_ animated: Bool) {

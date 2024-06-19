@@ -8,20 +8,29 @@
 import Foundation
 import UIKit
 
-public struct ViewManager {
+public class ViewManager {
     var keyChain: KeyChainProtocol?
     var prevViewName: String?
     var visibleView: CXView?
-
+    var uniqueViewsPerSession: Set<String>
+    
     init(keyChain: KeyChainProtocol?) {
         self.keyChain = keyChain
         if let viewName = keyChain?.readStringFromKeychain(service: Keys.service.rawValue, key: Keys.view.rawValue) {
             self.prevViewName = viewName
         }
+        self.uniqueViewsPerSession = Set<String>()
     }
-
-    public mutating func set(cxView: CXView?) {
-
+    
+    public func isUniqueView(name: String) -> Bool {
+        return !uniqueViewsPerSession.contains(name)
+    }
+    
+    public func getUniqueViewCount() -> Int {
+        return uniqueViewsPerSession.count
+    }
+    
+    public func set(cxView: CXView?) {
         if let view = cxView {
             if visibleView?.name == view.name {
                 return
@@ -29,6 +38,10 @@ public struct ViewManager {
             
             if view.state == .notifyOnAppear {
                 Log.d("view: \(view.name) state: \(view.state.rawValue)")
+                if self.isUniqueView(name: view.name) {
+                    uniqueViewsPerSession.insert(view.name)
+                }
+                Log.d("view unique count: \(uniqueViewsPerSession.count)")
             }
             keyChain?.writeStringToKeychain(service: Keys.service.rawValue,
                                             key: Keys.view.rawValue,
@@ -50,23 +63,18 @@ public struct ViewManager {
         }
         return [Keys.view.rawValue: prevViewName]
     }
-}
-
-extension CoralogixRum {
-    public func initializeViewInstrumentation() {
-        UIViewController.performSwizzling()
-        NotificationCenter.default.addObserver(self, selector: #selector(handleNotification(notification:)), name: .cxRumNotification, object: nil)
+    
+    func reset() {
+        self.uniqueViewsPerSession.removeAll()
     }
     
-    @objc func handleNotification(notification: Notification) {
-        if let cxView = notification.object as? CXView {
-            self.coralogixExporter.set(cxView: cxView)
-        } else {
-            Log.d("Notification received with no object or with a different object type")
-        }
+    func shutdown() {
+        self.visibleView = nil
+        self.prevViewName = nil
+        self.uniqueViewsPerSession.removeAll()
     }
-}
-
-extension Notification.Name {
-    static let cxRumNotification = Notification.Name("cxRumNotification")
+    
+    deinit {
+        Log.d("deinint ViewManager")
+    }
 }

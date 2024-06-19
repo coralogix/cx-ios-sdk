@@ -26,6 +26,8 @@ struct CxRum {
     let viewContext: String? = nil
     var labels: [String: Any]?
     var viewManager: ViewManager?
+    var snapshotContext: SnapshotConext?
+    var isOneMinuteFromLastSnapshotPass = false
     
     init(otel: SpanDataProtocol,
          versionMetadata: VersionMetadata,
@@ -63,9 +65,26 @@ struct CxRum {
         self.labels = labels
         self.logContext = LogContext(otel: otel)
         self.deviceState = DeviceState(networkManager: self.networkManager)
+        self.snapshotContext = SnapshotConext.getSnapshot(otel: otel)
+        
+        if let sessionManager = self.sessionManager,
+           let viewManager = self.viewManager,
+           let lastSnapshotSent = sessionManager.lastSnapshotEventTime {
+            if isMoreThanOneMinuteDifference(interval1: lastSnapshotSent.timeIntervalSince1970, interval2: self.timeStamp) {
+                self.snapshotContext = SnapshotConext(timestemp: Date().timeIntervalSince1970,
+                                                      errorCount: sessionManager.getErrorCount(),
+                                                      viewCount: viewManager.getUniqueViewCount())
+                self.isOneMinuteFromLastSnapshotPass = true
+            }
+        }
     }
     
-    func getDictionary() -> [String: Any] {
+    func isMoreThanOneMinuteDifference(interval1: TimeInterval, interval2: TimeInterval) -> Bool {
+        let difference = abs(interval1 - interval2)
+        return difference > 60
+    }
+
+    mutating func getDictionary() -> [String: Any] {
         var result = [String: Any]()
         result[Keys.timestamp.rawValue] = self.timeStamp.milliseconds
         result[Keys.mobileSdk.rawValue] = [Keys.sdkVersion.rawValue: self.mobileSdk,
@@ -87,6 +106,21 @@ struct CxRum {
         
         if eventContext.type == CoralogixEventType.error {
             result[Keys.errorContext.rawValue] = self.errorContext.getDictionary()
+            
+            // Add snapshot to all error type
+            if let _ = self.snapshotContext {
+                self.addSnapshotContext(to: &result)
+            }
+        }
+        
+        if eventContext.type == CoralogixEventType.navigation, let _ = self.snapshotContext {
+            // Add snapshot to all navigation type which the view is unique
+            self.addSnapshotContext(to: &result)
+        }
+        
+        if isOneMinuteFromLastSnapshotPass == true, let _ = self.snapshotContext {
+            self.addSnapshotContext(to: &result)
+            self.isOneMinuteFromLastSnapshotPass = false
         }
         
         if eventContext.type == CoralogixEventType.networkRequest {
@@ -109,5 +143,14 @@ struct CxRum {
             result[Keys.labels.rawValue] = labels
         }
         return result
+    }
+    
+    func addSnapshotContext(to result: inout [String: Any]) {
+        if let snapshotContext = self.snapshotContext {
+            result[Keys.isSnapshotEvent.rawValue] = true
+            result[Keys.snapshotContext.rawValue] = snapshotContext.getDictionary()
+            // Update lastTimestamp to now
+            self.sessionManager?.lastSnapshotEventTime = Date()
+        }
     }
 }

@@ -113,6 +113,11 @@ public enum Keys: String {
     case service = "com.coralogix.sdk"
     case keySessionId = "sessionId"
     case keySessionTimeInterval = "sessionTimeInterval"
+    case snapshotContext = "snapshot_context"
+    case errorCount
+    case viewCount
+    case isViewUnique
+    case isSnapshotEvent
 }
 
 public enum CoralogixLogSeverity: Int {
@@ -133,6 +138,7 @@ enum CoralogixEventType: String {
     case longtask
     case resources
     case internalKey = "internal"
+    case navigation
     case unknown
 }
 

@@ -13,7 +13,7 @@ public class CxSpan {
     let isErrorWithStacktrace: Bool = false
     var severity: Int = 0
     var timeStamp: TimeInterval = 0
-    let cxRum: CxRum
+    var cxRum: CxRum
     
     init(otel: SpanDataProtocol,
          versionMetadata: VersionMetadata,
