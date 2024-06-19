@@ -22,7 +22,7 @@ extension CoralogixRum {
             if viewManager.isUniqueView(name: cxView.name) {
                 let span = self.getSpan()
 
-                let snapshot = SnapshotConext(timestemp: Date(),
+                let snapshot = SnapshotConext(timestemp: Date().timeIntervalSince1970,
                                               errorCount: self.sessionManager.getErrorCount(),
                                               viewCount: self.viewManager.getUniqueViewCount() + 1)
                 let dict = Helper.convertDictionary(snapshot.getDictionary())

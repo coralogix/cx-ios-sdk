@@ -71,7 +71,7 @@ struct CxRum {
            let viewManager = self.viewManager,
            let lastSnapshotSent = sessionManager.lastSnapshotEventTime {
             if isMoreThanOneMinuteDifference(interval1: lastSnapshotSent.timeIntervalSince1970, interval2: self.timeStamp) {
-                self.snapshotContext = SnapshotConext(timestemp: Date(),
+                self.snapshotContext = SnapshotConext(timestemp: Date().timeIntervalSince1970,
                                                       errorCount: sessionManager.getErrorCount(),
                                                       viewCount: viewManager.getUniqueViewCount())
                 self.isOneMinuteFromLastSnapshotPass = true
@@ -108,17 +108,17 @@ struct CxRum {
             result[Keys.errorContext.rawValue] = self.errorContext.getDictionary()
             
             // Add snapshot to all error type
-            if let snapshotContext = self.snapshotContext {
+            if let _ = self.snapshotContext {
                 self.addSnapshotContext(to: &result)
             }
         }
         
-        if eventContext.type == CoralogixEventType.navigation, let snapshotContext = self.snapshotContext {
+        if eventContext.type == CoralogixEventType.navigation, let _ = self.snapshotContext {
             // Add snapshot to all navigation type which the view is unique
             self.addSnapshotContext(to: &result)
         }
         
-        if isOneMinuteFromLastSnapshotPass == true, let snapshotContext = self.snapshotContext {
+        if isOneMinuteFromLastSnapshotPass == true, let _ = self.snapshotContext {
             self.addSnapshotContext(to: &result)
             self.isOneMinuteFromLastSnapshotPass = false
         }

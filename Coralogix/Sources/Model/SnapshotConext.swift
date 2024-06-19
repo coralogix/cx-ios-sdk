@@ -8,14 +8,14 @@
 import Foundation
 
 public struct SnapshotConext {
-    let timestemp: Date
+    let timestemp: TimeInterval
     let errorCount: Int
     let viewCount: Int
     
     static func getSnapshot(otel: SpanDataProtocol) -> SnapshotConext? {
         if let jsonString = otel.getAttribute(forKey: Keys.snapshotContext.rawValue) as? String,
            let dict = Helper.convertJsonStringToDict(jsonString: jsonString) {
-            let timestemp = dict[Keys.timestamp.rawValue] as? Date ?? Date()
+            let timestemp = dict[Keys.timestamp.rawValue] as? TimeInterval ?? 0
             let errorCount = dict[Keys.errorCount.rawValue] as? Int ?? 0
             let viewCount = dict[Keys.viewCount.rawValue] as? Int ?? 0
             return SnapshotConext(timestemp: timestemp, errorCount: errorCount, viewCount: viewCount)
@@ -25,7 +25,7 @@ public struct SnapshotConext {
     
     func getDictionary() -> [String: Any] {
         var result = [String: Any]()
-        result[Keys.timestamp.rawValue] = Date().timeIntervalSince1970.milliseconds
+        result[Keys.timestamp.rawValue] = self.timestemp.milliseconds
         result[Keys.errorCount.rawValue] = self.errorCount
         result[Keys.viewCount.rawValue] = self.viewCount
         return result

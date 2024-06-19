@@ -88,7 +88,7 @@ extension CoralogixRum {
     
     private func addSnapshotContext(to span: inout Span) {
         self.sessionManager.incrementErrorCounter()
-        let snapshot = SnapshotConext(timestemp: Date(),
+        let snapshot = SnapshotConext(timestemp: Date().timeIntervalSince1970,
                                       errorCount: self.sessionManager.getErrorCount(),
                                       viewCount: self.viewManager.getUniqueViewCount())
         let dict = Helper.convertDictionary(snapshot.getDictionary())
