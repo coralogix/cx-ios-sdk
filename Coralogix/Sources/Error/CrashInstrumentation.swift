@@ -7,7 +7,7 @@
 
 import Foundation
 import CrashReporter
-import OpenTelemetryApi
+// import OpenTelemetryApi
 
 extension CoralogixRum {
     private func tracer() -> Tracer {

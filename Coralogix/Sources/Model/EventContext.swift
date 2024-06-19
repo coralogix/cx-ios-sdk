@@ -5,7 +5,6 @@
 //
 
 import Foundation
-import OpenTelemetrySdk
 
 struct EventContext {
     var type: CoralogixEventType = .unknown

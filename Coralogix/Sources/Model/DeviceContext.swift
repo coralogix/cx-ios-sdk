@@ -6,7 +6,7 @@
 //
 
 import Foundation
-import OpenTelemetryApi
+// import OpenTelemetryApi
 import UIKit
 
 struct DeviceContext {

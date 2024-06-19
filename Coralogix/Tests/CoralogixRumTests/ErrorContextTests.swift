@@ -6,8 +6,7 @@
 //
 
 import XCTest
-import OpenTelemetrySdk
-import OpenTelemetryApi
+// import OpenTelemetryApi
 @testable import Coralogix
 
 final class ErrorContextTests: XCTestCase {

@@ -6,8 +6,7 @@
 //
 
 import XCTest
-import OpenTelemetrySdk
-import OpenTelemetryApi
+// import OpenTelemetryApi
 import Foundation
 
 @testable import Coralogix

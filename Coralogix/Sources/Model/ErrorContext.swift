@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import OpenTelemetrySdk
 
 struct ErrorContext {
     let domain: String

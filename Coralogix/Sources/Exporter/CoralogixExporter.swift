@@ -5,8 +5,7 @@
 //
 
 import Foundation
-import OpenTelemetrySdk
-import OpenTelemetryApi
+// import OpenTelemetryApi
 
 public class CoralogixExporter: SpanExporter {
     private var options: CoralogixExporterOptions
@@ -64,7 +63,7 @@ public class CoralogixExporter: SpanExporter {
         self.viewManager = view
     }
     
-    public func export(spans: [SpanData], explicitTimeout: TimeInterval?) -> OpenTelemetrySdk.SpanExporterResultCode {
+    public func export(spans: [SpanData], explicitTimeout: TimeInterval?) -> SpanExporterResultCode {
         guard CoralogixRum.isInitialized,
               let url = URL(string: self.endPoint) else { return .failure }
         self.sessionManager.updateActivityTime()
@@ -116,7 +115,7 @@ public class CoralogixExporter: SpanExporter {
         return status
     }
     
-    public func flush(explicitTimeout: TimeInterval?) -> OpenTelemetrySdk.SpanExporterResultCode {
+    public func flush(explicitTimeout: TimeInterval?) -> SpanExporterResultCode {
         return .success
     }
    
