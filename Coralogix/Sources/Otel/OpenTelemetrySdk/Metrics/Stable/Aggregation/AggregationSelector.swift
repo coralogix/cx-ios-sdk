@@ -4,8 +4,6 @@
 // 
 
 import Foundation
-// import OpenTelemetryApi
-
 
 public typealias AggregationResolver = (InstrumentType) -> Aggregation
 

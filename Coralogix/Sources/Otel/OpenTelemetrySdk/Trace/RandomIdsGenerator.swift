@@ -4,7 +4,6 @@
  */
 
 import Foundation
-// import OpenTelemetryApi
 
 public struct RandomIdGenerator: IdGenerator {
     public init() {}

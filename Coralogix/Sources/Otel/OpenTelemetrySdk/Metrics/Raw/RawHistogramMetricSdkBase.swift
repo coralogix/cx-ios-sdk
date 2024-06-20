@@ -4,8 +4,6 @@
  */
 
 import Foundation
-// import OpenTelemetryApi
-
 
 class RawHistogramMetricSdkBase<T> : RawHistogramMetric {
     

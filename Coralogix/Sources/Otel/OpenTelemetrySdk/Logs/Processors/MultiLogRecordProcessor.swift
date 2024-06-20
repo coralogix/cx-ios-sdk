@@ -4,7 +4,6 @@
 // 
 
 import Foundation
-// import OpenTelemetryApi
 
 public class MultiLogRecordProcessor : LogRecordProcessor {
     var logRecordProcessors = [LogRecordProcessor]()

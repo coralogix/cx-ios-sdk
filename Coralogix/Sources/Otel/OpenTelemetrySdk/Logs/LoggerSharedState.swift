@@ -4,7 +4,6 @@
 // 
 
 import Foundation
-// import OpenTelemetryApi
 
 class LoggerSharedState {
   var resource : Resource

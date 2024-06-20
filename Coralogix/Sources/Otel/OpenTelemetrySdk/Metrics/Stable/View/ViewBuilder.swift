@@ -4,7 +4,6 @@
 //
 
 import Foundation
-// import OpenTelemetryApi
 
 public class ViewBuilder {
     private var name: String?

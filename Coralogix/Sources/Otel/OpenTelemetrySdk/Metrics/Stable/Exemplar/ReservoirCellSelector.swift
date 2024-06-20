@@ -4,7 +4,7 @@
 // 
 
 import Foundation
-// import OpenTelemetryApi
+// 
 
 public protocol ReservoirCellSelector {
     func reservoirCellIndex(for cells: [ReservoirCell], value: Int, attributes: [String: AttributeValue]) -> Int

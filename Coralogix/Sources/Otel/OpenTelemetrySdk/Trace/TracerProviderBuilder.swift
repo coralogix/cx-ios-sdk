@@ -4,7 +4,6 @@
  */
 
 import Foundation
-// import OpenTelemetryApi
 
 public class TracerProviderBuilder {
     public private(set) var clock : Clock = MillisClock()

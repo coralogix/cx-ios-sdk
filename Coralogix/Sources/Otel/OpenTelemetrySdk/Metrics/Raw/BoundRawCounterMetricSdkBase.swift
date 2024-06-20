@@ -5,7 +5,6 @@
 
 
 import Foundation
-// import OpenTelemetryApi
 
 class BoundRawCounterMetricSdkBase<T>: BoundRawCounterMetric<T> {
     internal var status : RecordStatus

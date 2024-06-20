@@ -8,7 +8,6 @@
 import CoreTelephony
 import Foundation
 import Network
-// import OpenTelemetryApi
 
 public class NetworkStatusInjector {
     private var netstat: NetworkStatusClass

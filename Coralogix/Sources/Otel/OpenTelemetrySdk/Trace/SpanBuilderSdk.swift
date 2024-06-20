@@ -4,7 +4,6 @@
  */
 
 import Foundation
-// import OpenTelemetryApi
 
 /// SpanBuilderSdk is SDK implementation of SpanBuilder.
 class SpanBuilderSdk: SpanBuilder {

@@ -4,7 +4,7 @@
  */
 
 import Foundation
-// import OpenTelemetryApi
+// 
 
 /// Implementation of the SpanProcessor that simply forwards all received events to a list of
 /// SpanProcessors.

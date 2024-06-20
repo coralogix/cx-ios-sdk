@@ -4,7 +4,6 @@
  */
 
 import Foundation
-// import OpenTelemetryApi
 
 /// Interface for getting the current time.
 public protocol Clock: AnyObject {

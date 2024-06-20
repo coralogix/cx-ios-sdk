@@ -4,7 +4,7 @@
  */
 
 import Foundation
-// import OpenTelemetryApi
+// 
 
 class CounterMetricSdk<T: SignedNumeric>: CounterMetricSdkBase<T> {
     override init(name: String) {

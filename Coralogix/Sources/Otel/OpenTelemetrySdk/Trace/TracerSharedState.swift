@@ -4,7 +4,6 @@
  */
 
 import Foundation
-// import OpenTelemetryApi
 
 /// Represents the shared state/config between all Tracers created by the same TracerProvider.
 class TracerSharedState {

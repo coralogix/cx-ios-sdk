@@ -4,7 +4,7 @@
  */
 
 import Foundation
-// import OpenTelemetryApi
+// 
 
 class IntObserverMetricSdk: IntObserverMetric {
     public private(set) var observerHandles = [LabelSet: IntObserverMetricHandleSdk]()

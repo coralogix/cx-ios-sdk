@@ -4,7 +4,6 @@
  */
 
 import Foundation
-// import OpenTelemetryApi
 
 class BoundCounterMetricSdkBase<T>: BoundCounterMetric<T> {
     internal var status: RecordStatus

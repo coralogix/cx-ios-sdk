@@ -4,7 +4,6 @@
  */
 
 import Foundation
-// import OpenTelemetryApi
 
 // A dictionary implementation with a fixed capacity that drops events when the dictionary gets full. Eviction
 // is based on the access order.

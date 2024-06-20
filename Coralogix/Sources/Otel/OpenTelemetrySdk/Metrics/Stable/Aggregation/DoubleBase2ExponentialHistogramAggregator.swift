@@ -4,7 +4,6 @@
 //
 
 import Foundation
-// import OpenTelemetryApi
 
 public class DoubleBase2ExponentialHistogramAggregator: StableAggregator {
     private var reservoirSupplier : () -> ExemplarReservoir

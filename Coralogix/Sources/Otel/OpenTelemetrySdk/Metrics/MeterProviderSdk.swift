@@ -4,7 +4,7 @@
  */
 
 import Foundation
-// import OpenTelemetryApi
+// 
 
 // Phase 2
 //@available(*, deprecated, renamed: "StableMeterProviderSdk")

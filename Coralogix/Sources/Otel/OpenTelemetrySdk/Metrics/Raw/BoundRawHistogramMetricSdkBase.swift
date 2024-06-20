@@ -5,7 +5,6 @@
 
 
 import Foundation
-// import OpenTelemetryApi
 
 
 class BoundRawHistogramMetricSdkBase<T> : BoundRawHistogramMetric<T> {

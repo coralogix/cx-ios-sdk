@@ -4,7 +4,7 @@
 //
 
 import Foundation
-// import OpenTelemetryApi
+
 public class DropAggregator: StableAggregator {
     public private(set) static var POINT_DATA = PointData(startEpochNanos: 0, endEpochNanos: 0, attributes: [String: AttributeValue](), exemplars: [ExemplarData]())
 

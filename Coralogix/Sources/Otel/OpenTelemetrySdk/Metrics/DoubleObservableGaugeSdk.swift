@@ -4,7 +4,7 @@
  */
 
 import Foundation
-// import OpenTelemetryApi
+// 
 
 class DoubleObservableGaugeSdk: DoubleObserverMetric {
     public private(set) var observerHandles = [LabelSet: DoubleObservableGaugeHandle]()

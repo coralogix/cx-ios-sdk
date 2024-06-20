@@ -4,7 +4,7 @@
  */
 
 import Foundation
-// import OpenTelemetryApi
+// 
 public class StableMeterProviderBuilder {
     public private(set) var clock: Clock = MillisClock()
     public private(set) var resource: Resource = .init()

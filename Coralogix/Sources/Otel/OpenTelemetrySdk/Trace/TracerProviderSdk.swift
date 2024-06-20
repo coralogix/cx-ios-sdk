@@ -4,7 +4,6 @@
  */
 
 import Foundation
-// import OpenTelemetryApi
 
 public class TracerProviderSdk: TracerProvider {
     private var tracerLock = pthread_rwlock_t()

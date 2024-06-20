@@ -4,7 +4,7 @@
  */
 
 import Foundation
-// import OpenTelemetryApi
+// 
 
 public extension Meter {
     func addMetric(name _: String, type _: AggregationType, data _: [MetricData]) {

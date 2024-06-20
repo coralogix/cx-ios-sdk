@@ -18,7 +18,7 @@ struct ErrorContext {
     let processName: String
     let applicationIdentifier: String
     var triggeredByThread: Int = 0
-    var originalStackTrace: [[String: Any]]?
+    var threads: [[[String: Any]]]?
     let baseAddress: String
     let arch: String
     
@@ -38,17 +38,24 @@ struct ErrorContext {
         if let triggeredByThread = otel.getAttribute(forKey: Keys.triggeredByThread.rawValue) as? String {
             self.triggeredByThread = Int(triggeredByThread) ?? -1
         }
-        
-        if let jsonString = otel.getAttribute(forKey: Keys.originalStackTrace.rawValue) as? String,
-           let data = Helper.convertJsonStringToArray(jsonString: jsonString) {
-            self.originalStackTrace = data
+    
+        if let jsonString = otel.getAttribute(forKey: Keys.threads.rawValue) as? String,
+           let arrayOfTreadsDictJsonString = Helper.convertJsonStringToArrayOfStrings(jsonString: jsonString) {
+            self.threads?.removeAll()
+            self.threads = [[[String: Any]]]()
+            
+            for threadJsonString in arrayOfTreadsDictJsonString {
+                if let data = Helper.convertJsonStringToArray(jsonString: threadJsonString) {
+                    self.threads?.append(data)
+                }
+            }
         }
         self.baseAddress = otel.getAttribute(forKey: Keys.baseAddress.rawValue) as? String ?? ""
         self.arch = otel.getAttribute(forKey: Keys.arch.rawValue) as? String ?? ""
     }
     
     func getDictionary() -> [String: Any] {
-        if let originalStackTrace = self.originalStackTrace, !originalStackTrace.isEmpty {
+        if let threads = self.threads, !threads.isEmpty {
             var crashContext = [String: Any]()
             crashContext[Keys.exceptionType.rawValue] = self.exceptionType
             crashContext[Keys.crashTimestamp.rawValue] = self.crashTimestamp
@@ -57,8 +64,8 @@ struct ErrorContext {
             crashContext[Keys.triggeredByThread.rawValue] = self.triggeredByThread
             crashContext[Keys.baseAddress.rawValue] = self.baseAddress
             crashContext[Keys.arch.rawValue] = self.arch
-            if let originalStackTrace = self.originalStackTrace {
-                crashContext[Keys.originalStackTrace.rawValue] = originalStackTrace
+            if let threads = self.threads {
+                crashContext[Keys.threads.rawValue] = threads
             }
             return [Keys.crashContext.rawValue: crashContext]
         } else {

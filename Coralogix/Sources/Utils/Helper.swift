@@ -9,6 +9,18 @@ import Foundation
 import UIKit
 
 class Helper {
+    internal static func convertArrayOfStringToJsonString(array: [String]) -> String {
+        do {
+            let jsonData = try JSONSerialization.data(withJSONObject: array, options: [])
+            if let jsonString = String(data: jsonData, encoding: .utf8) {
+                return jsonString
+            }
+        } catch {
+            Log.e("Error: \(error)")
+        }
+        return ""
+    }
+    
     internal static func convertArrayToJsonString(array: [[String: Any]]) -> String {
         do {
             let jsonData = try JSONSerialization.data(withJSONObject: array, options: [])
@@ -75,6 +87,26 @@ class Helper {
         }
     }
     
+    internal static func convertJsonStringToArrayOfStrings(jsonString: String) -> [String]? {
+        guard let jsonData = jsonString.data(using: .utf8) else {
+            Log.e("Failed to convert JSON string to data")
+            return nil
+        }
+        
+        do {
+            // Convert JSON data to a dictionary
+            if let arrayOfString = try JSONSerialization.jsonObject(with: jsonData, options: []) as? [String] {
+                // Use the dictionary as needed
+                return arrayOfString
+            } else {
+                Log.e("JSON data is not in the expected format")
+                return nil
+            }
+        } catch {
+            Log.e("Error: \(error)")
+            return nil
+        }
+    }
     internal static func convertDictionary(_ inputDict: [AnyHashable: Any]) -> [String: Any] {
         var outputDict: [String: Any] = [:]
         

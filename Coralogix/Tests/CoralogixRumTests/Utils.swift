@@ -6,7 +6,6 @@
 //
 
 import Foundation
-// import OpenTelemetryApi
 @testable import Coralogix
 
 class MockSpanData: SpanDataProtocol {

@@ -4,7 +4,6 @@
 //
 
 import Foundation
-// import OpenTelemetryApi
 
 public class DropAggregation: Aggregation {
     public private(set) static var instance = DropAggregation()

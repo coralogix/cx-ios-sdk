@@ -4,7 +4,7 @@
 //
 
 import Foundation
-// import OpenTelemetryApi
+// 
 
 public class Base2ExponentialHistogramIndexer {
     private static var cache = [Int: Base2ExponentialHistogramIndexer]()

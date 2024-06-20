@@ -4,7 +4,6 @@
 // 
 
 import Foundation
-// import OpenTelemetryApi
 
 public class NoopLogRecordProcessor : LogRecordProcessor {
     

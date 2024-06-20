@@ -4,7 +4,6 @@
 //
 
 import Foundation
-// import OpenTelemetryApi
 
 internal protocol AggregatorHandleProtocol {
     func doAggregateThenMaybeReset(startEpochNano: Int, endEpochNano: Int, attributes: [String: AttributeValue], reset: Bool) -> PointData

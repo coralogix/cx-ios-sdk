@@ -5,7 +5,6 @@
 //
 
 import Foundation
-// import OpenTelemetryApi
 
 struct SessionContext {
     let sessionId: String

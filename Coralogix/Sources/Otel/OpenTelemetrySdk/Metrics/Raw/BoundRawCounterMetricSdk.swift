@@ -4,7 +4,6 @@
  */
 
 import Foundation
-// import OpenTelemetryApi
 
 class BoundRawCounterMetricSdk<T: SignedNumeric> : BoundRawCounterMetricSdkBase<T> {
     var metricData = [MetricData]()

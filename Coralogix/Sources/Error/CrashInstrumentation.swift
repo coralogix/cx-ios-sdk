@@ -7,7 +7,6 @@
 
 import Foundation
 import CrashReporter
-// import OpenTelemetryApi
 
 extension CoralogixRum {
     private func tracer() -> Tracer {
@@ -81,15 +80,19 @@ extension CoralogixRum {
     }
     
     private func createStackTrace(report: PLCrashReport, span: Span) {
-        for case let thread as PLCrashReportThreadInfo in report.threads where thread.crashed {
-            span.setAttribute(key: Keys.triggeredByThread.rawValue, value: thread.threadNumber)
+        var threads = [String]()
+        for case let thread as PLCrashReportThreadInfo in report.threads {
+            if thread.crashed {
+                span.setAttribute(key: Keys.triggeredByThread.rawValue, value: thread.threadNumber)
+            }
             
             let crashedThreadFrames = crashedThread(report: report, thread: thread)
             let data = self.parseFrameArray(crashedThreadFrameArray: crashedThreadFrames)
-            span.setAttribute(key: Keys.originalStackTrace.rawValue, value: Helper.convertArrayToJsonString(array: data))
-            break
+            threads.append(Helper.convertArrayToJsonString(array: data))
         }
+        span.setAttribute(key: Keys.threads.rawValue, value: Helper.convertArrayOfStringToJsonString(array: threads))
     }
+
     
     func parseFrameArray(crashedThreadFrameArray: [StackFrame]) -> [[String: Any]] {
         var result = [[String: Any]]()

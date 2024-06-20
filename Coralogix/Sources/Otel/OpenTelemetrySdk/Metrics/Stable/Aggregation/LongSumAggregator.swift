@@ -4,7 +4,6 @@
 //
 
 import Foundation
-// import OpenTelemetryApi
 
 public class LongSumAggregator: SumAggregator, StableAggregator {
     private let reservoirSupplier: () -> ExemplarReservoir

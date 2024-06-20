@@ -4,7 +4,6 @@
 //
 
 import Foundation
-// import OpenTelemetryApi
 
 public class LastValueAggregation: Aggregation {
     public private(set) static var instance = LastValueAggregation()

@@ -4,7 +4,7 @@
 //
 
 import Foundation
-// import OpenTelemetryApi
+// 
 
 public class DoublePointData: PointData {
     public var value: Double

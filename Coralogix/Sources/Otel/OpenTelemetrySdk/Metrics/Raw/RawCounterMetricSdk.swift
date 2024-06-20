@@ -4,7 +4,6 @@
  */
 
 import Foundation
-// import OpenTelemetryApi
 
 internal class RawCounterMetricSdk<T : SignedNumeric & Comparable> : RawCounterMetricSdkBase<T> {
 

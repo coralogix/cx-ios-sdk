@@ -4,7 +4,6 @@
  */
 
 import Foundation
-// import OpenTelemetryApi
 
 class RawCounterMetricSdkBase<T> : RawCounterMetric {
     let bindUnbindLock = Lock()

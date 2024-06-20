@@ -118,6 +118,7 @@ public enum Keys: String {
     case viewCount
     case isViewUnique
     case isSnapshotEvent
+    case threads
 }
 
 public enum CoralogixLogSeverity: Int {

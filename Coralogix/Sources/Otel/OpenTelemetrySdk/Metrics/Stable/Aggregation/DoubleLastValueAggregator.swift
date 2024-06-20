@@ -4,7 +4,6 @@
 //
 
 import Foundation
-// import OpenTelemetryApi
 
 public class DoubleLastValueAggregator: StableAggregator {
     private var reservoirSupplier: () -> ExemplarReservoir

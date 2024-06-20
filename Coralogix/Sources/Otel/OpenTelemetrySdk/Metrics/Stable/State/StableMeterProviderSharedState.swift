@@ -4,7 +4,7 @@
 // 
 
 import Foundation
-// import OpenTelemetryApi
+// 
 
 public class MeterProviderSharedState {
     public  init(clock: Clock, resource: Resource, startEpochNanos: UInt64, exemplarFilter: ExemplarFilter) {

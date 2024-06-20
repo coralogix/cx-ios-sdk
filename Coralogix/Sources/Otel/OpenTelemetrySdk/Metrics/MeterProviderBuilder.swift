@@ -4,7 +4,7 @@
  */
 import Foundation
 
-// import OpenTelemetryApi
+// 
 
 public class MeterProviderBuilder {
     public private(set) var resource : Resource = Resource()

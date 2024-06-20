@@ -4,7 +4,6 @@
  */
 
 import Foundation
-// import OpenTelemetryApi
 
 class BoundCounterMetricSdk<T: SignedNumeric>: BoundCounterMetricSdkBase<T> {
     private var sumAggregator = CounterSumAggregator<T>()

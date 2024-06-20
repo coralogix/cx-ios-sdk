@@ -4,7 +4,6 @@
 //
 
 import Foundation
-// import OpenTelemetryApi
 
 public protocol StableAggregator {
     func diff(previousCumulative: PointData, currentCumulative: PointData) throws -> PointData

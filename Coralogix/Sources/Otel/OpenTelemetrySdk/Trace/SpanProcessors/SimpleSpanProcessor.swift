@@ -4,7 +4,6 @@
  */
 
 import Foundation
-// import OpenTelemetryApi
 
 /// A really simple implementation of the SpanProcessor that converts the ReadableSpan SpanData
 /// and passes it to the configured exporter.

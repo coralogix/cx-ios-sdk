@@ -4,7 +4,7 @@
 // 
 
 import Foundation
-// import OpenTelemetryApi
+// 
 
 public protocol AttributeProcessor  {
     func process(incoming : [String: AttributeValue]) -> [String: AttributeValue]

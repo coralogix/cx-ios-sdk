@@ -4,7 +4,6 @@
 //
 
 import Foundation
-// import OpenTelemetryApi
 
 public class Base2ExponentialHistogramAggregation : Aggregation {
     private static let defaultMaxBuckets = 160

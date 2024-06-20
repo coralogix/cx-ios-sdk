@@ -4,7 +4,6 @@
 // 
 
 import Foundation
-// import OpenTelemetryApi
 
 protocol InstrumentBuilder : AnyObject {
     var meterProviderSharedState : MeterProviderSharedState { get }

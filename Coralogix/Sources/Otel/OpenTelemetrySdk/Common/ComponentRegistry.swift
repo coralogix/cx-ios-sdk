@@ -4,7 +4,6 @@
 // 
 
 import Foundation
-// import OpenTelemetryApi
 
 class ComponentRegistry<T> {
     private var lock = Lock()

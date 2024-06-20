@@ -4,7 +4,6 @@
  */
 
 import Foundation
-// import OpenTelemetryApi
 
 /// The extend Span interface used by the SDK.
 public protocol ReadableSpan: Span {

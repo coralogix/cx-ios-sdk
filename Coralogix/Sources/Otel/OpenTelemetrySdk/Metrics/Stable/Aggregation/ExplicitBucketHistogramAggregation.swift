@@ -4,7 +4,6 @@
 //
 
 import Foundation
-// import OpenTelemetryApi
 
 public class ExplicitBucketHistogramAggregation: Aggregation {
     public private(set) static var DEFAULT_BOUNDARIES: [Double] = [0, 5, 10, 25, 50, 75, 100, 250, 500, 750, 1_000, 2_500, 5_000, 7_500]

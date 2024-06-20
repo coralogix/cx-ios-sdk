@@ -4,7 +4,6 @@
  */
 
 import Foundation
-// import OpenTelemetryApi
 
 /// Struct that holds global trace parameters.
 public struct SpanLimits: Equatable {

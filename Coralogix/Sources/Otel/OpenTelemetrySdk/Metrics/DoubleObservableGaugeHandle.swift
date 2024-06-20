@@ -4,7 +4,7 @@
  */
 
 import Foundation
-// import OpenTelemetryApi
+// 
 
 struct DoubleObservableGaugeHandle: DoubleObserverMetricHandle {
     public private(set) var aggregator = MaxValueAggregator<Double>()

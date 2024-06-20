@@ -4,7 +4,7 @@
  */
 
 import Foundation
-// import OpenTelemetryApi
+// 
 
 class CounterMetricSdkBase<T>: CounterMetric {
     let bindUnbindLock = Lock()

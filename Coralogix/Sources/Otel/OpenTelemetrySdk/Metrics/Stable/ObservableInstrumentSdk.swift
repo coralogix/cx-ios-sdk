@@ -4,7 +4,6 @@
 // 
 
 import Foundation
-// import OpenTelemetryApi
 
 public struct ObservableInstrumentSdk : ObservableDoubleCounter, ObservableLongCounter, ObservableLongGauge, ObservableLongUpDownCounter, ObservableDoubleGauge, ObservableDoubleUpDownCounter {
     let meterSharedState : StableMeterSharedState
