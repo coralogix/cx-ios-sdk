@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import OpenTelemetryApi
 
 extension CoralogixRum {
     private func tracer() -> Tracer {

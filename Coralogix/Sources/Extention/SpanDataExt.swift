@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import OpenTelemetrySdk
 
 protocol SpanDataProtocol {
     func getAttribute(forKey: String) -> Any?

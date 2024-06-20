@@ -4,8 +4,7 @@
  */
 
 import Foundation
-import OpenTelemetryApi
-import OpenTelemetrySdk
+// 
 import os.log
 
 class URLSessionLogger {

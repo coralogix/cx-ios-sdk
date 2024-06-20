@@ -4,8 +4,6 @@
  */
 
 import Foundation
-import OpenTelemetryApi
-import OpenTelemetrySdk
 
 public typealias DataOrFile = Any
 public typealias SessionTaskId = String

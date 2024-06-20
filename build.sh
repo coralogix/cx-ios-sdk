@@ -99,8 +99,6 @@ function build() {
     echo "Done archiving $scheme for $platform"
 
     xcframework_path="archives/$scheme/$platform.xcarchive/Products/usr/local/lib/"
-    cp -R ./Coralogix/Frameworks/OpenTelemetryApi.xcframework "$xcframework_path"
-    cp -R ./Coralogix/Frameworks/OpenTelemetrySDK.xcframework "$xcframework_path"
     cp -R ./Coralogix/Frameworks/PLCrashReporter/CrashReporter.xcframework "$xcframework_path"
     echo "Done copying All xcframework"
 
@@ -156,8 +154,6 @@ function package() {
         args+=("-framework" "$framework_path" "-debug-symbols" "$dsym_path")
     done
 
-  #  args+=("-framework" "Coralogix/Frameworks/OpenTelemetryApi.xcframework")
-  #  args+=("-framework" "Coralogix/Frameworks/OpenTelemetrySDK.xcframework")
   #  args+=("-framework" "Coralogix/Frameworks/PLCrashReporter/CrashReporter.xcframework")
   #  echo "######### $args"
   #  for arg in "${args[@]}"; do

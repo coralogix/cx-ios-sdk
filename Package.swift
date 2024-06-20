@@ -12,31 +12,20 @@ let package = Package(
         .library(name: "Coralogix", type: .dynamic, targets: ["Coralogix"])
     ],
     dependencies: [
+        //.package(url: "https://github.com/open-telemetry/opentelemetry-swift", from: "1.9.2"),
     ],
     targets: [
         .binaryTarget(
             name: "CrashReporter",
             path:"Coralogix/Frameworks/PLCrashReporter/CrashReporter.xcframework"
         ),
-        .binaryTarget(
-            name: "OpenTelemetryApi",
-            path:"Coralogix/Frameworks/OpenTelemetryApi.xcframework"
-        ),
-        .binaryTarget(
-            name: "OpenTelemetrySdk",
-            path:"Coralogix/Frameworks/OpenTelemetrySdk.xcframework"
-        ),
         .target(
             name: "Coralogix",
             dependencies: [
-                .target(name: "OpenTelemetryApi"),
-                .target(name: "OpenTelemetrySdk"),
                 .target(name: "CrashReporter"),
             ],
             path: "Coralogix/Sources/",
             resources: [
-                .copy("OpenTelemetryApi.xcframework"),
-                .copy("OpenTelemetrySDK.xcframework"),
                 .copy("CrashReporter.xcframework")
             ]
         ),

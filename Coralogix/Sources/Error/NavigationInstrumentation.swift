@@ -7,7 +7,6 @@
 
 import Foundation
 import UIKit
-import OpenTelemetryApi
 
 extension CoralogixRum {
     public func initializeNavigationInstrumentation() {

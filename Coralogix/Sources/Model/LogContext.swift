@@ -5,7 +5,6 @@
 //
 
 import Foundation
-import OpenTelemetrySdk
 
 struct LogContext {
     let message: String

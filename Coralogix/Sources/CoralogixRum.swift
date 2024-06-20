@@ -1,6 +1,4 @@
 import Foundation
-import OpenTelemetryApi
-import OpenTelemetrySdk
 import Darwin
 import UIKit
 
