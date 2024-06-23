@@ -94,7 +94,7 @@ public enum Keys: String {
     case pid
     case frameNumber = "frame_number"
     case binary
-    case functionAdresseCalled = "function_adresse_called"
+    case functionAddressCalled = "function_address_called"
     case base
     case offset
     case exceptionContext = "exception_context"
