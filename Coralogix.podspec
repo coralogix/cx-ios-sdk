@@ -9,7 +9,7 @@
 Pod::Spec.new do |spec|
 
   spec.name         = "Coralogix"
-  spec.version      = "1.0.6"
+  spec.version      = "1.0.7"
   spec.summary      = "Coralogix OpenTelemetry pod for iOS."
 
   spec.description  = <<-DESC
@@ -21,13 +21,21 @@ Pod::Spec.new do |spec|
   Page navigation (Swift use swizzeling / SwiftUI use modifier)
   DESC
 
+  spec.swift_version    = '5.1'
+  spec.cocoapods_version = '>= 1.10'
+
+  spec.platform     = :ios, '15.0'  # Update the deployment target here
+
   spec.homepage     = "https://github.com/coralogix/cx-ios-sdk.git"
   spec.license      = { :type => 'MIT', :file => 'LICENSE' }
   spec.source       = { :git => "https://github.com/coralogix/cx-ios-sdk.git", :tag => "#{spec.version}" }
   spec.author             = { "Coralogix" => "www.coralogix.com" }
   spec.ios.deployment_target = "15.0"
-  spec.source_files  = 'Sources/**/*.{swift,h}'
-  spec.exclude_files = 'Sources/Exclude'
-  spec.resources    = 'Sources/**/*.{xib,storyboard,xcassets,json,png,jpeg}'
 
+  spec.source_files  = 'Coralogix/Sources/**/*.{swift,h}'
+  spec.exclude_files = 'Coralogix/Sources/Exclude'
+
+  spec.static_framework = true
+  spec.dependency 'PLCrashReporter', '~> 1.11.1'
 end
+
