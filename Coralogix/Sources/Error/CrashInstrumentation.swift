@@ -100,7 +100,7 @@ extension CoralogixRum {
             var frameObj = [String: Any]()
             frameObj[Keys.frameNumber.rawValue] = frame.frameNumber
             frameObj[Keys.binary.rawValue] = frame.binary
-            frameObj[Keys.functionAdresseCalled.rawValue] = frame.functionAdresseCalled
+            frameObj[Keys.functionAddressCalled.rawValue] = frame.functionAdresseCalled
             frameObj[Keys.base.rawValue] = frame.base
             frameObj[Keys.offset.rawValue] = frame.offset
             result.append(frameObj)
