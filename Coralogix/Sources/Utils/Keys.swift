@@ -119,6 +119,7 @@ public enum Keys: String {
     case isViewUnique
     case isSnapshotEvent
     case threads
+    case httpResponseBodySize = "http_response_body_size"
 }
 
 public enum CoralogixLogSeverity: Int {
