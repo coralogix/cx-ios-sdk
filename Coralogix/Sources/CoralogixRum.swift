@@ -18,12 +18,13 @@ public class CoralogixRum {
 
     static var isDebug = false
     static var isInitialized = false
+    static var sdkFramework: SdkFramework = .swift
 
-    public init(options: CoralogixExporterOptions) {
-        if CoralogixRum.isInitialized { 
+    public init(options: CoralogixExporterOptions, sdkFramework: SdkFramework = .swift) {
+        if CoralogixRum.isInitialized {
             Log.w("CoralogixRum allready Initialized")
         }
-
+        CoralogixRum.sdkFramework = sdkFramework
         self.versionMetadata = VersionMetadata(appName: options.application, appVersion: options.version)
         CoralogixRum.isDebug = options.debug
         self.coralogixExporter = CoralogixExporter(options: options,
@@ -83,14 +84,9 @@ public class CoralogixRum {
     }
 }
 
-public struct CXView {
-    enum AppState: String {
-        case notifyOnAppear
-        case notifyOnDisappear
-    }
-    
-    let state: AppState
-    let name: String
+public enum SdkFramework: String {
+    case swift
+    case flutter
 }
 
 public struct CoralogixExporterOptions {
