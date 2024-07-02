@@ -163,7 +163,7 @@ public enum Global: String {
     }
     
     public static func getOs() -> String {
-        return UIDevice.current.systemName
+        return UIDevice.current.systemName.lowercased()
     }
     
     public static func appName() -> String {

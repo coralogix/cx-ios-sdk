@@ -89,7 +89,7 @@ struct CxRum {
         result[Keys.timestamp.rawValue] = self.timeStamp.milliseconds
         result[Keys.mobileSdk.rawValue] = [Keys.sdkVersion.rawValue: self.mobileSdk,
                                            Keys.framework.rawValue: CoralogixRum.sdkFramework.rawValue,
-                                           Keys.operatingSystem.rawValue: Keys.ios.rawValue]
+                                           Keys.operatingSystem.rawValue: Global.getOs()]
         result[Keys.versionMetaData.rawValue] =  self.versionMetadata.getDictionary()
         result[Keys.sessionContext.rawValue] = self.sessionContext?.getDictionary()
         result[Keys.eventContext.rawValue] = self.eventContext.getDictionary()
