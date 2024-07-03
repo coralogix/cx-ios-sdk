@@ -70,6 +70,10 @@ public class CoralogixRum {
         self.reportErrorWith(error: error)
     }
     
+    public func setView(cxView: CXView) {
+        self.coralogixExporter.set(cxView: cxView)
+    }
+    
     public func reportError(message: String, data: [String: Any]?) {
         self.reportErrorWith(message: message, data: data)
     }
