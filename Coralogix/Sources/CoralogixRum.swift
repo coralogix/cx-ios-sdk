@@ -70,7 +70,8 @@ public class CoralogixRum {
         self.reportErrorWith(error: error)
     }
     
-    public func setView(cxView: CXView) {
+    public func setView(name: String) {
+        let cxView = CXView(state: .notifyOnAppear, name: name)
         self.coralogixExporter.set(cxView: cxView)
     }
     
