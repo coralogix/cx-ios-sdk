@@ -1,6 +1,8 @@
 import Foundation
 import Darwin
+#if canImport(UIKit)
 import UIKit
+#endif
 
 extension Notification.Name {
     static let cxRumNotification = Notification.Name("cxRumNotification")

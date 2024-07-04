@@ -6,7 +6,9 @@
 //
 
 import Foundation
+#if canImport(UIKit)
 import UIKit
+#endif
 
 class Helper {
     internal static func convertArrayOfStringToJsonString(array: [String]) -> String {
@@ -129,7 +131,9 @@ class Helper {
         let lines = stackTrace.split(separator: "\n")
         
         // Regular expression to match the stack trace pattern
-        let regex = try! NSRegularExpression(pattern: "#(\\d+)\\s+(\\S+)\\s+\\((.*):(\\d+):(\\d+)\\)")
+        guard let regex = try? NSRegularExpression(pattern: "#(\\d+)\\s+(\\S+)\\s+\\((.*):(\\d+):(\\d+)\\)") else {
+            return [[String: Any]]()
+        }
         
         for line in lines {
             let lineStr = String(line)

@@ -5,7 +5,9 @@
 //
 
 import Foundation
+#if canImport(UIKit)
 import UIKit
+#endif
 import WebKit
 
 public enum Keys: String {
