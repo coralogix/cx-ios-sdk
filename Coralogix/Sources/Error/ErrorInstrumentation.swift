@@ -20,8 +20,6 @@ extension CoralogixRum {
         if let userInfo = exception.userInfo {
             let dict = Helper.convertDictionary(userInfo)
             span.setAttribute(key: Keys.userInfo.rawValue, value: Helper.convertDictionayToJsonString(dict: dict))
-        } else {
-            span.setAttribute(key: Keys.userInfo.rawValue, value: Helper.convertDictionayToJsonString(dict: [:]))
         }
         span.end()
     }
@@ -40,7 +38,6 @@ extension CoralogixRum {
         span.setAttribute(key: Keys.domain.rawValue, value: String(describing: type(of: error)))
         span.setAttribute(key: Keys.code.rawValue, value: 0)
         span.setAttribute(key: Keys.localizedDescription.rawValue, value: error.localizedDescription)
-        span.setAttribute(key: Keys.userInfo.rawValue, value: Helper.convertDictionayToJsonString(dict: [:]))
         span.end()
     }
 
@@ -48,7 +45,22 @@ extension CoralogixRum {
         self.log(severity: CoralogixLogSeverity.error, message: message, data: data)
     }
     
-    func logWith(severity: CoralogixLogSeverity, message: String, data: [String: Any]?) {
+    func reportErrorWith(message: String, stackTrace: String?) {
+        let span = self.getSpan()
+        span.setAttribute(key: Keys.domain.rawValue, value: "")
+        span.setAttribute(key: Keys.code.rawValue, value: 0)
+        span.setAttribute(key: Keys.localizedDescription.rawValue, value: message)
+        
+        if let stackTrace = stackTrace {
+            let stackTraceArray = Helper.parseStackTrace(stackTrace)
+            span.setAttribute(key: Keys.stackTrace.rawValue, value: Helper.convertArrayToJsonString(array: stackTraceArray))
+        }
+        span.end()
+    }
+    
+    func logWith(severity: CoralogixLogSeverity,
+                 message: String,
+                 data: [String: Any]?) {
         var span = tracer().spanBuilder(spanName: Keys.iosSdk.rawValue).startSpan()
         span.setAttribute(key: Keys.message.rawValue, value: message)
         span.setAttribute(key: Keys.eventType.rawValue, value: CoralogixEventType.log.rawValue)

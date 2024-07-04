@@ -19,6 +19,7 @@ struct ErrorContext {
     let applicationIdentifier: String
     var triggeredByThread: Int = 0
     var threads: [[[String: Any]]]?
+    var stackTrace: [[String: Any]]?
     let baseAddress: String
     let arch: String
     
@@ -39,6 +40,11 @@ struct ErrorContext {
             self.triggeredByThread = Int(triggeredByThread) ?? -1
         }
     
+        if let jsonString = otel.getAttribute(forKey: Keys.stackTrace.rawValue) as? String,
+           let stackTrace = Helper.convertJsonStringToArray(jsonString: jsonString) {
+            self.stackTrace = stackTrace
+        }
+        
         if let jsonString = otel.getAttribute(forKey: Keys.threads.rawValue) as? String,
            let arrayOfTreadsDictJsonString = Helper.convertJsonStringToArrayOfStrings(jsonString: jsonString) {
             self.threads?.removeAll()
@@ -77,6 +83,11 @@ struct ErrorContext {
             if let userInfo = self.userInfo {
                 exceptionContext[Keys.userInfo.rawValue] = userInfo
             }
+            
+            if let stackTrace = self.stackTrace {
+                exceptionContext[Keys.originalStackTrace.rawValue] = stackTrace
+            }
+            
             return [Keys.exceptionContext.rawValue: exceptionContext]
         }
     }

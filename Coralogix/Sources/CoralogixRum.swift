@@ -79,7 +79,13 @@ public class CoralogixRum {
         self.reportErrorWith(message: message, data: data)
     }
     
-    public func log(severity: CoralogixLogSeverity, message: String, data: [String: Any]?) {
+    public func reportError(message: String, stackTrace: String?) {
+        self.reportErrorWith(message: message, stackTrace: stackTrace)
+    }
+    
+    public func log(severity: CoralogixLogSeverity,
+                    message: String,
+                    data: [String: Any]?) {
         self.logWith(severity: severity, message: message, data: data)
     }
     
