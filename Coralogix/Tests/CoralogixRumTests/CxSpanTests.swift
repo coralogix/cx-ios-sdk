@@ -83,7 +83,7 @@ final class CxSpanTests: XCTestCase {
             
             if let mobileSdk = cxRum[Keys.mobileSdk.rawValue] as? [String: Any] {
                 XCTAssertEqual(mobileSdk[Keys.operatingSystem.rawValue] as? String, Keys.ios.rawValue)
-                XCTAssertEqual(mobileSdk[Keys.sdkVersion.rawValue] as? String, Global.iosSdk.rawValue)
+                XCTAssertEqual(mobileSdk[Keys.sdkVersion.rawValue] as? String, Global.sdk.rawValue)
                 XCTAssertEqual(mobileSdk[Keys.framework.rawValue] as? String, Keys.swift.rawValue)
             }
             

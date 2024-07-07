@@ -38,7 +38,7 @@ struct CxRum {
          labels: [String: Any]?) {
         self.timeStamp = otel.getStartTime() ?? Date().timeIntervalSince1970
         self.eventTypeContext = EventTypeContext(otel: otel)
-        self.mobileSdk = Global.iosSdk.rawValue
+        self.mobileSdk = Global.sdk.rawValue
         self.versionMetadata = versionMetadata
         self.sessionManager = sessionManager
         self.networkManager = networkManager
