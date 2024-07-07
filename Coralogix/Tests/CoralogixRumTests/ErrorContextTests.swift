@@ -93,42 +93,62 @@ final class ErrorContextTests: XCTestCase {
         XCTAssertEqual(exceptionContext[Keys.code.rawValue] as? String, "0")
     }
     
-//    func testGetDictionaryWithStackTrace() {
-//        let data = [["stack_trace_1": "value_1"], ["stack_trace_2": "value_2"], ["stack_trace_3": "value_3"]]
-//        let stringArray = Helper.convertArrayToJsonString(array: data)
-//        mockSpanData = MockSpanData(attributes: [
-//            Keys.exceptionType.rawValue: AttributeValue("Fatal"),
-//            Keys.crashTimestamp.rawValue: AttributeValue("1625097600"),
-//            Keys.processName.rawValue: AttributeValue("ExampleApp"),
-//            Keys.applicationIdentifier.rawValue: AttributeValue("com.myapp"),
-//            Keys.triggeredByThread.rawValue: AttributeValue("1"),
-//            Keys.originalStackTrace.rawValue: AttributeValue(stringArray),
-//            Keys.baseAddress.rawValue: AttributeValue("0x1000000"),
-//            Keys.arch.rawValue: AttributeValue("x86_64")
-//        ])
-//        
-//        let errorStruct = ErrorContext(otel: mockSpanData)
-//        
-//        let dictionary = errorStruct.getDictionary()
-//        guard let exceptionContext = dictionary[Keys.exceptionContext.rawValue] as? [String: Any],
-//              let crashContext = exceptionContext[Keys.crashContext.rawValue] as? [String: Any] else {
-//            XCTFail("Crash context should be available.")
-//            return
-//        }
-//        
-//        XCTAssertEqual(crashContext[Keys.exceptionType.rawValue] as? String, "Fatal")
-//        XCTAssertEqual(crashContext[Keys.arch.rawValue] as? String, "x86_64")
-//        XCTAssertEqual(crashContext[Keys.baseAddress.rawValue] as? String, "0x1000000")
-//        XCTAssertEqual(crashContext[Keys.triggeredByThread.rawValue] as? Int, 1)
-//        XCTAssertEqual(crashContext[Keys.applicationIdentifier.rawValue] as? String, "com.myapp")
-//        XCTAssertEqual(crashContext[Keys.processName.rawValue] as? String, "ExampleApp")
-//        XCTAssertEqual(crashContext[Keys.crashTimestamp.rawValue] as? String, "1625097600")
-//        let stackTrace = crashContext[Keys.originalStackTrace.rawValue] as? [[String: Any]]
-//        XCTAssertEqual(stackTrace!.count, 3)
-//    }
+    func testGetDictionaryWithThreads() {
+        var threads = [String]()
+        var result = [[String: Any]]()
+        for i in 0...3 {
+            var frameObj = [String: Any]()
+            frameObj[Keys.frameNumber.rawValue] = "\(i)"
+            frameObj[Keys.binary.rawValue] = "DemoAppSwift"
+            frameObj[Keys.functionAddressCalled.rawValue] = "0x0000000104b31f94"
+            frameObj[Keys.base.rawValue] = "_$s12DemoAppSwift8CrashSimC15indexOutOfRang92FB97BA4A060F0ABLLyyFZ"
+            frameObj[Keys.offset.rawValue] = "224"
+            result.append(frameObj)
+        }
+        threads.append(Helper.convertArrayToJsonString(array: result))
+        mockSpanData = MockSpanData(attributes: [
+            Keys.threads.rawValue: AttributeValue(Helper.convertArrayOfStringToJsonString(array: threads)),
+            Keys.exceptionType.rawValue: AttributeValue("Fatal"),
+            Keys.crashTimestamp.rawValue: AttributeValue("1625097600"),
+            Keys.processName.rawValue: AttributeValue("ExampleApp"),
+            Keys.applicationIdentifier.rawValue: AttributeValue("com.myapp"),
+            Keys.triggeredByThread.rawValue: AttributeValue("1"),
+            Keys.baseAddress.rawValue: AttributeValue("0x1000000"),
+            Keys.arch.rawValue: AttributeValue("x86_64")
+        ])
+        
+        let errorStruct = ErrorContext(otel: mockSpanData)
+        let dictionary = errorStruct.getDictionary()
+        guard let crashContext = dictionary[Keys.crashContext.rawValue] as? [String: Any] else {
+            XCTFail("Crash Context should be available.")
+            return
+        }
+        
+        guard let threads = crashContext[Keys.threads.rawValue] as? [[[String: Any]]] else {
+            XCTFail("Crash Context should be available.")
+            return
+        }
+        
+        if let frames = threads.first,
+           let frame = frames.first {
+            XCTAssertEqual("DemoAppSwift", frame[Keys.binary.rawValue] as? String)
+            XCTAssertEqual("0x0000000104b31f94", frame[Keys.functionAddressCalled.rawValue] as? String)
+            XCTAssertEqual("0", frame[Keys.frameNumber.rawValue] as? String)
+            XCTAssertEqual("224", frame[Keys.offset.rawValue] as? String)
+            XCTAssertEqual("_$s12DemoAppSwift8CrashSimC15indexOutOfRang92FB97BA4A060F0ABLLyyFZ", frame[Keys.base.rawValue] as? String)
+        }
+        
+
+        XCTAssertEqual(crashContext[Keys.exceptionType.rawValue] as? String, "Fatal")
+        XCTAssertEqual(crashContext[Keys.arch.rawValue] as? String, "x86_64")
+        XCTAssertEqual(crashContext[Keys.baseAddress.rawValue] as? String, "0x1000000")
+        XCTAssertEqual(crashContext[Keys.triggeredByThread.rawValue] as? Int, 1)
+        XCTAssertEqual(crashContext[Keys.applicationIdentifier.rawValue] as? String, "com.myapp")
+        XCTAssertEqual(crashContext[Keys.processName.rawValue] as? String, "ExampleApp")
+        XCTAssertEqual(crashContext[Keys.crashTimestamp.rawValue] as? String, "1625097600")
+    }
     
     func testGetDictionaryWithoutStackTrace() {
-        
         mockSpanData = MockSpanData(attributes: [
             Keys.domain.rawValue: AttributeValue("com.example.error"),
             Keys.code.rawValue: AttributeValue("404"),
