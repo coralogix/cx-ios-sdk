@@ -93,7 +93,6 @@ extension CoralogixRum {
         span.setAttribute(key: Keys.threads.rawValue, value: Helper.convertArrayOfStringToJsonString(array: threads))
     }
 
-    
     func parseFrameArray(crashedThreadFrameArray: [StackFrame]) -> [[String: Any]] {
         var result = [[String: Any]]()
         for frame in crashedThreadFrameArray {

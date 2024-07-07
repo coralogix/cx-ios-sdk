@@ -88,8 +88,8 @@ struct CxRum {
         var result = [String: Any]()
         result[Keys.timestamp.rawValue] = self.timeStamp.milliseconds
         result[Keys.mobileSdk.rawValue] = [Keys.sdkVersion.rawValue: self.mobileSdk,
-                                           Keys.framework.rawValue: Keys.swift.rawValue,
-                                           Keys.operatingSystem.rawValue: Keys.ios.rawValue]
+                                           Keys.framework.rawValue: CoralogixRum.sdkFramework.rawValue,
+                                           Keys.operatingSystem.rawValue: Global.getOs()]
         result[Keys.versionMetaData.rawValue] =  self.versionMetadata.getDictionary()
         result[Keys.sessionContext.rawValue] = self.sessionContext?.getDictionary()
         result[Keys.eventContext.rawValue] = self.eventContext.getDictionary()
@@ -108,17 +108,17 @@ struct CxRum {
             result[Keys.errorContext.rawValue] = self.errorContext.getDictionary()
             
             // Add snapshot to all error type
-            if let _ = self.snapshotContext {
+            if self.snapshotContext != nil {
                 self.addSnapshotContext(to: &result)
             }
         }
         
-        if eventContext.type == CoralogixEventType.navigation, let _ = self.snapshotContext {
+        if eventContext.type == CoralogixEventType.navigation, self.snapshotContext != nil {
             // Add snapshot to all navigation type which the view is unique
             self.addSnapshotContext(to: &result)
         }
         
-        if isOneMinuteFromLastSnapshotPass == true, let _ = self.snapshotContext {
+        if isOneMinuteFromLastSnapshotPass == true, self.snapshotContext != nil {
             self.addSnapshotContext(to: &result)
             self.isOneMinuteFromLastSnapshotPass = false
         }

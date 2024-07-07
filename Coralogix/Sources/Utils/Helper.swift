@@ -6,7 +6,9 @@
 //
 
 import Foundation
+#if canImport(UIKit)
 import UIKit
+#endif
 
 class Helper {
     internal static func convertArrayOfStringToJsonString(array: [String]) -> String {
@@ -107,6 +109,7 @@ class Helper {
             return nil
         }
     }
+    
     internal static func convertDictionary(_ inputDict: [AnyHashable: Any]) -> [String: Any] {
         var outputDict: [String: Any] = [:]
         
@@ -119,5 +122,45 @@ class Helper {
         }
         
         return outputDict
+    }
+    
+    internal static func parseStackTrace(_ stackTrace: String) -> [[String: Any]] {
+        var result: [[String: Any]] = []
+        
+        // Split the stack trace into lines
+        let lines = stackTrace.split(separator: "\n")
+        
+        // Regular expression to match the stack trace pattern
+        guard let regex = try? NSRegularExpression(pattern: "#(\\d+)\\s+(\\S+)\\s+\\((.*):(\\d+):(\\d+)\\)") else {
+            return [[String: Any]]()
+        }
+        
+        for line in lines {
+            let lineStr = String(line)
+            let range = NSRange(location: 0, length: lineStr.utf16.count)
+            
+            if let match = regex.firstMatch(in: lineStr, options: [], range: range) {
+                var dict: [String: Any] = [:]
+                
+                if let range = Range(match.range(at: 1), in: lineStr) {
+                   // dict["index"] = Int(lineStr[range])
+                }
+                if let range = Range(match.range(at: 2), in: lineStr) {
+                    dict["functionName"] = String(lineStr[range])
+                }
+                if let range = Range(match.range(at: 3), in: lineStr) {
+                    dict["fileName"] = String(lineStr[range])
+                }
+                if let range = Range(match.range(at: 4), in: lineStr) {
+                    dict["lineNumber"] = Int(lineStr[range])
+                }
+                if let range = Range(match.range(at: 5), in: lineStr) {
+                    dict["columnNumber"] = Int(lineStr[range])
+                }
+                
+                result.append(dict)
+            }
+        }
+        return result
     }
 }

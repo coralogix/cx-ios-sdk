@@ -6,7 +6,9 @@
 //
 
 import Foundation
+#if canImport(UIKit)
 import UIKit
+#endif
 
 extension CoralogixRum {
     public func initializeNavigationInstrumentation() {

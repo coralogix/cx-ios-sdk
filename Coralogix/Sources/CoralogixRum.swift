@@ -1,6 +1,8 @@
 import Foundation
 import Darwin
+#if canImport(UIKit)
 import UIKit
+#endif
 
 extension Notification.Name {
     static let cxRumNotification = Notification.Name("cxRumNotification")
@@ -18,12 +20,13 @@ public class CoralogixRum {
 
     static var isDebug = false
     static var isInitialized = false
+    static var sdkFramework: SdkFramework = .swift
 
-    public init(options: CoralogixExporterOptions) {
-        if CoralogixRum.isInitialized { 
+    public init(options: CoralogixExporterOptions, sdkFramework: SdkFramework = .swift) {
+        if CoralogixRum.isInitialized {
             Log.w("CoralogixRum allready Initialized")
         }
-
+        CoralogixRum.sdkFramework = sdkFramework
         self.versionMetadata = VersionMetadata(appName: options.application, appVersion: options.version)
         CoralogixRum.isDebug = options.debug
         self.coralogixExporter = CoralogixExporter(options: options,
@@ -69,11 +72,22 @@ public class CoralogixRum {
         self.reportErrorWith(error: error)
     }
     
+    public func setView(name: String) {
+        let cxView = CXView(state: .notifyOnAppear, name: name)
+        self.coralogixExporter.set(cxView: cxView)
+    }
+    
     public func reportError(message: String, data: [String: Any]?) {
         self.reportErrorWith(message: message, data: data)
     }
     
-    public func log(severity: CoralogixLogSeverity, message: String, data: [String: Any]?) {
+    public func reportError(message: String, stackTrace: String?) {
+        self.reportErrorWith(message: message, stackTrace: stackTrace)
+    }
+    
+    public func log(severity: CoralogixLogSeverity,
+                    message: String,
+                    data: [String: Any]?) {
         self.logWith(severity: severity, message: message, data: data)
     }
     
@@ -83,14 +97,9 @@ public class CoralogixRum {
     }
 }
 
-public struct CXView {
-    enum AppState: String {
-        case notifyOnAppear
-        case notifyOnDisappear
-    }
-    
-    let state: AppState
-    let name: String
+public enum SdkFramework: String {
+    case swift
+    case flutter
 }
 
 public struct CoralogixExporterOptions {

@@ -89,7 +89,7 @@ final class CxRumTests: XCTestCase {
         // Verify each part of the dictionary
         XCTAssertNotNil(cxRum.timeStamp)
         let mobileSdkDict = result[Keys.mobileSdk.rawValue] as? [String: String]
-        XCTAssertEqual(mobileSdkDict?[Keys.sdkVersion.rawValue], "1.0.3")  // Assuming "CurrentSDKVersion" is a placeholder
+        XCTAssertEqual(mobileSdkDict?[Keys.sdkVersion.rawValue], Global.iosSdk.rawValue)
         XCTAssertEqual(mobileSdkDict?[Keys.framework.rawValue], "swift")
         XCTAssertEqual(mobileSdkDict?[Keys.operatingSystem.rawValue], "ios")
         

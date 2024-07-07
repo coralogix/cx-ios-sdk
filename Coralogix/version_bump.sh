@@ -1,4 +1,8 @@
 #!/bin/bash
+# usage (update the sdk version in keys.swift under global)
+# ./version_bump.sh patch  -> will bump x.x.1 
+# ./version_bump.sh minor  -> will bump x.1.1
+# ./version_bump.sh major  -> will bump 1.x.x
 
 # Function to increment version
 increment_version() {

@@ -5,7 +5,9 @@
 //
 
 import Foundation
+#if canImport(UIKit)
 import UIKit
+#endif
 import WebKit
 
 public enum Keys: String {
@@ -119,6 +121,8 @@ public enum Keys: String {
     case isViewUnique
     case isSnapshotEvent
     case threads
+    case httpResponseBodySize = "http_response_body_size"
+    case stackTrace
 }
 
 public enum CoralogixLogSeverity: Int {
@@ -144,7 +148,7 @@ enum CoralogixEventType: String {
 }
 
 public enum Global: String {
-    case iosSdk = "1.0.3"
+    case iosSdk = "1.0.8"
     case coralogixPath = "/browser/v1beta/logs"
     
     enum BatchSpan: Int {
@@ -162,7 +166,7 @@ public enum Global: String {
     }
     
     public static func getOs() -> String {
-        return UIDevice.current.systemName
+        return UIDevice.current.systemName.lowercased()
     }
     
     public static func appName() -> String {

@@ -5,10 +5,21 @@
 //  Created by Coralogix DEV TEAM on 19/05/2024.
 //
 
+#if canImport(UIKit)
 import UIKit
+#endif
+
+public struct CXView {
+    enum AppState: String {
+        case notifyOnAppear
+        case notifyOnDisappear
+    }
+    
+    let state: AppState
+    let name: String
+}
 
 extension UIViewController {
-    
     static let swizzleViewDidAppear: Void = {
         let originalSelector = #selector(viewDidAppear(_:))
         let swizzledSelector = #selector(swizzled_viewDidAppear(_:))

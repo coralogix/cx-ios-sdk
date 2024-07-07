@@ -4,8 +4,9 @@
 //
 //  Created by Coralogix DEV TEAM on 12/05/2024.
 //
-
+#if canImport(UIKit)
 import UIKit
+#endif
 
 class DeviceBatteryManager {
 
