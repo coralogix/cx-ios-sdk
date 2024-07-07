@@ -61,7 +61,7 @@ final class CxRumTests: XCTestCase {
         // Verify initialization
         XCTAssertNotNil(cxRum.timeStamp)
         XCTAssertEqual(cxRum.environment, "prod")
-        XCTAssertEqual(cxRum.mobileSdk, Global.iosSdk.rawValue)
+        XCTAssertEqual(cxRum.mobileSdk, Global.sdk.rawValue)
         XCTAssertEqual(cxRum.versionMetadata.appName, "ExampleApp")
         XCTAssertEqual(cxRum.traceId, "30")
         XCTAssertEqual(cxRum.spanId, "20")
@@ -89,7 +89,7 @@ final class CxRumTests: XCTestCase {
         // Verify each part of the dictionary
         XCTAssertNotNil(cxRum.timeStamp)
         let mobileSdkDict = result[Keys.mobileSdk.rawValue] as? [String: String]
-        XCTAssertEqual(mobileSdkDict?[Keys.sdkVersion.rawValue], Global.iosSdk.rawValue)
+        XCTAssertEqual(mobileSdkDict?[Keys.sdkVersion.rawValue], Global.sdk.rawValue)
         XCTAssertEqual(mobileSdkDict?[Keys.framework.rawValue], "swift")
         XCTAssertEqual(mobileSdkDict?[Keys.operatingSystem.rawValue], "ios")
         

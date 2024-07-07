@@ -10,7 +10,7 @@ import Foundation
 extension CoralogixRum {
     
     private func tracer() -> Tracer {
-        return OpenTelemetry.instance.tracerProvider.get(instrumentationName: Keys.iosSdk.rawValue, instrumentationVersion: Global.iosSdk.rawValue)
+        return OpenTelemetry.instance.tracerProvider.get(instrumentationName: Keys.iosSdk.rawValue, instrumentationVersion: Global.sdk.rawValue)
     }
     
     public func initializeSessionInstrumentation() {
