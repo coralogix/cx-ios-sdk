@@ -31,14 +31,15 @@ Identify if your app project contains an `AppDelegate` file or a `SceneDelegate`
 
     ```swift
     import UIKit
-    import CoralogixRum
+    import Coralogix
 
     @main 
     class AppDelegate: UIResponder, UIApplicationDelegate {
     var coralogixRum: CoralogixRum?
     
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-         let options = CoralogixExporterOptions(coralogixDomain: CoralogixDomain,
+         let domain = CoralogixDomain.US2
+         let options = CoralogixExporterOptions(coralogixDomain: domain,
                                                userContext: nil,
                                                environment: "ENVIRONMENT",
                                                application: "APP-NAME",
@@ -64,14 +65,15 @@ Identify if your app project contains an `AppDelegate` file or a `SceneDelegate`
 
    ```swift
    import SwiftUI
-   import CoralogixRum
+   import Coralogix
 
    @main
    struct DemoAppApp: App {
     @State private var coralogixRum: CoralogixRum
 
      init() {
-        let options = CoralogixExporterOptions(coralogixDomain: CoralogixDomain,
+        let domain = CoralogixDomain.US2
+        let options = CoralogixExporterOptions(coralogixDomain: doamin,
                                                userContext: nil,
                                                environment: "ENVIRONMENT",
                                                application: "APP-NAME",
@@ -103,11 +105,12 @@ Identify if your app project contains an `AppDelegate` file or a `SceneDelegate`
     <summary> <b>Swift Instructions</b><i> - Click to expand or collapse</i></summary>
 
     ```swift
-    import CoralogixRum
+    import Coralogix
         @State private var coralogixRum: CoralogixRum
 
         func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions) {
-        let options = CoralogixExporterOptions(coralogixDomain: CoralogixDomain,
+        let domain = CoralogixDomain.US2
+        let options = CoralogixExporterOptions(coralogixDomain: domain,
                                                userContext: nil,
                                                environment: "ENVIRONMENT",
                                                application: "APP-NAME",
