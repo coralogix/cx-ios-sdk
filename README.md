@@ -23,14 +23,15 @@ Ideally in ```applicationDidFinishLaunching in AppDelegate```
 
 ```swift
 import UIKit
-import CoralogixRum
+import Coralogix
 
 @main
 class AppDelegate: UIResponder, UIApplicationDelegate {
     var coralogixRum: CoralogixRum?
     
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-         let options = CoralogixExporterOptions(coralogixDomain: CoralogixDomain,
+         let domain = CoralogixDomain.US2
+         let options = CoralogixExporterOptions(coralogixDomain: domain,
                                                userContext: nil,
                                                environment: "ENVIRONMENT",
                                                application: "APP-NAME",
@@ -50,14 +51,15 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 Or if you are using ```swiftUI```
 ```swift
 import SwiftUI
-import CoralogixRum
+import Coralogix
 
 @main
 struct DemoAppApp: App {
     @State private var coralogixRum: CoralogixRum
 
     init() {
-             let options = CoralogixExporterOptions(coralogixDomain: CoralogixDomain,
+             let domain = CoralogixDomain.US2
+             let options = CoralogixExporterOptions(coralogixDomain: domain,
                                                userContext: nil,
                                                environment: "ENVIRONMENT",
                                                application: "APP-NAME",
