@@ -8,8 +8,9 @@
 import Foundation
 
 extension CoralogixRum {
-    private func tracer() -> Tracer {
-        return OpenTelemetry.instance.tracerProvider.get(instrumentationName: Keys.iosSdk.rawValue, instrumentationVersion: Global.sdk.rawValue)
+    internal func tracer() -> Tracer {
+        return OpenTelemetry.instance.tracerProvider.get(instrumentationName: Keys.iosSdk.rawValue,
+                                                         instrumentationVersion: Global.sdk.rawValue)
     }
     
     func reportErrorWith(exception: NSException) {

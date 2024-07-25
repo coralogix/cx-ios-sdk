@@ -31,7 +31,8 @@ public class CoralogixExporter: SpanExporter {
 
     var pendingSpans: [SpanData] = []
     var endPoint: String {
-        if let customDomainUrl = self.options.customDomainUrl {
+        if let customDomainUrl = self.options.customDomainUrl,
+           self.options.customDomainUrl != "" {
             return "\(customDomainUrl)\(Global.coralogixPath.rawValue)"
         } else {
             return "\(self.options.coralogixDomain.rawValue)\(Global.coralogixPath.rawValue)"
@@ -102,7 +103,7 @@ public class CoralogixExporter: SpanExporter {
                 return .failure
             }
             
-            let task = URLSession.shared.dataTask(with: request) { _, _, error in
+            let task = URLSession.shared.dataTask(with: request) { _, response, error in
                 if error != nil {
                     status = .failure
                 } else {

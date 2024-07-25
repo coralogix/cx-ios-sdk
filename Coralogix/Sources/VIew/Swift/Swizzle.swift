@@ -8,6 +8,9 @@
 #if canImport(UIKit)
 import UIKit
 #endif
+import SwiftUI
+import ObjectiveC.runtime
+
 
 public struct CXView {
     enum AppState: String {
@@ -19,45 +22,146 @@ public struct CXView {
     let name: String
 }
 
+class SwizzleUtils {
+    static func swizzleInstanceMethod(for cls: AnyClass, originalSelector: Selector, swizzledSelector: Selector) {
+        guard let originalMethod = class_getInstanceMethod(cls, originalSelector),
+              let swizzledMethod = class_getInstanceMethod(cls, swizzledSelector) else {
+            return
+        }
+        
+        let didAddMethod = class_addMethod(cls,
+                                           originalSelector,
+                                           method_getImplementation(swizzledMethod),
+                                           method_getTypeEncoding(swizzledMethod))
+        
+        if didAddMethod {
+            class_replaceMethod(cls,
+                                swizzledSelector,
+                                method_getImplementation(originalMethod),
+                                method_getTypeEncoding(originalMethod))
+        } else {
+            method_exchangeImplementations(originalMethod, swizzledMethod)
+        }
+    }
+}
+
+extension UIGestureRecognizer {
+    @objc func cx_touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
+        // Call the original implementation (now swapped)
+        self.cx_touchesEnded(touches, with: event)
+        
+        if let touch = touches.first, let view = touch.view, let nextResponder = view.next as? UIView {
+            //Log.w("Screen tapped in view: \(view)")
+            if CXHelper.isSwiftUIView(view: view) || CXHelper.isSwiftUIView(view: nextResponder) {
+                return
+            }
+            let dict = CXHelper.cxElementForView(view: view)
+        }
+    }
+}
+
+extension UIApplication {
+    public static let swizzleTouchesEnded: Void = {
+        let cls = NSClassFromString("SwiftUI.UIKitGestureRecognizer")
+        guard let targetClass = cls else {
+            return
+        }
+        
+        let originalSelector = #selector(UIGestureRecognizer.touchesEnded(_:with:))
+        let swizzledSelector = #selector(UIGestureRecognizer.cx_touchesEnded(_:with:))
+        
+        SwizzleUtils.swizzleInstanceMethod(for: targetClass,
+                                           originalSelector: originalSelector,
+                                           swizzledSelector: swizzledSelector)
+    }()
+
+    public static let swizzledSendEvent: Void = {
+        let originalSelector = #selector(sendEvent(_:))
+        let swizzledSelector = #selector(cx_sendEvent(_:))
+        
+        SwizzleUtils.swizzleInstanceMethod(for: UIApplication.self,
+                                           originalSelector: originalSelector,
+                                           swizzledSelector: swizzledSelector)
+    }()
+    
+    public static let swizzleSendAction: Void = {
+        let originalSelector = #selector(UIApplication.sendAction(_:to:from:for:))
+        let swizzledSelector = #selector(cx_sendAction(_:to:from:for:))
+        
+        SwizzleUtils.swizzleInstanceMethod(for: UIApplication.self,
+                                           originalSelector: originalSelector,
+                                           swizzledSelector: swizzledSelector)
+    }()
+    
+    @objc private func cx_sendEvent(_ event: UIEvent) {
+        self.cx_sendEvent(event)
+        guard let touches = event.allTouches, let touch = touches.first, touch.phase == .began else { return }
+        
+        if let view = touch.view {
+            Log.w("Screen tapped at: \(touch.location(in: view)) in view: \(view)")
+            
+            if view.description.contains("UITabBarButton") {
+                Log.e("Responder is a UITabBarButton")
+            } else if view.description.contains("_UIButtonBarButton") {
+                Log.e("Responder is a UIButtonBarButton")
+            } else if view.description.contains("UISlider") {
+                Log.e("Responder is a UISlider")
+            }
+        }
+    }
+    
+    @objc private func cx_sendAction(_ action: Selector,
+                                           to target: AnyObject?,
+                                           from sender: AnyObject?,
+                                           for event: UIEvent?) -> Bool {        
+        let selectorNameCString = sel_getName(action)
+        let selectorNameString = String(cString: selectorNameCString)
+        if selectorNameString.contains("tabBarItemClicked") {
+            if let sender = sender {
+                let senderClass = NSStringFromClass(type(of: sender))
+                //Log.d("SenderClass class: \(senderClass), selector is \(selectorNameString)")
+                var attributes = [String: Any]()
+                if let description = sender.description,
+                   let title = CXHelper.extractTitleUITabBarItem(from: description) {
+                    attributes[Keys.text.rawValue] = title
+                }
+                let tap = [Keys.tapName.rawValue: "\(senderClass)",
+                           Keys.tapCount.rawValue: 1,
+                           Keys.tapAttributes.rawValue: Helper.convertDictionayToJsonString(dict: attributes)] as [String : Any]
+                NotificationCenter.default.post(name: .cxRumNotificationUserActions, object: tap)
+            }
+        } else if selectorNameString.contains("backButtonAction") {
+            if let sender = sender {
+                let senderClass = NSStringFromClass(type(of: sender))
+                let tap = [Keys.tapName.rawValue: "backButton",
+                           Keys.tapCount.rawValue: 1,
+                           Keys.tapAttributes.rawValue: [:]] as [String : Any]
+                NotificationCenter.default.post(name: .cxRumNotificationUserActions, object: tap)
+            }
+        }
+
+        return cx_sendAction(action, to: target, from: sender, for: event)
+    }
+}
+
 extension UIViewController {
     static let swizzleViewDidAppear: Void = {
         let originalSelector = #selector(viewDidAppear(_:))
         let swizzledSelector = #selector(swizzled_viewDidAppear(_:))
         
-        if let originalMethod = class_getInstanceMethod(UIViewController.self, originalSelector),
-           let swizzledMethod = class_getInstanceMethod(UIViewController.self, swizzledSelector) {
-            
-            let didAddMethod = class_addMethod(UIViewController.self,
-                                               originalSelector,
-                                               method_getImplementation(swizzledMethod),
-                                               method_getTypeEncoding(swizzledMethod))
-            
-            if didAddMethod {
-                class_replaceMethod(UIViewController.self,
-                                    swizzledSelector,
-                                    method_getImplementation(originalMethod),
-                                    method_getTypeEncoding(originalMethod))
-            } else {
-                method_exchangeImplementations(originalMethod, swizzledMethod)
-            }
-        }
+        SwizzleUtils.swizzleInstanceMethod(for: UIViewController.self,
+                                           originalSelector: originalSelector,
+                                           swizzledSelector: swizzledSelector)
     }()
     
     static let swizzleViewDidDisappear: Void = {
         let originalSelector = #selector(viewDidDisappear(_:))
         let swizzledSelector = #selector(swizzled_viewDidDisappear(_:))
         
-        guard let originalMethod = class_getInstanceMethod(UIViewController.self, originalSelector),
-              let swizzledMethod = class_getInstanceMethod(UIViewController.self, swizzledSelector) else { return }
-        
-        method_exchangeImplementations(originalMethod, swizzledMethod)
+        SwizzleUtils.swizzleInstanceMethod(for: UIViewController.self,
+                                           originalSelector: originalSelector,
+                                           swizzledSelector: swizzledSelector)
     }()
-    
-    // Call this method to perform the swizzling
-    static func performSwizzling() {
-        _ = UIViewController.swizzleViewDidAppear
-        _ = UIViewController.swizzleViewDidDisappear
-    }
     
     // This method will replace viewDidAppear
     @objc func swizzled_viewDidAppear(_ animated: Bool) {
@@ -139,3 +243,25 @@ extension UIWindow {
         }
     }
 }
+
+/*
+ (NSString *)getOperation:(id)sender
+{
+    Class senderClass = [sender class];
+    if ([senderClass isSubclassOfClass:[UIButton class]] ||
+        [senderClass isSubclassOfClass:[UIBarButtonItem class]] ||
+        [senderClass isSubclassOfClass:[UISegmentedControl class]] ||
+        [senderClass isSubclassOfClass:[UIPageControl class]]) {
+        return SentrySpanOperationUIActionClick;
+    }
+
+    return SentrySpanOperationUIAction;
+}
+ "addTarget:action:forControlEvents:"
+ "removeTarget:action:forControlEvents:"
+ "setDelegate:"
+ "setDelegate:"
+ "sendAction:to:from:forEvent:"
+ "setContentOffset:"
+ "setState:"
+ */

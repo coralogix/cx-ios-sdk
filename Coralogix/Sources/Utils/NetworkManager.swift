@@ -43,31 +43,35 @@ public class NetworkManager: NetworkProtocol {
     }
     
     func getCellularNetworkType() -> String {
+#if targetEnvironment(simulator)
+        return "Unknown"
+#else
         let networkInfo = CTTelephonyNetworkInfo()
         let currentRadioTech = networkInfo.serviceCurrentRadioAccessTechnology
         if let radioTech = currentRadioTech?.values.first {
             switch radioTech {
             case CTRadioAccessTechnologyGPRS,
-                 CTRadioAccessTechnologyEdge,
-                 CTRadioAccessTechnologyCDMA1x:
+                CTRadioAccessTechnologyEdge,
+            CTRadioAccessTechnologyCDMA1x:
                 return "2G"
             case CTRadioAccessTechnologyWCDMA,
-                 CTRadioAccessTechnologyHSDPA,
-                 CTRadioAccessTechnologyHSUPA,
-                 CTRadioAccessTechnologyCDMAEVDORev0,
-                 CTRadioAccessTechnologyCDMAEVDORevA,
-                 CTRadioAccessTechnologyCDMAEVDORevB,
-                 CTRadioAccessTechnologyeHRPD:
+                CTRadioAccessTechnologyHSDPA,
+                CTRadioAccessTechnologyHSUPA,
+                CTRadioAccessTechnologyCDMAEVDORev0,
+                CTRadioAccessTechnologyCDMAEVDORevA,
+                CTRadioAccessTechnologyCDMAEVDORevB,
+            CTRadioAccessTechnologyeHRPD:
                 return "3G"
             case CTRadioAccessTechnologyLTE:
                 return "4G"
             case CTRadioAccessTechnologyNRNSA,
-                 CTRadioAccessTechnologyNR:
+            CTRadioAccessTechnologyNR:
                 return "5G"
             default:
                 return "Unknown"
             }
         }
         return "Not Cellular Connection"
+#endif
     }
 }

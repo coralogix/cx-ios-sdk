@@ -9,15 +9,20 @@ import Foundation
 import Network
 
 public class NetworkStatusClass {
-    public private(set) var networkInfo: CTTelephonyNetworkInfo
+    public private(set) var networkInfo: CTTelephonyNetworkInfo?
     public private(set) var networkMonitor: NetworkMonitorProtocol
     public convenience init() throws {
         self.init(with: try NetworkMonitor())
     }
 
-    public init(with monitor: NetworkMonitorProtocol, info: CTTelephonyNetworkInfo = CTTelephonyNetworkInfo()) {
+    public init(with monitor: NetworkMonitorProtocol) {
         networkMonitor = monitor
+#if targetEnvironment(simulator)
+        networkInfo = nil
+#else
+        let networkInfo = CTTelephonyNetworkInfo()
         networkInfo = info
+#endif
     }
 
     public func status() -> (String, String?, CTCarrier?) {
@@ -26,12 +31,14 @@ public class NetworkStatusClass {
             return ("wifi", nil, nil)
         case .cellular:
             if #available(iOS 13.0, *) {
-                if let serviceId = networkInfo.dataServiceIdentifier, let value = networkInfo.serviceCurrentRadioAccessTechnology?[serviceId] {
-                    return ("cell", simpleConnectionName(connectionType: value), networkInfo.serviceSubscriberCellularProviders?[networkInfo.dataServiceIdentifier!])
+                if let serviceId = self.networkInfo?.dataServiceIdentifier, let value = self.networkInfo?.serviceCurrentRadioAccessTechnology?[serviceId] {
+                    if let dataServiceIdentifier = self.networkInfo?.dataServiceIdentifier {
+                        return ("cell", simpleConnectionName(connectionType: value), self.networkInfo?.serviceSubscriberCellularProviders?[dataServiceIdentifier])
+                    }
                 }
             } else {
-                if let radioType = networkInfo.currentRadioAccessTechnology {
-                    return ("cell", simpleConnectionName(connectionType: radioType), networkInfo.subscriberCellularProvider)
+                if let radioType = self.networkInfo?.currentRadioAccessTechnology {
+                    return ("cell", simpleConnectionName(connectionType: radioType), self.networkInfo?.subscriberCellularProvider)
                 }
             }
             return ("cell", "unknown", nil)

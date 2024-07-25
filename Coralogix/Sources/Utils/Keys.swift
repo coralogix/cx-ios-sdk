@@ -133,6 +133,10 @@ public enum Keys: String {
     case endTime
     case status
     case kind
+    case tapName
+    case tapCount
+    case tapAttributes
+    case tapObject
 }
 
 public enum CoralogixLogSeverity: Int {

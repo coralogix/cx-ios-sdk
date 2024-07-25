@@ -24,7 +24,7 @@ public class NetworkStatusInjector {
           span.setAttribute(key: SemanticAttributes.networkConnectionSubtype.rawValue, value: AttributeValue.string(subtype))
         }
 
-        if let carrierInfo: CTCarrier = carrier {
+        if !Helper.isSimulator, let carrierInfo: CTCarrier = carrier {
             if let carrierName = carrierInfo.carrierName {
               span.setAttribute(key: SemanticAttributes.networkCarrierName.rawValue, value: AttributeValue.string(carrierName))
             }

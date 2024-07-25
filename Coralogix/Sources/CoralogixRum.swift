@@ -7,6 +7,7 @@ import UIKit
 extension Notification.Name {
     static let cxRumNotification = Notification.Name("cxRumNotification")
     static let cxRumNotificationSessionEnded = Notification.Name("cxRumNotificationSessionEnded")
+    static let cxRumNotificationUserActions = Notification.Name("cxRumNotificationUserActions")
 }
 
 public class CoralogixRum {
@@ -17,11 +18,11 @@ public class CoralogixRum {
     internal var sessionManager = SessionManager()
     internal var sessionInstrumentation: URLSessionInstrumentation?
     let notificationCenter = NotificationCenter.default
-
+    
     static var isDebug = false
     static var isInitialized = false
     static var sdkFramework: SdkFramework = .swift
-
+    
     public init(options: CoralogixExporterOptions, sdkFramework: SdkFramework = .swift) {
         if CoralogixRum.isInitialized {
             Log.w("CoralogixRum allready Initialized")
@@ -30,7 +31,7 @@ public class CoralogixRum {
         self.versionMetadata = VersionMetadata(appName: options.application, appVersion: options.version)
         CoralogixRum.isDebug = options.debug
         self.coralogixExporter = CoralogixExporter(options: options,
-                                                   versionMetadata: self.versionMetadata, 
+                                                   versionMetadata: self.versionMetadata,
                                                    sessionManager: self.sessionManager,
                                                    networkManager: self.networkManager,
                                                    viewManager: self.viewManager)
@@ -44,16 +45,27 @@ public class CoralogixRum {
                                                    scheduleDelay: Double(Global.BatchSpan.scheduleDelay.rawValue),
                                                    maxExportBatchSize: Global.BatchSpan.maxExportBatchSize.rawValue))
                 .build())
+        UIApplication.swizzleTouchesEnded
+        UIApplication.swizzleSendAction
+//        UIApplication.swizzledSendEvent
+        UIViewController.swizzleViewDidAppear
+        UIViewController.swizzleViewDidDisappear
+        
+        self.initializeUserActionsInstrumentation()
         self.initializeNavigationInstrumentation()
         self.initializeSessionInstrumentation()
         self.initializeCrashInstumentation()
-
+        
+//        self.setupNotificationObservers()
+        
         CoralogixRum.isInitialized = true
     }
     
     deinit {
         // Remove observer to avoid memory leaks
         NotificationCenter.default.removeObserver(self, name: .cxRumNotification, object: nil)
+        NotificationCenter.default.removeObserver(self, name: .cxRumNotificationUserActions, object: nil)
+        NotificationCenter.default.removeObserver(self, name: .cxRumNotificationSessionEnded, object: nil)
     }
     
     public func setUserContext(userContext: UserContext) {
@@ -115,13 +127,13 @@ public struct CoralogixExporterOptions {
     
     // Applies for Fetch URLs. URLs that match that regex will not be traced.
     let ignoreUrls: [String]?
-
+    
     // A pattern for error messages which should not be sent to Coralogix. By default, all errors will be sent.
     let ignoreErrors: [String]?
     
     // Coralogix account domain
     let coralogixDomain: CoralogixDomain
-
+    
     // Coralogix token
     var publicKey: String
     
@@ -149,7 +161,7 @@ public struct CoralogixExporterOptions {
                 customDomainUrl: String? = nil,
                 labels: [String: Any]? = nil,
                 debug: Bool = false) {
-
+        
         self.coralogixDomain = coralogixDomain
         self.userContext = userContext
         self.publicKey = publicKey

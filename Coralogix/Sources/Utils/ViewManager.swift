@@ -39,11 +39,11 @@ public class ViewManager {
             }
             
             if view.state == .notifyOnAppear {
-                Log.d("view: \(view.name) state: \(view.state.rawValue)")
+//                Log.d("view: \(view.name) state: \(view.state.rawValue)")
                 if self.isUniqueView(name: view.name) {
                     uniqueViewsPerSession.insert(view.name)
                 }
-                Log.d("view unique count: \(uniqueViewsPerSession.count)")
+//                Log.d("view unique count: \(uniqueViewsPerSession.count)")
             }
             keyChain?.writeStringToKeychain(service: Keys.service.rawValue,
                                             key: Keys.view.rawValue,
