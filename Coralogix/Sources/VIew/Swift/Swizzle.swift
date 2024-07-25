@@ -26,6 +26,7 @@ class SwizzleUtils {
     static func swizzleInstanceMethod(for cls: AnyClass, originalSelector: Selector, swizzledSelector: Selector) {
         guard let originalMethod = class_getInstanceMethod(cls, originalSelector),
               let swizzledMethod = class_getInstanceMethod(cls, swizzledSelector) else {
+            Log.e("failed to swizzleInstanceMethod \(cls)")
             return
         }
         
@@ -41,6 +42,75 @@ class SwizzleUtils {
                                 method_getTypeEncoding(originalMethod))
         } else {
             method_exchangeImplementations(originalMethod, swizzledMethod)
+        }
+    }
+}
+
+extension UITableViewController {
+    static let swizzleUITableViewControllerDelegate: Void = {
+        let originalSelector = #selector(UITableViewController.tableView(_:didSelectRowAt:))
+        let swizzledSelector = #selector(swizzled_tableView(_:didSelectRowAt:))
+        
+        SwizzleUtils.swizzleInstanceMethod(for: UITableViewController.self,
+                                           originalSelector: originalSelector,
+                                           swizzledSelector: swizzledSelector)
+    }()
+    
+    @objc func swizzled_tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+        // Call the original implementation (which is now this method due to swizzling)
+        self.swizzled_tableView(tableView, didSelectRowAt: indexPath)
+        
+        if let cell = tableView.cellForRow(at: indexPath) {
+            var attributes = [String: Any]()
+            attributes[Keys.text.rawValue] = cell.textLabel?.text ?? ""
+            
+            let tap = [Keys.tapName.rawValue: "UITableView.didSelectRowAt",
+                       Keys.tapCount.rawValue: 1,
+                       Keys.tapAttributes.rawValue: attributes] as [String : Any]
+            NotificationCenter.default.post(name: .cxRumNotificationUserActions, object: tap)
+        }
+    }
+}
+
+extension UITableView {
+    static let swizzleUITableViewDelegate: Void = {
+        let originalSelector = #selector(setter: UITableView.delegate)
+        let swizzledSelector = #selector(swizzled_setDelegate(_:))
+        
+        SwizzleUtils.swizzleInstanceMethod(for: UITableView.self,
+                                           originalSelector: originalSelector,
+                                           swizzledSelector: swizzledSelector)
+    }()
+    
+    @objc private func swizzled_setDelegate(_ delegate: UITableViewDelegate?) {
+        // Call the original setDelegate method
+        swizzled_setDelegate(delegate)
+        
+        guard let delegate = delegate else { return }
+    
+        if let delegateClass: AnyClass = object_getClass(delegate) {
+            let originalSelector = #selector(UITableViewDelegate.tableView(_:didSelectRowAt:))
+            let swizzledSelector = #selector(UITableView.swizzled_tableView(_:didSelectRowAt:))
+            
+            SwizzleUtils.swizzleInstanceMethod(for: delegateClass,
+                                               originalSelector: originalSelector,
+                                               swizzledSelector: swizzledSelector)
+        }
+    }
+    
+    @objc func swizzled_tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+        // Call the original implementation (which is now this method due to swizzling)
+        self.swizzled_tableView(tableView, didSelectRowAt: indexPath)
+        
+        // Your custom implementation
+        if let cell = tableView.cellForRow(at: indexPath) {
+            var attributes = [String: Any]()
+            attributes[Keys.text.rawValue] = cell.textLabel?.text ?? ""
+            
+            let tap = [Keys.tapName.rawValue: "UITableView.didSelectRowAt",
+                       Keys.tapCount.rawValue: 1,
+                       Keys.tapAttributes.rawValue: attributes] as [String : Any]
+            NotificationCenter.default.post(name: .cxRumNotificationUserActions, object: tap)
         }
     }
 }
@@ -74,15 +144,15 @@ extension UIApplication {
                                            originalSelector: originalSelector,
                                            swizzledSelector: swizzledSelector)
     }()
-
-    public static let swizzledSendEvent: Void = {
-        let originalSelector = #selector(sendEvent(_:))
-        let swizzledSelector = #selector(cx_sendEvent(_:))
-        
-        SwizzleUtils.swizzleInstanceMethod(for: UIApplication.self,
-                                           originalSelector: originalSelector,
-                                           swizzledSelector: swizzledSelector)
-    }()
+    
+//    public static let swizzledSendEvent: Void = {
+//        let originalSelector = #selector(sendEvent(_:))
+//        let swizzledSelector = #selector(cx_sendEvent(_:))
+//        
+//        SwizzleUtils.swizzleInstanceMethod(for: UIApplication.self,
+//                                           originalSelector: originalSelector,
+//                                           swizzledSelector: swizzledSelector)
+//    }()
     
     public static let swizzleSendAction: Void = {
         let originalSelector = #selector(UIApplication.sendAction(_:to:from:for:))
@@ -93,27 +163,27 @@ extension UIApplication {
                                            swizzledSelector: swizzledSelector)
     }()
     
-    @objc private func cx_sendEvent(_ event: UIEvent) {
-        self.cx_sendEvent(event)
-        guard let touches = event.allTouches, let touch = touches.first, touch.phase == .began else { return }
-        
-        if let view = touch.view {
-            Log.w("Screen tapped at: \(touch.location(in: view)) in view: \(view)")
-            
-            if view.description.contains("UITabBarButton") {
-                Log.e("Responder is a UITabBarButton")
-            } else if view.description.contains("_UIButtonBarButton") {
-                Log.e("Responder is a UIButtonBarButton")
-            } else if view.description.contains("UISlider") {
-                Log.e("Responder is a UISlider")
-            }
-        }
-    }
+//    @objc private func cx_sendEvent(_ event: UIEvent) {
+//        self.cx_sendEvent(event)
+//        guard let touches = event.allTouches, let touch = touches.first, touch.phase == .began else { return }
+//        
+//        if let view = touch.view {
+//            Log.w("Screen tapped at: \(touch.location(in: view)) in view: \(view)")
+//            
+//            if view.description.contains("UITabBarButton") {
+//                Log.e("Responder is a UITabBarButton")
+//            } else if view.description.contains("_UIButtonBarButton") {
+//                Log.e("Responder is a UIButtonBarButton")
+//            } else if view.description.contains("UISlider") {
+//                Log.e("Responder is a UISlider")
+//            }
+//        }
+//    }
     
     @objc private func cx_sendAction(_ action: Selector,
-                                           to target: AnyObject?,
-                                           from sender: AnyObject?,
-                                           for event: UIEvent?) -> Bool {        
+                                     to target: AnyObject?,
+                                     from sender: AnyObject?,
+                                     for event: UIEvent?) -> Bool {
         let selectorNameCString = sel_getName(action)
         let selectorNameString = String(cString: selectorNameCString)
         if selectorNameString.contains("tabBarItemClicked") {
@@ -139,7 +209,7 @@ extension UIApplication {
                 NotificationCenter.default.post(name: .cxRumNotificationUserActions, object: tap)
             }
         }
-
+        
         return cx_sendAction(action, to: target, from: sender, for: event)
     }
 }
@@ -171,7 +241,7 @@ extension UIViewController {
         } else {
             // Custom implementation for UIViewController
             updateCoralogixRum(window: self.getWindow(), state: .notifyOnAppear)
-
+            
             // Call the original viewDidAppear
             swizzled_viewDidAppear(animated)
         }
@@ -179,7 +249,7 @@ extension UIViewController {
     
     @objc func swizzled_viewDidDisappear(_ animated: Bool) {
         updateCoralogixRum(window: self.getWindow(), state: .notifyOnDisappear)
-
+        
         // Call the original implementation
         self.swizzled_viewDidDisappear(animated)
     }
@@ -210,7 +280,7 @@ private func updateCoralogixRum(window: UIWindow?, state: CXView.AppState) {
     if !Thread.current.isMainThread {
         return
     }
-  
+    
     if let window = window {
         if let viewController = window.visibleViewController() {
             // When loading swiftUI project, we want to ignore "UIHostingController" view
@@ -230,7 +300,7 @@ extension UIWindow {
     func visibleViewController() -> UIViewController? {
         return UIWindow.getVisibleViewControllerFrom(rootViewController: self.rootViewController)
     }
-
+    
     private static func getVisibleViewControllerFrom(rootViewController: UIViewController?) -> UIViewController? {
         if let navigationController = rootViewController as? UINavigationController {
             return getVisibleViewControllerFrom(rootViewController: navigationController.visibleViewController)
@@ -246,17 +316,17 @@ extension UIWindow {
 
 /*
  (NSString *)getOperation:(id)sender
-{
-    Class senderClass = [sender class];
-    if ([senderClass isSubclassOfClass:[UIButton class]] ||
-        [senderClass isSubclassOfClass:[UIBarButtonItem class]] ||
-        [senderClass isSubclassOfClass:[UISegmentedControl class]] ||
-        [senderClass isSubclassOfClass:[UIPageControl class]]) {
-        return SentrySpanOperationUIActionClick;
-    }
-
-    return SentrySpanOperationUIAction;
-}
+ {
+ Class senderClass = [sender class];
+ if ([senderClass isSubclassOfClass:[UIButton class]] ||
+ [senderClass isSubclassOfClass:[UIBarButtonItem class]] ||
+ [senderClass isSubclassOfClass:[UISegmentedControl class]] ||
+ [senderClass isSubclassOfClass:[UIPageControl class]]) {
+ return SentrySpanOperationUIActionClick;
+ }
+ 
+ return SentrySpanOperationUIAction;
+ }
  "addTarget:action:forControlEvents:"
  "removeTarget:action:forControlEvents:"
  "setDelegate:"

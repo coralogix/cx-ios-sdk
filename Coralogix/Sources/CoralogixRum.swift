@@ -50,6 +50,8 @@ public class CoralogixRum {
 //        UIApplication.swizzledSendEvent
         UIViewController.swizzleViewDidAppear
         UIViewController.swizzleViewDidDisappear
+        UITableView.swizzleUITableViewDelegate
+        UITableViewController.swizzleUITableViewControllerDelegate
         
         self.initializeUserActionsInstrumentation()
         self.initializeNavigationInstrumentation()
