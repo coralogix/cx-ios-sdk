@@ -40,6 +40,17 @@ class Helper {
         return anyDict
     }
     
+    internal static func findFirstLabelText(in view: UIView) -> String? {
+        for subview in view.subviews {
+            if let label = subview as? UILabel {
+                return label.text
+            } else if let text = findFirstLabelText(in: subview) {
+                return text
+            }
+        }
+        return nil
+    }
+    
     internal static func convertArrayOfStringToJsonString(array: [String]) -> String {
         do {
             let jsonData = try JSONSerialization.data(withJSONObject: array, options: [])

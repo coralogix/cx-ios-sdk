@@ -47,11 +47,11 @@ public class CoralogixRum {
                 .build())
         UIApplication.swizzleTouchesEnded
         UIApplication.swizzleSendAction
-//        UIApplication.swizzledSendEvent
         UIViewController.swizzleViewDidAppear
         UIViewController.swizzleViewDidDisappear
         UITableView.swizzleUITableViewDelegate
         UITableViewController.swizzleUITableViewControllerDelegate
+        UICollectionView.swizzleUICollectionViewDelegate
         
         self.initializeUserActionsInstrumentation()
         self.initializeNavigationInstrumentation()
