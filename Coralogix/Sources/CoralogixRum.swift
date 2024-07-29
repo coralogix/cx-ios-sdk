@@ -52,6 +52,7 @@ public class CoralogixRum {
         UITableView.swizzleUITableViewDelegate
         UITableViewController.swizzleUITableViewControllerDelegate
         UICollectionView.swizzleUICollectionViewDelegate
+        UIPageControl.swizzleSetCurrentPage
         
         self.initializeUserActionsInstrumentation()
         self.initializeNavigationInstrumentation()

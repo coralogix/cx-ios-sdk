@@ -156,10 +156,30 @@ extension UIGestureRecognizer {
     }
 }
 
+extension UIPageControl {
+    static let swizzleSetCurrentPage: Void = {
+        let originalSelector = #selector(setter: currentPage)
+        let swizzledSelector = #selector(swizzled_setCurrentPage(_:))
+        
+        SwizzleUtils.swizzleInstanceMethod(for: UIPageControl.self,
+                                           originalSelector: originalSelector,
+                                           swizzledSelector: swizzledSelector)
+    }()
+    
+    @objc private func swizzled_setCurrentPage(_ page: Int) {
+        // Call the original method (which has been swizzled)
+        swizzled_setCurrentPage(page)
+        
+        let tap = [Keys.tapName.rawValue: "UIPageController",
+                   Keys.tapCount.rawValue: 1,
+                   Keys.tapAttributes.rawValue: Helper.convertDictionayToJsonString(dict: [:])] as [String : Any]
+        NotificationCenter.default.post(name: .cxRumNotificationUserActions, object: tap)
+    }
+}
+
 extension UIApplication {
     public static let swizzleTouchesEnded: Void = {
-        let cls = NSClassFromString("SwiftUI.UIKitGestureRecognizer")
-        guard let targetClass = cls else {
+        guard let targetClass = NSClassFromString("SwiftUI.UIKitGestureRecognizer") else {
             return
         }
         
@@ -218,6 +238,18 @@ extension UIApplication {
                 }
                 let senderClass = NSStringFromClass(type(of: sender))
                 let tap = [Keys.tapName.rawValue: "UISegmentedControl",
+                           Keys.tapCount.rawValue: 1,
+                           Keys.tapAttributes.rawValue: Helper.convertDictionayToJsonString(dict: attributes)] as [String : Any]
+                NotificationCenter.default.post(name: .cxRumNotificationUserActions, object: tap)
+            }
+        } else if selectorNameString.contains("buttonDown") {
+            if let sender = sender {
+                var attributes = [String: Any]()
+                if let tabBar = target as? UITabBar {
+                    attributes[Keys.text.rawValue] = tabBar.selectedItem?.title
+                }
+                let senderClass = NSStringFromClass(type(of: sender))
+                let tap = [Keys.tapName.rawValue: "\(senderClass)",
                            Keys.tapCount.rawValue: 1,
                            Keys.tapAttributes.rawValue: Helper.convertDictionayToJsonString(dict: attributes)] as [String : Any]
                 NotificationCenter.default.post(name: .cxRumNotificationUserActions, object: tap)
@@ -341,10 +373,3 @@ extension UIWindow {
         }
     }
 }
-
-/*
- (NSString *)getOperation:(id)sender
- {
- [senderClass isSubclassOfClass:[UIPageControl class]]) {
- }
- */
