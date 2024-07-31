@@ -35,7 +35,11 @@ public class CoralogixRum {
                                                    networkManager: self.networkManager,
                                                    viewManager: self.viewManager)
         
-        OpenTelemetry.registerTracerProvider(tracerProvider: TracerProviderBuilder()
+        let resource = Resource(attributes: [
+            ResourceAttributes.serviceName.rawValue: AttributeValue.string(options.application)
+        ])
+        
+        OpenTelemetry.registerTracerProvider(tracerProvider: TracerProviderBuilder().with(resource: resource)
             .add(spanProcessor: BatchSpanProcessor(spanExporter: self.coralogixExporter,
                                                    scheduleDelay: Double(Global.BatchSpan.scheduleDelay.rawValue),
                                                    maxExportBatchSize: Global.BatchSpan.maxExportBatchSize.rawValue))

@@ -36,6 +36,7 @@ struct CxRum {
          networkManager: NetworkProtocol,
          userMetadata: [String: String]?,
          labels: [String: Any]?) {
+
         self.timeStamp = otel.getStartTime() ?? Date().timeIntervalSince1970
         self.eventTypeContext = EventTypeContext(otel: otel)
         self.mobileSdk = Global.sdk.rawValue

@@ -123,6 +123,16 @@ public enum Keys: String {
     case threads
     case httpResponseBodySize = "http_response_body_size"
     case stackTrace
+    case instrumentationData = "instrumentation_data"
+    case otelResource
+    case otelSpan
+    case parentSpanId
+    case name
+    case attributes
+    case startTime
+    case endTime
+    case status
+    case kind
 }
 
 public enum CoralogixLogSeverity: Int {
