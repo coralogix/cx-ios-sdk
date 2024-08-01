@@ -75,6 +75,13 @@ final class SessionContextTests: XCTestCase {
         XCTAssertEqual(prevDictionary[Keys.sessionId.rawValue] as? String, "session_001")
         XCTAssertEqual(prevDictionary[Keys.sessionCreationDate.rawValue] as? Int, 1609459200.milliseconds)
     }
+    
+    func testResetSessionMetaDataDictionary() {
+        XCTAssertNotNil(sessionMetadata)
+        sessionMetadata.resetSessionMetadata()
+        XCTAssertEqual(sessionMetadata.sessionId, "")
+        XCTAssertEqual(sessionMetadata.sessionCreationDate, 0)
+    }
 }
 
 

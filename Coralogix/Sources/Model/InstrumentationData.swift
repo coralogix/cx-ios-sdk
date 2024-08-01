@@ -52,22 +52,26 @@ struct OtelSpan {
         let currentDate = Date().timeIntervalSince1970
         let defualtTime = [UInt64(currentDate), 0]
         if let startTime = otel.getStartTime() {
-            let (integerPart, fractionalPart) = modf(startTime)
-            self.startTime = [UInt64(integerPart), UInt64(fractionalPart * 1_000_000_000)]
+            self.startTime = startTime.openTelemetryFormat
         } else {
             self.startTime = defualtTime
         }
         
         if let endTime = otel.getEndTime() {
-            let (integerPart, fractionalPart) = modf(endTime)
-            self.endTime =  [UInt64(integerPart), UInt64(fractionalPart * 1_000_000_000)]
+            self.endTime = endTime.openTelemetryFormat
         } else {
             self.endTime = defualtTime
         }
         
         self.status = otel.getStatusCode()
         self.kind = otel.getKind()
-        self.duration = [0, 0]
+        if let startTime = otel.getStartTime(),
+           let endTime = otel.getEndTime() {
+            let delta = endTime - startTime
+            self.duration = delta.openTelemetryFormat
+        } else {
+            self.duration = [0, 0]
+        }
     }
     
     func getDictionary() -> [String: Any] {
@@ -89,7 +93,7 @@ struct OtelResource {
     let attributes: [String: Any]
     
     init(otel: SpanDataProtocol) {
-        self.attributes = otel.getResources() ??  [String: Any]()
+        self.attributes = otel.getResources()
     }
     
     func getDictionary() -> [String: Any] {

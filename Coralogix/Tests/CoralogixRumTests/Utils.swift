@@ -72,7 +72,10 @@ class MockSpanData: SpanDataProtocol {
          endTime: Date? = nil,
          spanId: String? = nil,
          traceId: String? = nil,
-         kind: Int = 0) {
+         name: String? = nil,
+         kind: Int = 0,
+         statusCode: [String: Any]? = nil,
+         resources: [String: Any]? = nil) {
         self.attributes = attributes
         self.status = status
         self.endTime = endTime?.timeIntervalSince1970 ?? 0
@@ -80,6 +83,10 @@ class MockSpanData: SpanDataProtocol {
         self.traceId = traceId
         self.spanId = spanId
         self.kind = kind
+        self.name = name
+        self.traceId = traceId
+        self.statusCode = statusCode ?? [:]
+        self.resources = resources ?? [:]
     }
 }
 
