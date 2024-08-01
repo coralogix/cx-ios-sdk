@@ -11,6 +11,35 @@ import UIKit
 #endif
 
 class Helper {
+    internal static func convertToAnyDict(_ attributeDict: [String: AttributeValue]) -> [String: Any] {
+        var anyDict: [String: Any] = [:]
+
+        for (key, attributeValue) in attributeDict {
+            switch attributeValue {
+            case let .string(value):
+                anyDict[key] = value
+            case let .bool(value):
+                anyDict[key] = value
+            case let .int(value):
+                anyDict[key] = value
+            case let .double(value):
+                anyDict[key] = value
+            case let .stringArray(value):
+                anyDict[key] = value
+            case let .boolArray(value):
+                anyDict[key] = value
+            case let .intArray(value):
+                anyDict[key] = value
+            case let .doubleArray(value):
+                anyDict[key] = value
+            case let .set(value):
+                anyDict[key] = value // Assuming AttributeSet conforms to Any
+            }
+        }
+
+        return anyDict
+    }
+    
     internal static func convertArrayOfStringToJsonString(array: [String]) -> String {
         do {
             let jsonData = try JSONSerialization.data(withJSONObject: array, options: [])

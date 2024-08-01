@@ -16,6 +16,8 @@ final class CxSpanTests: XCTestCase {
     var mockSessionManager: SessionManager!
     var mockNetworkManager: NetworkManager!
     var mockViewManager: ViewManager!
+    let statTime = Date()
+    let endTime = Date()
     
     override func setUpWithError() throws {
         mockSpanData = MockSpanData(attributes: [Keys.severity.rawValue: AttributeValue("3"),
@@ -25,7 +27,12 @@ final class CxSpanTests: XCTestCase {
                                                  Keys.userId.rawValue: AttributeValue("12345"),
                                                  Keys.userName.rawValue: AttributeValue("John Doe"),
                                                  Keys.userEmail.rawValue: AttributeValue("john.doe@example.com")],
-                                    startTime: Date(), spanId: "20", traceId: "30")
+                                    startTime: statTime, endTime: endTime, spanId: "20",
+                                    traceId: "30", name: "testSpan", kind: 1,
+                                    statusCode: ["status": "ok"],
+                                    resources: ["a": AttributeValue("1"),
+                                                "b": AttributeValue("2"),
+                                                "c": AttributeValue("3")])
         mockVersionMetadata = VersionMetadata(appName: "ExampleApp", appVersion: "1.1.1")
         mockSessionManager = SessionManager()
         mockNetworkManager = NetworkManager()
@@ -54,6 +61,34 @@ final class CxSpanTests: XCTestCase {
         XCTAssertEqual(cxSpan.severity, 3)
         XCTAssertNotNil(cxSpan.timeStamp)
         XCTAssertNotNil(cxSpan.cxRum)
+    }
+    
+    func testInitializationWirtInstrumentationData() {
+        mockSpanData = MockSpanData(attributes: [Keys.severity.rawValue: AttributeValue("3"),
+                                                 Keys.eventType.rawValue: AttributeValue("network-request"),
+                                                 Keys.source.rawValue: AttributeValue("console"),
+                                                 Keys.environment.rawValue: AttributeValue("prod"),
+                                                 Keys.userId.rawValue: AttributeValue("12345"),
+                                                 Keys.userName.rawValue: AttributeValue("John Doe"),
+                                                 Keys.userEmail.rawValue: AttributeValue("john.doe@example.com")],
+                                    startTime: statTime, endTime: endTime, spanId: "20",
+                                    traceId: "30", name: "testSpan", kind: 1,
+                                    statusCode: ["status": "ok"],
+                                    resources: ["a": AttributeValue("1"),
+                                                "b": AttributeValue("2"),
+                                                "c": AttributeValue("3")])
+        
+        let cxSpan = CxSpan(otel: mockSpanData,
+                            versionMetadata: mockVersionMetadata,
+                            sessionManager: mockSessionManager,
+                            networkManager: mockNetworkManager,
+                            viewManager: mockViewManager,
+                            userMetadata: nil,
+                            labels: nil)
+        XCTAssertNotNil(cxSpan.instrumentationData)
+        
+        let dict = cxSpan.getDictionary()
+        XCTAssertNotNil(dict[Keys.instrumentationData.rawValue])
     }
     
     func testGetDictionary() {

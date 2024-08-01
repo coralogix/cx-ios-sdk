@@ -15,6 +15,10 @@ class MockSpanData: SpanDataProtocol {
     var spanId: String?
     var startTime: TimeInterval
     var endTime: TimeInterval
+    var statusCode: [String: Any] = [:]
+    var name: String?
+    var resources: [String: Any] = [:]
+    var kind: Int
     
     func getStatus() -> String? {
         return self.status
@@ -40,6 +44,26 @@ class MockSpanData: SpanDataProtocol {
         let attribute = attributes[forKey] as? AttributeValue
         return attribute?.description
     }
+    
+    func getStatusCode() -> [String : Any] {
+        return self.statusCode
+    }
+    
+    func getAttributes() -> [String : Any]? {
+        return self.attributes
+    }
+    
+    func getName() -> String? {
+        return self.name
+    }
+    
+    func getKind() -> Int {
+        return self.kind
+    }
+    
+    func getResources() -> [String : Any] {
+        return self.resources
+    }
 
     // Add initializer or other methods to set up the mock data as needed
     init(attributes: [String: Any], 
@@ -47,13 +71,22 @@ class MockSpanData: SpanDataProtocol {
          startTime: Date? = nil,
          endTime: Date? = nil,
          spanId: String? = nil,
-         traceId: String? = nil) {
+         traceId: String? = nil,
+         name: String? = nil,
+         kind: Int = 0,
+         statusCode: [String: Any]? = nil,
+         resources: [String: Any]? = nil) {
         self.attributes = attributes
         self.status = status
         self.endTime = endTime?.timeIntervalSince1970 ?? 0
         self.startTime = startTime?.timeIntervalSince1970 ?? 0
         self.traceId = traceId
         self.spanId = spanId
+        self.kind = kind
+        self.name = name
+        self.traceId = traceId
+        self.statusCode = statusCode ?? [:]
+        self.resources = resources ?? [:]
     }
 }
 

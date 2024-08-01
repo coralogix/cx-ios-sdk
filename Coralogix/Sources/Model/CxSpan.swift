@@ -14,6 +14,7 @@ public class CxSpan {
     var severity: Int = 0
     var timeStamp: TimeInterval = 0
     var cxRum: CxRum
+    var instrumentationData: InstrumentationData?
     
     init(otel: SpanDataProtocol,
          versionMetadata: VersionMetadata,
@@ -36,6 +37,10 @@ public class CxSpan {
                            networkManager: networkManager,
                            userMetadata: userMetadata,
                            labels: labels)
+        
+        if cxRum.eventContext.type == CoralogixEventType.networkRequest {
+            self.instrumentationData = InstrumentationData(otel: otel, labels: labels)
+        }
     }
     
     func getDictionary() -> [String: Any] {
@@ -46,6 +51,11 @@ public class CxSpan {
         result[Keys.severity.rawValue] = self.severity
         result[Keys.timestamp.rawValue] = self.timeStamp.milliseconds
         result[Keys.text.rawValue] = [Keys.cxRum.rawValue: self.cxRum.getDictionary()]
+       
+        if cxRum.eventContext.type == CoralogixEventType.networkRequest,
+            let instrumentationData = self.instrumentationData?.getDictionary() {
+            result[Keys.instrumentationData.rawValue] = instrumentationData
+        }
         return result
     }
 }

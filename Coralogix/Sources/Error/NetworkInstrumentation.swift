@@ -20,7 +20,6 @@ extension CoralogixRum {
     private func spanCustomization(request: URLRequest, spanBuilder: SpanBuilder) {
         spanBuilder.setAttribute(key: Keys.eventType.rawValue, value: CoralogixEventType.networkRequest.rawValue)
         spanBuilder.setAttribute(key: Keys.source.rawValue, value: Keys.fetch.rawValue)
-        spanBuilder.setAttribute(key: Keys.timestamp.rawValue, value: Date().timeIntervalSince1970.milliseconds)
     }
     
     private func receivedResponse(response: URLResponse, data: DataOrFile?, span: Span) {
