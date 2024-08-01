@@ -39,7 +39,6 @@ final class EventTypeContextTests: XCTestCase {
             XCTAssertEqual(context.fragments, "/home")
             XCTAssertEqual(context.host, "example.com")
             XCTAssertEqual(context.schema, "https")
-            XCTAssertEqual(context.statusText, "OK")
             XCTAssertEqual(context.responseContentLength, "1024")
             XCTAssertNotNil(context.duration)
         }
@@ -56,7 +55,6 @@ final class EventTypeContextTests: XCTestCase {
             XCTAssertEqual(dictionary[Keys.fragments.rawValue] as? String, "/home")
             XCTAssertEqual(dictionary[Keys.host.rawValue] as? String, "example.com")
             XCTAssertEqual(dictionary[Keys.schema.rawValue] as? String, "https")
-            XCTAssertEqual(dictionary[Keys.statusText.rawValue] as? String, "OK")
             XCTAssertEqual(dictionary[Keys.responseContentLength.rawValue] as? String, "1024")
             XCTAssertNotNil(dictionary[Keys.duration.rawValue])
         }

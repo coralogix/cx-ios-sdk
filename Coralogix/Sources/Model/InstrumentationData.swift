@@ -54,7 +54,6 @@ struct OtelSpan {
         if let startTime = otel.getStartTime() {
             let (integerPart, fractionalPart) = modf(startTime)
             self.startTime = [UInt64(integerPart), UInt64(fractionalPart * 1_000_000_000)]
-            Log.e("startTime \(fractionalPart)")
         } else {
             self.startTime = defualtTime
         }
@@ -62,7 +61,6 @@ struct OtelSpan {
         if let endTime = otel.getEndTime() {
             let (integerPart, fractionalPart) = modf(endTime)
             self.endTime =  [UInt64(integerPart), UInt64(fractionalPart * 1_000_000_000)]
-            Log.e("endTime   \(fractionalPart)")
         } else {
             self.endTime = defualtTime
         }
