@@ -126,7 +126,6 @@ extension UITableViewController {
     }()
     
     @objc func swizzled_tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
-        // Call the original implementation (which is now this method due to swizzling)
         self.swizzled_tableView(tableView, didSelectRowAt: indexPath)
         
         if let cell = tableView.cellForRow(at: indexPath) {
@@ -207,56 +206,63 @@ extension UIApplication {
         let selectorNameCString = sel_getName(action)
         let selectorNameString = String(cString: selectorNameCString)
         if selectorNameString.contains("tabBarItemClicked") {
-            if let sender = sender {
-                let senderClass = NSStringFromClass(type(of: sender))
-                var attributes = [String: Any]()
-                if let description = sender.description,
-                   let title = CXHelper.extractTitleUITabBarItem(from: description) {
-                    attributes[Keys.text.rawValue] = title
-                }
-                let tap = [Keys.tapName.rawValue: "\(senderClass)",
-                           Keys.tapCount.rawValue: 1,
-                           Keys.tapAttributes.rawValue: Helper.convertDictionayToJsonString(dict: attributes)] as [String : Any]
-                NotificationCenter.default.post(name: .cxRumNotificationUserActions, object: tap)
-            }
+            self.handleTabBarItemClicked(sender: sender)
         } else if selectorNameString.contains("backButtonAction") {
-            if let sender = sender {
-                let senderClass = NSStringFromClass(type(of: sender))
-                let tap = [Keys.tapName.rawValue: "backButton",
-                           Keys.tapCount.rawValue: 1,
-                           Keys.tapAttributes.rawValue: [:]] as [String : Any]
-                NotificationCenter.default.post(name: .cxRumNotificationUserActions, object: tap)
-            }
+            self.handleBackButtonAction(sender: sender)
         } else if selectorNameString.contains("segmentChanged") {
-            if let sender = sender {
-                var attributes = [String: Any]()
-                
-                if let segmentedControl = sender as? UISegmentedControl {
-                    let selectedIndex = segmentedControl.selectedSegmentIndex
-                    let selectedTitle = segmentedControl.titleForSegment(at: selectedIndex)
-                    attributes[Keys.text.rawValue] = "\(selectedTitle)" ?? "None"
-                }
-                let senderClass = NSStringFromClass(type(of: sender))
-                let tap = [Keys.tapName.rawValue: "UISegmentedControl",
-                           Keys.tapCount.rawValue: 1,
-                           Keys.tapAttributes.rawValue: Helper.convertDictionayToJsonString(dict: attributes)] as [String : Any]
-                NotificationCenter.default.post(name: .cxRumNotificationUserActions, object: tap)
-            }
+            self.handleSegmentChanged(sender: sender)
         } else if selectorNameString.contains("buttonDown") {
-            if let sender = sender {
-                var attributes = [String: Any]()
-                if let tabBar = target as? UITabBar {
-                    attributes[Keys.text.rawValue] = tabBar.selectedItem?.title
-                }
-                let senderClass = NSStringFromClass(type(of: sender))
-                let tap = [Keys.tapName.rawValue: "\(senderClass)",
-                           Keys.tapCount.rawValue: 1,
-                           Keys.tapAttributes.rawValue: Helper.convertDictionayToJsonString(dict: attributes)] as [String : Any]
-                NotificationCenter.default.post(name: .cxRumNotificationUserActions, object: tap)
-            }
+            self.handleButtonDown(sender: sender, target: target)
         }
-        
         return cx_sendAction(action, to: target, from: sender, for: event)
+    }
+    
+    private func handleTabBarItemClicked(sender: AnyObject?) {
+        guard let sender = sender else { return }
+        let senderClass = NSStringFromClass(type(of: sender))
+        var attributes = [String: Any]()
+        if let description = sender.description,
+           let title = CXHelper.extractTitleUITabBarItem(from: description) {
+            attributes[Keys.text.rawValue] = title
+        }
+        let tap = [Keys.tapName.rawValue: "\(senderClass)",
+                   Keys.tapCount.rawValue: 1,
+                   Keys.tapAttributes.rawValue: Helper.convertDictionayToJsonString(dict: attributes)] as [String: Any]
+        NotificationCenter.default.post(name: .cxRumNotificationUserActions, object: tap)
+    }
+    
+    private func handleBackButtonAction(sender: AnyObject?) {
+        guard let sender = sender else { return }
+        let tap = [Keys.tapName.rawValue: "backButton",
+                   Keys.tapCount.rawValue: 1,
+                   Keys.tapAttributes.rawValue: [:]] as [String: Any]
+        NotificationCenter.default.post(name: .cxRumNotificationUserActions, object: tap)
+    }
+
+    private func handleSegmentChanged(sender: AnyObject?) {
+        guard let sender = sender, let segmentedControl = sender as? UISegmentedControl else { return }
+        var attributes = [String: Any]()
+        let selectedIndex = segmentedControl.selectedSegmentIndex
+        let selectedTitle = segmentedControl.titleForSegment(at: selectedIndex)
+        attributes[Keys.text.rawValue] = "\(selectedTitle ?? "None")"
+        let senderClass = NSStringFromClass(type(of: sender))
+        let tap = [Keys.tapName.rawValue: "UISegmentedControl",
+                   Keys.tapCount.rawValue: 1,
+                   Keys.tapAttributes.rawValue: Helper.convertDictionayToJsonString(dict: attributes)] as [String: Any]
+        NotificationCenter.default.post(name: .cxRumNotificationUserActions, object: tap)
+    }
+    
+    private func handleButtonDown(sender: AnyObject?, target: AnyObject?) {
+        guard let sender = sender else { return }
+        var attributes = [String: Any]()
+        if let tabBar = target as? UITabBar {
+            attributes[Keys.text.rawValue] = tabBar.selectedItem?.title
+        }
+        let senderClass = NSStringFromClass(type(of: sender))
+        let tap = [Keys.tapName.rawValue: "\(senderClass)",
+                   Keys.tapCount.rawValue: 1,
+                   Keys.tapAttributes.rawValue: Helper.convertDictionayToJsonString(dict: attributes)] as [String: Any]
+        NotificationCenter.default.post(name: .cxRumNotificationUserActions, object: tap)
     }
 }
 

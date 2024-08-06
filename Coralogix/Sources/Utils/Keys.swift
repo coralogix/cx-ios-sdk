@@ -118,6 +118,7 @@ public enum Keys: String {
     case snapshotContext = "snapshot_context"
     case errorCount
     case viewCount
+    case clickCount
     case isViewUnique
     case isSnapshotEvent
     case threads
@@ -137,6 +138,11 @@ public enum Keys: String {
     case tapCount
     case tapAttributes
     case tapObject
+    case interactionContext = "interaction_context"
+    case elementId = "element_id"
+    case eventName = "event_name"
+    case elementType = "element_type"
+    case click
 }
 
 public enum CoralogixLogSeverity: Int {

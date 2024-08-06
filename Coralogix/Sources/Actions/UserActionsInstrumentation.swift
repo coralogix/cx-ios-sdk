@@ -18,8 +18,8 @@ extension CoralogixRum {
     
     @objc func handleTapNotification(notification: Notification) {
         if let tapObject = notification.object as? [String: Any] {
+            self.sessionManager.incrementClickCounter()
             let span = self.getUserActionsSpan()
-            Log.d("tapObject: \(tapObject)")
             span.setAttribute(key: Keys.tapObject.rawValue, value: Helper.convertDictionayToJsonString(dict: tapObject))
             span.end()
         } else {

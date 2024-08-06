@@ -15,6 +15,7 @@ public class SessionManager {
     private var idleTimer: Timer?
     private let idleInterval: TimeInterval = 15 * 60  // 15 minutes in seconds
     private var errorCount: Int = 0
+    private var clickCount: Int = 0
     var lastSnapshotEventTime: Date?
 
     init() {
@@ -25,6 +26,10 @@ public class SessionManager {
     
     public func incrementErrorCounter() {
         errorCount += 1
+    }
+    
+    public func incrementClickCounter() {
+        clickCount += 1
     }
     
     public func getPrevSessionMetadata() -> SessionMetadata? {
@@ -48,10 +53,15 @@ public class SessionManager {
     
     public func reset() {
         self.errorCount = 0
+        self.clickCount = 0
     }
     
     public func getErrorCount() -> Int {
         return errorCount
+    }
+    
+    public func getClickCount() -> Int {
+        return clickCount
     }
     
     private func hasAnHourPassed(since timeInterval: TimeInterval) -> Bool {

@@ -28,6 +28,7 @@ struct CxRum {
     var viewManager: ViewManager?
     var snapshotContext: SnapshotConext?
     var isOneMinuteFromLastSnapshotPass = false
+    var interactionContext: InteractionContext?
     
     init(otel: SpanDataProtocol,
          versionMetadata: VersionMetadata,
@@ -67,6 +68,7 @@ struct CxRum {
         self.logContext = LogContext(otel: otel)
         self.deviceState = DeviceState(networkManager: self.networkManager)
         self.snapshotContext = SnapshotConext.getSnapshot(otel: otel)
+        self.interactionContext = InteractionContext(otel: otel)
         
         if let sessionManager = self.sessionManager,
            let viewManager = self.viewManager,
@@ -74,7 +76,8 @@ struct CxRum {
             if isMoreThanOneMinuteDifference(interval1: lastSnapshotSent.timeIntervalSince1970, interval2: self.timeStamp) {
                 self.snapshotContext = SnapshotConext(timestemp: Date().timeIntervalSince1970,
                                                       errorCount: sessionManager.getErrorCount(),
-                                                      viewCount: viewManager.getUniqueViewCount())
+                                                      viewCount: viewManager.getUniqueViewCount(),
+                                                      clickCount: sessionManager.getClickCount())
                 self.isOneMinuteFromLastSnapshotPass = true
             }
         }
@@ -130,6 +133,11 @@ struct CxRum {
         
         if eventContext.type == CoralogixEventType.log {
             result[Keys.logContext.rawValue] = self.logContext.getDictionary()
+        }
+        
+        if eventContext.type == CoralogixEventType.userInteraction,
+           let interactionContext = self.interactionContext {
+            result[Keys.interactionContext.rawValue] = interactionContext.getDictionary()
         }
         
         if let viewManager = self.viewManager {
