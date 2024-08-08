@@ -40,6 +40,17 @@ class Helper {
         return anyDict
     }
     
+    internal static func findFirstLabelText(in view: UIView) -> String? {
+        for subview in view.subviews {
+            if let label = subview as? UILabel {
+                return label.text
+            } else if let text = findFirstLabelText(in: subview) {
+                return text
+            }
+        }
+        return nil
+    }
+    
     internal static func convertArrayOfStringToJsonString(array: [String]) -> String {
         do {
             let jsonData = try JSONSerialization.data(withJSONObject: array, options: [])
@@ -47,7 +58,7 @@ class Helper {
                 return jsonString
             }
         } catch {
-            Log.e("Error: \(error)")
+            Log.e("Error convertArrayOfStringToJsonString: \(error)")
         }
         return ""
     }
@@ -59,7 +70,7 @@ class Helper {
                 return jsonString
             }
         } catch {
-            Log.e("Error: \(error)")
+            Log.e("Error convertArrayToJsonString: \(error)")
         }
         return ""
     }
@@ -92,7 +103,7 @@ class Helper {
                 return nil
             }
         } catch {
-            Log.e("Error: \(error)")
+            Log.e("Error convertJsonStringToDict: \(error)")
             return nil
         }
     }
@@ -113,7 +124,7 @@ class Helper {
                 return nil
             }
         } catch {
-            Log.e("Error: \(error)")
+            Log.e("Error convertJsonStringToArray: \(error)")
             return nil
         }
     }
@@ -134,7 +145,7 @@ class Helper {
                 return nil
             }
         } catch {
-            Log.e("Error: \(error)")
+            Log.e("Error convertJsonStringToArrayOfStrings: \(error)")
             return nil
         }
     }
@@ -191,5 +202,9 @@ class Helper {
             }
         }
         return result
+    }
+    
+    internal static var isSimulator: Bool {
+        return TARGET_OS_SIMULATOR != 0
     }
 }

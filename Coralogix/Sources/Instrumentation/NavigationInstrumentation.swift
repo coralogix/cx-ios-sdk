@@ -12,7 +12,6 @@ import UIKit
 
 extension CoralogixRum {
     public func initializeNavigationInstrumentation() {
-        UIViewController.performSwizzling()
         NotificationCenter.default.addObserver(self,
                                                selector: #selector(handleNotification(notification:)),
                                                name: .cxRumNotification, object: nil)
@@ -21,11 +20,12 @@ extension CoralogixRum {
     @objc func handleNotification(notification: Notification) {
         if let cxView = notification.object as? CXView {
             if viewManager.isUniqueView(name: cxView.name) {
-                let span = self.getSpan()
+                let span = self.getNavigationSpan()
 
                 let snapshot = SnapshotConext(timestemp: Date().timeIntervalSince1970,
                                               errorCount: self.sessionManager.getErrorCount(),
-                                              viewCount: self.viewManager.getUniqueViewCount() + 1)
+                                              viewCount: self.viewManager.getUniqueViewCount() + 1,
+                                              clickCount: self.sessionManager.getClickCount())
                 let dict = Helper.convertDictionary(snapshot.getDictionary())
                 span.setAttribute(key: Keys.snapshotContext.rawValue,
                                   value: Helper.convertDictionayToJsonString(dict: dict))
@@ -35,15 +35,11 @@ extension CoralogixRum {
                 self.coralogixExporter.set(cxView: cxView)
             }
         } else {
-            Log.d("Notification received with no object or with a different object type")
+            Log.e("Notification received with no object or with a different object type")
         }
     }
     
-    private func tracer() -> Tracer {
-        return OpenTelemetry.instance.tracerProvider.get(instrumentationName: Keys.iosSdk.rawValue, instrumentationVersion: Global.sdk.rawValue)
-    }
-    
-    private func getSpan() -> Span {
+    private func getNavigationSpan() -> Span {
         let span = tracer().spanBuilder(spanName: Keys.iosSdk.rawValue).startSpan()
         span.setAttribute(key: Keys.eventType.rawValue, value: CoralogixEventType.navigation.rawValue)
         span.setAttribute(key: Keys.source.rawValue, value: Keys.console.rawValue)

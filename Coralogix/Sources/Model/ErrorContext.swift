@@ -10,7 +10,7 @@ import Foundation
 struct ErrorContext {
     let domain: String
     let code: String
-    let localizedDescription: String
+    let errorMessage: String
     var userInfo: [String: Any]?
     
     let exceptionType: String
@@ -26,7 +26,7 @@ struct ErrorContext {
     init(otel: SpanDataProtocol) {
         self.domain = otel.getAttribute(forKey: Keys.domain.rawValue) as? String ?? ""
         self.code = otel.getAttribute(forKey: Keys.code.rawValue) as? String ?? ""
-        self.localizedDescription = otel.getAttribute(forKey: Keys.localizedDescription.rawValue) as? String ?? ""
+        self.errorMessage = otel.getAttribute(forKey: Keys.errorMessage.rawValue) as? String ?? ""
         if let jsonString = otel.getAttribute(forKey: Keys.userInfo.rawValue) as? String,
            let dict = Helper.convertJsonStringToDict(jsonString: jsonString) {
             self.userInfo = dict
@@ -78,7 +78,7 @@ struct ErrorContext {
             var exceptionContext = [String: Any]()
             exceptionContext[Keys.domain.rawValue] = self.domain
             exceptionContext[Keys.code.rawValue] = self.code
-            exceptionContext[Keys.localizedDescription.rawValue] = self.localizedDescription
+            exceptionContext[Keys.errorMessage.rawValue] = self.errorMessage
 
             if let userInfo = self.userInfo {
                 exceptionContext[Keys.userInfo.rawValue] = userInfo

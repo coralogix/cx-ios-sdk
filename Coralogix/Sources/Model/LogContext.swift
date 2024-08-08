@@ -12,9 +12,9 @@ struct LogContext {
     
     init(otel: SpanDataProtocol) {
         self.message = otel.getAttribute(forKey: Keys.message.rawValue) as? String ?? ""
-        let jsonString = otel.getAttribute(forKey: Keys.data.rawValue) as? String ?? ""
-
-        if let data = Helper.convertJsonStringToDict(jsonString: jsonString) {
+    
+        if let jsonString = otel.getAttribute(forKey: Keys.data.rawValue) as? String,
+            let data = Helper.convertJsonStringToDict(jsonString: jsonString) {
             self.data = data
         }
     }

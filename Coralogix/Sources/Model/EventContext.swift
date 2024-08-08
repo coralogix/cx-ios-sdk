@@ -24,8 +24,14 @@ struct EventContext {
     }
     
     func getDictionary() -> [String: Any] {
-        return [Keys.type.rawValue: self.type.rawValue,
-                Keys.source.rawValue: self.source,
-                Keys.severity.rawValue: self.severity]
+        var result = [String: Any]()
+        result[Keys.type.rawValue] = self.type.rawValue
+        
+        if self.source != "" {
+            result[Keys.source.rawValue] = self.source
+        }
+        
+        result[Keys.severity.rawValue] = self.severity
+        return result
     }
 }

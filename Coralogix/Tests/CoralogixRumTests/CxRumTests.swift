@@ -21,7 +21,8 @@ final class CxRumTests: XCTestCase {
         
         let snapshot = SnapshotConext(timestemp: Date().timeIntervalSince1970,
                                       errorCount: 1,
-                                      viewCount: 2)
+                                      viewCount: 2,
+                                      clickCount: 0)
         let dict = Helper.convertDictionary(snapshot.getDictionary())
         let snapshotString = Helper.convertDictionayToJsonString(dict: dict)
         mockSpanData = MockSpanData(attributes: [Keys.severity.rawValue: AttributeValue("3"),
@@ -126,7 +127,7 @@ final class CxRumTests: XCTestCase {
         
         let currentTime = Date()
         cxRum.isOneMinuteFromLastSnapshotPass = true
-        cxRum.snapshotContext = SnapshotConext(timestemp: currentTime.timeIntervalSince1970, errorCount: 1, viewCount: 1)
+        cxRum.snapshotContext = SnapshotConext(timestemp: currentTime.timeIntervalSince1970, errorCount: 1, viewCount: 1, clickCount: 0)
         // Invoke getDictionary
         let result = cxRum.getDictionary()
         XCTAssertNotNil(result[Keys.snapshotContext.rawValue] as? [String: Any])
@@ -159,7 +160,7 @@ final class CxRumTests: XCTestCase {
         )
         
         let currentTime = Date()        
-        cxRum.snapshotContext = SnapshotConext(timestemp: currentTime.timeIntervalSince1970, errorCount: 1, viewCount: 1)
+        cxRum.snapshotContext = SnapshotConext(timestemp: currentTime.timeIntervalSince1970, errorCount: 1, viewCount: 1, clickCount: 0)
         // Invoke getDictionary
         let result = cxRum.getDictionary()
         XCTAssertNotNil(result[Keys.snapshotContext.rawValue] as? [String: Any])
@@ -192,7 +193,10 @@ final class CxRumTests: XCTestCase {
         )
         
         let currentTime = Date()
-        cxRum.snapshotContext = SnapshotConext(timestemp: currentTime.timeIntervalSince1970, errorCount: 0, viewCount: 1)
+        cxRum.snapshotContext = SnapshotConext(timestemp: currentTime.timeIntervalSince1970,
+                                               errorCount: 0,
+                                               viewCount: 1,
+                                               clickCount: 0)
         // Invoke getDictionary
         let result = cxRum.getDictionary()
         XCTAssertNotNil(result[Keys.snapshotContext.rawValue] as? [String: Any])

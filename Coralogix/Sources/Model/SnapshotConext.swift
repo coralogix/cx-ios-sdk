@@ -11,6 +11,7 @@ public struct SnapshotConext {
     let timestemp: TimeInterval
     let errorCount: Int
     let viewCount: Int
+    let clickCount: Int
     
     static func getSnapshot(otel: SpanDataProtocol) -> SnapshotConext? {
         if let jsonString = otel.getAttribute(forKey: Keys.snapshotContext.rawValue) as? String,
@@ -18,7 +19,8 @@ public struct SnapshotConext {
             let timestemp = dict[Keys.timestamp.rawValue] as? TimeInterval ?? Date().timeIntervalSince1970
             let errorCount = dict[Keys.errorCount.rawValue] as? Int ?? 0
             let viewCount = dict[Keys.viewCount.rawValue] as? Int ?? 0
-            return SnapshotConext(timestemp: timestemp, errorCount: errorCount, viewCount: viewCount)
+            let clickCount = dict[Keys.clickCount.rawValue] as? Int ?? 0
+            return SnapshotConext(timestemp: timestemp, errorCount: errorCount, viewCount: viewCount, clickCount: clickCount)
         }
         return nil
     }
@@ -28,6 +30,7 @@ public struct SnapshotConext {
         result[Keys.timestamp.rawValue] = self.timestemp.milliseconds
         result[Keys.errorCount.rawValue] = self.errorCount
         result[Keys.viewCount.rawValue] = self.viewCount
+        result[Keys.clickCount.rawValue] = self.clickCount
         return result
     }
 }

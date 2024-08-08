@@ -9,10 +9,6 @@ import Foundation
 import CrashReporter
 
 extension CoralogixRum {
-    private func tracer() -> Tracer {
-        return OpenTelemetry.instance.tracerProvider.get(instrumentationName: Keys.iosSdk.rawValue, instrumentationVersion: Global.sdk.rawValue)
-    }
-    
     public func initializeCrashInstumentation() {
         // It is strongly recommended that local symbolication only be enabled for non-release builds.
         // Use [] for release versions.
