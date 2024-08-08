@@ -17,7 +17,7 @@ final class ErrorContextTests: XCTestCase {
         mockSpanData = MockSpanData(attributes: [
             Keys.domain.rawValue: AttributeValue("com.example.error"),
             Keys.code.rawValue: AttributeValue("404"),
-            Keys.localizedDescription.rawValue: AttributeValue("Not Found"),
+            Keys.errorMessage.rawValue: AttributeValue("Not Found"),
             Keys.userInfo.rawValue: AttributeValue("{\"exampleKey\": \"exampleValue\"}"),
             Keys.exceptionType.rawValue: AttributeValue("Fatal"),
             Keys.crashTimestamp.rawValue: AttributeValue("1625097600"),
@@ -67,7 +67,7 @@ final class ErrorContextTests: XCTestCase {
 """
         let stackTraceArray = Helper.parseStackTrace(trace)
         mockSpanData = MockSpanData(attributes: [
-            Keys.localizedDescription.rawValue: AttributeValue("localizedDescription"),
+            Keys.errorMessage.rawValue: AttributeValue("localizedDescription"),
             Keys.code.rawValue: AttributeValue("0"),
             Keys.domain.rawValue: AttributeValue(""),
             Keys.stackTrace.rawValue: AttributeValue(Helper.convertArrayToJsonString(array: stackTraceArray)),
@@ -88,7 +88,7 @@ final class ErrorContextTests: XCTestCase {
             XCTAssertEqual("throwExceptionInDart", frame0["functionName"] as? String ?? "")
         }
         
-        XCTAssertEqual(exceptionContext[Keys.localizedDescription.rawValue] as? String, "localizedDescription")
+        XCTAssertEqual(exceptionContext[Keys.errorMessage.rawValue] as? String, "localizedDescription")
         XCTAssertEqual(exceptionContext[Keys.domain.rawValue] as? String, "")
         XCTAssertEqual(exceptionContext[Keys.code.rawValue] as? String, "0")
     }
@@ -152,7 +152,7 @@ final class ErrorContextTests: XCTestCase {
         mockSpanData = MockSpanData(attributes: [
             Keys.domain.rawValue: AttributeValue("com.example.error"),
             Keys.code.rawValue: AttributeValue("404"),
-            Keys.localizedDescription.rawValue: AttributeValue("Not Found"),
+            Keys.errorMessage.rawValue: AttributeValue("Not Found"),
             Keys.userInfo.rawValue: AttributeValue("{\"exampleKey\": \"exampleValue\"}"),
         ])
         

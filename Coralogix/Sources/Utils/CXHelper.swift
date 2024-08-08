@@ -17,8 +17,7 @@ class CXHelper {
         }
         let isClickable = self.isClickableControlOrView(view: view) || self.isClickableCellOrRow(view: view)
         let text = CXHelper.extractTextsFrom(view: view)
-        // let properties = self.extractViewProperties(view: view, isClickable: isClickable)
-        Log.d("isClickable: \(isClickable), text: \(text) ")
+        Log.d("isClickable: \(isClickable), text: \(text)")
         return [String: Any]()
     }
     
@@ -153,5 +152,4 @@ class CXHelper {
         }
         return nil
     }
-
 }

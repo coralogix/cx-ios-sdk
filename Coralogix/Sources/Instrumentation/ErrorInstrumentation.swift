@@ -17,7 +17,7 @@ extension CoralogixRum {
         let span = self.getSpan()
         span.setAttribute(key: Keys.domain.rawValue, value: exception.name.rawValue)
         span.setAttribute(key: Keys.code.rawValue, value: 0)
-        span.setAttribute(key: Keys.localizedDescription.rawValue, value: exception.reason ?? "")
+        span.setAttribute(key: Keys.errorMessage.rawValue, value: exception.reason ?? "")
         if let userInfo = exception.userInfo {
             let dict = Helper.convertDictionary(userInfo)
             span.setAttribute(key: Keys.userInfo.rawValue, value: Helper.convertDictionayToJsonString(dict: dict))
@@ -29,7 +29,7 @@ extension CoralogixRum {
         let span = self.getSpan()
         span.setAttribute(key: Keys.domain.rawValue, value: error.domain)
         span.setAttribute(key: Keys.code.rawValue, value: error.code)
-        span.setAttribute(key: Keys.localizedDescription.rawValue, value: error.localizedDescription)
+        span.setAttribute(key: Keys.errorMessage.rawValue, value: error.localizedDescription)
         span.setAttribute(key: Keys.userInfo.rawValue, value: Helper.convertDictionayToJsonString(dict: error.userInfo))
         span.end()
     }
@@ -38,7 +38,7 @@ extension CoralogixRum {
         let span = self.getSpan()
         span.setAttribute(key: Keys.domain.rawValue, value: String(describing: type(of: error)))
         span.setAttribute(key: Keys.code.rawValue, value: 0)
-        span.setAttribute(key: Keys.localizedDescription.rawValue, value: error.localizedDescription)
+        span.setAttribute(key: Keys.errorMessage.rawValue, value: error.localizedDescription)
         span.end()
     }
 
@@ -50,7 +50,7 @@ extension CoralogixRum {
         let span = self.getSpan()
         span.setAttribute(key: Keys.domain.rawValue, value: "")
         span.setAttribute(key: Keys.code.rawValue, value: 0)
-        span.setAttribute(key: Keys.localizedDescription.rawValue, value: message)
+        span.setAttribute(key: Keys.errorMessage.rawValue, value: message)
         
         if let stackTrace = stackTrace {
             let stackTraceArray = Helper.parseStackTrace(stackTrace)

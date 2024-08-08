@@ -58,9 +58,6 @@ public class CoralogixRum {
         self.initializeNavigationInstrumentation()
         self.initializeSessionInstrumentation()
         self.initializeCrashInstumentation()
-        
-//        self.setupNotificationObservers()
-        
         CoralogixRum.isInitialized = true
     }
     

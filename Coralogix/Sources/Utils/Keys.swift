@@ -143,6 +143,7 @@ public enum Keys: String {
     case eventName = "event_name"
     case elementType = "element_type"
     case click
+    case errorMessage = "error_message"
 }
 
 public enum CoralogixLogSeverity: Int {
