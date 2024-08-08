@@ -20,8 +20,7 @@ public class NetworkStatusClass {
 #if targetEnvironment(simulator)
         networkInfo = nil
 #else
-        let networkInfo = CTTelephonyNetworkInfo()
-        networkInfo = info
+        networkInfo = CTTelephonyNetworkInfo()
 #endif
     }
 
