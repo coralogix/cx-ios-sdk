@@ -17,6 +17,8 @@ public class CoralogixRum {
     internal var viewManager = ViewManager(keyChain: KeychainManager())
     internal var sessionManager = SessionManager()
     internal var sessionInstrumentation: URLSessionInstrumentation?
+    internal var performanceMetricsManager: PerformanceMetricsManager?
+
     let notificationCenter = NotificationCenter.default
     
     static var isDebug = false
@@ -70,6 +72,8 @@ public class CoralogixRum {
         self.initializeNavigationInstrumentation()
         self.initializeSessionInstrumentation()
         self.initializeCrashInstumentation()
+        self.performanceMetricsManager = PerformanceMetricsManager()
+
         CoralogixRum.isInitialized = true
     }
     
