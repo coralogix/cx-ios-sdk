@@ -39,7 +39,7 @@ final class ErrorContextTests: XCTestCase {
 
            XCTAssertEqual(errorStruct.domain, "com.example.error")
            XCTAssertEqual(errorStruct.code, "404")
-           XCTAssertEqual(errorStruct.localizedDescription, "Not Found")
+           XCTAssertEqual(errorStruct.errorMessage, "Not Found")
            XCTAssertEqual(errorStruct.userInfo?["exampleKey"] as? String, "exampleValue")
            XCTAssertEqual(errorStruct.exceptionType, "Fatal")
            XCTAssertEqual(errorStruct.crashTimestamp, "1625097600")
@@ -74,12 +74,8 @@ final class ErrorContextTests: XCTestCase {
         ])
         let errorStruct = ErrorContext(otel: mockSpanData)
         let dictionary = errorStruct.getDictionary()
-        guard let exceptionContext = dictionary[Keys.exceptionContext.rawValue] as? [String: Any] else {
-            XCTFail("Exception Context should be available.")
-            return
-        }
         
-        if let stackTrace = exceptionContext[Keys.originalStackTrace.rawValue] as? [[String: Any]] {
+        if let stackTrace = dictionary[Keys.originalStackTrace.rawValue] as? [[String: Any]] {
             XCTAssertEqual(10, stackTrace.count)
             let frame0 = stackTrace[0]
             XCTAssertEqual("package:coralogix_sdk/main.dart", frame0["fileName"] as? String ?? "")
@@ -88,9 +84,9 @@ final class ErrorContextTests: XCTestCase {
             XCTAssertEqual("throwExceptionInDart", frame0["functionName"] as? String ?? "")
         }
         
-        XCTAssertEqual(exceptionContext[Keys.errorMessage.rawValue] as? String, "localizedDescription")
-        XCTAssertEqual(exceptionContext[Keys.domain.rawValue] as? String, "")
-        XCTAssertEqual(exceptionContext[Keys.code.rawValue] as? String, "0")
+        XCTAssertEqual(dictionary[Keys.errorMessage.rawValue] as? String, "localizedDescription")
+        XCTAssertEqual(dictionary[Keys.domain.rawValue] as? String, "")
+        XCTAssertEqual(dictionary[Keys.code.rawValue] as? String, "0")
     }
     
     func testGetDictionaryWithThreads() {
@@ -119,12 +115,8 @@ final class ErrorContextTests: XCTestCase {
         
         let errorStruct = ErrorContext(otel: mockSpanData)
         let dictionary = errorStruct.getDictionary()
-        guard let crashContext = dictionary[Keys.crashContext.rawValue] as? [String: Any] else {
-            XCTFail("Crash Context should be available.")
-            return
-        }
         
-        guard let threads = crashContext[Keys.threads.rawValue] as? [[[String: Any]]] else {
+        guard let threads = dictionary[Keys.threads.rawValue] as? [[[String: Any]]] else {
             XCTFail("Crash Context should be available.")
             return
         }
@@ -139,13 +131,13 @@ final class ErrorContextTests: XCTestCase {
         }
         
 
-        XCTAssertEqual(crashContext[Keys.exceptionType.rawValue] as? String, "Fatal")
-        XCTAssertEqual(crashContext[Keys.arch.rawValue] as? String, "x86_64")
-        XCTAssertEqual(crashContext[Keys.baseAddress.rawValue] as? String, "0x1000000")
-        XCTAssertEqual(crashContext[Keys.triggeredByThread.rawValue] as? Int, 1)
-        XCTAssertEqual(crashContext[Keys.applicationIdentifier.rawValue] as? String, "com.myapp")
-        XCTAssertEqual(crashContext[Keys.processName.rawValue] as? String, "ExampleApp")
-        XCTAssertEqual(crashContext[Keys.crashTimestamp.rawValue] as? String, "1625097600")
+        XCTAssertEqual(dictionary[Keys.exceptionType.rawValue] as? String, "Fatal")
+        XCTAssertEqual(dictionary[Keys.arch.rawValue] as? String, "x86_64")
+        XCTAssertEqual(dictionary[Keys.baseAddress.rawValue] as? String, "0x1000000")
+        XCTAssertEqual(dictionary[Keys.triggeredByThread.rawValue] as? Int, 1)
+        XCTAssertEqual(dictionary[Keys.applicationIdentifier.rawValue] as? String, "com.myapp")
+        XCTAssertEqual(dictionary[Keys.processName.rawValue] as? String, "ExampleApp")
+        XCTAssertEqual(dictionary[Keys.crashTimestamp.rawValue] as? String, "1625097600")
     }
     
     func testGetDictionaryWithoutStackTrace() {
@@ -157,14 +149,9 @@ final class ErrorContextTests: XCTestCase {
         ])
         
         let errorStruct = ErrorContext(otel: mockSpanData)
-
         let dictionary = errorStruct.getDictionary()
-        guard let exceptionContext = dictionary[Keys.exceptionContext.rawValue] as? [String: Any] else {
-            XCTFail("Exception context should be available.")
-            return
-        }
         
-        XCTAssertEqual(exceptionContext[Keys.domain.rawValue] as? String, "com.example.error")
-        XCTAssertEqual(exceptionContext[Keys.userInfo.rawValue] as? [String: String], ["exampleKey": "exampleValue"])
+        XCTAssertEqual(dictionary[Keys.domain.rawValue] as? String, "com.example.error")
+        XCTAssertEqual(dictionary[Keys.userInfo.rawValue] as? [String: String], ["exampleKey": "exampleValue"])
     }
 }

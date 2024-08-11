@@ -99,8 +99,6 @@ public enum Keys: String {
     case functionAddressCalled = "function_address_called"
     case base
     case offset
-    case exceptionContext = "exception_context"
-    case crashContext = "crash_context"
     case platform
     case mobile
     case mobileSdk = "mobile_sdk"
@@ -144,6 +142,7 @@ public enum Keys: String {
     case elementType = "element_type"
     case click
     case errorMessage = "error_message"
+    case isCrash = "is_crash"
 }
 
 public enum CoralogixLogSeverity: Int {

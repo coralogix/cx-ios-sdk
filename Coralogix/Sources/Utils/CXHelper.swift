@@ -44,11 +44,11 @@ class CXHelper {
         }
         
         let isGestureIgnoredClass = self is UIWindow ||
-            (self is UIControl && (self as! UIControl).allTargets.count > 0) ||
-            self is UIScrollView ||
-            self is UISearchBar ||
-            self is UITabBar ||
-            self is UINavigationBar
+        (self as? UIControl)?.allTargets.count ?? 0 > 0 ||
+        self is UIScrollView ||
+        self is UISearchBar ||
+        self is UITabBar ||
+        self is UINavigationBar
         return !isGestureIgnoredClass
     }
     
@@ -95,8 +95,8 @@ class CXHelper {
         var methodCount: UInt32 = 0
         if let methods = class_copyMethodList(cls, &methodCount) {
             print("Methods:")
-            for i in 0..<Int(methodCount) {
-                let method = methods[i]
+            for index in 0..<Int(methodCount) {
+                let method = methods[index]
                 let selector = method_getName(method)
                 let name = NSStringFromSelector(selector)
                 print("  \(name)")
@@ -108,8 +108,8 @@ class CXHelper {
         var propertyCount: UInt32 = 0
         if let properties = class_copyPropertyList(cls, &propertyCount) {
             print("Properties:")
-            for i in 0..<Int(propertyCount) {
-                let property = properties[i]
+            for index in 0..<Int(propertyCount) {
+                let property = properties[index]
                 let name = String(cString: property_getName(property))
                 print("  \(name)")
             }
@@ -120,8 +120,8 @@ class CXHelper {
         var ivarCount: UInt32 = 0
         if let ivars = class_copyIvarList(cls, &ivarCount) {
             print("Ivars:")
-            for i in 0..<Int(ivarCount) {
-                let ivar = ivars[i]
+            for index in 0..<Int(ivarCount) {
+                let ivar = ivars[index]
                 let name = String(cString: ivar_getName(ivar)!)
                 print("  \(name)")
             }
@@ -132,8 +132,8 @@ class CXHelper {
         var protocolCount: UInt32 = 0
         if let protocols = class_copyProtocolList(cls, &protocolCount) {
             print("Protocols:")
-            for i in 0..<Int(protocolCount) {
-                let proto = protocols[i]
+            for index in 0..<Int(protocolCount) {
+                let proto = protocols[index]
                 let name = String(cString: protocol_getName(proto))
                 print("  \(name)")
             }

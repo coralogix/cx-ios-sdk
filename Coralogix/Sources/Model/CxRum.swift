@@ -90,11 +90,20 @@ struct CxRum {
 
     mutating func getDictionary() -> [String: Any] {
         var result = [String: Any]()
+        self.addBasicDetails(to: &result)
+        self.addOptionalContexts(to: &result)
+        self.addConditionalContexts(to: &result)
+        self.addViewManagerContext(to: &result)
+        self.addLabels(to: &result)
+        return result
+    }
+    
+    private func addBasicDetails(to result: inout [String: Any]) {
         result[Keys.timestamp.rawValue] = self.timeStamp.milliseconds
         result[Keys.mobileSdk.rawValue] = [Keys.sdkVersion.rawValue: self.mobileSdk,
                                            Keys.framework.rawValue: CoralogixRum.sdkFramework.rawValue,
                                            Keys.operatingSystem.rawValue: Global.getOs()]
-        result[Keys.versionMetaData.rawValue] =  self.versionMetadata.getDictionary()
+        result[Keys.versionMetaData.rawValue] = self.versionMetadata.getDictionary()
         result[Keys.sessionContext.rawValue] = self.sessionContext?.getDictionary()
         result[Keys.eventContext.rawValue] = self.eventContext.getDictionary()
         result[Keys.environment.rawValue] = self.environment
@@ -103,22 +112,23 @@ struct CxRum {
         result[Keys.platform.rawValue] = Keys.mobile.rawValue
         result[Keys.deviceContext.rawValue] = self.deviceContext.getDictionary()
         result[Keys.deviceState.rawValue] = self.deviceState.getDictionary()
-        
+    }
+    
+    private func addOptionalContexts(to result: inout [String: Any]) {
         if let prevSessionContext = self.prevSessionContext {
             result[Keys.prevSession.rawValue] = prevSessionContext.getPrevSessionDictionary()
         }
-        
+    }
+
+    private mutating func addConditionalContexts(to result: inout [String: Any]) {
         if eventContext.type == CoralogixEventType.error {
             result[Keys.errorContext.rawValue] = self.errorContext.getDictionary()
-            
-            // Add snapshot to all error type
-            if self.snapshotContext != nil {
+            if let snapshotContext = self.snapshotContext {
                 self.addSnapshotContext(to: &result)
             }
         }
         
         if eventContext.type == CoralogixEventType.navigation, self.snapshotContext != nil {
-            // Add snapshot to all navigation type which the view is unique
             self.addSnapshotContext(to: &result)
         }
         
@@ -139,7 +149,9 @@ struct CxRum {
            let interactionContext = self.interactionContext {
             result[Keys.interactionContext.rawValue] = interactionContext.getDictionary()
         }
-        
+    }
+    
+    private func addViewManagerContext(to result: inout [String: Any]) {
         if let viewManager = self.viewManager {
             if self.sessionContext?.isPidEqualToOldPid != nil {
                 result[Keys.viewContext.rawValue] = viewManager.getPrevDictionary()
@@ -147,11 +159,12 @@ struct CxRum {
                 result[Keys.viewContext.rawValue] = viewManager.getDictionary()
             }
         }
-        
+    }
+    
+    private func addLabels(to result: inout [String: Any]) {
         if let labels = self.labels {
             result[Keys.labels.rawValue] = labels
         }
-        return result
     }
     
     func addSnapshotContext(to result: inout [String: Any]) {

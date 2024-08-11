@@ -58,7 +58,7 @@ extension CoralogixRum {
             // We might be covered by a modal view controller (recursively, so find the last one).
             var presented = rootViewController.presentedViewController
             
-            while (presented != nil) {
+            while presented != nil {
                 presented = presented?.presentedViewController
             }
             

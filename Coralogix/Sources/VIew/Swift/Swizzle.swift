@@ -109,7 +109,7 @@ extension UITableView {
             
             let tap = [Keys.tapName.rawValue: "UITableView.didSelectRowAt",
                        Keys.tapCount.rawValue: 1,
-                       Keys.tapAttributes.rawValue: attributes] as [String : Any]
+                       Keys.tapAttributes.rawValue: attributes] as [String: Any]
             NotificationCenter.default.post(name: .cxRumNotificationUserActions, object: tap)
         }
     }
@@ -134,7 +134,7 @@ extension UITableViewController {
             
             let tap = [Keys.tapName.rawValue: "UITableView.didSelectRowAt",
                        Keys.tapCount.rawValue: 1,
-                       Keys.tapAttributes.rawValue: attributes] as [String : Any]
+                       Keys.tapAttributes.rawValue: attributes] as [String: Any]
             NotificationCenter.default.post(name: .cxRumNotificationUserActions, object: tap)
         }
     }
@@ -142,11 +142,9 @@ extension UITableViewController {
 
 extension UIGestureRecognizer {
     @objc func cx_touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
-        // Call the original implementation (now swapped)
         self.cx_touchesEnded(touches, with: event)
         
         if let touch = touches.first, let view = touch.view, let nextResponder = view.next as? UIView {
-            //Log.w("Screen tapped in view: \(view)")
             if CXHelper.isSwiftUIView(view: view) || CXHelper.isSwiftUIView(view: nextResponder) {
                 return
             }
@@ -166,12 +164,11 @@ extension UIPageControl {
     }()
     
     @objc private func swizzled_setCurrentPage(_ page: Int) {
-        // Call the original method (which has been swizzled)
         swizzled_setCurrentPage(page)
         
         let tap = [Keys.tapName.rawValue: "UIPageController",
                    Keys.tapCount.rawValue: 1,
-                   Keys.tapAttributes.rawValue: Helper.convertDictionayToJsonString(dict: [:])] as [String : Any]
+                   Keys.tapAttributes.rawValue: Helper.convertDictionayToJsonString(dict: [:])] as [String: Any]
         NotificationCenter.default.post(name: .cxRumNotificationUserActions, object: tap)
     }
 }
@@ -315,7 +312,7 @@ extension UIViewController {
             
             let tap = [Keys.tapName.rawValue: "UITableView.didSelectRowAt",
                        Keys.tapCount.rawValue: 1,
-                       Keys.tapAttributes.rawValue: attributes] as [String : Any]
+                       Keys.tapAttributes.rawValue: attributes] as [String: Any]
             NotificationCenter.default.post(name: .cxRumNotificationUserActions, object: tap)
         }
     }
