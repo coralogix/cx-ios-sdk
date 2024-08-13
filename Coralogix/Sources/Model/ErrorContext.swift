@@ -61,34 +61,35 @@ struct ErrorContext {
     }
     
     func getDictionary() -> [String: Any] {
+        var errorContext = [String: Any]()
+
         if let threads = self.threads, !threads.isEmpty {
-            var crashContext = [String: Any]()
-            crashContext[Keys.exceptionType.rawValue] = self.exceptionType
-            crashContext[Keys.crashTimestamp.rawValue] = self.crashTimestamp
-            crashContext[Keys.processName.rawValue] = self.processName
-            crashContext[Keys.applicationIdentifier.rawValue] = self.applicationIdentifier
-            crashContext[Keys.triggeredByThread.rawValue] = self.triggeredByThread
-            crashContext[Keys.baseAddress.rawValue] = self.baseAddress
-            crashContext[Keys.arch.rawValue] = self.arch
+            errorContext[Keys.exceptionType.rawValue] = self.exceptionType
+            errorContext[Keys.crashTimestamp.rawValue] = self.crashTimestamp
+            errorContext[Keys.processName.rawValue] = self.processName
+            errorContext[Keys.applicationIdentifier.rawValue] = self.applicationIdentifier
+            errorContext[Keys.triggeredByThread.rawValue] = self.triggeredByThread
+            errorContext[Keys.baseAddress.rawValue] = self.baseAddress
+            errorContext[Keys.arch.rawValue] = self.arch
             if let threads = self.threads {
-                crashContext[Keys.threads.rawValue] = threads
+                errorContext[Keys.threads.rawValue] = threads
             }
-            return [Keys.crashContext.rawValue: crashContext]
+            errorContext[Keys.isCrash.rawValue] = true
+            errorContext[Keys.errorMessage.rawValue] = self.exceptionType
         } else {
-            var exceptionContext = [String: Any]()
-            exceptionContext[Keys.domain.rawValue] = self.domain
-            exceptionContext[Keys.code.rawValue] = self.code
-            exceptionContext[Keys.errorMessage.rawValue] = self.errorMessage
+            errorContext[Keys.domain.rawValue] = self.domain
+            errorContext[Keys.code.rawValue] = self.code
+            errorContext[Keys.errorMessage.rawValue] = self.errorMessage
 
             if let userInfo = self.userInfo {
-                exceptionContext[Keys.userInfo.rawValue] = userInfo
+                errorContext[Keys.userInfo.rawValue] = userInfo
             }
             
             if let stackTrace = self.stackTrace {
-                exceptionContext[Keys.originalStackTrace.rawValue] = stackTrace
+                errorContext[Keys.originalStackTrace.rawValue] = stackTrace
             }
-            
-            return [Keys.exceptionContext.rawValue: exceptionContext]
+            errorContext[Keys.isCrash.rawValue] = false
         }
+        return errorContext
     }
 }

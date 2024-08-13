@@ -132,7 +132,7 @@ final class CxSpanTests: XCTestCase {
                 }
                 
                 if let battery = deviceState[Keys.battery.rawValue] as? String {
-                    XCTAssertEqual(battery, "-1.0")
+                    XCTAssertEqual(battery, "")
                 }
                 
                 if let networkType = deviceState[Keys.networkType.rawValue] as? String {

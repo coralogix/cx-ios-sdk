@@ -103,7 +103,7 @@ public class CoralogixExporter: SpanExporter {
                 return .failure
             }
             
-            let task = URLSession.shared.dataTask(with: request) { _, response, error in
+            let task = URLSession.shared.dataTask(with: request) { _, _, error in
                 if error != nil {
                     status = .failure
                 } else {
