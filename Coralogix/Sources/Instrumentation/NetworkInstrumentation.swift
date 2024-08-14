@@ -23,10 +23,12 @@ extension CoralogixRum {
             let logSeverity = statusCode > 400 ?  CoralogixLogSeverity.error : CoralogixLogSeverity.info
             span.setAttribute(key: Keys.severity.rawValue, value: AttributeValue.int(logSeverity.rawValue))
         }
-        span.setAttribute(key: Keys.userId.rawValue, value: self.coralogixExporter.getOptions().userContext?.userId ?? "")
-        span.setAttribute(key: Keys.userName.rawValue, value: self.coralogixExporter.getOptions().userContext?.userName ?? "")
-        span.setAttribute(key: Keys.userEmail.rawValue, value: self.coralogixExporter.getOptions().userContext?.userEmail ?? "")
-        span.setAttribute(key: Keys.environment.rawValue, value: self.coralogixExporter.getOptions().environment)
+        
+        let options = self.coralogixExporter?.getOptions()
+        span.setAttribute(key: Keys.userId.rawValue, value: options?.userContext?.userId ?? "")
+        span.setAttribute(key: Keys.userName.rawValue, value: options?.userContext?.userName ?? "")
+        span.setAttribute(key: Keys.userEmail.rawValue, value: options?.userContext?.userEmail ?? "")
+        span.setAttribute(key: Keys.environment.rawValue, value: options?.environment ?? "")
     }
     
     public func setNetworkRequestContext(dictionary: [String: Any]) {
@@ -47,12 +49,9 @@ extension CoralogixRum {
     
     private func getSpan() -> Span {
         var span = tracer().spanBuilder(spanName: Keys.iosSdk.rawValue).startSpan()
+        self.addUserMetadata(to: &span)
         span.setAttribute(key: Keys.eventType.rawValue, value: CoralogixEventType.networkRequest.rawValue)
         span.setAttribute(key: Keys.source.rawValue, value: Keys.fetch.rawValue)
-        span.setAttribute(key: Keys.userId.rawValue, value: self.coralogixExporter.getOptions().userContext?.userId ?? "")
-        span.setAttribute(key: Keys.userName.rawValue, value: self.coralogixExporter.getOptions().userContext?.userName ?? "")
-        span.setAttribute(key: Keys.userEmail.rawValue, value: self.coralogixExporter.getOptions().userContext?.userEmail ?? "")
-        span.setAttribute(key: Keys.environment.rawValue, value: self.coralogixExporter.getOptions().environment)
         return span
     }
 }
