@@ -24,36 +24,40 @@ final class CoralogixRumTests: XCTestCase {
     
     func testInit() {
         let coralogixRum = CoralogixRum(options: options!)
-        
-        // Verify that options are set correctly
-        XCTAssertEqual(coralogixRum.coralogixExporter.getOptions().application, "TestApp-iOS")
-        XCTAssertEqual(coralogixRum.coralogixExporter.getOptions().version, "1.0")
-        
-        // Verify that isDebug flag is set correctly
-        XCTAssertTrue(CoralogixRum.isDebug)
-        
-        // Verify that isInitialized flag is set to true
-        XCTAssertTrue(CoralogixRum.isInitialized)
+        if let options = coralogixRum.coralogixExporter?.getOptions() {
+            
+            // Verify that options are set correctly
+            XCTAssertEqual(options.application, "TestApp-iOS")
+            XCTAssertEqual(options.version, "1.0")
+            
+            // Verify that isDebug flag is set correctly
+            XCTAssertTrue(CoralogixRum.isDebug)
+            
+            // Verify that isInitialized flag is set to true
+            XCTAssertTrue(CoralogixRum.isInitialized)
+        }
     }
     
     // Test setUserContext method
     func testSetUserContext() {
         let coralogixRum = CoralogixRum(options: options!)
-        
-        let userContext = UserContext(userId: "1234",
-                                      userName: "Daffy Duck",
-                                      userEmail: "daffy.duck@coralogix.com",
-                                      userMetadata: ["age": "18", "profession" : "duck"])       
-        coralogixRum.setUserContext(userContext: userContext)
-        XCTAssertEqual(coralogixRum.coralogixExporter.getOptions().userContext, userContext)
+            let userContext = UserContext(userId: "1234",
+                                          userName: "Daffy Duck",
+                                          userEmail: "daffy.duck@coralogix.com",
+                                          userMetadata: ["age": "18", "profession" : "duck"])
+            coralogixRum.setUserContext(userContext: userContext)
+            
+        if let options = coralogixRum.coralogixExporter?.getOptions() {
+            
+            // Verify that userContext is set correctly
+            XCTAssertEqual(options.userContext, userContext)
+        }
 
-        // Verify that userContext is set correctly
-        XCTAssertEqual(coralogixRum.coralogixExporter.getOptions().userContext, userContext)
     }
     
     func testSetLabels() {
         let coralogixRum = CoralogixRum(options: options!)
-        if let labels = coralogixRum.coralogixExporter.getOptions().labels {
+        if let labels = coralogixRum.coralogixExporter?.getOptions().labels {
             XCTAssertEqual(labels.count, 2)
             XCTAssertEqual(labels["item"] as? String, "banana")
             XCTAssertEqual(labels["itemPrice"] as? Int, 1000)
@@ -61,7 +65,7 @@ final class CoralogixRumTests: XCTestCase {
         
         let newLabel = ["device": "iphone"]
         coralogixRum.setLabels(labels: newLabel)
-        if let labels = coralogixRum.coralogixExporter.getOptions().labels {
+        if let labels = coralogixRum.coralogixExporter?.getOptions().labels {
             XCTAssertEqual(labels.count, 1)
             XCTAssertEqual(labels["device"] as? String, "iphone")
         }

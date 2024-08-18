@@ -28,14 +28,10 @@ extension CoralogixRum {
     }
     
     private func getUserActionsSpan() -> Span {
-        let span = tracer().spanBuilder(spanName: Keys.iosSdk.rawValue).startSpan()
-        let options = self.coralogixExporter.getOptions()
+        var span = tracer().spanBuilder(spanName: Keys.iosSdk.rawValue).startSpan()
+        self.addUserMetadata(to: &span)
         span.setAttribute(key: Keys.eventType.rawValue, value: CoralogixEventType.userInteraction.rawValue)
         span.setAttribute(key: Keys.severity.rawValue, value: AttributeValue.int(CoralogixLogSeverity.info.rawValue))
-        span.setAttribute(key: Keys.userId.rawValue, value: options.userContext?.userId ?? "")
-        span.setAttribute(key: Keys.userName.rawValue, value: options.userContext?.userName ?? "")
-        span.setAttribute(key: Keys.userEmail.rawValue, value: options.userContext?.userEmail ?? "" )
-        span.setAttribute(key: Keys.environment.rawValue, value: options.environment )
         return span
     }
 }

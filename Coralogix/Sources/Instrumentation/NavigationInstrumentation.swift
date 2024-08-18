@@ -29,10 +29,10 @@ extension CoralogixRum {
                 let dict = Helper.convertDictionary(snapshot.getDictionary())
                 span.setAttribute(key: Keys.snapshotContext.rawValue,
                                   value: Helper.convertDictionayToJsonString(dict: dict))
-                self.coralogixExporter.set(cxView: cxView)
+                self.coralogixExporter?.set(cxView: cxView)
                 span.end()
             } else {
-                self.coralogixExporter.set(cxView: cxView)
+                self.coralogixExporter?.set(cxView: cxView)
             }
         } else {
             Log.e("Notification received with no object or with a different object type")
@@ -40,14 +40,11 @@ extension CoralogixRum {
     }
     
     private func getNavigationSpan() -> Span {
-        let span = tracer().spanBuilder(spanName: Keys.iosSdk.rawValue).startSpan()
+        var span = tracer().spanBuilder(spanName: Keys.iosSdk.rawValue).startSpan()
+        self.addUserMetadata(to: &span)
         span.setAttribute(key: Keys.eventType.rawValue, value: CoralogixEventType.navigation.rawValue)
         span.setAttribute(key: Keys.source.rawValue, value: Keys.console.rawValue)
         span.setAttribute(key: Keys.severity.rawValue, value: AttributeValue.int(CoralogixLogSeverity.info.rawValue))
-        span.setAttribute(key: Keys.userId.rawValue, value: self.coralogixExporter.getOptions().userContext?.userId ?? "")
-        span.setAttribute(key: Keys.userName.rawValue, value: self.coralogixExporter.getOptions().userContext?.userName ?? "")
-        span.setAttribute(key: Keys.userEmail.rawValue, value: self.coralogixExporter.getOptions().userContext?.userEmail ?? "" )
-        span.setAttribute(key: Keys.environment.rawValue, value: self.coralogixExporter.getOptions().environment )
         return span
     }
 }

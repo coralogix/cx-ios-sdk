@@ -11,8 +11,8 @@ extension Notification.Name {
 }
 
 public class CoralogixRum {
-    internal var coralogixExporter: CoralogixExporter
-    internal var versionMetadata: VersionMetadata
+    internal var coralogixExporter: CoralogixExporter?
+    internal var versionMetadata: VersionMetadata?
     internal var networkManager = NetworkManager()
     internal var viewManager = ViewManager(keyChain: KeychainManager())
     internal var sessionManager = SessionManager()
@@ -24,41 +24,15 @@ public class CoralogixRum {
     static var sdkFramework: SdkFramework = .swift
     
     public init(options: CoralogixExporterOptions, sdkFramework: SdkFramework = .swift) {
+        if options.cxSampler.shouldInitialized() == false {
+            return
+        }
+        
         if CoralogixRum.isInitialized {
             Log.w("CoralogixRum allready Initialized")
         }
-        CoralogixRum.sdkFramework = sdkFramework
-        self.versionMetadata = VersionMetadata(appName: options.application, appVersion: options.version)
-        CoralogixRum.isDebug = options.debug
-        self.coralogixExporter = CoralogixExporter(options: options,
-                                                   versionMetadata: self.versionMetadata,
-                                                   sessionManager: self.sessionManager,
-                                                   networkManager: self.networkManager,
-                                                   viewManager: self.viewManager)
         
-        let resource = Resource(attributes: [
-            ResourceAttributes.serviceName.rawValue: AttributeValue.string(options.application)
-        ])
-        
-        OpenTelemetry.registerTracerProvider(tracerProvider: TracerProviderBuilder().with(resource: resource)
-            .add(spanProcessor: BatchSpanProcessor(spanExporter: self.coralogixExporter,
-                                                   scheduleDelay: Double(Global.BatchSpan.scheduleDelay.rawValue),
-                                                   maxExportBatchSize: Global.BatchSpan.maxExportBatchSize.rawValue))
-                .build())
-        UIApplication.swizzleTouchesEnded
-        UIApplication.swizzleSendAction
-        UIViewController.swizzleViewDidAppear
-        UIViewController.swizzleViewDidDisappear
-        UITableView.swizzleUITableViewDelegate
-        UITableViewController.swizzleUITableViewControllerDelegate
-        UICollectionView.swizzleUICollectionViewDelegate
-        UIPageControl.swizzleSetCurrentPage
-        
-        self.initializeUserActionsInstrumentation()
-        self.initializeNavigationInstrumentation()
-        self.initializeSessionInstrumentation()
-        self.initializeCrashInstumentation()
-        CoralogixRum.isInitialized = true
+        self.startup(options: options, sdkFramework: sdkFramework)
     }
     
     deinit {
@@ -68,48 +42,114 @@ public class CoralogixRum {
         NotificationCenter.default.removeObserver(self, name: .cxRumNotificationSessionEnded, object: nil)
     }
     
+    private func startup(options: CoralogixExporterOptions, sdkFramework: SdkFramework) {
+        CoralogixRum.sdkFramework = sdkFramework
+        
+        CoralogixRum.isDebug = options.debug
+        let versionMetadata = VersionMetadata(appName: options.application, appVersion: options.version)
+        let coralogixExporter = CoralogixExporter(options: options,
+                                                  versionMetadata: versionMetadata,
+                                                  sessionManager: self.sessionManager,
+                                                  networkManager: self.networkManager,
+                                                  viewManager: self.viewManager)
+        self.versionMetadata = versionMetadata
+        self.coralogixExporter = coralogixExporter
+        
+        let resource = Resource(attributes: [
+            ResourceAttributes.serviceName.rawValue: AttributeValue.string(options.application)
+        ])
+        
+        OpenTelemetry.registerTracerProvider(tracerProvider: TracerProviderBuilder().with(resource: resource)
+            .add(spanProcessor: BatchSpanProcessor(spanExporter: coralogixExporter,
+                                                   scheduleDelay: Double(Global.BatchSpan.scheduleDelay.rawValue),
+                                                   maxExportBatchSize: Global.BatchSpan.maxExportBatchSize.rawValue))
+                .build())
+        
+        self.swizzle()
+        self.initializeUserActionsInstrumentation()
+        self.initializeNavigationInstrumentation()
+        self.initializeSessionInstrumentation()
+        self.initializeCrashInstumentation()
+        CoralogixRum.isInitialized = true
+    }
+    
+    private func swizzle() {
+        UIApplication.swizzleTouchesEnded
+        UIApplication.swizzleSendAction
+        UIViewController.swizzleViewDidAppear
+        UIViewController.swizzleViewDidDisappear
+        UITableView.swizzleUITableViewDelegate
+        UITableViewController.swizzleUITableViewControllerDelegate
+        UICollectionView.swizzleUICollectionViewDelegate
+        UIPageControl.swizzleSetCurrentPage
+    }
+    
     public func setUserContext(userContext: UserContext) {
-        self.coralogixExporter.updade(userContext: userContext)
+        if CoralogixRum.isInitialized {
+            self.coralogixExporter?.updade(userContext: userContext)
+        }
     }
     
     public func setLabels(labels: [String: Any]) {
-        self.coralogixExporter.updade(labels: labels)
+        if CoralogixRum.isInitialized {
+            self.coralogixExporter?.updade(labels: labels)
+        }
     }
     
     public func reportError(exception: NSException) {
-        self.reportErrorWith(exception: exception)
+        if CoralogixRum.isInitialized {
+            self.reportErrorWith(exception: exception)
+        }
     }
     
     public func reportError(error: NSError) {
-        self.reportErrorWith(error: error)
+        if CoralogixRum.isInitialized {
+            self.reportErrorWith(error: error)
+        }
     }
     
     public func reportError(error: Error) {
-        self.reportErrorWith(error: error)
+        if CoralogixRum.isInitialized {
+            self.reportErrorWith(error: error)
+        }
     }
     
     public func setView(name: String) {
         let cxView = CXView(state: .notifyOnAppear, name: name)
-        self.coralogixExporter.set(cxView: cxView)
+        self.coralogixExporter?.set(cxView: cxView)
     }
     
     public func reportError(message: String, data: [String: Any]?) {
-        self.reportErrorWith(message: message, data: data)
+        if CoralogixRum.isInitialized {
+            self.reportErrorWith(message: message, data: data)
+        }
     }
     
     public func reportError(message: String, stackTrace: String?) {
-        self.reportErrorWith(message: message, stackTrace: stackTrace)
+        if CoralogixRum.isInitialized {
+            self.reportErrorWith(message: message, stackTrace: stackTrace)
+        }
     }
     
     public func log(severity: CoralogixLogSeverity,
                     message: String,
                     data: [String: Any]?) {
-        self.logWith(severity: severity, message: message, data: data)
+        if CoralogixRum.isInitialized {
+            self.logWith(severity: severity, message: message, data: data)
+        }
     }
     
     public func shutdown() {
         CoralogixRum.isInitialized = false
-        self.coralogixExporter.shutdown()
+        self.coralogixExporter?.shutdown()
+    }
+    
+    internal func addUserMetadata(to span: inout Span) {
+        let options = self.coralogixExporter?.getOptions()
+        span.setAttribute(key: Keys.userId.rawValue, value: options?.userContext?.userId ?? "")
+        span.setAttribute(key: Keys.userName.rawValue, value: options?.userContext?.userName ?? "")
+        span.setAttribute(key: Keys.userEmail.rawValue, value: options?.userContext?.userEmail ?? "")
+        span.setAttribute(key: Keys.environment.rawValue, value: options?.environment ?? "")
     }
 }
 
@@ -150,6 +190,8 @@ public struct CoralogixExporterOptions {
     
     var labels: [String: Any]?
     
+    let cxSampler: CXSampler
+    
     public init(coralogixDomain: CoralogixDomain,
                 userContext: UserContext?,
                 environment: String,
@@ -160,6 +202,7 @@ public struct CoralogixExporterOptions {
                 ignoreErrors: [String]? = nil,
                 customDomainUrl: String? = nil,
                 labels: [String: Any]? = nil,
+                sampleRate: Float = 100,
                 debug: Bool = false) {
         
         self.coralogixDomain = coralogixDomain
@@ -173,5 +216,6 @@ public struct CoralogixExporterOptions {
         self.version = version
         self.customDomainUrl = customDomainUrl
         self.labels = labels
+        self.cxSampler = CXSampler(sampleRate: sampleRate)
     }
 }
