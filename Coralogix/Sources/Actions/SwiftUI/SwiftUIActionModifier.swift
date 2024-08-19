@@ -17,14 +17,25 @@ internal struct CXTapModifier: SwiftUI.ViewModifier {
     let attributes: [String: Any]
 
     func body(content: Content) -> some View {
-        content.simultaneousGesture(
-            TapGesture(count: count).onEnded { _ in
-                let tap = [Keys.tapName.rawValue: name,
-                           Keys.tapCount.rawValue: count,
-                           Keys.tapAttributes.rawValue: attributes]
-                NotificationCenter.default.post(name: .cxRumNotificationUserActions, object: tap)
-            }
-        )
+        if #available(tvOS 16.0, iOS 13.0, *) {
+            content.simultaneousGesture(
+                TapGesture(count: count).onEnded { _ in
+                    let tap = [Keys.tapName.rawValue: name,
+                               Keys.tapCount.rawValue: count,
+                               Keys.tapAttributes.rawValue: attributes]
+                    NotificationCenter.default.post(name: .cxRumNotificationUserActions, object: tap)
+                }
+            )
+        } else {
+            content.overlay(
+                TapView(count: count) {
+                    let tap = [Keys.tapName.rawValue: name,
+                               Keys.tapCount.rawValue: count,
+                               Keys.tapAttributes.rawValue: attributes]
+                    NotificationCenter.default.post(name: .cxRumNotificationUserActions, object: tap)
+                }
+            )
+        }
     }
 }
 
@@ -43,4 +54,36 @@ public extension SwiftUI.View {
             )
         )
     }
+}
+
+@available(iOS 13, *)
+struct TapView: UIViewRepresentable {
+    let count: Int
+    let action: () -> Void
+
+    class Coordinator: NSObject {
+        let action: () -> Void
+
+        init(action: @escaping () -> Void) {
+            self.action = action
+        }
+
+        @objc func handleTap() {
+            action()
+        }
+    }
+
+    func makeCoordinator() -> Coordinator {
+        return Coordinator(action: action)
+    }
+
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView()
+        let tapGesture = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleTap))
+        tapGesture.numberOfTapsRequired = count
+        view.addGestureRecognizer(tapGesture)
+        return view
+    }
+
+    func updateUIView(_ uiView: UIView, context: Context) {}
 }

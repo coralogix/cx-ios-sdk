@@ -109,7 +109,7 @@ struct CxRum {
         result[Keys.environment.rawValue] = self.environment
         result[Keys.traceId.rawValue] = self.traceId
         result[Keys.spanId.rawValue] = self.spanId
-        result[Keys.platform.rawValue] = Keys.mobile.rawValue
+        result[Keys.platform.rawValue] = Global.getOs() == Keys.tvos.rawValue ? Keys.television.rawValue : Keys.mobile.rawValue
         result[Keys.deviceContext.rawValue] = self.deviceContext.getDictionary()
         result[Keys.deviceState.rawValue] = self.deviceState.getDictionary()
     }

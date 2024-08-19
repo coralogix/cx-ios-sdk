@@ -7,7 +7,9 @@
 
 import Foundation
 import Network
+#if canImport(CoreTelephony)
 import CoreTelephony
+#endif
 
 public protocol NetworkProtocol {
     func getNetworkType() -> String

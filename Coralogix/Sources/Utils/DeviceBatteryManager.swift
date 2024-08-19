@@ -12,15 +12,23 @@ class DeviceBatteryManager {
 
     init() {
         // Enable battery monitoring
-        UIDevice.current.isBatteryMonitoringEnabled = true
+        #if os(iOS)
+            UIDevice.current.isBatteryMonitoringEnabled = true
+        #endif
     }
 
     deinit {
         // Disable battery monitoring when not needed to save power
+#if os(iOS)
         UIDevice.current.isBatteryMonitoringEnabled = false
+#endif
     }
 
     public func getBatteryLevel() -> Float {
+    #if os(tvOS)
+    Log.d("Battery level is not applicable on tvOS")
+    return -1.0 // or return 0.0 to indicate no battery
+    #else
         let batteryLevel = UIDevice.current.batteryLevel
         if batteryLevel < 0 {
             // If battery level is -1.0, the battery level is unknown.
@@ -29,5 +37,6 @@ class DeviceBatteryManager {
             Log.d("Battery level is \(batteryLevel * 100)%")
         }
         return batteryLevel
+    #endif
     }
 }
