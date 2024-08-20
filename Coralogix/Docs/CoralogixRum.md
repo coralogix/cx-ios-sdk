@@ -49,6 +49,7 @@ Identify if your app project contains an `AppDelegate` file or a `SceneDelegate`
                                                ignoreErrors: [],
                                                customDomainUrl: "",
                                                labels: ["String" : Any],
+                                               sampleRate: 100,
                                                debug: false)
         self.coralogixRum = CoralogixRum(options: options)
         
@@ -83,6 +84,7 @@ Identify if your app project contains an `AppDelegate` file or a `SceneDelegate`
                                                ignoreErrors: [],
                                                customDomainUrl: "",
                                                labels: ["String" : Any],
+                                               sampleRate: 100,
                                                debug: false)
             self.coralogixRum = CoralogixRum(options: options)
             
@@ -120,6 +122,7 @@ Identify if your app project contains an `AppDelegate` file or a `SceneDelegate`
                                                ignoreErrors: [],
                                                customDomainUrl: "",
                                                labels: ["String" : Any],
+                                               sampleRate: 100,
                                                debug: false)
             self.coralogixRum = CoralogixRum(options: options)
             
