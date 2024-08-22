@@ -210,8 +210,24 @@ extension UIApplication {
             self.handleSegmentChanged(sender: sender)
         } else if selectorNameString.contains("buttonDown") {
             self.handleButtonDown(sender: sender, target: target)
+        } else if selectorNameString.contains("dismissViewController") {
+            self.handleDismissViewController(sender: sender)
         }
         return cx_sendAction(action, to: target, from: sender, for: event)
+    }
+    
+    private func handleDismissViewController(sender: AnyObject?) {
+        guard let sender = sender else { return }
+        let senderClass = NSStringFromClass(type(of: sender))
+        var attributes = [String: Any]()
+        if let button = sender as? UIButton {
+            attributes[Keys.text.rawValue] = button.titleLabel?.text
+        }
+
+        let tap = [Keys.tapName.rawValue: "\(senderClass)",
+                   Keys.tapCount.rawValue: 1,
+                   Keys.tapAttributes.rawValue: Helper.convertDictionayToJsonString(dict: attributes)] as [String: Any]
+        NotificationCenter.default.post(name: .cxRumNotificationUserActions, object: tap)
     }
     
     private func handleTabBarItemClicked(sender: AnyObject?) {
@@ -324,11 +340,20 @@ extension UIViewController {
     func getWindow() -> UIWindow? {
         if #available(iOS 15.0, *) {
             // For iOS 15 and later, handle multiple scenes and the active window
-            return UIApplication.shared.connectedScenes
-                .filter { $0.activationState == .foregroundActive }
-                .compactMap { $0 as? UIWindowScene }
-                .flatMap { $0.windows }
-                .first { $0.isKeyWindow }
+            if let window = UIApplication.shared.connectedScenes
+                    .filter({ $0.activationState == .foregroundActive })
+                    .compactMap({ $0 as? UIWindowScene })
+                    .flatMap({ $0.windows })
+                    .first(where: { $0.isKeyWindow }) {
+                    return window
+                }
+                
+                // Fallback to AppDelegate's window reference if all else fails
+                if let appDelegate = UIApplication.shared.delegate {
+                    return appDelegate.window ?? nil
+                }
+                
+                return nil
         } else if #available(iOS 13.0, *) {
             // For iOS 13 and 14
             return UIApplication.shared.windows.first { $0.isKeyWindow }
@@ -354,25 +379,6 @@ private func updateCoralogixRum(window: UIWindow?, state: CXView.AppState) {
             let name = viewController.viewControllerName
             let cxView = CXView(state: state, name: name)
             NotificationCenter.default.post(name: .cxRumNotification, object: cxView)
-        }
-    }
-}
-
-extension UIWindow {
-    /// Returns the top most view controller from given window's root view controller
-    func visibleViewController() -> UIViewController? {
-        return UIWindow.getVisibleViewControllerFrom(rootViewController: self.rootViewController)
-    }
-    
-    private static func getVisibleViewControllerFrom(rootViewController: UIViewController?) -> UIViewController? {
-        if let navigationController = rootViewController as? UINavigationController {
-            return getVisibleViewControllerFrom(rootViewController: navigationController.visibleViewController)
-        } else if let tabBarController = rootViewController as? UITabBarController {
-            return getVisibleViewControllerFrom(rootViewController: tabBarController.selectedViewController)
-        } else if let presentedViewController = rootViewController?.presentedViewController {
-            return getVisibleViewControllerFrom(rootViewController: presentedViewController)
-        } else {
-            return rootViewController
         }
     }
 }

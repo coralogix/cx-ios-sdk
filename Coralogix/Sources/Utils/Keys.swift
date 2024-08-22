@@ -8,7 +8,6 @@ import Foundation
 #if canImport(UIKit)
 import UIKit
 #endif
-import WebKit
 
 public enum Keys: String {
     case appName = "app_name"
@@ -143,6 +142,8 @@ public enum Keys: String {
     case click
     case errorMessage = "error_message"
     case isCrash = "is_crash"
+    case tvos
+    case television
 }
 
 public enum CoralogixLogSeverity: Int {
@@ -311,8 +312,8 @@ public enum Global: String {
         case "iPad14,5", "iPad14,6": return "iPadPro12Inch6"
         case "AudioAccessory1,1": return "homePod"
         case "i386", "x86_64", "arm64": return ProcessInfo().environment["SIMULATOR_MODEL_IDENTIFIER"] ?? "iOS"
-        default: return identifier
 #endif
+        default: return identifier
         // swiftlint:enable function_body_length
         // swiftlint:enable cyclomatic_complexity
         }
