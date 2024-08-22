@@ -202,7 +202,7 @@ public struct CoralogixExporterOptions {
                 ignoreErrors: [String]? = nil,
                 customDomainUrl: String? = nil,
                 labels: [String: Any]? = nil,
-                sampleRate: Float = 100,
+                sampleRate: Int = 100,
                 debug: Bool = false) {
         
         self.coralogixDomain = coralogixDomain

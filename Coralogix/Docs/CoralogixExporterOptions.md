@@ -71,7 +71,7 @@ Sets labels that are added to every Span. This is an optional property.
 
 ### sampleRate
 ```swift
-let sampleRate: Float?
+let sampleRate: Int?
 ```
 Sets sample rate, value between `0.0` and `100.0`, where `0.0` means SDK will not initialized and `100.0` means ALL events will be sent.
 
