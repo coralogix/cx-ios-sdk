@@ -8,6 +8,7 @@ extension Notification.Name {
     static let cxRumNotification = Notification.Name("cxRumNotification")
     static let cxRumNotificationSessionEnded = Notification.Name("cxRumNotificationSessionEnded")
     static let cxRumNotificationUserActions = Notification.Name("cxRumNotificationUserActions")
+    static let cxRumNotificationMetrics = Notification.Name("cxRumNotificationMetrics")
 }
 
 public class CoralogixRum {
@@ -42,11 +43,14 @@ public class CoralogixRum {
         NotificationCenter.default.removeObserver(self, name: .cxRumNotification, object: nil)
         NotificationCenter.default.removeObserver(self, name: .cxRumNotificationUserActions, object: nil)
         NotificationCenter.default.removeObserver(self, name: .cxRumNotificationSessionEnded, object: nil)
+        NotificationCenter.default.removeObserver(self, name: .cxRumNotificationMetrics, object: nil)
     }
     
     private func startup(options: CoralogixExporterOptions, sdkFramework: SdkFramework) {
         CoralogixRum.sdkFramework = sdkFramework
-        
+        self.performanceMetricsManager = PerformanceMetricsManager()
+        self.performanceMetricsManager?.coldStart()
+
         CoralogixRum.isDebug = options.debug
         let versionMetadata = VersionMetadata(appName: options.application, appVersion: options.version)
         let coralogixExporter = CoralogixExporter(options: options,
@@ -72,7 +76,6 @@ public class CoralogixRum {
         self.initializeNavigationInstrumentation()
         self.initializeSessionInstrumentation()
         self.initializeCrashInstumentation()
-        self.performanceMetricsManager = PerformanceMetricsManager()
 
         CoralogixRum.isInitialized = true
     }

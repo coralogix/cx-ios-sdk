@@ -6,13 +6,74 @@
 //
 
 import Foundation
+#if canImport(UIKit)
+import UIKit
+#endif
 import MetricKit
 
 @available(iOS 14.0, *)
 class PerformanceMetricsManager: NSObject, MXMetricManagerSubscriber {
+    var launchStartTime: CFAbsoluteTime?
+    var launchEndTime: CFAbsoluteTime?
+    var foregroundStartTime: CFAbsoluteTime?
+    var foregroundEndTime: CFAbsoluteTime?
+    
     override init() {
         super.init()
         MXMetricManager.shared.add(self)
+        NotificationCenter.default.addObserver(self,
+                                               selector: #selector(handleNotification(notification:)),
+                                               name: .cxRumNotificationMetrics,
+                                               object: nil)
+        
+        NotificationCenter.default.addObserver(self,
+                                               selector: #selector(applicationDidEnterBackground),
+                                               name: UIApplication.didEnterBackgroundNotification,
+                                               object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(appWillEnterForeground),
+                                               name: UIApplication.willEnterForegroundNotification,
+                                               object: nil)
+    }
+    
+    @objc private func applicationDidEnterBackground() {
+        Log.d("App did enter Background")
+        self.foregroundStartTime = CFAbsoluteTimeGetCurrent()
+        self.foregroundEndTime = nil
+    }
+    
+    @objc private func appWillEnterForeground() {
+        Log.d("App did enter Foreground")
+         if let foregroundStartTime = foregroundStartTime,
+                  self.foregroundEndTime == nil {
+             let currentTime = CFAbsoluteTimeGetCurrent()
+            self.foregroundEndTime = currentTime
+            let warmStartDuration = currentTime - foregroundStartTime
+            Log.d("Warm start duration: \(warmStartDuration) seconds")
+        }
+    }
+    
+    func coldStart() {
+        launchStartTime = CFAbsoluteTimeGetCurrent()
+    }
+    
+    @objc func handleNotification(notification: Notification) {
+        if let metrics = notification.object as? [String: Any] {
+            if let launchStartTime = self.launchStartTime,
+               let launchEndTime = metrics[Keys.coldEnd.rawValue] as? CFAbsoluteTime,
+               self.launchEndTime == nil {
+                self.launchEndTime = launchEndTime
+                let coldStartDuration = launchEndTime - launchStartTime
+                Log.d("Cold start duration: \(coldStartDuration) seconds")
+            }
+        }
+    }
+    
+    func coldStop() {
+        if let launchStartTime = self.launchStartTime {
+            let launchEndTime = CFAbsoluteTimeGetCurrent()
+            let coldStartDuration = launchEndTime - launchStartTime
+            Log.d("Cold start duration: \(coldStartDuration) seconds")
+        }
     }
     
     // Handle received metrics
@@ -52,5 +113,8 @@ class PerformanceMetricsManager: NSObject, MXMetricManagerSubscriber {
     
     deinit {
         MXMetricManager.shared.remove(self)
+        NotificationCenter().removeObserver(self, name: UIApplication.didEnterBackgroundNotification, object: nil)
+        NotificationCenter().removeObserver(self, name: UIApplication.willEnterForegroundNotification, object: nil)
+        NotificationCenter().removeObserver(self, name: .cxRumNotificationMetrics, object: nil)
     }
 }

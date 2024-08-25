@@ -307,6 +307,8 @@ extension UIViewController {
             // Custom implementation for UIViewController
             updateCoralogixRum(window: self.getWindow(), state: .notifyOnAppear)
             
+            NotificationCenter.default.post(name: .cxRumNotificationMetrics,
+                                            object: [Keys.coldEnd.rawValue: CFAbsoluteTimeGetCurrent()])
             // Call the original viewDidAppear
             swizzled_viewDidAppear(animated)
         }

@@ -144,6 +144,7 @@ public enum Keys: String {
     case isCrash = "is_crash"
     case tvos
     case television
+    case coldEnd
 }
 
 public enum CoralogixLogSeverity: Int {
