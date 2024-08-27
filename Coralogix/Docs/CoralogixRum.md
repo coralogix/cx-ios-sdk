@@ -6,7 +6,7 @@
 >[!IMPORTANT]
 >Requirements:
 >- Deployment target of `iOS 13` or higher 
->- Swift Compatibility `5.7` or higher
+>- Swift Compatibility `5.9` or higher
 >- Xcode `14` or higher
 
 ## Step 1. Add the Coralogix SDK
