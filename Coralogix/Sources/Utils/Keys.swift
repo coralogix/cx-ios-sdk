@@ -169,7 +169,7 @@ enum CoralogixEventType: String {
 }
 
 public enum Global: String {
-    case sdk = "1.0.9"
+    case sdk = "1.0.10"
     case coralogixPath = "/browser/v1beta/logs"
     
     enum BatchSpan: Int {
