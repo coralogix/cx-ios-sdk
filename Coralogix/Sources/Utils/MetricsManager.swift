@@ -17,21 +17,26 @@ class PerformanceMetricsManager: NSObject, MXMetricManagerSubscriber {
     var launchEndTime: CFAbsoluteTime?
     var foregroundStartTime: CFAbsoluteTime?
     var foregroundEndTime: CFAbsoluteTime?
+    var anrDetector: CXANRDetector?
     
     override init() {
         super.init()
         MXMetricManager.shared.add(self)
+        self.anrDetector = CXANRDetector()
+        self.anrDetector?.startMonitoring()
         NotificationCenter.default.addObserver(self,
                                                selector: #selector(handleNotification(notification:)),
                                                name: .cxRumNotificationMetrics,
                                                object: nil)
-        
         NotificationCenter.default.addObserver(self,
                                                selector: #selector(applicationDidEnterBackground),
                                                name: UIApplication.didEnterBackgroundNotification,
                                                object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(appWillEnterForeground),
                                                name: UIApplication.willEnterForegroundNotification,
+                                               object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(appWillTerminateNotification),
+                                               name: UIApplication.willTerminateNotification,
                                                object: nil)
     }
     
@@ -50,6 +55,11 @@ class PerformanceMetricsManager: NSObject, MXMetricManagerSubscriber {
             let warmStartDuration = currentTime - foregroundStartTime
             Log.d("Warm start duration: \(warmStartDuration) seconds")
         }
+    }
+    
+    @objc private func appWillTerminateNotification() {
+        Log.d("App will Terminate Notification")
+        self.anrDetector?.stopMonitoring()
     }
     
     func coldStart() {
@@ -110,11 +120,11 @@ class PerformanceMetricsManager: NSObject, MXMetricManagerSubscriber {
         }
     }
     
-    
     deinit {
         MXMetricManager.shared.remove(self)
         NotificationCenter().removeObserver(self, name: UIApplication.didEnterBackgroundNotification, object: nil)
         NotificationCenter().removeObserver(self, name: UIApplication.willEnterForegroundNotification, object: nil)
+        NotificationCenter().removeObserver(self, name: UIApplication.willTerminateNotification, object: nil)
         NotificationCenter().removeObserver(self, name: .cxRumNotificationMetrics, object: nil)
     }
 }
