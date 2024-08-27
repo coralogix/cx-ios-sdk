@@ -9,7 +9,7 @@
 Pod::Spec.new do |spec|
 
   spec.name         = "Coralogix"
-  spec.version      = "1.0.9"
+  spec.version      = "1.0.10"
   spec.summary      = "Coralogix OpenTelemetry pod for iOS."
 
   spec.description  = <<-DESC
@@ -21,7 +21,7 @@ Pod::Spec.new do |spec|
   Page navigation (Swift use swizzeling / SwiftUI use modifier)
   DESC
 
-  spec.swift_version    = '5.1'
+  spec.swift_version    = '5.9'
   spec.cocoapods_version = '>= 1.10'
 
   spec.platform     = :ios, '15.0'  # Update the deployment target here
