@@ -17,12 +17,12 @@ internal struct CXTapModifier: SwiftUI.ViewModifier {
     let attributes: [String: Any]
 
     func body(content: Content) -> some View {
-        if #available(tvOS 16.0, iOS 13.0, *) {
+        if #available(tvOS 16.0, iOS 14.0, *) {
             content.simultaneousGesture(
                 TapGesture(count: count).onEnded { _ in
                     let tap = [Keys.tapName.rawValue: name,
                                Keys.tapCount.rawValue: count,
-                               Keys.tapAttributes.rawValue: attributes]
+                               Keys.tapAttributes.rawValue: attributes] as? [String : Any]
                     NotificationCenter.default.post(name: .cxRumNotificationUserActions, object: tap)
                 }
             )
@@ -31,7 +31,7 @@ internal struct CXTapModifier: SwiftUI.ViewModifier {
                 TapView(count: count) {
                     let tap = [Keys.tapName.rawValue: name,
                                Keys.tapCount.rawValue: count,
-                               Keys.tapAttributes.rawValue: attributes]
+                               Keys.tapAttributes.rawValue: attributes] as? [String : Any]
                     NotificationCenter.default.post(name: .cxRumNotificationUserActions, object: tap)
                 }
             )
