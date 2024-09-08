@@ -2,7 +2,7 @@
 //  MetricsManager.swift
 //
 //
-//  Created by Tomer Har Yoffi on 08/08/2024.
+//  Created by Coralogix DEV TEAM on 08/08/2024.
 //
 
 import Foundation
@@ -11,19 +11,21 @@ import UIKit
 #endif
 import MetricKit
 
-@available(iOS 14.0, *)
-class PerformanceMetricsManager: NSObject, MXMetricManagerSubscriber {
+public class PerformanceMetricsManager: NSObject, MXMetricManagerSubscriber {
     var launchStartTime: CFAbsoluteTime?
     var launchEndTime: CFAbsoluteTime?
     var foregroundStartTime: CFAbsoluteTime?
     var foregroundEndTime: CFAbsoluteTime?
-    var anrDetector: CXANRDetector?
+    var cxAnrDetector: CXANRDetector?
+    var cxSlowRenderingDetector: CXSlowRenderingDetector?
     
     override init() {
         super.init()
         MXMetricManager.shared.add(self)
-        self.anrDetector = CXANRDetector()
-        self.anrDetector?.startMonitoring()
+        self.cxAnrDetector = CXANRDetector()
+        self.cxAnrDetector?.startMonitoring()
+        self.cxSlowRenderingDetector = CXSlowRenderingDetector()
+        self.cxSlowRenderingDetector?.startMonitoring()
         NotificationCenter.default.addObserver(self,
                                                selector: #selector(handleNotification(notification:)),
                                                name: .cxRumNotificationMetrics,
@@ -53,13 +55,13 @@ class PerformanceMetricsManager: NSObject, MXMetricManagerSubscriber {
              let currentTime = CFAbsoluteTimeGetCurrent()
             self.foregroundEndTime = currentTime
             let warmStartDuration = currentTime - foregroundStartTime
-            Log.d("Warm start duration: \(warmStartDuration) seconds")
+            Log.d("[Metric] Warm start duration: \(warmStartDuration) seconds")
         }
     }
     
     @objc private func appWillTerminateNotification() {
         Log.d("App will Terminate Notification")
-        self.anrDetector?.stopMonitoring()
+        self.cxAnrDetector?.stopMonitoring()
     }
     
     func coldStart() {
@@ -73,7 +75,7 @@ class PerformanceMetricsManager: NSObject, MXMetricManagerSubscriber {
                self.launchEndTime == nil {
                 self.launchEndTime = launchEndTime
                 let coldStartDuration = launchEndTime - launchStartTime
-                Log.d("Cold start duration: \(coldStartDuration) seconds")
+                Log.d("[Metric] Cold start duration: \(coldStartDuration) seconds")
             }
         }
     }
@@ -87,7 +89,7 @@ class PerformanceMetricsManager: NSObject, MXMetricManagerSubscriber {
     }
     
     // Handle received metrics
-    func didReceive(_ payloads: [MXMetricPayload]) {
+    public func didReceive(_ payloads: [MXMetricPayload]) {
         for payload in payloads {
             
             if let metricPayloadJsonString = String(data: payload.jsonRepresentation(), encoding: .utf8) {
@@ -110,7 +112,8 @@ class PerformanceMetricsManager: NSObject, MXMetricManagerSubscriber {
     }
     
     // Handle received diagnostics
-    func didReceive(_ payloads: [MXDiagnosticPayload]) {
+    @available(iOS 14.0, *)
+    public func didReceive(_ payloads: [MXDiagnosticPayload]) {
         for payload in payloads {
             if let hangDiagnostics = payload.hangDiagnostics {
                 for hangDiagnostic in hangDiagnostics {
@@ -126,5 +129,7 @@ class PerformanceMetricsManager: NSObject, MXMetricManagerSubscriber {
         NotificationCenter().removeObserver(self, name: UIApplication.willEnterForegroundNotification, object: nil)
         NotificationCenter().removeObserver(self, name: UIApplication.willTerminateNotification, object: nil)
         NotificationCenter().removeObserver(self, name: .cxRumNotificationMetrics, object: nil)
+        self.cxAnrDetector?.stopMonitoring()
+        self.cxSlowRenderingDetector?.stopMonitoring()
     }
 }

@@ -8,16 +8,25 @@
 import Foundation
 
 class CXANRDetector {
-    private var timer: Timer?
+    internal var timer: Timer?
     private var isMainThreadResponsive = true
 
     // Time interval to check for ANR (e.g., every 1 second)
-    private let checkInterval: TimeInterval = 1.0
+    private let checkInterval: TimeInterval
 
     // Maximum allowed main thread block time (e.g., 5 seconds)
-    private let maxBlockTime: TimeInterval = 5.0
+    private let maxBlockTime: TimeInterval
 
     private var lastCheckTimestamp: CFAbsoluteTime = CFAbsoluteTimeGetCurrent()
+
+    // ANR handling closure (useful for testing)
+    var handleANRClosure: (() -> Void)?
+    
+    init(checkInterval: TimeInterval = 1.0, maxBlockTime: TimeInterval = 5.0) {
+        self.checkInterval = checkInterval
+        self.maxBlockTime = maxBlockTime
+        self.lastCheckTimestamp = CFAbsoluteTimeGetCurrent()
+    }
 
     func startMonitoring() {
         timer = Timer.scheduledTimer(timeInterval: checkInterval, target: self, selector: #selector(checkForANR), userInfo: nil, repeats: true)
@@ -43,8 +52,9 @@ class CXANRDetector {
         }
     }
 
-    private func handleANR() {
+    public func handleANR() {
         // ANR detected, handle it here (e.g., log, notify, etc.)
-        Log.d("ANR detected: Main thread unresponsive for more than \(maxBlockTime) seconds")
+        handleANRClosure?()  // Call closure in test
+        Log.d("[Metric] ANR detected: Main thread unresponsive for more than \(maxBlockTime) seconds")
     }
 }
