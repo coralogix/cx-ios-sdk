@@ -8,6 +8,23 @@
 import Foundation
 
 extension CoralogixRum {
+    
+    func initializeErrorInstrumentation() {
+        NotificationCenter.default.addObserver(self,
+                                               selector: #selector(handleErrorNotification(notification:)),
+                                               name: .cxRumNotificationMetrics, object: nil)
+    }
+    
+    @objc func handleErrorNotification(notification: Notification) {
+        if let cxMobileVitals = notification.object as? CXMobileVitals {
+            if cxMobileVitals.type == .anr {
+                let span = self.getSpan()
+                span.setAttribute(key: Keys.mobileVitalsType.rawValue, value: cxMobileVitals.type.rawValue)
+                span.end()
+            }
+        }
+    }
+    
     internal func tracer() -> Tracer {
         return OpenTelemetry.instance.tracerProvider.get(instrumentationName: Keys.iosSdk.rawValue,
                                                          instrumentationVersion: Global.sdk.rawValue)

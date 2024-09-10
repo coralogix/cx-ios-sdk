@@ -66,7 +66,7 @@ class CXFPSTrigger {
             Log.d("[Metric] Average FPS over 5 seconds: \(averageFPS)")
             
             // send instrumentaion event
-            NotificationCenter.default.post(name: .cxRumNotification,
+            NotificationCenter.default.post(name: .cxRumNotificationMetrics,
                                             object: CXMobileVitals(type: .fps, value: "\(averageFPS)"))
         }
     }
@@ -82,6 +82,7 @@ enum CXMobileVitalsType: String {
     case cold
     case warm
     case fps
+    case anr
 }
 
 struct CXMobileVitals {

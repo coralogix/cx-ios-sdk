@@ -56,5 +56,8 @@ class CXANRDetector {
         // ANR detected, handle it here (e.g., log, notify, etc.)
         handleANRClosure?()  // Call closure in test
         Log.d("[Metric] ANR detected: Main thread unresponsive for more than \(maxBlockTime) seconds")
+        // send instrumentaion event
+        NotificationCenter.default.post(name: .cxRumNotificationMetrics,
+                                        object: CXMobileVitals(type: .anr, value: ""))
     }
 }

@@ -11,7 +11,7 @@ extension CoralogixRum {
     public func initializeMobileVitalsInstrumentation() {
         NotificationCenter.default.addObserver(self,
                                                selector: #selector(handleMobileVitalsNotification(notification:)),
-                                               name: .cxRumNotification, object: nil)
+                                               name: .cxRumNotificationMetrics, object: nil)
     }
     
     @objc func handleMobileVitalsNotification(notification: Notification) {

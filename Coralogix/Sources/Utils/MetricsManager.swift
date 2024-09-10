@@ -23,8 +23,7 @@ public class PerformanceMetricsManager: NSObject, MXMetricManagerSubscriber {
     override init() {
         super.init()
         MXMetricManager.shared.add(self)
-        self.cxAnrDetector = CXANRDetector()
-        self.cxAnrDetector?.startMonitoring()
+        
         NotificationCenter.default.addObserver(self,
                                                selector: #selector(handleNotification(notification:)),
                                                name: .cxRumNotificationMetrics,
@@ -59,7 +58,16 @@ public class PerformanceMetricsManager: NSObject, MXMetricManagerSubscriber {
             let currentTime = CFAbsoluteTimeGetCurrent()
             self.foregroundEndTime = currentTime
             let warmStartDuration = currentTime - foregroundStartTime
-            Log.d("[Metric] Warm start duration: \(warmStartDuration) seconds")
+            
+            let warmStartDurationInMilliseconds = warmStartDuration * 1000
+            
+            // Convert to an integer if you want to remove the decimal part
+            let millisecondsRounded = Int(warmStartDurationInMilliseconds)
+            Log.d("[Metric] Warm start duration: \(millisecondsRounded) milliseconds")
+            
+            // send instrumentaion event
+            NotificationCenter.default.post(name: .cxRumNotificationMetrics,
+                                            object: CXMobileVitals(type: .warm, value: "\(millisecondsRounded)"))
         }
         self.startFPSSamplingMonitoring(mobileVitalsFPSSamplingRate: self.mobileVitalsFPSSamplingRate)
     }
@@ -69,8 +77,13 @@ public class PerformanceMetricsManager: NSObject, MXMetricManagerSubscriber {
         self.cxAnrDetector?.stopMonitoring()
     }
     
-    func coldStart() {
+    func startColdStartMonitoring() {
         launchStartTime = CFAbsoluteTimeGetCurrent()
+    }
+    
+    func startANRMonitoring() {
+        self.cxAnrDetector = CXANRDetector()
+        self.cxAnrDetector?.startMonitoring()
     }
     
     @objc func handleNotification(notification: Notification) {
@@ -79,17 +92,18 @@ public class PerformanceMetricsManager: NSObject, MXMetricManagerSubscriber {
                let launchEndTime = metrics[Keys.coldEnd.rawValue] as? CFAbsoluteTime,
                self.launchEndTime == nil {
                 self.launchEndTime = launchEndTime
-                let coldStartDuration = launchEndTime - launchStartTime
-                Log.d("[Metric] Cold start duration: \(coldStartDuration) seconds")
+                let coldStartDurationInSeconds = launchEndTime - launchStartTime
+                let coldStartDurationInMilliseconds = coldStartDurationInSeconds * 1000
+                
+                // Convert to an integer if you want to remove the decimal part
+                let millisecondsRounded = Int(coldStartDurationInMilliseconds)
+
+                Log.d("[Metric] Cold start duration: \(millisecondsRounded) milliseconds")
+                
+                // send instrumentaion event
+                NotificationCenter.default.post(name: .cxRumNotificationMetrics,
+                                                object: CXMobileVitals(type: .cold, value: "\(millisecondsRounded)"))
             }
-        }
-    }
-    
-    func coldStop() {
-        if let launchStartTime = self.launchStartTime {
-            let launchEndTime = CFAbsoluteTimeGetCurrent()
-            let coldStartDuration = launchEndTime - launchStartTime
-            Log.d("Cold start duration: \(coldStartDuration) seconds")
         }
     }
     

@@ -48,8 +48,7 @@ public class CoralogixRum {
     
     private func startup(options: CoralogixExporterOptions, sdkFramework: SdkFramework) {
         CoralogixRum.sdkFramework = sdkFramework
-        self.performanceMetricsManager.startFPSSamplingMonitoring(mobileVitalsFPSSamplingRate: options.mobileVitalsFPSSamplingRate)
-        self.performanceMetricsManager.coldStart()
+        self.initialzeMetricPerformance(options: options)
 
         CoralogixRum.isDebug = options.debug
         let versionMetadata = VersionMetadata(appName: options.application, appVersion: options.version)
@@ -78,8 +77,15 @@ public class CoralogixRum {
         self.initializeSessionInstrumentation()
         self.initializeCrashInstumentation()
         self.initializeMobileVitalsInstrumentation()
+        self.initializeErrorInstrumentation()
 
         CoralogixRum.isInitialized = true
+    }
+    
+    private func initialzeMetricPerformance(options: CoralogixExporterOptions) {
+        self.performanceMetricsManager.startFPSSamplingMonitoring(mobileVitalsFPSSamplingRate: options.mobileVitalsFPSSamplingRate)
+        self.performanceMetricsManager.startColdStartMonitoring()
+        self.performanceMetricsManager.startANRMonitoring()
     }
     
     private func swizzle() {
