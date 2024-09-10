@@ -17,15 +17,14 @@ public class PerformanceMetricsManager: NSObject, MXMetricManagerSubscriber {
     var foregroundStartTime: CFAbsoluteTime?
     var foregroundEndTime: CFAbsoluteTime?
     var cxAnrDetector: CXANRDetector?
-    var cxSlowRenderingDetector: CXSlowRenderingDetector?
+    let cxFPSTrigger = CXFPSTrigger()
+    let mobileVitalsFPSSamplingRate = 60
     
     override init() {
         super.init()
         MXMetricManager.shared.add(self)
         self.cxAnrDetector = CXANRDetector()
         self.cxAnrDetector?.startMonitoring()
-        self.cxSlowRenderingDetector = CXSlowRenderingDetector()
-        self.cxSlowRenderingDetector?.startMonitoring()
         NotificationCenter.default.addObserver(self,
                                                selector: #selector(handleNotification(notification:)),
                                                name: .cxRumNotificationMetrics,
@@ -42,21 +41,27 @@ public class PerformanceMetricsManager: NSObject, MXMetricManagerSubscriber {
                                                object: nil)
     }
     
+    func startFPSSamplingMonitoring(mobileVitalsFPSSamplingRate: Int) {
+        self.cxFPSTrigger.startMonitoring(xTimesPerHour: mobileVitalsFPSSamplingRate)
+    }
+    
     @objc private func applicationDidEnterBackground() {
         Log.d("App did enter Background")
         self.foregroundStartTime = CFAbsoluteTimeGetCurrent()
         self.foregroundEndTime = nil
+        self.cxFPSTrigger.stopMonitoring()
     }
     
     @objc private func appWillEnterForeground() {
         Log.d("App did enter Foreground")
-         if let foregroundStartTime = foregroundStartTime,
-                  self.foregroundEndTime == nil {
-             let currentTime = CFAbsoluteTimeGetCurrent()
+        if let foregroundStartTime = foregroundStartTime,
+           self.foregroundEndTime == nil {
+            let currentTime = CFAbsoluteTimeGetCurrent()
             self.foregroundEndTime = currentTime
             let warmStartDuration = currentTime - foregroundStartTime
             Log.d("[Metric] Warm start duration: \(warmStartDuration) seconds")
         }
+        self.startFPSSamplingMonitoring(mobileVitalsFPSSamplingRate: self.mobileVitalsFPSSamplingRate)
     }
     
     @objc private func appWillTerminateNotification() {
@@ -130,6 +135,6 @@ public class PerformanceMetricsManager: NSObject, MXMetricManagerSubscriber {
         NotificationCenter().removeObserver(self, name: UIApplication.willTerminateNotification, object: nil)
         NotificationCenter().removeObserver(self, name: .cxRumNotificationMetrics, object: nil)
         self.cxAnrDetector?.stopMonitoring()
-        self.cxSlowRenderingDetector?.stopMonitoring()
+        self.cxFPSTrigger.stopMonitoring()
     }
 }

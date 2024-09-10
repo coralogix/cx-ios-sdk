@@ -24,13 +24,13 @@ Pod::Spec.new do |spec|
   spec.swift_version    = '5.9'
   spec.cocoapods_version = '>= 1.10'
 
-  spec.platform     = :ios, '15.0'  # Update the deployment target here
+  spec.platform     = :ios, '13.0'  # Update the deployment target here
 
   spec.homepage     = "https://github.com/coralogix/cx-ios-sdk.git"
   spec.license      = { :type => 'MIT', :file => 'LICENSE' }
   spec.source       = { :git => "https://github.com/coralogix/cx-ios-sdk.git", :tag => "#{spec.version}" }
   spec.author             = { "Coralogix" => "www.coralogix.com" }
-  spec.ios.deployment_target = "15.0"
+  spec.ios.deployment_target = "13.0"
 
   spec.source_files  = 'Coralogix/Sources/**/*.{swift,h}'
   spec.exclude_files = 'Coralogix/Sources/Exclude'

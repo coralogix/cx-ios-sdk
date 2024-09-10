@@ -6,9 +6,6 @@
 //
 
 import Foundation
-#if canImport(UIKit)
-import UIKit
-#endif
 
 extension CoralogixRum {
     public func initializeNavigationInstrumentation() {
@@ -34,8 +31,6 @@ extension CoralogixRum {
             } else {
                 self.coralogixExporter?.set(cxView: cxView)
             }
-        } else {
-            Log.e("Notification received with no object or with a different object type")
         }
     }
     

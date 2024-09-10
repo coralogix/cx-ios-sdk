@@ -18,7 +18,7 @@ public class CoralogixRum {
     internal var viewManager = ViewManager(keyChain: KeychainManager())
     internal var sessionManager = SessionManager()
     internal var sessionInstrumentation: URLSessionInstrumentation?
-    internal var performanceMetricsManager: PerformanceMetricsManager?
+    internal var performanceMetricsManager = PerformanceMetricsManager()
 
     let notificationCenter = NotificationCenter.default
     
@@ -48,8 +48,8 @@ public class CoralogixRum {
     
     private func startup(options: CoralogixExporterOptions, sdkFramework: SdkFramework) {
         CoralogixRum.sdkFramework = sdkFramework
-        self.performanceMetricsManager = PerformanceMetricsManager()
-        self.performanceMetricsManager?.coldStart()
+        self.performanceMetricsManager.startFPSSamplingMonitoring(mobileVitalsFPSSamplingRate: options.mobileVitalsFPSSamplingRate)
+        self.performanceMetricsManager.coldStart()
 
         CoralogixRum.isDebug = options.debug
         let versionMetadata = VersionMetadata(appName: options.application, appVersion: options.version)
@@ -57,7 +57,8 @@ public class CoralogixRum {
                                                   versionMetadata: versionMetadata,
                                                   sessionManager: self.sessionManager,
                                                   networkManager: self.networkManager,
-                                                  viewManager: self.viewManager)
+                                                  viewManager: self.viewManager,
+                                                  performanceMetricsManager: self.performanceMetricsManager)
         self.versionMetadata = versionMetadata
         self.coralogixExporter = coralogixExporter
         
@@ -76,6 +77,7 @@ public class CoralogixRum {
         self.initializeNavigationInstrumentation()
         self.initializeSessionInstrumentation()
         self.initializeCrashInstumentation()
+        self.initializeMobileVitalsInstrumentation()
 
         CoralogixRum.isInitialized = true
     }
@@ -199,6 +201,8 @@ public struct CoralogixExporterOptions {
     
     let cxSampler: CXSampler
     
+    let mobileVitalsFPSSamplingRate: Int
+    
     public init(coralogixDomain: CoralogixDomain,
                 userContext: UserContext?,
                 environment: String,
@@ -210,6 +214,7 @@ public struct CoralogixExporterOptions {
                 customDomainUrl: String? = nil,
                 labels: [String: Any]? = nil,
                 sampleRate: Int = 100,
+                mobileVitalsFPSSamplingRate: Int = 60, // minimum every 1 minute
                 debug: Bool = false) {
         
         self.coralogixDomain = coralogixDomain
@@ -224,5 +229,6 @@ public struct CoralogixExporterOptions {
         self.customDomainUrl = customDomainUrl
         self.labels = labels
         self.cxSampler = CXSampler(sampleRate: sampleRate)
+        self.mobileVitalsFPSSamplingRate = mobileVitalsFPSSamplingRate
     }
 }

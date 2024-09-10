@@ -145,6 +145,11 @@ public enum Keys: String {
     case tvos
     case television
     case coldEnd
+    case mobileVitalsContext = "mobile_vitals_context"
+    case fps = "fps"
+    case mobileVitalsType
+    case mobileVitalsValue
+    case value
 }
 
 public enum CoralogixLogSeverity: Int {
@@ -166,6 +171,7 @@ enum CoralogixEventType: String {
     case resources
     case internalKey = "internal"
     case navigation
+    case mobileVitals = "mobile-vitals"
     case unknown
 }
 
