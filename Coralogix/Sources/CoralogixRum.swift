@@ -27,12 +27,10 @@ public class CoralogixRum {
     static var sdkFramework: SdkFramework = .swift
     
     public init(options: CoralogixExporterOptions, sdkFramework: SdkFramework = .swift) {
+        self.displayCoralogixWord(animate: false)
+
         if options.cxSampler.shouldInitialized() == false {
             return
-        }
-        
-        if CoralogixRum.isInitialized {
-            Log.w("CoralogixRum allready Initialized")
         }
         
         self.startup(options: options, sdkFramework: sdkFramework)
@@ -165,6 +163,32 @@ public class CoralogixRum {
         span.setAttribute(key: Keys.userName.rawValue, value: options?.userContext?.userName ?? "")
         span.setAttribute(key: Keys.userEmail.rawValue, value: options?.userContext?.userEmail ?? "")
         span.setAttribute(key: Keys.environment.rawValue, value: options?.environment ?? "")
+    }
+    
+    func displayCoralogixWord(animate: Bool) {
+        let time = animate ? 0.3 : 0.0
+        let coralogixArt = """
+         CCCCC   OOOOO   RRRRR    AAAAA   L       OOOOO   GGGGG   I   X   X
+        C       O     O  R    R  A     A  L      O     O G        I    X X
+        C       O     O  RRRRR   AAAAAAA  L      O     O G  GGG   I     X
+        C       O     O  R   R   A     A  L      O     O G    G   I    X X
+         CCCCC   OOOOO   R    R  A     A  LLLLL   OOOOO   GGGGG   I   X   X
+        """
+        
+        // Split the string into individual characters
+        let lines = coralogixArt.split(separator: "\n")
+        
+        // Print each line with a delay to simulate animation
+        for (index, line) in lines.enumerated() {
+            DispatchQueue.main.asyncAfter(deadline: .now() + Double(index) * time) {
+                print(line)
+            }
+        }
+        
+        let versionText = "\nVerion: \(Global.sdk.rawValue) \nSwift Verion: \(Global.swiftVersion.rawValue) \nSupport iOS, tvOS\n\n\n"
+        DispatchQueue.main.asyncAfter(deadline: .now() + Double(lines.count) * time) {
+            print(versionText)
+        }
     }
 }
 
