@@ -2,7 +2,7 @@
 //  CXANRDetector.swift
 //
 //
-//  Created by Tomer Har Yoffi on 27/08/2024.
+//  Created by Coralogix DEV TEAM on 27/08/2024.
 //
 
 import Foundation

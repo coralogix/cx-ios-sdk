@@ -16,6 +16,7 @@ final class CxSpanTests: XCTestCase {
     var mockSessionManager: SessionManager!
     var mockNetworkManager: NetworkManager!
     var mockViewManager: ViewManager!
+    var mockCxMetricsManager: CXMetricsManager!
     let statTime = Date()
     let endTime = Date()
     
@@ -37,6 +38,7 @@ final class CxSpanTests: XCTestCase {
         mockSessionManager = SessionManager()
         mockNetworkManager = NetworkManager()
         mockViewManager = ViewManager(keyChain: KeychainManager())
+        mockCxMetricsManager = CXMetricsManager()
     }
     
     override func tearDownWithError() throws {
@@ -52,6 +54,7 @@ final class CxSpanTests: XCTestCase {
                             sessionManager: mockSessionManager, 
                             networkManager: mockNetworkManager,
                             viewManager: mockViewManager,
+                            metricsManager: mockCxMetricsManager,
                             userMetadata: nil,
                             labels: nil)
         
@@ -83,6 +86,7 @@ final class CxSpanTests: XCTestCase {
                             sessionManager: mockSessionManager,
                             networkManager: mockNetworkManager,
                             viewManager: mockViewManager,
+                            metricsManager: mockCxMetricsManager,
                             userMetadata: nil,
                             labels: nil)
         XCTAssertNotNil(cxSpan.instrumentationData)
@@ -97,6 +101,7 @@ final class CxSpanTests: XCTestCase {
                             sessionManager: mockSessionManager, 
                             networkManager: mockNetworkManager,
                             viewManager: mockViewManager,
+                            metricsManager: mockCxMetricsManager,
                             userMetadata: nil,
                             labels: nil)
         

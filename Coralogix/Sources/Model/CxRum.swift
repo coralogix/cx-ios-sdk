@@ -36,7 +36,7 @@ struct CxRum {
          sessionManager: SessionManager,
          viewManager: ViewManager,
          networkManager: NetworkProtocol,
-         performanceMetricsManager: PerformanceMetricsManager,
+         metricsManager: CXMetricsManager,
          userMetadata: [String: String]?,
          labels: [String: Any]?) {
 
@@ -71,7 +71,7 @@ struct CxRum {
         self.deviceState = DeviceState(networkManager: self.networkManager)
         self.snapshotContext = SnapshotConext.getSnapshot(otel: otel)
         self.interactionContext = InteractionContext(otel: otel)
-        self.mobileVitalsContext = MobileVitalsContext(otel: otel, performanceMetricsManager: performanceMetricsManager)
+        self.mobileVitalsContext = MobileVitalsContext(otel: otel)
         
         if let sessionManager = self.sessionManager,
            let viewManager = self.viewManager,
@@ -102,7 +102,7 @@ struct CxRum {
         return result
     }
     
-    private func addMobileVitals(to result: inout [String: Any]){
+    private func addMobileVitals(to result: inout [String: Any]) {
         result[Keys.mobileVitalsContext.rawValue] = self.mobileVitalsContext?.getMobileVitalsDictionary()
     }
     

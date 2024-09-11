@@ -7,7 +7,11 @@
 
 import Foundation
 
-public struct CXSampler {
+protocol CXSamplerProtocol {
+    func shouldInitialized() -> Bool
+}
+
+public struct CXSampler: CXSamplerProtocol {
     /// Value between `0.0` and `100.0`,
     ///  where `0.0` means SDK will not initialized and `100.0` means ALL events will be sent.
     public let sampleRate: Int

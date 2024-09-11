@@ -18,7 +18,7 @@ public class CoralogixRum {
     internal var viewManager = ViewManager(keyChain: KeychainManager())
     internal var sessionManager = SessionManager()
     internal var sessionInstrumentation: URLSessionInstrumentation?
-    internal var performanceMetricsManager = PerformanceMetricsManager()
+    internal var cxMetricsManager = CXMetricsManager()
 
     let notificationCenter = NotificationCenter.default
     
@@ -57,7 +57,7 @@ public class CoralogixRum {
                                                   sessionManager: self.sessionManager,
                                                   networkManager: self.networkManager,
                                                   viewManager: self.viewManager,
-                                                  performanceMetricsManager: self.performanceMetricsManager)
+                                                  metricsManager: self.cxMetricsManager)
         self.versionMetadata = versionMetadata
         self.coralogixExporter = coralogixExporter
         
@@ -83,9 +83,9 @@ public class CoralogixRum {
     }
     
     private func initialzeMetricPerformance(options: CoralogixExporterOptions) {
-        self.performanceMetricsManager.startFPSSamplingMonitoring(mobileVitalsFPSSamplingRate: options.mobileVitalsFPSSamplingRate)
-        self.performanceMetricsManager.startColdStartMonitoring()
-        self.performanceMetricsManager.startANRMonitoring()
+        self.cxMetricsManager.startFPSSamplingMonitoring(mobileVitalsFPSSamplingRate: options.mobileVitalsFPSSamplingRate)
+        self.cxMetricsManager.startColdStartMonitoring()
+        self.cxMetricsManager.startANRMonitoring()
     }
     
     private func swizzle() {
@@ -205,7 +205,7 @@ public struct CoralogixExporterOptions {
     
     var labels: [String: Any]?
     
-    let cxSampler: CXSampler
+    var cxSampler: CXSampler
     
     let mobileVitalsFPSSamplingRate: Int
     

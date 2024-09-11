@@ -150,6 +150,7 @@ public enum Keys: String {
     case mobileVitalsType
     case mobileVitalsValue
     case value
+    case anr = "application_not_responding"
 }
 
 public enum CoralogixLogSeverity: Int {

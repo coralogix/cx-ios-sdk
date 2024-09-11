@@ -8,12 +8,10 @@
 import Foundation
 
 struct MobileVitalsContext {
-    let performanceMetricsManager: PerformanceMetricsManager?
     let mobileVitalsType: String
     let mobileVitalsValue: String
     
-    init(otel: SpanDataProtocol, performanceMetricsManager: PerformanceMetricsManager) {
-        self.performanceMetricsManager = performanceMetricsManager
+    init(otel: SpanDataProtocol) {
         self.mobileVitalsType = otel.getAttribute(forKey: Keys.mobileVitalsType.rawValue) as? String ?? ""
         self.mobileVitalsValue = otel.getAttribute(forKey: Keys.mobileVitalsValue.rawValue) as? String ?? ""
     }

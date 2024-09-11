@@ -20,6 +20,7 @@ extension CoralogixRum {
             if cxMobileVitals.type == .anr {
                 let span = self.getSpan()
                 span.setAttribute(key: Keys.mobileVitalsType.rawValue, value: cxMobileVitals.type.rawValue)
+                span.setAttribute(key: Keys.errorMessage.rawValue, value: Keys.anr.rawValue ?? "")
                 span.end()
             }
         }

@@ -11,7 +11,7 @@ import UIKit
 #endif
 import MetricKit
 
-public class PerformanceMetricsManager: NSObject, MXMetricManagerSubscriber {
+public class CXMetricsManager: NSObject { /*}, MXMetricManagerSubscriber { */
     var launchStartTime: CFAbsoluteTime?
     var launchEndTime: CFAbsoluteTime?
     var foregroundStartTime: CFAbsoluteTime?
@@ -22,20 +22,20 @@ public class PerformanceMetricsManager: NSObject, MXMetricManagerSubscriber {
     
     override init() {
         super.init()
-        MXMetricManager.shared.add(self)
+        // MXMetricManager.shared.add(self)
         
         NotificationCenter.default.addObserver(self,
-                                               selector: #selector(handleNotification(notification:)),
+                                               selector: #selector(self.handleNotification(notification:)),
                                                name: .cxRumNotificationMetrics,
                                                object: nil)
         NotificationCenter.default.addObserver(self,
-                                               selector: #selector(applicationDidEnterBackground),
+                                               selector: #selector(self.applicationDidEnterBackground),
                                                name: UIApplication.didEnterBackgroundNotification,
                                                object: nil)
-        NotificationCenter.default.addObserver(self, selector: #selector(appWillEnterForeground),
+        NotificationCenter.default.addObserver(self, selector: #selector(self.appWillEnterForeground),
                                                name: UIApplication.willEnterForegroundNotification,
                                                object: nil)
-        NotificationCenter.default.addObserver(self, selector: #selector(appWillTerminateNotification),
+        NotificationCenter.default.addObserver(self, selector: #selector(self.appWillTerminateNotification),
                                                name: UIApplication.willTerminateNotification,
                                                object: nil)
     }
@@ -44,16 +44,16 @@ public class PerformanceMetricsManager: NSObject, MXMetricManagerSubscriber {
         self.cxFPSTrigger.startMonitoring(xTimesPerHour: mobileVitalsFPSSamplingRate)
     }
     
-    @objc private func applicationDidEnterBackground() {
+    @objc internal func applicationDidEnterBackground() {
         Log.d("App did enter Background")
         self.foregroundStartTime = CFAbsoluteTimeGetCurrent()
         self.foregroundEndTime = nil
         self.cxFPSTrigger.stopMonitoring()
     }
     
-    @objc private func appWillEnterForeground() {
+    @objc internal func appWillEnterForeground() {
         Log.d("App did enter Foreground")
-        if let foregroundStartTime = foregroundStartTime,
+        if let foregroundStartTime = self.foregroundStartTime,
            self.foregroundEndTime == nil {
             let currentTime = CFAbsoluteTimeGetCurrent()
             self.foregroundEndTime = currentTime
@@ -72,13 +72,14 @@ public class PerformanceMetricsManager: NSObject, MXMetricManagerSubscriber {
         self.startFPSSamplingMonitoring(mobileVitalsFPSSamplingRate: self.mobileVitalsFPSSamplingRate)
     }
     
-    @objc private func appWillTerminateNotification() {
+    @objc internal func appWillTerminateNotification() {
         Log.d("App will Terminate Notification")
         self.cxAnrDetector?.stopMonitoring()
+        self.cxAnrDetector = nil
     }
     
     func startColdStartMonitoring() {
-        launchStartTime = CFAbsoluteTimeGetCurrent()
+        self.launchStartTime = CFAbsoluteTimeGetCurrent()
     }
     
     func startANRMonitoring() {
@@ -107,43 +108,43 @@ public class PerformanceMetricsManager: NSObject, MXMetricManagerSubscriber {
         }
     }
     
-    // Handle received metrics
-    public func didReceive(_ payloads: [MXMetricPayload]) {
-        for payload in payloads {
-            
-            if let metricPayloadJsonString = String(data: payload.jsonRepresentation(), encoding: .utf8) {
-                Log.d("metricPayloadJsonString  \(metricPayloadJsonString)")
-            }
-                    
-            if let applicationLaunchMetric = payload.applicationLaunchMetrics {
-                Log.d("Launch Time: \(applicationLaunchMetric.histogrammedApplicationResumeTime)")
-                Log.d("Time to First Draw: \(applicationLaunchMetric.histogrammedTimeToFirstDraw)")
-            }
-            
-            if let diskWritesMetric = payload.diskIOMetrics {
-                Log.d("Disk Writes: \(diskWritesMetric.cumulativeLogicalWrites)")
-            }
-            
-            if let memoryMetric = payload.memoryMetrics {
-                Log.d("Memory Usage: \(memoryMetric.averageSuspendedMemory)")
-            }
-        }
-    }
-    
-    // Handle received diagnostics
-    @available(iOS 14.0, *)
-    public func didReceive(_ payloads: [MXDiagnosticPayload]) {
-        for payload in payloads {
-            if let hangDiagnostics = payload.hangDiagnostics {
-                for hangDiagnostic in hangDiagnostics {
-                    Log.d("Call Stack Tree: \(hangDiagnostic.callStackTree)")
-                }
-            }
-        }
-    }
+//    // Handle received metrics
+//    public func didReceive(_ payloads: [MXMetricPayload]) {
+//        for payload in payloads {
+//            
+//            if let metricPayloadJsonString = String(data: payload.jsonRepresentation(), encoding: .utf8) {
+//                Log.d("metricPayloadJsonString  \(metricPayloadJsonString)")
+//            }
+//                    
+//            if let applicationLaunchMetric = payload.applicationLaunchMetrics {
+//                Log.d("Launch Time: \(applicationLaunchMetric.histogrammedApplicationResumeTime)")
+//                Log.d("Time to First Draw: \(applicationLaunchMetric.histogrammedTimeToFirstDraw)")
+//            }
+//            
+//            if let diskWritesMetric = payload.diskIOMetrics {
+//                Log.d("Disk Writes: \(diskWritesMetric.cumulativeLogicalWrites)")
+//            }
+//            
+//            if let memoryMetric = payload.memoryMetrics {
+//                Log.d("Memory Usage: \(memoryMetric.averageSuspendedMemory)")
+//            }
+//        }
+//    }
+//    
+//    // Handle received diagnostics
+//    @available(iOS 14.0, *)
+//    public func didReceive(_ payloads: [MXDiagnosticPayload]) {
+//        for payload in payloads {
+//            if let hangDiagnostics = payload.hangDiagnostics {
+//                for hangDiagnostic in hangDiagnostics {
+//                    Log.d("Call Stack Tree: \(hangDiagnostic.callStackTree)")
+//                }
+//            }
+//        }
+//    }
     
     deinit {
-        MXMetricManager.shared.remove(self)
+//        MXMetricManager.shared.remove(self)
         NotificationCenter().removeObserver(self, name: UIApplication.didEnterBackgroundNotification, object: nil)
         NotificationCenter().removeObserver(self, name: UIApplication.willEnterForegroundNotification, object: nil)
         NotificationCenter().removeObserver(self, name: UIApplication.willTerminateNotification, object: nil)

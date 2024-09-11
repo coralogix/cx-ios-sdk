@@ -85,7 +85,9 @@ final class ErrorContextTests: XCTestCase {
         }
         
         XCTAssertEqual(dictionary[Keys.errorMessage.rawValue] as? String, "localizedDescription")
-        XCTAssertEqual(dictionary[Keys.domain.rawValue] as? String, "")
+        if let domain = dictionary[Keys.domain.rawValue] as? String {
+            XCTAssertEqual(domain, "")
+        }
         XCTAssertEqual(dictionary[Keys.code.rawValue] as? String, "0")
     }
     

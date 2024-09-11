@@ -15,6 +15,7 @@ final class CoralogixRumTests: XCTestCase {
                                            ignoreErrors: [], //[".*errorcode=.*", "Im cusom Error"],
                                            customDomainUrl: "url",
                                            labels: ["item" : "banana", "itemPrice" : 1000],
+                                           sampleRate: 100,
                                            debug: true)
     }
     
@@ -36,6 +37,24 @@ final class CoralogixRumTests: XCTestCase {
             // Verify that isInitialized flag is set to true
             XCTAssertTrue(CoralogixRum.isInitialized)
         }
+    }
+    
+    func testInitSamplerOff() {
+        CoralogixRum.isInitialized = false
+        options = CoralogixExporterOptions(coralogixDomain: CoralogixDomain.US2,
+                                           userContext: nil,
+                                           environment: "PROD",
+                                           application: "TestApp-iOS",
+                                           version: "1.0",
+                                           publicKey: "token",
+                                           ignoreUrls: [], //[".*\\.il$", "https://www.coralogix.com/academy"],
+                                           ignoreErrors: [], //[".*errorcode=.*", "Im cusom Error"],
+                                           customDomainUrl: "url",
+                                           labels: ["item" : "banana", "itemPrice" : 1000],
+                                           sampleRate: 0,
+                                           debug: true)
+        _ = CoralogixRum(options: options!)
+        XCTAssertFalse(CoralogixRum.isInitialized)
     }
     
     // Test setUserContext method

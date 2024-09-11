@@ -10,7 +10,7 @@ import UIKit
 class CXFPSMonitor {
     private var displayLink: CADisplayLink?
     private var frameCount: Int = 0
-    private var startTime: CFTimeInterval = 0
+    var startTime: CFTimeInterval = 0
     
     // Start monitoring FPS
     func startMonitoring() {
@@ -28,15 +28,15 @@ class CXFPSMonitor {
         return Double(frameCount) / elapsedTime
     }
     
-    @objc private func trackFrame() {
+    @objc internal func trackFrame() {
         frameCount += 1
     }
 }
 
 class CXFPSTrigger {
     private let cxFpsMonitor = CXFPSMonitor()
-    private var timer: Timer?
-    private var isRunning = false
+    internal var timer: Timer?
+    internal var isRunning = false
     
     func startMonitoring(xTimesPerHour: Int = 60) {
         if !isRunning {
