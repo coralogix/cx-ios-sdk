@@ -43,7 +43,7 @@ public class AsynchronousMetricStorage: MetricStorage {
         do {
             try recordPoint(point: aggregator.toPoint(measurement: newMeasurement))
         } catch let HistogramAggregatorError.unsupportedOperation(error) {
-            // TODO: log error
+            Log.d(error)
         } catch {
             // TODO: log default error
         }
@@ -65,7 +65,7 @@ public class AsynchronousMetricStorage: MetricStorage {
     public func collect(resource: Resource, scope: InstrumentationScopeInfo, startEpochNanos: UInt64, epochNanos: UInt64) -> StableMetricData {
         var result: [[String: AttributeValue]: PointData]
         if aggregationTemporality == .delta {
-            var points = self.points
+            let points = self.points
             var lastPoints = self.lastPoints
             lastPoints = lastPoints.filter { element in
                 points[element.key] == nil // remove if points does not contain key

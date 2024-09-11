@@ -27,7 +27,8 @@ public class URLSessionInstrumentation {
 
     private let queue = DispatchQueue(label: "io.opentelemetry.ddnetworkinstrumentation")
 
-    static var instrumentedKey = "io.opentelemetry.instrumentedCall"
+   // static var instrumentedKey = "io.opentelemetry.instrumentedCall"
+    static var instrumentedKey: UInt8 = 0
 
     static let avAssetDownloadTask: AnyClass? = NSClassFromString("__NSCFBackgroundAVAssetDownloadTask")
 

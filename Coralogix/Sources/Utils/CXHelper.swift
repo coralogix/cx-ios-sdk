@@ -16,8 +16,9 @@ class CXHelper {
             return nil
         }
         let isClickable = self.isClickableControlOrView(view: view) || self.isClickableCellOrRow(view: view)
-        let text = CXHelper.extractTextsFrom(view: view)
-        Log.d("isClickable: \(isClickable), text: \(text)")
+        if let text = CXHelper.extractTextsFrom(view: view) {
+            Log.d("isClickable: \(isClickable), text: \(text)")
+        }
         return [String: Any]()
     }
     
@@ -43,12 +44,13 @@ class CXHelper {
             return false
         }
         
-        let isGestureIgnoredClass = self is UIWindow ||
-        (self as? UIControl)?.allTargets.count ?? 0 > 0 ||
-        self is UIScrollView ||
-        self is UISearchBar ||
-        self is UITabBar ||
-        self is UINavigationBar
+        let isGestureIgnoredClass = self == UIWindow.self ||
+        self == UIControl.self ||
+        self == UIScrollView.self ||
+        self == UISearchBar.self ||
+        self == UITabBar.self ||
+        self == UINavigationBar.self
+        
         return !isGestureIgnoredClass
     }
     
@@ -90,52 +92,53 @@ class CXHelper {
     static func printClassDetails(view: UIView) {
         let className = NSStringFromClass(type(of: view))
         print("Class: \(className)")
-        let cls = NSClassFromString(className)
-        // Print methods
-        var methodCount: UInt32 = 0
-        if let methods = class_copyMethodList(cls, &methodCount) {
-            print("Methods:")
-            for index in 0..<Int(methodCount) {
-                let method = methods[index]
-                let selector = method_getName(method)
-                let name = NSStringFromSelector(selector)
-                print("  \(name)")
+        if let cls = NSClassFromString(className) {
+            // Print methods
+            var methodCount: UInt32 = 0
+            if let methods = class_copyMethodList(cls, &methodCount) {
+                print("Methods:")
+                for index in 0..<Int(methodCount) {
+                    let method = methods[index]
+                    let selector = method_getName(method)
+                    let name = NSStringFromSelector(selector)
+                    print("  \(name)")
+                }
+                free(methods)
             }
-            free(methods)
-        }
-        
-        // Print properties
-        var propertyCount: UInt32 = 0
-        if let properties = class_copyPropertyList(cls, &propertyCount) {
-            print("Properties:")
-            for index in 0..<Int(propertyCount) {
-                let property = properties[index]
-                let name = String(cString: property_getName(property))
-                print("  \(name)")
+            
+            // Print properties
+            var propertyCount: UInt32 = 0
+            if let properties = class_copyPropertyList(cls, &propertyCount) {
+                print("Properties:")
+                for index in 0..<Int(propertyCount) {
+                    let property = properties[index]
+                    let name = String(cString: property_getName(property))
+                    print("  \(name)")
+                }
+                free(properties)
             }
-            free(properties)
-        }
-        
-        // Print ivars
-        var ivarCount: UInt32 = 0
-        if let ivars = class_copyIvarList(cls, &ivarCount) {
-            print("Ivars:")
-            for index in 0..<Int(ivarCount) {
-                let ivar = ivars[index]
-                let name = String(cString: ivar_getName(ivar)!)
-                print("  \(name)")
+            
+            // Print ivars
+            var ivarCount: UInt32 = 0
+            if let ivars = class_copyIvarList(cls, &ivarCount) {
+                print("Ivars:")
+                for index in 0..<Int(ivarCount) {
+                    let ivar = ivars[index]
+                    let name = String(cString: ivar_getName(ivar)!)
+                    print("  \(name)")
+                }
+                free(ivars)
             }
-            free(ivars)
-        }
-        
-        // Print protocols
-        var protocolCount: UInt32 = 0
-        if let protocols = class_copyProtocolList(cls, &protocolCount) {
-            print("Protocols:")
-            for index in 0..<Int(protocolCount) {
-                let proto = protocols[index]
-                let name = String(cString: protocol_getName(proto))
-                print("  \(name)")
+            
+            // Print protocols
+            var protocolCount: UInt32 = 0
+            if let protocols = class_copyProtocolList(cls, &protocolCount) {
+                print("Protocols:")
+                for index in 0..<Int(protocolCount) {
+                    let proto = protocols[index]
+                    let name = String(cString: protocol_getName(proto))
+                    print("  \(name)")
+                }
             }
         }
     }

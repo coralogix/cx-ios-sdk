@@ -182,9 +182,9 @@ class Helper {
             if let match = regex.firstMatch(in: lineStr, options: [], range: range) {
                 var dict: [String: Any] = [:]
                 
-                if let range = Range(match.range(at: 1), in: lineStr) {
-                   // dict["index"] = Int(lineStr[range])
-                }
+//                if let range = Range(match.range(at: 1), in: lineStr) {
+//                    dict["index"] = Int(lineStr[range])
+//                }
                 if let range = Range(match.range(at: 2), in: lineStr) {
                     dict["functionName"] = String(lineStr[range])
                 }

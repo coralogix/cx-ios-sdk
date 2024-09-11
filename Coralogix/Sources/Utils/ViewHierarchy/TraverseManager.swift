@@ -40,8 +40,9 @@ extension CoralogixRum {
                let window = windowScene.windows.first {
                 // Now you have access to the main UIWindow
                 Log.d("\(window)")
-                let rootViewController = rootViewControllerFrom(window: window)
-                Log.d("\(rootViewController)")
+                if let rootViewController = rootViewControllerFrom(window: window) {
+                    Log.d("\(rootViewController)")
+                }
             }
         } else {
             //            if let appDelegate = UIApplication.shared.delegate as? AppDelegate,

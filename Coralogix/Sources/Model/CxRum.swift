@@ -131,7 +131,7 @@ struct CxRum {
     private mutating func addConditionalContexts(to result: inout [String: Any]) {
         if eventContext.type == CoralogixEventType.error {
             result[Keys.errorContext.rawValue] = self.errorContext.getDictionary()
-            if let snapshotContext = self.snapshotContext {
+            if self.snapshotContext != nil {
                 self.addSnapshotContext(to: &result)
             }
         }
