@@ -146,6 +146,7 @@ class URLSessionLogger {
             return .error(description: String(code))
         }
     }
+    private static var instrumentedKey: UInt8 = 0
 
     private static func instrumentedRequest(for request: URLRequest, span: Span?, instrumentation: URLSessionInstrumentation) -> URLRequest? {
         var request = request
@@ -155,7 +156,10 @@ class URLSessionLogger {
         }
         instrumentation.configuration.injectCustomHeaders?(&request, span)
         var instrumentedRequest = request
-        objc_setAssociatedObject(instrumentedRequest, &URLSessionInstrumentation.instrumentedKey, true, .OBJC_ASSOCIATION_COPY_NONATOMIC)
+        objc_setAssociatedObject(instrumentedRequest,
+                                 &instrumentedKey,
+                                 true,
+                                 .OBJC_ASSOCIATION_COPY_NONATOMIC)
         let propagators = OpenTelemetry.instance.propagators
         var traceHeaders = tracePropagationHTTPHeaders(span: span, textMapPropagator: propagators.textMapPropagator, textMapBaggagePropagator: propagators.textMapBaggagePropagator)
         if let originalHeaders = request.allHTTPHeaderFields {
