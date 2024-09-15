@@ -24,10 +24,7 @@ let package = Package(
             dependencies: [
                 .target(name: "CrashReporter"),
             ],
-            path: "Coralogix/Sources/",
-            resources: [
-                .copy("CrashReporter.xcframework")
-            ]
+            path: "Coralogix/Sources/"
         ),
         .testTarget(
             name: "CoralogixRumTests",

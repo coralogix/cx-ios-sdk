@@ -22,6 +22,7 @@ struct ErrorContext {
     var stackTrace: [[String: Any]]?
     let baseAddress: String
     let arch: String
+    let eventType: String
     
     init(otel: SpanDataProtocol) {
         self.domain = otel.getAttribute(forKey: Keys.domain.rawValue) as? String ?? ""
@@ -58,6 +59,7 @@ struct ErrorContext {
         }
         self.baseAddress = otel.getAttribute(forKey: Keys.baseAddress.rawValue) as? String ?? ""
         self.arch = otel.getAttribute(forKey: Keys.arch.rawValue) as? String ?? ""
+        self.eventType = otel.getAttribute(forKey: Keys.mobileVitalsType.rawValue) as? String ?? ""
     }
     
     func getDictionary() -> [String: Any] {
@@ -77,9 +79,17 @@ struct ErrorContext {
             errorContext[Keys.isCrash.rawValue] = true
             errorContext[Keys.errorMessage.rawValue] = self.exceptionType
         } else {
-            errorContext[Keys.domain.rawValue] = self.domain
-            errorContext[Keys.code.rawValue] = self.code
-            errorContext[Keys.errorMessage.rawValue] = self.errorMessage
+            if !self.domain.isEmpty {
+                errorContext[Keys.domain.rawValue] = self.domain
+            }
+            
+            if !self.code.isEmpty {
+                errorContext[Keys.code.rawValue] = self.code
+            }
+            
+            if !self.errorMessage.isEmpty {
+                errorContext[Keys.errorMessage.rawValue] = self.errorMessage
+            }
 
             if let userInfo = self.userInfo {
                 errorContext[Keys.userInfo.rawValue] = userInfo
@@ -88,7 +98,12 @@ struct ErrorContext {
             if let stackTrace = self.stackTrace {
                 errorContext[Keys.originalStackTrace.rawValue] = stackTrace
             }
+            
             errorContext[Keys.isCrash.rawValue] = false
+            
+            if !self.eventType.isEmpty {
+                errorContext[Keys.eventType.rawValue] = eventType
+            }
         }
         return errorContext
     }

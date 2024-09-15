@@ -75,4 +75,8 @@ let sampleRate: Int?
 ```
 Sets sample rate, value between `0.0` and `100.0`, where `0.0` means SDK will not initialized and `100.0` means ALL events will be sent.
 
-
+### mobileVitalsFPSSamplingRate
+```swift
+let mobileVitalsFPSSamplingRate: Int
+```
+Defines the interval, in seconds, at which the SDK will perform FPS sampling. This value determines how frequently the FPS (Frames Per Second) calculator should be triggered, allowing the SDK to monitor rendering performance at regular intervals.

@@ -1,5 +1,5 @@
 //
-//  CxRumTests.swift
+//  RumTests.swift
 //
 //
 //  Created by Coralogix DEV TEAM on 09/05/2024.
@@ -9,13 +9,14 @@ import XCTest
 
 @testable import Coralogix
 
-final class CxRumTests: XCTestCase {
+final class RumTests: XCTestCase {
     var mockSpanData: SpanDataProtocol!
     var mockVersionMetadata: VersionMetadata!
     var mockSessionManager: SessionManager!
     var mockNetworkManager: NetworkManager!
     var mockViewerManager: ViewManager!
-    
+    var mockCxMetricsManager: MetricsManager!
+
     override func setUpWithError() throws {
         
         let snapshot = SnapshotConext(timestemp: Date().timeIntervalSince1970,
@@ -38,6 +39,7 @@ final class CxRumTests: XCTestCase {
         mockNetworkManager = NetworkManager()
         mockViewerManager = ViewManager(keyChain: KeychainManager())
         mockSessionManager.lastSnapshotEventTime = Date()
+        mockCxMetricsManager = MetricsManager()
     }
     
     override func tearDownWithError() throws {
@@ -54,6 +56,7 @@ final class CxRumTests: XCTestCase {
             sessionManager: mockSessionManager,
             viewManager: mockViewerManager,
             networkManager: mockNetworkManager,
+            metricsManager: mockCxMetricsManager,
             userMetadata: ["userId": "12345"],
             labels: ["key": "value"]
         )
@@ -79,6 +82,7 @@ final class CxRumTests: XCTestCase {
             sessionManager: mockSessionManager,
             viewManager: mockViewerManager,
             networkManager: mockNetworkManager,
+            metricsManager: mockCxMetricsManager,
             userMetadata: ["userId": "12345"],
             labels: ["key": "value"]
         )
@@ -120,6 +124,7 @@ final class CxRumTests: XCTestCase {
             sessionManager: mockSessionManager,
             viewManager: mockViewerManager,
             networkManager: mockNetworkManager,
+            metricsManager: mockCxMetricsManager,
             userMetadata: ["userId": "12345"],
             labels: ["key": "value"]
         )
@@ -154,6 +159,7 @@ final class CxRumTests: XCTestCase {
             sessionManager: mockSessionManager,
             viewManager: mockViewerManager,
             networkManager: mockNetworkManager,
+            metricsManager: mockCxMetricsManager,
             userMetadata: ["userId": "12345"],
             labels: ["key": "value"]
         )
@@ -187,6 +193,7 @@ final class CxRumTests: XCTestCase {
             sessionManager: mockSessionManager,
             viewManager: mockViewerManager,
             networkManager: mockNetworkManager,
+            metricsManager: mockCxMetricsManager,
             userMetadata: ["userId": "12345"],
             labels: ["key": "value"]
         )
@@ -227,12 +234,13 @@ final class CxRumTests: XCTestCase {
         let pastDate = currentDate.addingTimeInterval(oneMinuteInThePast)
 
         mockSessionManager.lastSnapshotEventTime = pastDate
-        var cxRum = CxRum(
+        let cxRum = CxRum(
             otel: mockSpanData,
             versionMetadata: mockVersionMetadata,
             sessionManager: mockSessionManager,
             viewManager: mockViewerManager,
             networkManager: mockNetworkManager,
+            metricsManager: mockCxMetricsManager,
             userMetadata: ["userId": "12345"],
             labels: ["key": "value"]
         )

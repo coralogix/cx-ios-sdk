@@ -144,6 +144,13 @@ public enum Keys: String {
     case isCrash = "is_crash"
     case tvos
     case television
+    case coldEnd
+    case mobileVitalsContext = "mobile_vitals_context"
+    case fps = "fps"
+    case mobileVitalsType
+    case mobileVitalsValue
+    case value
+    case anr = "application_not_responding"
 }
 
 public enum CoralogixLogSeverity: Int {
@@ -165,11 +172,13 @@ enum CoralogixEventType: String {
     case resources
     case internalKey = "internal"
     case navigation
+    case mobileVitals = "mobile-vitals"
     case unknown
 }
 
 public enum Global: String {
     case sdk = "1.0.11"
+    case swiftVersion = "5.9"
     case coralogixPath = "/browser/v1beta/logs"
     
     enum BatchSpan: Int {

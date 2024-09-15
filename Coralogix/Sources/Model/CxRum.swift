@@ -29,12 +29,14 @@ struct CxRum {
     var snapshotContext: SnapshotConext?
     var isOneMinuteFromLastSnapshotPass = false
     var interactionContext: InteractionContext?
-    
+    var mobileVitalsContext: MobileVitalsContext?
+     
     init(otel: SpanDataProtocol,
          versionMetadata: VersionMetadata,
          sessionManager: SessionManager,
          viewManager: ViewManager,
          networkManager: NetworkProtocol,
+         metricsManager: MetricsManager,
          userMetadata: [String: String]?,
          labels: [String: Any]?) {
 
@@ -69,6 +71,7 @@ struct CxRum {
         self.deviceState = DeviceState(networkManager: self.networkManager)
         self.snapshotContext = SnapshotConext.getSnapshot(otel: otel)
         self.interactionContext = InteractionContext(otel: otel)
+        self.mobileVitalsContext = MobileVitalsContext(otel: otel)
         
         if let sessionManager = self.sessionManager,
            let viewManager = self.viewManager,
@@ -95,7 +98,12 @@ struct CxRum {
         self.addConditionalContexts(to: &result)
         self.addViewManagerContext(to: &result)
         self.addLabels(to: &result)
+        self.addMobileVitals(to: &result)
         return result
+    }
+    
+    private func addMobileVitals(to result: inout [String: Any]) {
+        result[Keys.mobileVitalsContext.rawValue] = self.mobileVitalsContext?.getMobileVitalsDictionary()
     }
     
     private func addBasicDetails(to result: inout [String: Any]) {
@@ -123,7 +131,7 @@ struct CxRum {
     private mutating func addConditionalContexts(to result: inout [String: Any]) {
         if eventContext.type == CoralogixEventType.error {
             result[Keys.errorContext.rawValue] = self.errorContext.getDictionary()
-            if let snapshotContext = self.snapshotContext {
+            if self.snapshotContext != nil {
                 self.addSnapshotContext(to: &result)
             }
         }

@@ -1,5 +1,5 @@
 //
-//  CxSpanTests.swift
+//  SpanTests.swift
 //
 //
 //  Created by Coralogix DEV TEAM on 08/05/2024.
@@ -10,12 +10,13 @@ import Foundation
 
 @testable import Coralogix
 
-final class CxSpanTests: XCTestCase {
+final class SpanTests: XCTestCase {
     var mockSpanData: SpanDataProtocol!
     var mockVersionMetadata: VersionMetadata!
     var mockSessionManager: SessionManager!
     var mockNetworkManager: NetworkManager!
     var mockViewManager: ViewManager!
+    var mockCxMetricsManager: MetricsManager!
     let statTime = Date()
     let endTime = Date()
     
@@ -37,6 +38,7 @@ final class CxSpanTests: XCTestCase {
         mockSessionManager = SessionManager()
         mockNetworkManager = NetworkManager()
         mockViewManager = ViewManager(keyChain: KeychainManager())
+        mockCxMetricsManager = MetricsManager()
     }
     
     override func tearDownWithError() throws {
@@ -52,6 +54,7 @@ final class CxSpanTests: XCTestCase {
                             sessionManager: mockSessionManager, 
                             networkManager: mockNetworkManager,
                             viewManager: mockViewManager,
+                            metricsManager: mockCxMetricsManager,
                             userMetadata: nil,
                             labels: nil)
         
@@ -83,6 +86,7 @@ final class CxSpanTests: XCTestCase {
                             sessionManager: mockSessionManager,
                             networkManager: mockNetworkManager,
                             viewManager: mockViewManager,
+                            metricsManager: mockCxMetricsManager,
                             userMetadata: nil,
                             labels: nil)
         XCTAssertNotNil(cxSpan.instrumentationData)
@@ -97,6 +101,7 @@ final class CxSpanTests: XCTestCase {
                             sessionManager: mockSessionManager, 
                             networkManager: mockNetworkManager,
                             viewManager: mockViewManager,
+                            metricsManager: mockCxMetricsManager,
                             userMetadata: nil,
                             labels: nil)
         

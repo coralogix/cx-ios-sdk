@@ -64,7 +64,7 @@ extension UICollectionView {
         let originalSelector = #selector(UICollectionViewDelegate.collectionView(_:didSelectItemAt:))
         let swizzledSelector = #selector(UIViewController.swizzled_collectionView(_:didSelectItemAt:))
 
-        if let delegateClass: AnyClass = object_getClass(delegate) {
+        if object_getClass(delegate) != nil {
             SwizzleUtils.swizzleInstanceMethod(for: type(of: delegate),
                                                originalSelector: originalSelector,
                                                swizzledSelector: swizzledSelector)
@@ -145,10 +145,10 @@ extension UIGestureRecognizer {
         self.cx_touchesEnded(touches, with: event)
         
         if let touch = touches.first, let view = touch.view, let nextResponder = view.next as? UIView {
-            if CXHelper.isSwiftUIView(view: view) || CXHelper.isSwiftUIView(view: nextResponder) {
+            if ViewHelper.isSwiftUIView(view: view) || ViewHelper.isSwiftUIView(view: nextResponder) {
                 return
             }
-            let dict = CXHelper.cxElementForView(view: view)
+            _ = ViewHelper.cxElementForView(view: view)
         }
     }
 }
@@ -235,7 +235,7 @@ extension UIApplication {
         let senderClass = NSStringFromClass(type(of: sender))
         var attributes = [String: Any]()
         if let description = sender.description,
-           let title = CXHelper.extractTitleUITabBarItem(from: description) {
+           let title = ViewHelper.extractTitleUITabBarItem(from: description) {
             attributes[Keys.text.rawValue] = title
         }
         let tap = [Keys.tapName.rawValue: "\(senderClass)",
@@ -245,11 +245,12 @@ extension UIApplication {
     }
     
     private func handleBackButtonAction(sender: AnyObject?) {
-        guard let sender = sender else { return }
-        let tap = [Keys.tapName.rawValue: "backButton",
-                   Keys.tapCount.rawValue: 1,
-                   Keys.tapAttributes.rawValue: [:]] as [String: Any]
-        NotificationCenter.default.post(name: .cxRumNotificationUserActions, object: tap)
+        if sender != nil {
+            let tap = [Keys.tapName.rawValue: "backButton",
+                       Keys.tapCount.rawValue: 1,
+                       Keys.tapAttributes.rawValue: [:]] as [String: Any]
+            NotificationCenter.default.post(name: .cxRumNotificationUserActions, object: tap)
+        }
     }
 
     private func handleSegmentChanged(sender: AnyObject?) {
@@ -258,7 +259,6 @@ extension UIApplication {
         let selectedIndex = segmentedControl.selectedSegmentIndex
         let selectedTitle = segmentedControl.titleForSegment(at: selectedIndex)
         attributes[Keys.text.rawValue] = "\(selectedTitle ?? "None")"
-        let senderClass = NSStringFromClass(type(of: sender))
         let tap = [Keys.tapName.rawValue: "UISegmentedControl",
                    Keys.tapCount.rawValue: 1,
                    Keys.tapAttributes.rawValue: Helper.convertDictionayToJsonString(dict: attributes)] as [String: Any]
@@ -307,6 +307,8 @@ extension UIViewController {
             // Custom implementation for UIViewController
             updateCoralogixRum(window: self.getWindow(), state: .notifyOnAppear)
             
+            NotificationCenter.default.post(name: .cxRumNotificationMetrics,
+                                            object: [Keys.coldEnd.rawValue: CFAbsoluteTimeGetCurrent()])
             // Call the original viewDidAppear
             swizzled_viewDidAppear(animated)
         }

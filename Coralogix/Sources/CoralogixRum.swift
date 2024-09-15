@@ -8,6 +8,7 @@ extension Notification.Name {
     static let cxRumNotification = Notification.Name("cxRumNotification")
     static let cxRumNotificationSessionEnded = Notification.Name("cxRumNotificationSessionEnded")
     static let cxRumNotificationUserActions = Notification.Name("cxRumNotificationUserActions")
+    static let cxRumNotificationMetrics = Notification.Name("cxRumNotificationMetrics")
 }
 
 public class CoralogixRum {
@@ -17,6 +18,8 @@ public class CoralogixRum {
     internal var viewManager = ViewManager(keyChain: KeychainManager())
     internal var sessionManager = SessionManager()
     internal var sessionInstrumentation: URLSessionInstrumentation?
+    internal var metricsManager = MetricsManager()
+
     let notificationCenter = NotificationCenter.default
     
     static var isDebug = false
@@ -24,12 +27,10 @@ public class CoralogixRum {
     static var sdkFramework: SdkFramework = .swift
     
     public init(options: CoralogixExporterOptions, sdkFramework: SdkFramework = .swift) {
-        if options.cxSampler.shouldInitialized() == false {
+        self.displayCoralogixWord()
+
+        if options.sdkSampler.shouldInitialized() == false {
             return
-        }
-        
-        if CoralogixRum.isInitialized {
-            Log.w("CoralogixRum allready Initialized")
         }
         
         self.startup(options: options, sdkFramework: sdkFramework)
@@ -40,18 +41,21 @@ public class CoralogixRum {
         NotificationCenter.default.removeObserver(self, name: .cxRumNotification, object: nil)
         NotificationCenter.default.removeObserver(self, name: .cxRumNotificationUserActions, object: nil)
         NotificationCenter.default.removeObserver(self, name: .cxRumNotificationSessionEnded, object: nil)
+        NotificationCenter.default.removeObserver(self, name: .cxRumNotificationMetrics, object: nil)
     }
     
     private func startup(options: CoralogixExporterOptions, sdkFramework: SdkFramework) {
         CoralogixRum.sdkFramework = sdkFramework
-        
+        self.initialzeMetricPerformance(options: options)
+
         CoralogixRum.isDebug = options.debug
         let versionMetadata = VersionMetadata(appName: options.application, appVersion: options.version)
         let coralogixExporter = CoralogixExporter(options: options,
                                                   versionMetadata: versionMetadata,
                                                   sessionManager: self.sessionManager,
                                                   networkManager: self.networkManager,
-                                                  viewManager: self.viewManager)
+                                                  viewManager: self.viewManager,
+                                                  metricsManager: self.metricsManager)
         self.versionMetadata = versionMetadata
         self.coralogixExporter = coralogixExporter
         
@@ -70,7 +74,16 @@ public class CoralogixRum {
         self.initializeNavigationInstrumentation()
         self.initializeSessionInstrumentation()
         self.initializeCrashInstumentation()
+        self.initializeMobileVitalsInstrumentation()
+        self.initializeErrorInstrumentation()
+
         CoralogixRum.isInitialized = true
+    }
+    
+    private func initialzeMetricPerformance(options: CoralogixExporterOptions) {
+        self.metricsManager.startFPSSamplingMonitoring(mobileVitalsFPSSamplingRate: options.mobileVitalsFPSSamplingRate)
+        self.metricsManager.startColdStartMonitoring()
+        self.metricsManager.startANRMonitoring()
     }
     
     private func swizzle() {
@@ -151,6 +164,11 @@ public class CoralogixRum {
         span.setAttribute(key: Keys.userEmail.rawValue, value: options?.userContext?.userEmail ?? "")
         span.setAttribute(key: Keys.environment.rawValue, value: options?.environment ?? "")
     }
+    
+    func displayCoralogixWord() {
+        let coralogixText = "[CORALOGIX]\nVerion: \(Global.sdk.rawValue) \nSwift Verion: \(Global.swiftVersion.rawValue) \nSupport iOS, tvOS\n\n\n"
+        print(coralogixText)
+    }
 }
 
 public enum SdkFramework: String {
@@ -190,7 +208,9 @@ public struct CoralogixExporterOptions {
     
     var labels: [String: Any]?
     
-    let cxSampler: CXSampler
+    var sdkSampler: SDKSampler
+    
+    let mobileVitalsFPSSamplingRate: Int
     
     public init(coralogixDomain: CoralogixDomain,
                 userContext: UserContext?,
@@ -203,6 +223,7 @@ public struct CoralogixExporterOptions {
                 customDomainUrl: String? = nil,
                 labels: [String: Any]? = nil,
                 sampleRate: Int = 100,
+                mobileVitalsFPSSamplingRate: Int = 300, // minimum every 5 minute
                 debug: Bool = false) {
         
         self.coralogixDomain = coralogixDomain
@@ -216,6 +237,7 @@ public struct CoralogixExporterOptions {
         self.version = version
         self.customDomainUrl = customDomainUrl
         self.labels = labels
-        self.cxSampler = CXSampler(sampleRate: sampleRate)
+        self.sdkSampler = SDKSampler(sampleRate: sampleRate)
+        self.mobileVitalsFPSSamplingRate = mobileVitalsFPSSamplingRate
     }
 }
