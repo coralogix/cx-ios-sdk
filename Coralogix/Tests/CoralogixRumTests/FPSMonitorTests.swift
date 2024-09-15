@@ -1,5 +1,5 @@
 //
-//  CXFPSMonitorTests.swift
+//  FPSMonitorTests.swift
 //
 //
 //  Created by Coralogix DEV TRAM on 08/09/2024.
@@ -8,12 +8,12 @@
 import XCTest
 @testable import Coralogix
 
-final class CXFPSMonitorTests: XCTestCase {
-    var fpsMonitor: CXFPSMonitor!
+final class FPSMonitorTests: XCTestCase {
+    var fpsMonitor: FPSMonitor!
     
     override func setUp() {
         super.setUp()
-        fpsMonitor = CXFPSMonitor()
+        fpsMonitor = FPSMonitor()
     }
     
     override func tearDown() {

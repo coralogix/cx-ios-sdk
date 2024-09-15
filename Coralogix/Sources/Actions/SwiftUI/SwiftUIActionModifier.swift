@@ -22,7 +22,7 @@ internal struct CXTapModifier: SwiftUI.ViewModifier {
                 TapGesture(count: count).onEnded { _ in
                     let tap = [Keys.tapName.rawValue: name,
                                Keys.tapCount.rawValue: count,
-                               Keys.tapAttributes.rawValue: attributes] as? [String : Any]
+                               Keys.tapAttributes.rawValue: attributes] as? [String: Any]
                     NotificationCenter.default.post(name: .cxRumNotificationUserActions, object: tap)
                 }
             )
@@ -31,7 +31,7 @@ internal struct CXTapModifier: SwiftUI.ViewModifier {
                 TapView(count: count) {
                     let tap = [Keys.tapName.rawValue: name,
                                Keys.tapCount.rawValue: count,
-                               Keys.tapAttributes.rawValue: attributes] as? [String : Any]
+                               Keys.tapAttributes.rawValue: attributes] as? [String: Any]
                     NotificationCenter.default.post(name: .cxRumNotificationUserActions, object: tap)
                 }
             )

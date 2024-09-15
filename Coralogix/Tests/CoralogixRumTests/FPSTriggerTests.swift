@@ -1,5 +1,5 @@
 //
-//  CXFPSTriggerTests.swift
+//  FPSTriggerTests.swift
 //
 //
 //  Created by Coralogix DEV TEAM on 11/09/2024.
@@ -8,12 +8,12 @@
 import XCTest
 @testable import Coralogix
 
-final class CXFPSTriggerTests: XCTestCase {
-    var fpsTrigger: CXFPSTrigger!
+final class FPSTriggerTests: XCTestCase {
+    var fpsTrigger: FPSTrigger!
     
     override func setUp() {
         super.setUp()
-        fpsTrigger = CXFPSTrigger()
+        fpsTrigger = FPSTrigger()
     }
 
     override func tearDown() {

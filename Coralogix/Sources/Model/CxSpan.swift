@@ -21,7 +21,7 @@ public class CxSpan {
          sessionManager: SessionManager,
          networkManager: NetworkProtocol,
          viewManager: ViewManager,
-         metricsManager: CXMetricsManager,
+         metricsManager: MetricsManager,
          userMetadata: [String: String]?,
          labels: [String: Any]?) {
         self.applicationName = versionMetadata.appName

@@ -1,5 +1,5 @@
 //
-//  CxRumTests.swift
+//  RumTests.swift
 //
 //
 //  Created by Coralogix DEV TEAM on 09/05/2024.
@@ -9,13 +9,13 @@ import XCTest
 
 @testable import Coralogix
 
-final class CxRumTests: XCTestCase {
+final class RumTests: XCTestCase {
     var mockSpanData: SpanDataProtocol!
     var mockVersionMetadata: VersionMetadata!
     var mockSessionManager: SessionManager!
     var mockNetworkManager: NetworkManager!
     var mockViewerManager: ViewManager!
-    var mockCxMetricsManager: CXMetricsManager!
+    var mockCxMetricsManager: MetricsManager!
 
     override func setUpWithError() throws {
         
@@ -39,7 +39,7 @@ final class CxRumTests: XCTestCase {
         mockNetworkManager = NetworkManager()
         mockViewerManager = ViewManager(keyChain: KeychainManager())
         mockSessionManager.lastSnapshotEventTime = Date()
-        mockCxMetricsManager = CXMetricsManager()
+        mockCxMetricsManager = MetricsManager()
     }
     
     override func tearDownWithError() throws {

@@ -1,5 +1,5 @@
 //
-//  CXANRDetector.swift
+//  ANRDetector.swift
 //
 //
 //  Created by Coralogix DEV TEAM on 27/08/2024.
@@ -7,7 +7,7 @@
 
 import Foundation
 
-class CXANRDetector {
+class ANRDetector {
     internal var timer: Timer?
     private var isMainThreadResponsive = true
 

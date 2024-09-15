@@ -145,10 +145,10 @@ extension UIGestureRecognizer {
         self.cx_touchesEnded(touches, with: event)
         
         if let touch = touches.first, let view = touch.view, let nextResponder = view.next as? UIView {
-            if CXHelper.isSwiftUIView(view: view) || CXHelper.isSwiftUIView(view: nextResponder) {
+            if ViewHelper.isSwiftUIView(view: view) || ViewHelper.isSwiftUIView(view: nextResponder) {
                 return
             }
-            _ = CXHelper.cxElementForView(view: view)
+            _ = ViewHelper.cxElementForView(view: view)
         }
     }
 }
@@ -235,7 +235,7 @@ extension UIApplication {
         let senderClass = NSStringFromClass(type(of: sender))
         var attributes = [String: Any]()
         if let description = sender.description,
-           let title = CXHelper.extractTitleUITabBarItem(from: description) {
+           let title = ViewHelper.extractTitleUITabBarItem(from: description) {
             attributes[Keys.text.rawValue] = title
         }
         let tap = [Keys.tapName.rawValue: "\(senderClass)",

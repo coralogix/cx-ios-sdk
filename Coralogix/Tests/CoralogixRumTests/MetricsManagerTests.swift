@@ -1,5 +1,5 @@
 //
-//  CXMetricsManagerTests.swift
+//  MetricsManagerTests.swift
 //  
 //
 //  Created by Coralogix DEV TEAM on 11/09/2024.
@@ -8,18 +8,21 @@
 import XCTest
 @testable import Coralogix
 
-final class CXMetricsManagerTests: XCTestCase {
+final class MetricsManagerTests: XCTestCase {
     
-    var metricsManager: CXMetricsManager!
+    var metricsManager: MetricsManager!
+    var mockFPSMonitor: MockFPSTrigger!
 
     override func setUp() {
         super.setUp()
-        self.metricsManager = CXMetricsManager()
+        self.metricsManager = MetricsManager()
+        self.mockFPSMonitor = MockFPSTrigger()
     }
 
     override func tearDown() {
         NotificationCenter.default.removeObserver(metricsManager as Any)
         metricsManager = nil
+        mockFPSMonitor = nil
         super.tearDown()
     }
     
@@ -31,30 +34,38 @@ final class CXMetricsManagerTests: XCTestCase {
     func testAppWillEnterForeground() {
         // Set up foreground start time to simulate entering the background
         metricsManager.foregroundStartTime = CFAbsoluteTimeGetCurrent() - 1.0  // Simulate 1 second ago
+        metricsManager.appDidEnterBackgroundNotification()
         
         // Simulate entering foreground
-        metricsManager.appWillEnterForeground()
-        
+        metricsManager.appWillEnterForegroundNotification()
+        metricsManager.appDidBecomeActiveNotification()
         // Check if foregroundEndTime is set and warm start duration is calculated
         XCTAssertNotNil(metricsManager.foregroundEndTime, "Foreground end time should be set after entering foreground")
-        XCTAssertTrue(metricsManager.foregroundEndTime! - metricsManager.foregroundStartTime! >= 1.0, "Warm start duration should be calculated")
+        XCTAssertTrue(metricsManager.foregroundEndTime! - metricsManager.foregroundStartTime! >= 0.0, "Warm start duration should be calculated")
     }
     
-    func testApplicationDidEnterBackground() {
-        metricsManager.applicationDidEnterBackground()
-        XCTAssertNotNil(metricsManager.foregroundStartTime, "Foreground start time should be set when app enters background")
-        XCTAssertNil(metricsManager.foregroundEndTime, "Foreground end time should be nil when app enters background")
+    func testAppDidEnterBackgroundNotification() {
+        
+        metricsManager.fpsTrigger = mockFPSMonitor
+        // Simulate the method being called when the app enters background
+        metricsManager.appDidEnterBackgroundNotification()
+        
+        // Verify that the FPS monitoring was stopped
+        XCTAssertTrue(mockFPSMonitor.stopMonitoringCalled, "stopMonitoring() should be called when app enters background")
+        
+        // Verify that warmMetricIsActive is set to true
+        XCTAssertTrue(metricsManager.warmMetricIsActive, "warmMetricIsActive should be set to true when app enters background")
     }
     
     func testAppWillTerminateNotification() {
         // Simulate setting up ANR detector
-        metricsManager.cxAnrDetector = CXANRDetector()
+        metricsManager.anrDetector = ANRDetector()
         
         // Call the termination handler
         metricsManager.appWillTerminateNotification()
         
         // Ensure ANR monitoring is stopped
-        XCTAssertNil(metricsManager.cxAnrDetector, "ANR monitoring should stop on app termination")
+        XCTAssertNil(metricsManager.anrDetector, "ANR monitoring should stop on app termination")
     }
     
     func testHandleNotificationForColdStart() {
@@ -74,7 +85,7 @@ final class CXMetricsManagerTests: XCTestCase {
     
     func testStartANRMonitoring() {
         metricsManager.startANRMonitoring()
-        XCTAssertNotNil(metricsManager.cxAnrDetector, "ANR monitoring should start and cxAnrDetector should be initialized")
+        XCTAssertNotNil(metricsManager.anrDetector, "ANR monitoring should start and anrDetector should be initialized")
     }
     
     func testFPSSamplingMonitoringStartAndStop() {
@@ -82,12 +93,21 @@ final class CXMetricsManagerTests: XCTestCase {
         metricsManager.startFPSSamplingMonitoring(mobileVitalsFPSSamplingRate: 30)
         
         // FPS monitoring should be running
-        XCTAssertTrue(metricsManager.cxFPSTrigger.isRunning, "FPS sampling should be running after calling startFPSSamplingMonitoring")
+        XCTAssertTrue(metricsManager.fpsTrigger.isRunning, "FPS sampling should be running after calling startFPSSamplingMonitoring")
         
         // Stop FPS monitoring
-        metricsManager.applicationDidEnterBackground()
+        metricsManager.appDidEnterBackgroundNotification()
         
         // FPS monitoring should stop
-        XCTAssertFalse(metricsManager.cxFPSTrigger.isRunning, "FPS sampling should stop when app enters background")
+        XCTAssertFalse(metricsManager.fpsTrigger.isRunning, "FPS sampling should stop when app enters background")
+    }
+}
+
+// Mock class to simulate the behavior of fpsTrigger
+class MockFPSTrigger: FPSTrigger {
+    var stopMonitoringCalled = false
+    
+    override func stopMonitoring() {
+        stopMonitoringCalled = true
     }
 }

@@ -36,7 +36,7 @@ struct CxRum {
          sessionManager: SessionManager,
          viewManager: ViewManager,
          networkManager: NetworkProtocol,
-         metricsManager: CXMetricsManager,
+         metricsManager: MetricsManager,
          userMetadata: [String: String]?,
          labels: [String: Any]?) {
 

@@ -10,13 +10,13 @@ import Foundation
 import UIKit
 #endif
 
-class CXHelper {
+class ViewHelper {
     static func cxElementForView(view: UIView?) -> [String: Any]? {
         guard let view = view else {
             return nil
         }
         let isClickable = self.isClickableControlOrView(view: view) || self.isClickableCellOrRow(view: view)
-        if let text = CXHelper.extractTextsFrom(view: view) {
+        if let text = ViewHelper.extractTextsFrom(view: view) {
             Log.d("isClickable: \(isClickable), text: \(text)")
         }
         return [String: Any]()
@@ -29,7 +29,7 @@ class CXHelper {
         
         var isClickableView = self.isClickableView(view: view)
         if !isClickableView {
-            isClickableView = CXHelper.isSwiftUIView(view: view)
+            isClickableView = ViewHelper.isSwiftUIView(view: view)
         }
         return isClickableView
     }
@@ -76,7 +76,7 @@ class CXHelper {
             }
         } else if let tableViewCell = view as? UITableViewCell {
             return tableViewCell.textLabel?.text
-        } else if CXHelper.isSwiftUIView(view: view) {
+        } else if ViewHelper.isSwiftUIView(view: view) {
             return view.layer.debugDescription
         }
         return nil

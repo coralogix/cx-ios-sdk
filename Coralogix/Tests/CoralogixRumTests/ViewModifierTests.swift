@@ -1,5 +1,5 @@
 //
-//  CXViewModifierTests.swift
+//  ViewModifierTests.swift
 //
 //
 //  Created by Coralogix DEV TEAM on 19/05/2024.
@@ -11,7 +11,7 @@ import Combine
 @testable import Coralogix
 
 @available(iOS 13, tvOS 13, *)
-final class CXViewModifierTests: XCTestCase {
+final class ViewModifierTests: XCTestCase {
     
     var hostingController: UIHostingController<AnyView>!
     var window: UIWindow!

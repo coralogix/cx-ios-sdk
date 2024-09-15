@@ -1,5 +1,5 @@
 //
-//  CXANRDetectorTests.swift
+//  ANRDetectorTests.swift
 //
 //
 //  Created by Coralogix DEV TEAM on 08/09/2024.
@@ -8,15 +8,15 @@
 import XCTest
 @testable import Coralogix
 
-final class CXANRDetectorTests: XCTestCase {
+final class ANRDetectorTests: XCTestCase {
     
-    var anrDetector: CXANRDetector!
+    var anrDetector: ANRDetector!
     var anrDetected = false
     
     override func setUp() {
         super.setUp()
         // Initialize with a short maxBlockTime for faster tests
-        anrDetector = CXANRDetector(checkInterval: 0.1, maxBlockTime: 0.2)
+        anrDetector = ANRDetector(checkInterval: 0.1, maxBlockTime: 0.2)
         
         // Override the handleANR with a closure to test ANR detection
         anrDetector.handleANRClosure = { [weak self] in

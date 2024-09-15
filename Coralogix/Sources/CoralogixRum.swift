@@ -18,7 +18,7 @@ public class CoralogixRum {
     internal var viewManager = ViewManager(keyChain: KeychainManager())
     internal var sessionManager = SessionManager()
     internal var sessionInstrumentation: URLSessionInstrumentation?
-    internal var cxMetricsManager = CXMetricsManager()
+    internal var metricsManager = MetricsManager()
 
     let notificationCenter = NotificationCenter.default
     
@@ -27,9 +27,9 @@ public class CoralogixRum {
     static var sdkFramework: SdkFramework = .swift
     
     public init(options: CoralogixExporterOptions, sdkFramework: SdkFramework = .swift) {
-        self.displayCoralogixWord(animate: false)
+        self.displayCoralogixWord()
 
-        if options.cxSampler.shouldInitialized() == false {
+        if options.sdkSampler.shouldInitialized() == false {
             return
         }
         
@@ -55,7 +55,7 @@ public class CoralogixRum {
                                                   sessionManager: self.sessionManager,
                                                   networkManager: self.networkManager,
                                                   viewManager: self.viewManager,
-                                                  metricsManager: self.cxMetricsManager)
+                                                  metricsManager: self.metricsManager)
         self.versionMetadata = versionMetadata
         self.coralogixExporter = coralogixExporter
         
@@ -81,9 +81,9 @@ public class CoralogixRum {
     }
     
     private func initialzeMetricPerformance(options: CoralogixExporterOptions) {
-        self.cxMetricsManager.startFPSSamplingMonitoring(mobileVitalsFPSSamplingRate: options.mobileVitalsFPSSamplingRate)
-        self.cxMetricsManager.startColdStartMonitoring()
-        self.cxMetricsManager.startANRMonitoring()
+        self.metricsManager.startFPSSamplingMonitoring(mobileVitalsFPSSamplingRate: options.mobileVitalsFPSSamplingRate)
+        self.metricsManager.startColdStartMonitoring()
+        self.metricsManager.startANRMonitoring()
     }
     
     private func swizzle() {
@@ -165,30 +165,9 @@ public class CoralogixRum {
         span.setAttribute(key: Keys.environment.rawValue, value: options?.environment ?? "")
     }
     
-    func displayCoralogixWord(animate: Bool) {
-        let time = animate ? 0.3 : 0.0
-        let coralogixArt = """
-         CCCCC   OOOOO   RRRRR    AAAAA   L       OOOOO   GGGGG   I   X   X
-        C       O     O  R    R  A     A  L      O     O G        I    X X
-        C       O     O  RRRRR   AAAAAAA  L      O     O G  GGG   I     X
-        C       O     O  R   R   A     A  L      O     O G    G   I    X X
-         CCCCC   OOOOO   R    R  A     A  LLLLL   OOOOO   GGGGG   I   X   X
-        """
-        
-        // Split the string into individual characters
-        let lines = coralogixArt.split(separator: "\n")
-        
-        // Print each line with a delay to simulate animation
-        for (index, line) in lines.enumerated() {
-            DispatchQueue.main.asyncAfter(deadline: .now() + Double(index) * time) {
-                print(line)
-            }
-        }
-        
-        let versionText = "\nVerion: \(Global.sdk.rawValue) \nSwift Verion: \(Global.swiftVersion.rawValue) \nSupport iOS, tvOS\n\n\n"
-        DispatchQueue.main.asyncAfter(deadline: .now() + Double(lines.count) * time) {
-            print(versionText)
-        }
+    func displayCoralogixWord() {
+        let coralogixText = "[CORALOGIX]\nVerion: \(Global.sdk.rawValue) \nSwift Verion: \(Global.swiftVersion.rawValue) \nSupport iOS, tvOS\n\n\n"
+        print(coralogixText)
     }
 }
 
@@ -229,7 +208,7 @@ public struct CoralogixExporterOptions {
     
     var labels: [String: Any]?
     
-    var cxSampler: CXSampler
+    var sdkSampler: SDKSampler
     
     let mobileVitalsFPSSamplingRate: Int
     
@@ -244,7 +223,7 @@ public struct CoralogixExporterOptions {
                 customDomainUrl: String? = nil,
                 labels: [String: Any]? = nil,
                 sampleRate: Int = 100,
-                mobileVitalsFPSSamplingRate: Int = 60, // minimum every 1 minute
+                mobileVitalsFPSSamplingRate: Int = 300, // minimum every 5 minute
                 debug: Bool = false) {
         
         self.coralogixDomain = coralogixDomain
@@ -258,7 +237,7 @@ public struct CoralogixExporterOptions {
         self.version = version
         self.customDomainUrl = customDomainUrl
         self.labels = labels
-        self.cxSampler = CXSampler(sampleRate: sampleRate)
+        self.sdkSampler = SDKSampler(sampleRate: sampleRate)
         self.mobileVitalsFPSSamplingRate = mobileVitalsFPSSamplingRate
     }
 }

@@ -12,20 +12,20 @@ public class CoralogixExporter: SpanExporter {
     private var viewManager: ViewManager
     private var sessionManager: SessionManager
     private var networkManager: NetworkProtocol
-    private var cxMetricsManager: CXMetricsManager
+    private var metricsManager: MetricsManager
 
     public init(options: CoralogixExporterOptions,
                 versionMetadata: VersionMetadata,
                 sessionManager: SessionManager,
                 networkManager: NetworkProtocol,
                 viewManager: ViewManager,
-                metricsManager: CXMetricsManager) {
+                metricsManager: MetricsManager) {
         self.options = options
         self.versionMetadata = versionMetadata
         self.sessionManager = sessionManager
         self.networkManager = networkManager
         self.viewManager = viewManager
-        self.cxMetricsManager = metricsManager
+        self.metricsManager = metricsManager
         
         NotificationCenter.default.addObserver(self,
                                                selector: #selector(handleNotification(notification:)),
@@ -142,7 +142,7 @@ public class CoralogixExporter: SpanExporter {
                       sessionManager: self.sessionManager,
                       networkManager: self.networkManager, 
                       viewManager: self.viewManager,
-                      metricsManager: self.cxMetricsManager,
+                      metricsManager: self.metricsManager,
                       userMetadata: self.options.userContext?.userMetadata,
                       labels: self.options.labels).getDictionary()
     }

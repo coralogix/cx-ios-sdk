@@ -1,5 +1,5 @@
 //
-//  CXSampler.swift
+//  SDKSampler.swift
 //
 //
 //  Created by Coralogix Dev Team on 14/08/2024.
@@ -7,11 +7,11 @@
 
 import Foundation
 
-protocol CXSamplerProtocol {
+protocol SamplerProtocol {
     func shouldInitialized() -> Bool
 }
 
-public struct CXSampler: CXSamplerProtocol {
+public struct SDKSampler: SamplerProtocol {
     /// Value between `0.0` and `100.0`,
     ///  where `0.0` means SDK will not initialized and `100.0` means ALL events will be sent.
     public let sampleRate: Int
