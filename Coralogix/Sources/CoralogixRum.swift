@@ -235,7 +235,7 @@ public struct CoralogixExporterOptions {
     var instrumentations: [InstrumentationType: Bool]?
 
     public init(coralogixDomain: CoralogixDomain,
-                userContext: UserContext?,
+                userContext: UserContext? = nil,
                 environment: String,
                 application: String,
                 version: String,
