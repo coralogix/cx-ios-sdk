@@ -30,9 +30,6 @@ public class MetricsManager: NSObject { /*}, MXMetricManagerSubscriber { */
                                                name: .cxRumNotificationMetrics,
                                                object: nil)
         
-        NotificationCenter.default.addObserver(self, selector: #selector(self.appWillTerminateNotification),
-                                               name: UIApplication.willTerminateNotification,
-                                               object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(self.appDidEnterBackgroundNotification),
                                                name: UIApplication.didEnterBackgroundNotification,
                                                object: nil)
@@ -57,7 +54,7 @@ public class MetricsManager: NSObject { /*}, MXMetricManagerSubscriber { */
     
     // Warm
     @objc internal func appWillEnterForegroundNotification() {
-        Log.d("App did enter Background")
+        Log.d("App Will Enter Foreground")
         if warmMetricIsActive == true {
             self.foregroundStartTime = CFAbsoluteTimeGetCurrent()
             self.foregroundEndTime = nil
@@ -66,7 +63,7 @@ public class MetricsManager: NSObject { /*}, MXMetricManagerSubscriber { */
     }
     
     @objc internal func appDidBecomeActiveNotification() {
-        Log.d("App did enter Foreground")
+        Log.d("App did Become Active")
         if let foregroundStartTime = self.foregroundStartTime,
            self.foregroundEndTime == nil {
             let currentTime = CFAbsoluteTimeGetCurrent()
@@ -83,13 +80,6 @@ public class MetricsManager: NSObject { /*}, MXMetricManagerSubscriber { */
             NotificationCenter.default.post(name: .cxRumNotificationMetrics,
                                             object: CXMobileVitals(type: .warm, value: "\(millisecondsRounded)"))
         }
-        self.startFPSSamplingMonitoring(mobileVitalsFPSSamplingRate: self.mobileVitalsFPSSamplingRate)
-    }
-    
-    @objc internal func appWillTerminateNotification() {
-        Log.d("App will Terminate Notification")
-        self.anrDetector?.stopMonitoring()
-        self.anrDetector = nil
     }
     
     func startColdStartMonitoring() {
@@ -162,7 +152,6 @@ public class MetricsManager: NSObject { /*}, MXMetricManagerSubscriber { */
         NotificationCenter().removeObserver(self, name: UIApplication.didEnterBackgroundNotification, object: nil)
         NotificationCenter().removeObserver(self, name: UIApplication.willEnterForegroundNotification, object: nil)
         NotificationCenter().removeObserver(self, name: UIApplication.didBecomeActiveNotification, object: nil)
-        NotificationCenter().removeObserver(self, name: UIApplication.willTerminateNotification, object: nil)
         NotificationCenter().removeObserver(self, name: .cxRumNotificationMetrics, object: nil)
         self.anrDetector?.stopMonitoring()
         self.fpsTrigger.stopMonitoring()

@@ -10,66 +10,68 @@ import CrashReporter
 
 extension CoralogixRum {
     public func initializeCrashInstumentation() {
-        // It is strongly recommended that local symbolication only be enabled for non-release builds.
-        // Use [] for release versions.
-        let config = PLCrashReporterConfig(signalHandlerType: .BSD, symbolicationStrategy: .all)
-        guard let crashReporter = PLCrashReporter(configuration: config) else {
-            Log.e("Could not create an instance of PLCrashReporter")
-            return
-        }
-        
-        crashReporter.enable()
-
-        // Try loading the crash report.
-        if crashReporter.hasPendingCrashReport() {
-            do {
-                let data = try crashReporter.loadPendingCrashReportDataAndReturnError()
-                
-                // Retrieving crash reporter data.
-                let report = try PLCrashReport(data: data)
-                var span = tracer().spanBuilder(spanName: Keys.iosSdk.rawValue).startSpan()
-                span.setAttribute(key: Keys.eventType.rawValue, value: CoralogixEventType.error.rawValue)
-                span.setAttribute(key: Keys.source.rawValue, value: Keys.console.rawValue)
-                span.setAttribute(key: Keys.severity.rawValue, value: AttributeValue.int(CoralogixLogSeverity.error.rawValue))
-                
-                // user_context
-                self.addUserMetadata(to: &span)
-
-                span.setAttribute(key: Keys.exceptionType.rawValue, value: report.signalInfo.name)
-                if let crashTimestamp = report.systemInfo.timestamp {
-                    span.setAttribute(key: Keys.crashTimestamp.rawValue, value: "\(crashTimestamp.timeIntervalSince1970.milliseconds)")
-                }
-                span.setAttribute(key: Keys.processName.rawValue, value: report.processInfo.processName)
-                span.setAttribute(key: Keys.applicationIdentifier.rawValue, value: report.applicationInfo.applicationIdentifier)
-                span.setAttribute(key: Keys.pid.rawValue, value: "\(report.processInfo.processID)")
-                
-                self.createStackTrace(report: report, span: span)
-                
-                if let text = PLCrashReportTextFormatter.stringValue(for: report, with: PLCrashReportTextFormatiOS) {
-                    let substrings = text.components(separatedBy: "\n")
-                    for value in substrings {
-                        if let processName = report.processInfo.processName,
-                           value.contains("+\(processName)") {
-                            let details = extractMemoryAddressAndArchitecture(input: value)
-                            if details.count == 7 {
-                                let baseAddress = details[0]  // Extracting the base memory address
-                                span.setAttribute(key: Keys.baseAddress.rawValue, value: "\(baseAddress)")
-                                let arch = details[4]     // Extracting the architecture
-                                span.setAttribute(key: Keys.arch.rawValue, value: "\(arch)")
+        if self.options.shouldInitInstumentation(instumentation: .errors) {
+            // It is strongly recommended that local symbolication only be enabled for non-release builds.
+            // Use [] for release versions.
+            let config = PLCrashReporterConfig(signalHandlerType: .BSD, symbolicationStrategy: .all)
+            guard let crashReporter = PLCrashReporter(configuration: config) else {
+                Log.e("Could not create an instance of PLCrashReporter")
+                return
+            }
+            
+            crashReporter.enable()
+            
+            // Try loading the crash report.
+            if crashReporter.hasPendingCrashReport() {
+                do {
+                    let data = try crashReporter.loadPendingCrashReportDataAndReturnError()
+                    
+                    // Retrieving crash reporter data.
+                    let report = try PLCrashReport(data: data)
+                    var span = tracer().spanBuilder(spanName: Keys.iosSdk.rawValue).startSpan()
+                    span.setAttribute(key: Keys.eventType.rawValue, value: CoralogixEventType.error.rawValue)
+                    span.setAttribute(key: Keys.source.rawValue, value: Keys.console.rawValue)
+                    span.setAttribute(key: Keys.severity.rawValue, value: AttributeValue.int(CoralogixLogSeverity.error.rawValue))
+                    
+                    // user_context
+                    self.addUserMetadata(to: &span)
+                    
+                    span.setAttribute(key: Keys.exceptionType.rawValue, value: report.signalInfo.name)
+                    if let crashTimestamp = report.systemInfo.timestamp {
+                        span.setAttribute(key: Keys.crashTimestamp.rawValue, value: "\(crashTimestamp.timeIntervalSince1970.milliseconds)")
+                    }
+                    span.setAttribute(key: Keys.processName.rawValue, value: report.processInfo.processName)
+                    span.setAttribute(key: Keys.applicationIdentifier.rawValue, value: report.applicationInfo.applicationIdentifier)
+                    span.setAttribute(key: Keys.pid.rawValue, value: "\(report.processInfo.processID)")
+                    
+                    self.createStackTrace(report: report, span: span)
+                    
+                    if let text = PLCrashReportTextFormatter.stringValue(for: report, with: PLCrashReportTextFormatiOS) {
+                        let substrings = text.components(separatedBy: "\n")
+                        for value in substrings {
+                            if let processName = report.processInfo.processName,
+                               value.contains("+\(processName)") {
+                                let details = extractMemoryAddressAndArchitecture(input: value)
+                                if details.count == 7 {
+                                    let baseAddress = details[0]  // Extracting the base memory address
+                                    span.setAttribute(key: Keys.baseAddress.rawValue, value: "\(baseAddress)")
+                                    let arch = details[4]     // Extracting the architecture
+                                    span.setAttribute(key: Keys.arch.rawValue, value: "\(arch)")
+                                }
                             }
                         }
+                    } else {
+                        Log.e("CrashReporter: can't convert report to text")
                     }
-                } else {
-                    Log.e("CrashReporter: can't convert report to text")
+                    span.end()
+                } catch let error {
+                    Log.e("CrashReporter failed to load and parse with error: \(error)")
                 }
-                span.end()
-            } catch let error {
-                Log.e("CrashReporter failed to load and parse with error: \(error)")
             }
+            
+            // Purge the report.
+            crashReporter.purgePendingCrashReport()
         }
-        
-        // Purge the report.
-        crashReporter.purgePendingCrashReport()
     }
     
     private func createStackTrace(report: PLCrashReport, span: Span) {
@@ -85,7 +87,7 @@ extension CoralogixRum {
         }
         span.setAttribute(key: Keys.threads.rawValue, value: Helper.convertArrayOfStringToJsonString(array: threads))
     }
-
+    
     func parseFrameArray(crashedThreadFrameArray: [StackFrame]) -> [[String: Any]] {
         var result = [[String: Any]]()
         for frame in crashedThreadFrameArray {
@@ -165,7 +167,7 @@ extension CoralogixRum {
                                     base: base,
                                     offset: offset,
                                     description: description)
-                                    
+        
         return stackFrame
     }
     

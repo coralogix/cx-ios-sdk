@@ -32,9 +32,9 @@ class DeviceBatteryManager {
         let batteryLevel = UIDevice.current.batteryLevel
         if batteryLevel < 0 {
             // If battery level is -1.0, the battery level is unknown.
-            Log.d("Battery level is unknown")
+            Log.d("[Coralogix] Battery level is unknown")
         } else {
-            Log.d("Battery level is \(batteryLevel * 100)%")
+            Log.d("[Coralogix] Battery level is \(batteryLevel * 100)%")
         }
         return batteryLevel
     #endif

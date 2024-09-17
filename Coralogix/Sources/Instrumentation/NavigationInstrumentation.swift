@@ -9,9 +9,11 @@ import Foundation
 
 extension CoralogixRum {
     public func initializeNavigationInstrumentation() {
-        NotificationCenter.default.addObserver(self,
-                                               selector: #selector(handleNotification(notification:)),
-                                               name: .cxRumNotification, object: nil)
+        if self.options.shouldInitInstumentation(instumentation: .navigation) {
+            NotificationCenter.default.addObserver(self,
+                                                   selector: #selector(handleNotification(notification:)),
+                                                   name: .cxRumNotification, object: nil)
+        }
     }
     
     @objc func handleNotification(notification: Notification) {
