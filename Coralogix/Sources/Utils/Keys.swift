@@ -336,6 +336,7 @@ public enum CoralogixDomain: String {
     case US2 = "https://ingress.us2.rum-ingress-coralogix.com" // us-west-2 (Oregon)
     case AP1 = "https://ingress.ap1.rum-ingress-coralogix.com" // ap-south-1 (Mumbai)
     case AP2 = "https://ingress.ap2.rum-ingress-coralogix.com" // ap-southeast-1 (Singapore)
+    case AP3 = "https://ingress.ap3.rum-ingress-coralogix.com" // ap-southeast-3 (Jakarta)
     
     func stringValue() -> String {
         switch self {
@@ -351,6 +352,8 @@ public enum CoralogixDomain: String {
             return "AP1"
         case .AP2:
             return "AP2"
+        case .AP3:
+            return "AP3"
         }
     }
 }
