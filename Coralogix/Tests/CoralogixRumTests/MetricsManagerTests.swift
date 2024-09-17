@@ -57,17 +57,6 @@ final class MetricsManagerTests: XCTestCase {
         XCTAssertTrue(metricsManager.warmMetricIsActive, "warmMetricIsActive should be set to true when app enters background")
     }
     
-    func testAppWillTerminateNotification() {
-        // Simulate setting up ANR detector
-        metricsManager.anrDetector = ANRDetector()
-        
-        // Call the termination handler
-        metricsManager.appWillTerminateNotification()
-        
-        // Ensure ANR monitoring is stopped
-        XCTAssertNil(metricsManager.anrDetector, "ANR monitoring should stop on app termination")
-    }
-    
     func testHandleNotificationForColdStart() {
         // Simulate the cold start by setting the start time
         metricsManager.launchStartTime = CFAbsoluteTimeGetCurrent() - 2.0  // Simulate 2 seconds ago

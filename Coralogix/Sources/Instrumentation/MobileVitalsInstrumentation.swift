@@ -9,9 +9,11 @@ import Foundation
 
 extension CoralogixRum {
     public func initializeMobileVitalsInstrumentation() {
-        NotificationCenter.default.addObserver(self,
-                                               selector: #selector(handleMobileVitalsNotification(notification:)),
-                                               name: .cxRumNotificationMetrics, object: nil)
+        if self.options.shouldInitInstumentation(instumentation: .mobileVitals) {
+            NotificationCenter.default.addObserver(self,
+                                                   selector: #selector(handleMobileVitalsNotification(notification:)),
+                                                   name: .cxRumNotificationMetrics, object: nil)
+        }
     }
     
     @objc func handleMobileVitalsNotification(notification: Notification) {

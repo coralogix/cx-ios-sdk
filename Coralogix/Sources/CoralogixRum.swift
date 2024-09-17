@@ -19,6 +19,7 @@ public class CoralogixRum {
     internal var sessionManager = SessionManager()
     internal var sessionInstrumentation: URLSessionInstrumentation?
     internal var metricsManager = MetricsManager()
+    internal var options: CoralogixExporterOptions
 
     let notificationCenter = NotificationCenter.default
     
@@ -27,13 +28,15 @@ public class CoralogixRum {
     static var sdkFramework: SdkFramework = .swift
     
     public init(options: CoralogixExporterOptions, sdkFramework: SdkFramework = .swift) {
+        self.options = options
+
         self.displayCoralogixWord()
 
         if options.sdkSampler.shouldInitialized() == false {
             return
         }
         
-        self.startup(options: options, sdkFramework: sdkFramework)
+        self.startup(sdkFramework: sdkFramework)
     }
     
     deinit {
@@ -44,13 +47,14 @@ public class CoralogixRum {
         NotificationCenter.default.removeObserver(self, name: .cxRumNotificationMetrics, object: nil)
     }
     
-    private func startup(options: CoralogixExporterOptions, sdkFramework: SdkFramework) {
+    private func startup(sdkFramework: SdkFramework) {
         CoralogixRum.sdkFramework = sdkFramework
-        self.initialzeMetricPerformance(options: options)
+        self.initialzeMetricsManager()
 
-        CoralogixRum.isDebug = options.debug
-        let versionMetadata = VersionMetadata(appName: options.application, appVersion: options.version)
-        let coralogixExporter = CoralogixExporter(options: options,
+        CoralogixRum.isDebug = self.options.debug
+        let versionMetadata = VersionMetadata(appName: self.options.application,
+                                              appVersion: self.options.version)
+        let coralogixExporter = CoralogixExporter(options: self.options,
                                                   versionMetadata: versionMetadata,
                                                   sessionManager: self.sessionManager,
                                                   networkManager: self.networkManager,
@@ -60,7 +64,7 @@ public class CoralogixRum {
         self.coralogixExporter = coralogixExporter
         
         let resource = Resource(attributes: [
-            ResourceAttributes.serviceName.rawValue: AttributeValue.string(options.application)
+            ResourceAttributes.serviceName.rawValue: AttributeValue.string(self.options.application)
         ])
         
         OpenTelemetry.registerTracerProvider(tracerProvider: TracerProviderBuilder().with(resource: resource)
@@ -72,18 +76,20 @@ public class CoralogixRum {
         self.swizzle()
         self.initializeUserActionsInstrumentation()
         self.initializeNavigationInstrumentation()
-        self.initializeSessionInstrumentation()
+        self.initializeNetworkInstrumentation()
         self.initializeCrashInstumentation()
         self.initializeMobileVitalsInstrumentation()
-        self.initializeErrorInstrumentation()
-
+        self.initializeANRInstrumentation()
         CoralogixRum.isInitialized = true
     }
     
-    private func initialzeMetricPerformance(options: CoralogixExporterOptions) {
-        self.metricsManager.startFPSSamplingMonitoring(mobileVitalsFPSSamplingRate: options.mobileVitalsFPSSamplingRate)
-        self.metricsManager.startColdStartMonitoring()
-        self.metricsManager.startANRMonitoring()
+    private func initialzeMetricsManager() {
+        if self.options.shouldInitInstumentation(instumentation: .mobileVitals) {
+            self.metricsManager.startFPSSamplingMonitoring(mobileVitalsFPSSamplingRate: options.mobileVitalsFPSSamplingRate)
+            self.metricsManager.startColdStartMonitoring()
+        } else if self.options.shouldInitInstumentation(instumentation: .anr) {
+            self.metricsManager.startANRMonitoring()
+        }
     }
     
     private func swizzle() {
@@ -177,6 +183,17 @@ public enum SdkFramework: String {
 }
 
 public struct CoralogixExporterOptions {
+    
+    public enum InstrumentationType {
+        case mobileVitals
+        case navigation
+        case custom
+        case errors
+        case network
+        case userActions
+        case anr
+    }
+
     // Configuration for user context.
     var userContext: UserContext?
     
@@ -208,10 +225,15 @@ public struct CoralogixExporterOptions {
     
     var labels: [String: Any]?
     
+    // Number between 0-100 as a precentage of SDK should be init.
     var sdkSampler: SDKSampler
     
+    // The timeinterval the SDK will run the FPS sampling in an hour. default is every 1 minute.
     let mobileVitalsFPSSamplingRate: Int
     
+    // A list of instruments that you wish to switch off during runtime. all instrumentations are active by default.
+    var instrumentations: [InstrumentationType: Bool]?
+
     public init(coralogixDomain: CoralogixDomain,
                 userContext: UserContext?,
                 environment: String,
@@ -224,6 +246,7 @@ public struct CoralogixExporterOptions {
                 labels: [String: Any]? = nil,
                 sampleRate: Int = 100,
                 mobileVitalsFPSSamplingRate: Int = 300, // minimum every 5 minute
+                instrumentations: [InstrumentationType: Bool]? = nil,
                 debug: Bool = false) {
         
         self.coralogixDomain = coralogixDomain
@@ -239,5 +262,15 @@ public struct CoralogixExporterOptions {
         self.labels = labels
         self.sdkSampler = SDKSampler(sampleRate: sampleRate)
         self.mobileVitalsFPSSamplingRate = mobileVitalsFPSSamplingRate
+        self.instrumentations = instrumentations
+    }
+    
+    internal func shouldInitInstumentation(instumentation: InstrumentationType) -> Bool {
+        if let keys = self.instrumentations?.keys {
+            if keys.contains(instumentation) {
+                return self.instrumentations?[instumentation] ?? true
+            }
+        }
+        return true
     }
 }

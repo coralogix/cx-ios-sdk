@@ -66,11 +66,19 @@ public class NetworkManager: NetworkProtocol {
                 return "3G"
             case CTRadioAccessTechnologyLTE:
                 return "4G"
-            case CTRadioAccessTechnologyNRNSA,
-            CTRadioAccessTechnologyNR:
-                return "5G"
+           
             default:
-                return "Unknown"
+                // Use iOS 14.1+ checks for 5G support
+                if #available(iOS 14.1, *) {
+                    switch radioTech {
+                    case CTRadioAccessTechnologyNRNSA, CTRadioAccessTechnologyNR:
+                        return "5G"
+                    default:
+                        return "Unknown"
+                    }
+                } else {
+                    return "Unknown" // iOS versions below 14.1
+                }
             }
         }
         return "Not Cellular Connection"

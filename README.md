@@ -8,6 +8,8 @@ The SDK provides mobile Telemetry instrumentation that captures:
 3. Custom Log ()
 4. Crashes - using PLCrashReporter
 5. Page navigation (Swift use swizzeling / SwiftUI use modifier)
+6. User Actions (Clicks - UI elemenets)
+7. Mobile Vitals (FPS, Application not responding, Cold Start, Warm Start)
 
 
 ## Requirements
@@ -41,6 +43,15 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
                                                ignoreErrors: [],
                                                customDomainUrl: "",
                                                labels: ["String" : Any],
+                                               sampleRate: 100,
+                                               mobileVitalsFPSSamplingRate: 300, // minimum every 5 minute
+                                               instrumentations: [.navigation: true,
+                                                                  .mobileVitals: true,
+                                                                  .custom: true,
+                                                                  .errors: true,
+                                                                  .userActions: true,
+                                                                  .network: true,
+                                                                  .anr: true],
                                                debug: false)
         self.coralogixRum = CoralogixRum(options: options)
         return true
@@ -69,6 +80,15 @@ struct DemoAppApp: App {
                                                ignoreErrors: [],
                                                customDomainUrl: "",
                                                labels: ["String" : Any],
+                                               sampleRate: 100,
+                                               mobileVitalsFPSSamplingRate: 300, // minimum every 5 minute
+                                               instrumentations: [.navigation: true,
+                                                                  .mobileVitals: true,
+                                                                  .custom: true,
+                                                                  .errors: true,
+                                                                  .userActions: true,
+                                                                  .network: true,
+                                                                  .anr: true],
                                                debug: false)
         self.coralogixRum = CoralogixRum(options: options)
     }
