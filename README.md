@@ -133,7 +133,7 @@ let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
                                         labels: ["item" : "item_number_5", "itemPrice" : 1000]) 
 ```
 
-### Skip Enrichment With IP
+### CollectIPData
 Determines whether the SDK should collect the user's IP address and corresponding geolocation data. Defaults to true.
 ```
 let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
@@ -141,7 +141,7 @@ let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
                                         application: "APP-NAME",
                                         version: "APP-VERSION",
                                         publicKey: "API-KEY",
-                                        skipEnrichmentWithIp: true)
+                                        collectIPData: true)
 ```
 
 ### Sample Rate
