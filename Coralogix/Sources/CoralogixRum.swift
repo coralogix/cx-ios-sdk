@@ -235,7 +235,7 @@ public struct CoralogixExporterOptions {
     var instrumentations: [InstrumentationType: Bool]?
     
     // Determines whether the SDK should collect the user's IP address and corresponding geolocation data. Defaults to true.
-    var skipEnrichmentWithIp: Bool = false
+    var collectIPData: Bool
 
     public init(coralogixDomain: CoralogixDomain,
                 userContext: UserContext? = nil,
@@ -250,7 +250,7 @@ public struct CoralogixExporterOptions {
                 sampleRate: Int = 100,
                 mobileVitalsFPSSamplingRate: Int = 300, // minimum every 5 minute
                 instrumentations: [InstrumentationType: Bool]? = nil,
-                skipEnrichmentWithIp: Bool = false,
+                collectIPData: Bool = true,
                 debug: Bool = false) {
         
         self.coralogixDomain = coralogixDomain
@@ -267,7 +267,7 @@ public struct CoralogixExporterOptions {
         self.sdkSampler = SDKSampler(sampleRate: sampleRate)
         self.mobileVitalsFPSSamplingRate = mobileVitalsFPSSamplingRate
         self.instrumentations = instrumentations
-        self.skipEnrichmentWithIp = skipEnrichmentWithIp
+        self.collectIPData = collectIPData
     }
     
     internal func shouldInitInstumentation(instumentation: InstrumentationType) -> Bool {

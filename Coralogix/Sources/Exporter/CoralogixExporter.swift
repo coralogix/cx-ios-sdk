@@ -91,7 +91,7 @@ public class CoralogixExporter: SpanExporter {
         if !filterSpans.isEmpty {
             let cxSpansDictionary = encodeSpans(spans: filterSpans)
             let jsonObject = [Keys.logs.rawValue: cxSpansDictionary,
-                              Keys.skipEnrichmentWithIp.rawValue: options.skipEnrichmentWithIp] as [String : Any]
+                              Keys.skipEnrichmentWithIp.rawValue: !options.collectIPData] as [String : Any]
             
             do {
                 // Convert the dictionary to JSON data
