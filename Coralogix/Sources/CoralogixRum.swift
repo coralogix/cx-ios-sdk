@@ -233,6 +233,9 @@ public struct CoralogixExporterOptions {
     
     // A list of instruments that you wish to switch off during runtime. all instrumentations are active by default.
     var instrumentations: [InstrumentationType: Bool]?
+    
+    // Determines whether the SDK should collect the user's IP address and corresponding geolocation data. Defaults to true.
+    var collectIPData: Bool
 
     public init(coralogixDomain: CoralogixDomain,
                 userContext: UserContext? = nil,
@@ -247,6 +250,7 @@ public struct CoralogixExporterOptions {
                 sampleRate: Int = 100,
                 mobileVitalsFPSSamplingRate: Int = 300, // minimum every 5 minute
                 instrumentations: [InstrumentationType: Bool]? = nil,
+                collectIPData: Bool = true,
                 debug: Bool = false) {
         
         self.coralogixDomain = coralogixDomain
@@ -263,6 +267,7 @@ public struct CoralogixExporterOptions {
         self.sdkSampler = SDKSampler(sampleRate: sampleRate)
         self.mobileVitalsFPSSamplingRate = mobileVitalsFPSSamplingRate
         self.instrumentations = instrumentations
+        self.collectIPData = collectIPData
     }
     
     internal func shouldInitInstumentation(instumentation: InstrumentationType) -> Bool {

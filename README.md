@@ -133,7 +133,7 @@ let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
                                         labels: ["item" : "item_number_5", "itemPrice" : 1000]) 
 ```
 
-### Collect IP Data
+### CollectIPData
 Determines whether the SDK should collect the user's IP address and corresponding geolocation data. Defaults to true.
 ```
 let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,

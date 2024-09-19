@@ -87,14 +87,15 @@ public class CoralogixExporter: SpanExporter {
         }
         
         var status: SpanExporterResultCode = .failure
-
+        
         if !filterSpans.isEmpty {
             let cxSpansDictionary = encodeSpans(spans: filterSpans)
-            let logs = [Keys.logs.rawValue: cxSpansDictionary]
+            let jsonObject = [Keys.logs.rawValue: cxSpansDictionary,
+                              Keys.skipEnrichmentWithIp.rawValue: !options.collectIPData] as [String : Any]
             
             do {
                 // Convert the dictionary to JSON data
-                let jsonData = try JSONSerialization.data(withJSONObject: logs, options: [])
+                let jsonData = try JSONSerialization.data(withJSONObject: jsonObject, options: [])
                 request.httpBody = jsonData
                 
                 // Convert JSON data to a string if needed
