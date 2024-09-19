@@ -151,6 +151,7 @@ public enum Keys: String {
     case mobileVitalsValue
     case value
     case anr = "application_not_responding"
+    case skipEnrichmentWithIp = "skip_enrichment_with_ip"
 }
 
 public enum CoralogixLogSeverity: Int {
