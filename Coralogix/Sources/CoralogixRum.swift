@@ -237,6 +237,7 @@ public struct CoralogixExporterOptions {
     // Determines whether the SDK should collect the user's IP address and corresponding geolocation data. Defaults to true.
     var collectIPData: Bool
     
+    // Enable event access and modification before sending to Coralogix, supporting content modification, and event discarding.
     var beforeSend: (([String: Any]) -> [String: Any]?)?
 
     public init(coralogixDomain: CoralogixDomain,
@@ -255,7 +256,6 @@ public struct CoralogixExporterOptions {
                 collectIPData: Bool = true,
                 beforeSend: (([String: Any]) -> [String: Any]?)? = nil,
                 debug: Bool = false) {
-        
         self.coralogixDomain = coralogixDomain
         self.userContext = userContext
         self.publicKey = publicKey
