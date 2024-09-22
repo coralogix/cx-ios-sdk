@@ -236,6 +236,8 @@ public struct CoralogixExporterOptions {
     
     // Determines whether the SDK should collect the user's IP address and corresponding geolocation data. Defaults to true.
     var collectIPData: Bool
+    
+    var beforeSend: (([String: Any]) -> [String: Any]?)?
 
     public init(coralogixDomain: CoralogixDomain,
                 userContext: UserContext? = nil,
@@ -251,6 +253,7 @@ public struct CoralogixExporterOptions {
                 mobileVitalsFPSSamplingRate: Int = 300, // minimum every 5 minute
                 instrumentations: [InstrumentationType: Bool]? = nil,
                 collectIPData: Bool = true,
+                beforeSend: (([String: Any]) -> [String: Any]?)? = nil,
                 debug: Bool = false) {
         
         self.coralogixDomain = coralogixDomain
@@ -268,6 +271,7 @@ public struct CoralogixExporterOptions {
         self.mobileVitalsFPSSamplingRate = mobileVitalsFPSSamplingRate
         self.instrumentations = instrumentations
         self.collectIPData = collectIPData
+        self.beforeSend = beforeSend
     }
     
     internal func shouldInitInstumentation(instumentation: InstrumentationType) -> Bool {

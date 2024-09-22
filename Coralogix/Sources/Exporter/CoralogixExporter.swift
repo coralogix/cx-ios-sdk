@@ -90,8 +90,12 @@ public class CoralogixExporter: SpanExporter {
         
         if !filterSpans.isEmpty {
             let cxSpansDictionary = encodeSpans(spans: filterSpans)
-            let jsonObject = [Keys.logs.rawValue: cxSpansDictionary,
-                              Keys.skipEnrichmentWithIp.rawValue: !options.collectIPData] as [String : Any]
+           
+            if cxSpansDictionary.isEmpty {
+                return .success
+            }
+            
+            let jsonObject = [Keys.logs.rawValue: cxSpansDictionary, Keys.skipEnrichmentWithIp.rawValue: !options.collectIPData] as [String: Any]
             
             do {
                 // Convert the dictionary to JSON data
@@ -129,7 +133,7 @@ public class CoralogixExporter: SpanExporter {
     }
     
     func encodeSpans(spans: [SpanData]) -> [[String: Any]] {
-        return spans.map { self.spanDatatoCxSpan(otelSpan: $0) }
+        return spans.compactMap { self.spanDatatoCxSpan(otelSpan: $0) }
     }
     
     @objc func handleNotification(notification: Notification) {
@@ -137,7 +141,7 @@ public class CoralogixExporter: SpanExporter {
         self.sessionManager.reset()
     }
     
-    private func spanDatatoCxSpan(otelSpan: SpanData) -> [String: Any] {
+    private func spanDatatoCxSpan(otelSpan: SpanData) -> [String: Any]? {
         return CxSpan(otel: otelSpan,
                       versionMetadata: self.versionMetadata,
                       sessionManager: self.sessionManager,
@@ -145,6 +149,7 @@ public class CoralogixExporter: SpanExporter {
                       viewManager: self.viewManager,
                       metricsManager: self.metricsManager,
                       userMetadata: self.options.userContext?.userMetadata,
+                      beforeSend: self.options.beforeSend,
                       labels: self.options.labels).getDictionary()
     }
     
