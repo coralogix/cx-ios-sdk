@@ -163,9 +163,43 @@ let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
                                         application: "APP-NAME",
                                         version: "APP-VERSION",
                                         publicKey: "API-KEY",
-                                        let mobileVitalsFPSSamplingRate: 60)
+                                        mobileVitalsFPSSamplingRate: 60)
 ```
-    
+  
+### Before Send
+Enable event access and modification before sending to Coralogix, supporting content modification.
+```
+let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
+                                        environment: "ENVIRONMENT",
+                                        application: "APP-NAME",
+                                        version: "APP-VERSION",
+                                        publicKey: "API-KEY",
+                                        beforeSend: { cxRum in
+            var editableCxRum = cxRum
+            if var sessionContext = editableCxRum["session_context"] as? [String: Any] {
+                sessionContext["user_email"] = "jone.dow@coralogix.com"
+                editableCxRum["session_context"] = sessionContext
+            }
+            return editableCxRum
+        })
+```
+, and event discarding
+```
+let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
+                                        environment: "ENVIRONMENT",
+                                        application: "APP-NAME",
+                                        version: "APP-VERSION",
+                                        publicKey: "API-KEY",
+                                        beforeSend: { cxRum in
+            var editableCxRum = cxRum
+            if var viewContext = editableCxRum["view_context"] as? [String: Any], 
+                      let view = viewContext["view"] {
+                if view == "DetailsViewController" {
+                    return nil
+                }
+            }
+        })
+```
 
 ## License
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

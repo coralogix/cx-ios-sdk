@@ -15,6 +15,7 @@ public class CxSpan {
     var timeStamp: TimeInterval = 0
     var cxRum: CxRum
     var instrumentationData: InstrumentationData?
+    var beforeSend: (([String: Any]) -> [String: Any]?)?
     
     init(otel: SpanDataProtocol,
          versionMetadata: VersionMetadata,
@@ -23,10 +24,12 @@ public class CxSpan {
          viewManager: ViewManager,
          metricsManager: MetricsManager,
          userMetadata: [String: String]?,
+         beforeSend: (([String: Any]) -> [String: Any]?)?,
          labels: [String: Any]?) {
         self.applicationName = versionMetadata.appName
         self.versionMetadata = versionMetadata
         self.subsystemName = Keys.cxRum.rawValue
+        self.beforeSend = beforeSend
         if let severity = otel.getAttribute(forKey: Keys.severity.rawValue) as? String {
             self.severity = Int(severity) ?? 0
         }
@@ -45,20 +48,79 @@ public class CxSpan {
         }
     }
     
-    func getDictionary() -> [String: Any] {
+    func getDictionary() -> [String: Any]? {
         var result = [String: Any]()
+        // Populate the basic metadata
+        self.populateBasicMetadata(in: &result)
+        
+        let originalCxRum = self.cxRum.getDictionary()
+        if beforeSend != nil {
+            let subsetOfCxRum = self.createSubsetOfCxRum(from: originalCxRum)
+            if let editableCxRum = self.beforeSend?(subsetOfCxRum) {
+                let mergedDict = mergeDictionaries(original: originalCxRum, editable: editableCxRum)
+                result[Keys.text.rawValue] = [Keys.cxRum.rawValue: mergedDict]
+            } else {
+                return nil // editableCxRum is nil we need to drop that span
+            }
+        } else {
+            result[Keys.text.rawValue] = [Keys.cxRum.rawValue: originalCxRum]
+        }
+        
+        // Add instrumentation data if applicable
+        self.addInstrumentationData(to: &result)
+        return result
+    }
+    
+    private func populateBasicMetadata(in result: inout [String: Any]) {
         result[Keys.versionMetaData.rawValue] = versionMetadata.getDictionary()
         result[Keys.applicationName.rawValue] = self.applicationName
         result[Keys.subsystemName.rawValue] = self.subsystemName
         result[Keys.severity.rawValue] = self.severity
         result[Keys.timestamp.rawValue] = self.timeStamp.milliseconds
-        result[Keys.text.rawValue] = [Keys.cxRum.rawValue: self.cxRum.getDictionary()]
-       
+    }
+    
+    private func addInstrumentationData(to result: inout [String: Any]) {
         if cxRum.eventContext.type == CoralogixEventType.networkRequest,
-            let instrumentationData = self.instrumentationData?.getDictionary() {
+           let instrumentationData = self.instrumentationData?.getDictionary() {
             result[Keys.instrumentationData.rawValue] = instrumentationData
         }
-        return result
+    }
+    
+    func mergeDictionaries(original: [String: Any], editable: [String: Any]) -> [String: Any] {
+        var mergedDict = original
+
+        for (key, value) in editable {
+            if let existingValue = mergedDict[key] {
+                // If both values are dictionaries, merge them recursively
+                if let existingDict = existingValue as? [String: Any], let newDict = value as? [String: Any] {
+                    mergedDict[key] = mergeDictionaries(original: existingDict, editable: newDict)
+                } else {
+                    // If the key already exists and is not a dictionary, overwrite with the new value
+                    mergedDict[key] = value
+                }
+            } else {
+                // If the key does not exist in dict1, add the new key-value pair
+                mergedDict[key] = value
+            }
+        }
+
+        return mergedDict
+    }
+    
+    func createSubsetOfCxRum(from originalCxRum: [String: Any]) -> [String: Any] {
+        var editableCxRum = originalCxRum
+        // Remove sessionCreationDate and sessionId form sessionContext
+        if var sessionContext = editableCxRum[Keys.sessionContext.rawValue] as? [String: Any] {
+            sessionContext.removeValue(forKey: Keys.sessionCreationDate.rawValue)
+            sessionContext.removeValue(forKey: Keys.sessionId.rawValue)
+            editableCxRum[Keys.sessionContext.rawValue] = sessionContext
+        }
+        
+        editableCxRum.removeValue(forKey: Keys.snapshotContext.rawValue)
+        editableCxRum.removeValue(forKey: Keys.mobileSdk.rawValue)
+        editableCxRum.removeValue(forKey: Keys.timestamp.rawValue)
+       
+        return editableCxRum
     }
 }
 
