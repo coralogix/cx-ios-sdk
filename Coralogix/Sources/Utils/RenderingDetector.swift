@@ -84,6 +84,7 @@ enum CXMobileVitalsType: String {
     case warm
     case fps
     case anr
+    case metricKit
 }
 
 struct CXMobileVitals {

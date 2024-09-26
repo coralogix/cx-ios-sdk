@@ -18,10 +18,25 @@ extension CoralogixRum {
     
     @objc func handleMobileVitalsNotification(notification: Notification) {
         if let cxMobileVitals = notification.object as? CXMobileVitals {
-            let span = self.getMobileVitalsSpan()
-            span.setAttribute(key: Keys.mobileVitalsType.rawValue, value: cxMobileVitals.type.rawValue)
-            span.setAttribute(key: Keys.mobileVitalsValue.rawValue, value: cxMobileVitals.value)
-            span.end()
+            if cxMobileVitals.type == .metricKit {
+                // Send metric as custom error
+                
+                if let jsonData = cxMobileVitals.value.data(using: .utf8) {
+                    do {
+                        // Convert JSON data to a dictionary
+                        if let dictionary = try JSONSerialization.jsonObject(with: jsonData, options: []) as? [String: Any] {
+                            self.reportError(message: "metricKit log", data: dictionary)
+                        }
+                    } catch {
+                        Log.w("Error parsing JSON: \(error)")
+                    }
+                }
+            } else {
+                let span = self.getMobileVitalsSpan()
+                span.setAttribute(key: Keys.mobileVitalsType.rawValue, value: cxMobileVitals.type.rawValue)
+                span.setAttribute(key: Keys.mobileVitalsValue.rawValue, value: cxMobileVitals.value)
+                span.end()
+            }
         }
     }
     
