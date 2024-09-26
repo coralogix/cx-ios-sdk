@@ -17,27 +17,32 @@ extension CoralogixRum {
     }
     
     @objc func handleMobileVitalsNotification(notification: Notification) {
-        if let cxMobileVitals = notification.object as? CXMobileVitals {
-            if cxMobileVitals.type == .metricKit {
-                // Send metric as custom error
-                
-                if let jsonData = cxMobileVitals.value.data(using: .utf8) {
-                    do {
-                        // Convert JSON data to a dictionary
-                        if let dictionary = try JSONSerialization.jsonObject(with: jsonData, options: []) as? [String: Any] {
-                            self.reportError(message: "metricKit log", data: dictionary)
-                        }
-                    } catch {
-                        Log.w("Error parsing JSON: \(error)")
-                    }
-                }
-            } else {
-                let span = self.getMobileVitalsSpan()
-                span.setAttribute(key: Keys.mobileVitalsType.rawValue, value: cxMobileVitals.type.rawValue)
-                span.setAttribute(key: Keys.mobileVitalsValue.rawValue, value: cxMobileVitals.value)
-                span.end()
-            }
+        guard let cxMobileVitals = notification.object as? CXMobileVitals else { return }
+        
+        if cxMobileVitals.type == .metricKit {
+            handleMetricKit(cxMobileVitals.value)
+        } else {
+            handleRegularMobileVitals(cxMobileVitals)
         }
+    }
+    
+    private func handleMetricKit(_ value: String) {
+        guard let jsonData = value.data(using: .utf8) else { return }
+        
+        do {
+            if let dictionary = try JSONSerialization.jsonObject(with: jsonData, options: []) as? [String: Any] {
+                reportError(message: "metricKit log", data: dictionary)
+            }
+        } catch {
+            Log.w("Error parsing JSON: \(error)")
+        }
+    }
+
+    private func handleRegularMobileVitals(_ cxMobileVitals: CXMobileVitals) {
+        let span = getMobileVitalsSpan()
+        span.setAttribute(key: Keys.mobileVitalsType.rawValue, value: cxMobileVitals.type.rawValue)
+        span.setAttribute(key: Keys.mobileVitalsValue.rawValue, value: cxMobileVitals.value)
+        span.end()
     }
     
     private func getMobileVitalsSpan() -> Span {
