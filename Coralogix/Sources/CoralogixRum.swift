@@ -45,6 +45,25 @@ public class CoralogixRum {
         NotificationCenter.default.removeObserver(self, name: .cxRumNotificationUserActions, object: nil)
         NotificationCenter.default.removeObserver(self, name: .cxRumNotificationSessionEnded, object: nil)
         NotificationCenter.default.removeObserver(self, name: .cxRumNotificationMetrics, object: nil)
+        self.removeAppLifeCycleNotification()
+    }
+    
+    private func removeAppLifeCycleNotification() {
+        NotificationCenter().removeObserver(self,
+                                            name: UIApplication.didFinishLaunchingNotification,
+                                            object: nil)
+        NotificationCenter().removeObserver(self,
+                                            name: UIApplication.didBecomeActiveNotification,
+                                            object: nil)
+        NotificationCenter().removeObserver(self,
+                                            name: UIApplication.didEnterBackgroundNotification,
+                                            object: nil)
+        NotificationCenter().removeObserver(self,
+                                            name: UIApplication.willTerminateNotification,
+                                            object: nil)
+        NotificationCenter().removeObserver(self,
+                                            name: UIApplication.didReceiveMemoryWarningNotification,
+                                            object: nil)
     }
     
     private func startup(sdkFramework: SdkFramework) {
@@ -74,6 +93,7 @@ public class CoralogixRum {
                 .build())
         
         self.swizzle()
+        self.initializeAppLifeCycleInstrumentation()
         self.initializeUserActionsInstrumentation()
         self.initializeNavigationInstrumentation()
         self.initializeNetworkInstrumentation()
@@ -152,7 +172,7 @@ public class CoralogixRum {
     
     public func log(severity: CoralogixLogSeverity,
                     message: String,
-                    data: [String: Any]?) {
+                    data: [String: Any]? = nil) {
         if CoralogixRum.isInitialized {
             self.logWith(severity: severity, message: message, data: data)
         }
@@ -192,6 +212,7 @@ public struct CoralogixExporterOptions {
         case network
         case userActions
         case anr
+        case appLifeCycle
     }
 
     // Configuration for user context.

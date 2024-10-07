@@ -152,6 +152,12 @@ public enum Keys: String {
     case value
     case anr = "application_not_responding"
     case skipEnrichmentWithIp = "skip_enrichment_with_ip"
+    case appDidFinishLaunching
+    case appDidBecomeActiveNotification
+    case appDidEnterBackgroundNotification
+    case appWillTerminateNotification
+    case applicationDidReceiveMemoryWarning
+    case appDidReceiveMemoryWarningNotification
 }
 
 public enum CoralogixLogSeverity: Int {
