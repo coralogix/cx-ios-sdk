@@ -25,10 +25,10 @@ let package = Package(
                 //.product(name: "crashreporter", package: "plcrashreporter")
                 .target(name: "CrashReporter"),
             ],
+            path: "Coralogix/Sources/",
             resources: [
                 .copy("CrashReporter.xcframework")
             ]
-            path: "Coralogix/Sources/"
         )
     ]
 )
