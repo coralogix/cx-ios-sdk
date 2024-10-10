@@ -12,13 +12,13 @@ let package = Package(
         .library(name: "Coralogix", type: .dynamic, targets: ["Coralogix"])
     ],
     dependencies: [
-        .package(url: "http://github.com/microsoft/plcrashreporter.git", from: "1.11.1"),
+        .package(url: "https://github.com/microsoft/plcrashreporter", from: "1.11.1")
     ],
     targets: [
         .target(
             name: "Coralogix",
             dependencies: [
-                "CrashReporter"
+                .product(name: "CrashReporter", package: "PLCrashReporter")
             ],
             path: "Coralogix/Sources/"
         )
