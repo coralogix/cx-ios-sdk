@@ -18,7 +18,7 @@ let package = Package(
         .target(
             name: "Coralogix",
             dependencies: [
-                .product(name: "PLCrashReporter", package: "plcrashreporter"),
+                "CrashReporter"
             ],
             path: "Coralogix/Sources/"
         )
