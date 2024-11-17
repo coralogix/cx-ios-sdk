@@ -45,10 +45,10 @@ public class CoralogixRum {
         NotificationCenter.default.removeObserver(self, name: .cxRumNotificationUserActions, object: nil)
         NotificationCenter.default.removeObserver(self, name: .cxRumNotificationSessionEnded, object: nil)
         NotificationCenter.default.removeObserver(self, name: .cxRumNotificationMetrics, object: nil)
-        self.removeAppLifeCycleNotification()
+        self.removeLifeCycleNotification()
     }
     
-    private func removeAppLifeCycleNotification() {
+    private func removeLifeCycleNotification() {
         NotificationCenter().removeObserver(self,
                                             name: UIApplication.didFinishLaunchingNotification,
                                             object: nil)
@@ -93,7 +93,7 @@ public class CoralogixRum {
                 .build())
         
         self.swizzle()
-        self.initializeAppLifeCycleInstrumentation()
+        self.initializeLifeCycleInstrumentation()
         self.initializeUserActionsInstrumentation()
         self.initializeNavigationInstrumentation()
         self.initializeNetworkInstrumentation()
@@ -212,7 +212,7 @@ public struct CoralogixExporterOptions {
         case network
         case userActions
         case anr
-        case appLifeCycle
+        case lifeCycle
     }
 
     // Configuration for user context.

@@ -146,6 +146,7 @@ public enum Keys: String {
     case television
     case coldEnd
     case mobileVitalsContext = "mobile_vitals_context"
+    case lifeCycleContext = "life_cycle_context"
     case fps = "fps"
     case mobileVitalsType
     case mobileVitalsValue
@@ -180,6 +181,7 @@ enum CoralogixEventType: String {
     case internalKey = "internal"
     case navigation
     case mobileVitals = "mobile-vitals"
+    case lifeCycle = "life-cycle"
     case unknown
 }
 

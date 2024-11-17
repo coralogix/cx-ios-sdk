@@ -74,7 +74,7 @@ extension CoralogixRum {
                  message: String,
                  data: [String: Any]?) {
         if self.options.shouldInitInstumentation(instumentation: .custom) ||
-            self.options.shouldInitInstumentation(instumentation: .appLifeCycle) {
+            self.options.shouldInitInstumentation(instumentation: .lifeCycle) {
             var span = tracer().spanBuilder(spanName: Keys.iosSdk.rawValue).startSpan()
             span.setAttribute(key: Keys.message.rawValue, value: message)
             span.setAttribute(key: Keys.eventType.rawValue, value: CoralogixEventType.log.rawValue)

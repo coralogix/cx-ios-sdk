@@ -97,7 +97,7 @@ Turn on/off specific instrumentation, default to all trues. Each instrumentation
                                                               .userActions: false,
                                                               .network: true,
                                                               .anr: true,
-                                                              .appLifeCycle: false])
+                                                              .lifeCycle: false])
 ```
 
 ### Ignore Errors

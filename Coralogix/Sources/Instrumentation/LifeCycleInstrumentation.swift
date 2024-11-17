@@ -1,5 +1,5 @@
 //
-//  AppLifeCycleInstrumentation.swift
+//  LifeCycleInstrumentation.swift
 //
 //
 //  Created by Coralogix Dev TEAM on 29/09/2024.
@@ -10,8 +10,8 @@ import UIKit
 #endif
 
 extension CoralogixRum {
-    public func initializeAppLifeCycleInstrumentation() {
-        if self.options.shouldInitInstumentation(instumentation: .appLifeCycle) {
+    public func initializeLifeCycleInstrumentation() {
+        if self.options.shouldInitInstumentation(instumentation: .lifeCycle) {
             NotificationCenter.default.addObserver(self,
                                                    selector: #selector(appDidFinishLaunching),
                                                    name: UIApplication.didFinishLaunchingNotification,
@@ -36,32 +36,56 @@ extension CoralogixRum {
     }
     
     @objc private func appDidFinishLaunching(notification: Notification) {
-        if self.options.shouldInitInstumentation(instumentation: .appLifeCycle) {
-            self.log(severity: .info, message: Keys.appDidFinishLaunching.rawValue)
+        if self.options.shouldInitInstumentation(instumentation: .lifeCycle) {
+            let span = self.getLifeCycleSpan()
+            span.setAttribute(key: Keys.type.rawValue,
+                              value: Keys.appDidFinishLaunching.rawValue)
+            span.end()
         }
     }
     
     @objc private func appDidBecomeActiveNotification(notification: Notification) {
-        if self.options.shouldInitInstumentation(instumentation: .appLifeCycle) {
-            self.log(severity: .info, message: Keys.appDidBecomeActiveNotification.rawValue)
+        if self.options.shouldInitInstumentation(instumentation: .lifeCycle) {
+            let span = self.getLifeCycleSpan()
+            span.setAttribute(key: Keys.type.rawValue,
+                              value: Keys.appDidBecomeActiveNotification.rawValue)
+            span.end()
         }
     }
     
     @objc private func appDidEnterBackgroundNotification(notification: Notification) {
-        if self.options.shouldInitInstumentation(instumentation: .appLifeCycle) {
-            self.log(severity: .info, message: Keys.appDidEnterBackgroundNotification.rawValue)
+        if self.options.shouldInitInstumentation(instumentation: .lifeCycle) {
+            let span = self.getLifeCycleSpan()
+            span.setAttribute(key: Keys.type.rawValue,
+                              value: Keys.appDidEnterBackgroundNotification.rawValue)
+            span.end()
         }
     }
     
     @objc private func appWillTerminateNotification(notification: Notification) {
-        if self.options.shouldInitInstumentation(instumentation: .appLifeCycle) {
-            self.log(severity: .info, message: Keys.appWillTerminateNotification.rawValue)
+        if self.options.shouldInitInstumentation(instumentation: .lifeCycle) {
+            let span = self.getLifeCycleSpan()
+            span.setAttribute(key: Keys.type.rawValue,
+                              value: Keys.appWillTerminateNotification.rawValue)
+            span.end()
         }
     }
     
     @objc private func appDidReceiveMemoryWarningNotification(notification: Notification) {
-        if self.options.shouldInitInstumentation(instumentation: .appLifeCycle) {
-            self.log(severity: .info, message: Keys.appDidReceiveMemoryWarningNotification.rawValue)
+        if self.options.shouldInitInstumentation(instumentation: .lifeCycle) {
+            let span = self.getLifeCycleSpan()
+            span.setAttribute(key: Keys.type.rawValue,
+                              value: Keys.appDidReceiveMemoryWarningNotification.rawValue)
+            span.end()
         }
+    }
+    
+    private func getLifeCycleSpan() -> Span {
+        var span = tracer().spanBuilder(spanName: Keys.iosSdk.rawValue).startSpan()
+        self.addUserMetadata(to: &span)
+        span.setAttribute(key: Keys.eventType.rawValue, value: CoralogixEventType.lifeCycle.rawValue)
+        span.setAttribute(key: Keys.source.rawValue, value: Keys.console.rawValue)
+        span.setAttribute(key: Keys.severity.rawValue, value: AttributeValue.int(CoralogixLogSeverity.info.rawValue))
+        return span
     }
 }
