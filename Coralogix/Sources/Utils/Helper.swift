@@ -171,7 +171,7 @@ class Helper {
         let lines = stackTrace.split(separator: "\n")
         
         // Regular expression to match the stack trace pattern
-        guard let regex = try? NSRegularExpression(pattern: "#(\\d+)\\s+(\\S+)\\s+\\((.*):(\\d+):(\\d+)\\)") else {
+        guard let regex = try? NSRegularExpression(pattern: "^#(\\d+)\\s+([^\\(]+)\\s+\\((.*):(\\d+):(\\d+)\\)$") else {
             return [[String: Any]]()
         }
         

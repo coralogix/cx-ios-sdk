@@ -176,7 +176,7 @@ public class CoralogixExporter: SpanExporter {
                 return false
             }
             
-            return self.isMatchesRegexPattern(string: url, regexs: ignoreUrlsOrRejexs) ? false : true
+            return self.isMatchesRegexPattern(string: url, regexs: ignoreUrlsOrRejexs) ? true : false
         }
         return false
     }

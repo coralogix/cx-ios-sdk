@@ -184,7 +184,7 @@ enum CoralogixEventType: String {
 }
 
 public enum Global: String {
-    case sdk = "1.0.11"
+    case sdk = "1.0.12"
     case swiftVersion = "5.9"
     case coralogixPath = "/browser/v1beta/logs"
     
