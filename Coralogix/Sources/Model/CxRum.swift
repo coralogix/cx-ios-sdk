@@ -30,6 +30,7 @@ struct CxRum {
     var isOneMinuteFromLastSnapshotPass = false
     var interactionContext: InteractionContext?
     var mobileVitalsContext: MobileVitalsContext?
+    var lifeCycleContext: LifeCycleContext?
      
     init(otel: SpanDataProtocol,
          versionMetadata: VersionMetadata,
@@ -72,6 +73,7 @@ struct CxRum {
         self.snapshotContext = SnapshotConext.getSnapshot(otel: otel)
         self.interactionContext = InteractionContext(otel: otel)
         self.mobileVitalsContext = MobileVitalsContext(otel: otel)
+        self.lifeCycleContext = LifeCycleContext(otel: otel)
         
         if let sessionManager = self.sessionManager,
            let viewManager = self.viewManager,
@@ -99,7 +101,12 @@ struct CxRum {
         self.addViewManagerContext(to: &result)
         self.addLabels(to: &result)
         self.addMobileVitals(to: &result)
+        self.addLifeCycleContext(to: &result)
         return result
+    }
+    
+    private func addLifeCycleContext(to result: inout [String: Any]) {
+        result[Keys.lifeCycleContext.rawValue] = self.lifeCycleContext?.getLifeCycleDictionary()
     }
     
     private func addMobileVitals(to result: inout [String: Any]) {
