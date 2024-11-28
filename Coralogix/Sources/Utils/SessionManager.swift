@@ -16,6 +16,7 @@ public class SessionManager {
     private let idleInterval: TimeInterval = 15 * 60  // 15 minutes in seconds
     private var errorCount: Int = 0
     private var clickCount: Int = 0
+    public var sessionChangedCallback: ((String) -> Void)?
     var lastSnapshotEventTime: Date?
 
     init() {
@@ -81,6 +82,10 @@ public class SessionManager {
         self.sessionMetadata = SessionMetadata(sessionId: NSUUID().uuidString,
                                                sessionCreationDate: Date().timeIntervalSince1970,
                                                keychain: KeychainManager())
+        // Publish the new session Id
+        if let sessionId = self.sessionMetadata?.sessionId {
+            self.sessionChangedCallback?(sessionId)
+        }
     }
     
     private func setupIdleTimer() {

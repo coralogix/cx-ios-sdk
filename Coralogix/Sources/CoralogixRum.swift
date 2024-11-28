@@ -3,6 +3,7 @@ import Darwin
 #if canImport(UIKit)
 import UIKit
 #endif
+import session_replay
 
 extension Notification.Name {
     static let cxRumNotification = Notification.Name("cxRumNotification")
@@ -20,6 +21,7 @@ public class CoralogixRum {
     internal var sessionInstrumentation: URLSessionInstrumentation?
     internal var metricsManager = MetricsManager()
     internal var options: CoralogixExporterOptions
+    internal var sessionReplay: SessionReplay?
 
     let notificationCenter = NotificationCenter.default
     
@@ -100,6 +102,7 @@ public class CoralogixRum {
         self.initializeCrashInstumentation()
         self.initializeMobileVitalsInstrumentation()
         self.initializeANRInstrumentation()
+        self.initializeSessionReplay()
         CoralogixRum.isInitialized = true
     }
     
