@@ -9,18 +9,17 @@ import Foundation
 
 extension CoralogixRum {
     public func initializeNavigationInstrumentation() {
-        if self.options.shouldInitInstumentation(instumentation: .navigation) {
-            NotificationCenter.default.addObserver(self,
-                                                   selector: #selector(handleNotification(notification:)),
-                                                   name: .cxRumNotification, object: nil)
-        }
+        NotificationCenter.default.addObserver(self, selector: #selector(handleNotification(notification:)), name: .cxRumNotification, object: nil)
     }
     
     @objc func handleNotification(notification: Notification) {
         if let cxView = notification.object as? CXView {
+            if cxView.state == .notifyOnAppear {
+                self.sessionReplay?.captureEvent()
+            }
+            
             if viewManager.isUniqueView(name: cxView.name) {
                 let span = self.getNavigationSpan()
-
                 let snapshot = SnapshotConext(timestemp: Date().timeIntervalSince1970,
                                               errorCount: self.sessionManager.getErrorCount(),
                                               viewCount: self.viewManager.getUniqueViewCount() + 1,

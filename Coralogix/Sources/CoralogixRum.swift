@@ -209,7 +209,6 @@ public struct CoralogixExporterOptions {
     
     public enum InstrumentationType {
         case mobileVitals
-        case navigation
         case custom
         case errors
         case network

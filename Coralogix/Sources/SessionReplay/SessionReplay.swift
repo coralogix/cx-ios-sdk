@@ -11,7 +11,11 @@ import session_replay
 extension CoralogixRum {
     func initializeSessionReplay() {
         if let sessionId = self.sessionManager.getSessionMetadata()?.sessionId {
-            self.sessionReplay = SessionReplay(sessionId: sessionId, recordingType: .image) { message in
+            self.sessionReplay = SessionReplay(sessionId: sessionId,
+                                               recordingType: .image,
+                                               captureTimeInterval: 10.0,
+                                               captureScale: 2.0,
+                                               captureCompressionQuality: 0.8) { message in
                 Log.d(message)
             }
         }
