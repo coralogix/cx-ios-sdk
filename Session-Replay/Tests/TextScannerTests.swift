@@ -1,0 +1,97 @@
+//
+//  TextScannerTests.swift
+//  session_replayTests
+//
+//  Created by Tomer Har Yoffi on 24/12/2024.
+//
+
+import XCTest
+import Vision
+import CoreImage
+@testable import session_replay
+
+class TextScannerTests: XCTestCase {
+    var textScanner: TextScanner!
+    
+    override func setUp() {
+        super.setUp()
+        textScanner = TextScanner()
+    }
+
+    override func tearDown() {
+        textScanner = nil
+        super.tearDown()
+    }
+
+    func testProcessImage_withValidInput_shouldCompleteSuccessfully() {
+        let expectation = self.expectation(description: "Image processing should complete successfully.")
+
+        // Mock input image URL
+        let inputURL = Bundle(for: type(of: self)).url(forResource: "test_image", withExtension: "png")!
+
+        textScanner.processImage(at: inputURL, maskText: ["Sign"]) { success, totalTextCount, maskedTextCount in
+            XCTAssertTrue(success, "The image processing should succeed.")
+            XCTAssertTrue(FileManager.default.fileExists(atPath: inputURL.path), "The output file should exist.")
+            XCTAssertEqual(1, maskedTextCount)
+            expectation.fulfill()
+        }
+
+        waitForExpectations(timeout: 5, handler: nil)
+    }
+
+    func testProcessImage_withInvalidInput_shouldFail() {
+        let expectation = self.expectation(description: "Image processing should fail.")
+
+        // Invalid input URL
+        let invalidURL = URL(fileURLWithPath: "/invalid/path/to/image.png")
+        let outputURL = FileManager.default.temporaryDirectory.appendingPathComponent("output_image.png")
+
+        textScanner.processImage(at: invalidURL, maskText: ["confidential"]) { success, totalTextCount, maskedTextCount in
+            XCTAssertFalse(success, "The image processing should fail for an invalid input URL.")
+            XCTAssertFalse(FileManager.default.fileExists(atPath: outputURL.path), "The output file should not exist.")
+            XCTAssertEqual(0, maskedTextCount)
+            expectation.fulfill()
+        }
+
+        waitForExpectations(timeout: 5, handler: nil)
+    }
+
+    func testMaskText_withSpecificPattern_shouldMaskOnlyMatchingText() {
+        // Mock input image
+        let inputURL = Bundle(for: type(of: self)).url(forResource: "test_image", withExtension: "png")!
+        let ciImage = CIImage(contentsOf: inputURL)!
+
+        let patterns = ["Stop"]
+        let (maskedImage, totalTextCount, maskedTextCount) = textScanner.maskText(in: ciImage, with: patterns)
+
+        XCTAssertNotNil(maskedImage, "The masked image should not be nil.")
+        // Additional verification of the masked content can be done by saving and visually inspecting the result.
+        XCTAssertEqual(31, totalTextCount)
+        XCTAssertEqual(1, maskedTextCount)
+    }
+
+    func testMaskText_withNoPatterns_shouldMaskAllText() {
+        // Mock input image
+        let inputURL = Bundle(for: type(of: self)).url(forResource: "test_image", withExtension: "png")!
+        let ciImage = CIImage(contentsOf: inputURL)!
+
+        let (maskedImage, totalTextCount, maskedTextCount) = textScanner.maskText(in: ciImage, with: nil)
+
+        XCTAssertNotNil(maskedImage, "The masked image should not be nil.")
+        // Additional verification of the masked content can be done by saving and visually inspecting the result.
+        XCTAssertEqual(totalTextCount, maskedTextCount)
+    }
+
+    func testMaskText_withNoText_shouldReturnOriginalImage() {
+        // Mock input image without text
+        let inputURL = Bundle(for: type(of: self)).url(forResource: "test_image_without_text", withExtension: "png")!
+        let ciImage = CIImage(contentsOf: inputURL)!
+
+        let (maskedImage, totalTextCount, maskedTextCount) = textScanner.maskText(in: ciImage, with: ["anyPattern"])
+
+        XCTAssertNotNil(maskedImage, "The masked image should not be nil.")
+        XCTAssertEqual(ciImage.extent, maskedImage.extent, "The output image should have the same extent as the input image.")
+        XCTAssertEqual(0, totalTextCount)
+        XCTAssertEqual(0, maskedTextCount)
+    }
+}

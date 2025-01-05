@@ -11,8 +11,8 @@ final class CoralogixRumTests: XCTestCase {
                                            application: "TestApp-iOS",
                                            version: "1.0",
                                            publicKey: "token",
-                                           ignoreUrls: [], //[".*\\.il$", "https://www.coralogix.com/academy"],
-                                           ignoreErrors: [], //[".*errorcode=.*", "Im cusom Error"],
+                                           ignoreUrls: [],
+                                           ignoreErrors: [],
                                            customDomainUrl: "url",
                                            labels: ["item" : "banana", "itemPrice" : 1000],
                                            sampleRate: 100,
@@ -32,7 +32,7 @@ final class CoralogixRumTests: XCTestCase {
             XCTAssertEqual(options.version, "1.0")
             
             // Verify that isDebug flag is set correctly
-            XCTAssertTrue(CoralogixRum.isDebug)
+            XCTAssertTrue(Log.isDebug)
             
             // Verify that isInitialized flag is set to true
             XCTAssertTrue(CoralogixRum.isInitialized)
@@ -47,8 +47,8 @@ final class CoralogixRumTests: XCTestCase {
                                            application: "TestApp-iOS",
                                            version: "1.0",
                                            publicKey: "token",
-                                           ignoreUrls: [], //[".*\\.il$", "https://www.coralogix.com/academy"],
-                                           ignoreErrors: [], //[".*errorcode=.*", "Im cusom Error"],
+                                           ignoreUrls: [],
+                                           ignoreErrors: [],
                                            customDomainUrl: "url",
                                            labels: ["item" : "banana", "itemPrice" : 1000],
                                            sampleRate: 0,
@@ -71,7 +71,6 @@ final class CoralogixRumTests: XCTestCase {
             // Verify that userContext is set correctly
             XCTAssertEqual(options.userContext, userContext)
         }
-
     }
     
     func testSetLabels() {

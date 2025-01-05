@@ -21,7 +21,6 @@ final class MetricsManagerTests: XCTestCase {
 
     override func tearDown() {
         NotificationCenter.default.removeObserver(metricsManager as Any)
-        metricsManager = nil
         mockFPSMonitor = nil
         super.tearDown()
     }

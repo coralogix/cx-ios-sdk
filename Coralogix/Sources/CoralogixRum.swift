@@ -1,9 +1,10 @@
 import Foundation
 import Darwin
+import coralogix_internal
+
 #if canImport(UIKit)
 import UIKit
 #endif
-import session_replay
 
 extension Notification.Name {
     static let cxRumNotification = Notification.Name("cxRumNotification")
@@ -21,17 +22,14 @@ public class CoralogixRum {
     internal var sessionInstrumentation: URLSessionInstrumentation?
     internal var metricsManager = MetricsManager()
     internal var options: CoralogixExporterOptions
-    internal var sessionReplay: SessionReplay?
 
     let notificationCenter = NotificationCenter.default
     
-    static var isDebug = false
     static var isInitialized = false
     static var sdkFramework: SdkFramework = .swift
     
     public init(options: CoralogixExporterOptions, sdkFramework: SdkFramework = .swift) {
         self.options = options
-
         self.displayCoralogixWord()
 
         if options.sdkSampler.shouldInitialized() == false {
@@ -72,7 +70,7 @@ public class CoralogixRum {
         CoralogixRum.sdkFramework = sdkFramework
         self.initialzeMetricsManager()
 
-        CoralogixRum.isDebug = self.options.debug
+        Log.isDebug = self.options.debug
         let versionMetadata = VersionMetadata(appName: self.options.application,
                                               appVersion: self.options.version)
         let coralogixExporter = CoralogixExporter(options: self.options,
@@ -107,10 +105,14 @@ public class CoralogixRum {
     }
     
     private func initialzeMetricsManager() {
+        self.metricsManager.addObservers()
+
         if self.options.shouldInitInstumentation(instumentation: .mobileVitals) {
             self.metricsManager.startFPSSamplingMonitoring(mobileVitalsFPSSamplingRate: options.mobileVitalsFPSSamplingRate)
             self.metricsManager.startColdStartMonitoring()
-        } else if self.options.shouldInitInstumentation(instumentation: .anr) {
+        }
+        
+        if self.options.shouldInitInstumentation(instumentation: .anr) {
             self.metricsManager.startANRMonitoring()
         }
     }
@@ -262,7 +264,7 @@ public struct CoralogixExporterOptions {
     
     // Enable event access and modification before sending to Coralogix, supporting content modification, and event discarding.
     var beforeSend: (([String: Any]) -> [String: Any]?)?
-
+    
     public init(coralogixDomain: CoralogixDomain,
                 userContext: UserContext? = nil,
                 environment: String,

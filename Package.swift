@@ -7,12 +7,10 @@ let package = Package(
     name: "Coralogix",
     platforms: [
         .iOS(.v13)
+        .tvOS(.v13),
     ],
     products: [
         .library(name: "Coralogix", type: .dynamic, targets: ["Coralogix"])
-    ],
-    dependencies: [
-        //.package(url: "https://github.com/open-telemetry/opentelemetry-swift", from: "1.9.2"),
     ],
     targets: [
         .binaryTarget(
@@ -20,15 +18,16 @@ let package = Package(
             path:"Coralogix/Frameworks/PLCrashReporter/CrashReporter.xcframework"
         ),
         .target(
+            name: "Coralogix-Internal",
+            path: "Coralogix-Internal/Sources/"
+        ),
+        .target(
             name: "Coralogix",
             dependencies: [
-                .target(name: "CrashReporter"),
+                .target(name: "Coralogix-Internal"),
+                .target(name: "CrashReporter")
             ],
             path: "Coralogix/Sources/"
-        ),
-        .testTarget(
-            name: "CoralogixRumTests",
-            dependencies: ["Coralogix"],
-            path: "Coralogix/Tests/")
+        )
     ]
 )

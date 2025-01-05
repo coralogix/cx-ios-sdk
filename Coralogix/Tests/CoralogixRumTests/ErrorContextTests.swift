@@ -76,7 +76,7 @@ final class ErrorContextTests: XCTestCase {
         let dictionary = errorStruct.getDictionary()
         
         if let stackTrace = dictionary[Keys.originalStackTrace.rawValue] as? [[String: Any]] {
-            XCTAssertEqual(10, stackTrace.count)
+            XCTAssertEqual(11, stackTrace.count)
             let frame0 = stackTrace[0]
             XCTAssertEqual("package:coralogix_sdk/main.dart", frame0["fileName"] as? String ?? "")
             XCTAssertEqual(5, frame0["columnNumber"] as? Int ?? 0)

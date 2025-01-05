@@ -15,7 +15,7 @@ extension CoralogixRum {
     @objc func handleNotification(notification: Notification) {
         if let cxView = notification.object as? CXView {
             if cxView.state == .notifyOnAppear {
-                self.sessionReplay?.captureEvent()
+                //self.sessionReplay?.captureEvent()
             }
             
             if viewManager.isUniqueView(name: cxView.name) {

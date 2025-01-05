@@ -4,7 +4,6 @@
 //
 
 import Foundation
-// 
 
 public class AsynchronousMetricStorage: MetricStorage {
     public private(set) var registeredReader: RegisteredReader

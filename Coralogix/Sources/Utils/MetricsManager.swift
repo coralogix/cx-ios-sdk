@@ -11,7 +11,7 @@ import UIKit
 #endif
 import MetricKit
 
-public class MetricsManager: NSObject, MXMetricManagerSubscriber {
+public class MetricsManager {
     var launchStartTime: CFAbsoluteTime?
     var launchEndTime: CFAbsoluteTime?
     var foregroundStartTime: CFAbsoluteTime?
@@ -20,11 +20,9 @@ public class MetricsManager: NSObject, MXMetricManagerSubscriber {
     var fpsTrigger = FPSTrigger()
     let mobileVitalsFPSSamplingRate = 300 // 5 min
     var warmMetricIsActive = false
-    
-    override init() {
-        super.init()
-        MXMetricManager.shared.add(self)
         
+    public func addObservers() {
+        MXMetricManager.shared.add(MyMetricSubscriber.shared)
         NotificationCenter.default.addObserver(self,
                                                selector: #selector(self.handleNotification(notification:)),
                                                name: .cxRumNotificationMetrics,
@@ -112,6 +110,21 @@ public class MetricsManager: NSObject, MXMetricManagerSubscriber {
         }
     }
     
+    deinit {
+        NotificationCenter().removeObserver(self, name: UIApplication.didEnterBackgroundNotification, object: nil)
+        NotificationCenter().removeObserver(self, name: UIApplication.willEnterForegroundNotification, object: nil)
+        NotificationCenter().removeObserver(self, name: UIApplication.didBecomeActiveNotification, object: nil)
+        NotificationCenter().removeObserver(self, name: .cxRumNotificationMetrics, object: nil)
+        self.anrDetector?.stopMonitoring()
+        self.fpsTrigger.stopMonitoring()
+        self.launchEndTime = 0
+    }
+}
+
+
+class MyMetricSubscriber: NSObject, MXMetricManagerSubscriber {
+    static let shared = MyMetricSubscriber()
+
     // Handle received metrics
     public func didReceive(_ payloads: [MXMetricPayload]) {
         for payload in payloads {
@@ -147,16 +160,5 @@ public class MetricsManager: NSObject, MXMetricManagerSubscriber {
                 }
             }
         }
-    }
-    
-    deinit {
-        MXMetricManager.shared.remove(self)
-        NotificationCenter().removeObserver(self, name: UIApplication.didEnterBackgroundNotification, object: nil)
-        NotificationCenter().removeObserver(self, name: UIApplication.willEnterForegroundNotification, object: nil)
-        NotificationCenter().removeObserver(self, name: UIApplication.didBecomeActiveNotification, object: nil)
-        NotificationCenter().removeObserver(self, name: .cxRumNotificationMetrics, object: nil)
-        self.anrDetector?.stopMonitoring()
-        self.fpsTrigger.stopMonitoring()
-        self.launchEndTime = 0
     }
 }

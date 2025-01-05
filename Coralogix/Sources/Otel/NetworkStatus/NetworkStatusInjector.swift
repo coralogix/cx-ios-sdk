@@ -18,27 +18,40 @@ public class NetworkStatusInjector {
 
     public func inject(span: Span) {
         let (type, subtype, carrier) = netstat.status()
-      span.setAttribute(key: SemanticAttributes.networkConnectionType.rawValue, value: AttributeValue.string(type))
 
+        // Set the connection type
+        span.setAttribute(key: SemanticAttributes.networkConnectionType.rawValue, value: AttributeValue.string(type))
+
+        // Set the connection subtype if available
         if let subtype: String = subtype {
-          span.setAttribute(key: SemanticAttributes.networkConnectionSubtype.rawValue, value: AttributeValue.string(subtype))
+            span.setAttribute(key: SemanticAttributes.networkConnectionSubtype.rawValue, value: AttributeValue.string(subtype))
         }
 
-        if !Helper.isSimulator, let carrierInfo: CTCarrier = carrier {
-            if let carrierName = carrierInfo.carrierName {
-              span.setAttribute(key: SemanticAttributes.networkCarrierName.rawValue, value: AttributeValue.string(carrierName))
-            }
+        // Avoid injecting carrier info in the simulator environment
+        guard !Helper.isSimulator else { return }
 
-            if let isoCountryCode = carrierInfo.isoCountryCode {
-              span.setAttribute(key: SemanticAttributes.networkCarrierIcc.rawValue, value: AttributeValue.string(isoCountryCode))
-            }
+        if #available(iOS 16.0, *) {
+            // Carrier information is deprecated with no replacement in iOS 16 and above.
+            // Skip setting carrier-related attributes.
+            return
+        } else {
+            // iOS 15 and below: Handle carrier info using CTCarrier
+            if let carrierInfo = carrier as? CTCarrier {
+                if let carrierName = carrierInfo.carrierName {
+                    span.setAttribute(key: SemanticAttributes.networkCarrierName.rawValue, value: AttributeValue.string(carrierName))
+                }
 
-            if let mobileCountryCode = carrierInfo.mobileCountryCode {
-              span.setAttribute(key: SemanticAttributes.networkCarrierMcc.rawValue, value: AttributeValue.string(mobileCountryCode))
-            }
+                if let isoCountryCode = carrierInfo.isoCountryCode {
+                    span.setAttribute(key: SemanticAttributes.networkCarrierIcc.rawValue, value: AttributeValue.string(isoCountryCode))
+                }
 
-            if let mobileNetworkCode = carrierInfo.mobileNetworkCode {
-              span.setAttribute(key: SemanticAttributes.networkCarrierMnc.rawValue, value: AttributeValue.string(mobileNetworkCode))
+                if let mobileCountryCode = carrierInfo.mobileCountryCode {
+                    span.setAttribute(key: SemanticAttributes.networkCarrierMcc.rawValue, value: AttributeValue.string(mobileCountryCode))
+                }
+
+                if let mobileNetworkCode = carrierInfo.mobileNetworkCode {
+                    span.setAttribute(key: SemanticAttributes.networkCarrierMnc.rawValue, value: AttributeValue.string(mobileNetworkCode))
+                }
             }
         }
     }

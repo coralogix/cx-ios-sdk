@@ -356,12 +356,12 @@ extension UIViewController {
                 }
                 
                 return nil
-        } else if #available(iOS 13.0, *) {
-            // For iOS 13 and 14
-            return UIApplication.shared.windows.first { $0.isKeyWindow }
         } else {
-            // For iOS 12 and earlier
-            return UIApplication.shared.keyWindow
+            // For iOS 13 and 14
+            return UIApplication.shared.connectedScenes
+                .compactMap({ $0 as? UIWindowScene })
+                .flatMap({ $0.windows })
+                .first(where: { $0.isKeyWindow })
         }
     }
 }

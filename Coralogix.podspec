@@ -37,5 +37,7 @@ Pod::Spec.new do |spec|
 
   spec.static_framework = true
   spec.dependency 'PLCrashReporter', '~> 1.11.1'
+  spec.dependency 'coralogix-internal', spec.version.to_s
+
 end
 
