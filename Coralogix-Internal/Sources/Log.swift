@@ -6,10 +6,10 @@
 
 import Foundation
 
-class Log {
-    static var isDebug = false
+public class Log {
+    public static var isDebug = false
 
-    internal static func d(_ message: String) {
+    public static func d(_ message: String) {
         debug(message)
     }
     
@@ -21,7 +21,7 @@ class Log {
     
     // MARK: - Trace
     
-    internal static func t(_ message: String) {
+    public static func t(_ message: String) {
         trace(message)
     }
     
@@ -33,7 +33,7 @@ class Log {
     
     // MARK: - Warning
 
-    internal static func w(_ message: String) {
+    public static func w(_ message: String) {
         warning(message)
     }
     
@@ -45,7 +45,7 @@ class Log {
     
     // MARK: - Error
 
-    internal static func e(_ message: String = "", _ error: Error? = nil) {
+    public static func e(_ message: String = "", _ error: Error? = nil) {
         Log.error(message, error)
     }
     
@@ -59,7 +59,7 @@ class Log {
         }
     }
     
-    internal static func e(_ error: Error) {
+    public static func e(_ error: Error) {
         Log.error(error)
     }
     

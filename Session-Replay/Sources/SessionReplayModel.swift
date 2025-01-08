@@ -44,7 +44,7 @@ class SessionReplayModel {
             
             // Add URL to array and save it
             self.urlManager.addURL(fileURL)
-            Helper.saveURLsToDisk(urls: self.urlManager.savedURLs)
+            Utils.saveURLsToDisk(urls: self.urlManager.savedURLs)
             self.updateSessionId(with: self.sessionId)
         }
     }
@@ -116,13 +116,10 @@ class SessionReplayModel {
 
 extension UIView {
     func captureScreenshot(scale: CGFloat = UIScreen.main.scale, compressionQuality: CGFloat = 0.8) -> Data? {
-        guard let keyWindow = UIApplication.shared.connectedScenes
-            .compactMap({ ($0 as? UIWindowScene)?.keyWindow })
-            .first else {
-            print("Unable to find the key window")
+    
+        guard let keyWindow = getKeyWindow() else {
             return nil
         }
-        
     
         let rendererFormat = UIGraphicsImageRendererFormat()
         rendererFormat.scale = scale
@@ -133,5 +130,17 @@ extension UIView {
 
         }
         return image.jpegData(compressionQuality: compressionQuality)
+    }
+    
+    func getKeyWindow() -> UIWindow? {
+        guard let keyWindow = UIApplication.shared.connectedScenes
+            .compactMap({ $0 as? UIWindowScene }) // Filter only UIWindowScenes
+            .flatMap({ $0.windows }) // Get all windows in each UIWindowScene
+            .first(where: { $0.isKeyWindow }) // Find the key window
+        else {
+            print("Unable to find the key window")
+            return nil
+        }
+        return keyWindow
     }
 }

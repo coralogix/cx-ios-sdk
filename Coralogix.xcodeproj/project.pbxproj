@@ -372,7 +372,7 @@
 		E6A2857E2D2A7A3900889A94 /* UserContext.md in Resources */ = {isa = PBXBuildFile; fileRef = E6A283F92D2A7A3900889A94 /* UserContext.md */; };
 		E6A285822D2A7AF200889A94 /* Log.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6A2857F2D2A7AF200889A94 /* Log.swift */; };
 		E6A2858F2D2A80E900889A94 /* Log.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6A2857F2D2A7AF200889A94 /* Log.swift */; };
-		E6A285932D2A81AA00889A94 /* coralogix_internal.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E6A285882D2A809300889A94 /* coralogix_internal.framework */; };
+		E6A285932D2A81AA00889A94 /* Coralogix_Internal.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E6A285882D2A809300889A94 /* Coralogix_Internal.framework */; };
 		E6A285AA2D2A853200889A94 /* Coralogix.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E6A2822A2D2A79A000889A94 /* Coralogix.framework */; };
 		E6A285C72D2A857400889A94 /* ANRDetectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6A285B12D2A857300889A94 /* ANRDetectorTests.swift */; };
 		E6A285C82D2A857400889A94 /* SpanTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6A285B22D2A857300889A94 /* SpanTests.swift */; };
@@ -396,6 +396,28 @@
 		E6A285DA2D2A857400889A94 /* ViewManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6A285C42D2A857300889A94 /* ViewManagerTests.swift */; };
 		E6A285DB2D2A857400889A94 /* Utils.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6A285C52D2A857400889A94 /* Utils.swift */; };
 		E6A285DC2D2A857400889A94 /* ErrorContextTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6A285C62D2A857400889A94 /* ErrorContextTests.swift */; };
+		E6A286002D2AD60700889A94 /* Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6A285E92D2AD60700889A94 /* Extensions.swift */; };
+		E6A286012D2AD60700889A94 /* FaceScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6A285EA2D2AD60700889A94 /* FaceScanner.swift */; };
+		E6A286022D2AD60700889A94 /* ImageScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6A285EB2D2AD60700889A94 /* ImageScanner.swift */; };
+		E6A286032D2AD60700889A94 /* Log.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6A285EC2D2AD60700889A94 /* Log.swift */; };
+		E6A286042D2AD60700889A94 /* ScannerPipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6A285ED2D2AD60700889A94 /* ScannerPipeline.swift */; };
+		E6A286062D2AD60700889A94 /* SessionReplay.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6A285EF2D2AD60700889A94 /* SessionReplay.swift */; };
+		E6A286072D2AD60700889A94 /* SessionReplayModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6A285F02D2AD60700889A94 /* SessionReplayModel.swift */; };
+		E6A286082D2AD60700889A94 /* TextScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6A285F12D2AD60700889A94 /* TextScanner.swift */; };
+		E6A286092D2AD60700889A94 /* URLManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6A285F22D2AD60700889A94 /* URLManager.swift */; };
+		E6A2860A2D2AD60700889A94 /* Utils.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6A285F32D2AD60700889A94 /* Utils.swift */; };
+		E6A2860B2D2AD60700889A94 /* VideoMaskingProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6A285F42D2AD60700889A94 /* VideoMaskingProcessor.swift */; };
+		E6A2860C2D2AD60700889A94 /* README.md in Resources */ = {isa = PBXBuildFile; fileRef = E6A285F62D2AD60700889A94 /* README.md */; };
+		E6A286752D2BEA8E00889A94 /* Session_Replay.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E6A285E22D2AD5E900889A94 /* Session_Replay.framework */; };
+		E6A286942D2EB16700889A94 /* FaceScannerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6A2868B2D2EB16700889A94 /* FaceScannerTests.swift */; };
+		E6A286952D2EB16700889A94 /* Session_Replay_Tests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6A2868C2D2EB16700889A94 /* Session_Replay_Tests.swift */; };
+		E6A286962D2EB16700889A94 /* ScannerPipelineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6A2868D2D2EB16700889A94 /* ScannerPipelineTests.swift */; };
+		E6A286972D2EB16700889A94 /* SessionReplayTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6A2868E2D2EB16700889A94 /* SessionReplayTests.swift */; };
+		E6A286982D2EB16700889A94 /* test_image.png in Resources */ = {isa = PBXBuildFile; fileRef = E6A2868F2D2EB16700889A94 /* test_image.png */; };
+		E6A286992D2EB16700889A94 /* ImageScannerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6A286902D2EB16700889A94 /* ImageScannerTests.swift */; };
+		E6A2869A2D2EB16700889A94 /* TextScannerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6A286912D2EB16700889A94 /* TextScannerTests.swift */; };
+		E6A2869B2D2EB16700889A94 /* test_image_without_text.png in Resources */ = {isa = PBXBuildFile; fileRef = E6A286922D2EB16700889A94 /* test_image_without_text.png */; };
+		E6A2869C2D2EB16700889A94 /* test_image_2.png in Resources */ = {isa = PBXBuildFile; fileRef = E6A286932D2EB16700889A94 /* test_image_2.png */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -412,6 +434,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = E6A282292D2A79A000889A94;
 			remoteInfo = Coralogix;
+		};
+		E6A286892D2D51E800889A94 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = E6A282212D2A79A000889A94 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = E6A285E12D2AD5E900889A94;
+			remoteInfo = "Session-Replay";
 		};
 /* End PBXContainerItemProxy section */
 
@@ -782,7 +811,7 @@
 		E6A283F82D2A7A3900889A94 /* SDKSampler.md */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = net.daringfireball.markdown; path = SDKSampler.md; sourceTree = "<group>"; };
 		E6A283F92D2A7A3900889A94 /* UserContext.md */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = net.daringfireball.markdown; path = UserContext.md; sourceTree = "<group>"; };
 		E6A2857F2D2A7AF200889A94 /* Log.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Log.swift; sourceTree = "<group>"; };
-		E6A285882D2A809300889A94 /* coralogix_internal.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = coralogix_internal.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		E6A285882D2A809300889A94 /* Coralogix_Internal.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Coralogix_Internal.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		E6A285A62D2A853200889A94 /* Coralogix-Tests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Coralogix-Tests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		E6A285B12D2A857300889A94 /* ANRDetectorTests.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = ANRDetectorTests.swift; path = Coralogix/Tests/CoralogixRumTests/ANRDetectorTests.swift; sourceTree = SOURCE_ROOT; };
 		E6A285B22D2A857300889A94 /* SpanTests.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = SpanTests.swift; path = Coralogix/Tests/CoralogixRumTests/SpanTests.swift; sourceTree = SOURCE_ROOT; };
@@ -806,6 +835,29 @@
 		E6A285C42D2A857300889A94 /* ViewManagerTests.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = ViewManagerTests.swift; path = Coralogix/Tests/CoralogixRumTests/ViewManagerTests.swift; sourceTree = SOURCE_ROOT; };
 		E6A285C52D2A857400889A94 /* Utils.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = Utils.swift; path = Coralogix/Tests/CoralogixRumTests/Utils.swift; sourceTree = SOURCE_ROOT; };
 		E6A285C62D2A857400889A94 /* ErrorContextTests.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = ErrorContextTests.swift; path = Coralogix/Tests/CoralogixRumTests/ErrorContextTests.swift; sourceTree = SOURCE_ROOT; };
+		E6A285E22D2AD5E900889A94 /* Session_Replay.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Session_Replay.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		E6A285E92D2AD60700889A94 /* Extensions.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Extensions.swift; sourceTree = "<group>"; };
+		E6A285EA2D2AD60700889A94 /* FaceScanner.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = FaceScanner.swift; sourceTree = "<group>"; };
+		E6A285EB2D2AD60700889A94 /* ImageScanner.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ImageScanner.swift; sourceTree = "<group>"; };
+		E6A285EC2D2AD60700889A94 /* Log.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Log.swift; sourceTree = "<group>"; };
+		E6A285ED2D2AD60700889A94 /* ScannerPipeline.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ScannerPipeline.swift; sourceTree = "<group>"; };
+		E6A285EF2D2AD60700889A94 /* SessionReplay.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SessionReplay.swift; sourceTree = "<group>"; };
+		E6A285F02D2AD60700889A94 /* SessionReplayModel.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SessionReplayModel.swift; sourceTree = "<group>"; };
+		E6A285F12D2AD60700889A94 /* TextScanner.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = TextScanner.swift; sourceTree = "<group>"; };
+		E6A285F22D2AD60700889A94 /* URLManager.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = URLManager.swift; sourceTree = "<group>"; };
+		E6A285F32D2AD60700889A94 /* Utils.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Utils.swift; sourceTree = "<group>"; };
+		E6A285F42D2AD60700889A94 /* VideoMaskingProcessor.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = VideoMaskingProcessor.swift; sourceTree = "<group>"; };
+		E6A285F62D2AD60700889A94 /* README.md */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
+		E6A286712D2BEA8D00889A94 /* Session-Replay-Tests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Session-Replay-Tests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+		E6A2868B2D2EB16700889A94 /* FaceScannerTests.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = FaceScannerTests.swift; path = "Session-Replay/Tests/FaceScannerTests.swift"; sourceTree = SOURCE_ROOT; };
+		E6A2868C2D2EB16700889A94 /* Session_Replay_Tests.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = Session_Replay_Tests.swift; path = "Session-Replay/Tests/Session_Replay_Tests.swift"; sourceTree = SOURCE_ROOT; };
+		E6A2868D2D2EB16700889A94 /* ScannerPipelineTests.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = ScannerPipelineTests.swift; path = "Session-Replay/Tests/ScannerPipelineTests.swift"; sourceTree = SOURCE_ROOT; };
+		E6A2868E2D2EB16700889A94 /* SessionReplayTests.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = SessionReplayTests.swift; path = "Session-Replay/Tests/SessionReplayTests.swift"; sourceTree = SOURCE_ROOT; };
+		E6A2868F2D2EB16700889A94 /* test_image.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = test_image.png; path = "Session-Replay/Tests/test_image.png"; sourceTree = SOURCE_ROOT; };
+		E6A286902D2EB16700889A94 /* ImageScannerTests.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = ImageScannerTests.swift; path = "Session-Replay/Tests/ImageScannerTests.swift"; sourceTree = SOURCE_ROOT; };
+		E6A286912D2EB16700889A94 /* TextScannerTests.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = TextScannerTests.swift; path = "Session-Replay/Tests/TextScannerTests.swift"; sourceTree = SOURCE_ROOT; };
+		E6A286922D2EB16700889A94 /* test_image_without_text.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = test_image_without_text.png; path = "Session-Replay/Tests/test_image_without_text.png"; sourceTree = SOURCE_ROOT; };
+		E6A286932D2EB16700889A94 /* test_image_2.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = test_image_2.png; path = "Session-Replay/Tests/test_image_2.png"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -813,7 +865,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				E6A285932D2A81AA00889A94 /* coralogix_internal.framework in Frameworks */,
+				E6A285932D2A81AA00889A94 /* Coralogix_Internal.framework in Frameworks */,
 				E6A284012D2A7A3900889A94 /* CrashReporter.xcframework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -833,6 +885,21 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		E6A285DF2D2AD5E900889A94 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E6A2866E2D2BEA8D00889A94 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E6A286752D2BEA8E00889A94 /* Session_Replay.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -841,7 +908,9 @@
 			children = (
 				E6A285812D2A7AF200889A94 /* Coralogix-Internal */,
 				E6A2822C2D2A79A000889A94 /* Coralogix */,
+				E6A285E32D2AD5E900889A94 /* Session-Replay */,
 				E6A285A72D2A853200889A94 /* Coralogix-Tests */,
+				E6A286722D2BEA8E00889A94 /* Session-Replay-Tests */,
 				E6A2822B2D2A79A000889A94 /* Products */,
 				E6A285922D2A81AA00889A94 /* Frameworks */,
 			);
@@ -851,8 +920,10 @@
 			isa = PBXGroup;
 			children = (
 				E6A2822A2D2A79A000889A94 /* Coralogix.framework */,
-				E6A285882D2A809300889A94 /* coralogix_internal.framework */,
+				E6A285882D2A809300889A94 /* Coralogix_Internal.framework */,
 				E6A285A62D2A853200889A94 /* Coralogix-Tests.xctest */,
+				E6A285E22D2AD5E900889A94 /* Session_Replay.framework */,
+				E6A286712D2BEA8D00889A94 /* Session-Replay-Tests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -1800,10 +1871,68 @@
 			path = "Coralogix-Tests";
 			sourceTree = "<group>";
 		};
+		E6A285E32D2AD5E900889A94 /* Session-Replay */ = {
+			isa = PBXGroup;
+			children = (
+				E6A285F72D2AD60700889A94 /* Docs */,
+				E6A285F52D2AD60700889A94 /* Sources */,
+			);
+			path = "Session-Replay";
+			sourceTree = "<group>";
+		};
+		E6A285F52D2AD60700889A94 /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				E6A285E92D2AD60700889A94 /* Extensions.swift */,
+				E6A285EA2D2AD60700889A94 /* FaceScanner.swift */,
+				E6A285EB2D2AD60700889A94 /* ImageScanner.swift */,
+				E6A285EC2D2AD60700889A94 /* Log.swift */,
+				E6A285ED2D2AD60700889A94 /* ScannerPipeline.swift */,
+				E6A285EF2D2AD60700889A94 /* SessionReplay.swift */,
+				E6A285F02D2AD60700889A94 /* SessionReplayModel.swift */,
+				E6A285F12D2AD60700889A94 /* TextScanner.swift */,
+				E6A285F22D2AD60700889A94 /* URLManager.swift */,
+				E6A285F32D2AD60700889A94 /* Utils.swift */,
+				E6A285F42D2AD60700889A94 /* VideoMaskingProcessor.swift */,
+			);
+			path = Sources;
+			sourceTree = "<group>";
+		};
+		E6A285F72D2AD60700889A94 /* Docs */ = {
+			isa = PBXGroup;
+			children = (
+				E6A285F62D2AD60700889A94 /* README.md */,
+			);
+			path = Docs;
+			sourceTree = "<group>";
+		};
+		E6A286722D2BEA8E00889A94 /* Session-Replay-Tests */ = {
+			isa = PBXGroup;
+			children = (
+				E6A2868B2D2EB16700889A94 /* FaceScannerTests.swift */,
+				E6A286902D2EB16700889A94 /* ImageScannerTests.swift */,
+				E6A2868D2D2EB16700889A94 /* ScannerPipelineTests.swift */,
+				E6A2868C2D2EB16700889A94 /* Session_Replay_Tests.swift */,
+				E6A2868E2D2EB16700889A94 /* SessionReplayTests.swift */,
+				E6A286932D2EB16700889A94 /* test_image_2.png */,
+				E6A286922D2EB16700889A94 /* test_image_without_text.png */,
+				E6A2868F2D2EB16700889A94 /* test_image.png */,
+				E6A286912D2EB16700889A94 /* TextScannerTests.swift */,
+			);
+			path = "Session-Replay-Tests";
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXHeadersBuildPhase section */
 		E6A285832D2A809300889A94 /* Headers */ = {
+			isa = PBXHeadersBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E6A285DD2D2AD5E900889A94 /* Headers */ = {
 			isa = PBXHeadersBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -1831,9 +1960,9 @@
 			productReference = E6A2822A2D2A79A000889A94 /* Coralogix.framework */;
 			productType = "com.apple.product-type.framework";
 		};
-		E6A285872D2A809300889A94 /* coralogix-internal */ = {
+		E6A285872D2A809300889A94 /* Coralogix-Internal */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = E6A2858C2D2A809300889A94 /* Build configuration list for PBXNativeTarget "coralogix-internal" */;
+			buildConfigurationList = E6A2858C2D2A809300889A94 /* Build configuration list for PBXNativeTarget "Coralogix-Internal" */;
 			buildPhases = (
 				E6A285832D2A809300889A94 /* Headers */,
 				E6A285842D2A809300889A94 /* Sources */,
@@ -1844,9 +1973,9 @@
 			);
 			dependencies = (
 			);
-			name = "coralogix-internal";
+			name = "Coralogix-Internal";
 			productName = "coralogix-internal";
-			productReference = E6A285882D2A809300889A94 /* coralogix_internal.framework */;
+			productReference = E6A285882D2A809300889A94 /* Coralogix_Internal.framework */;
 			productType = "com.apple.product-type.framework";
 		};
 		E6A285A52D2A853200889A94 /* Coralogix-Tests */ = {
@@ -1865,6 +1994,42 @@
 			name = "Coralogix-Tests";
 			productName = "Coralogix-tests";
 			productReference = E6A285A62D2A853200889A94 /* Coralogix-Tests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		E6A285E12D2AD5E900889A94 /* Session-Replay */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E6A285E62D2AD5E900889A94 /* Build configuration list for PBXNativeTarget "Session-Replay" */;
+			buildPhases = (
+				E6A285DD2D2AD5E900889A94 /* Headers */,
+				E6A285DE2D2AD5E900889A94 /* Sources */,
+				E6A285DF2D2AD5E900889A94 /* Frameworks */,
+				E6A285E02D2AD5E900889A94 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = "Session-Replay";
+			productName = "Session-Replay";
+			productReference = E6A285E22D2AD5E900889A94 /* Session_Replay.framework */;
+			productType = "com.apple.product-type.framework";
+		};
+		E6A286702D2BEA8D00889A94 /* Session-Replay-Tests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E6A286782D2BEA8E00889A94 /* Build configuration list for PBXNativeTarget "Session-Replay-Tests" */;
+			buildPhases = (
+				E6A2866D2D2BEA8D00889A94 /* Sources */,
+				E6A2866E2D2BEA8D00889A94 /* Frameworks */,
+				E6A2866F2D2BEA8D00889A94 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				E6A2868A2D2D51E800889A94 /* PBXTargetDependency */,
+			);
+			name = "Session-Replay-Tests";
+			productName = "Session-Replay-Tests";
+			productReference = E6A286712D2BEA8D00889A94 /* Session-Replay-Tests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
 /* End PBXNativeTarget section */
@@ -1887,6 +2052,13 @@
 						CreatedOnToolsVersion = 15.3;
 						LastSwiftMigration = 1530;
 					};
+					E6A285E12D2AD5E900889A94 = {
+						CreatedOnToolsVersion = 15.3;
+					};
+					E6A286702D2BEA8D00889A94 = {
+						CreatedOnToolsVersion = 15.3;
+						LastSwiftMigration = 1530;
+					};
 				};
 			};
 			buildConfigurationList = E6A282242D2A79A000889A94 /* Build configuration list for PBXProject "Coralogix" */;
@@ -1903,8 +2075,10 @@
 			projectRoot = "";
 			targets = (
 				E6A282292D2A79A000889A94 /* Coralogix */,
-				E6A285872D2A809300889A94 /* coralogix-internal */,
+				E6A285872D2A809300889A94 /* Coralogix-Internal */,
+				E6A285E12D2AD5E900889A94 /* Session-Replay */,
 				E6A285A52D2A853200889A94 /* Coralogix-Tests */,
+				E6A286702D2BEA8D00889A94 /* Session-Replay-Tests */,
 			);
 		};
 /* End PBXProject section */
@@ -1943,6 +2117,24 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E6A285E02D2AD5E900889A94 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E6A2860C2D2AD60700889A94 /* README.md in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E6A2866F2D2BEA8D00889A94 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E6A286982D2EB16700889A94 /* test_image.png in Resources */,
+				E6A2869C2D2EB16700889A94 /* test_image_2.png in Resources */,
+				E6A2869B2D2EB16700889A94 /* test_image_without_text.png in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -2341,18 +2533,54 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		E6A285DE2D2AD5E900889A94 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E6A286022D2AD60700889A94 /* ImageScanner.swift in Sources */,
+				E6A286042D2AD60700889A94 /* ScannerPipeline.swift in Sources */,
+				E6A2860B2D2AD60700889A94 /* VideoMaskingProcessor.swift in Sources */,
+				E6A286092D2AD60700889A94 /* URLManager.swift in Sources */,
+				E6A286002D2AD60700889A94 /* Extensions.swift in Sources */,
+				E6A286082D2AD60700889A94 /* TextScanner.swift in Sources */,
+				E6A2860A2D2AD60700889A94 /* Utils.swift in Sources */,
+				E6A286072D2AD60700889A94 /* SessionReplayModel.swift in Sources */,
+				E6A286032D2AD60700889A94 /* Log.swift in Sources */,
+				E6A286012D2AD60700889A94 /* FaceScanner.swift in Sources */,
+				E6A286062D2AD60700889A94 /* SessionReplay.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E6A2866D2D2BEA8D00889A94 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E6A286962D2EB16700889A94 /* ScannerPipelineTests.swift in Sources */,
+				E6A286942D2EB16700889A94 /* FaceScannerTests.swift in Sources */,
+				E6A286992D2EB16700889A94 /* ImageScannerTests.swift in Sources */,
+				E6A286952D2EB16700889A94 /* Session_Replay_Tests.swift in Sources */,
+				E6A286972D2EB16700889A94 /* SessionReplayTests.swift in Sources */,
+				E6A2869A2D2EB16700889A94 /* TextScannerTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
 		E6A285912D2A816500889A94 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = E6A285872D2A809300889A94 /* coralogix-internal */;
+			target = E6A285872D2A809300889A94 /* Coralogix-Internal */;
 			targetProxy = E6A285902D2A816500889A94 /* PBXContainerItemProxy */;
 		};
 		E6A285AC2D2A853200889A94 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = E6A282292D2A79A000889A94 /* Coralogix */;
 			targetProxy = E6A285AB2D2A853200889A94 /* PBXContainerItemProxy */;
+		};
+		E6A2868A2D2D51E800889A94 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = E6A285E12D2AD5E900889A94 /* Session-Replay */;
+			targetProxy = E6A286892D2D51E800889A94 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -2410,7 +2638,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.4;
+				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
@@ -2470,7 +2698,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.4;
+				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
@@ -2552,7 +2780,7 @@
 				BUILD_LIBRARY_FOR_DISTRIBUTION = YES;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEFINES_MODULE = NO;
+				DEFINES_MODULE = YES;
 				DYLIB_COMPATIBILITY_VERSION = 1;
 				DYLIB_CURRENT_VERSION = 1;
 				DYLIB_INSTALL_NAME_BASE = "@rpath";
@@ -2569,7 +2797,7 @@
 				MODULE_VERIFIER_SUPPORTED_LANGUAGES = "objective-c objective-c++";
 				MODULE_VERIFIER_SUPPORTED_LANGUAGE_STANDARDS = "gnu17 gnu++20";
 				PRODUCT_BUNDLE_IDENTIFIER = "com.coralogix.coralogix-internal";
-				PRODUCT_NAME = "$(TARGET_NAME:c99extidentifier)";
+				PRODUCT_NAME = Coralogix_Internal;
 				SKIP_INSTALL = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_INSTALL_OBJC_HEADER = NO;
@@ -2584,7 +2812,7 @@
 				BUILD_LIBRARY_FOR_DISTRIBUTION = YES;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEFINES_MODULE = NO;
+				DEFINES_MODULE = YES;
 				DYLIB_COMPATIBILITY_VERSION = 1;
 				DYLIB_CURRENT_VERSION = 1;
 				DYLIB_INSTALL_NAME_BASE = "@rpath";
@@ -2601,7 +2829,7 @@
 				MODULE_VERIFIER_SUPPORTED_LANGUAGES = "objective-c objective-c++";
 				MODULE_VERIFIER_SUPPORTED_LANGUAGE_STANDARDS = "gnu17 gnu++20";
 				PRODUCT_BUNDLE_IDENTIFIER = "com.coralogix.coralogix-internal";
-				PRODUCT_NAME = "$(TARGET_NAME:c99extidentifier)";
+				PRODUCT_NAME = Coralogix_Internal;
 				SKIP_INSTALL = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_INSTALL_OBJC_HEADER = NO;
@@ -2618,10 +2846,9 @@
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.coralogix.Coralogix-tests";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.coralogix.Coralogix-Tests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_OBJC_BRIDGING_HEADER = "Coralogix-tests/Coralogix-tests-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -2636,10 +2863,112 @@
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.coralogix.Coralogix-tests";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.coralogix.Coralogix-Tests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_OBJC_BRIDGING_HEADER = "Coralogix-tests/Coralogix-tests-Bridging-Header.h";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		E6A285E72D2AD5E900889A94 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUILD_LIBRARY_FOR_DISTRIBUTION = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEFINES_MODULE = YES;
+				DYLIB_COMPATIBILITY_VERSION = 1;
+				DYLIB_CURRENT_VERSION = 1;
+				DYLIB_INSTALL_NAME_BASE = "@rpath";
+				ENABLE_MODULE_VERIFIER = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				MODULE_VERIFIER_SUPPORTED_LANGUAGES = "objective-c objective-c++";
+				MODULE_VERIFIER_SUPPORTED_LANGUAGE_STANDARDS = "gnu17 gnu++20";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.coralogix.Session-Replay";
+				PRODUCT_NAME = Session_Replay;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_INSTALL_OBJC_HEADER = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		E6A285E82D2AD5E900889A94 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUILD_LIBRARY_FOR_DISTRIBUTION = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEFINES_MODULE = YES;
+				DYLIB_COMPATIBILITY_VERSION = 1;
+				DYLIB_CURRENT_VERSION = 1;
+				DYLIB_INSTALL_NAME_BASE = "@rpath";
+				ENABLE_MODULE_VERIFIER = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				MODULE_VERIFIER_SUPPORTED_LANGUAGES = "objective-c objective-c++";
+				MODULE_VERIFIER_SUPPORTED_LANGUAGE_STANDARDS = "gnu17 gnu++20";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.coralogix.Session-Replay";
+				PRODUCT_NAME = Session_Replay;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_INSTALL_OBJC_HEADER = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		E6A286792D2BEA8E00889A94 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = KB76G8PF7B;
+				FRAMEWORK_SEARCH_PATHS = "$(BUILT_PRODUCTS_DIR)";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.coralogix.Session-Replay-Tests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		E6A2867A2D2BEA8E00889A94 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = KB76G8PF7B;
+				FRAMEWORK_SEARCH_PATHS = "$(BUILT_PRODUCTS_DIR)";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.coralogix.Session-Replay-Tests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
@@ -2666,7 +2995,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		E6A2858C2D2A809300889A94 /* Build configuration list for PBXNativeTarget "coralogix-internal" */ = {
+		E6A2858C2D2A809300889A94 /* Build configuration list for PBXNativeTarget "Coralogix-Internal" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				E6A2858D2D2A809300889A94 /* Debug */,
@@ -2680,6 +3009,24 @@
 			buildConfigurations = (
 				E6A285AE2D2A853200889A94 /* Debug */,
 				E6A285AF2D2A853200889A94 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		E6A285E62D2AD5E900889A94 /* Build configuration list for PBXNativeTarget "Session-Replay" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E6A285E72D2AD5E900889A94 /* Debug */,
+				E6A285E82D2AD5E900889A94 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		E6A286782D2BEA8E00889A94 /* Build configuration list for PBXNativeTarget "Session-Replay-Tests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E6A286792D2BEA8E00889A94 /* Debug */,
+				E6A2867A2D2BEA8E00889A94 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

@@ -9,6 +9,8 @@ import Foundation
 #if canImport(UIKit)
 import UIKit
 #endif
+import Coralogix_Internal
+
 
 class Helper {
     internal static func convertToAnyDict(_ attributeDict: [String: AttributeValue]) -> [String: Any] {

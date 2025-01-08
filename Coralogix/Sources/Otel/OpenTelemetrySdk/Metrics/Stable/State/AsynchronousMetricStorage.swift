@@ -4,6 +4,7 @@
 //
 
 import Foundation
+import Coralogix_Internal
 
 public class AsynchronousMetricStorage: MetricStorage {
     public private(set) var registeredReader: RegisteredReader

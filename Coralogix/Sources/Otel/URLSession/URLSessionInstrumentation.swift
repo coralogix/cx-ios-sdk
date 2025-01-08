@@ -4,6 +4,7 @@
  */
 
 import Foundation
+import Coralogix_Internal
 
 struct NetworkRequestState {
     var request: URLRequest?

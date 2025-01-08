@@ -64,31 +64,31 @@ public class VideoMaskingProcessor {
     }
     
     // MARK: Functions For reading video from URL
-    public func loadVideo(_ url: URL) async -> Bool {
-        self.videoAsset = AVAsset(url: url)
-        let tracks = try? await self.videoAsset?.loadTracks(withMediaType: AVMediaType.video)
-        
-        if let videoTrack = tracks?.first {
-            self.videoTrack = videoTrack
-            do {
-                let (affineTransform, metadata, cmMinFrameDuration, frameRate) = try await self.videoTrack!.load(.preferredTransform, .metadata, .minFrameDuration, .nominalFrameRate)
-                self.affineTransform = affineTransform
-                self.metadata = metadata
-                self.cmMinFrameDuration = cmMinFrameDuration
-                self.frameRate = frameRate
-                let duration = try await self.videoAsset!.load(.duration)
-                self.duration = CMTimeGetSeconds(duration)
-                
-            } catch (let error) {
-                Log.e("error loading data: \(error.localizedDescription)")
-                return false
-            }
-        } else {
-            return false
-        }
-        
-        return self.readAsset()
-    }
+//    public func loadVideo(_ url: URL) async -> Bool {
+//        self.videoAsset = AVAsset(url: url)
+//        let tracks = try? await self.videoAsset?.loadTracks(withMediaType: AVMediaType.video)
+//        
+//        if let videoTrack = tracks?.first {
+//            self.videoTrack = videoTrack
+//            do {
+//                let (affineTransform, metadata, cmMinFrameDuration, frameRate) = try await self.videoTrack!.load(.preferredTransform, .metadata, .minFrameDuration, .nominalFrameRate)
+//                self.affineTransform = affineTransform
+//                self.metadata = metadata
+//                self.cmMinFrameDuration = cmMinFrameDuration
+//                self.frameRate = frameRate
+//                let duration = try await self.videoAsset!.load(.duration)
+//                self.duration = CMTimeGetSeconds(duration)
+//                
+//            } catch (let error) {
+//                Log.e("error loading data: \(error.localizedDescription)")
+//                return false
+//            }
+//        } else {
+//            return false
+//        }
+//        
+//        return self.readAsset()
+//    }
     
     public func calculteFrames() {
         while true {

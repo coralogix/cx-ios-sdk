@@ -4,6 +4,7 @@
 //
 //  Created by Tomer Har Yoffi on 12/12/2024.
 //
+import Foundation
 
 class ScannerPipeline {
     var isImageScannerEnabled: Bool = false

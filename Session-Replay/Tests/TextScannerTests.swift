@@ -8,7 +8,7 @@
 import XCTest
 import Vision
 import CoreImage
-@testable import session_replay
+@testable import Session_Replay
 
 class TextScannerTests: XCTestCase {
     var textScanner: TextScanner!
@@ -84,7 +84,7 @@ class TextScannerTests: XCTestCase {
 
     func testMaskText_withNoText_shouldReturnOriginalImage() {
         // Mock input image without text
-        let inputURL = Bundle(for: type(of: self)).url(forResource: "test_image_without_text", withExtension: "png")!
+        let inputURL = Bundle(for: type(of: self)).url(forResource: "test_image_2", withExtension: "png")!
         let ciImage = CIImage(contentsOf: inputURL)!
 
         let (maskedImage, totalTextCount, maskedTextCount) = textScanner.maskText(in: ciImage, with: ["anyPattern"])

@@ -8,7 +8,7 @@
 import AVFoundation
 import ReplayKit
 import UIKit
-import CoralogixRum from Frameworks/sdk1
+
 /// Represents the configuration options for session replay functionality.
 public struct SessionReplayOptions {
     /// The type of recording to be used during the session. image / video (TBD)
@@ -104,7 +104,7 @@ public class SessionReplay {
     
     // Private initializer that requires an Options object
     private init(sessionReplayOptions: SessionReplayOptions) {
-        if Helper.shouldInitialized(sampleRate: sessionReplayOptions.sessionRecordingSampleRate) == false {
+        if Utils.shouldInitialized(sampleRate: sessionReplayOptions.sessionRecordingSampleRate) == false {
             return
         }
         self.sessionReplayOptions = sessionReplayOptions
@@ -181,6 +181,14 @@ public class SessionReplay {
             return
         }
         sessionReplayModel.updateSessionId(with: sessionId)
+    }
+    
+    internal func update(sessionReplayModel: SessionReplayModel?) {
+        guard let model = sessionReplayModel else {
+            Log.e("[SessionReplay] missing SessionReplayModel")
+            return
+        }
+        self.sessionReplayModel = model
     }
 }
 

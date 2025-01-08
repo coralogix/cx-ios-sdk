@@ -6,7 +6,7 @@
 //
 
 import XCTest
-@testable import session_replay
+@testable import Session_Replay
 
 class ScannerPipelineTests: XCTestCase {
     var scannerPipeline: ScannerPipeline!

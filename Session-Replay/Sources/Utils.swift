@@ -6,7 +6,6 @@
 //
 
 import UIKit
-import coralogix-internal
 
 class Utils {
     

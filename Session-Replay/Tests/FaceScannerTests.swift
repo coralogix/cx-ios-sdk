@@ -8,7 +8,7 @@
 import XCTest
 import Vision
 import UIKit
-@testable import session_replay
+@testable import Session_Replay
 
 class FaceScannerTests: XCTestCase {
     var faceScanner: FaceScanner!
@@ -27,7 +27,7 @@ class FaceScannerTests: XCTestCase {
         let expectation = self.expectation(description: "Face detection and masking should complete successfully.")
 
         // Mock input image URL
-        let inputURL = Bundle(for: type(of: self)).url(forResource: "test_image_with_faces", withExtension: "png")!
+        let inputURL = Bundle(for: type(of: self)).url(forResource: "test_image_2", withExtension: "png")!
         
         faceScanner.processImage(at: inputURL) { success in
             XCTAssertTrue(success, "The face detection and masking should succeed.")
@@ -41,7 +41,7 @@ class FaceScannerTests: XCTestCase {
         let expectation = self.expectation(description: "Face detection should return false when no faces are present.")
 
         // Mock input image URL
-        let inputURL = Bundle(for: type(of: self)).url(forResource: "test_image_without_faces", withExtension: "png")!
+        let inputURL = Bundle(for: type(of: self)).url(forResource: "test_image", withExtension: "png")!
 
         faceScanner.processImage(at: inputURL) { success in
             XCTAssertFalse(success, "The face detection should fail when no faces are detected.")
@@ -53,7 +53,7 @@ class FaceScannerTests: XCTestCase {
 
     func testApplyFaceMask_withDetectedFaces_shouldMaskCorrectly() {
         // Mock input image
-        let inputURL = Bundle(for: type(of: self)).url(forResource: "test_image_without_text", withExtension: "png")!
+        let inputURL = Bundle(for: type(of: self)).url(forResource: "test_image_2", withExtension: "png")!
         let uiImage = UIImage(contentsOfFile: inputURL.path)!
 
         // Mock face observations

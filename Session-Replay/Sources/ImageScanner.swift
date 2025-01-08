@@ -19,7 +19,7 @@ class ImageScanner {
                       creditCardPredicate: [String]? = nil,
                       completion: @escaping (Bool, Int, Int) -> Void) {
         guard let ciImage = CIImage(contentsOf: inputURL),
-              let cgImage = Helper.convertCIImageToCGImage(ciImage) else {
+              let cgImage = Utils.convertCIImageToCGImage(ciImage) else {
             Log.e("Failed to load image.")
             completion(false, 0, 0)
             return
@@ -61,7 +61,7 @@ class ImageScanner {
         }
         
         func saveMaskedImage(_ maskedImage: CIImage, to url: URL,  totalImagesCount: Int, maskedImagesCount: Int) {
-            Helper.saveImage(maskedImage, outputURL: url) { result in
+            Utils.saveImage(maskedImage, outputURL: url) { result in
                 completion(result, totalImagesCount, maskedImagesCount)
             }
         }
@@ -212,8 +212,8 @@ class ImageScanner {
                 return
             }
             
-            let allPredicates = (Helper.creditCardWords +
-                                 Helper.creditCardPrefixes +
+            let allPredicates = (Utils.creditCardWords +
+                                 Utils.creditCardPrefixes +
                                  (self.creditCardPredicate ?? [])).map { $0.lowercased() }
             
             for observation in observations {

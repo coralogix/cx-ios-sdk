@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import Coralogix_Internal
 
 extension String {
     func matches(for regex: String) -> [String] {

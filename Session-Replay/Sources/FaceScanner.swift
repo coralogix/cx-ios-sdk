@@ -16,7 +16,7 @@ class FaceScanner {
     ///   - completion: A closure returning the processed image with faces masked or an error.
     func processImage(at inputURL: URL, completion: @escaping (Bool) -> Void) {
         guard let ciImage = CIImage(contentsOf: inputURL),
-              let cgImage = Helper.convertCIImageToCGImage(ciImage) else {
+              let cgImage = Utils.convertCIImageToCGImage(ciImage) else {
             Log.e("Failed to load image.")
             completion(false)
             return
@@ -39,7 +39,7 @@ class FaceScanner {
             // Process the image and mask detected faces
             let maskedImage = self.applyFaceMask(to: UIImage(cgImage: cgImage), with: observations)
             if let cgImage = maskedImage?.cgImage {
-                Helper.saveImage(cgImage, outputURL: inputURL) { isSuccess in
+                Utils.saveImage(cgImage, outputURL: inputURL) { isSuccess in
                     completion(isSuccess)
                 }
             }

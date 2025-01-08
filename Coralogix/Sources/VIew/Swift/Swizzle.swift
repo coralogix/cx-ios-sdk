@@ -10,6 +10,8 @@ import UIKit
 #endif
 import SwiftUI
 import ObjectiveC.runtime
+import Coralogix_Internal
+
 
 public struct CXView {
     enum AppState: String {

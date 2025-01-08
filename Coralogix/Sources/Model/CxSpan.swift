@@ -5,6 +5,7 @@
 //
 
 import Foundation
+import Coralogix_Internal
 
 public class CxSpan {
     let versionMetadata: VersionMetadata

@@ -5,6 +5,7 @@
 //
 
 import Foundation
+import Coralogix_Internal
 
 public class CoralogixExporter: SpanExporter {
     private var options: CoralogixExporterOptions

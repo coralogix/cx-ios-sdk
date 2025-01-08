@@ -8,6 +8,7 @@
 #if canImport(UIKit)
 import UIKit
 #endif
+import Coralogix_Internal
 
 extension CoralogixRum {
     public func initializeUserActionsInstrumentation() {

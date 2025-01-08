@@ -7,10 +7,10 @@ let package = Package(
     name: "Coralogix",
     platforms: [
         .iOS(.v13)
-        .tvOS(.v13),
     ],
     products: [
-        .library(name: "Coralogix", type: .dynamic, targets: ["Coralogix"])
+        .library(name: "Coralogix", type: .dynamic, targets: ["Coralogix"]),
+        .library(name: "Coralogix-Internal", targets: ["Coralogix-Internal"])
     ],
     targets: [
         .binaryTarget(
