@@ -16,7 +16,7 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "E6A285872D2A809300889A94"
-               BuildableName = "Coralogix-Internal.framework"
+               BuildableName = "Coralogix_Internal.framework"
                BlueprintName = "Coralogix-Internal"
                ReferencedContainer = "container:Coralogix.xcodeproj">
             </BuildableReference>
@@ -51,7 +51,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "E6A285872D2A809300889A94"
-            BuildableName = "Coralogix-Internal.framework"
+            BuildableName = "Coralogix_Internal.framework"
             BlueprintName = "Coralogix-Internal"
             ReferencedContainer = "container:Coralogix.xcodeproj">
          </BuildableReference>

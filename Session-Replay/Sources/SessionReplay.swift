@@ -8,6 +8,7 @@
 import AVFoundation
 import ReplayKit
 import UIKit
+import Coralogix_Internal
 
 /// Represents the configuration options for session replay functionality.
 public struct SessionReplayOptions {
@@ -92,7 +93,8 @@ public struct SessionReplayOptions {
 }
 
 /// Manages session replay functionality, including recording and event capture.
-public class SessionReplay {
+public class SessionReplay: SessionReplayInterface {
+    
     /// The internal model managing session replay data and operations.
     var sessionReplayModel: SessionReplayModel?
     
@@ -107,11 +109,21 @@ public class SessionReplay {
         if Utils.shouldInitialized(sampleRate: sessionReplayOptions.sessionRecordingSampleRate) == false {
             return
         }
+        
+        SdkManager.shared.register(sessionReplayInterface: self)
+
         self.sessionReplayOptions = sessionReplayOptions
         self.sessionReplayModel = SessionReplayModel(sessionReplayOptions: sessionReplayOptions)
         
+        if let coralogixSdk = SdkManager.shared.getCoralogixSdk() {
+            let sessionId = coralogixSdk.getSessionID()
+            self.update(sessionId: sessionId)
+        } else {
+            Log.e("[CoralogixSdk] is not initialized")
+        }
+        
         if sessionReplayOptions.autoStartSessionRecording {
-            self.startSessionRecording()
+            self.startRecording()
         }
     }
 
@@ -127,7 +139,7 @@ public class SessionReplay {
     }
     
     /// Starts recording the session, capturing data at the configured interval.
-    public func startSessionRecording() {
+    public func startRecording() {
         guard let sessionReplayModel = self.sessionReplayModel,
               let sessionReplayOptions = sessionReplayModel.sessionReplayOptions else {
             Log.e("[SessionReplay] missing sessionReplayOptions")
@@ -146,7 +158,7 @@ public class SessionReplay {
     }
     
     /// Stops recording the session and releases resources.
-    public func stopSessionRecording() {
+    public func stopRecording() {
         guard let sessionReplayModel = self.sessionReplayModel,
               let sessionReplayOptions = sessionReplayModel.sessionReplayOptions else {
             Log.e("[SessionReplay] missing sessionReplayOptions")
@@ -162,7 +174,7 @@ public class SessionReplay {
     }
     
     /// Captures a specific event during the session.
-    public func captureEvent() {
+    public func captureEvent(name: String, properties: [String : Any]) {
         guard let sessionReplayModel = self.sessionReplayModel,
               let sessionReplayOptions = sessionReplayModel.sessionReplayOptions else {
             Log.e("[SessionReplay] missing sessionReplayOptions")

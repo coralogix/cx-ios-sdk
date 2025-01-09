@@ -418,6 +418,8 @@
 		E6A2869A2D2EB16700889A94 /* TextScannerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6A286912D2EB16700889A94 /* TextScannerTests.swift */; };
 		E6A2869B2D2EB16700889A94 /* test_image_without_text.png in Resources */ = {isa = PBXBuildFile; fileRef = E6A286922D2EB16700889A94 /* test_image_without_text.png */; };
 		E6A2869C2D2EB16700889A94 /* test_image_2.png in Resources */ = {isa = PBXBuildFile; fileRef = E6A286932D2EB16700889A94 /* test_image_2.png */; };
+		E6A2869D2D30028D00889A94 /* Coralogix_Internal.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E6A285882D2A809300889A94 /* Coralogix_Internal.framework */; };
+		E6A286A12D3002E800889A94 /* SdkManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6A286A02D3002E800889A94 /* SdkManager.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -441,6 +443,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = E6A285E12D2AD5E900889A94;
 			remoteInfo = "Session-Replay";
+		};
+		E6A2869E2D30029500889A94 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = E6A282212D2A79A000889A94 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = E6A285872D2A809300889A94;
+			remoteInfo = "Coralogix-Internal";
 		};
 /* End PBXContainerItemProxy section */
 
@@ -858,6 +867,7 @@
 		E6A286912D2EB16700889A94 /* TextScannerTests.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = TextScannerTests.swift; path = "Session-Replay/Tests/TextScannerTests.swift"; sourceTree = SOURCE_ROOT; };
 		E6A286922D2EB16700889A94 /* test_image_without_text.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = test_image_without_text.png; path = "Session-Replay/Tests/test_image_without_text.png"; sourceTree = SOURCE_ROOT; };
 		E6A286932D2EB16700889A94 /* test_image_2.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = test_image_2.png; path = "Session-Replay/Tests/test_image_2.png"; sourceTree = SOURCE_ROOT; };
+		E6A286A02D3002E800889A94 /* SdkManager.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SdkManager.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -889,6 +899,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E6A2869D2D30028D00889A94 /* Coralogix_Internal.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1822,6 +1833,7 @@
 		E6A285802D2A7AF200889A94 /* Sources */ = {
 			isa = PBXGroup;
 			children = (
+				E6A286A02D3002E800889A94 /* SdkManager.swift */,
 				E6A2857F2D2A7AF200889A94 /* Log.swift */,
 			);
 			path = Sources;
@@ -2008,6 +2020,7 @@
 			buildRules = (
 			);
 			dependencies = (
+				E6A2869F2D30029500889A94 /* PBXTargetDependency */,
 			);
 			name = "Session-Replay";
 			productName = "Session-Replay";
@@ -2500,6 +2513,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E6A286A12D3002E800889A94 /* SdkManager.swift in Sources */,
 				E6A2858F2D2A80E900889A94 /* Log.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -2581,6 +2595,11 @@
 			isa = PBXTargetDependency;
 			target = E6A285E12D2AD5E900889A94 /* Session-Replay */;
 			targetProxy = E6A286892D2D51E800889A94 /* PBXContainerItemProxy */;
+		};
+		E6A2869F2D30029500889A94 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = E6A285872D2A809300889A94 /* Coralogix-Internal */;
+			targetProxy = E6A2869E2D30029500889A94 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 

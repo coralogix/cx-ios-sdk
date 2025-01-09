@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import Coralogix_Internal
 
 extension CoralogixRum {
     public func initializeNavigationInstrumentation() {
@@ -15,7 +16,11 @@ extension CoralogixRum {
     @objc func handleNotification(notification: Notification) {
         if let cxView = notification.object as? CXView {
             if cxView.state == .notifyOnAppear {
-                //self.sessionReplay?.captureEvent()
+                if let sessionReplay = SdkManager.shared.getSessionReplay() {
+                    sessionReplay.captureEvent(name: "", properties: [:])
+                } else {
+                    Log.e("[SessionReplay] is not initialized")
+                }
             }
             
             if viewManager.isUniqueView(name: cxView.name) {

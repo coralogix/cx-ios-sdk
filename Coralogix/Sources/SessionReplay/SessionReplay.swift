@@ -8,11 +8,17 @@
 import Foundation
 import Coralogix_Internal
 
-extension CoralogixRum {
+extension CoralogixRum: CoralogixInterface {
+    public func getSessionID() -> String {
+        return self.sessionManager.getSessionMetadata()?.sessionId ?? ""
+    }
+    
+    public func reportError(_ error: String) {
+        Log.d("[SessionRelay] Reporting error: \(error)")
+    }
+    
     func initializeSessionReplay() {
-        if let sessionId = self.sessionManager.getSessionMetadata()?.sessionId {
-            
-        }
+        SdkManager.shared.register(coralogixInterface: self)
         
         self.sessionManager.sessionChangedCallback = { sessionId in
             Log.d("[Session Id: \(sessionId)]")
@@ -20,18 +26,27 @@ extension CoralogixRum {
     }
     
     public func startRecording() {
-        if let sessionId = self.sessionManager.getSessionMetadata()?.sessionId {
-             //   sessionReplay.startSessionRecording()
+        if let sessionReplay = SdkManager.shared.getSessionReplay() {
+            sessionReplay.startRecording()
+            sessionReplay.captureEvent(name: "TestEvent", properties: ["key": "value"])
         } else {
-            Log.e("[Session Replay] failed to start recording - missing session id")
+            Log.e("[SessionReplay] is not initialized")
         }
     }
     
     public func stopRecording() {
-//sessionReplay.stopSessionRecording()
+        if let sessionReplay = SdkManager.shared.getSessionReplay() {
+            sessionReplay.stopRecording()
+        } else {
+            Log.e("[SessionReplay] is not initialized")
+        }
     }
     
     public func captureEvent() {
-         //   sessionReplay.captureEvent()
+        if let sessionReplay = SdkManager.shared.getSessionReplay() {
+            sessionReplay.captureEvent(name: "TestEvent", properties: ["key": "value"])
+        } else {
+            Log.e("[SessionReplay] is not initialized")
+        }
     }
 }

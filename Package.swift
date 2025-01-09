@@ -10,7 +10,8 @@ let package = Package(
     ],
     products: [
         .library(name: "Coralogix", type: .dynamic, targets: ["Coralogix"]),
-        .library(name: "Coralogix-Internal", targets: ["Coralogix-Internal"])
+        .library(name: "Coralogix-Internal", targets: ["Coralogix-Internal"]),
+        .library(name: "Session-Replay", targets: ["Session-Replay"])
     ],
     targets: [
         .binaryTarget(
@@ -28,6 +29,10 @@ let package = Package(
                 .target(name: "CrashReporter")
             ],
             path: "Coralogix/Sources/"
+        ),
+        .target(
+            name: "Session-Replay",
+            path: "Session-Replay/Sources/"
         )
     ]
 )
