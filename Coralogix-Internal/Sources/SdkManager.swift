@@ -16,6 +16,7 @@ public protocol SessionReplayInterface {
     func startRecording()
     func stopRecording()
     func captureEvent(name: String, properties: [String: Any])
+    func update(sessionId: String)
 }
 
 public class SdkManager {

@@ -23,7 +23,11 @@ extension CoralogixRum: CoralogixInterface {
         self.sessionManager.sessionChangedCallback = { sessionId in
             Log.d("[Session Id: \(sessionId)]")
             
-            
+            guard let sessionReplay = SdkManager.shared.getSessionReplay() else {
+                Log.e("Failed to get Session Recording ")
+                return
+            }
+            sessionReplay.update(sessionId: sessionId)
         }
     }
     
