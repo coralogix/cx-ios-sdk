@@ -11,7 +11,11 @@ import Coralogix_Internal
 
 extension CoralogixRum {
     public func initializeCrashInstumentation() {
-        if self.options.shouldInitInstumentation(instumentation: .errors) {
+        guard let options = self.options else {
+            Log.e("Options are nil.")
+            return
+        }
+        if options.shouldInitInstumentation(instumentation: .errors) {
             // It is strongly recommended that local symbolication only be enabled for non-release builds.
             // Use [] for release versions.
             let config = PLCrashReporterConfig(signalHandlerType: .BSD, symbolicationStrategy: .all)

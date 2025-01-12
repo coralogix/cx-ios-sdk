@@ -14,25 +14,41 @@ extension Notification.Name {
 }
 
 public class CoralogixRum {
-    internal var coralogixExporter: CoralogixExporter?
-    internal var versionMetadata: VersionMetadata?
+    // MARK: - Singleton Instance
+    public static let shared = CoralogixRum()
+    
+    // MARK: - Properties
+    internal var coralogixExporter: CoralogixExporter? = nil
+    internal var versionMetadata: VersionMetadata? = nil
     internal var networkManager = NetworkManager()
     internal var viewManager = ViewManager(keyChain: KeychainManager())
     internal var sessionManager = SessionManager()
-    internal var sessionInstrumentation: URLSessionInstrumentation?
+    internal var sessionInstrumentation: URLSessionInstrumentation? = nil
     internal var metricsManager = MetricsManager()
-    internal var options: CoralogixExporterOptions
+    internal var options: CoralogixExporterOptions? = nil
 
     let notificationCenter = NotificationCenter.default
     
     static var isInitialized = false
     static var sdkFramework: SdkFramework = .swift
     
-    public init(options: CoralogixExporterOptions, sdkFramework: SdkFramework = .swift) {
+    // MARK: - Private Initializer
+    private init() {
+        // Prevent external initialization
+    }
+    
+    public func initialize(options: CoralogixExporterOptions, sdkFramework: SdkFramework = .swift) {
+        // Prevent reinitialization if already initialized
+        guard !CoralogixRum.isInitialized else {
+            Log.e("[CoralogixRum] is already initialized.")
+            return
+        }
+
         self.options = options
         self.displayCoralogixWord()
 
-        if options.sdkSampler.shouldInitialized() == false {
+        guard options.sdkSampler.shouldInitialized() else {
+            Log.e("Initialization skipped due to sample rate.")
             return
         }
         
@@ -67,23 +83,30 @@ public class CoralogixRum {
     }
     
     private func startup(sdkFramework: SdkFramework) {
+        guard let options = self.options else {
+            Log.e("Options is missing.")
+            return
+        }
         CoralogixRum.sdkFramework = sdkFramework
         self.initialzeMetricsManager()
 
-        Log.isDebug = self.options.debug
-        let versionMetadata = VersionMetadata(appName: self.options.application,
-                                              appVersion: self.options.version)
-        let coralogixExporter = CoralogixExporter(options: self.options,
-                                                  versionMetadata: versionMetadata,
-                                                  sessionManager: self.sessionManager,
-                                                  networkManager: self.networkManager,
-                                                  viewManager: self.viewManager,
-                                                  metricsManager: self.metricsManager)
+        Log.isDebug = self.options?.debug ?? false
+        let versionMetadata = VersionMetadata(
+            appName: self.options?.application ?? "",
+            appVersion: self.options?.version ?? "")
+        let coralogixExporter = CoralogixExporter(
+            options: options,
+            versionMetadata: versionMetadata,
+            sessionManager: self.sessionManager,
+            networkManager: self.networkManager,
+            viewManager: self.viewManager,
+            metricsManager: self.metricsManager)
+
         self.versionMetadata = versionMetadata
         self.coralogixExporter = coralogixExporter
         
         let resource = Resource(attributes: [
-            ResourceAttributes.serviceName.rawValue: AttributeValue.string(self.options.application)
+            ResourceAttributes.serviceName.rawValue: AttributeValue.string(self.options?.application ?? "")
         ])
         
         OpenTelemetry.registerTracerProvider(tracerProvider: TracerProviderBuilder().with(resource: resource)
@@ -107,12 +130,17 @@ public class CoralogixRum {
     private func initialzeMetricsManager() {
         self.metricsManager.addObservers()
 
-        if self.options.shouldInitInstumentation(instumentation: .mobileVitals) {
+        guard let options = self.options else {
+            Log.e("MetricsManager initialization failed: options are nil.")
+            return
+        }
+        
+        if options.shouldInitInstumentation(instumentation: .mobileVitals) {
             self.metricsManager.startFPSSamplingMonitoring(mobileVitalsFPSSamplingRate: options.mobileVitalsFPSSamplingRate)
             self.metricsManager.startColdStartMonitoring()
         }
         
-        if self.options.shouldInitInstumentation(instumentation: .anr) {
+        if options.shouldInitInstumentation(instumentation: .anr) {
             self.metricsManager.startANRMonitoring()
         }
     }

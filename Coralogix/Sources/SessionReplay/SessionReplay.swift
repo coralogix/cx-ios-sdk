@@ -22,6 +22,8 @@ extension CoralogixRum: CoralogixInterface {
         
         self.sessionManager.sessionChangedCallback = { sessionId in
             Log.d("[Session Id: \(sessionId)]")
+            
+            
         }
     }
     

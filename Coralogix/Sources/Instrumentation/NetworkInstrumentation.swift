@@ -6,10 +6,15 @@
 //
 
 import Foundation
+import Coralogix_Internal
 
 extension CoralogixRum {
     public func initializeNetworkInstrumentation() {
-        if self.options.shouldInitInstumentation(instumentation: .network) {
+        guard let options = self.options else {
+            Log.e("Options are nil.")
+            return
+        }
+        if options.shouldInitInstumentation(instumentation: .network) {
             self.sessionInstrumentation = URLSessionInstrumentation(configuration: URLSessionInstrumentationConfiguration(spanCustomization: self.spanCustomization, receivedResponse: self.receivedResponse))
         }
     }

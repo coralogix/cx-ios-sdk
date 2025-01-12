@@ -10,7 +10,11 @@ import Coralogix_Internal
 
 extension CoralogixRum {
     public func initializeMobileVitalsInstrumentation() {
-        if self.options.shouldInitInstumentation(instumentation: .mobileVitals) {
+        guard let options = self.options else {
+            Log.e("Options are nil.")
+            return
+        }
+        if options.shouldInitInstumentation(instumentation: .mobileVitals) {
             NotificationCenter.default.addObserver(self,
                                                    selector: #selector(handleMobileVitalsNotification(notification:)),
                                                    name: .cxRumNotificationMetrics, object: nil)

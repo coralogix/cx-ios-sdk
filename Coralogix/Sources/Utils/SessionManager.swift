@@ -7,6 +7,37 @@
 
 import Foundation
 import Coralogix_Internal
+/**
+ * When Is a New Session Created?
+ *
+ * A new session is created under the following circumstances:
+ *
+ * 1. **Idle Timeout**
+ *    If the time since the last recorded activity exceeds the idle interval (15 minutes),
+ *    the `setupSessionMetadata` method is called from `checkIdleTime`.
+ *
+ *    ```swift
+ *    if timeSinceLastActivity > idleInterval {
+ *        self.setupSessionMetadata()
+ *        NotificationCenter.default.post(name: .cxRumNotificationSessionEnded, object: nil)
+ *        Log.d("Function has been idle for 15 minutes.")
+ *    }
+ *    ```
+ *
+ * 2. **An Hour Has Passed**
+ *    The `getSessionMetadata` method checks if an hour has passed since the current session was created.
+ *    If so, it triggers `setupSessionMetadata` to create a new session.
+ *
+ *    ```swift
+ *    if let sessionCreationDate = self.sessionMetadata?.sessionCreationDate,
+ *       self.hasAnHourPassed(since: sessionCreationDate) {
+ *        self.setupSessionMetadata()
+ *    }
+ *    ```
+ *
+ * 3. **Explicit Session Management**
+ *    The `setupSessionMetadata` method can also be invoked explicitly, such as during a reset or other custom logic.
+ */
 
 public class SessionManager {
     private var sessionMetadata: SessionMetadata?

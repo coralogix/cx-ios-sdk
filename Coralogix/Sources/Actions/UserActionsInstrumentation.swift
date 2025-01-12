@@ -12,7 +12,11 @@ import Coralogix_Internal
 
 extension CoralogixRum {
     public func initializeUserActionsInstrumentation() {
-        if self.options.shouldInitInstumentation(instumentation: .userActions) {
+        guard let options = self.options else {
+            Log.e("Options are nil.")
+            return
+        }
+        if options.shouldInitInstumentation(instumentation: .userActions) {
             NotificationCenter.default.addObserver(self,
                                                    selector: #selector(handleTapNotification(notification:)),
                                                    name: .cxRumNotificationUserActions, object: nil)

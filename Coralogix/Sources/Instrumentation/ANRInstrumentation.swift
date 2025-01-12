@@ -6,11 +6,15 @@
 //
 
 import Foundation
+import Coralogix_Internal
 
 extension CoralogixRum {
-    
     func initializeANRInstrumentation() {
-        if self.options.shouldInitInstumentation(instumentation: .anr) {
+        guard let options = self.options else {
+            Log.e("Options are nil.")
+            return
+        }
+        if options.shouldInitInstumentation(instumentation: .anr) {
             NotificationCenter.default.addObserver(self,
                                                    selector: #selector(handleErrorNotification(notification:)),
                                                    name: .cxRumNotificationMetrics, object: nil)

@@ -8,10 +8,16 @@
 #if canImport(UIKit)
 import UIKit
 #endif
+import Coralogix_Internal
 
 extension CoralogixRum {
     public func initializeLifeCycleInstrumentation() {
-        if self.options.shouldInitInstumentation(instumentation: .lifeCycle) {
+        guard let options = self.options else {
+            Log.e("Options are nil.")
+            return
+        }
+        
+        if options.shouldInitInstumentation(instumentation: .lifeCycle) {
             NotificationCenter.default.addObserver(self,
                                                    selector: #selector(appDidFinishLaunching),
                                                    name: UIApplication.didFinishLaunchingNotification,
@@ -36,7 +42,11 @@ extension CoralogixRum {
     }
     
     @objc private func appDidFinishLaunching(notification: Notification) {
-        if self.options.shouldInitInstumentation(instumentation: .lifeCycle) {
+        guard let options = self.options else {
+            Log.e("Options are nil.")
+            return
+        }
+        if options.shouldInitInstumentation(instumentation: .lifeCycle) {
             let span = self.getLifeCycleSpan()
             span.setAttribute(key: Keys.type.rawValue,
                               value: Keys.appDidFinishLaunching.rawValue)
@@ -45,7 +55,11 @@ extension CoralogixRum {
     }
     
     @objc private func appDidBecomeActiveNotification(notification: Notification) {
-        if self.options.shouldInitInstumentation(instumentation: .lifeCycle) {
+        guard let options = self.options else {
+            Log.e("Options are nil.")
+            return
+        }
+        if options.shouldInitInstumentation(instumentation: .lifeCycle) {
             let span = self.getLifeCycleSpan()
             span.setAttribute(key: Keys.type.rawValue,
                               value: Keys.appDidBecomeActiveNotification.rawValue)
@@ -54,7 +68,11 @@ extension CoralogixRum {
     }
     
     @objc private func appDidEnterBackgroundNotification(notification: Notification) {
-        if self.options.shouldInitInstumentation(instumentation: .lifeCycle) {
+        guard let options = self.options else {
+            Log.e("Options are nil.")
+            return
+        }
+        if options.shouldInitInstumentation(instumentation: .lifeCycle) {
             let span = self.getLifeCycleSpan()
             span.setAttribute(key: Keys.type.rawValue,
                               value: Keys.appDidEnterBackgroundNotification.rawValue)
@@ -63,7 +81,11 @@ extension CoralogixRum {
     }
     
     @objc private func appWillTerminateNotification(notification: Notification) {
-        if self.options.shouldInitInstumentation(instumentation: .lifeCycle) {
+        guard let options = self.options else {
+            Log.e("Options are nil.")
+            return
+        }
+        if options.shouldInitInstumentation(instumentation: .lifeCycle) {
             let span = self.getLifeCycleSpan()
             span.setAttribute(key: Keys.type.rawValue,
                               value: Keys.appWillTerminateNotification.rawValue)
@@ -72,7 +94,11 @@ extension CoralogixRum {
     }
     
     @objc private func appDidReceiveMemoryWarningNotification(notification: Notification) {
-        if self.options.shouldInitInstumentation(instumentation: .lifeCycle) {
+        guard let options = self.options else {
+            Log.e("Options are nil.")
+            return
+        }
+        if options.shouldInitInstumentation(instumentation: .lifeCycle) {
             let span = self.getLifeCycleSpan()
             span.setAttribute(key: Keys.type.rawValue,
                               value: Keys.appDidReceiveMemoryWarningNotification.rawValue)

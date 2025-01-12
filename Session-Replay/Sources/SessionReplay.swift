@@ -106,31 +106,40 @@ public class SessionReplay: SessionReplayInterface {
     
     // Private initializer that requires an Options object
     private init(sessionReplayOptions: SessionReplayOptions) {
-        if Utils.shouldInitialized(sampleRate: sessionReplayOptions.sessionRecordingSampleRate) == false {
+        guard Utils.shouldInitialized(sampleRate: sessionReplayOptions.sessionRecordingSampleRate) else {
+            Log.e("Initialization skipped due to sample rate")
             return
         }
         
-        SdkManager.shared.register(sessionReplayInterface: self)
-
         self.sessionReplayOptions = sessionReplayOptions
         self.sessionReplayModel = SessionReplayModel(sessionReplayOptions: sessionReplayOptions)
         
-        if let coralogixSdk = SdkManager.shared.getCoralogixSdk() {
-            let sessionId = coralogixSdk.getSessionID()
-            self.update(sessionId: sessionId)
-        } else {
-            Log.e("[CoralogixSdk] is not initialized")
+        // Register with SDK Manager
+        DispatchQueue.main.async {
+            SdkManager.shared.register(sessionReplayInterface: self)
         }
         
+        guard let coralogixSdk = SdkManager.shared.getCoralogixSdk() else {
+            Log.e("[CoralogixSdk] is not initialized")
+            return
+        }
+        
+        let sessionId = coralogixSdk.getSessionID()
+        self.update(sessionId: sessionId)
+        
         if sessionReplayOptions.autoStartSessionRecording {
-            self.startRecording()
+            do {
+                try self.startRecording()
+            } catch {
+                Log.e("Failed to start recording: \(error)")
+            }
         }
     }
 
     // Method to initialize the singleton with options (called only once)
     public static func initializeWithOptions(sessionReplayOptions: SessionReplayOptions) {
         guard shared == nil else {
-            print("Singleton already initialized!")
+            Log.e("Singleton already initialized!")
             return
         }
         
