@@ -9,6 +9,9 @@ import Foundation
 
 public protocol CoralogixInterface {
     func getSessionID() -> String
+    func getCoralogixDomain() -> String
+    func getPublicKey() -> String
+    func getApplication() -> String
     func reportError(_ error: String)
 }
 

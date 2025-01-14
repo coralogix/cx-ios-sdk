@@ -8,6 +8,26 @@
 import UIKit
 import Coralogix_Internal
 
+/// The possible results for the export method.
+public enum SessionReplayResultCode {
+  /// The export operation finished successfully.
+  case success
+  
+  /// The export operation finished with an error.
+  case failure
+  
+  /// Merges the current result code with other result code
+  /// - Parameter newResultCode: the result code to merge with
+  mutating func mergeResultCode(newResultCode: SessionReplayResultCode) {
+    // If both results are success then return success.
+    if self == .success && newResultCode == .success {
+      self = .success
+      return
+    }
+    self = .failure
+  }
+}
+
 class SessionReplayModel {
     private let urlManager = URLManager()
     private var urlObserver: URLObserver?
@@ -19,6 +39,7 @@ class SessionReplayModel {
     var isRecording = false  // Custom flag to track recording state
     private var debounceWorkItem: DispatchWorkItem? = nil
     private let debounceInterval: TimeInterval = 0.5 // 500 milliseconds
+    private let srNetworkManager = SRNetworkManager()
     
     init(sessionReplayOptions: SessionReplayOptions? = nil) {
         self.sessionReplayOptions = sessionReplayOptions
@@ -74,21 +95,27 @@ class SessionReplayModel {
                 Log.e("Failed to capture screenshot")
                 return
             }
-            let timestamp = (properties?[Keys.timestamp.rawValue] as? TimeInterval).map { Int($0) }
-                            ?? Int(Date().timeIntervalSince1970 * 1000)
+            let timestamp: TimeInterval = (properties?[Keys.timestamp.rawValue] as? TimeInterval)
+                ?? Date().timeIntervalSince1970 * 1000
             let fileName = "SessionReplay/\(sessionId)_\(timestamp)_\(trackNumber).jpg"
             
             if let documentsDirectory = FileManager.default.urls(for: .documentDirectory,
                                                                  in: .userDomainMask).first {
                 let fileURL = documentsDirectory.appendingPathComponent(fileName)
                 
-                DispatchQueue(label: "com.example.fileOperations").async {
-                    self.saveImageToDocument(fileURL:fileURL, data: data)
+                DispatchQueue(label: "com.example.fileOperations").async { [weak self] in
+                    guard let strongSelf = self else { return }
+                    strongSelf.saveImageToDocument(fileURL:fileURL, data: data)
+                    // Send Data
+                    strongSelf.srNetworkManager.send(data,
+                                               timestamp: timestamp,
+                                               sessionId: strongSelf.sessionId,
+                                               trackNumber: strongSelf.trackNumber)
                     
                     // Add URL to array and save it
-                    self.urlManager.addURL(fileURL)
-                    Utils.saveURLsToDisk(urls: self.urlManager.savedURLs)
-                    self.updateSessionId(with: self.sessionId)
+                    strongSelf.urlManager.addURL(fileURL)
+                    Utils.saveURLsToDisk(urls: strongSelf.urlManager.savedURLs)
+                    strongSelf.updateSessionId(with: strongSelf.sessionId)
                 }
             }
         }

@@ -9,6 +9,18 @@ import Foundation
 import Coralogix_Internal
 
 extension CoralogixRum: CoralogixInterface {
+    public func getApplication() -> String {
+        return self.options?.application ?? ""
+    }
+    
+    public func getCoralogixDomain() -> String {
+        return self.options?.coralogixDomain.rawValue ?? ""
+    }
+    
+    public func getPublicKey() -> String {
+        return self.options?.publicKey ?? ""
+    }
+    
     public func getSessionID() -> String {
         return self.sessionManager.getSessionMetadata()?.sessionId ?? ""
     }

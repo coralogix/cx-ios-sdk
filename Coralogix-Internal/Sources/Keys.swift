@@ -157,4 +157,12 @@ public enum Keys: String {
     case appWillTerminateNotification
     case applicationDidReceiveMemoryWarning
     case appDidReceiveMemoryWarningNotification
+    case application
+    case segmentIndex
+    case segmentSize
+    case segmentTimestamp
+    case sessionCreationTime
+    case subIndex
+    case metadata
+    case events
 }

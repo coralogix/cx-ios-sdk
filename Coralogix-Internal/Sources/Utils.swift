@@ -11,7 +11,8 @@ public enum Global: String {
     case sdk = "1.0.12"
     case swiftVersion = "5.9"
     case coralogixPath = "/browser/v1beta/logs"
-    
+    case sessionReplayPath = "/browser/alpha/sessionrecording"
+
     public enum BatchSpan: Int {
         case maxExportBatchSize = 50
         case scheduleDelay = 2
