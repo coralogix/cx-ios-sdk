@@ -15,9 +15,10 @@ extension CoralogixRum {
     
     @objc func handleNotification(notification: Notification) {
         if let cxView = notification.object as? CXView {
+            let timestemp: TimeInterval = Date().timeIntervalSince1970
             if cxView.state == .notifyOnAppear {
                 if let sessionReplay = SdkManager.shared.getSessionReplay() {
-                    sessionReplay.captureEvent(name: "", properties: [:])
+                    sessionReplay.captureEvent(properties: [Keys.timestamp.rawValue: timestemp])
                 } else {
                     Log.e("[SessionReplay] is not initialized")
                 }
@@ -25,7 +26,7 @@ extension CoralogixRum {
             
             if viewManager.isUniqueView(name: cxView.name) {
                 let span = self.getNavigationSpan()
-                let snapshot = SnapshotConext(timestemp: Date().timeIntervalSince1970,
+                let snapshot = SnapshotConext(timestemp: timestemp,
                                               errorCount: self.sessionManager.getErrorCount(),
                                               viewCount: self.viewManager.getUniqueViewCount() + 1,
                                               clickCount: self.sessionManager.getClickCount())

@@ -2,7 +2,7 @@
 //  Helper.swift
 //  session-replay
 //
-//  Created by Tomer Har Yoffi on 08/12/2024.
+//  Created by Coralogix DEV TEAM on 08/12/2024.
 //
 
 import UIKit

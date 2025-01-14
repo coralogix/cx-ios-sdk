@@ -5,6 +5,7 @@
 //
 
 import Foundation
+import Coralogix_Internal
 
 struct CxRum {
     var timeStamp: TimeInterval

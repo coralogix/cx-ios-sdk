@@ -2,7 +2,7 @@
 //  ScannerPipeline.swift
 //  session-replay
 //
-//  Created by Tomer Har Yoffi on 12/12/2024.
+//  Created by Coralogix DEV TEAM on 12/12/2024.
 //
 import Foundation
 

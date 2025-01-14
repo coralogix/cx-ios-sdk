@@ -2,7 +2,7 @@
 //  FaceScanner.swift
 //  session-replay
 //
-//  Created by Tomer Har Yoffi on 09/12/2024.
+//  Created by Coralogix DEV TEAM on 09/12/2024.
 //
 
 import Vision

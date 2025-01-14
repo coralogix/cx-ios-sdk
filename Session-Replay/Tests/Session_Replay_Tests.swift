@@ -2,7 +2,7 @@
 //  Session_Replay_Tests.swift
 //  Session-Replay-Tests
 //
-//  Created by Tomer Har Yoffi on 06/01/2025.
+//  Created by Coralogix DEV TEAM on 06/01/2025.
 //
 
 import XCTest

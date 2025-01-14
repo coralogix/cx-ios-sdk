@@ -2,7 +2,7 @@
 //  ImageScannerTests.swift
 //  session_replayTests
 //
-//  Created by Tomer Har Yoffi on 23/12/2024.
+//  Created by Coralogix DEV TEAM on 23/12/2024.
 //
 
 import XCTest

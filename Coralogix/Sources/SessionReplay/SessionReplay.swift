@@ -2,7 +2,7 @@
 //  CoralogixRum.swift
 //  
 //
-//  Created by Tomer Har Yoffi on 03/11/2024.
+//  Created by Coralogix DEV TEAM on 03/11/2024.
 //
 
 import Foundation
@@ -34,7 +34,7 @@ extension CoralogixRum: CoralogixInterface {
     public func startRecording() {
         if let sessionReplay = SdkManager.shared.getSessionReplay() {
             sessionReplay.startRecording()
-            sessionReplay.captureEvent(name: "TestEvent", properties: ["key": "value"])
+            sessionReplay.captureEvent(properties: ["key": "value"])
         } else {
             Log.e("[SessionReplay] is not initialized")
         }
@@ -50,7 +50,7 @@ extension CoralogixRum: CoralogixInterface {
     
     public func captureEvent() {
         if let sessionReplay = SdkManager.shared.getSessionReplay() {
-            sessionReplay.captureEvent(name: "TestEvent", properties: ["key": "value"])
+            sessionReplay.captureEvent(properties: ["key": "value"])
         } else {
             Log.e("[SessionReplay] is not initialized")
         }

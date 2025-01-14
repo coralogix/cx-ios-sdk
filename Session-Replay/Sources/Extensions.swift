@@ -2,7 +2,7 @@
 //  Extensions.swift
 //  session-replay
 //
-//  Created by Tomer Har Yoffi on 16/12/2024.
+//  Created by Coralogix DEV TEAM on 16/12/2024.
 //
 
 import UIKit

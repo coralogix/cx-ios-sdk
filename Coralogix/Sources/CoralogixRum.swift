@@ -1,6 +1,6 @@
 import Foundation
 import Darwin
-import Coralogix_Internal
+@_exported import Coralogix_Internal
 
 #if canImport(UIKit)
 import UIKit

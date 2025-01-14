@@ -2,10 +2,11 @@
 //  SessionReplayModel.swift
 //  session-replay
 //
-//  Created by Tomer Har Yoffi on 24/12/2024.
+//  Created by Coralogix DEV TEAM on 24/12/2024.
 //
 
 import UIKit
+import Coralogix_Internal
 
 class SessionReplayModel {
     private let urlManager = URLManager()
@@ -38,7 +39,7 @@ class SessionReplayModel {
         Log.d("SessionManager deinitialized and resources cleaned up.")
     }
     
-    internal func captureImage() {
+    internal func captureImage(properties: [String: Any]? = nil) {
         // Cancel any ongoing debounce work
         debounceWorkItem?.cancel()
         
@@ -73,9 +74,9 @@ class SessionReplayModel {
                 Log.e("Failed to capture screenshot")
                 return
             }
-            
-            let timestemp = Int(Date().timeIntervalSince1970 * 1000)
-            let fileName = "SessionReplay/\(sessionId)_\(timestemp)_\(trackNumber).jpg"
+            let timestamp = (properties?[Keys.timestamp.rawValue] as? TimeInterval).map { Int($0) }
+                            ?? Int(Date().timeIntervalSince1970 * 1000)
+            let fileName = "SessionReplay/\(sessionId)_\(timestamp)_\(trackNumber).jpg"
             
             if let documentsDirectory = FileManager.default.urls(for: .documentDirectory,
                                                                  in: .userDomainMask).first {

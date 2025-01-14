@@ -2,7 +2,7 @@
 //  SessionReplay.swift
 //  session-replay
 //
-//  Created by Tomer Har Yoffi on 03/11/2024.
+//  Created by Coralogix DEV TEAM on 03/11/2024.
 //
 
 import AVFoundation
@@ -183,7 +183,7 @@ public class SessionReplay: SessionReplayInterface {
     }
     
     /// Captures a specific event during the session.
-    public func captureEvent(name: String, properties: [String : Any]) {
+    public func captureEvent(properties: [String : Any]?) {
         guard let sessionReplayModel = self.sessionReplayModel,
               let sessionReplayOptions = sessionReplayModel.sessionReplayOptions else {
             Log.e("[SessionReplay] missing sessionReplayOptions")
@@ -192,7 +192,7 @@ public class SessionReplay: SessionReplayInterface {
         
         if sessionReplayOptions.imageRecordingType == true {
             guard sessionReplayModel.isRecording else { return }
-            sessionReplayModel.captureImage()
+            sessionReplayModel.captureImage(properties: properties)
         }
     }
     

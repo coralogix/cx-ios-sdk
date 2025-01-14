@@ -2,7 +2,7 @@
 //  SdkManager.swift
 //
 //
-//  Created by Tomer Har Yoffi on 09/01/2025.
+//  Created by Coralogix DEV TEAM on 09/01/2025.
 //
 
 import Foundation
@@ -15,7 +15,7 @@ public protocol CoralogixInterface {
 public protocol SessionReplayInterface {
     func startRecording()
     func stopRecording()
-    func captureEvent(name: String, properties: [String: Any])
+    func captureEvent(properties: [String: Any]?)
     func update(sessionId: String)
 }
 

@@ -2,7 +2,7 @@
 //  TextScanner.swift
 //  session-replay
 //
-//  Created by Tomer Har Yoffi on 28/11/2024.
+//  Created by Coralogix DEV TEAM on 28/11/2024.
 //
 
 import Foundation
