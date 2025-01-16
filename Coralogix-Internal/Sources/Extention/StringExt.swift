@@ -9,7 +9,7 @@ import Foundation
 import Coralogix_Internal
 
 extension String {
-    func matches(for regex: String) -> [String] {
+    public func matches(for regex: String) -> [String] {
         do {
             let regex = try NSRegularExpression(pattern: regex)
             let results = regex.matches(in: self, range: NSRange(self.startIndex..., in: self))

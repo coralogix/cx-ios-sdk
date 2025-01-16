@@ -106,11 +106,23 @@ class SessionReplayModel {
                 DispatchQueue(label: "com.example.fileOperations").async { [weak self] in
                     guard let strongSelf = self else { return }
                     strongSelf.saveImageToDocument(fileURL:fileURL, data: data)
-                    // Send Data
-                    strongSelf.srNetworkManager.send(data,
-                                               timestamp: timestamp,
-                                               sessionId: strongSelf.sessionId,
-                                               trackNumber: strongSelf.trackNumber)
+                    
+                    if let compressedChunks = data.gzipCompressed() {
+                        Log.d("Compression succeeded! Number of chunks: \(compressedChunks.count)")
+                        for (index, chunk) in compressedChunks.enumerated() {
+                            Log.d("Chunk \(index): \(chunk.count) bytes")
+                            
+                            // Send Data
+                            strongSelf.srNetworkManager.send(data,
+                                                             timestamp: timestamp,
+                                                             sessionId: strongSelf.sessionId,
+                                                             trackNumber: strongSelf.trackNumber,
+                                                             eventBase64: chunk.toBase64String(),
+                                                             subIndex: compressedChunks.count > 1 ? index : -1)
+                        }
+                    } else {
+                        Log.d("Compression failed")
+                    }
                     
                     // Add URL to array and save it
                     strongSelf.urlManager.addURL(fileURL)

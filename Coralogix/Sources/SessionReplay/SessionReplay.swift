@@ -9,12 +9,21 @@ import Foundation
 import Coralogix_Internal
 
 extension CoralogixRum: CoralogixInterface {
+    public func getSessionCreationTimestamp() -> TimeInterval {
+        return self.sessionManager.getSessionMetadata()?.sessionCreationDate ?? 0
+    }
+    
     public func getApplication() -> String {
         return self.options?.application ?? ""
     }
     
     public func getCoralogixDomain() -> String {
-        return self.options?.coralogixDomain.rawValue ?? ""
+        if let customDomainUrl = self.options?.customDomainUrl,
+           self.options?.customDomainUrl != "" {
+            return "\(customDomainUrl)"
+        } else {
+            return self.options?.coralogixDomain.rawValue ?? ""
+        }
     }
     
     public func getPublicKey() -> String {

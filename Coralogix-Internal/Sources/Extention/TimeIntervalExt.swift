@@ -6,16 +6,16 @@
 
 import Foundation
 
-extension TimeInterval {
-    var seconds: Int {
+public extension TimeInterval {
+    public var seconds: Int {
         return Int(self.rounded())
     }
 
-    var milliseconds: Int {
+    public var milliseconds: Int {
         return Int(self * 1_000)
     }
     
-    var openTelemetryFormat: [UInt64] {
+    public var openTelemetryFormat: [UInt64] {
         let (integerPart, fractionalPart) = modf(self)
         return [UInt64(integerPart), UInt64(fractionalPart * 1_000_000_000)]
     }

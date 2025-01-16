@@ -12,6 +12,7 @@ public protocol CoralogixInterface {
     func getCoralogixDomain() -> String
     func getPublicKey() -> String
     func getApplication() -> String
+    func getSessionCreationTimestamp() -> TimeInterval
     func reportError(_ error: String)
 }
 

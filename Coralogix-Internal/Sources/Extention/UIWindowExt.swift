@@ -10,7 +10,7 @@ import UIKit
 
 extension UIWindow {
     /// Returns the top most view controller from given window's root view controller
-    func visibleViewController() -> UIViewController? {
+    public func visibleViewController() -> UIViewController? {
         return UIWindow.getVisibleViewControllerFrom(rootViewController: self.rootViewController)
     }
     

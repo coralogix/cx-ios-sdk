@@ -12,6 +12,7 @@ public class SRNetworkManager {
     public var endPoint: String?
     public var publicKey: String?
     public var application: String?
+    public var sessionCreationTimestamp: TimeInterval?
     
     init() {
         guard let sdkManager = SdkManager.shared.getCoralogixSdk() else {
@@ -22,14 +23,18 @@ public class SRNetworkManager {
         self.endPoint = "\(coralogixDomain)\(Global.sessionReplayPath.rawValue)"
         self.publicKey = sdkManager.getPublicKey()
         self.application = sdkManager.getApplication()
+        self.sessionCreationTimestamp = sdkManager.getSessionCreationTimestamp()
     }
     
     public func send(_ data: Data,
                      timestamp: TimeInterval,
                      sessionId: String,
-                     trackNumber: Int) -> SessionReplayResultCode {
+                     trackNumber: Int,
+                     eventBase64: String,
+                     subIndex: Int) -> SessionReplayResultCode {
         guard let endPoint = self.endPoint,
               let publicKey = self.publicKey,
+              let sessionCreationTimestamp = self.sessionCreationTimestamp,
               let url = URL(string: endPoint) else { return .failure }
         
         var request = URLRequest(url: url)
@@ -37,12 +42,15 @@ public class SRNetworkManager {
         request.httpMethod = "POST"
         request.addValue("Bearer \(publicKey)", forHTTPHeaderField: "Authorization")
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.addValue("content-encoding", forHTTPHeaderField: "gzip")
         
         var status: SessionReplayResultCode = .failure
         let jsonObject = encode(data: data,
                                 timestamp: timestamp,
                                 sessionId: sessionId,
-                                trackNumber: trackNumber)
+                                trackNumber: trackNumber,
+                                eventBase64: eventBase64,
+                                subIndex: subIndex)
         
         if jsonObject.isEmpty {
             return .success
@@ -77,20 +85,27 @@ public class SRNetworkManager {
     private func encode(data: Data,
                         timestamp: TimeInterval,
                         sessionId: String,
-                        trackNumber: Int) -> [String: Any] {
+                        trackNumber: Int,
+                        eventBase64: String,
+                        subIndex: Int) -> [String: Any] {
         guard let application = self.application else {
             Log.e("Session Replay missing Application name")
             return [String: Any]()
         }
         
-        let events = ["base64", "base64"]
+        guard let sessionCreationTime = self.sessionCreationTimestamp else {
+            Log.e("Session Replay missing Session Creation Time")
+            return [String: Any]()
+        }
+        
+        let events = [eventBase64]
         let metaData = [Keys.application.rawValue: application,
                         Keys.segmentIndex.rawValue: trackNumber,
                         Keys.segmentSize.rawValue: data.count,
-                        Keys.segmentTimestamp.rawValue: timestamp,
-                        Keys.sessionCreationTime.rawValue: "Timestamp",
+                        Keys.segmentTimestamp.rawValue: timestamp.milliseconds,
+                        Keys.sessionCreationTime.rawValue: sessionCreationTime.milliseconds,
                         Keys.keySessionId.rawValue: sessionId,
-                        Keys.subIndex.rawValue: -1] as [String : Any]
+                        Keys.subIndex.rawValue: subIndex] as [String : Any]
         var paylod = [Keys.metadata.rawValue: metaData,
                       Keys.events.rawValue: events] as [String : Any]
         return paylod
