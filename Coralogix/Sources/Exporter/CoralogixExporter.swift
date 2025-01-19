@@ -167,8 +167,8 @@ public class CoralogixExporter: SpanExporter {
         guard let url = span.attributes[SemanticAttributes.httpUrl.rawValue]?.description else {
             return true
         }
-                
-        if url != self.endPoint {
+
+        if !Global.containsMonitoredPath(url) {
             guard let ignoreUrlsOrRejexs = self.options.ignoreUrls else {
                 return true
             }
@@ -176,7 +176,6 @@ public class CoralogixExporter: SpanExporter {
             if ignoreUrlsOrRejexs.contains(url) {
                 return false
             }
-            
             return self.isMatchesRegexPattern(string: url, regexs: ignoreUrlsOrRejexs) ? true : false
         }
         return false

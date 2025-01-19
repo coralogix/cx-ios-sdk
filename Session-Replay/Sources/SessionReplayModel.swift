@@ -97,7 +97,7 @@ class SessionReplayModel {
             }
             let timestamp: TimeInterval = (properties?[Keys.timestamp.rawValue] as? TimeInterval)
                 ?? Date().timeIntervalSince1970 * 1000
-            let fileName = "SessionReplay/\(sessionId)_\(timestamp)_\(trackNumber).jpg"
+            let fileName = "SessionReplay/\(sessionId)_\(trackNumber).jpg"
             
             if let documentsDirectory = FileManager.default.urls(for: .documentDirectory,
                                                                  in: .userDomainMask).first {
@@ -105,28 +105,29 @@ class SessionReplayModel {
                 
                 DispatchQueue(label: "com.example.fileOperations").async { [weak self] in
                     guard let strongSelf = self else { return }
-                    strongSelf.saveImageToDocument(fileURL:fileURL, data: data)
+                    
+                    if let sdkManager = SdkManager.shared.getCoralogixSdk(), sdkManager.isDebug() {
+                        strongSelf.saveImageToDocument(fileURL:fileURL, data: data)
+                    }
                     
                     if let compressedChunks = data.gzipCompressed() {
                         Log.d("Compression succeeded! Number of chunks: \(compressedChunks.count)")
                         for (index, chunk) in compressedChunks.enumerated() {
-                            Log.d("Chunk \(index): \(chunk.count) bytes")
+                            //Log.d("Chunk \(index): \(chunk.count) bytes")
                             
                             // Send Data
-                            strongSelf.srNetworkManager.send(data,
+                            strongSelf.srNetworkManager.send(chunk,
                                                              timestamp: timestamp,
                                                              sessionId: strongSelf.sessionId,
                                                              trackNumber: strongSelf.trackNumber,
-                                                             eventBase64: chunk.toBase64String(),
                                                              subIndex: compressedChunks.count > 1 ? index : -1)
                         }
                     } else {
-                        Log.d("Compression failed")
+                        Log.e("Compression failed")
                     }
                     
                     // Add URL to array and save it
                     strongSelf.urlManager.addURL(fileURL)
-                    Utils.saveURLsToDisk(urls: strongSelf.urlManager.savedURLs)
                     strongSelf.updateSessionId(with: strongSelf.sessionId)
                 }
             }
@@ -146,6 +147,7 @@ class SessionReplayModel {
             self.sessionId = sessionId
             self.trackNumber = 0
             self.clearSessionReplayFolder()
+            Utils.deleteURLsFromDisk()
         }
     }
     
@@ -175,7 +177,6 @@ class SessionReplayModel {
     private func saveImageToDocument(fileURL: URL, data: Data) {
         do {
             try data.write(to: fileURL)
-            Log.d("Screenshot saved to: \(fileURL.path)")
         } catch {
             Log.e("Error saving screenshot: \(error)")
         }

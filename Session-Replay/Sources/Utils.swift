@@ -242,7 +242,23 @@ class Utils {
             try data.write(to: fileURL)
             Log.d("Saved URLs to disk at \(fileURL)")
         } catch {
-            Log.d("Failed to save URLs to disk: \(error)")
+            Log.e("Failed to save URLs to disk: \(error)")
+        }
+    }
+    
+    static func deleteURLsFromDisk() {
+        let fileURL = getURLsFilePath()
+        let fileManager = FileManager.default
+        
+        do {
+            if fileManager.fileExists(atPath: fileURL.path) {
+                try fileManager.removeItem(at: fileURL)
+                Log.d("Deleted URLs file from disk at \(fileURL)")
+            } else {
+                Log.d("No URLs file exists at \(fileURL) to delete.")
+            }
+        } catch {
+            Log.e("Failed to delete URLs file from disk: \(error)")
         }
     }
 

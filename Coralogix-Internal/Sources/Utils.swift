@@ -18,6 +18,17 @@ public enum Global: String {
         case scheduleDelay = 2
     }
     
+    static let monitoredPaths: Set<String> = [
+        Global.coralogixPath.rawValue,
+        Global.sessionReplayPath.rawValue
+    ]
+    
+    // Function to check if the URL contains any monitored path
+    public static func containsMonitoredPath(_ urlString: String) -> Bool {
+        guard let url = URL(string: urlString) else { return false }
+        return monitoredPaths.contains(url.path)
+    }
+    
     public static func appVersionInfo(indludeBuild: Bool = true) -> String {
         let dictionary = Bundle.main.infoDictionary!
         if let version = dictionary["CFBundleShortVersionString"] as? String,

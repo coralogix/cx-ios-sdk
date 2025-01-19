@@ -2,7 +2,7 @@
 //  NetworkManager.swift
 //
 //
-//  Created by Tomer Har Yoffi on 14/01/2025.
+//  Created by Coralogix DEV TEAM on 14/01/2025.
 //
 
 import Foundation
@@ -30,84 +30,101 @@ public class SRNetworkManager {
                      timestamp: TimeInterval,
                      sessionId: String,
                      trackNumber: Int,
-                     eventBase64: String,
                      subIndex: Int) -> SessionReplayResultCode {
         guard let endPoint = self.endPoint,
               let publicKey = self.publicKey,
               let sessionCreationTimestamp = self.sessionCreationTimestamp,
               let url = URL(string: endPoint) else { return .failure }
-        
-        var request = URLRequest(url: url)
-        request.timeoutInterval = min(TimeInterval.greatestFiniteMagnitude, 10)
-        request.httpMethod = "POST"
-        request.addValue("Bearer \(publicKey)", forHTTPHeaderField: "Authorization")
-        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.addValue("content-encoding", forHTTPHeaderField: "gzip")
-        
         var status: SessionReplayResultCode = .failure
-        let jsonObject = encode(data: data,
-                                timestamp: timestamp,
-                                sessionId: sessionId,
-                                trackNumber: trackNumber,
-                                eventBase64: eventBase64,
-                                subIndex: subIndex)
+
+        let metaData = encode(dataSize: data.count,
+                              timestamp: timestamp,
+                              sessionId: sessionId,
+                              trackNumber: trackNumber,
+                              subIndex: subIndex)
         
-        if jsonObject.isEmpty {
-            return .success
-        }
-        
-        do {
-            // Convert the dictionary to JSON data
-            let jsonData = try JSONSerialization.data(withJSONObject: jsonObject, options: [])
-            request.httpBody = jsonData
-            
-            // Convert JSON data to a string if needed
-            if let jsonString = String(data: jsonData, encoding: .utf8) {
-                Log.d("⚡️ Session Replay string: ⚡️\n\(jsonString)")
-            }
-        } catch {
-            Log.e(error)
+        // Convert the JSON to Data
+        guard let jsonData = try? JSONSerialization.data(withJSONObject: metaData, options: []) else {
+            Log.e("[SRNetworkManager] Failed to convert JSON to Data")
             return .failure
         }
         
-        let task = URLSession.shared.dataTask(with: request) { _, _, error in
-            if error != nil {
-                status = .failure
-            } else {
+        // Boundary for separating parts
+        let boundary = "Boundary-\(UUID().uuidString)"
+
+        // Create the URLRequest
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        request.addValue("Bearer \(publicKey)", forHTTPHeaderField: "Authorization")
+        
+        // Create the request body
+        var body = Data()
+        
+        // Add the JSON part
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"\(Keys.metaData.rawValue)\"\r\n".data(using: .utf8)!)
+        body.append("Content-Type: application/json\r\n\r\n".data(using: .utf8)!)
+        body.append(jsonData)
+        body.append("\r\n".data(using: .utf8)!)
+        
+        // Add chunk (binary data)
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"chunk\"; filename=\"image.jpg\"\r\n".data(using: .utf8)!)
+        body.append("Content-Type: image/jpeg\r\n\r\n".data(using: .utf8)!)
+        body.append(data)
+        body.append("\r\n".data(using: .utf8)!)
+        
+        // End the body with the boundary
+        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
+        
+        // Set the body to the request
+        request.httpBody = body
+    
+        let task = URLSession.shared.dataTask(with: request) { data, response, error in
+            if let error = error {
+                Log.e("[SRNetworkManager] Request failed with error: \(error.localizedDescription)")
+                return
+            }
+            
+            guard let httpResponse = response as? HTTPURLResponse else {
+                Log.e("[SRNetworkManager] Invalid response")
+                return
+            }
+            
+            Log.d("[SRNetworkManager] Response status code: \(httpResponse.statusCode)")
+            
+            if let data = data, let responseString = String(data: data, encoding: .utf8) {
+                Log.d("[SRNetworkManager] Response body: \(responseString)")
                 status = .success
             }
         }
         task.resume()
-        
         return status
     }
     
-    private func encode(data: Data,
+    private func encode(dataSize: Int,
                         timestamp: TimeInterval,
                         sessionId: String,
                         trackNumber: Int,
-                        eventBase64: String,
                         subIndex: Int) -> [String: Any] {
         guard let application = self.application else {
-            Log.e("Session Replay missing Application name")
+            Log.e("[SRNetworkManager] Session Replay missing Application name")
             return [String: Any]()
         }
         
         guard let sessionCreationTime = self.sessionCreationTimestamp else {
-            Log.e("Session Replay missing Session Creation Time")
+            Log.e("[SRNetworkManager] Session Replay missing Session Creation Time")
             return [String: Any]()
         }
         
-        let events = [eventBase64]
         let metaData = [Keys.application.rawValue: application,
                         Keys.segmentIndex.rawValue: trackNumber,
-                        Keys.segmentSize.rawValue: data.count,
+                        Keys.segmentSize.rawValue: dataSize,
                         Keys.segmentTimestamp.rawValue: timestamp.milliseconds,
-                        Keys.sessionCreationTime.rawValue: sessionCreationTime.milliseconds,
+                        Keys.keySessionCreationDate.rawValue: sessionCreationTime.milliseconds,
                         Keys.keySessionId.rawValue: sessionId,
                         Keys.subIndex.rawValue: subIndex] as [String : Any]
-        var paylod = [Keys.metadata.rawValue: metaData,
-                      Keys.events.rawValue: events] as [String : Any]
-        return paylod
+        return metaData
     }
 }

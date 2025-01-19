@@ -42,7 +42,7 @@ class URLObserver {
                             if success {
                                 Log.d("Pipeline completed successfully!")
                             } else {
-                                Log.d("Pipeline encountered an error.")
+                                Log.e("Pipeline encountered an error.")
                             }
                         }
                     }

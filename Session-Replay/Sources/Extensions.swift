@@ -76,7 +76,7 @@ extension Data {
             
             // Compress the current chunk
             guard let compressedChunk = chunk.compressChunk(bufferSize: bufferSize) else {
-                print("Failed to compress chunk at index \(currentIndex)")
+                Log.e("Failed to compress chunk at index \(currentIndex)")
                 return nil
             }
             
@@ -108,7 +108,7 @@ extension Data {
         )
         
         guard result == Z_OK else {
-            print("Failed to initialize zlib stream for GZIP, error code: \(result)")
+            Log.e("Failed to initialize zlib stream for GZIP, error code: \(result)")
             return nil
         }
         
@@ -120,7 +120,7 @@ extension Data {
             
             let status = deflate(&stream, Z_FINISH)
             if status == Z_STREAM_ERROR {
-                print("Compression error: \(status)")
+                Log.e("Compression error: \(status)")
                 return nil
             }
             
@@ -134,56 +134,4 @@ extension Data {
         
         return compressedData
     }
-    
-    /// Compresses the data using GZIP format (zlib with window bits = 31)
-//    func gzipCompressed() -> Data? {
-//        var compressedData = Data()
-//        let bufferSize = 64 * 1024 // 64KB buffer
-//        let streamPointer = UnsafeMutablePointer<UInt8>.allocate(capacity: bufferSize)
-//        
-//        var stream = z_stream()
-//        stream.next_in = UnsafeMutablePointer<UInt8>(mutating: (self as NSData).bytes.bindMemory(to: UInt8.self, capacity: self.count))
-//        stream.avail_in = uInt(self.count)
-//        
-//        // Initialize GZIP compression (windowBits = 31 for GZIP format)
-//        let result = deflateInit2_(
-//            &stream,
-//            Z_BEST_COMPRESSION,          // Compression level
-//            Z_DEFLATED,                  // Compression method
-//            31,                          // Window bits (31 = GZIP format)
-//            8,                           // Memory level
-//            Z_DEFAULT_STRATEGY,          // Strategy
-//            ZLIB_VERSION,                // Version of zlib
-//            Int32(MemoryLayout<z_stream>.size) // Size of the stream structure
-//        )
-//        
-//        guard result == Z_OK else {
-//            print("Failed to initialize zlib stream for GZIP, error code: \(result)")
-//            return nil
-//        }
-//        
-//        repeat {
-//            stream.next_out = streamPointer
-//            stream.avail_out = uInt(bufferSize)
-//            
-//            // Perform the compression
-//            let status = deflate(&stream, Z_FINISH)
-//            guard status == Z_OK || status == Z_STREAM_END else {
-//                print("Compression error: \(status)")
-//                deflateEnd(&stream)
-//                return nil
-//            }
-//            
-//            // Write the compressed chunk
-//            let bytesCompressed = bufferSize - Int(stream.avail_out)
-//            compressedData.append(streamPointer, count: bytesCompressed)
-//            
-//        } while stream.avail_out == 0
-//        
-//        // Clean up
-//        deflateEnd(&stream)
-//        streamPointer.deallocate()
-//        
-//        return compressedData
-//    }
 }

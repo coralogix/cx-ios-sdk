@@ -161,8 +161,9 @@ public enum Keys: String {
     case segmentIndex
     case segmentSize
     case segmentTimestamp
-    case sessionCreationTime
+    case keySessionCreationDate = "sessionCreationDate"
     case subIndex
-    case metadata
+    case metaData
     case events
+    case chunk
 }

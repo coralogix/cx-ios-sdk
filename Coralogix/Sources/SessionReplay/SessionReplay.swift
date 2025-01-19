@@ -9,6 +9,10 @@ import Foundation
 import Coralogix_Internal
 
 extension CoralogixRum: CoralogixInterface {
+    public func isDebug() -> Bool {
+        return self.options?.debug ?? false
+    }
+    
     public func getSessionCreationTimestamp() -> TimeInterval {
         return self.sessionManager.getSessionMetadata()?.sessionCreationDate ?? 0
     }
@@ -42,7 +46,7 @@ extension CoralogixRum: CoralogixInterface {
         SdkManager.shared.register(coralogixInterface: self)
         
         self.sessionManager.sessionChangedCallback = { sessionId in
-            Log.d("[Session Id: \(sessionId)]")
+            Log.d("[Changed Session Id: \(sessionId)]")
             
             guard let sessionReplay = SdkManager.shared.getSessionReplay() else {
                 Log.e("Failed to get Session Recording ")
