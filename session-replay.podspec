@@ -9,7 +9,7 @@
 Pod::Spec.new do |spec|
 
   spec.name         = "Session-Replay"
-  spec.version      = "1.0.0"
+  spec.version      = "1.0.13"
   spec.summary      = "Coralogix Session-Replay pod for iOS."
 
   spec.description  = <<-DESC

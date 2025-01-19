@@ -67,21 +67,15 @@ class SessionReplayModel {
         // Create a new work item
         let workItem = DispatchWorkItem { [weak self] in
             guard let self = self else { return }
-            guard let windowScene = UIApplication.shared.connectedScenes
-                .first(where: { $0.activationState == .foregroundActive }) as? UIWindowScene else {
-                Log.e("No active window scene found")
-                return
-            }
             
-            guard let window = windowScene.windows.first(where: { $0.isKeyWindow }) else {
+            guard let window = self.getKeyWindow() else {
                 Log.e("No key window found")
                 return
             }
-            
-            guard let sessionReplayOptions = self.sessionReplayOptions,
-                  sessionReplayOptions.captureScale > 0,
-                  sessionReplayOptions.captureCompressionQuality > 0 else {
-                Log.e("Invalid capture scale or compression quality in sessionReplayOptions")
+          
+            guard let options = self.sessionReplayOptions,
+                  self.isValidSessionReplayOptions(options) else {
+                Log.e("Invalid sessionReplayOptions")
                 return
             }
             
@@ -90,46 +84,18 @@ class SessionReplayModel {
                 return
             }
             
-            guard let data = window.captureScreenshot(scale: sessionReplayOptions.captureScale,
-                                                      compressionQuality: sessionReplayOptions.captureCompressionQuality) else {
+            guard let screenshotData = window.captureScreenshot(scale: options.captureScale,
+                                                      compressionQuality: options.captureCompressionQuality) else {
                 Log.e("Failed to capture screenshot")
                 return
             }
-            let timestamp: TimeInterval = (properties?[Keys.timestamp.rawValue] as? TimeInterval)
-                ?? Date().timeIntervalSince1970 * 1000
-            let fileName = "SessionReplay/\(sessionId)_\(trackNumber).jpg"
             
-            if let documentsDirectory = FileManager.default.urls(for: .documentDirectory,
-                                                                 in: .userDomainMask).first {
+            let timestamp = self.getTimestamp(from: properties)
+            let fileName = self.generateFileName(timestamp: timestamp)
+
+            if let documentsDirectory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
                 let fileURL = documentsDirectory.appendingPathComponent(fileName)
-                
-                DispatchQueue(label: "com.example.fileOperations").async { [weak self] in
-                    guard let strongSelf = self else { return }
-                    
-                    if let sdkManager = SdkManager.shared.getCoralogixSdk(), sdkManager.isDebug() {
-                        strongSelf.saveImageToDocument(fileURL:fileURL, data: data)
-                    }
-                    
-                    if let compressedChunks = data.gzipCompressed() {
-                        Log.d("Compression succeeded! Number of chunks: \(compressedChunks.count)")
-                        for (index, chunk) in compressedChunks.enumerated() {
-                            //Log.d("Chunk \(index): \(chunk.count) bytes")
-                            
-                            // Send Data
-                            strongSelf.srNetworkManager.send(chunk,
-                                                             timestamp: timestamp,
-                                                             sessionId: strongSelf.sessionId,
-                                                             trackNumber: strongSelf.trackNumber,
-                                                             subIndex: compressedChunks.count > 1 ? index : -1)
-                        }
-                    } else {
-                        Log.e("Compression failed")
-                    }
-                    
-                    // Add URL to array and save it
-                    strongSelf.urlManager.addURL(fileURL)
-                    strongSelf.updateSessionId(with: strongSelf.sessionId)
-                }
+                self.handleCapturedData(fileURL: fileURL, data: screenshotData, timestamp: timestamp)
             }
         }
         
@@ -199,6 +165,64 @@ class SessionReplayModel {
             }
         } else {
             Log.d("SessionReplay folder already exists at \(sessionReplayURL.path)")
+        }
+    }
+    
+    // MARK: - Helper Methods
+
+    private func getKeyWindow() -> UIWindow? {
+        guard let windowScene = UIApplication.shared.connectedScenes
+                .first(where: { $0.activationState == .foregroundActive }) as? UIWindowScene else {
+            Log.e("No active window scene found")
+            return nil
+        }
+        return windowScene.windows.first(where: { $0.isKeyWindow })
+    }
+    
+    private func isValidSessionReplayOptions(_ options: SessionReplayOptions) -> Bool {
+        return options.captureScale > 0 && options.captureCompressionQuality > 0
+    }
+    
+    private func getTimestamp(from properties: [String: Any]?) -> TimeInterval {
+        return (properties?[Keys.timestamp.rawValue] as? TimeInterval) ?? Date().timeIntervalSince1970 * 1000
+    }
+    
+    private func generateFileName(timestamp: TimeInterval) -> String {
+        return "SessionReplay/\(sessionId)_\(trackNumber).jpg"
+    }
+    
+    private func handleCapturedData(fileURL: URL, data: Data, timestamp: TimeInterval) {
+        DispatchQueue(label: "com.example.fileOperations").async { [weak self] in
+            guard let self = self else { return }
+
+            self.saveImageToDocumentIfDebug(fileURL: fileURL, data: data)
+            self.compressAndSendData(data: data, timestamp: timestamp)
+            self.urlManager.addURL(fileURL)
+            self.updateSessionId(with: self.sessionId)
+        }
+    }
+    
+    private func saveImageToDocumentIfDebug(fileURL: URL, data: Data) {
+        if let sdkManager = SdkManager.shared.getCoralogixSdk(), sdkManager.isDebug() {
+            saveImageToDocument(fileURL: fileURL, data: data)
+        }
+    }
+    
+    private func compressAndSendData(data: Data, timestamp: TimeInterval) {
+        if let compressedChunks = data.gzipCompressed() {
+            Log.d("Compression succeeded! Number of chunks: \(compressedChunks.count)")
+            for (index, chunk) in compressedChunks.enumerated() {
+                //Log.d("Chunk \(index): \(chunk.count) bytes")
+                
+                // Send Data
+                self.srNetworkManager.send(chunk,
+                                                 timestamp: timestamp,
+                                                 sessionId: self.sessionId,
+                                                 trackNumber: self.trackNumber,
+                                                 subIndex: compressedChunks.count > 1 ? index : -1)
+            }
+        } else {
+            Log.e("Compression failed")
         }
     }
 }

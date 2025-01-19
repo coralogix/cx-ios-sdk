@@ -1,4 +1,4 @@
-#
+ #
 #  Be sure to run `pod spec lint Coralogix.podspec' to ensure this is a
 #  valid spec and to remove all comments including this before submitting the spec.
 #
@@ -9,7 +9,7 @@
 Pod::Spec.new do |spec|
 
   spec.name         = "Coralogix"
-  spec.version      = "1.0.12"
+  spec.version      = "1.0.13"
   spec.summary      = "Coralogix Internal Package. This module is not for public use."
 
   spec.description  = <<-DESC
