@@ -13,8 +13,8 @@
 		E654D9CE2D3D3D3000829E44 /* UIWindowExt.swift in Sources */ = {isa = PBXBuildFile; fileRef = E654D9CA2D3D3D3000829E44 /* UIWindowExt.swift */; };
 		E654D9D12D3D3D5300829E44 /* Utils.swift in Sources */ = {isa = PBXBuildFile; fileRef = E654D9CF2D3D3D5300829E44 /* Utils.swift */; };
 		E654D9D22D3D3D5300829E44 /* Keys.swift in Sources */ = {isa = PBXBuildFile; fileRef = E654D9D02D3D3D5300829E44 /* Keys.swift */; };
-		E654D9D42D3F8D3E00829E44 /* SRNetworkManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E654D9D32D3F8D3E00829E44 /* SRNetworkManagerTests.swift */; };
 		E654D9D62D3F91E700829E44 /* Enums.swift in Sources */ = {isa = PBXBuildFile; fileRef = E654D9D52D3F91E700829E44 /* Enums.swift */; };
+		E654D9D72D3FD4DE00829E44 /* SRNetworkManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E654D9D32D3F8D3E00829E44 /* SRNetworkManagerTests.swift */; };
 		E6A283FD2D2A7A3900889A94 /* IEEEtrantools.sty in Resources */ = {isa = PBXBuildFile; fileRef = E6A282362D2A7A3900889A94 /* IEEEtrantools.sty */; };
 		E6A283FE2D2A7A3900889A94 /* PLCrashReportFormat.tex in Resources */ = {isa = PBXBuildFile; fileRef = E6A282372D2A7A3900889A94 /* PLCrashReportFormat.tex */; };
 		E6A283FF2D2A7A3900889A94 /* plcrashutil in Resources */ = {isa = PBXBuildFile; fileRef = E6A2823A2D2A7A3900889A94 /* plcrashutil */; };
@@ -418,7 +418,6 @@
 		E6A286982D2EB16700889A94 /* test_image.png in Resources */ = {isa = PBXBuildFile; fileRef = E6A2868F2D2EB16700889A94 /* test_image.png */; };
 		E6A286992D2EB16700889A94 /* ImageScannerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6A286902D2EB16700889A94 /* ImageScannerTests.swift */; };
 		E6A2869A2D2EB16700889A94 /* TextScannerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6A286912D2EB16700889A94 /* TextScannerTests.swift */; };
-		E6A2869B2D2EB16700889A94 /* test_image_without_text.png in Resources */ = {isa = PBXBuildFile; fileRef = E6A286922D2EB16700889A94 /* test_image_without_text.png */; };
 		E6A2869C2D2EB16700889A94 /* test_image_2.png in Resources */ = {isa = PBXBuildFile; fileRef = E6A286932D2EB16700889A94 /* test_image_2.png */; };
 		E6A2869D2D30028D00889A94 /* Coralogix_Internal.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E6A285882D2A809300889A94 /* Coralogix_Internal.framework */; };
 		E6A286A12D3002E800889A94 /* SdkManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6A286A02D3002E800889A94 /* SdkManager.swift */; };
@@ -869,7 +868,6 @@
 		E6A2868F2D2EB16700889A94 /* test_image.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = test_image.png; path = "Session-Replay/Tests/test_image.png"; sourceTree = SOURCE_ROOT; };
 		E6A286902D2EB16700889A94 /* ImageScannerTests.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = ImageScannerTests.swift; path = "Session-Replay/Tests/ImageScannerTests.swift"; sourceTree = SOURCE_ROOT; };
 		E6A286912D2EB16700889A94 /* TextScannerTests.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = TextScannerTests.swift; path = "Session-Replay/Tests/TextScannerTests.swift"; sourceTree = SOURCE_ROOT; };
-		E6A286922D2EB16700889A94 /* test_image_without_text.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = test_image_without_text.png; path = "Session-Replay/Tests/test_image_without_text.png"; sourceTree = SOURCE_ROOT; };
 		E6A286932D2EB16700889A94 /* test_image_2.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = test_image_2.png; path = "Session-Replay/Tests/test_image_2.png"; sourceTree = SOURCE_ROOT; };
 		E6A286A02D3002E800889A94 /* SdkManager.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SdkManager.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -1939,11 +1937,10 @@
 				E6A286902D2EB16700889A94 /* ImageScannerTests.swift */,
 				E6A2868D2D2EB16700889A94 /* ScannerPipelineTests.swift */,
 				E6A2868E2D2EB16700889A94 /* SessionReplayTests.swift */,
-				E6A286932D2EB16700889A94 /* test_image_2.png */,
-				E6A286922D2EB16700889A94 /* test_image_without_text.png */,
-				E6A2868F2D2EB16700889A94 /* test_image.png */,
 				E6A286912D2EB16700889A94 /* TextScannerTests.swift */,
 				E654D9D32D3F8D3E00829E44 /* SRNetworkManagerTests.swift */,
+				E6A286932D2EB16700889A94 /* test_image_2.png */,
+				E6A2868F2D2EB16700889A94 /* test_image.png */,
 			);
 			path = "Session-Replay-Tests";
 			sourceTree = "<group>";
@@ -2161,7 +2158,6 @@
 			files = (
 				E6A286982D2EB16700889A94 /* test_image.png in Resources */,
 				E6A2869C2D2EB16700889A94 /* test_image_2.png in Resources */,
-				E6A2869B2D2EB16700889A94 /* test_image_without_text.png in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -2552,7 +2548,6 @@
 				E6A285DA2D2A857400889A94 /* ViewManagerTests.swift in Sources */,
 				E6A285C92D2A857400889A94 /* FPSTriggerTests.swift in Sources */,
 				E6A285CE2D2A857400889A94 /* SamplerTests.swift in Sources */,
-				E654D9D42D3F8D3E00829E44 /* SRNetworkManagerTests.swift in Sources */,
 				E6A285D52D2A857400889A94 /* RumTests.swift in Sources */,
 				E6A285D62D2A857400889A94 /* DeviceContextTests.swift in Sources */,
 				E6A285CD2D2A857400889A94 /* InteractionContextTests.swift in Sources */,
@@ -2587,6 +2582,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				E6A286962D2EB16700889A94 /* ScannerPipelineTests.swift in Sources */,
+				E654D9D72D3FD4DE00829E44 /* SRNetworkManagerTests.swift in Sources */,
 				E6A286942D2EB16700889A94 /* FaceScannerTests.swift in Sources */,
 				E6A286992D2EB16700889A94 /* ImageScannerTests.swift in Sources */,
 				E6A286972D2EB16700889A94 /* SessionReplayTests.swift in Sources */,

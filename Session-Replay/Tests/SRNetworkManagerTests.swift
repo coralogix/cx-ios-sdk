@@ -241,5 +241,3 @@ class MockURLSessionDataTask: URLSessionDataTaskProtocol {
         closure()
     }
 }
-
-
