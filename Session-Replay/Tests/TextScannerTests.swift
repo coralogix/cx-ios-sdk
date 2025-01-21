@@ -56,20 +56,6 @@ class TextScannerTests: XCTestCase {
         waitForExpectations(timeout: 5, handler: nil)
     }
 
-    func testMaskText_withSpecificPattern_shouldMaskOnlyMatchingText() {
-        // Mock input image
-        let inputURL = Bundle(for: type(of: self)).url(forResource: "test_image", withExtension: "png")!
-        let ciImage = CIImage(contentsOf: inputURL)!
-
-        let patterns = ["Stop"]
-        let (maskedImage, totalTextCount, maskedTextCount) = textScanner.maskText(in: ciImage, with: patterns)
-
-        XCTAssertNotNil(maskedImage, "The masked image should not be nil.")
-        // Additional verification of the masked content can be done by saving and visually inspecting the result.
-        XCTAssertEqual(31, totalTextCount)
-        XCTAssertEqual(1, maskedTextCount)
-    }
-
     func testMaskText_withNoPatterns_shouldMaskAllText() {
         // Mock input image
         let inputURL = Bundle(for: type(of: self)).url(forResource: "test_image", withExtension: "png")!
@@ -93,5 +79,19 @@ class TextScannerTests: XCTestCase {
         XCTAssertEqual(ciImage.extent, maskedImage.extent, "The output image should have the same extent as the input image.")
         XCTAssertEqual(0, totalTextCount)
         XCTAssertEqual(0, maskedTextCount)
+    }
+    
+    func testMaskText_withSpecificPattern_shouldMaskOnlyMatchingText() {
+        // Mock input image
+        let inputURL = Bundle(for: type(of: self)).url(forResource: "test_image", withExtension: "png")!
+        let ciImage = CIImage(contentsOf: inputURL)!
+
+        let patterns = ["Stop"]
+        let (maskedImage, totalTextCount, maskedTextCount) = textScanner.maskText(in: ciImage, with: patterns)
+
+        XCTAssertNotNil(maskedImage, "The masked image should not be nil.")
+        // Additional verification of the masked content can be done by saving and visually inspecting the result.
+        XCTAssertEqual(31, totalTextCount)
+        XCTAssertEqual(1, maskedTextCount)
     }
 }

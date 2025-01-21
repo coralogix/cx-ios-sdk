@@ -215,11 +215,11 @@ class SessionReplayModel {
                 //Log.d("Chunk \(index): \(chunk.count) bytes")
                 
                 // Send Data
-                self.srNetworkManager.send(chunk,
-                                                 timestamp: timestamp,
-                                                 sessionId: self.sessionId,
-                                                 trackNumber: self.trackNumber,
-                                                 subIndex: compressedChunks.count > 1 ? index : -1)
+                _ = self.srNetworkManager.send(chunk,
+                                               timestamp: timestamp,
+                                               sessionId: self.sessionId,
+                                               trackNumber: self.trackNumber,
+                                               subIndex: compressedChunks.count > 1 ? index : -1)
             }
         } else {
             Log.e("Compression failed")

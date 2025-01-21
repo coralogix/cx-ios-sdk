@@ -8,6 +8,7 @@
 import UIKit
 import Vision
 import CoreImage
+import Coralogix_Internal
 
 class ImageScanner {
     let matches = 2

@@ -5,6 +5,7 @@
 //  Created by Coralogix DEV TEAM on 12/12/2024.
 //
 import Foundation
+import Coralogix_Internal
 
 class ScannerPipeline {
     var isImageScannerEnabled: Bool = false

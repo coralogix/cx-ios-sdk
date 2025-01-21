@@ -24,8 +24,8 @@ final class CoralogixRumTests: XCTestCase {
     }
     
     func testInit() {
-        let coralogixRum = CoralogixRum(options: options!)
-        if let options = coralogixRum.coralogixExporter?.getOptions() {
+        CoralogixRum.shared.initialize(options: options!)
+        if let options = CoralogixRum.shared.coralogixExporter?.getOptions() {
             
             // Verify that options are set correctly
             XCTAssertEqual(options.application, "TestApp-iOS")
@@ -53,20 +53,20 @@ final class CoralogixRumTests: XCTestCase {
                                            labels: ["item" : "banana", "itemPrice" : 1000],
                                            sampleRate: 0,
                                            debug: true)
-        _ = CoralogixRum(options: options!)
+        CoralogixRum.shared.initialize(options: options!)
         XCTAssertFalse(CoralogixRum.isInitialized)
     }
     
     // Test setUserContext method
     func testSetUserContext() {
-        let coralogixRum = CoralogixRum(options: options!)
+        CoralogixRum.shared.initialize(options: options!)
             let userContext = UserContext(userId: "1234",
                                           userName: "Daffy Duck",
                                           userEmail: "daffy.duck@coralogix.com",
                                           userMetadata: ["age": "18", "profession" : "duck"])
-            coralogixRum.setUserContext(userContext: userContext)
+        CoralogixRum.shared.setUserContext(userContext: userContext)
             
-        if let options = coralogixRum.coralogixExporter?.getOptions() {
+        if let options = CoralogixRum.shared.coralogixExporter?.getOptions() {
             
             // Verify that userContext is set correctly
             XCTAssertEqual(options.userContext, userContext)
@@ -74,24 +74,23 @@ final class CoralogixRumTests: XCTestCase {
     }
     
     func testSetLabels() {
-        let coralogixRum = CoralogixRum(options: options!)
-        if let labels = coralogixRum.coralogixExporter?.getOptions().labels {
+        CoralogixRum.shared.initialize(options: options!)
+        if let labels = CoralogixRum.shared.coralogixExporter?.getOptions().labels {
             XCTAssertEqual(labels.count, 2)
             XCTAssertEqual(labels["item"] as? String, "banana")
             XCTAssertEqual(labels["itemPrice"] as? Int, 1000)
         }
         
-        let newLabel = ["device": "iphone"]
-        coralogixRum.setLabels(labels: newLabel)
-        if let labels = coralogixRum.coralogixExporter?.getOptions().labels {
+        CoralogixRum.shared.initialize(options: options!)
+        if let labels = CoralogixRum.shared.coralogixExporter?.getOptions().labels {
             XCTAssertEqual(labels.count, 1)
             XCTAssertEqual(labels["device"] as? String, "iphone")
         }
     }
     
     func testShutdown() {
-        let coralogixRum = CoralogixRum(options: options!)
-        coralogixRum.shutdown()
+        CoralogixRum.shared.initialize(options: options!)
+        CoralogixRum.shared.shutdown()
         XCTAssertFalse(CoralogixRum.isInitialized)
     }
 }

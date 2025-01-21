@@ -128,11 +128,7 @@ public class SessionReplay: SessionReplayInterface {
         self.update(sessionId: sessionId)
         
         if sessionReplayOptions.autoStartSessionRecording {
-            do {
-                try self.startRecording()
-            } catch {
-                Log.e("Failed to start recording: \(error)")
-            }
+            self.startRecording()
         }
     }
 

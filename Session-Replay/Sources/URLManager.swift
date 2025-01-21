@@ -7,6 +7,7 @@
 
 import Foundation
 import Combine
+import Coralogix_Internal
 
 class URLManager: ObservableObject {
     @Published private(set) var savedURLs: [URL] = []

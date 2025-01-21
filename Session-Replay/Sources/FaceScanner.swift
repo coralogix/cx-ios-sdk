@@ -7,6 +7,7 @@
 
 import Vision
 import UIKit
+import Coralogix_Internal
 
 class FaceScanner {
     

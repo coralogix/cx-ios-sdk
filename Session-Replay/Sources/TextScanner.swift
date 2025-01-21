@@ -9,6 +9,7 @@ import Foundation
 import Vision
 import CoreImage
 import UIKit
+import Coralogix_Internal
 
 public class TextScanner {
     

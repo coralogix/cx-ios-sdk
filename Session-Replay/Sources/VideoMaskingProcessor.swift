@@ -8,6 +8,7 @@
 import AVFoundation
 import Vision
 import CoreImage
+import Coralogix_Internal
 
 public class VideoMaskingProcessor {
     

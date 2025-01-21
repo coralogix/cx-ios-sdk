@@ -6,6 +6,7 @@
 //
 
 import XCTest
+@testable import Coralogix_Internal
 @testable import Session_Replay
 
 class SessionReplayTests: XCTestCase {
@@ -13,7 +14,7 @@ class SessionReplayTests: XCTestCase {
     func testStartSessionRecording_startsRecordingWhenNotAlreadyRecording() {
         let mockOptions = SessionReplayOptions(imageRecordingType: true)
         SessionReplay.initializeWithOptions(sessionReplayOptions: mockOptions)
-        SessionReplay.shared.startSessionRecording()
+        SessionReplay.shared.startRecording()
 
         if let isRecording = SessionReplay.shared.sessionReplayModel?.isRecording {
             XCTAssertTrue(isRecording, "Session recording should start when not already recording.")
@@ -26,20 +27,20 @@ class SessionReplayTests: XCTestCase {
     func testStartSessionRecording_doesNotStartWhenAlreadyRecording() {
         let mockOptions = SessionReplayOptions(imageRecordingType: true)
         SessionReplay.initializeWithOptions(sessionReplayOptions: mockOptions)
-        SessionReplay.shared.startSessionRecording()
+        SessionReplay.shared.startRecording()
         if let isRecording = SessionReplay.shared.sessionReplayModel?.isRecording {
             XCTAssertTrue(isRecording, "Session recording should remain true when already recording.")
         }
         let beforeCaptureTimer = SessionReplay.shared.sessionReplayModel?.captureTimer
-        SessionReplay.shared.startSessionRecording()
+        SessionReplay.shared.startRecording()
         let afterCaptureTimer = SessionReplay.shared.sessionReplayModel?.captureTimer
         XCTAssertEqual(beforeCaptureTimer, afterCaptureTimer, "Capture timer should not be re-initialized when already recording.")
     }
 
     func testStopSessionRecording_stopsRecording() {
-        SessionReplay.shared.startSessionRecording()
+        SessionReplay.shared.startRecording()
         sleep(1)
-        SessionReplay.shared.stopSessionRecording()
+        SessionReplay.shared.stopRecording()
         if let isRecording = SessionReplay.shared.sessionReplayModel?.isRecording {
             XCTAssertFalse(isRecording, "Session recording should stop.")
         }
@@ -58,10 +59,11 @@ class SessionReplayTests: XCTestCase {
         let mockSessionReplayModel = MockSessionReplayModel(sessionReplayOptions: options)
 
         SessionReplay.shared.update(sessionReplayModel: mockSessionReplayModel)
-        SessionReplay.shared.startSessionRecording()
+        SessionReplay.shared.startRecording()
         
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-            SessionReplay.shared.captureEvent()
+            let timestemp: TimeInterval = Date().timeIntervalSince1970
+            SessionReplay.shared.captureEvent(properties: [Keys.timestamp.rawValue: timestemp])
             XCTAssertEqual(mockSessionReplayModel.captureImageCallCount, 2, "Capture image should be called when recording.")
             expectation.fulfill()
         }
@@ -69,7 +71,8 @@ class SessionReplayTests: XCTestCase {
     }
 
     func testCaptureEvent_doesNotCaptureImageWhenNotRecording() {
-        SessionReplay.shared.captureEvent()
+        let timestemp: TimeInterval = Date().timeIntervalSince1970
+        SessionReplay.shared.captureEvent(properties: [Keys.timestamp.rawValue: timestemp])
         if let sessionReplayModel = SessionReplay.shared.sessionReplayModel {
             XCTAssertEqual(sessionReplayModel.trackNumber, 0, "Capture image should not be called when not recording.")
         }
@@ -80,7 +83,7 @@ class SessionReplayTests: XCTestCase {
 class MockSessionReplayModel: SessionReplayModel {
     var captureImageCallCount = 0
 
-    override func captureImage() {
+    override func captureImage(properties: [String : Any]?) {
         captureImageCallCount += 1
     }
 }

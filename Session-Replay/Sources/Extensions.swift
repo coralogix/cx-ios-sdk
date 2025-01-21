@@ -10,6 +10,7 @@ import Foundation
 import CommonCrypto
 import Compression
 import zlib
+import Coralogix_Internal
 
 extension CGImage {
     // Compute SHA-256 hash of pixel data

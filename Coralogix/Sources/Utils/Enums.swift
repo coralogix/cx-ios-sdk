@@ -1,5 +1,5 @@
 //
-//  Keys.swift
+//  Enums.swift
 //
 //  Created by Coralogix DEV TEAM on 28/03/2024.
 //
