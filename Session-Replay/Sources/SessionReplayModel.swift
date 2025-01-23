@@ -15,23 +15,12 @@ public enum SessionReplayResultCode {
   
   /// The export operation finished with an error.
   case failure
-  
-  /// Merges the current result code with other result code
-  /// - Parameter newResultCode: the result code to merge with
-  mutating func mergeResultCode(newResultCode: SessionReplayResultCode) {
-    // If both results are success then return success.
-    if self == .success && newResultCode == .success {
-      self = .success
-      return
-    }
-    self = .failure
-  }
 }
 
 class SessionReplayModel {
     private let urlManager = URLManager()
     private var urlObserver: URLObserver?
-    private var sessionId: String = ""
+    internal var sessionId: String = ""
     internal var trackNumber: Int = 0
     var captureTimer: Timer?
     private var isMaskingProcessorWorking = false
@@ -39,13 +28,15 @@ class SessionReplayModel {
     var isRecording = false  // Custom flag to track recording state
     private var debounceWorkItem: DispatchWorkItem? = nil
     private let debounceInterval: TimeInterval = 0.5 // 500 milliseconds
-    private let srNetworkManager = SRNetworkManager()
+    private let srNetworkManager: SRNetworkManager?
     
-    init(sessionReplayOptions: SessionReplayOptions? = nil) {
+    init(sessionReplayOptions: SessionReplayOptions? = nil,
+         networkManager: SRNetworkManager? = SRNetworkManager()) {
         self.sessionReplayOptions = sessionReplayOptions
+        self.srNetworkManager = networkManager
         self.urlObserver = URLObserver(urlManager: self.urlManager,
                                        sessionReplayOptions: sessionReplayOptions)
-        self.createSessionReplayFolder()
+        _ = self.createSessionReplayFolder()
     }
     
     deinit {
@@ -91,7 +82,7 @@ class SessionReplayModel {
             }
             
             let timestamp = self.getTimestamp(from: properties)
-            let fileName = self.generateFileName(timestamp: timestamp)
+            let fileName = self.generateFileName()
 
             if let documentsDirectory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
                 let fileURL = documentsDirectory.appendingPathComponent(fileName)
@@ -112,66 +103,78 @@ class SessionReplayModel {
             // Set track to 0 and update the current session ID if it's a new session
             self.sessionId = sessionId
             self.trackNumber = 0
-            self.clearSessionReplayFolder()
+            _ = self.clearSessionReplayFolder()
             Utils.deleteURLsFromDisk()
         }
     }
     
-    private func clearSessionReplayFolder() {
-        guard let documentsURL = getDocumentsDirectory() else {
+    internal func clearSessionReplayFolder(fileManager: FileManager = .default) -> SessionReplayResultCode {
+        guard let documentsURL = getDocumentsDirectory(fileManager: fileManager) else {
             Log.e("Could not locate Documents directory.")
-            return
+            return .failure
         }
         
         let sessionReplayURL = documentsURL.appendingPathComponent("SessionReplay")
         
         do {
-            let contents = try FileManager.default.contentsOfDirectory(at: sessionReplayURL, includingPropertiesForKeys: nil, options: [])
-            for fileURL in contents {
-                try FileManager.default.removeItem(at: fileURL)
+            let contents = try fileManager.contentsOfDirectory(at: sessionReplayURL,
+                                                               includingPropertiesForKeys: nil,
+                                                               options: [])
+            if contents.count > 0 {
+                for fileURL in contents {
+                    try fileManager.removeItem(at: fileURL)
+                }
+                Log.d("All contents of SessionReplay folder have been deleted.")
+                return .success
             }
-            Log.d("All contents of SessionReplay folder have been deleted.")
+            return .failure
         } catch {
             Log.e("Failed to clear SessionReplay folder: \(error.localizedDescription)")
+            return .failure
         }
     }
     
-    private func getDocumentsDirectory() -> URL? {
-        return FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
+    internal func getDocumentsDirectory(fileManager: FileManager = .default) -> URL? {
+        return fileManager.urls(for: .documentDirectory, in: .userDomainMask).first
     }
     
-    private func saveImageToDocument(fileURL: URL, data: Data) {
+    internal func saveImageToDocument(fileURL: URL, data: Data) -> SessionReplayResultCode {
         do {
             try data.write(to: fileURL)
+            return .success
         } catch {
             Log.e("Error saving screenshot: \(error)")
+            return .failure
         }
     }
     
-    private func createSessionReplayFolder() {
-        guard let documentsURL = getDocumentsDirectory() else {
+    internal func createSessionReplayFolder(fileManager: FileManager = .default) -> SessionReplayResultCode {
+        guard let documentsURL = getDocumentsDirectory(fileManager: fileManager) else {
             Log.e("Could not locate Documents directory.")
-            return
+            return .failure
         }
         
         let sessionReplayURL = documentsURL.appendingPathComponent("SessionReplay")
         
-        if !FileManager.default.fileExists(atPath: sessionReplayURL.path) {
+        if !fileManager.fileExists(atPath: sessionReplayURL.path) {
             do {
-                try FileManager.default.createDirectory(at: sessionReplayURL, withIntermediateDirectories: true, attributes: nil)
+                try fileManager.createDirectory(at: sessionReplayURL, withIntermediateDirectories: true, attributes: nil)
                 Log.d("SessionReplay folder created successfully at \(sessionReplayURL.path)")
+                return .success
             } catch {
                 Log.e("Failed to create SessionReplay folder: \(error.localizedDescription)")
+                return .failure
             }
         } else {
             Log.d("SessionReplay folder already exists at \(sessionReplayURL.path)")
+            return .failure
         }
     }
     
     // MARK: - Helper Methods
 
-    private func getKeyWindow() -> UIWindow? {
-        guard let windowScene = UIApplication.shared.connectedScenes
+    internal func getKeyWindow(connectedScenes: Set<UIScene> = UIApplication.shared.connectedScenes) -> UIWindow? {
+        guard let windowScene = connectedScenes
                 .first(where: { $0.activationState == .foregroundActive }) as? UIWindowScene else {
             Log.e("No active window scene found")
             return nil
@@ -179,15 +182,15 @@ class SessionReplayModel {
         return windowScene.windows.first(where: { $0.isKeyWindow })
     }
     
-    private func isValidSessionReplayOptions(_ options: SessionReplayOptions) -> Bool {
+    internal func isValidSessionReplayOptions(_ options: SessionReplayOptions) -> Bool {
         return options.captureScale > 0 && options.captureCompressionQuality > 0
     }
     
-    private func getTimestamp(from properties: [String: Any]?) -> TimeInterval {
+    internal func getTimestamp(from properties: [String: Any]?) -> TimeInterval {
         return (properties?[Keys.timestamp.rawValue] as? TimeInterval) ?? Date().timeIntervalSince1970 * 1000
     }
     
-    private func generateFileName(timestamp: TimeInterval) -> String {
+    internal func generateFileName() -> String {
         return "SessionReplay/\(sessionId)_\(trackNumber).jpg"
     }
     
@@ -195,34 +198,42 @@ class SessionReplayModel {
         DispatchQueue(label: "com.example.fileOperations").async { [weak self] in
             guard let self = self else { return }
 
-            self.saveImageToDocumentIfDebug(fileURL: fileURL, data: data)
-            self.compressAndSendData(data: data, timestamp: timestamp)
+            _ = self.saveImageToDocumentIfDebug(fileURL: fileURL, data: data)
+            _ = self.compressAndSendData(data: data, timestamp: timestamp)
             self.urlManager.addURL(fileURL)
             self.updateSessionId(with: self.sessionId)
         }
     }
     
-    private func saveImageToDocumentIfDebug(fileURL: URL, data: Data) {
+    internal func saveImageToDocumentIfDebug(fileURL: URL, data: Data) -> SessionReplayResultCode {
         if let sdkManager = SdkManager.shared.getCoralogixSdk(), sdkManager.isDebug() {
-            saveImageToDocument(fileURL: fileURL, data: data)
+            return saveImageToDocument(fileURL: fileURL, data: data)
         }
+        return .failure
     }
     
-    private func compressAndSendData(data: Data, timestamp: TimeInterval) {
-        if let compressedChunks = data.gzipCompressed() {
+    internal func calculateSubIndex(chunkCount: Int, currentIndex: Int) -> Int {
+        return chunkCount > 1 ? currentIndex : -1
+    }
+    
+    internal func compressAndSendData(data: Data, timestamp: TimeInterval) -> SessionReplayResultCode {
+        if let compressedChunks = data.gzipCompressed(), compressedChunks.count > 0 {
             Log.d("Compression succeeded! Number of chunks: \(compressedChunks.count)")
             for (index, chunk) in compressedChunks.enumerated() {
                 //Log.d("Chunk \(index): \(chunk.count) bytes")
+                let subIndex = calculateSubIndex(chunkCount: compressedChunks.count, currentIndex: index)
                 
                 // Send Data
-                _ = self.srNetworkManager.send(chunk,
-                                               timestamp: timestamp,
-                                               sessionId: self.sessionId,
-                                               trackNumber: self.trackNumber,
-                                               subIndex: compressedChunks.count > 1 ? index : -1)
+                _ = self.srNetworkManager?.send(chunk,
+                                                timestamp: timestamp,
+                                                sessionId: self.sessionId,
+                                                trackNumber: self.trackNumber,
+                                                subIndex: subIndex)
             }
+            return .success
         } else {
             Log.e("Compression failed")
+            return .failure
         }
     }
 }

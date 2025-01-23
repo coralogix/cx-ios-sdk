@@ -15,6 +15,7 @@
 		E654D9D22D3D3D5300829E44 /* Keys.swift in Sources */ = {isa = PBXBuildFile; fileRef = E654D9D02D3D3D5300829E44 /* Keys.swift */; };
 		E654D9D62D3F91E700829E44 /* Enums.swift in Sources */ = {isa = PBXBuildFile; fileRef = E654D9D52D3F91E700829E44 /* Enums.swift */; };
 		E654D9D72D3FD4DE00829E44 /* SRNetworkManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E654D9D32D3F8D3E00829E44 /* SRNetworkManagerTests.swift */; };
+		E654D9D92D422C5600829E44 /* SessionReplayModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E654D9D82D422C5600829E44 /* SessionReplayModelTests.swift */; };
 		E6A283FD2D2A7A3900889A94 /* IEEEtrantools.sty in Resources */ = {isa = PBXBuildFile; fileRef = E6A282362D2A7A3900889A94 /* IEEEtrantools.sty */; };
 		E6A283FE2D2A7A3900889A94 /* PLCrashReportFormat.tex in Resources */ = {isa = PBXBuildFile; fileRef = E6A282372D2A7A3900889A94 /* PLCrashReportFormat.tex */; };
 		E6A283FF2D2A7A3900889A94 /* plcrashutil in Resources */ = {isa = PBXBuildFile; fileRef = E6A2823A2D2A7A3900889A94 /* plcrashutil */; };
@@ -463,6 +464,7 @@
 		E654D9D02D3D3D5300829E44 /* Keys.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Keys.swift; sourceTree = "<group>"; };
 		E654D9D32D3F8D3E00829E44 /* SRNetworkManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SRNetworkManagerTests.swift; path = "Session-Replay/Tests/SRNetworkManagerTests.swift"; sourceTree = SOURCE_ROOT; };
 		E654D9D52D3F91E700829E44 /* Enums.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Enums.swift; sourceTree = "<group>"; };
+		E654D9D82D422C5600829E44 /* SessionReplayModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SessionReplayModelTests.swift; path = "Session-Replay/Tests/SessionReplayModelTests.swift"; sourceTree = SOURCE_ROOT; };
 		E6A2822A2D2A79A000889A94 /* Coralogix.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Coralogix.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		E6A282362D2A7A3900889A94 /* IEEEtrantools.sty */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = IEEEtrantools.sty; sourceTree = "<group>"; };
 		E6A282372D2A7A3900889A94 /* PLCrashReportFormat.tex */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = PLCrashReportFormat.tex; sourceTree = "<group>"; };
@@ -1939,6 +1941,7 @@
 				E6A2868E2D2EB16700889A94 /* SessionReplayTests.swift */,
 				E6A286912D2EB16700889A94 /* TextScannerTests.swift */,
 				E654D9D32D3F8D3E00829E44 /* SRNetworkManagerTests.swift */,
+				E654D9D82D422C5600829E44 /* SessionReplayModelTests.swift */,
 				E6A286932D2EB16700889A94 /* test_image_2.png */,
 				E6A2868F2D2EB16700889A94 /* test_image.png */,
 			);
@@ -2583,6 +2586,7 @@
 			files = (
 				E6A286962D2EB16700889A94 /* ScannerPipelineTests.swift in Sources */,
 				E654D9D72D3FD4DE00829E44 /* SRNetworkManagerTests.swift in Sources */,
+				E654D9D92D422C5600829E44 /* SessionReplayModelTests.swift in Sources */,
 				E6A286942D2EB16700889A94 /* FaceScannerTests.swift in Sources */,
 				E6A286992D2EB16700889A94 /* ImageScannerTests.swift in Sources */,
 				E6A286972D2EB16700889A94 /* SessionReplayTests.swift in Sources */,

@@ -31,7 +31,7 @@ class ImageScanner {
         func processRectangles(_ rectangles: [VNRectangleObservation], in ciImage: CIImage, using cgImage: CGImage) {
             var maskedImage = ciImage
             let dispatchGroup = DispatchGroup()
-            var totalImagesCount = rectangles.count
+            let totalImagesCount = rectangles.count
             var maskedImagesCount = 0
             
             for observation in rectangles {
