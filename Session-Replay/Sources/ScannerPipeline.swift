@@ -15,11 +15,12 @@ class ScannerPipeline {
     private let textScanner = TextScanner()
     private let imageScanner = ImageScanner()
     private let faceScanner = FaceScanner()
+    private let clickScanner = ClickScanner()
     
     func runPipeline(inputURL: URL,
                      options: SessionReplayOptions,
                      completion: @escaping (Bool) -> Void) {
-
+        
         // Run Image Scanner if enabled
         if isImageScannerEnabled {
             imageScanner.processImage(at: inputURL,
@@ -31,7 +32,7 @@ class ScannerPipeline {
             runTextScanner(inputURL: inputURL, options: options, completion: completion)
         }
     }
-
+    
     private func runTextScanner(inputURL: URL,
                                 options: SessionReplayOptions,
                                 completion: @escaping (Bool) -> Void) {
@@ -44,30 +45,33 @@ class ScannerPipeline {
             runFaceScanner(inputURL: inputURL, options: options, completion: completion)
         }
     }
-
+    
     private func runFaceScanner(inputURL: URL,
                                 options: SessionReplayOptions,
                                 completion: @escaping (Bool) -> Void) {
-    #if targetEnvironment(simulator)
-    // Skip face scanning on the simulator
-    Log.e("Skipping FaceScanner as we are running on the simulator")
-    completion(true)
-    #else
+#if targetEnvironment(simulator)
+        // Skip face scanning on the simulator
+        Log.e("Skipping FaceScanner as we are running on the simulator")
+        runClickScanner(inputURL: inputURL, options: options, completion: completion)
+#else
         // Run Face Scanner if enabled
         if isFaceScannerEnabled {
             faceScanner.processImage(at: inputURL) { result in
-                if result {
-                    Log.d("FaceScanner completed successfully.")
-                    completion(true)
-                } else {
-                    Log.d("FaceScanner failed")
-                    completion(false)
-                }
+                Log.d("FaceScanner completed successfully.")
+                runClickScanner(inputURL: inputURL, options: options, completion: completion)
             }
         } else {
             Log.d("Pipeline completed without FaceScanner.")
-            completion(true)
+            runClickScanner(inputURL: inputURL, options: options, completion: completion)
         }
-    #endif
+#endif
+    }
+    
+    private func runClickScanner(inputURL: URL,
+                                 options: SessionReplayOptions,
+                                 completion: @escaping (Bool) -> Void) {
+        clickScanner.processImage(at: inputURL) { result in
+            completion(result)
+        }
     }
 }

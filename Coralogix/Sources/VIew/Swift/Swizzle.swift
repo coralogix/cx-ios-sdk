@@ -198,6 +198,32 @@ extension UIApplication {
                                            swizzledSelector: swizzledSelector)
     }()
     
+    public static let swizzleSendEvent: Void = {
+        let originalSelector = #selector(sendEvent(_:))
+        let swizzledSelector = #selector(cx_sendEvent(_:))
+        
+        SwizzleUtils.swizzleInstanceMethod(for: UIApplication.self,
+                                           originalSelector: originalSelector,
+                                           swizzledSelector: swizzledSelector)
+    }()
+
+    @objc func cx_sendEvent(_ event: UIEvent) {
+        // Call the original implementation (swizzled now)
+        self.cx_sendEvent(event)
+
+        // Process touch events
+        if let touches = event.allTouches, let touch = touches.first, touch.phase == .began {
+            let location = touch.location(in: nil) // Screen coordinates
+            let x = location.x
+            let y = location.y
+
+            // Post the touch event to a notification center or your SDK
+            let tap = [Keys.x.rawValue: x,
+                       Keys.y.rawValue: y] as? [String: Any]
+            NotificationCenter.default.post(name: .cxRumNotificationUserActions, object: tap)
+        }
+    }
+    
     @objc private func cx_sendAction(_ action: Selector,
                                      to target: AnyObject?,
                                      from sender: AnyObject?,
@@ -325,6 +351,7 @@ extension UIViewController {
     
     @objc func swizzled_collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
         swizzled_collectionView(collectionView, didSelectItemAt: indexPath)
+        
         // Your custom implementation
         if let cell = collectionView.cellForItem(at: indexPath) {
             var attributes = [String: Any]()

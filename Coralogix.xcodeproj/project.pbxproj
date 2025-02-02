@@ -16,6 +16,8 @@
 		E654D9D62D3F91E700829E44 /* Enums.swift in Sources */ = {isa = PBXBuildFile; fileRef = E654D9D52D3F91E700829E44 /* Enums.swift */; };
 		E654D9D72D3FD4DE00829E44 /* SRNetworkManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E654D9D32D3F8D3E00829E44 /* SRNetworkManagerTests.swift */; };
 		E654D9D92D422C5600829E44 /* SessionReplayModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E654D9D82D422C5600829E44 /* SessionReplayModelTests.swift */; };
+		E6941B622D48CD060037AD9B /* ClickScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6941B602D48CC530037AD9B /* ClickScanner.swift */; };
+		E6941B792D4905E90037AD9B /* ClickScannerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6941B782D4905E90037AD9B /* ClickScannerTests.swift */; };
 		E6A283FD2D2A7A3900889A94 /* IEEEtrantools.sty in Resources */ = {isa = PBXBuildFile; fileRef = E6A282362D2A7A3900889A94 /* IEEEtrantools.sty */; };
 		E6A283FE2D2A7A3900889A94 /* PLCrashReportFormat.tex in Resources */ = {isa = PBXBuildFile; fileRef = E6A282372D2A7A3900889A94 /* PLCrashReportFormat.tex */; };
 		E6A283FF2D2A7A3900889A94 /* plcrashutil in Resources */ = {isa = PBXBuildFile; fileRef = E6A2823A2D2A7A3900889A94 /* plcrashutil */; };
@@ -411,7 +413,6 @@
 		E6A286092D2AD60700889A94 /* URLManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6A285F22D2AD60700889A94 /* URLManager.swift */; };
 		E6A2860A2D2AD60700889A94 /* Utils.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6A285F32D2AD60700889A94 /* Utils.swift */; };
 		E6A2860B2D2AD60700889A94 /* VideoMaskingProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6A285F42D2AD60700889A94 /* VideoMaskingProcessor.swift */; };
-		E6A2860C2D2AD60700889A94 /* README.md in Resources */ = {isa = PBXBuildFile; fileRef = E6A285F62D2AD60700889A94 /* README.md */; };
 		E6A286752D2BEA8E00889A94 /* Session_Replay.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E6A285E22D2AD5E900889A94 /* Session_Replay.framework */; };
 		E6A286942D2EB16700889A94 /* FaceScannerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6A2868B2D2EB16700889A94 /* FaceScannerTests.swift */; };
 		E6A286962D2EB16700889A94 /* ScannerPipelineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6A2868D2D2EB16700889A94 /* ScannerPipelineTests.swift */; };
@@ -465,6 +466,8 @@
 		E654D9D32D3F8D3E00829E44 /* SRNetworkManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SRNetworkManagerTests.swift; path = "Session-Replay/Tests/SRNetworkManagerTests.swift"; sourceTree = SOURCE_ROOT; };
 		E654D9D52D3F91E700829E44 /* Enums.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Enums.swift; sourceTree = "<group>"; };
 		E654D9D82D422C5600829E44 /* SessionReplayModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SessionReplayModelTests.swift; path = "Session-Replay/Tests/SessionReplayModelTests.swift"; sourceTree = SOURCE_ROOT; };
+		E6941B602D48CC530037AD9B /* ClickScanner.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ClickScanner.swift; sourceTree = "<group>"; };
+		E6941B782D4905E90037AD9B /* ClickScannerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ClickScannerTests.swift; path = "Session-Replay/Tests/ClickScannerTests.swift"; sourceTree = SOURCE_ROOT; };
 		E6A2822A2D2A79A000889A94 /* Coralogix.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Coralogix.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		E6A282362D2A7A3900889A94 /* IEEEtrantools.sty */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = IEEEtrantools.sty; sourceTree = "<group>"; };
 		E6A282372D2A7A3900889A94 /* PLCrashReportFormat.tex */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = PLCrashReportFormat.tex; sourceTree = "<group>"; };
@@ -1909,6 +1912,7 @@
 		E6A285F52D2AD60700889A94 /* Sources */ = {
 			isa = PBXGroup;
 			children = (
+				E6941B602D48CC530037AD9B /* ClickScanner.swift */,
 				E654D9C62D3D3C7200829E44 /* SRNetworkManager.swift */,
 				E6A285E92D2AD60700889A94 /* Extensions.swift */,
 				E6A285EA2D2AD60700889A94 /* FaceScanner.swift */,
@@ -1942,6 +1946,7 @@
 				E6A286912D2EB16700889A94 /* TextScannerTests.swift */,
 				E654D9D32D3F8D3E00829E44 /* SRNetworkManagerTests.swift */,
 				E654D9D82D422C5600829E44 /* SessionReplayModelTests.swift */,
+				E6941B782D4905E90037AD9B /* ClickScannerTests.swift */,
 				E6A286932D2EB16700889A94 /* test_image_2.png */,
 				E6A2868F2D2EB16700889A94 /* test_image.png */,
 			);
@@ -2029,7 +2034,6 @@
 				E6A285DD2D2AD5E900889A94 /* Headers */,
 				E6A285DE2D2AD5E900889A94 /* Sources */,
 				E6A285DF2D2AD5E900889A94 /* Frameworks */,
-				E6A285E02D2AD5E900889A94 /* Resources */,
 			);
 			buildRules = (
 			);
@@ -2144,14 +2148,6 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		E6A285E02D2AD5E900889A94 /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				E6A2860C2D2AD60700889A94 /* README.md in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -2571,6 +2567,7 @@
 				E6A286042D2AD60700889A94 /* ScannerPipeline.swift in Sources */,
 				E6A2860B2D2AD60700889A94 /* VideoMaskingProcessor.swift in Sources */,
 				E6A286092D2AD60700889A94 /* URLManager.swift in Sources */,
+				E6941B622D48CD060037AD9B /* ClickScanner.swift in Sources */,
 				E6A286002D2AD60700889A94 /* Extensions.swift in Sources */,
 				E6A286082D2AD60700889A94 /* TextScanner.swift in Sources */,
 				E6A2860A2D2AD60700889A94 /* Utils.swift in Sources */,
@@ -2589,6 +2586,7 @@
 				E654D9D92D422C5600829E44 /* SessionReplayModelTests.swift in Sources */,
 				E6A286942D2EB16700889A94 /* FaceScannerTests.swift in Sources */,
 				E6A286992D2EB16700889A94 /* ImageScannerTests.swift in Sources */,
+				E6941B792D4905E90037AD9B /* ClickScannerTests.swift in Sources */,
 				E6A286972D2EB16700889A94 /* SessionReplayTests.swift in Sources */,
 				E6A2869A2D2EB16700889A94 /* TextScannerTests.swift in Sources */,
 			);
@@ -2816,6 +2814,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEFINES_MODULE = YES;
+				DEVELOPMENT_ASSET_PATHS = "";
 				DYLIB_COMPATIBILITY_VERSION = 1;
 				DYLIB_CURRENT_VERSION = 1;
 				DYLIB_INSTALL_NAME_BASE = "@rpath";
@@ -2848,6 +2847,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEFINES_MODULE = YES;
+				DEVELOPMENT_ASSET_PATHS = "";
 				DYLIB_COMPATIBILITY_VERSION = 1;
 				DYLIB_CURRENT_VERSION = 1;
 				DYLIB_INSTALL_NAME_BASE = "@rpath";
@@ -2913,6 +2913,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEFINES_MODULE = YES;
+				DEVELOPMENT_ASSET_PATHS = "";
 				DYLIB_COMPATIBILITY_VERSION = 1;
 				DYLIB_CURRENT_VERSION = 1;
 				DYLIB_INSTALL_NAME_BASE = "@rpath";
@@ -2945,6 +2946,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEFINES_MODULE = YES;
+				DEVELOPMENT_ASSET_PATHS = "";
 				DYLIB_COMPATIBILITY_VERSION = 1;
 				DYLIB_CURRENT_VERSION = 1;
 				DYLIB_INSTALL_NAME_BASE = "@rpath";

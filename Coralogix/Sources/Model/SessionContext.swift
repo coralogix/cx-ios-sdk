@@ -18,8 +18,13 @@ struct SessionContext {
     let userEmail: String
     let userMetadata: [String: String]?
     var isPidEqualToOldPid: Bool = false
+    var hasRecording: Bool = false
     
-    init(otel: SpanDataProtocol, versionMetadata: VersionMetadata, sessionMetadata: SessionMetadata, userMetadata: [String: String]?) {
+    init(otel: SpanDataProtocol,
+         versionMetadata: VersionMetadata,
+         sessionMetadata: SessionMetadata,
+         userMetadata: [String: String]?,
+         hasRecording: Bool = false) {
       if let pid = otel.getAttribute(forKey: Keys.pid.rawValue) as? String,
            let oldPid = sessionMetadata.oldPid,
            pid == oldPid,
@@ -39,6 +44,7 @@ struct SessionContext {
         self.userName = otel.getAttribute(forKey: Keys.userName.rawValue) as? String ?? ""
         self.userEmail = otel.getAttribute(forKey: Keys.userEmail.rawValue) as? String ?? ""
         self.userMetadata = userMetadata
+        self.hasRecording = hasRecording
     }
     
     func getDictionary() -> [String: Any] {
@@ -52,6 +58,7 @@ struct SessionContext {
         result[Keys.userId.rawValue] = self.userId
         result[Keys.userName.rawValue] = self.userName
         result[Keys.userEmail.rawValue] = self.userEmail
+        result[Keys.hasRecording.rawValue] = self.hasRecording
         if let userMetadata = self.userMetadata {
             result[Keys.userMetadata.rawValue] = userMetadata
         }

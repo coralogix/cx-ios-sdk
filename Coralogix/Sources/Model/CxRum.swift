@@ -49,17 +49,19 @@ struct CxRum {
         self.sessionManager = sessionManager
         self.networkManager = networkManager
         self.viewManager = viewManager
-        
+        let hasRecording = sessionManager.doesSessionhasRecording()
         if let sessionMetadata = sessionManager.getSessionMetadata() {
             self.sessionContext = SessionContext(otel: otel,
                                                  versionMetadata: versionMetadata,
                                                  sessionMetadata: sessionMetadata,
-                                                 userMetadata: userMetadata)
+                                                 userMetadata: userMetadata,
+                                                 hasRecording: hasRecording)
             if let prevSessionMetadata = sessionManager.getPrevSessionMetadata() {
                 self.prevSessionContext = SessionContext(otel: otel,
                                                          versionMetadata: versionMetadata,
                                                          sessionMetadata: prevSessionMetadata,
-                                                         userMetadata: userMetadata)
+                                                         userMetadata: userMetadata,
+                                                         hasRecording: hasRecording)
             }
         }
         self.eventContext = EventContext(otel: otel)

@@ -166,4 +166,7 @@ public enum Keys: String {
     case metaData
     case events
     case chunk
+    case x
+    case y
+    case hasRecording
 }

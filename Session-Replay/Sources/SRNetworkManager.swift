@@ -71,20 +71,25 @@ public class SRNetworkManager {
                      timestamp: TimeInterval,
                      sessionId: String,
                      trackNumber: Int,
-                     subIndex: Int) -> SessionReplayResultCode {
+                     subIndex: Int,
+                     completion: @escaping (SessionReplayResultCode) -> Void) {
         guard let endPoint = self.endPoint,
               let publicKey = self.publicKey,
-              let url = URL(string: endPoint) else { return .failure }
-        var status: SessionReplayResultCode = .failure
+              let url = URL(string: endPoint) else {
+            completion(.failure)
+            return
+        }
         
         guard let application = self.application else {
             Log.e("[SRNetworkManager] Session Replay missing Application name")
-            return .failure
+            completion(.failure)
+            return
         }
         
         guard let sessionCreationTime = self.sessionCreationTimestamp else {
             Log.e("[SRNetworkManager] Session Replay missing Session Creation Time")
-            return .failure
+            completion(.failure)
+            return
         }
         
         let metadata = metadataBuilder.buildMetadata(
@@ -100,7 +105,8 @@ public class SRNetworkManager {
         // Convert the JSON to Data
         guard let jsonData = try? JSONSerialization.data(withJSONObject: metadata, options: []) else {
             Log.e("[SRNetworkManager] Failed to convert JSON to Data")
-            return .failure
+            completion(.failure)
+            return
         }
         
         // Boundary for separating parts
@@ -138,13 +144,13 @@ public class SRNetworkManager {
         let task = session?.dataTask(with: request) { data, response, error in
             if let error = error {
                 Log.e("[SRNetworkManager] Request failed with error: \(error.localizedDescription)")
-                status = .failure
+                completion(.failure)
                 return
             }
             
             guard let httpResponse = response as? HTTPURLResponse else {
                 Log.e("[SRNetworkManager] Invalid response")
-                status = .failure
+                completion(.failure)
                 return
             }
             
@@ -152,11 +158,10 @@ public class SRNetworkManager {
             
             if let data = data, let responseString = String(data: data, encoding: .utf8) {
                 Log.d("[SRNetworkManager] Response body: \(responseString)")
-                status = .success
+                completion(.success)
             }
         }
         task?.resume()
-        return status
     }
     
 //    private func getMetadata(dataSize: Int,

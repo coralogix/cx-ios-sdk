@@ -24,12 +24,13 @@ extension CoralogixRum {
                 }
             }
             
-            if viewManager.isUniqueView(name: cxView.name) {
+            if viewManager.isUniqueView(name: cxView.name),
+               let sessionManager = self.sessionManager {
                 let span = self.getNavigationSpan()
                 let snapshot = SnapshotConext(timestemp: timestemp,
-                                              errorCount: self.sessionManager.getErrorCount(),
+                                              errorCount: sessionManager.getErrorCount(),
                                               viewCount: self.viewManager.getUniqueViewCount() + 1,
-                                              clickCount: self.sessionManager.getClickCount())
+                                              clickCount: sessionManager.getClickCount())
                 let dict = Helper.convertDictionary(snapshot.getDictionary())
                 span.setAttribute(key: Keys.snapshotContext.rawValue,
                                   value: Helper.convertDictionayToJsonString(dict: dict))

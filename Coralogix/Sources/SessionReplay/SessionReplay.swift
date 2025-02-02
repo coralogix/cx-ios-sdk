@@ -9,12 +9,16 @@ import Foundation
 import Coralogix_Internal
 
 extension CoralogixRum: CoralogixInterface {
+    public func hasSessionRecording(_ hasSessionRecoding: Bool) {
+        self.sessionManager?.hasRecording = hasSessionRecoding
+    }
+    
     public func isDebug() -> Bool {
         return self.options?.debug ?? false
     }
     
     public func getSessionCreationTimestamp() -> TimeInterval {
-        return self.sessionManager.getSessionMetadata()?.sessionCreationDate ?? 0
+        return self.sessionManager?.getSessionMetadata()?.sessionCreationDate ?? 0
     }
     
     public func getApplication() -> String {
@@ -35,17 +39,17 @@ extension CoralogixRum: CoralogixInterface {
     }
     
     public func getSessionID() -> String {
-        return self.sessionManager.getSessionMetadata()?.sessionId ?? ""
+        return self.sessionManager?.getSessionMetadata()?.sessionId ?? ""
     }
     
     public func reportError(_ error: String) {
         Log.d("[SessionRelay] Reporting error: \(error)")
     }
     
-    func initializeSessionReplay() {
+    public func initializeSessionReplay() {
         SdkManager.shared.register(coralogixInterface: self)
         
-        self.sessionManager.sessionChangedCallback = { sessionId in
+        self.sessionManager?.sessionChangedCallback = { sessionId in
             Log.d("[Changed Session Id: \(sessionId)]")
             
             guard let sessionReplay = SdkManager.shared.getSessionReplay() else {

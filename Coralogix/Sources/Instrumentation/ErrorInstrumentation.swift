@@ -130,11 +130,14 @@ extension CoralogixRum {
     }
     
     private func addSnapshotContext(to span: inout Span) {
-        self.sessionManager.incrementErrorCounter()
+        guard let sessionManager = self.sessionManager else {
+            return
+        }
+        sessionManager.incrementErrorCounter()
         let snapshot = SnapshotConext(timestemp: Date().timeIntervalSince1970,
-                                      errorCount: self.sessionManager.getErrorCount(),
+                                      errorCount: sessionManager.getErrorCount(),
                                       viewCount: self.viewManager.getUniqueViewCount(),
-                                      clickCount: self.sessionManager.getClickCount())
+                                      clickCount: sessionManager.getClickCount())
         let dict = Helper.convertDictionary(snapshot.getDictionary())
         span.setAttribute(key: Keys.snapshotContext.rawValue,
                           value: Helper.convertDictionayToJsonString(dict: dict))

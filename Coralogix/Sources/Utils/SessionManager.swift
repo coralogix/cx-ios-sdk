@@ -50,11 +50,16 @@ public class SessionManager {
     private var clickCount: Int = 0
     public var sessionChangedCallback: ((String) -> Void)?
     var lastSnapshotEventTime: Date?
+    public var hasRecording: Bool = false
 
-    init() {
+    public init() {
         self.setupSessionMetadata()
         self.setupIdleTimer()
         self.updateActivityTime()
+    }
+    
+    public func doesSessionhasRecording() -> Bool {
+        return self.hasRecording
     }
     
     public func incrementErrorCounter() {
@@ -82,11 +87,13 @@ public class SessionManager {
                                                sessionCreationDate: 0,
                                                keychain: KeychainManager())
         self.idleTimer?.invalidate()
+        self.hasRecording = false
     }
     
     public func reset() {
         self.errorCount = 0
         self.clickCount = 0
+        self.hasRecording = false
     }
     
     public func getErrorCount() -> Int {

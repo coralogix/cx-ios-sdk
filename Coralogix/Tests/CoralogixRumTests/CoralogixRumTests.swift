@@ -81,7 +81,19 @@ final class CoralogixRumTests: XCTestCase {
             XCTAssertEqual(labels["itemPrice"] as? Int, 1000)
         }
         
-        CoralogixRum.shared.initialize(options: options!)
+        options = CoralogixExporterOptions(coralogixDomain: CoralogixDomain.US2,
+                                           userContext: nil,
+                                           environment: "PROD",
+                                           application: "TestApp-iOS",
+                                           version: "1.0",
+                                           publicKey: "token",
+                                           ignoreUrls: [],
+                                           ignoreErrors: [],
+                                           customDomainUrl: "url",
+                                           labels: ["device" : "iphone"],
+                                           sampleRate: 100,
+                                           debug: true)
+        CoralogixRum.shared.coralogixExporter?.updade(labels: ["device" : "iphone"])
         if let labels = CoralogixRum.shared.coralogixExporter?.getOptions().labels {
             XCTAssertEqual(labels.count, 1)
             XCTAssertEqual(labels["device"] as? String, "iphone")
@@ -92,6 +104,90 @@ final class CoralogixRumTests: XCTestCase {
         CoralogixRum.shared.initialize(options: options!)
         CoralogixRum.shared.shutdown()
         XCTAssertFalse(CoralogixRum.isInitialized)
+    }
+    
+    func testHasSessionRecording() {
+        let mockSessionManager = SessionManager()
+        let mockOptions =  CoralogixExporterOptions(coralogixDomain: CoralogixDomain.US2,
+                                                           userContext: nil,
+                                                           environment: "PROD",
+                                                           application: "TestApp-iOS",
+                                                           version: "1.0",
+                                                           publicKey: "token",
+                                                           ignoreUrls: [],
+                                                           ignoreErrors: [],
+                                                           customDomainUrl: "url",
+                                                           labels: ["item" : "banana", "itemPrice" : 1000],
+                                                           sampleRate: 100,
+                                                           debug: true)
+        CoralogixRum.shared.initialize(options: mockOptions, sessionManager: mockSessionManager)
+        
+        // Test enabling session recording
+        CoralogixRum.shared.hasSessionRecording(true)
+        XCTAssertTrue(mockSessionManager.hasRecording)
+
+        // Test disabling session recording
+        CoralogixRum.shared.hasSessionRecording(false)
+        XCTAssertFalse(mockSessionManager.hasRecording)
+    }
+    
+    func testIsDebug() {
+        var mockOptions =  CoralogixExporterOptions(coralogixDomain: CoralogixDomain.US2,
+                                                    userContext: nil,
+                                                    environment: "PROD",
+                                                    application: "TestApp-iOS",
+                                                    version: "1.0",
+                                                    publicKey: "token",
+                                                    ignoreUrls: [],
+                                                    ignoreErrors: [],
+                                                    customDomainUrl: "url",
+                                                    labels: ["item" : "banana", "itemPrice" : 1000],
+                                                    sampleRate: 100,
+                                                    debug: true)
+        CoralogixRum.shared.initialize(options: mockOptions)
+        // Test when debug is true
+        XCTAssertTrue(CoralogixRum.shared.isDebug())
+        
+        // Test when debug is false
+        CoralogixRum.isInitialized = false
+        mockOptions =  CoralogixExporterOptions(coralogixDomain: CoralogixDomain.US2,
+                                                userContext: nil,
+                                                environment: "PROD",
+                                                application: "TestApp-iOS",
+                                                version: "1.0",
+                                                publicKey: "token",
+                                                ignoreUrls: [],
+                                                ignoreErrors: [],
+                                                customDomainUrl: "url",
+                                                labels: ["item" : "banana", "itemPrice" : 1000],
+                                                sampleRate: 100,
+                                                debug: false)
+        CoralogixRum.shared.initialize(options: mockOptions)
+        XCTAssertFalse(CoralogixRum.shared.isDebug())
+    }
+    
+    func testGetSessionCreationTimestamp() {
+        let mockSessionManager = SessionManager()
+        var mockOptions =  CoralogixExporterOptions(coralogixDomain: CoralogixDomain.US2,
+                                                    userContext: nil,
+                                                    environment: "PROD",
+                                                    application: "TestApp-iOS",
+                                                    version: "1.0",
+                                                    publicKey: "token",
+                                                    ignoreUrls: [],
+                                                    ignoreErrors: [],
+                                                    customDomainUrl: "url",
+                                                    labels: ["item" : "banana", "itemPrice" : 1000],
+                                                    sampleRate: 100,
+                                                    debug: true)
+        CoralogixRum.shared.initialize(options: mockOptions, sessionManager: mockSessionManager)
+
+        // Test with a valid session metadata
+        XCTAssertNotNil(CoralogixRum.shared.getSessionCreationTimestamp())
+        
+        // Test with no session metadata
+        mockSessionManager.shutdown()
+        XCTAssertEqual(CoralogixRum.shared.getSessionCreationTimestamp(), 0)
     }
 }
 

@@ -22,7 +22,7 @@ public class CoralogixRum {
     internal var versionMetadata: VersionMetadata? = nil
     internal var networkManager = NetworkManager()
     internal var viewManager = ViewManager(keyChain: KeychainManager())
-    internal var sessionManager = SessionManager()
+    internal var sessionManager: SessionManager?
     internal var sessionInstrumentation: URLSessionInstrumentation? = nil
     internal var metricsManager = MetricsManager()
     internal var options: CoralogixExporterOptions? = nil
@@ -37,13 +37,15 @@ public class CoralogixRum {
         // Prevent external initialization
     }
     
-    public func initialize(options: CoralogixExporterOptions, sdkFramework: SdkFramework = .swift) {
+    public func initialize(options: CoralogixExporterOptions,
+                           sdkFramework: SdkFramework = .swift,
+                           sessionManager: SessionManager? = SessionManager()) {
         // Prevent reinitialization if already initialized
         guard !CoralogixRum.isInitialized else {
             Log.e("[CoralogixRum] is already initialized.")
             return
         }
-
+        self.sessionManager = sessionManager
         self.options = options
         self.displayCoralogixWord()
 
@@ -87,6 +89,11 @@ public class CoralogixRum {
             Log.e("Options is missing.")
             return
         }
+        guard let sessionManager = self.sessionManager else {
+            Log.e("SessionManager is nil.")
+            return
+        }
+        
         CoralogixRum.sdkFramework = sdkFramework
         self.initialzeMetricsManager()
 
@@ -97,7 +104,7 @@ public class CoralogixRum {
         let coralogixExporter = CoralogixExporter(
             options: options,
             versionMetadata: versionMetadata,
-            sessionManager: self.sessionManager,
+            sessionManager: sessionManager,
             networkManager: self.networkManager,
             viewManager: self.viewManager,
             metricsManager: self.metricsManager)
@@ -148,6 +155,7 @@ public class CoralogixRum {
     private func swizzle() {
         UIApplication.swizzleTouchesEnded
         UIApplication.swizzleSendAction
+        UIApplication.swizzleSendEvent
         UIViewController.swizzleViewDidAppear
         UIViewController.swizzleViewDidDisappear
         UITableView.swizzleUITableViewDelegate

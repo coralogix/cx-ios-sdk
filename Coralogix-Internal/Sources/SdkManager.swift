@@ -15,6 +15,7 @@ public protocol CoralogixInterface {
     func getSessionCreationTimestamp() -> TimeInterval
     func reportError(_ error: String)
     func isDebug() -> Bool
+    func hasSessionRecording(_ hasSessionRecoding: Bool)
 }
 
 public protocol SessionReplayInterface {

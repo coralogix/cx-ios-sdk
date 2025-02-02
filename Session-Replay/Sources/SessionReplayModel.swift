@@ -81,12 +81,13 @@ class SessionReplayModel {
                 return
             }
             
-            let timestamp = self.getTimestamp(from: properties)
             let fileName = self.generateFileName()
 
             if let documentsDirectory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
                 let fileURL = documentsDirectory.appendingPathComponent(fileName)
-                self.handleCapturedData(fileURL: fileURL, data: screenshotData, timestamp: timestamp)
+                self.handleCapturedData(fileURL: fileURL,
+                                        data: screenshotData,
+                                        properties: properties)
             }
         }
         
@@ -194,15 +195,34 @@ class SessionReplayModel {
         return "SessionReplay/\(sessionId)_\(trackNumber).jpg"
     }
     
-    private func handleCapturedData(fileURL: URL, data: Data, timestamp: TimeInterval) {
+    private func handleCapturedData(fileURL: URL, data: Data, properties: [String: Any]?) {
+        let timestamp = self.getTimestamp(from: properties)
+        let point = self.getClickPoint(from: properties)
+        
         DispatchQueue(label: "com.example.fileOperations").async { [weak self] in
             guard let self = self else { return }
 
             _ = self.saveImageToDocumentIfDebug(fileURL: fileURL, data: data)
+            
+            //bug
             _ = self.compressAndSendData(data: data, timestamp: timestamp)
             self.urlManager.addURL(fileURL)
             self.updateSessionId(with: self.sessionId)
         }
+    }
+    
+    internal func getClickPoint(from properties: [String: Any]?) -> CGPoint? {
+        // Safely unwrap the dictionary
+        guard let properties = properties else {
+            return nil
+        }
+        // Check if the dictionary contains valid x and y values
+        if let x = properties[Keys.x.rawValue] as? CGFloat,
+           let y = properties[Keys.y.rawValue] as? CGFloat {
+            return CGPoint(x: x, y: y)
+        }
+        // Return nil if the dictionary doesn't contain valid values
+        return nil
     }
     
     internal func saveImageToDocumentIfDebug(fileURL: URL, data: Data) -> SessionReplayResultCode {
@@ -224,11 +244,17 @@ class SessionReplayModel {
                 let subIndex = calculateSubIndex(chunkCount: compressedChunks.count, currentIndex: index)
                 
                 // Send Data
-                _ = self.srNetworkManager?.send(chunk,
-                                                timestamp: timestamp,
-                                                sessionId: self.sessionId,
-                                                trackNumber: self.trackNumber,
-                                                subIndex: subIndex)
+                self.srNetworkManager?.send(chunk,
+                                            timestamp: timestamp,
+                                            sessionId: self.sessionId.lowercased(),
+                                            trackNumber: self.trackNumber,
+                                            subIndex: subIndex) { result in 
+                    if result == .success {
+                        if let sdkManager = SdkManager.shared.getCoralogixSdk() {
+                            sdkManager.hasSessionRecording(true)
+                        }
+                    }
+                }
             }
             return .success
         } else {
