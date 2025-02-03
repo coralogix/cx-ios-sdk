@@ -158,9 +158,9 @@ public class CoralogixRum {
         UIApplication.swizzleSendEvent
         UIViewController.swizzleViewDidAppear
         UIViewController.swizzleViewDidDisappear
-        UITableView.swizzleUITableViewDelegate
         UITableViewController.swizzleUITableViewControllerDelegate
-        UICollectionView.swizzleUICollectionViewDelegate
+        UICollectionView.swizzleTouchesEnded
+        UITableView.swizzleTouchesEnded
         UIPageControl.swizzleSetCurrentPage
     }
     
