@@ -17,7 +17,11 @@ public enum SessionReplayResultCode {
   case failure
 }
 
-class SessionReplayModel {
+protocol UserInteractionRecorder {
+    func getUserInteraction(for url: String) -> CGPoint?
+}
+
+class SessionReplayModel: UserInteractionRecorder {
     private let urlManager = URLManager()
     private var urlObserver: URLObserver?
     internal var sessionId: String = ""
@@ -29,6 +33,7 @@ class SessionReplayModel {
     private var debounceWorkItem: DispatchWorkItem? = nil
     private let debounceInterval: TimeInterval = 0.5 // 500 milliseconds
     private let srNetworkManager: SRNetworkManager?
+    private var urlPointDict = [String: CGPoint]()
     
     init(sessionReplayOptions: SessionReplayOptions? = nil,
          networkManager: SRNetworkManager? = SRNetworkManager()) {
@@ -172,6 +177,13 @@ class SessionReplayModel {
         }
     }
     
+
+    // MARK: - Protocol
+
+    func getUserInteraction(for url: String) -> CGPoint? {
+        return urlPointDict[url] ?? nil
+    }
+    
     // MARK: - Helper Methods
 
     internal func getKeyWindow(connectedScenes: Set<UIScene> = UIApplication.shared.connectedScenes) -> UIWindow? {
@@ -197,7 +209,10 @@ class SessionReplayModel {
     
     private func handleCapturedData(fileURL: URL, data: Data, properties: [String: Any]?) {
         let timestamp = self.getTimestamp(from: properties)
-        let point = self.getClickPoint(from: properties)
+        
+        if let point = self.getClickPoint(from: properties) {
+            urlPointDict[fileURL.absoluteString] = point
+        }
         
         DispatchQueue(label: "com.example.fileOperations").async { [weak self] in
             guard let self = self else { return }
