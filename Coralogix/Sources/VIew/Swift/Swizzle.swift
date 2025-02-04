@@ -22,111 +22,146 @@ public struct CXView {
 }
 
 class SwizzleUtils {
+    private static var originalImplementations: [Selector: IMP] = [:]
+    
     static func swizzleInstanceMethod(for cls: AnyClass, originalSelector: Selector, swizzledSelector: Selector) {
         guard let originalMethod = class_getInstanceMethod(cls, originalSelector),
               let swizzledMethod = class_getInstanceMethod(cls, swizzledSelector) else {
-            Log.e("failed to swizzleInstanceMethod \(cls)")
+            Log.e("Failed to swizzle \(originalSelector)")
             return
+        }
+        
+        let originalIMP = method_getImplementation(originalMethod)
+        let swizzledIMP = method_getImplementation(swizzledMethod)
+        
+        let key = originalSelector
+        if originalImplementations[key] == nil {
+            originalImplementations[key] = originalIMP
         }
         
         let didAddMethod = class_addMethod(cls,
                                            originalSelector,
-                                           method_getImplementation(swizzledMethod),
+                                           swizzledIMP,
                                            method_getTypeEncoding(swizzledMethod))
         
         if didAddMethod {
             class_replaceMethod(cls,
                                 swizzledSelector,
-                                method_getImplementation(originalMethod),
+                                originalIMP,
                                 method_getTypeEncoding(originalMethod))
         } else {
-            method_exchangeImplementations(originalMethod, swizzledMethod)
+            let previousIMP = method_getImplementation(originalMethod)
+            if previousIMP != originalIMP {
+                // Already swizzled by another SDK, chain the implementations
+                let block: @convention(block) (Any) -> Void = { obj in
+                    let originalIMP = originalImplementations[key] ?? previousIMP
+                    typealias Function = @convention(c) (Any, Selector) -> Void
+                    let originalMethod = unsafeBitCast(originalIMP, to: Function.self)
+                    originalMethod(obj, originalSelector)
+                    
+                    let swizzledMethod = unsafeBitCast(swizzledIMP, to: Function.self)
+                    swizzledMethod(obj, swizzledSelector)
+                }
+                
+                let newIMP = imp_implementationWithBlock(block)
+                method_setImplementation(originalMethod, newIMP)
+            } else {
+                method_exchangeImplementations(originalMethod, swizzledMethod)
+            }
         }
     }
 }
 
 extension UICollectionView {
-    static let swizzleUICollectionViewDelegate: Void = {
-        let originalSelector = #selector(setter: UICollectionView.delegate)
-        let swizzledSelector = #selector(swizzled_setDelegate(_:))
+    static let swizzleTouchesEnded: Void = {
+        let originalSelector = #selector(UIResponder.touchesEnded(_:with:))
+        let swizzledSelector = #selector(cx_touchesEnded(_:with:))
         
         SwizzleUtils.swizzleInstanceMethod(for: UICollectionView.self,
                                            originalSelector: originalSelector,
                                            swizzledSelector: swizzledSelector)
     }()
     
-    @objc private func swizzled_setDelegate(_ delegate: UICollectionViewDelegate?) {
-        // Call the original setDelegate method
-        swizzled_setDelegate(delegate)
-        
-        guard let delegate = delegate else { return }
-        
-        let originalSelector = #selector(UICollectionViewDelegate.collectionView(_:didSelectItemAt:))
-        let swizzledSelector = #selector(UIViewController.swizzled_collectionView(_:didSelectItemAt:))
-
-        if object_getClass(delegate) != nil {
-            SwizzleUtils.swizzleInstanceMethod(for: type(of: delegate),
-                                               originalSelector: originalSelector,
-                                               swizzledSelector: swizzledSelector)
+    @objc func cx_touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
+        guard let touch = touches.first else {
+            self.cx_touchesEnded(touches, with: event) // Call original method
+            return
         }
+        
+        let location = touch.location(in: self)
+        guard let indexPath = self.indexPathForItem(at: location),
+              let cell = self.cellForItem(at: indexPath) else {
+            self.cx_touchesEnded(touches, with: event) // Call original method
+            return
+        }
+        
+        let attributes: [String: Any] = [
+            Keys.text.rawValue: Helper.findFirstLabelText(in: cell) ?? ""
+        ]
+        
+        let tapData: [String: Any] = [
+            Keys.tapName.rawValue: "UICollectionView.didSelectRowAt",
+            Keys.tapCount.rawValue: 1,
+            Keys.tapAttributes.rawValue: attributes
+        ]
+        
+        NotificationCenter.default.post(name: .cxRumNotificationUserActions, object: tapData)
+        
+        self.cx_touchesEnded(touches, with: event) // Call original method
     }
 }
 
 extension UITableView {
-    static let swizzleUITableViewDelegate: Void = {
-        let originalSelector = #selector(setter: UITableView.delegate)
-        let swizzledSelector = #selector(swizzled_setDelegate(_:))
+    static let swizzleTouchesEnded: Void = {
+        let originalSelector = #selector(UITableView.touchesEnded(_:with:))
+        let swizzledSelector = #selector(cx_touchesEnded(_:with:))
         
         SwizzleUtils.swizzleInstanceMethod(for: UITableView.self,
                                            originalSelector: originalSelector,
                                            swizzledSelector: swizzledSelector)
     }()
     
-    @objc private func swizzled_setDelegate(_ delegate: UITableViewDelegate?) {
-        // Call the original setDelegate method
-        swizzled_setDelegate(delegate)
-        
-        guard let delegate = delegate else { return }
-        
-        if let delegateClass: AnyClass = object_getClass(delegate) {
-            let originalSelector = #selector(UITableViewDelegate.tableView(_:didSelectRowAt:))
-            let swizzledSelector = #selector(UITableView.swizzled_tableView(_:didSelectRowAt:))
-            
-            SwizzleUtils.swizzleInstanceMethod(for: delegateClass,
-                                               originalSelector: originalSelector,
-                                               swizzledSelector: swizzledSelector)
+    @objc func cx_touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
+        guard let touch = touches.first else {
+            self.cx_touchesEnded(touches, with: event) // Call original method
+            return
         }
-    }
-    
-    @objc func swizzled_tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
-        // Call the original implementation (which is now this method due to swizzling)
-        self.swizzled_tableView(tableView, didSelectRowAt: indexPath)
         
-        // Your custom implementation
-        if let cell = tableView.cellForRow(at: indexPath) {
-            var attributes = [String: Any]()
-            attributes[Keys.text.rawValue] = cell.textLabel?.text ?? ""
-            
-            let tap = [Keys.tapName.rawValue: "UITableView.didSelectRowAt",
-                       Keys.tapCount.rawValue: 1,
-                       Keys.tapAttributes.rawValue: attributes] as [String: Any]
-            NotificationCenter.default.post(name: .cxRumNotificationUserActions, object: tap)
+        let location = touch.location(in: self)
+        guard let indexPath = self.indexPathForRow(at: location),
+              let cell = self.cellForRow(at: indexPath) else {
+            self.cx_touchesEnded(touches, with: event) // Call original method
+            return
         }
+        
+        let attributes: [String: Any] = [
+            Keys.text.rawValue: Helper.findFirstLabelText(in: cell) ?? ""
+        ]
+        
+        let tapData: [String: Any] = [
+            Keys.tapName.rawValue: "UITableView.didSelectRowAt",
+            Keys.tapCount.rawValue: 1,
+            Keys.tapAttributes.rawValue: attributes
+        ]
+        
+        NotificationCenter.default.post(name: .cxRumNotificationUserActions, object: tapData)
+        
+        self.cx_touchesEnded(touches, with: event) // Call original method
     }
 }
 
 extension UITableViewController {
     static let swizzleUITableViewControllerDelegate: Void = {
         let originalSelector = #selector(UITableViewController.tableView(_:didSelectRowAt:))
-        let swizzledSelector = #selector(swizzled_tableView(_:didSelectRowAt:))
+        let swizzledSelector = #selector(cx_tableView(_:didSelectRowAt:))
         
         SwizzleUtils.swizzleInstanceMethod(for: UITableViewController.self,
                                            originalSelector: originalSelector,
                                            swizzledSelector: swizzledSelector)
     }()
     
-    @objc func swizzled_tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
-        self.swizzled_tableView(tableView, didSelectRowAt: indexPath)
+    @objc func cx_tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+        self.cx_tableView(tableView, didSelectRowAt: indexPath)
         
         if let cell = tableView.cellForRow(at: indexPath) {
             var attributes = [String: Any]()
@@ -156,15 +191,15 @@ extension UIGestureRecognizer {
 extension UIPageControl {
     static let swizzleSetCurrentPage: Void = {
         let originalSelector = #selector(setter: currentPage)
-        let swizzledSelector = #selector(swizzled_setCurrentPage(_:))
+        let swizzledSelector = #selector(cx_setCurrentPage(_:))
         
         SwizzleUtils.swizzleInstanceMethod(for: UIPageControl.self,
                                            originalSelector: originalSelector,
                                            swizzledSelector: swizzledSelector)
     }()
     
-    @objc private func swizzled_setCurrentPage(_ page: Int) {
-        swizzled_setCurrentPage(page)
+    @objc private func cx_setCurrentPage(_ page: Int) {
+        self.cx_setCurrentPage(page)
         
         let tap = [Keys.tapName.rawValue: "UIPageController",
                    Keys.tapCount.rawValue: 1,
@@ -189,17 +224,43 @@ extension UIApplication {
     
     public static let swizzleSendAction: Void = {
         let originalSelector = #selector(UIApplication.sendAction(_:to:from:for:))
-        let swizzledSelector = #selector(UIApplication.cx_sendAction(_:to:from:for:))
+        let swizzledSelector = #selector(cx_sendAction(_:to:from:for:))
         
         SwizzleUtils.swizzleInstanceMethod(for: UIApplication.self,
                                            originalSelector: originalSelector,
                                            swizzledSelector: swizzledSelector)
     }()
     
+    public static let swizzleSendEvent: Void = {
+        let originalSelector = #selector(sendEvent(_:))
+        let swizzledSelector = #selector(cx_sendEvent(_:))
+        
+        SwizzleUtils.swizzleInstanceMethod(for: UIApplication.self,
+                                           originalSelector: originalSelector,
+                                           swizzledSelector: swizzledSelector)
+    }()
+    
+    @objc func cx_sendEvent(_ event: UIEvent) {
+        // Call the original implementation (swizzled now)
+        cx_sendEvent(event)
+        
+        // Process touch events
+        if let touches = event.allTouches, let touch = touches.first, touch.phase == .began {
+            let location = touch.location(in: nil) // Screen coordinates
+            let x = location.x
+            let y = location.y
+            
+            // Post the touch event to a notification center or your SDK
+            let tap = [Keys.x.rawValue: x,
+                       Keys.y.rawValue: y] as? [String: Any]
+            NotificationCenter.default.post(name: .cxRumNotificationUserActions, object: tap)
+        }
+    }
+    
     @objc private func cx_sendAction(_ action: Selector,
-                                     to target: AnyObject?,
-                                     from sender: AnyObject?,
-                                     for event: UIEvent?) -> Bool {
+                                           to target: AnyObject?,
+                                           from sender: AnyObject?,
+                                           for event: UIEvent?) -> Bool {
         let selectorNameCString = sel_getName(action)
         let selectorNameString = String(cString: selectorNameCString)
         if selectorNameString.contains("tabBarItemClicked") {
@@ -213,6 +274,7 @@ extension UIApplication {
         } else if selectorNameString.contains("dismissViewController") {
             self.handleDismissViewController(sender: sender)
         }
+        
         return cx_sendAction(action, to: target, from: sender, for: event)
     }
     
@@ -223,7 +285,7 @@ extension UIApplication {
         if let button = sender as? UIButton {
             attributes[Keys.text.rawValue] = button.titleLabel?.text
         }
-
+        
         let tap = [Keys.tapName.rawValue: "\(senderClass)",
                    Keys.tapCount.rawValue: 1,
                    Keys.tapAttributes.rawValue: Helper.convertDictionayToJsonString(dict: attributes)] as [String: Any]
@@ -252,7 +314,7 @@ extension UIApplication {
             NotificationCenter.default.post(name: .cxRumNotificationUserActions, object: tap)
         }
     }
-
+    
     private func handleSegmentChanged(sender: AnyObject?) {
         guard let sender = sender, let segmentedControl = sender as? UISegmentedControl else { return }
         var attributes = [String: Any]()
@@ -282,7 +344,7 @@ extension UIApplication {
 extension UIViewController {
     static let swizzleViewDidAppear: Void = {
         let originalSelector = #selector(viewDidAppear(_:))
-        let swizzledSelector = #selector(swizzled_viewDidAppear(_:))
+        let swizzledSelector = #selector(cx_viewDidAppear(_:))
         
         SwizzleUtils.swizzleInstanceMethod(for: UIViewController.self,
                                            originalSelector: originalSelector,
@@ -291,7 +353,7 @@ extension UIViewController {
     
     static let swizzleViewDidDisappear: Void = {
         let originalSelector = #selector(viewDidDisappear(_:))
-        let swizzledSelector = #selector(swizzled_viewDidDisappear(_:))
+        let swizzledSelector = #selector(cx_viewDidDisappear(_:))
         
         SwizzleUtils.swizzleInstanceMethod(for: UIViewController.self,
                                            originalSelector: originalSelector,
@@ -299,10 +361,10 @@ extension UIViewController {
     }()
     
     // This method will replace viewDidAppear
-    @objc func swizzled_viewDidAppear(_ animated: Bool) {
+    @objc func cx_viewDidAppear(_ animated: Bool) {
         if self.isKind(of: UINavigationController.self) {
             // Call the original viewDidAppear method for UINavigationController
-            swizzled_viewDidAppear(animated)
+            cx_viewDidAppear(animated)
         } else {
             // Custom implementation for UIViewController
             updateCoralogixRum(window: self.getWindow(), state: .notifyOnAppear)
@@ -310,31 +372,17 @@ extension UIViewController {
             NotificationCenter.default.post(name: .cxRumNotificationMetrics,
                                             object: [Keys.coldEnd.rawValue: CFAbsoluteTimeGetCurrent()])
             // Call the original viewDidAppear
-            swizzled_viewDidAppear(animated)
+            cx_viewDidAppear(animated)
         }
     }
     
-    @objc func swizzled_viewDidDisappear(_ animated: Bool) {
+    @objc func cx_viewDidDisappear(_ animated: Bool) {
         updateCoralogixRum(window: self.getWindow(), state: .notifyOnDisappear)
         
         // Call the original implementation
-        self.swizzled_viewDidDisappear(animated)
+        self.cx_viewDidDisappear(animated)
     }
     
-    @objc func swizzled_collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
-        swizzled_collectionView(collectionView, didSelectItemAt: indexPath)
-        // Your custom implementation
-        if let cell = collectionView.cellForItem(at: indexPath) {
-            var attributes = [String: Any]()
-            attributes[Keys.text.rawValue] =  Helper.findFirstLabelText(in: cell) ?? ""
-            
-            let tap = [Keys.tapName.rawValue: "UITableView.didSelectRowAt",
-                       Keys.tapCount.rawValue: 1,
-                       Keys.tapAttributes.rawValue: attributes] as [String: Any]
-            NotificationCenter.default.post(name: .cxRumNotificationUserActions, object: tap)
-        }
-    }
-
     var viewControllerName: String {
         return String(describing: type(of: self))
     }
@@ -343,25 +391,25 @@ extension UIViewController {
         if #available(iOS 15.0, *) {
             // For iOS 15 and later, handle multiple scenes and the active window
             if let window = UIApplication.shared.connectedScenes
-                    .filter({ $0.activationState == .foregroundActive })
-                    .compactMap({ $0 as? UIWindowScene })
-                    .flatMap({ $0.windows })
-                    .first(where: { $0.isKeyWindow }) {
-                    return window
-                }
-                
-                // Fallback to AppDelegate's window reference if all else fails
-                if let appDelegate = UIApplication.shared.delegate {
-                    return appDelegate.window ?? nil
-                }
-                
-                return nil
-        } else if #available(iOS 13.0, *) {
-            // For iOS 13 and 14
-            return UIApplication.shared.windows.first { $0.isKeyWindow }
+                .filter({ $0.activationState == .foregroundActive })
+                .compactMap({ $0 as? UIWindowScene })
+                .flatMap({ $0.windows })
+                .first(where: { $0.isKeyWindow }) {
+                return window
+            }
+            
+            // Fallback to AppDelegate's window reference if all else fails
+            if let appDelegate = UIApplication.shared.delegate {
+                return appDelegate.window ?? nil
+            }
+            
+            return nil
         } else {
-            // For iOS 12 and earlier
-            return UIApplication.shared.keyWindow
+            // For iOS 13 and 14
+            return UIApplication.shared.connectedScenes
+                .compactMap({ $0 as? UIWindowScene })
+                .flatMap({ $0.windows })
+                .first(where: { $0.isKeyWindow })
         }
     }
 }
@@ -384,3 +432,4 @@ private func updateCoralogixRum(window: UIWindow?, state: CXView.AppState) {
         }
     }
 }
+

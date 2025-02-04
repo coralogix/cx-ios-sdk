@@ -17,7 +17,7 @@ struct InteractionContext {
            let tapObject = Helper.convertJsonStringToDict(jsonString: jsonString) {
             self.eventName = Keys.click.rawValue
             self.elementId = tapObject[Keys.tapName.rawValue] as? String ?? ""
-            self.attributes = tapObject[Keys.attributes.rawValue] as? [String: Any] ?? nil
+            self.attributes = tapObject[Keys.tapAttributes.rawValue] as? [String: Any] ?? nil
         }
     }
     
@@ -25,7 +25,7 @@ struct InteractionContext {
         var result = [String: Any]()
         result[Keys.elementId.rawValue] = self.elementId
         result[Keys.eventName.rawValue] = self.eventName
-        result[Keys.attributes.rawValue] = self.attributes
+        result[Keys.attributes.rawValue] = self.attributes // currently not show in the UI
         return result
     }
 }
