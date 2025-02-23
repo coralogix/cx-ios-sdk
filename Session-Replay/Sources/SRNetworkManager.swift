@@ -32,7 +32,8 @@ public class MetadataBuilder {
                               trackNumber: Int,
                               subIndex: Int,
                               application: String,
-                              sessionCreationTime: TimeInterval) -> [String: Any] {
+                              sessionCreationTime: TimeInterval,
+                              snapshotId: String) -> [String: Any] {
         return [
             Keys.application.rawValue: application,
             Keys.segmentIndex.rawValue: trackNumber,
@@ -40,7 +41,9 @@ public class MetadataBuilder {
             Keys.segmentTimestamp.rawValue: timestamp.milliseconds,
             Keys.keySessionCreationDate.rawValue: sessionCreationTime.milliseconds,
             Keys.keySessionId.rawValue: sessionId,
-            Keys.subIndex.rawValue: subIndex
+            Keys.subIndex.rawValue: subIndex,
+            Keys.snapshotId.rawValue: UUID().uuidString,
+            Keys.snapshotCreationTime.rawValue: Date().timeIntervalSince1970.milliseconds
         ]
     }
 }
@@ -53,7 +56,6 @@ public class SRNetworkManager {
     var session: URLSessionProtocol?
     private let metadataBuilder = MetadataBuilder()
 
-    
     init(session: URLSessionProtocol = URLSession.shared) {
         guard let sdkManager = SdkManager.shared.getCoralogixSdk() else {
             Log.e("Failed to get CoralogixDomain")
@@ -99,8 +101,10 @@ public class SRNetworkManager {
             trackNumber: trackNumber,
             subIndex: subIndex,
             application: application,
-            sessionCreationTime: sessionCreationTime
+            sessionCreationTime: sessionCreationTime,
+            snapshotId: UUID().uuidString
         )
+        Log.e("[metadata] \(metadata)")
         
         // Convert the JSON to Data
         guard let jsonData = try? JSONSerialization.data(withJSONObject: metadata, options: []) else {

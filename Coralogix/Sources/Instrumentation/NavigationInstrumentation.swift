@@ -30,7 +30,7 @@ extension CoralogixRum {
                 let snapshot = SnapshotConext(timestemp: timestemp,
                                               errorCount: sessionManager.getErrorCount(),
                                               viewCount: self.viewManager.getUniqueViewCount() + 1,
-                                              clickCount: sessionManager.getClickCount())
+                                              clickCount: sessionManager.getClickCount(), hasRecording: sessionManager.hasRecording)
                 let dict = Helper.convertDictionary(snapshot.getDictionary())
                 span.setAttribute(key: Keys.snapshotContext.rawValue,
                                   value: Helper.convertDictionayToJsonString(dict: dict))

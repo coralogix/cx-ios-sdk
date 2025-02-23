@@ -73,7 +73,8 @@ struct CxRum {
         self.labels = labels
         self.logContext = LogContext(otel: otel)
         self.deviceState = DeviceState(networkManager: self.networkManager)
-        self.snapshotContext = SnapshotConext.getSnapshot(otel: otel)
+        self.snapshotContext = SnapshotConext.getSnapshot(otel: otel,
+                                                          sessionManager: self.sessionManager)
         self.interactionContext = InteractionContext(otel: otel)
         self.mobileVitalsContext = MobileVitalsContext(otel: otel)
         self.lifeCycleContext = LifeCycleContext(otel: otel)
@@ -85,7 +86,7 @@ struct CxRum {
                 self.snapshotContext = SnapshotConext(timestemp: Date().timeIntervalSince1970,
                                                       errorCount: sessionManager.getErrorCount(),
                                                       viewCount: viewManager.getUniqueViewCount(),
-                                                      clickCount: sessionManager.getClickCount())
+                                                      clickCount: sessionManager.getClickCount(), hasRecording: sessionManager.hasRecording)
                 self.isOneMinuteFromLastSnapshotPass = true
             }
         }

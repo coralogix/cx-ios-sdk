@@ -169,4 +169,6 @@ public enum Keys: String {
     case x
     case y
     case hasRecording
+    case snapshotId
+    case snapshotCreationTime
 }
