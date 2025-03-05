@@ -164,6 +164,43 @@ class Helper {
         return outputDict
     }
     
+    internal static func parseRNStackTrace(_ stackTrace: String) -> [[String: Any]] {
+        var result: [[String: Any]] = []
+        
+        // Split the stack trace into lines
+        let lines = stackTrace.split(separator: "\n")
+        
+        // Regular expression to match the stack trace pattern
+        guard let regex = try? NSRegularExpression(pattern: #"at\s+([\w$<>.-]+)\s+\((.*):(\d+):(\d+)\)"#, options: []) else {
+            return []
+        }
+        
+        for line in lines {
+            let lineStr = String(line)
+            let range = NSRange(location: 0, length: lineStr.utf16.count)
+            
+            if let match = regex.firstMatch(in: lineStr, options: [], range: range) {
+                var dict: [String: Any] = [:]
+
+                if let range = Range(match.range(at: 1), in: lineStr) {
+                    dict["functionName"] = String(lineStr[range])  // Captures function name
+                }
+                if let range = Range(match.range(at: 2), in: lineStr) {
+                    dict["fileName"] = String(lineStr[range])  // Captures file URL
+                }
+                if let range = Range(match.range(at: 3), in: lineStr) {
+                    dict["lineNumber"] = Int(lineStr[range]) ?? 0  // Captures line number
+                }
+                if let range = Range(match.range(at: 4), in: lineStr) {
+                    dict["columnNumber"] = Int(lineStr[range]) ?? 0  // Captures column number
+                }
+                
+                result.append(dict)
+            }
+        }
+        return result
+    }
+    
     internal static func parseStackTrace(_ stackTrace: String) -> [[String: Any]] {
         var result: [[String: Any]] = []
         

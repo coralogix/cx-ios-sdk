@@ -188,7 +188,7 @@ enum CoralogixEventType: String {
 }
 
 public enum Global: String {
-    case sdk = "1.0.14"
+    case sdk = "1.0.15"
     case swiftVersion = "5.9"
     case coralogixPath = "/browser/v1beta/logs"
     
@@ -348,6 +348,7 @@ public enum CoralogixDomain: String {
     case AP1 = "https://ingress.ap1.rum-ingress-coralogix.com" // ap-south-1 (Mumbai)
     case AP2 = "https://ingress.ap2.rum-ingress-coralogix.com" // ap-southeast-1 (Singapore)
     case AP3 = "https://ingress.ap3.rum-ingress-coralogix.com" // ap-southeast-3 (Jakarta)
+    case STG = "https://ingress.staging.rum-ingress-coralogix.com"
     
     func stringValue() -> String {
         switch self {
@@ -365,6 +366,8 @@ public enum CoralogixDomain: String {
             return "AP2"
         case .AP3:
             return "AP3"
+        case .STG:
+            return "STG"
         }
     }
 }

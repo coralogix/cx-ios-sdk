@@ -63,7 +63,7 @@ extension CoralogixRum {
             span.setAttribute(key: Keys.errorMessage.rawValue, value: message)
             
             if let stackTrace = stackTrace {
-                let stackTraceArray = Helper.parseStackTrace(stackTrace)
+                let stackTraceArray = CoralogixRum.sdkFramework == .reactNative ? Helper.parseRNStackTrace(stackTrace) : Helper.parseStackTrace(stackTrace)
                 span.setAttribute(key: Keys.stackTrace.rawValue, value: Helper.convertArrayToJsonString(array: stackTraceArray))
             }
             span.end()

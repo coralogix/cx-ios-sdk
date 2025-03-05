@@ -76,12 +76,57 @@ final class ErrorContextTests: XCTestCase {
         let dictionary = errorStruct.getDictionary()
         
         if let stackTrace = dictionary[Keys.originalStackTrace.rawValue] as? [[String: Any]] {
-            XCTAssertEqual(10, stackTrace.count)
+            XCTAssertEqual(11, stackTrace.count)
             let frame0 = stackTrace[0]
             XCTAssertEqual("package:coralogix_sdk/main.dart", frame0["fileName"] as? String ?? "")
             XCTAssertEqual(5, frame0["columnNumber"] as? Int ?? 0)
             XCTAssertEqual(134, frame0["lineNumber"] as? Int ?? 0)
             XCTAssertEqual("throwExceptionInDart", frame0["functionName"] as? String ?? "")
+        }
+        
+        XCTAssertEqual(dictionary[Keys.errorMessage.rawValue] as? String, "localizedDescription")
+        if let domain = dictionary[Keys.domain.rawValue] as? String {
+            XCTAssertEqual(domain, "")
+        }
+        XCTAssertEqual(dictionary[Keys.code.rawValue] as? String, "0")
+    }
+    
+    func testGetDictionaryWithRNStackTrace() {
+        let stackTrace = """
+        at throwError (http://localhost:8081/index.bundle//&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=com.coralogix.AwesomeProject:124990:22)
+        at _performTransitionSideEffects (http://localhost:8081/index.bundle//&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=com.coralogix.AwesomeProject:65997:22)
+        at _receiveSignal (http://localhost:8081/index.bundle//&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=com.coralogix.AwesomeProject:65953:45)
+        at onResponderRelease (http://localhost:8081/index.bundle//&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=com.coralogix.AwesomeProject:65816:34)
+        at executeDispatch (http://localhost:8081/index.bundle//&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=com.coralogix.AwesomeProject:3449:19)
+        at executeDispatchesInOrder (http://localhost:8081/index.bundle//&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=com.coralogix.AwesomeProject:3477:26)
+        at executeDispatchesAndRelease (http://localhost:8081/index.bundle//&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=com.coralogix.AwesomeProject:5435:35)
+        at executeDispatchesAndReleaseTopLevel (http://localhost:8081/index.bundle//&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=com.coralogix.AwesomeProject:5443:43)
+        at forEach (native)
+        at forEachAccumulated (http://localhost:8081/index.bundle//&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=com.coralogix.AwesomeProject:4088:22)
+        at runEventsInBatch (http://localhost:8081/index.bundle//&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=com.coralogix.AwesomeProject:5456:27)
+        at runExtractedPluginEventsInBatch (http://localhost:8081/index.bundle//&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=com.coralogix.AwesomeProject:5489:25)
+        at anonymous (http://localhost:8081/index.bundle//&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=com.coralogix.AwesomeProject:5533:42)
+        at batchedUpdates (http://localhost:8081/index.bundle//&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=com.coralogix.AwesomeProject:20165:20)
+        at batchedUpdates$1 (http://localhost:8081/index.bundle//&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=com.coralogix.AwesomeProject:5411:36)
+        at dispatchEvent (http://localhost:8081/index.bundle//&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=com.coralogix.AwesomeProject:5502:25)
+        """
+        let stackTraceArray = Helper.parseRNStackTrace(stackTrace)
+        mockSpanData = MockSpanData(attributes: [
+            Keys.errorMessage.rawValue: AttributeValue("localizedDescription"),
+            Keys.code.rawValue: AttributeValue("0"),
+            Keys.domain.rawValue: AttributeValue(""),
+            Keys.stackTrace.rawValue: AttributeValue(Helper.convertArrayToJsonString(array: stackTraceArray)),
+        ])
+        let errorStruct = ErrorContext(otel: mockSpanData)
+        let dictionary = errorStruct.getDictionary()
+        
+        if let stackTrace = dictionary[Keys.originalStackTrace.rawValue] as? [[String: Any]] {
+            XCTAssertEqual(15, stackTrace.count)
+            let frame0 = stackTrace[0]
+            XCTAssertEqual("http://localhost:8081/index.bundle//&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=com.coralogix.AwesomeProject", frame0["fileName"] as? String ?? "")
+            XCTAssertEqual(22, frame0["columnNumber"] as? Int ?? 0)
+            XCTAssertEqual(124990, frame0["lineNumber"] as? Int ?? 0)
+            XCTAssertEqual("throwError", frame0["functionName"] as? String ?? "")
         }
         
         XCTAssertEqual(dictionary[Keys.errorMessage.rawValue] as? String, "localizedDescription")
