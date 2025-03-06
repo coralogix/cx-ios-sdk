@@ -161,6 +161,7 @@ public enum Keys: String {
     case appDidReceiveMemoryWarningNotification
     case x
     case y
+    case errorType = "error_type"
 }
 
 public enum CoralogixLogSeverity: Int {

@@ -55,6 +55,7 @@ extension CoralogixRum {
         }
     }
     
+    // Use By Flutter
     func reportErrorWith(message: String, stackTrace: String?) {
         let stackTraceJson = stackTrace.flatMap {
             let stackTraceArray = Helper.parseStackTrace($0)
@@ -63,17 +64,28 @@ extension CoralogixRum {
         reportErrorInternal(message: message, stackTraceJson: stackTraceJson)
     }
     
-    func reportErrorWith(message: String, stackTrace: [[String: Any]]) {
+    // Use By React Native
+    func reportErrorWith(message: String,
+                         stackTrace: [[String: Any]],
+                         errorType: String?) {
         let stackTraceJson = Helper.convertArrayToJsonString(array: stackTrace)
-        reportErrorInternal(message: message, stackTraceJson: stackTraceJson)
+        reportErrorInternal(message: message,
+                            stackTraceJson: stackTraceJson,
+                            errorType: errorType)
     }
     
-    private func reportErrorInternal(message: String, stackTraceJson: String?) {
+    private func reportErrorInternal(message: String,
+                                     stackTraceJson: String?,
+                                     errorType: String? = nil) {
         if self.options.shouldInitInstumentation(instumentation: .errors) {
             let span = self.getSpan()
             span.setAttribute(key: Keys.domain.rawValue, value: "")
             span.setAttribute(key: Keys.code.rawValue, value: 0)
             span.setAttribute(key: Keys.errorMessage.rawValue, value: message)
+            
+            if let errorType = errorType {
+                span.setAttribute(key: Keys.errorType.rawValue, value: errorType)
+            }
             
             if let stackTraceJson = stackTraceJson {
                 span.setAttribute(key: Keys.stackTrace.rawValue, value: stackTraceJson)
