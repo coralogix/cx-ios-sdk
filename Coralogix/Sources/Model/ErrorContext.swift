@@ -12,7 +12,7 @@ struct ErrorContext {
     let code: String
     let errorMessage: String
     var userInfo: [String: Any]?
-    
+    let errorType: String
     let exceptionType: String
     let crashTimestamp: String
     let processName: String
@@ -60,6 +60,7 @@ struct ErrorContext {
         self.baseAddress = otel.getAttribute(forKey: Keys.baseAddress.rawValue) as? String ?? ""
         self.arch = otel.getAttribute(forKey: Keys.arch.rawValue) as? String ?? ""
         self.eventType = otel.getAttribute(forKey: Keys.mobileVitalsType.rawValue) as? String ?? ""
+        self.errorType = otel.getAttribute(forKey: Keys.errorType.rawValue) as? String ?? ""
     }
     
     func getDictionary() -> [String: Any] {
@@ -97,6 +98,10 @@ struct ErrorContext {
             
             if let stackTrace = self.stackTrace {
                 errorContext[Keys.originalStackTrace.rawValue] = stackTrace
+            }
+            
+            if !self.errorType.isEmpty {
+                errorContext[Keys.errorType.rawValue] = errorType
             }
             
             errorContext[Keys.isCrash.rawValue] = false

@@ -170,6 +170,12 @@ public class CoralogixRum {
         }
     }
     
+    public func reportError(message: String, stackTrace: [[String: Any]], errorType: String?) {
+        if CoralogixRum.isInitialized {
+            self.reportErrorWith(message: message, stackTrace: stackTrace, errorType: errorType)
+        }
+    }
+    
     public func log(severity: CoralogixLogSeverity,
                     message: String,
                     data: [String: Any]? = nil) {
@@ -181,6 +187,23 @@ public class CoralogixRum {
     public func shutdown() {
         CoralogixRum.isInitialized = false
         self.coralogixExporter?.shutdown()
+    }
+    
+    public func isInitialized() -> Bool {
+        return CoralogixRum.isInitialized
+    }
+    
+    public func getLabels() -> [String: Any]? {
+        return self.options.labels
+    }
+    
+    public func getSessionId() -> String? {
+        return self.sessionManager.getSessionMetadata()?.sessionId
+    }
+    
+    public func setApplicationContext(application: String, version: String) {
+        self.options.version = version
+        self.options.application = application
     }
     
     internal func addUserMetadata(to span: inout Span) {
@@ -200,6 +223,7 @@ public class CoralogixRum {
 public enum SdkFramework: String {
     case swift
     case flutter
+    case reactNative = "react-native"
 }
 
 public struct CoralogixExporterOptions {
@@ -237,10 +261,10 @@ public struct CoralogixExporterOptions {
     let environment: String
     
     // Application name
-    let application: String
+    var application: String
     
     // Appliaction version
-    let version: String
+    var version: String
     
     let customDomainUrl: String?
     
