@@ -56,20 +56,33 @@ extension CoralogixRum {
     }
     
     func reportErrorWith(message: String, stackTrace: String?) {
+        let stackTraceJson = stackTrace.flatMap {
+            let stackTraceArray = Helper.parseStackTrace($0)
+            return Helper.convertArrayToJsonString(array: stackTraceArray)
+        }
+        reportErrorInternal(message: message, stackTraceJson: stackTraceJson)
+    }
+    
+    func reportErrorWith(message: String, stackTrace: [[String: Any]]) {
+        let stackTraceJson = Helper.convertArrayToJsonString(array: stackTrace)
+        reportErrorInternal(message: message, stackTraceJson: stackTraceJson)
+    }
+    
+    private func reportErrorInternal(message: String, stackTraceJson: String?) {
         if self.options.shouldInitInstumentation(instumentation: .errors) {
             let span = self.getSpan()
             span.setAttribute(key: Keys.domain.rawValue, value: "")
             span.setAttribute(key: Keys.code.rawValue, value: 0)
             span.setAttribute(key: Keys.errorMessage.rawValue, value: message)
             
-            if let stackTrace = stackTrace {
-                let stackTraceArray = CoralogixRum.sdkFramework == .reactNative ? Helper.parseRNStackTrace(stackTrace) : Helper.parseStackTrace(stackTrace)
-                span.setAttribute(key: Keys.stackTrace.rawValue, value: Helper.convertArrayToJsonString(array: stackTraceArray))
+            if let stackTraceJson = stackTraceJson {
+                span.setAttribute(key: Keys.stackTrace.rawValue, value: stackTraceJson)
             }
+            
             span.end()
         }
     }
-    
+
     func logWith(severity: CoralogixLogSeverity,
                  message: String,
                  data: [String: Any]?) {

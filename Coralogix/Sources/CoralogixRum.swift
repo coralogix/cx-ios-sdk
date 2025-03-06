@@ -170,6 +170,12 @@ public class CoralogixRum {
         }
     }
     
+    public func reportError(message: String, stackTrace: [[String: Any]]) {
+        if CoralogixRum.isInitialized {
+            self.reportErrorWith(message: message, stackTrace: stackTrace)
+        }
+    }
+    
     public func log(severity: CoralogixLogSeverity,
                     message: String,
                     data: [String: Any]? = nil) {
