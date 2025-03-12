@@ -10,11 +10,10 @@ import Foundation
 extension CoralogixRum {
     
     func initializeANRInstrumentation() {
-        if self.options.shouldInitInstumentation(instumentation: .anr) {
-            NotificationCenter.default.addObserver(self,
-                                                   selector: #selector(handleErrorNotification(notification:)),
-                                                   name: .cxRumNotificationMetrics, object: nil)
-        }
+        NotificationCenter.default.addObserver(self,
+                                               selector: #selector(handleErrorNotification(notification:)),
+                                               name: .cxRumNotificationMetrics, object: nil)
+        
     }
     
     @objc func handleErrorNotification(notification: Notification) {

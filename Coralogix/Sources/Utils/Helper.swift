@@ -207,4 +207,13 @@ class Helper {
     internal static var isSimulator: Bool {
         return TARGET_OS_SIMULATOR != 0
     }
+    
+    internal static func isEmptyDictionary(_ dict: [String: Any]) -> Bool {
+        for value in dict.values {
+            if let stringValue = value as? String, !stringValue.isEmpty {
+                return false
+            }
+        }
+        return true
+    }
 }

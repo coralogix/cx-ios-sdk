@@ -9,9 +9,7 @@ import Foundation
 
 extension CoralogixRum {
     public func initializeNetworkInstrumentation() {
-        if self.options.shouldInitInstumentation(instumentation: .network) {
-            self.sessionInstrumentation = URLSessionInstrumentation(configuration: URLSessionInstrumentationConfiguration(spanCustomization: self.spanCustomization, receivedResponse: self.receivedResponse))
-        }
+        self.sessionInstrumentation = URLSessionInstrumentation(configuration: URLSessionInstrumentationConfiguration(spanCustomization: self.spanCustomization, receivedResponse: self.receivedResponse))
     }
     
     private func spanCustomization(request: URLRequest, spanBuilder: SpanBuilder) {

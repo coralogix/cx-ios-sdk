@@ -8,20 +8,17 @@ import Foundation
 
 public class CoralogixExporter: SpanExporter {
     private var options: CoralogixExporterOptions
-    private var versionMetadata: VersionMetadata
     private var viewManager: ViewManager
     private var sessionManager: SessionManager
     private var networkManager: NetworkProtocol
     private var metricsManager: MetricsManager
 
     public init(options: CoralogixExporterOptions,
-                versionMetadata: VersionMetadata,
                 sessionManager: SessionManager,
                 networkManager: NetworkProtocol,
                 viewManager: ViewManager,
                 metricsManager: MetricsManager) {
         self.options = options
-        self.versionMetadata = versionMetadata
         self.sessionManager = sessionManager
         self.networkManager = networkManager
         self.viewManager = viewManager
@@ -46,6 +43,10 @@ public class CoralogixExporter: SpanExporter {
         return self.options
     }
     
+    public func getViewManager() -> ViewManager {
+        return self.viewManager
+    }
+    
     public func set(cxView: CXView) {
         if cxView.state == .notifyOnAppear {
             self.viewManager.set(cxView: cxView)
@@ -64,6 +65,11 @@ public class CoralogixExporter: SpanExporter {
     
     public func updade(view: ViewManager) {
         self.viewManager = view
+    }
+    
+    public func updade(application: String, version: String) {
+        self.options.version = version
+        self.options.application = application
     }
     
     public func export(spans: [SpanData], explicitTimeout: TimeInterval?) -> SpanExporterResultCode {
@@ -142,8 +148,9 @@ public class CoralogixExporter: SpanExporter {
     }
     
     private func spanDatatoCxSpan(otelSpan: SpanData) -> [String: Any]? {
+        let metatadata = VersionMetadata(appName: self.options.application, appVersion: self.options.version)
         return CxSpan(otel: otelSpan,
-                      versionMetadata: self.versionMetadata,
+                      versionMetadata: metatadata,
                       sessionManager: self.sessionManager,
                       networkManager: self.networkManager, 
                       viewManager: self.viewManager,

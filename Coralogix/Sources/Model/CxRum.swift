@@ -51,12 +51,10 @@ struct CxRum {
         
         if let sessionMetadata = sessionManager.getSessionMetadata() {
             self.sessionContext = SessionContext(otel: otel,
-                                                 versionMetadata: versionMetadata,
                                                  sessionMetadata: sessionMetadata,
                                                  userMetadata: userMetadata)
             if let prevSessionMetadata = sessionManager.getPrevSessionMetadata() {
                 self.prevSessionContext = SessionContext(otel: otel,
-                                                         versionMetadata: versionMetadata,
                                                          sessionMetadata: prevSessionMetadata,
                                                          userMetadata: userMetadata)
             }
@@ -110,7 +108,10 @@ struct CxRum {
     }
     
     private func addMobileVitals(to result: inout [String: Any]) {
-        result[Keys.mobileVitalsContext.rawValue] = self.mobileVitalsContext?.getMobileVitalsDictionary()
+        if let mobileVitalsDictionary = self.mobileVitalsContext?.getMobileVitalsDictionary(),
+           !Helper.isEmptyDictionary(mobileVitalsDictionary) {
+            result[Keys.mobileVitalsContext.rawValue] = self.mobileVitalsContext?.getMobileVitalsDictionary()
+        }
     }
     
     private func addBasicDetails(to result: inout [String: Any]) {
@@ -168,7 +169,8 @@ struct CxRum {
     
     private func addViewManagerContext(to result: inout [String: Any]) {
         if let viewManager = self.viewManager {
-            if self.sessionContext?.isPidEqualToOldPid != nil {
+            if let sessionContext = self.sessionContext,
+               sessionContext.isPidEqualToOldPid == true {
                 result[Keys.viewContext.rawValue] = viewManager.getPrevDictionary()
             } else {
                 result[Keys.viewContext.rawValue] = viewManager.getDictionary()

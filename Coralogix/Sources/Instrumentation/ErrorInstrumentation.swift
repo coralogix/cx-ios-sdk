@@ -15,7 +15,8 @@ extension CoralogixRum {
     }
     
     func reportErrorWith(exception: NSException) {
-        if self.options.shouldInitInstumentation(instumentation: .errors) {
+        if let options = self.coralogixExporter?.getOptions(),
+           options.shouldInitInstumentation(instumentation: .errors) {
             let span = self.getSpan()
             span.setAttribute(key: Keys.domain.rawValue, value: exception.name.rawValue)
             span.setAttribute(key: Keys.code.rawValue, value: 0)
@@ -29,7 +30,8 @@ extension CoralogixRum {
     }
 
     func reportErrorWith(error: NSError) {
-        if self.options.shouldInitInstumentation(instumentation: .errors) {
+        if let options = self.coralogixExporter?.getOptions(),
+           options.shouldInitInstumentation(instumentation: .errors) {
             let span = self.getSpan()
             span.setAttribute(key: Keys.domain.rawValue, value: error.domain)
             span.setAttribute(key: Keys.code.rawValue, value: error.code)
@@ -40,7 +42,8 @@ extension CoralogixRum {
     }
     
     func reportErrorWith(error: Error) {
-        if self.options.shouldInitInstumentation(instumentation: .errors) {
+        if let options = self.coralogixExporter?.getOptions(),
+           options.shouldInitInstumentation(instumentation: .errors) {
             let span = self.getSpan()
             span.setAttribute(key: Keys.domain.rawValue, value: String(describing: type(of: error)))
             span.setAttribute(key: Keys.code.rawValue, value: 0)
@@ -50,7 +53,8 @@ extension CoralogixRum {
     }
 
     func reportErrorWith(message: String, data: [String: Any]?) {
-        if self.options.shouldInitInstumentation(instumentation: .errors) {
+        if let options = self.coralogixExporter?.getOptions(),
+           options.shouldInitInstumentation(instumentation: .errors) {
             self.log(severity: CoralogixLogSeverity.error, message: message, data: data)
         }
     }
@@ -77,7 +81,8 @@ extension CoralogixRum {
     private func reportErrorInternal(message: String,
                                      stackTraceJson: String?,
                                      errorType: String? = nil) {
-        if self.options.shouldInitInstumentation(instumentation: .errors) {
+        if let options = self.coralogixExporter?.getOptions(),
+           options.shouldInitInstumentation(instumentation: .errors) {
             let span = self.getSpan()
             span.setAttribute(key: Keys.domain.rawValue, value: "")
             span.setAttribute(key: Keys.code.rawValue, value: 0)
@@ -98,8 +103,9 @@ extension CoralogixRum {
     func logWith(severity: CoralogixLogSeverity,
                  message: String,
                  data: [String: Any]?) {
-        if self.options.shouldInitInstumentation(instumentation: .custom) ||
-            self.options.shouldInitInstumentation(instumentation: .lifeCycle) {
+        if let options = self.coralogixExporter?.getOptions(),
+           options.shouldInitInstumentation(instumentation: .custom) ||
+            options.shouldInitInstumentation(instumentation: .lifeCycle) {
             var span = tracer().spanBuilder(spanName: Keys.iosSdk.rawValue).startSpan()
             span.setAttribute(key: Keys.message.rawValue, value: message)
             span.setAttribute(key: Keys.eventType.rawValue, value: CoralogixEventType.log.rawValue)
