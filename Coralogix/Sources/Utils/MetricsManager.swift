@@ -20,10 +20,10 @@ public class MetricsManager: NSObject, MXMetricManagerSubscriber {
     var fpsTrigger = FPSTrigger()
     let mobileVitalsFPSSamplingRate = 300 // 5 min
     var warmMetricIsActive = false
+    private var isSubscribedToMXMetrics = false
     
     override init() {
         super.init()
-        MXMetricManager.shared.add(self)
         
         NotificationCenter.default.addObserver(self,
                                                selector: #selector(self.handleNotification(notification:)),
@@ -43,6 +43,11 @@ public class MetricsManager: NSObject, MXMetricManagerSubscriber {
                                                object: nil)
     }
     
+    func startCollectingMetrics() {
+        MXMetricManager.shared.add(self)
+        isSubscribedToMXMetrics = true
+    }
+
     func startFPSSamplingMonitoring(mobileVitalsFPSSamplingRate: Int) {
         self.fpsTrigger.startMonitoring(xTimesPerHour: mobileVitalsFPSSamplingRate)
     }
@@ -150,11 +155,13 @@ public class MetricsManager: NSObject, MXMetricManagerSubscriber {
     }
     
     deinit {
-        MXMetricManager.shared.remove(self)
-        NotificationCenter().removeObserver(self, name: UIApplication.didEnterBackgroundNotification, object: nil)
-        NotificationCenter().removeObserver(self, name: UIApplication.willEnterForegroundNotification, object: nil)
-        NotificationCenter().removeObserver(self, name: UIApplication.didBecomeActiveNotification, object: nil)
-        NotificationCenter().removeObserver(self, name: .cxRumNotificationMetrics, object: nil)
+        if isSubscribedToMXMetrics {
+            MXMetricManager.shared.remove(self)
+        }
+        NotificationCenter.default.removeObserver(self, name: UIApplication.didEnterBackgroundNotification, object: nil)
+        NotificationCenter.default.removeObserver(self, name: UIApplication.willEnterForegroundNotification, object: nil)
+        NotificationCenter.default.removeObserver(self, name: UIApplication.didBecomeActiveNotification, object: nil)
+        NotificationCenter.default.removeObserver(self, name: .cxRumNotificationMetrics, object: nil)
         self.anrDetector?.stopMonitoring()
         self.fpsTrigger.stopMonitoring()
         self.launchEndTime = 0

@@ -46,19 +46,19 @@ public class CoralogixRum {
     }
     
     private func removeLifeCycleNotification() {
-        NotificationCenter().removeObserver(self,
+        NotificationCenter.default.removeObserver(self,
                                             name: UIApplication.didFinishLaunchingNotification,
                                             object: nil)
-        NotificationCenter().removeObserver(self,
+        NotificationCenter.default.removeObserver(self,
                                             name: UIApplication.didBecomeActiveNotification,
                                             object: nil)
-        NotificationCenter().removeObserver(self,
+        NotificationCenter.default.removeObserver(self,
                                             name: UIApplication.didEnterBackgroundNotification,
                                             object: nil)
-        NotificationCenter().removeObserver(self,
+        NotificationCenter.default.removeObserver(self,
                                             name: UIApplication.willTerminateNotification,
                                             object: nil)
-        NotificationCenter().removeObserver(self,
+        NotificationCenter.default.removeObserver(self,
                                             name: UIApplication.didReceiveMemoryWarningNotification,
                                             object: nil)
     }
@@ -182,6 +182,7 @@ public class CoralogixRum {
         }
     }
     
+    // Depractead
     public func reportError(message: String, stackTrace: String?) {
         if CoralogixRum.isInitialized {
             self.reportErrorWith(message: message, stackTrace: stackTrace)

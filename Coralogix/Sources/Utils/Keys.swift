@@ -162,6 +162,7 @@ public enum Keys: String {
     case x
     case y
     case errorType = "error_type"
+    case keyStackTrace = "stack_trace"
 }
 
 public enum CoralogixLogSeverity: Int {
@@ -189,7 +190,7 @@ enum CoralogixEventType: String {
 }
 
 public enum Global: String {
-    case sdk = "1.0.15"
+    case sdk = "1.0.16"
     case swiftVersion = "5.9"
     case coralogixPath = "/browser/v1beta/logs"
     
