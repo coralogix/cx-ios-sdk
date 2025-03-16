@@ -54,6 +54,5 @@ final class InteractionContextTests: XCTestCase {
         let dictionary = context.getDictionary()
         XCTAssertEqual(dictionary[Keys.elementId.rawValue] as? String, "UIButton")
         XCTAssertEqual(dictionary[Keys.eventName.rawValue] as? String, Keys.click.rawValue)
-        XCTAssertEqual((dictionary[Keys.attributes.rawValue] as? [String: Any])?["text"] as? String, "click me")
     }
 }

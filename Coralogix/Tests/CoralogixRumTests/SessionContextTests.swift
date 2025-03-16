@@ -35,7 +35,6 @@ final class SessionContextTests: XCTestCase {
     
     func testInitSessionContext() {
         let context = SessionContext(otel: mockSpanData,
-                                     versionMetadata: versionMetadata,
                                      sessionMetadata: sessionMetadata,
                                      userMetadata: ["role": "admin"])
         
@@ -52,7 +51,6 @@ final class SessionContextTests: XCTestCase {
 
     func testGetDictionary() {
         let context = SessionContext(otel: mockSpanData,
-                                     versionMetadata: versionMetadata,
                                      sessionMetadata: sessionMetadata,
                                      userMetadata: ["role": "admin"])
         let dictionary = context.getDictionary()
@@ -69,7 +67,7 @@ final class SessionContextTests: XCTestCase {
     }
 
     func testGetPrevSessionDictionary() {
-        let context = SessionContext(otel: mockSpanData, versionMetadata: versionMetadata, sessionMetadata: sessionMetadata, userMetadata: nil)
+        let context = SessionContext(otel: mockSpanData, sessionMetadata: sessionMetadata, userMetadata: nil)
         let prevDictionary = context.getPrevSessionDictionary()
         
         XCTAssertEqual(prevDictionary[Keys.sessionId.rawValue] as? String, "session_001")

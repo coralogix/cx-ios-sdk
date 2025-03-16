@@ -18,7 +18,7 @@ struct SessionContext {
     let userMetadata: [String: String]?
     var isPidEqualToOldPid: Bool = false
     
-    init(otel: SpanDataProtocol, versionMetadata: VersionMetadata, sessionMetadata: SessionMetadata, userMetadata: [String: String]?) {
+    init(otel: SpanDataProtocol, sessionMetadata: SessionMetadata, userMetadata: [String: String]?) {
       if let pid = otel.getAttribute(forKey: Keys.pid.rawValue) as? String,
            let oldPid = sessionMetadata.oldPid,
            pid == oldPid,
@@ -43,7 +43,7 @@ struct SessionContext {
     func getDictionary() -> [String: Any] {
         var result = [String: Any]()
         
-        result[Keys.sessionId.rawValue] = self.sessionId
+        result[Keys.sessionId.rawValue] = self.sessionId.lowercased()
         result[Keys.sessionCreationDate.rawValue] = self.sessionCreationDate.milliseconds
         result[Keys.operatingSystem.rawValue] = self.operatingSystem
         result[Keys.osVersion.rawValue] = self.osVersion
@@ -59,7 +59,7 @@ struct SessionContext {
     
     func getPrevSessionDictionary() -> [String: Any] {
         var result = [String: Any]()
-        result[Keys.sessionId.rawValue] = self.sessionId
+        result[Keys.sessionId.rawValue] = self.sessionId.lowercased()
         result[Keys.sessionCreationDate.rawValue] = self.sessionCreationDate.milliseconds
         return result
     }

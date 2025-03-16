@@ -11,11 +11,10 @@ import UIKit
 
 extension CoralogixRum {
     public func initializeUserActionsInstrumentation() {
-        if self.options.shouldInitInstumentation(instumentation: .userActions) {
-            NotificationCenter.default.addObserver(self,
-                                                   selector: #selector(handleTapNotification(notification:)),
-                                                   name: .cxRumNotificationUserActions, object: nil)
-        }
+        NotificationCenter.default.addObserver(self,
+                                               selector: #selector(handleTapNotification(notification:)),
+                                               name: .cxRumNotificationUserActions, object: nil)
+        
     }
     
     @objc func handleTapNotification(notification: Notification) {

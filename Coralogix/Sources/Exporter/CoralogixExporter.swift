@@ -8,20 +8,17 @@ import Foundation
 
 public class CoralogixExporter: SpanExporter {
     private var options: CoralogixExporterOptions
-    private var versionMetadata: VersionMetadata
     private var viewManager: ViewManager
     private var sessionManager: SessionManager
     private var networkManager: NetworkProtocol
     private var metricsManager: MetricsManager
-
+    
     public init(options: CoralogixExporterOptions,
-                versionMetadata: VersionMetadata,
                 sessionManager: SessionManager,
                 networkManager: NetworkProtocol,
                 viewManager: ViewManager,
                 metricsManager: MetricsManager) {
         self.options = options
-        self.versionMetadata = versionMetadata
         self.sessionManager = sessionManager
         self.networkManager = networkManager
         self.viewManager = viewManager
@@ -31,7 +28,7 @@ public class CoralogixExporter: SpanExporter {
                                                selector: #selector(handleNotification(notification:)),
                                                name: .cxRumNotificationSessionEnded, object: nil)
     }
-
+    
     var pendingSpans: [SpanData] = []
     var endPoint: String {
         if let customDomainUrl = self.options.customDomainUrl,
@@ -44,6 +41,10 @@ public class CoralogixExporter: SpanExporter {
     
     public func getOptions() -> CoralogixExporterOptions {
         return self.options
+    }
+    
+    public func getViewManager() -> ViewManager {
+        return self.viewManager
     }
     
     public func set(cxView: CXView) {
@@ -66,6 +67,11 @@ public class CoralogixExporter: SpanExporter {
         self.viewManager = view
     }
     
+    public func updade(application: String, version: String) {
+        self.options.version = version
+        self.options.application = application
+    }
+    
     public func export(spans: [SpanData], explicitTimeout: TimeInterval?) -> SpanExporterResultCode {
         guard CoralogixRum.isInitialized,
               let url = URL(string: self.endPoint) else { return .failure }
@@ -75,10 +81,10 @@ public class CoralogixExporter: SpanExporter {
         request.httpMethod = "POST"
         request.addValue("Bearer \(self.options.publicKey)", forHTTPHeaderField: "Authorization")
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-
+        
         // ignore Urls
         var filterSpans = spans.filter {
-            self.shouldFilterIgnoreUrl(span: $0)
+            self.shouldRemoveSpan(span: $0)
         }
         
         // ignore Error
@@ -90,7 +96,7 @@ public class CoralogixExporter: SpanExporter {
         
         if !filterSpans.isEmpty {
             let cxSpansDictionary = encodeSpans(spans: filterSpans)
-           
+            
             if cxSpansDictionary.isEmpty {
                 return .success
             }
@@ -126,7 +132,7 @@ public class CoralogixExporter: SpanExporter {
     public func flush(explicitTimeout: TimeInterval?) -> SpanExporterResultCode {
         return .success
     }
-   
+    
     public func shutdown(explicitTimeout: TimeInterval?) {
         self.sessionManager.shutdown()
         self.viewManager.shutdown()
@@ -142,10 +148,11 @@ public class CoralogixExporter: SpanExporter {
     }
     
     private func spanDatatoCxSpan(otelSpan: SpanData) -> [String: Any]? {
+        let metatadata = VersionMetadata(appName: self.options.application, appVersion: self.options.version)
         return CxSpan(otel: otelSpan,
-                      versionMetadata: self.versionMetadata,
+                      versionMetadata: metatadata,
                       sessionManager: self.sessionManager,
-                      networkManager: self.networkManager, 
+                      networkManager: self.networkManager,
                       viewManager: self.viewManager,
                       metricsManager: self.metricsManager,
                       userMetadata: self.options.userContext?.userMetadata,
@@ -154,29 +161,52 @@ public class CoralogixExporter: SpanExporter {
     }
     
     private func isMatchesRegexPattern(string: String, regexs: [String]) -> Bool {
+        guard let url = URL(string: string), let host = url.host else {
+            return false // Return false if URL creation fails or no host part exists
+        }
+        
+        // Iterate over the regex patterns
         for regex in regexs {
             let predicate = NSPredicate(format: "SELF MATCHES %@", regex)
-            // Check if the URL matches the regular expression
-            return predicate.evaluate(with: string) ? true : false
-        }
-        return false
-    }
-    
-    private func shouldFilterIgnoreUrl(span: SpanData) -> Bool {
-        guard let url = span.attributes[SemanticAttributes.httpUrl.rawValue]?.description else {
-            return true
-        }
-                
-        if url != self.endPoint {
-            guard let ignoreUrlsOrRejexs = self.options.ignoreUrls else {
+            // Check if the domain part (host) matches the regex
+            if predicate.evaluate(with: host) {
                 return true
             }
-            
-            if ignoreUrlsOrRejexs.contains(url) {
+        }
+        
+        // Return false if no regex matches the host
+        return false
+
+    }
+    
+    internal func shouldRemoveSpan(span: SpanDataProtocol) -> Bool {
+        // if the closure returns true, the element stays in the result.
+        let attributes = span.getAttributes()
+        var urlString: String?
+
+        if let attrValue = attributes?[SemanticAttributes.httpUrl.rawValue] as? AttributeValue {
+            urlString = attrValue.description  // Or attrValue.stringValue if available
+        } else if let rawString = attributes?[SemanticAttributes.httpUrl.rawValue] as? String {
+            urlString = rawString
+        }
+
+        guard let url = urlString?.description else {
+           return false
+        }
+        
+        if url != self.endPoint {
+            if let ignoreUrlsOrRejexs = self.options.ignoreUrls,
+               !ignoreUrlsOrRejexs.isEmpty,
+               ignoreUrlsOrRejexs.contains(url)  {
                 return false
             }
             
-            return self.isMatchesRegexPattern(string: url, regexs: ignoreUrlsOrRejexs) ? true : false
+            if let ignoreUrlsOrRejexs = self.options.ignoreUrls,
+               !ignoreUrlsOrRejexs.isEmpty {
+                let isMatch = self.isMatchesRegexPattern(string: url, regexs: ignoreUrlsOrRejexs) 
+                return !isMatch
+            }
+            return true
         }
         return false
     }

@@ -13,13 +13,11 @@ extension Notification.Name {
 
 public class CoralogixRum {
     internal var coralogixExporter: CoralogixExporter?
-    internal var versionMetadata: VersionMetadata?
     internal var networkManager = NetworkManager()
     internal var viewManager = ViewManager(keyChain: KeychainManager())
     internal var sessionManager = SessionManager()
     internal var sessionInstrumentation: URLSessionInstrumentation?
     internal var metricsManager = MetricsManager()
-    internal var options: CoralogixExporterOptions
 
     let notificationCenter = NotificationCenter.default
     
@@ -28,15 +26,14 @@ public class CoralogixRum {
     static var sdkFramework: SdkFramework = .swift
     
     public init(options: CoralogixExporterOptions, sdkFramework: SdkFramework = .swift) {
-        self.options = options
-
+        CoralogixRum.isDebug = options.debug
         self.displayCoralogixWord()
 
         if options.sdkSampler.shouldInitialized() == false {
             return
         }
         
-        self.startup(sdkFramework: sdkFramework)
+        self.startup(sdkFramework: sdkFramework, options: options)
     }
     
     deinit {
@@ -49,41 +46,36 @@ public class CoralogixRum {
     }
     
     private func removeLifeCycleNotification() {
-        NotificationCenter().removeObserver(self,
+        NotificationCenter.default.removeObserver(self,
                                             name: UIApplication.didFinishLaunchingNotification,
                                             object: nil)
-        NotificationCenter().removeObserver(self,
+        NotificationCenter.default.removeObserver(self,
                                             name: UIApplication.didBecomeActiveNotification,
                                             object: nil)
-        NotificationCenter().removeObserver(self,
+        NotificationCenter.default.removeObserver(self,
                                             name: UIApplication.didEnterBackgroundNotification,
                                             object: nil)
-        NotificationCenter().removeObserver(self,
+        NotificationCenter.default.removeObserver(self,
                                             name: UIApplication.willTerminateNotification,
                                             object: nil)
-        NotificationCenter().removeObserver(self,
+        NotificationCenter.default.removeObserver(self,
                                             name: UIApplication.didReceiveMemoryWarningNotification,
                                             object: nil)
     }
     
-    private func startup(sdkFramework: SdkFramework) {
+    private func startup(sdkFramework: SdkFramework, options: CoralogixExporterOptions) {
         CoralogixRum.sdkFramework = sdkFramework
-        self.initialzeMetricsManager()
+        self.initialzeMetricsManager(options: options)
 
-        CoralogixRum.isDebug = self.options.debug
-        let versionMetadata = VersionMetadata(appName: self.options.application,
-                                              appVersion: self.options.version)
-        let coralogixExporter = CoralogixExporter(options: self.options,
-                                                  versionMetadata: versionMetadata,
+        let coralogixExporter = CoralogixExporter(options: options,
                                                   sessionManager: self.sessionManager,
                                                   networkManager: self.networkManager,
                                                   viewManager: self.viewManager,
                                                   metricsManager: self.metricsManager)
-        self.versionMetadata = versionMetadata
         self.coralogixExporter = coralogixExporter
         
         let resource = Resource(attributes: [
-            ResourceAttributes.serviceName.rawValue: AttributeValue.string(self.options.application)
+            ResourceAttributes.serviceName.rawValue: AttributeValue.string(options.application)
         ])
         
         OpenTelemetry.registerTracerProvider(tracerProvider: TracerProviderBuilder().with(resource: resource)
@@ -93,21 +85,35 @@ public class CoralogixRum {
                 .build())
         
         self.swizzle()
-        self.initializeLifeCycleInstrumentation()
-        self.initializeUserActionsInstrumentation()
-        self.initializeNavigationInstrumentation()
-        self.initializeNetworkInstrumentation()
-        self.initializeCrashInstumentation()
-        self.initializeMobileVitalsInstrumentation()
-        self.initializeANRInstrumentation()
+        if options.shouldInitInstumentation(instumentation: .lifeCycle) {
+            self.initializeLifeCycleInstrumentation()
+        }
+        if options.shouldInitInstumentation(instumentation: .userActions) {
+            self.initializeUserActionsInstrumentation()
+        }
+        if options.shouldInitInstumentation(instumentation: .navigation) {
+            self.initializeNavigationInstrumentation()
+        }
+        if options.shouldInitInstumentation(instumentation: .network) {
+            self.initializeNetworkInstrumentation()
+        }
+        if options.shouldInitInstumentation(instumentation: .errors) {
+            self.initializeCrashInstumentation()
+        }
+        if options.shouldInitInstumentation(instumentation: .mobileVitals) {
+            self.initializeMobileVitalsInstrumentation()
+        }
+        if options.shouldInitInstumentation(instumentation: .anr) {
+            self.initializeANRInstrumentation()
+        }
         CoralogixRum.isInitialized = true
     }
     
-    private func initialzeMetricsManager() {
-        if self.options.shouldInitInstumentation(instumentation: .mobileVitals) {
+    private func initialzeMetricsManager(options: CoralogixExporterOptions) {
+        if options.shouldInitInstumentation(instumentation: .mobileVitals) {
             self.metricsManager.startFPSSamplingMonitoring(mobileVitalsFPSSamplingRate: options.mobileVitalsFPSSamplingRate)
             self.metricsManager.startColdStartMonitoring()
-        } else if self.options.shouldInitInstumentation(instumentation: .anr) {
+        } else if options.shouldInitInstumentation(instumentation: .anr) {
             self.metricsManager.startANRMonitoring()
         }
     }
@@ -129,10 +135,21 @@ public class CoralogixRum {
         }
     }
     
+    public func getUserContext() -> UserContext? {
+        if CoralogixRum.isInitialized {
+            return self.coralogixExporter?.getOptions().userContext
+        }
+        return nil
+    }
+    
     public func setLabels(labels: [String: Any]) {
         if CoralogixRum.isInitialized {
             self.coralogixExporter?.updade(labels: labels)
         }
+    }
+    
+    public func getLabels() -> [String: Any]? {
+        return self.coralogixExporter?.getOptions().labels
     }
     
     public func reportError(exception: NSException) {
@@ -155,6 +172,7 @@ public class CoralogixRum {
     
     public func setView(name: String) {
         let cxView = CXView(state: .notifyOnAppear, name: name)
+        self.coralogixExporter?.getViewManager().reset()
         self.coralogixExporter?.set(cxView: cxView)
     }
     
@@ -164,6 +182,7 @@ public class CoralogixRum {
         }
     }
     
+    // Depractead
     public func reportError(message: String, stackTrace: String?) {
         if CoralogixRum.isInitialized {
             self.reportErrorWith(message: message, stackTrace: stackTrace)
@@ -192,18 +211,13 @@ public class CoralogixRum {
     public func isInitialized() -> Bool {
         return CoralogixRum.isInitialized
     }
-    
-    public func getLabels() -> [String: Any]? {
-        return self.options.labels
-    }
-    
+
     public func getSessionId() -> String? {
         return self.sessionManager.getSessionMetadata()?.sessionId
     }
     
     public func setApplicationContext(application: String, version: String) {
-        self.options.version = version
-        self.options.application = application
+        self.coralogixExporter?.updade(application: application, version: version)
     }
     
     internal func addUserMetadata(to span: inout Span) {

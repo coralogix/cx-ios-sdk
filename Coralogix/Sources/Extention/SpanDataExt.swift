@@ -23,6 +23,7 @@ protocol SpanDataProtocol {
 // Extend the real SpanData to conform to this protocol if possible
 // This is only necessary if SpanData doesn't already have the methods you need
 extension SpanData: SpanDataProtocol {
+    
     func getTraceId() -> String? {
         return self.traceId.hexString
     }
