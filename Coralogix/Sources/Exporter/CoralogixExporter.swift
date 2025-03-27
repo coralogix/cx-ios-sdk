@@ -93,9 +93,13 @@ public class CoralogixExporter: SpanExporter {
         }
         
         var status: SpanExporterResultCode = .failure
-        
-        if !filterSpans.isEmpty {
-            let cxSpansDictionary = encodeSpans(spans: filterSpans)
+
+        // Deduplicate using spanId as key
+        let uniqueSpansDict = Dictionary(grouping: filterSpans, by: { $0.spanId })
+        let uniqueSpans = uniqueSpansDict.compactMap { $0.value.first }
+
+        if !uniqueSpans.isEmpty {
+            let cxSpansDictionary = encodeSpans(spans: uniqueSpans)
             
             if cxSpansDictionary.isEmpty {
                 return .success
@@ -108,10 +112,7 @@ public class CoralogixExporter: SpanExporter {
                 let jsonData = try JSONSerialization.data(withJSONObject: jsonObject, options: [])
                 request.httpBody = jsonData
                 
-                // Convert JSON data to a string if needed
-                if let jsonString = String(data: jsonData, encoding: .utf8) {
-                    Log.d("⚡️ JSON string: ⚡️\n\(jsonString)")
-                }
+                self.logJSON(from: jsonData, prettyPrint: false)
             } catch {
                 Log.e(error)
                 return .failure
@@ -147,6 +148,22 @@ public class CoralogixExporter: SpanExporter {
         self.sessionManager.reset()
     }
     
+    private func logJSON(from jsonData: Data, prettyPrint: Bool) {
+        guard let jsonObject = try? JSONSerialization.jsonObject(with: jsonData, options: []) else {
+            Log.d("❌ Failed to parse JSON data.")
+            return
+        }
+        
+        let options: JSONSerialization.WritingOptions = prettyPrint ? .prettyPrinted : []
+        
+        if let formattedData = try? JSONSerialization.data(withJSONObject: jsonObject, options: options),
+           let jsonString = String(data: formattedData, encoding: .utf8) {
+            Log.d("⚡️ JSON string: ⚡️\n\(jsonString)")
+        } else {
+            Log.d("❌ Failed to format JSON string.")
+        }
+    }
+    
     private func spanDatatoCxSpan(otelSpan: SpanData) -> [String: Any]? {
         let metatadata = VersionMetadata(appName: self.options.application, appVersion: self.options.version)
         return CxSpan(otel: otelSpan,
@@ -161,37 +178,59 @@ public class CoralogixExporter: SpanExporter {
     }
     
     private func isMatchesRegexPattern(string: String, regexs: [String]) -> Bool {
+        // Iterate over the regex patterns
+        for regex in regexs {
+            do {
+                let regex = try NSRegularExpression(pattern: regex, options: [.caseInsensitive])
+                let range = NSRange(string.startIndex..., in: string)
+                let matchFound = regex.firstMatch(in: string, options: [], range: range) != nil
+                return matchFound
+            } catch {
+                Log.d("Invalid regex pattern: \(regex) — Error: \(error)")
+                continue // Skip invalid regex instead of crashing
+            }
+        }
+        
+        // Return false if no regex matches the host
+        return false
+    }
+    
+    private func isHostMatchesRegexPattern(string: String, regexs: [String]) -> Bool {
         guard let url = URL(string: string), let host = url.host else {
             return false // Return false if URL creation fails or no host part exists
         }
         
         // Iterate over the regex patterns
         for regex in regexs {
-            let predicate = NSPredicate(format: "SELF MATCHES %@", regex)
-            // Check if the domain part (host) matches the regex
-            if predicate.evaluate(with: host) {
-                return true
+            do {
+                let regex = try NSRegularExpression(pattern: regex)
+                let range = NSRange(location: 0, length: host.utf16.count)
+                if regex.firstMatch(in: host, options: [], range: range) != nil {
+                    return true
+                }
+            } catch {
+                Log.d("Invalid regex pattern: \(regex) — Error: \(error)")
+                continue // Skip invalid regex instead of crashing
             }
         }
         
         // Return false if no regex matches the host
         return false
-
     }
     
     internal func shouldRemoveSpan(span: SpanDataProtocol) -> Bool {
         // if the closure returns true, the element stays in the result.
         let attributes = span.getAttributes()
         var urlString: String?
-
+        
         if let attrValue = attributes?[SemanticAttributes.httpUrl.rawValue] as? AttributeValue {
             urlString = attrValue.description  // Or attrValue.stringValue if available
         } else if let rawString = attributes?[SemanticAttributes.httpUrl.rawValue] as? String {
             urlString = rawString
         }
-
+        
         guard let url = urlString?.description else {
-           return false
+            return true
         }
         
         if url != self.endPoint {
@@ -203,7 +242,7 @@ public class CoralogixExporter: SpanExporter {
             
             if let ignoreUrlsOrRejexs = self.options.ignoreUrls,
                !ignoreUrlsOrRejexs.isEmpty {
-                let isMatch = self.isMatchesRegexPattern(string: url, regexs: ignoreUrlsOrRejexs) 
+                let isMatch = self.isHostMatchesRegexPattern(string: url, regexs: ignoreUrlsOrRejexs)
                 return !isMatch
             }
             return true
@@ -211,19 +250,33 @@ public class CoralogixExporter: SpanExporter {
         return false
     }
     
-    private func shouldFilterIgnoreError(span: SpanData) -> Bool {
-        guard let message = span.attributes[Keys.message.rawValue]?.description else {
+    internal func shouldFilterIgnoreError(span: SpanDataProtocol) -> Bool {
+        // if the closure returns true, the element stays in the result.
+        let attributes = span.getAttributes()
+        var message: String?
+
+        if let attrValue = attributes?[Keys.errorMessage.rawValue] as? AttributeValue {
+            message = attrValue.description
+        } else if let rawString = attributes?[Keys.errorMessage.rawValue] as? String {
+            message = rawString
+        }
+        
+        guard let message = message?.description else {
             return true
         }
         
-        guard let ignoreErrorsOrRejexs = self.options.ignoreErrors else {
-            return true
-        }
-        
-        if ignoreErrorsOrRejexs.contains(message) {
+        if let ignoreErrorsOrRejexs = self.options.ignoreErrors,
+           !ignoreErrorsOrRejexs.isEmpty,
+           ignoreErrorsOrRejexs.contains(message) {
             return false
         }
         
-        return self.isMatchesRegexPattern(string: message, regexs: ignoreErrorsOrRejexs) ? false : true
+        if let ignoreErrorsOrRejexs = self.options.ignoreErrors,
+           !ignoreErrorsOrRejexs.isEmpty {
+            let isMatch = self.isMatchesRegexPattern(string: message, regexs: ignoreErrorsOrRejexs)
+            return !isMatch
+        }
+        
+        return true
     }
 }

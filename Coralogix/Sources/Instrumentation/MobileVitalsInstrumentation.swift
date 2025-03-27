@@ -37,6 +37,7 @@ extension CoralogixRum {
     }
 
     private func handleRegularMobileVitals(_ cxMobileVitals: CXMobileVitals) {
+        Log.w("mobile vitals type: \(cxMobileVitals.type.rawValue)")
         let span = getMobileVitalsSpan()
         span.setAttribute(key: Keys.mobileVitalsType.rawValue, value: cxMobileVitals.type.rawValue)
         span.setAttribute(key: Keys.mobileVitalsValue.rawValue, value: cxMobileVitals.value)

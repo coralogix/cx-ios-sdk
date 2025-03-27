@@ -18,7 +18,7 @@ public class CoralogixRum {
     internal var sessionManager = SessionManager()
     internal var sessionInstrumentation: URLSessionInstrumentation?
     internal var metricsManager = MetricsManager()
-
+    
     let notificationCenter = NotificationCenter.default
     
     static var isDebug = false
@@ -85,27 +85,23 @@ public class CoralogixRum {
                 .build())
         
         self.swizzle()
-        if options.shouldInitInstumentation(instumentation: .lifeCycle) {
-            self.initializeLifeCycleInstrumentation()
+        
+        let instrumentationMap: [(CoralogixExporterOptions.InstrumentationType, () -> Void)] = [
+            (.lifeCycle, self.initializeLifeCycleInstrumentation),
+            (.userActions, self.initializeUserActionsInstrumentation),
+            (.navigation, self.initializeNavigationInstrumentation),
+            (.network, self.initializeNetworkInstrumentation),
+            (.errors, self.initializeCrashInstumentation),
+            (.mobileVitals, self.initializeMobileVitalsInstrumentation),
+            (.anr, self.initializeANRInstrumentation)
+        ]
+
+        for (type, initializer) in instrumentationMap {
+            if options.shouldInitInstumentation(instumentation: type) {
+                initializer()
+            }
         }
-        if options.shouldInitInstumentation(instumentation: .userActions) {
-            self.initializeUserActionsInstrumentation()
-        }
-        if options.shouldInitInstumentation(instumentation: .navigation) {
-            self.initializeNavigationInstrumentation()
-        }
-        if options.shouldInitInstumentation(instumentation: .network) {
-            self.initializeNetworkInstrumentation()
-        }
-        if options.shouldInitInstumentation(instumentation: .errors) {
-            self.initializeCrashInstumentation()
-        }
-        if options.shouldInitInstumentation(instumentation: .mobileVitals) {
-            self.initializeMobileVitalsInstrumentation()
-        }
-        if options.shouldInitInstumentation(instumentation: .anr) {
-            self.initializeANRInstrumentation()
-        }
+        
         CoralogixRum.isInitialized = true
     }
     
