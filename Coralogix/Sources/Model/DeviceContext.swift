@@ -9,6 +9,7 @@ import Foundation
 #if canImport(UIKit)
 import UIKit
 #endif
+import OpenTelemetryApi
 
 struct DeviceContext {
     let networkConnectionType: String

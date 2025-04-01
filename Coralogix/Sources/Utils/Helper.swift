@@ -9,6 +9,7 @@ import Foundation
 #if canImport(UIKit)
 import UIKit
 #endif
+import OpenTelemetryApi
 
 class Helper {
     internal static func convertToAnyDict(_ attributeDict: [String: AttributeValue]) -> [String: Any] {
@@ -34,6 +35,8 @@ class Helper {
                 anyDict[key] = value
             case let .set(value):
                 anyDict[key] = value // Assuming AttributeSet conforms to Any
+            case let.array(value):
+                anyDict[key] = value 
             }
         }
 

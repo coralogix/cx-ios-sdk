@@ -9,6 +9,8 @@
 import UIKit
 #endif
 
+import OpenTelemetryApi
+
 extension CoralogixRum {
     public func initializeUserActionsInstrumentation() {
         NotificationCenter.default.addObserver(self,

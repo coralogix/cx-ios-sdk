@@ -3,6 +3,9 @@ import Darwin
 #if canImport(UIKit)
 import UIKit
 #endif
+import OpenTelemetryApi
+import URLSessionInstrumentation
+import OpenTelemetrySdk
 
 extension Notification.Name {
     static let cxRumNotification = Notification.Name("cxRumNotification")
@@ -201,7 +204,7 @@ public class CoralogixRum {
     
     public func shutdown() {
         CoralogixRum.isInitialized = false
-        self.coralogixExporter?.shutdown()
+        self.coralogixExporter?.shutdown(explicitTimeout: nil)
     }
     
     public func isInitialized() -> Bool {

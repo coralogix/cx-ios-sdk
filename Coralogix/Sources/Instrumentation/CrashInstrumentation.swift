@@ -7,6 +7,7 @@
 
 import Foundation
 import CrashReporter
+import OpenTelemetryApi
 
 extension CoralogixRum {
     public func initializeCrashInstumentation() {

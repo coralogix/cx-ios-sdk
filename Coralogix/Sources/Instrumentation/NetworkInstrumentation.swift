@@ -6,6 +6,8 @@
 //
 
 import Foundation
+import OpenTelemetryApi
+import URLSessionInstrumentation
 
 extension CoralogixRum {
     public func initializeNetworkInstrumentation() {
@@ -15,7 +17,6 @@ extension CoralogixRum {
             //To do this only on URL that are not internal
                 return true
         }, receivedResponse: self.receivedResponse)
-       
         self.sessionInstrumentation = URLSessionInstrumentation(configuration: configuration)
     }
     

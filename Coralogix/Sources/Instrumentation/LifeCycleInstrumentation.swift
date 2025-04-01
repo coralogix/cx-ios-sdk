@@ -8,6 +8,7 @@
 #if canImport(UIKit)
 import UIKit
 #endif
+import OpenTelemetryApi
 
 extension CoralogixRum {
     public func initializeLifeCycleInstrumentation() {

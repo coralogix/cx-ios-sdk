@@ -6,7 +6,8 @@
 //
 
 import XCTest
-// 
+import OpenTelemetryApi
+
 @testable import Coralogix
 
 final class DeviceContextTests: XCTestCase {
