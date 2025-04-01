@@ -16,15 +16,17 @@ public class NetworkStatusInjector {
         self.netstat = netstat
     }
 
-    public func inject(span: Span) {
+    public func inject(span: any Span) {
         let (type, subtype, carrier) = netstat.status()
       span.setAttribute(key: SemanticAttributes.networkConnectionType.rawValue, value: AttributeValue.string(type))
 
         if let subtype: String = subtype {
           span.setAttribute(key: SemanticAttributes.networkConnectionSubtype.rawValue, value: AttributeValue.string(subtype))
         }
-
-        if !Helper.isSimulator, let carrierInfo: CTCarrier = carrier {
+#if targetEnvironment(simulator)
+        Log.d("Running in simulator, skipping carrier info.")
+#else
+        if let carrierInfo: CTCarrier = carrier {
             if let carrierName = carrierInfo.carrierName {
               span.setAttribute(key: SemanticAttributes.networkCarrierName.rawValue, value: AttributeValue.string(carrierName))
             }
@@ -41,6 +43,7 @@ public class NetworkStatusInjector {
               span.setAttribute(key: SemanticAttributes.networkCarrierMnc.rawValue, value: AttributeValue.string(mobileNetworkCode))
             }
         }
+#endif
     }
 }
 

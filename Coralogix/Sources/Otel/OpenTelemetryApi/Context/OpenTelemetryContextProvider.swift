@@ -16,8 +16,8 @@ public struct OpenTelemetryContextProvider {
     var contextManager: ContextManager
 
     /// Returns the Span from the current context
-    public var activeSpan: Span? {
-        return contextManager.getCurrentContextValue(forKey: .span) as? Span
+    public var activeSpan: (any Span)? {
+        return contextManager.getCurrentContextValue(forKey: .span) as? (any Span)
     }
 
     /// Returns the Baggage from the current context
@@ -27,7 +27,7 @@ public struct OpenTelemetryContextProvider {
 
     /// Sets the span as the activeSpan for the current context
     /// - Parameter span: the Span to be set to the current context
-    public func setActiveSpan(_ span: Span) {
+    public func setActiveSpan(_ span: any Span) {
         contextManager.setCurrentContextValue(forKey: OpenTelemetryContextKeys.span, value: span)
     }
 
@@ -37,7 +37,7 @@ public struct OpenTelemetryContextProvider {
         contextManager.setCurrentContextValue(forKey: OpenTelemetryContextKeys.baggage, value: baggage)
     }
 
-    public func removeContextForSpan(_ span: Span) {
+    public func removeContextForSpan(_ span: any Span) {
         contextManager.removeContextValue(forKey: OpenTelemetryContextKeys.span, value: span)
     }
 

@@ -44,7 +44,7 @@ extension CoralogixRum {
         span.end()
     }
     
-    private func getMobileVitalsSpan() -> Span {
+    private func getMobileVitalsSpan() -> any Span {
         var span = tracer().spanBuilder(spanName: Keys.iosSdk.rawValue).startSpan()
         self.addUserMetadata(to: &span)
         span.setAttribute(key: Keys.eventType.rawValue, value: CoralogixEventType.mobileVitals.rawValue)

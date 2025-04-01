@@ -33,8 +33,8 @@ public class URLSessionInstrumentation {
 
     public private(set) var tracer: Tracer
 
-    public var startedRequestSpans: [Span] {
-        var spans = [Span]()
+    public var startedRequestSpans: [any Span] {
+        var spans = [any Span]()
         URLSessionLogger.runningSpansQueue.sync {
             spans = Array(URLSessionLogger.runningSpans.values)
         }

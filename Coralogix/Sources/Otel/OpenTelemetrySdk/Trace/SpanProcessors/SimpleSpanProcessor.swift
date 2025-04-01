@@ -16,9 +16,9 @@ public struct SimpleSpanProcessor: SpanProcessor {
   public let isStartRequired = false
   public let isEndRequired = true
   
-  public func onStart(parentContext: SpanContext?, span: ReadableSpan) {}
+    public func onStart(parentContext: SpanContext?, span: any ReadableSpan) {}
   
-  public mutating func onEnd(span: ReadableSpan) {
+    public mutating func onEnd(span: any ReadableSpan) {
     if sampled, !span.context.traceFlags.sampled {
       return
     }

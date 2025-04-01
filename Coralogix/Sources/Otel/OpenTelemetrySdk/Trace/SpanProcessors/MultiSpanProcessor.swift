@@ -33,13 +33,13 @@ public struct MultiSpanProcessor: SpanProcessor {
     return spanProcessorsEnd.count > 0
   }
   
-  public func onStart(parentContext: SpanContext?, span: ReadableSpan) {
+  public func onStart(parentContext: SpanContext?, span: any ReadableSpan) {
     spanProcessorsStart.forEach {
       $0.onStart(parentContext: parentContext, span: span)
     }
   }
   
-  public func onEnd(span: ReadableSpan) {
+  public func onEnd(span: any ReadableSpan) {
     for var processor in spanProcessorsEnd {
       processor.onEnd(span: span)
     }

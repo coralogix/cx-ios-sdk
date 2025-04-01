@@ -31,12 +31,7 @@ public class CoralogixExporter: SpanExporter {
     
     var pendingSpans: [SpanData] = []
     var endPoint: String {
-        if let customDomainUrl = self.options.customDomainUrl,
-           self.options.customDomainUrl != "" {
-            return "\(customDomainUrl)\(Global.coralogixPath.rawValue)"
-        } else {
-            return "\(self.options.coralogixDomain.rawValue)\(Global.coralogixPath.rawValue)"
-        }
+      return "\(self.options.coralogixDomain.rawValue)\(Global.coralogixPath.rawValue)"
     }
     
     public func getOptions() -> CoralogixExporterOptions {

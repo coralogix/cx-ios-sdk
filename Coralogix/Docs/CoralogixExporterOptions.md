@@ -57,12 +57,6 @@ let version: String
 ```
 Version of the application. This is a required property.
 
-### customDomainUrl
-```swift
-let customDomainUrl: String?
-```
-Ignore CoralogixDomain URL and route all data calls to a specific URL. This is an optional property.
-
 ### labels
 ```swift
 var labels: [String: Any]?

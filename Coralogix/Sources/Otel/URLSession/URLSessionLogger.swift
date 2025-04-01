@@ -8,7 +8,7 @@ import Foundation
 import os.log
 
 class URLSessionLogger {
-    static var runningSpans = [String: Span]()
+    static var runningSpans = [String: any Span]()
     static var runningSpansQueue = DispatchQueue(label: "io.opentelemetry.URLSessionLogger")
     #if os(iOS) && !targetEnvironment(macCatalyst)
 
@@ -97,7 +97,7 @@ class URLSessionLogger {
 
     /// This methods ends a Span when a response arrives
     static func logResponse(_ response: URLResponse, dataOrFile: Any?, instrumentation: URLSessionInstrumentation, sessionTaskId: String) {
-        var span: Span!
+        var span: (any Span)!
         runningSpansQueue.sync {
             span = runningSpans.removeValue(forKey: sessionTaskId)
         }
@@ -124,7 +124,7 @@ class URLSessionLogger {
 
     /// This methods ends a Span when a error arrives
     static func logError(_ error: Error, dataOrFile: Any?, statusCode: Int, instrumentation: URLSessionInstrumentation, sessionTaskId: String) {
-        var span: Span!
+        var span: (any Span)!
         runningSpansQueue.sync {
             span = runningSpans.removeValue(forKey: sessionTaskId)
         }
@@ -148,7 +148,7 @@ class URLSessionLogger {
     }
     private static var instrumentedKey: UInt8 = 0
 
-    private static func instrumentedRequest(for request: URLRequest, span: Span?, instrumentation: URLSessionInstrumentation) -> URLRequest? {
+    private static func instrumentedRequest(for request: URLRequest, span: (any Span)?, instrumentation: URLSessionInstrumentation) -> URLRequest? {
         var request = request
         guard instrumentation.configuration.shouldInjectTracingHeaders?(request) ?? true
         else {
@@ -169,7 +169,7 @@ class URLSessionLogger {
         return instrumentedRequest
     }
 
-    private static func tracePropagationHTTPHeaders(span: Span?, textMapPropagator: TextMapPropagator, textMapBaggagePropagator: TextMapBaggagePropagator) -> [String: String] {
+    private static func tracePropagationHTTPHeaders(span: (any Span)?, textMapPropagator: TextMapPropagator, textMapBaggagePropagator: TextMapBaggagePropagator) -> [String: String] {
         var headers = [String: String]()
 
         struct HeaderSetter: Setter {

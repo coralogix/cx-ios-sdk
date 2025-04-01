@@ -34,7 +34,7 @@ extension CoralogixRum {
         }
     }
     
-    private func getNavigationSpan() -> Span {
+    private func getNavigationSpan() -> any Span {
         var span = tracer().spanBuilder(spanName: Keys.iosSdk.rawValue).startSpan()
         self.addUserMetadata(to: &span)
         span.setAttribute(key: Keys.eventType.rawValue, value: CoralogixEventType.navigation.rawValue)

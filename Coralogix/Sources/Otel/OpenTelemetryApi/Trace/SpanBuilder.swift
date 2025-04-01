@@ -20,7 +20,7 @@ public protocol SpanBuilder: AnyObject {
     /// state defined by a previous call to setNoParent() will be discarded.
     ///
     /// - Parameter parent: the Span used as parent.
-    @discardableResult func setParent(_ parent: Span) -> Self
+    @discardableResult func setParent(_ parent: any Span) -> Self
 
     /// Sets the parent SpanContext to use. If not set, the value of
     /// OpenTelemetryContext.activeSpan at startSpan() time will be used as parent.
@@ -111,7 +111,7 @@ public protocol SpanBuilder: AnyObject {
     /// Users must manually call Span.end() to end this Span
     ///
     /// Does not install the newly created Span to the current Context.
-    func startSpan() -> Span
+    func startSpan() -> any Span
 }
 
 public extension SpanBuilder {

@@ -22,7 +22,7 @@ class SpanBuilderSdk: SpanBuilder {
     private var tracerSharedState: TracerSharedState
     private var spanLimits: SpanLimits
 
-    private var parent: Span?
+    private var parent: (any Span)?
     private var remoteParent: SpanContext?
     private var spanKind = SpanKind.internal
     private var attributes: AttributesDictionary
@@ -46,7 +46,7 @@ class SpanBuilderSdk: SpanBuilder {
         attributes = AttributesDictionary(capacity: spanLimits.attributeCountLimit)
     }
 
-    @discardableResult func setParent(_ parent: Span) -> Self {
+    @discardableResult func setParent(_ parent: any Span) -> Self {
         self.parent = parent
         remoteParent = nil
         parentType = .explicitParent
@@ -104,7 +104,7 @@ class SpanBuilderSdk: SpanBuilder {
         return self
     }
 
-    func startSpan() -> Span {
+    func startSpan() -> any Span {
         var parentContext = getParentContext(parentType: parentType, explicitParent: parent, remoteParent: remoteParent)
         let traceId: TraceId
         let spanId = tracerSharedState.idGenerator.generateSpanId()
@@ -156,7 +156,7 @@ class SpanBuilderSdk: SpanBuilder {
         return createdSpan
     }
 
-    private static func getClock(parent: Span?, clock: Clock) -> Clock {
+    private static func getClock(parent: (any Span)?, clock: Clock) -> Clock {
         if let parentRecordEventSpan = parent as? RecordEventsReadableSpan {
             return parentRecordEventSpan.clock
         } else {
@@ -164,7 +164,7 @@ class SpanBuilderSdk: SpanBuilder {
         }
     }
 
-    private func getParentContext(parentType: ParentType, explicitParent: Span?, remoteParent: SpanContext?) -> SpanContext? {
+    private func getParentContext(parentType: ParentType, explicitParent: (any Span)?, remoteParent: SpanContext?) -> SpanContext? {
         let currentSpan = OpenTelemetry.instance.contextProvider.activeSpan
 
         var parentContext: SpanContext?
@@ -182,7 +182,7 @@ class SpanBuilderSdk: SpanBuilder {
         return parentContext ?? tracerSharedState.launchEnvironmentContext
     }
 
-    private static func getParentSpan(parentType: ParentType, explicitParent: Span?) -> Span? {
+    private static func getParentSpan(parentType: ParentType, explicitParent: (any Span)?) -> (any Span)? {
         switch parentType {
         case .currentSpan:
             return OpenTelemetry.instance.contextProvider.activeSpan

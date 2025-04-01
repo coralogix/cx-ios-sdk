@@ -34,9 +34,9 @@ public struct BatchSpanProcessor: SpanProcessor {
   public let isStartRequired = false
   public let isEndRequired = true
   
-  public func onStart(parentContext: SpanContext?, span: ReadableSpan) {}
+  public func onStart(parentContext: SpanContext?, span: any ReadableSpan) {}
   
-  public func onEnd(span: ReadableSpan) {
+  public func onEnd(span: any ReadableSpan) {
     if !span.context.traceFlags.sampled {
       return
     }
@@ -65,7 +65,7 @@ private class BatchWorker: Thread {
   let willExportCallback: ((inout [SpanData]) -> Void)?
   let halfMaxQueueSize: Int
   private let cond = NSCondition()
-  var spanList = [ReadableSpan]()
+  var spanList = [any ReadableSpan]()
   var queue: OperationQueue
   
   init(spanExporter: SpanExporter, scheduleDelay: TimeInterval, exportTimeout: TimeInterval, maxQueueSize: Int, maxExportBatchSize: Int, willExportCallback: ((inout [SpanData]) -> Void)?) {
@@ -81,7 +81,7 @@ private class BatchWorker: Thread {
     queue.maxConcurrentOperationCount = 1
   }
   
-  func addSpan(span: ReadableSpan) {
+  func addSpan(span: any ReadableSpan) {
     cond.lock()
     defer { cond.unlock() }
     
@@ -101,7 +101,7 @@ private class BatchWorker: Thread {
   override func main() {
     repeat {
       autoreleasepool {
-        var spansCopy: [ReadableSpan]
+        var spansCopy: [any ReadableSpan]
         cond.lock()
         if spanList.count < maxExportBatchSize {
           repeat {
@@ -122,7 +122,7 @@ private class BatchWorker: Thread {
   }
   
   public func forceFlush(explicitTimeout: TimeInterval? = nil) {
-    var spansCopy: [ReadableSpan]
+    var spansCopy: [any ReadableSpan]
     cond.lock()
     spansCopy = spanList
     spanList.removeAll()
@@ -131,7 +131,7 @@ private class BatchWorker: Thread {
     exportBatch(spanList: spansCopy, explicitTimeout: explicitTimeout)
   }
   
-  private func exportBatch(spanList: [ReadableSpan], explicitTimeout: TimeInterval? = nil) {
+  private func exportBatch(spanList: [any ReadableSpan], explicitTimeout: TimeInterval? = nil) {
     let maxTimeOut = min(explicitTimeout ?? TimeInterval.greatestFiniteMagnitude, exportTimeout)
     let exportOperation = BlockOperation { [weak self] in
       self?.exportAction(spanList: spanList, explicitTimeout: maxTimeOut)
@@ -148,7 +148,7 @@ private class BatchWorker: Thread {
     timeoutTimer.cancel()
   }
   
-  private func exportAction(spanList: [ReadableSpan], explicitTimeout: TimeInterval? = nil) {
+  private func exportAction(spanList: [any ReadableSpan], explicitTimeout: TimeInterval? = nil) {
     stride(from: 0, to: spanList.endIndex, by: maxExportBatchSize).forEach {
       var spansToExport = spanList[$0 ..< min($0 + maxExportBatchSize, spanList.count)].map { $0.toSpanData() }
       willExportCallback?(&spansToExport)

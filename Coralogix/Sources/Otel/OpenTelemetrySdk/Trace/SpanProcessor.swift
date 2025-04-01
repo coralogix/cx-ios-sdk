@@ -19,13 +19,13 @@ public protocol SpanProcessor {
   /// execution thread.
   /// - Parameter parentContext: the context of the span parent, if exists
   /// - Parameter span: the ReadableSpan that just started
-  func onStart(parentContext: SpanContext?, span: ReadableSpan)
+    func onStart(parentContext: SpanContext?, span: any ReadableSpan)
   
   /// Called when a Span is ended, if the Span.isRecording() is true.
   /// This method is called synchronously on the execution thread, should not throw or block the
   /// execution thread.
   /// - Parameter span: the ReadableSpan that just ended.
-  mutating func onEnd(span: ReadableSpan)
+    mutating func onEnd(span: any ReadableSpan)
   
   /// Called when TracerSdk.shutdown() is called.
   /// Implementations must ensure that all span events are processed before returning

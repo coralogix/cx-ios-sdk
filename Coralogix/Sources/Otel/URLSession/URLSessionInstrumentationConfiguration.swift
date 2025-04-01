@@ -15,10 +15,10 @@ public struct URLSessionInstrumentationConfiguration {
                 nameSpan: ((URLRequest) -> (String)?)? = nil,
                 spanCustomization: ((URLRequest, SpanBuilder) -> Void)? = nil,
                 shouldInjectTracingHeaders: ((URLRequest) -> (Bool)?)? = nil,
-                injectCustomHeaders: ((inout URLRequest, Span?) -> Void)? = nil,
-                createdRequest: ((URLRequest, Span) -> Void)? = nil,
-                receivedResponse: ((URLResponse, DataOrFile?, Span) -> Void)? = nil,
-                receivedError: ((Error, DataOrFile?, HTTPStatus, Span) -> Void)? = nil,
+                injectCustomHeaders: ((inout URLRequest, (any Span)?) -> Void)? = nil,
+                createdRequest: ((URLRequest, any Span) -> Void)? = nil,
+                receivedResponse: ((URLResponse, DataOrFile?, any Span) -> Void)? = nil,
+                receivedError: ((Error, DataOrFile?, HTTPStatus, any Span) -> Void)? = nil,
                 delegateClassesToInstrument: [AnyClass]? = nil) {
         self.shouldRecordPayload = shouldRecordPayload
         self.shouldInstrument = shouldInstrument
@@ -47,7 +47,7 @@ public struct URLSessionInstrumentationConfiguration {
     public var shouldInjectTracingHeaders: ((URLRequest) -> (Bool)?)?
 
     /// Implement this callback to inject custom headers or modify the request in any other way
-    public var injectCustomHeaders: ((inout URLRequest, Span?) -> Void)?
+    public var injectCustomHeaders: ((inout URLRequest, (any Span)?) -> Void)?
 
     /// Implement this callback to override the default span name for a given request, return nil to use default.
     /// default name: `HTTP {method}` e.g. `HTTP PUT`
@@ -57,13 +57,13 @@ public struct URLSessionInstrumentationConfiguration {
     public var spanCustomization: ((URLRequest, SpanBuilder) -> Void)?
 
     ///  Called before the span is created, it allows to add extra information to the Span
-    public var createdRequest: ((URLRequest, Span) -> Void)?
+    public var createdRequest: ((URLRequest, any Span) -> Void)?
 
     ///  Called before the span is ended, it allows to add extra information to the Span
-    public var receivedResponse: ((URLResponse, DataOrFile?, Span) -> Void)?
+    public var receivedResponse: ((URLResponse, DataOrFile?, any Span) -> Void)?
 
     ///  Called before the span is ended, it allows to add extra information to the Span
-    public var receivedError: ((Error, DataOrFile?, HTTPStatus, Span) -> Void)?
+    public var receivedError: ((Error, DataOrFile?, HTTPStatus, any Span) -> Void)?
     
     ///  The array of URLSession delegate classes that will be instrumented by the library, will autodetect if nil is passed.
     public var delegateClassesToInstrument: [AnyClass]?

@@ -13,7 +13,11 @@ struct DeviceState {
     let deviceBatteryManager = DeviceBatteryManager()
     
     init(networkManager: NetworkProtocol?) {
-        self.battery = Helper.isSimulator ? "" : String(deviceBatteryManager.getBatteryLevel())
+#if targetEnvironment(simulator)
+        self.battery = ""
+#else
+        self.battery = String(deviceBatteryManager.getBatteryLevel())
+#endif
         self.networkType = networkManager?.getNetworkType() ?? ""
     }
     
