@@ -5,6 +5,7 @@
 //
 
 import Foundation
+import OpenTelemetryApi
 
 struct EventTypeContext {
     let method: String

@@ -11,6 +11,9 @@ let package = Package(
     products: [
         .library(name: "Coralogix", targets: ["Coralogix"])
     ],
+    dependencies: [
+        .package(url: "https://github.com/open-telemetry/opentelemetry-swift", from: "1.14.0"),
+    ],
     targets: [
         .binaryTarget(
             name: "CrashReporter",
@@ -18,8 +21,9 @@ let package = Package(
         ),
         .target(
             name: "Coralogix",
-            dependencies: [
-                .target(name: "CrashReporter"),
+            dependencies: [.product(name: "OpenTelemetryApi", package: "opentelemetry-swift"),
+                           .product(name: "OpenTelemetrySDK", package: "opentelemetry-swift"),
+                           .target(name: "CrashReporter"),
             ],
             path: "Coralogix/Sources/"
         ),
