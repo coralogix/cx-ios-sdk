@@ -11,11 +11,11 @@ import URLSessionInstrumentation
 
 extension CoralogixRum {
     public func initializeNetworkInstrumentation() {
-        let configuration = URLSessionInstrumentationConfiguration(spanCustomization: self.spanCustomization, shouldInjectTracingHeaders: { request in
-            //TBD: need to implement the follow
-            //Received shouldInjectTracingHeaders from Coralogix options options
-            //To do this only on URL that are not internal
-                return true
+        let configuration = URLSessionInstrumentationConfiguration(spanCustomization: self.spanCustomization, shouldInjectTracingHeaders: { _ /*request*/ in
+            // TBD: need to implement the follow
+            // Received shouldInjectTracingHeaders from Coralogix options options
+            // To do this only on URL that are not internal
+            return true
         }, receivedResponse: self.receivedResponse)
         self.sessionInstrumentation = URLSessionInstrumentation(configuration: configuration)
     }

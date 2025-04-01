@@ -159,8 +159,8 @@ public enum Keys: String {
     case appWillTerminateNotification
     case applicationDidReceiveMemoryWarning
     case appDidReceiveMemoryWarningNotification
-    case x
-    case y
+    case positionX = "x"
+    case positionY = "y"
     case errorType = "error_type"
     case keyStackTrace = "stack_trace"
 }

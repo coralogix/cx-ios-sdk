@@ -233,7 +233,7 @@ public class CoralogixExporter: SpanExporter {
         if url != self.endPoint {
             if let ignoreUrlsOrRejexs = self.options.ignoreUrls,
                !ignoreUrlsOrRejexs.isEmpty,
-               ignoreUrlsOrRejexs.contains(url)  {
+               ignoreUrlsOrRejexs.contains(url) {
                 return false
             }
             

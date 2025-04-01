@@ -99,10 +99,9 @@ public class CoralogixRum {
             (.anr, self.initializeANRInstrumentation)
         ]
 
-        for (type, initializer) in instrumentationMap {
-            if options.shouldInitInstumentation(instumentation: type) {
-                initializer()
-            }
+        for (type, initializer) in instrumentationMap
+            where options.shouldInitInstumentation(instumentation: type) {
+            initializer()
         }
         
         CoralogixRum.isInitialized = true
