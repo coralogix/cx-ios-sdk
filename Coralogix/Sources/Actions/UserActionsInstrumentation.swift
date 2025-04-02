@@ -9,6 +9,8 @@
 import UIKit
 #endif
 
+import OpenTelemetryApi
+
 extension CoralogixRum {
     public func initializeUserActionsInstrumentation() {
         NotificationCenter.default.addObserver(self,
@@ -28,7 +30,7 @@ extension CoralogixRum {
         }
     }
     
-    private func getUserActionsSpan() -> Span {
+    private func getUserActionsSpan() -> any Span {
         var span = tracer().spanBuilder(spanName: Keys.iosSdk.rawValue).startSpan()
         self.addUserMetadata(to: &span)
         span.setAttribute(key: Keys.eventType.rawValue, value: CoralogixEventType.userInteraction.rawValue)

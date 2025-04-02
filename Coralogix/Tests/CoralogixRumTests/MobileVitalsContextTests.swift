@@ -6,6 +6,8 @@
 //
 
 import XCTest
+import OpenTelemetryApi
+
 @testable import Coralogix
 
 final class MobileVitalsContextTests: XCTestCase {

@@ -159,8 +159,8 @@ public enum Keys: String {
     case appWillTerminateNotification
     case applicationDidReceiveMemoryWarning
     case appDidReceiveMemoryWarningNotification
-    case x
-    case y
+    case positionX = "x"
+    case positionY = "y"
     case errorType = "error_type"
     case keyStackTrace = "stack_trace"
 }
@@ -190,7 +190,7 @@ enum CoralogixEventType: String {
 }
 
 public enum Global: String {
-    case sdk = "1.0.17"
+    case sdk = "1.0.18"
     case swiftVersion = "5.9"
     case coralogixPath = "/browser/v1beta/logs"
     

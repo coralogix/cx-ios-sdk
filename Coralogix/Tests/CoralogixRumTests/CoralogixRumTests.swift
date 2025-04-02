@@ -13,7 +13,6 @@ final class CoralogixRumTests: XCTestCase {
                                            publicKey: "token",
                                            ignoreUrls: [], //[".*\\.il$", "https://www.coralogix.com/academy"],
                                            ignoreErrors: [], //[".*errorcode=.*", "Im cusom Error"],
-                                           customDomainUrl: "url",
                                            labels: ["item" : "banana", "itemPrice" : 1000],
                                            sampleRate: 100,
                                            debug: true)
@@ -49,7 +48,6 @@ final class CoralogixRumTests: XCTestCase {
                                            publicKey: "token",
                                            ignoreUrls: [], //[".*\\.il$", "https://www.coralogix.com/academy"],
                                            ignoreErrors: [], //[".*errorcode=.*", "Im cusom Error"],
-                                           customDomainUrl: "url",
                                            labels: ["item" : "banana", "itemPrice" : 1000],
                                            sampleRate: 0,
                                            debug: true)

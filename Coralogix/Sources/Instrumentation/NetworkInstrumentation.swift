@@ -6,10 +6,18 @@
 //
 
 import Foundation
+import OpenTelemetryApi
+import URLSessionInstrumentation
 
 extension CoralogixRum {
     public func initializeNetworkInstrumentation() {
-        self.sessionInstrumentation = URLSessionInstrumentation(configuration: URLSessionInstrumentationConfiguration(spanCustomization: self.spanCustomization, receivedResponse: self.receivedResponse))
+        let configuration = URLSessionInstrumentationConfiguration(spanCustomization: self.spanCustomization, shouldInjectTracingHeaders: { _ /*request*/ in
+            // TBD: need to implement the follow
+            // Received shouldInjectTracingHeaders from Coralogix options options
+            // To do this only on URL that are not internal
+            return true
+        }, receivedResponse: self.receivedResponse)
+        self.sessionInstrumentation = URLSessionInstrumentation(configuration: configuration)
     }
     
     private func spanCustomization(request: URLRequest, spanBuilder: SpanBuilder) {
@@ -17,7 +25,7 @@ extension CoralogixRum {
         spanBuilder.setAttribute(key: Keys.source.rawValue, value: Keys.fetch.rawValue)
     }
     
-    private func receivedResponse(response: URLResponse, data: DataOrFile?, span: Span) {
+    private func receivedResponse(response: URLResponse, data: DataOrFile?, span: any Span) {
         if let httpResponse = response as? HTTPURLResponse {
             let statusCode = httpResponse.statusCode
             let logSeverity = statusCode > 400 ?  CoralogixLogSeverity.error : CoralogixLogSeverity.info
@@ -47,7 +55,7 @@ extension CoralogixRum {
         span.end()
     }
     
-    private func getSpan() -> Span {
+    private func getSpan() -> any Span {
         var span = tracer().spanBuilder(spanName: Keys.iosSdk.rawValue).startSpan()
         self.addUserMetadata(to: &span)
         span.setAttribute(key: Keys.eventType.rawValue, value: CoralogixEventType.networkRequest.rawValue)

@@ -3,6 +3,9 @@ import Darwin
 #if canImport(UIKit)
 import UIKit
 #endif
+import OpenTelemetryApi
+import URLSessionInstrumentation
+import OpenTelemetrySdk
 
 extension Notification.Name {
     static let cxRumNotification = Notification.Name("cxRumNotification")
@@ -96,10 +99,9 @@ public class CoralogixRum {
             (.anr, self.initializeANRInstrumentation)
         ]
 
-        for (type, initializer) in instrumentationMap {
-            if options.shouldInitInstumentation(instumentation: type) {
-                initializer()
-            }
+        for (type, initializer) in instrumentationMap
+            where options.shouldInitInstumentation(instumentation: type) {
+            initializer()
         }
         
         CoralogixRum.isInitialized = true
@@ -201,7 +203,7 @@ public class CoralogixRum {
     
     public func shutdown() {
         CoralogixRum.isInitialized = false
-        self.coralogixExporter?.shutdown()
+        self.coralogixExporter?.shutdown(explicitTimeout: nil)
     }
     
     public func isInitialized() -> Bool {
@@ -216,7 +218,7 @@ public class CoralogixRum {
         self.coralogixExporter?.updade(application: application, version: version)
     }
     
-    internal func addUserMetadata(to span: inout Span) {
+    internal func addUserMetadata(to span: inout any Span) {
         let options = self.coralogixExporter?.getOptions()
         span.setAttribute(key: Keys.userId.rawValue, value: options?.userContext?.userId ?? "")
         span.setAttribute(key: Keys.userName.rawValue, value: options?.userContext?.userName ?? "")
@@ -275,9 +277,7 @@ public struct CoralogixExporterOptions {
     
     // Appliaction version
     var version: String
-    
-    let customDomainUrl: String?
-    
+        
     var labels: [String: Any]?
     
     // Number between 0-100 as a precentage of SDK should be init.
@@ -303,7 +303,6 @@ public struct CoralogixExporterOptions {
                 publicKey: String,
                 ignoreUrls: [String]? = nil,
                 ignoreErrors: [String]? = nil,
-                customDomainUrl: String? = nil,
                 labels: [String: Any]? = nil,
                 sampleRate: Int = 100,
                 mobileVitalsFPSSamplingRate: Int = 300, // minimum every 5 minute
@@ -320,7 +319,6 @@ public struct CoralogixExporterOptions {
         self.environment = environment
         self.application = application
         self.version = version
-        self.customDomainUrl = customDomainUrl
         self.labels = labels
         self.sdkSampler = SDKSampler(sampleRate: sampleRate)
         self.mobileVitalsFPSSamplingRate = mobileVitalsFPSSamplingRate

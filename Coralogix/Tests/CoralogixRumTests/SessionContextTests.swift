@@ -7,7 +7,8 @@
 
 import Foundation
 import XCTest
-// 
+import OpenTelemetryApi
+
 @testable import Coralogix
 
 final class SessionContextTests: XCTestCase {

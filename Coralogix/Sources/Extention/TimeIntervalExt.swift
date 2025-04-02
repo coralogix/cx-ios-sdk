@@ -16,7 +16,13 @@ extension TimeInterval {
     }
     
     var openTelemetryFormat: [UInt64] {
+        guard self.isFinite && self >= 0 else {
+            return [0, 0]
+        }
+
         let (integerPart, fractionalPart) = modf(self)
-        return [UInt64(integerPart), UInt64(fractionalPart * 1_000_000_000)]
+        let seconds = UInt64(integerPart)
+        let nanoseconds = UInt64((fractionalPart * 1_000_000_000).rounded())
+        return [seconds, nanoseconds]
     }
 }

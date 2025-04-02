@@ -7,6 +7,7 @@
 
 import Foundation
 import CrashReporter
+import OpenTelemetryApi
 
 extension CoralogixRum {
     public func initializeCrashInstumentation() {
@@ -74,7 +75,7 @@ extension CoralogixRum {
         
     }
     
-    private func createStackTrace(report: PLCrashReport, span: Span) {
+    private func createStackTrace(report: PLCrashReport, span: any Span) {
         var threads = [String]()
         for case let thread as PLCrashReportThreadInfo in report.threads {
             if thread.crashed {

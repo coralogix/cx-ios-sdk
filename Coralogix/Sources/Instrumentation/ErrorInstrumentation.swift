@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import OpenTelemetryApi
 
 extension CoralogixRum {
     
@@ -125,7 +126,7 @@ extension CoralogixRum {
         }
     }
     
-    private func getSpan() -> Span {
+    private func getSpan() -> any Span {
         var span = tracer().spanBuilder(spanName: Keys.iosSdk.rawValue).startSpan()
         span.setAttribute(key: Keys.eventType.rawValue, value: CoralogixEventType.error.rawValue)
         span.setAttribute(key: Keys.source.rawValue, value: Keys.console.rawValue)
@@ -135,7 +136,7 @@ extension CoralogixRum {
         return span
     }
     
-    private func addSnapshotContext(to span: inout Span) {
+    private func addSnapshotContext(to span: inout any Span) {
         self.sessionManager.incrementErrorCounter()
         let snapshot = SnapshotConext(timestemp: Date().timeIntervalSince1970,
                                       errorCount: self.sessionManager.getErrorCount(),

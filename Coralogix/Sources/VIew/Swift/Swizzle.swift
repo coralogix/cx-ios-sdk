@@ -5,6 +5,8 @@
 //  Created by Coralogix DEV TEAM on 19/05/2024.
 //
 
+// swiftlint:disable file_length
+
 #if canImport(UIKit)
 import UIKit
 #endif
@@ -247,20 +249,20 @@ extension UIApplication {
         // Process touch events
         if let touches = event.allTouches, let touch = touches.first, touch.phase == .began {
             let location = touch.location(in: nil) // Screen coordinates
-            let x = location.x
-            let y = location.y
+            let positionX = location.x
+            let positionY = location.y
             
             // Post the touch event to a notification center or your SDK
-            let tap = [Keys.x.rawValue: x,
-                       Keys.y.rawValue: y] as? [String: Any]
+            let tap = [Keys.positionX.rawValue: positionX,
+                       Keys.positionY.rawValue: positionY] as? [String: Any]
             NotificationCenter.default.post(name: .cxRumNotificationUserActions, object: tap)
         }
     }
     
     @objc private func cx_sendAction(_ action: Selector,
-                                           to target: AnyObject?,
-                                           from sender: AnyObject?,
-                                           for event: UIEvent?) -> Bool {
+                                     to target: AnyObject?,
+                                     from sender: AnyObject?,
+                                     for event: UIEvent?) -> Bool {
         let selectorNameCString = sel_getName(action)
         let selectorNameString = String(cString: selectorNameCString)
         if selectorNameString.contains("tabBarItemClicked") {
@@ -432,4 +434,3 @@ private func updateCoralogixRum(window: UIWindow?, state: CXView.AppState) {
         }
     }
 }
-

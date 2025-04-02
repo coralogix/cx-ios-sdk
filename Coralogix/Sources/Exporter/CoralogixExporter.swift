@@ -5,6 +5,8 @@
 //
 
 import Foundation
+import OpenTelemetryApi
+import OpenTelemetrySdk
 
 public class CoralogixExporter: SpanExporter {
     private var options: CoralogixExporterOptions
@@ -31,12 +33,7 @@ public class CoralogixExporter: SpanExporter {
     
     var pendingSpans: [SpanData] = []
     var endPoint: String {
-        if let customDomainUrl = self.options.customDomainUrl,
-           self.options.customDomainUrl != "" {
-            return "\(customDomainUrl)\(Global.coralogixPath.rawValue)"
-        } else {
-            return "\(self.options.coralogixDomain.rawValue)\(Global.coralogixPath.rawValue)"
-        }
+      return "\(self.options.coralogixDomain.rawValue)\(Global.coralogixPath.rawValue)"
     }
     
     public func getOptions() -> CoralogixExporterOptions {
@@ -236,7 +233,7 @@ public class CoralogixExporter: SpanExporter {
         if url != self.endPoint {
             if let ignoreUrlsOrRejexs = self.options.ignoreUrls,
                !ignoreUrlsOrRejexs.isEmpty,
-               ignoreUrlsOrRejexs.contains(url)  {
+               ignoreUrlsOrRejexs.contains(url) {
                 return false
             }
             

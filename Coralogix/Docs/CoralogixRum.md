@@ -47,7 +47,6 @@ Identify if your app project contains an `AppDelegate` file or a `SceneDelegate`
                                                publicKey: "API-KEY",
                                                ignoreUrls: [],
                                                ignoreErrors: [],
-                                               customDomainUrl: "",
                                                labels: ["String" : Any],
                                                sampleRate: 100,
                                                debug: false)
@@ -82,7 +81,6 @@ Identify if your app project contains an `AppDelegate` file or a `SceneDelegate`
                                                publicKey: "TOKEN",
                                                ignoreUrls: [],
                                                ignoreErrors: [],
-                                               customDomainUrl: "",
                                                labels: ["String" : Any],
                                                sampleRate: 100,
                                                debug: false)
@@ -120,7 +118,6 @@ Identify if your app project contains an `AppDelegate` file or a `SceneDelegate`
                                                publicKey: "TOKEN",
                                                ignoreUrls: [],
                                                ignoreErrors: [],
-                                               customDomainUrl: "",
                                                labels: ["String" : Any],
                                                sampleRate: 100,
                                                debug: false)
