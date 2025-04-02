@@ -14,7 +14,7 @@ struct EventTypeContext {
     let fragments: String
     let host: String
     var schema: String
-    let duration: TimeInterval
+    let duration: UInt64
     let responseContentLength: String
     
     init(otel: SpanDataProtocol) {
@@ -28,7 +28,13 @@ struct EventTypeContext {
         self.fragments = otel.getAttribute(forKey: SemanticAttributes.httpTarget.rawValue) as? String ?? ""
         self.host = otel.getAttribute(forKey: SemanticAttributes.netPeerName.rawValue) as? String ?? ""
         self.schema = otel.getAttribute(forKey: SemanticAttributes.httpScheme.rawValue) as? String ?? ""
-        self.duration = otel.getEndTime() ?? 0
+        if let startTime = otel.getStartTime(),
+           let endTime = otel.getEndTime() {
+            let delta = endTime - startTime
+            self.duration = delta.openTelemetryMilliseconds
+        } else {
+            self.duration = 0
+        }
         self.responseContentLength = otel.getAttribute(forKey: SemanticAttributes.httpResponseBodySize.rawValue) as? String ?? ""
     }
     
@@ -39,7 +45,7 @@ struct EventTypeContext {
                 Keys.fragments.rawValue: self.fragments,
                 Keys.host.rawValue: self.host,
                 Keys.schema.rawValue: self.schema,
-                Keys.duration.rawValue: self.duration.milliseconds,
+                Keys.duration.rawValue: self.duration,
                 Keys.responseContentLength.rawValue: self.responseContentLength]
     }
 }
