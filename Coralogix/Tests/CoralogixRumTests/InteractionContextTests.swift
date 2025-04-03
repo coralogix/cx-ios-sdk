@@ -6,7 +6,6 @@
 //
 
 import XCTest
-import OpenTelemetryApi
 @testable import Coralogix
 
 final class InteractionContextTests: XCTestCase {

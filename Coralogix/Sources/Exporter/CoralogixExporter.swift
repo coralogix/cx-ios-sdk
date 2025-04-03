@@ -5,8 +5,6 @@
 //
 
 import Foundation
-import OpenTelemetryApi
-import OpenTelemetrySdk
 
 public class CoralogixExporter: SpanExporter {
     private var options: CoralogixExporterOptions
