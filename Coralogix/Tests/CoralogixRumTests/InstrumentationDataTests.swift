@@ -7,7 +7,6 @@
 
 import XCTest
 import Foundation
-import OpenTelemetryApi
 
 @testable import Coralogix
 

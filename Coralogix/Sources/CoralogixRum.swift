@@ -3,9 +3,6 @@ import Darwin
 #if canImport(UIKit)
 import UIKit
 #endif
-import OpenTelemetryApi
-import URLSessionInstrumentation
-import OpenTelemetrySdk
 
 extension Notification.Name {
     static let cxRumNotification = Notification.Name("cxRumNotification")

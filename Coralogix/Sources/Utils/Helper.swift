@@ -9,7 +9,6 @@ import Foundation
 #if canImport(UIKit)
 import UIKit
 #endif
-import OpenTelemetryApi
 
 extension AttributeValue {
     var anyValue: Any {
@@ -23,7 +22,6 @@ extension AttributeValue {
         case let .intArray(value): return value
         case let .doubleArray(value): return value
         case let .set(value): return value
-        case let .array(value): return value
         }
     }
 }

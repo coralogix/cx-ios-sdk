@@ -6,8 +6,6 @@
 //
 
 import Foundation
-import OpenTelemetryApi
-import URLSessionInstrumentation
 
 extension CoralogixRum {
     public func initializeNetworkInstrumentation() {
