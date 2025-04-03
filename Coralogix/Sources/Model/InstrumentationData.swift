@@ -33,7 +33,7 @@ struct OtelSpan {
     let endTime: [UInt64]
     let status: [String: Any]
     let kind: Int
-    let duration: UInt64
+    let duration: [UInt64]
     
     init(otel: SpanDataProtocol, labels: [String: Any]?) {
         self.spanId = otel.getSpanId() ?? ""
@@ -68,9 +68,9 @@ struct OtelSpan {
         if let startTime = otel.getStartTime(),
            let endTime = otel.getEndTime() {
             let delta = endTime - startTime
-            self.duration = delta.openTelemetryMilliseconds
+            self.duration = delta.openTelemetryFormat
         } else {
-            self.duration = 0
+            self.duration = [0, 0]
         }
     }
     
