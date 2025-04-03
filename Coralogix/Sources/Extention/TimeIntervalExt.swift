@@ -25,4 +25,11 @@ extension TimeInterval {
         let nanoseconds = UInt64((fractionalPart * 1_000_000_000).rounded())
         return [seconds, nanoseconds]
     }
+    
+    var openTelemetryMilliseconds: UInt64 {
+        guard self.isFinite && self >= 0 else {
+            return 0
+        }
+        return UInt64((self * 1_000).rounded())
+    }
 }

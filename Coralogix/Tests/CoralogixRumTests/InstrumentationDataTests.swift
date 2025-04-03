@@ -63,6 +63,7 @@ final class InstrumentationDataTests: XCTestCase {
         XCTAssertEqual(otelSpan.spanId, "span123")
         XCTAssertEqual(otelSpan.traceId, "trace123")
         XCTAssertEqual(otelSpan.name, "testSpan")
+        
         let attributes = otelSpan.attributes
         if let eventType = attributes[Keys.eventType.rawValue] as? AttributeValue {
             XCTAssertEqual(eventType.description, "log")
@@ -71,18 +72,17 @@ final class InstrumentationDataTests: XCTestCase {
         XCTAssertEqual(otelSpan.attributes["label1"] as? String, "value1")
         
         let (integerPart, fractionalPart) = modf(statTime.timeIntervalSince1970)
-        
         XCTAssertEqual(otelSpan.startTime[0], UInt64(integerPart))
-        XCTAssertEqual(otelSpan.startTime[1], UInt64(fractionalPart * 1_000_000_000))
+        XCTAssertEqual(otelSpan.startTime[1], UInt64((fractionalPart * 1_000_000_000).rounded()))
         
         let (integerPartEnd, fractionalPartEnd) = modf(endTime.timeIntervalSince1970)
         XCTAssertEqual(otelSpan.endTime[0], UInt64(integerPartEnd))
-        XCTAssertEqual(otelSpan.endTime[1], UInt64(fractionalPartEnd * 1_000_000_000))
+        XCTAssertEqual(otelSpan.endTime[1], UInt64((fractionalPartEnd * 1_000_000_000).rounded()))
         
         XCTAssertEqual(otelSpan.status["status"] as? String, "ok")
         XCTAssertEqual(otelSpan.kind, 1)
     }
-    
+
     func testGetOtelSpanDictionary() {
         let otelSpan = OtelSpan(otel: mockSpan, labels: nil)
         let dictionary = otelSpan.getDictionary()
@@ -99,11 +99,11 @@ final class InstrumentationDataTests: XCTestCase {
     
     func testInitializationWithAttributes() {
         let otelResource = OtelResource(otel: mockSpan)
-        if let elemet1 = otelResource.attributes["a"] as? String {
-            XCTAssertEqual(elemet1, "1")
+        if let elemet1 = otelResource.attributes["a"] as? AttributeValue {
+            XCTAssertEqual(elemet1.description, "1")
         }
-        if let elemet2 = otelResource.attributes["b"] as? String {
-            XCTAssertEqual(elemet2, "2")
+        if let elemet2 = otelResource.attributes["b"] as? AttributeValue {
+            XCTAssertEqual(elemet2.description, "2")
         }
     }
 
