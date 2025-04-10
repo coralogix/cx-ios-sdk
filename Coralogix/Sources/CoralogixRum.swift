@@ -215,6 +215,10 @@ public class CoralogixRum {
         self.coralogixExporter?.updade(application: application, version: version)
     }
     
+    public func sendBeforeSendData(data: [[String: Any]]) {
+        self.coralogixExporter?.sendSpansPayload(data)
+    }
+    
     internal func addUserMetadata(to span: inout any Span) {
         let options = self.coralogixExporter?.getOptions()
         span.setAttribute(key: Keys.userId.rawValue, value: options?.userContext?.userId ?? "")
@@ -291,6 +295,9 @@ public struct CoralogixExporterOptions {
     
     // Enable event access and modification before sending to Coralogix, supporting content modification, and event discarding.
     var beforeSend: (([String: Any]) -> [String: Any]?)?
+    
+    // Alternative beforeSend for Other Platfoms.
+    public var beforeSendCallBack: (([[String: Any]]) -> Void)? = nil
 
     public init(coralogixDomain: CoralogixDomain,
                 userContext: UserContext? = nil,
