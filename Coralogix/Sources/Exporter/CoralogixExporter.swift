@@ -68,62 +68,75 @@ public class CoralogixExporter: SpanExporter {
     }
     
     public func export(spans: [SpanData], explicitTimeout: TimeInterval?) -> SpanExporterResultCode {
-        guard CoralogixRum.isInitialized,
-              let url = URL(string: self.endPoint) else { return .failure }
-        self.sessionManager.updateActivityTime()
-        var request = URLRequest(url: url)
-        request.timeoutInterval = min(TimeInterval.greatestFiniteMagnitude, 10)
-        request.httpMethod = "POST"
-        request.addValue("Bearer \(self.options.publicKey)", forHTTPHeaderField: "Authorization")
-        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
         
         // ignore Urls
-        var filterSpans = spans.filter {
-            self.shouldRemoveSpan(span: $0)
-        }
-        
+        var filterSpans = spans.filter { self.shouldRemoveSpan(span: $0) }
         // ignore Error
-        filterSpans = filterSpans.filter {
-            self.shouldFilterIgnoreError(span: $0)
-        }
+        filterSpans = filterSpans.filter { self.shouldFilterIgnoreError(span: $0) }
         
-        var status: SpanExporterResultCode = .failure
-
         // Deduplicate using spanId as key
         let uniqueSpansDict = Dictionary(grouping: filterSpans, by: { $0.spanId })
         let uniqueSpans = uniqueSpansDict.compactMap { $0.value.first }
 
         if !uniqueSpans.isEmpty {
             let cxSpansDictionary = encodeSpans(spans: uniqueSpans)
-            
             if cxSpansDictionary.isEmpty {
                 return .success
             }
             
-            let jsonObject = [Keys.logs.rawValue: cxSpansDictionary, Keys.skipEnrichmentWithIp.rawValue: !options.collectIPData] as [String: Any]
-            
-            do {
-                // Convert the dictionary to JSON data
-                let jsonData = try JSONSerialization.data(withJSONObject: jsonObject, options: [])
-                request.httpBody = jsonData
-                
-                self.logJSON(from: jsonData, prettyPrint: false)
-            } catch {
-                Log.e(error)
-                return .failure
+            if (CoralogixRum.sdkFramework == .reactNative && self.options.beforeSendCallBack != nil) {
+                self.options.beforeSendCallBack?(cxSpansDictionary)
+                return .success
+            } else {
+                // Normal flow
+                return sendSpansPayload(cxSpansDictionary)
             }
-            
-            let task = URLSession.shared.dataTask(with: request) { _, _, error in
-                if error != nil {
-                    status = .failure
-                } else {
-                    status = .success
-                }
-            }
-            task.resume()
         }
+        return .failure
+    }
+    
+    @discardableResult
+    public func sendSpansPayload(_ spans: [[String: Any]]) -> SpanExporterResultCode {
+        guard CoralogixRum.isInitialized,
+              let url = URL(string: self.endPoint) else {
+            return .failure
+        }
+
+        self.sessionManager.updateActivityTime()
+
+        var request = URLRequest(url: url)
+        request.timeoutInterval = min(TimeInterval.greatestFiniteMagnitude, 10)
+        request.httpMethod = "POST"
+        request.addValue("Bearer \(self.options.publicKey)", forHTTPHeaderField: "Authorization")
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        let jsonObject: [String: Any] = [
+            Keys.logs.rawValue: spans,
+            Keys.skipEnrichmentWithIp.rawValue: !options.collectIPData
+        ]
+
+        do {
+            let jsonData = try JSONSerialization.data(withJSONObject: jsonObject, options: [])
+            request.httpBody = jsonData
+            self.logJSON(from: jsonData, prettyPrint: false)
+        } catch {
+            Log.e(error)
+            return .failure
+        }
+
+        var status: SpanExporterResultCode = .failure
+        let semaphore = DispatchSemaphore(value: 0)
+
+        let task = URLSession.shared.dataTask(with: request) { jsonData, _, error in
+            status = (error == nil) ? .success : .failure
+            semaphore.signal()
+        }
+
+        task.resume()
+        semaphore.wait()
         return status
     }
+
     
     public func flush(explicitTimeout: TimeInterval?) -> SpanExporterResultCode {
         return .success
