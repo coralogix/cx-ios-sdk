@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import CoralogixInternal
 
 public class SessionManager {
     private var sessionMetadata: SessionMetadata?

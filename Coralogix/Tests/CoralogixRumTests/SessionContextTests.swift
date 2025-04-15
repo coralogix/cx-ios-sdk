@@ -7,7 +7,7 @@
 
 import Foundation
 import XCTest
-
+import CoralogixInternal
 @testable import Coralogix
 
 final class SessionContextTests: XCTestCase {

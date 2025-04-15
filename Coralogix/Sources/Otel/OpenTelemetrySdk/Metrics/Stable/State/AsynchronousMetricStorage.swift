@@ -4,7 +4,7 @@
 //
 
 import Foundation
-// 
+import CoralogixInternal
 
 public class AsynchronousMetricStorage: MetricStorage {
     public private(set) var registeredReader: RegisteredReader
@@ -43,7 +43,7 @@ public class AsynchronousMetricStorage: MetricStorage {
         do {
             try recordPoint(point: aggregator.toPoint(measurement: newMeasurement))
         } catch let HistogramAggregatorError.unsupportedOperation(error) {
-            Log.d(error)
+            Log.e("HistogramAggregatorError: \(error)")
         } catch {
             // TODO: log default error
         }

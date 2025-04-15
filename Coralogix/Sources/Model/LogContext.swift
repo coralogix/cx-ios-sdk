@@ -5,6 +5,7 @@
 //
 
 import Foundation
+import CoralogixInternal
 
 struct LogContext {
     let message: String

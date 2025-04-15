@@ -5,6 +5,7 @@
 //
 
 import Foundation
+import CoralogixInternal
 
 struct EventContext {
     var type: CoralogixEventType = .unknown

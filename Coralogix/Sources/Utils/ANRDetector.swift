@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import CoralogixInternal
 
 class ANRDetector {
     internal var timer: Timer?

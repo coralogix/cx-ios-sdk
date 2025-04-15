@@ -6,8 +6,8 @@
 //
 
 import XCTest
+import CoralogixInternal
 @testable import Coralogix
-
 
 final class ViewManagerTests: XCTestCase {
     var mockKeyChain: MockKeyChain!

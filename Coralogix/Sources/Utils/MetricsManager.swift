@@ -10,6 +10,7 @@ import Foundation
 import UIKit
 #endif
 import MetricKit
+import CoralogixInternal
 
 public class MetricsManager: NSObject, MXMetricManagerSubscriber {
     var launchStartTime: CFAbsoluteTime?

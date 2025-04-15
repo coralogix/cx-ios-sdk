@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import CoralogixInternal
 
 public struct SnapshotConext {
     let timestemp: TimeInterval

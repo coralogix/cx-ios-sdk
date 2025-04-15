@@ -7,6 +7,7 @@
 
 import Foundation
 import CrashReporter
+import CoralogixInternal
 
 extension CoralogixRum {
     public func initializeCrashInstumentation() {

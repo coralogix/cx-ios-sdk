@@ -1,5 +1,7 @@
 import Foundation
 import Darwin
+import CoralogixInternal
+
 #if canImport(UIKit)
 import UIKit
 #endif
@@ -66,6 +68,7 @@ public class CoralogixRum {
     private func startup(sdkFramework: SdkFramework, options: CoralogixExporterOptions) {
         CoralogixRum.sdkFramework = sdkFramework
         self.initialzeMetricsManager(options: options)
+        Log.isDebug = options.debug
 
         let coralogixExporter = CoralogixExporter(options: options,
                                                   sessionManager: self.sessionManager,

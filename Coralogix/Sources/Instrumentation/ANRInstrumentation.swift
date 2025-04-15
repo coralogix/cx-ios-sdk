@@ -6,9 +6,9 @@
 //
 
 import Foundation
+import CoralogixInternal
 
-extension CoralogixRum {
-    
+extension CoralogixRum {    
     func initializeANRInstrumentation() {
         NotificationCenter.default.addObserver(self,
                                                selector: #selector(handleErrorNotification(notification:)),

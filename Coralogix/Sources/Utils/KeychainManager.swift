@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import CoralogixInternal
 
 class KeychainManager: KeyChainProtocol {
     // Function to read a string from Keychain

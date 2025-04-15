@@ -8,6 +8,7 @@
 import XCTest
 
 @testable import Coralogix
+import CoralogixInternal
 
 final class LogContextTests: XCTestCase {
     var mockSpanData: SpanDataProtocol!

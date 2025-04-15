@@ -7,7 +7,7 @@
 
 import XCTest
 import Foundation
-
+import CoralogixInternal
 @testable import Coralogix
 
 final class InstrumentationDataTests: XCTestCase {

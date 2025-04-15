@@ -24,7 +24,7 @@ public class NetworkStatusInjector {
           span.setAttribute(key: SemanticAttributes.networkConnectionSubtype.rawValue, value: AttributeValue.string(subtype))
         }
 #if targetEnvironment(simulator)
-        Log.d("Running in simulator, skipping carrier info.")
+        print("Running in simulator, skipping carrier info.")
 #else
         if let carrierInfo: CTCarrier = carrier {
             if let carrierName = carrierInfo.carrierName {
