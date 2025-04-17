@@ -232,9 +232,9 @@ class SessionReplayModel: UserInteractionRecorder {
             return nil
         }
         // Check if the dictionary contains valid x and y values
-        if let x = properties[Keys.x.rawValue] as? CGFloat,
-           let y = properties[Keys.y.rawValue] as? CGFloat {
-            return CGPoint(x: x, y: y)
+        if let positionX = properties[Keys.positionX.rawValue] as? CGFloat,
+           let positionY = properties[Keys.positionY.rawValue] as? CGFloat {
+            return CGPoint(x: positionX, y: positionY)
         }
         // Return nil if the dictionary doesn't contain valid values
         return nil

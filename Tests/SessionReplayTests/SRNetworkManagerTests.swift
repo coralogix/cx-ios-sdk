@@ -55,10 +55,9 @@ final class SRNetworkManagerTests: XCTestCase {
         networkManager = SRNetworkManager(session: mockSession)
         
         // Call the method under test
-        let result = networkManager.send(testData, timestamp: timestamp, sessionId: sessionId, trackNumber: trackNumber, subIndex: subIndex)
-        
-        // Assert the result
-        XCTAssertEqual(result, .success, "The send method should return .success for a valid request")
+        networkManager.send(testData, timestamp: timestamp, sessionId: sessionId, trackNumber: trackNumber, subIndex: subIndex) { result in
+            XCTAssertEqual(result, .success, "The send method should return .success for a valid request")
+        }
     }
     
     func testSend_Failure_InvalidEndPoint() {
@@ -73,10 +72,11 @@ final class SRNetworkManagerTests: XCTestCase {
         networkManager.endPoint = nil
         
         // Call the method under test
-        let result = networkManager.send(testData, timestamp: timestamp, sessionId: sessionId, trackNumber: trackNumber, subIndex: subIndex)
-        
-        // Assert the result
-        XCTAssertEqual(result, .failure, "The send method should return .failure when endPoint is nil")
+        networkManager.send(testData, timestamp: timestamp, sessionId: sessionId, trackNumber: trackNumber, subIndex: subIndex) { result in
+            
+            // Assert the result
+            XCTAssertEqual(result, .failure, "The send method should return .failure when endPoint is nil")
+        }
     }
     
     func testSend_Failure_InvalidJSON() {
@@ -88,10 +88,11 @@ final class SRNetworkManagerTests: XCTestCase {
         let subIndex = 1
         
         // Call the method under test
-        let result = networkManager.send(invalidData, timestamp: timestamp, sessionId: sessionId, trackNumber: trackNumber, subIndex: subIndex)
-        
-        // Assert the result
-        XCTAssertEqual(result, .failure, "The send method should return .failure for invalid JSON.")
+        networkManager.send(invalidData, timestamp: timestamp, sessionId: sessionId, trackNumber: trackNumber, subIndex: subIndex) { result in
+            
+            // Assert the result
+            XCTAssertEqual(result, .failure, "The send method should return .failure for invalid JSON.")
+        }
     }
     
     func testBuildMetadata_ReturnsCorrectValues() {
@@ -105,6 +106,7 @@ final class SRNetworkManagerTests: XCTestCase {
         let dataSize = 1024
         let trackNumber = 1
         let subIndex = 2
+        let snapshotId = "snapshotId"
         
         // Act
         let metadata = builder.buildMetadata(
@@ -114,7 +116,8 @@ final class SRNetworkManagerTests: XCTestCase {
             trackNumber: trackNumber,
             subIndex: subIndex,
             application: application,
-            sessionCreationTime: sessionCreationTime
+            sessionCreationTime: sessionCreationTime,
+            snapshotId: snapshotId
         )
         
         // Assert
@@ -138,6 +141,7 @@ final class SRNetworkManagerTests: XCTestCase {
         let dataSize = 1024
         let trackNumber = 1
         let subIndex = 2
+        let snapshotId = "snapshotId"
         
         // Act
         let metadata = builder.buildMetadata(
@@ -147,7 +151,8 @@ final class SRNetworkManagerTests: XCTestCase {
             trackNumber: trackNumber,
             subIndex: subIndex,
             application: application,
-            sessionCreationTime: sessionCreationTime
+            sessionCreationTime: sessionCreationTime,
+            snapshotId: snapshotId
         )
         
         // Assert
@@ -174,6 +179,10 @@ class MockCoralogix: CoralogixInterface {
     var sessionCreationTimestamp: TimeInterval = 1737453647.568056
     var debugMode: Bool = false
     var reportedErrors: [String] = []
+    
+    func hasSessionRecording(_ hasSessionRecoding: Bool) {
+        // update the coralogix sdk that there is a session recording to that session
+    }
     
     // Simulate getSessionID
     func getSessionID() -> String {

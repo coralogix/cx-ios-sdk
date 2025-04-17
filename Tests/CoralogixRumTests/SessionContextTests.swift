@@ -47,6 +47,7 @@ final class SessionContextTests: XCTestCase {
         XCTAssertEqual(context.userName, "John Doe")
         XCTAssertEqual(context.userEmail, "john.doe@example.com")
         XCTAssertEqual(context.userMetadata?["role"], "admin")
+        XCTAssertFalse(context.hasRecording)
     }
 
     func testGetDictionary() {
@@ -64,6 +65,16 @@ final class SessionContextTests: XCTestCase {
         XCTAssertEqual(dictionary[Keys.userName.rawValue] as? String, "John Doe")
         XCTAssertEqual(dictionary[Keys.userEmail.rawValue] as? String, "john.doe@example.com")
         XCTAssertEqual(dictionary[Keys.userMetadata.rawValue] as? [String: String], ["role": "admin"])
+        XCTAssertEqual(dictionary[Keys.hasRecording.rawValue] as? Bool, false)
+    }
+
+    func testHasSessionReplay() {
+        let context = SessionContext(otel: mockSpanData,
+                                     sessionMetadata: sessionMetadata,
+                                     userMetadata: ["role": "admin"],
+                                     hasRecording: true)
+        let dictionary = context.getDictionary()
+        XCTAssertEqual(dictionary[Keys.hasRecording.rawValue] as? Bool, true)
     }
 
     func testGetPrevSessionDictionary() {

@@ -14,11 +14,11 @@ extension Notification.Name {
 }
 
 public class CoralogixRum {
-    internal var coralogixExporter: CoralogixExporter?
+    internal var coralogixExporter: CoralogixExporter? = nil
     internal var networkManager = NetworkManager()
     internal var viewManager = ViewManager(keyChain: KeychainManager())
-    internal var sessionManager = SessionManager()
-    internal var sessionInstrumentation: URLSessionInstrumentation?
+    internal var sessionManager: SessionManager?
+    internal var sessionInstrumentation: URLSessionInstrumentation? = nil
     internal var metricsManager = MetricsManager()
     
     let notificationCenter = NotificationCenter.default
@@ -26,12 +26,15 @@ public class CoralogixRum {
     static var isInitialized = false
     static var sdkFramework: SdkFramework = .swift
     
-    public init(options: CoralogixExporterOptions, sdkFramework: SdkFramework = .swift) {
+    public init(options: CoralogixExporterOptions,
+                           sdkFramework: SdkFramework = .swift,
+                           sessionManager: SessionManager? = SessionManager()) {
         Log.isDebug = options.debug
-
+        self.sessionManager = sessionManager
         self.displayCoralogixWord()
 
         if options.sdkSampler.shouldInitialized() == false {
+            Log.e("Initialization skipped due to sample rate.")
             return
         }
         
@@ -66,12 +69,19 @@ public class CoralogixRum {
     }
     
     private func startup(sdkFramework: SdkFramework, options: CoralogixExporterOptions) {
+        guard let sessionManager = self.sessionManager else {
+            Log.e("SessionManager is nil.")
+            return
+        }
+        
         CoralogixRum.sdkFramework = sdkFramework
         self.initialzeMetricsManager(options: options)
+        self.initializeNavigationInstrumentation()
+
         Log.isDebug = options.debug
 
         let coralogixExporter = CoralogixExporter(options: options,
-                                                  sessionManager: self.sessionManager,
+                                                  sessionManager: sessionManager,
                                                   networkManager: self.networkManager,
                                                   viewManager: self.viewManager,
                                                   metricsManager: self.metricsManager)
@@ -88,7 +98,6 @@ public class CoralogixRum {
                 .build())
         
         self.swizzle()
-        self.initializeNavigationInstrumentation()
         let instrumentationMap: [(CoralogixExporterOptions.InstrumentationType, () -> Void)] = [
             (.lifeCycle, self.initializeLifeCycleInstrumentation),
             (.userActions, self.initializeUserActionsInstrumentation),
@@ -214,7 +223,7 @@ public class CoralogixRum {
     }
 
     public func getSessionId() -> String? {
-        return self.sessionManager.getSessionMetadata()?.sessionId
+        return self.sessionManager?.getSessionMetadata()?.sessionId
     }
     
     public func setApplicationContext(application: String, version: String) {

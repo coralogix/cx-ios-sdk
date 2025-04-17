@@ -19,14 +19,47 @@ extension CoralogixRum {
     }
     
     @objc func handleTapNotification(notification: Notification) {
-        if let tapObject = notification.object as? [String: Any] {
-            self.sessionManager.incrementClickCounter()
-            let span = self.getUserActionsSpan()
-            span.setAttribute(key: Keys.tapObject.rawValue, value: Helper.convertDictionayToJsonString(dict: tapObject))
-            span.end()
-        } else {
+        guard let tapObject = notification.object as? [String: Any] else {
             Log.e("Notification received with no object or with a different object type")
+            return
         }
+        
+        processTapObject(tapObject)
+    }
+    
+    // Increment the click counter and handle the tap object
+    private func processTapObject(_ tapObject: [String: Any]) {
+        self.sessionManager?.incrementClickCounter()
+        
+        if containsXY(tapObject) {
+            handleSessionReplayEvent(tapObject)
+        } else {
+            handleNonXYEvent(tapObject)
+        }
+    }
+    
+    // Handle the case where x and y coordinates are present
+    private func handleSessionReplayEvent(_ tapObject: [String: Any]) {
+        if let sessionReplay = SdkManager.shared.getSessionReplay() {
+            sessionReplay.captureEvent(properties: tapObject)
+        } else {
+            Log.e("[SessionReplay] is not initialized")
+        }
+    }
+
+    // Handle the case where x and y coordinates are not present
+    private func handleNonXYEvent(_ tapObject: [String: Any]) {
+        let span = getUserActionsSpan()
+        span.setAttribute(
+            key: Keys.tapObject.rawValue,
+            value: Helper.convertDictionayToJsonString(dict: tapObject)
+        )
+        span.end()
+    }
+    
+    // Check if the dictionary contains x and y properties
+    private func containsXY(_ dict: [String: Any]) -> Bool {
+        return dict[Keys.positionX.rawValue] != nil && dict[Keys.positionY.rawValue] != nil
     }
     
     private func getUserActionsSpan() -> any Span {

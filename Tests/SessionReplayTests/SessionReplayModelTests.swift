@@ -371,10 +371,15 @@ final class MockSRNetworkManager: SRNetworkManager {
     var didSendData = false
     var sentChunks: [Data] = []
     
-    override func send(_ data: Data, timestamp: TimeInterval, sessionId: String, trackNumber: Int, subIndex: Int) -> SessionReplayResultCode {
+    override func send(_ data: Data,
+                       timestamp: TimeInterval,
+                       sessionId: String,
+                       trackNumber: Int,
+                       subIndex: Int,
+                       completion: @escaping (SessionReplayResultCode) -> Void) {
         didSendData = true
         sentChunks.append(data)
-        return .success
+        completion(.success)
     }
 }
 

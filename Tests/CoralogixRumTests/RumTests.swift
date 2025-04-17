@@ -22,7 +22,8 @@ final class RumTests: XCTestCase {
         let snapshot = SnapshotConext(timestemp: Date().timeIntervalSince1970,
                                       errorCount: 1,
                                       viewCount: 2,
-                                      clickCount: 0)
+                                      clickCount: 0,
+                                      hasRecording: false)
         let dict = Helper.convertDictionary(snapshot.getDictionary())
         let snapshotString = Helper.convertDictionayToJsonString(dict: dict)
         mockSpanData = MockSpanData(attributes: [Keys.severity.rawValue: AttributeValue("3"),
@@ -131,7 +132,11 @@ final class RumTests: XCTestCase {
         
         let currentTime = Date()
         cxRum.isOneMinuteFromLastSnapshotPass = true
-        cxRum.snapshotContext = SnapshotConext(timestemp: currentTime.timeIntervalSince1970, errorCount: 1, viewCount: 1, clickCount: 0)
+        cxRum.snapshotContext = SnapshotConext(timestemp: currentTime.timeIntervalSince1970,
+                                               errorCount: 1,
+                                               viewCount: 1,
+                                               clickCount: 0,
+                                               hasRecording: false)
         // Invoke getDictionary
         let result = cxRum.getDictionary()
         XCTAssertNotNil(result[Keys.snapshotContext.rawValue] as? [String: Any])
@@ -165,7 +170,11 @@ final class RumTests: XCTestCase {
         )
         
         let currentTime = Date()        
-        cxRum.snapshotContext = SnapshotConext(timestemp: currentTime.timeIntervalSince1970, errorCount: 1, viewCount: 1, clickCount: 0)
+        cxRum.snapshotContext = SnapshotConext(timestemp: currentTime.timeIntervalSince1970,
+                                               errorCount: 1,
+                                               viewCount: 1,
+                                               clickCount: 0,
+                                               hasRecording: false)
         // Invoke getDictionary
         let result = cxRum.getDictionary()
         XCTAssertNotNil(result[Keys.snapshotContext.rawValue] as? [String: Any])
@@ -202,7 +211,8 @@ final class RumTests: XCTestCase {
         cxRum.snapshotContext = SnapshotConext(timestemp: currentTime.timeIntervalSince1970,
                                                errorCount: 0,
                                                viewCount: 1,
-                                               clickCount: 0)
+                                               clickCount: 0,
+                                               hasRecording: false)
         // Invoke getDictionary
         let result = cxRum.getDictionary()
         XCTAssertNotNil(result[Keys.snapshotContext.rawValue] as? [String: Any])

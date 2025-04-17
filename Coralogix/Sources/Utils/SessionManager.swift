@@ -7,6 +7,37 @@
 
 import Foundation
 import CoralogixInternal
+/**
+ * When Is a New Session Created?
+ *
+ * A new session is created under the following circumstances:
+ *
+ * 1. **Idle Timeout**
+ *    If the time since the last recorded activity exceeds the idle interval (15 minutes),
+ *    the `setupSessionMetadata` method is called from `checkIdleTime`.
+ *
+ *    ```swift
+ *    if timeSinceLastActivity > idleInterval {
+ *        self.setupSessionMetadata()
+ *        NotificationCenter.default.post(name: .cxRumNotificationSessionEnded, object: nil)
+ *        Log.d("Function has been idle for 15 minutes.")
+ *    }
+ *    ```
+ *
+ * 2. **An Hour Has Passed**
+ *    The `getSessionMetadata` method checks if an hour has passed since the current session was created.
+ *    If so, it triggers `setupSessionMetadata` to create a new session.
+ *
+ *    ```swift
+ *    if let sessionCreationDate = self.sessionMetadata?.sessionCreationDate,
+ *       self.hasAnHourPassed(since: sessionCreationDate) {
+ *        self.setupSessionMetadata()
+ *    }
+ *    ```
+ *
+ * 3. **Explicit Session Management**
+ *    The `setupSessionMetadata` method can also be invoked explicitly, such as during a reset or other custom logic.
+ */
 
 public class SessionManager {
     private var sessionMetadata: SessionMetadata?
@@ -17,12 +48,18 @@ public class SessionManager {
     private let idleInterval: TimeInterval = 15 * 60  // 15 minutes in seconds
     private var errorCount: Int = 0
     private var clickCount: Int = 0
+    public var sessionChangedCallback: ((String) -> Void)?
     var lastSnapshotEventTime: Date?
+    public var hasRecording: Bool = false
 
-    init() {
+    public init() {
         self.setupSessionMetadata()
         self.setupIdleTimer()
         self.updateActivityTime()
+    }
+    
+    public func doesSessionhasRecording() -> Bool {
+        return self.hasRecording
     }
     
     public func incrementErrorCounter() {
@@ -50,11 +87,13 @@ public class SessionManager {
                                                sessionCreationDate: 0,
                                                keychain: KeychainManager())
         self.idleTimer?.invalidate()
+        self.hasRecording = false
     }
     
     public func reset() {
         self.errorCount = 0
         self.clickCount = 0
+        self.hasRecording = false
     }
     
     public func getErrorCount() -> Int {
@@ -82,6 +121,10 @@ public class SessionManager {
         self.sessionMetadata = SessionMetadata(sessionId: NSUUID().uuidString,
                                                sessionCreationDate: Date().timeIntervalSince1970,
                                                keychain: KeychainManager())
+        // Publish the new session Id
+        if let sessionId = self.sessionMetadata?.sessionId {
+            self.sessionChangedCallback?(sessionId)
+        }
     }
     
     private func setupIdleTimer() {

@@ -49,15 +49,18 @@ struct CxRum {
         self.sessionManager = sessionManager
         self.networkManager = networkManager
         self.viewManager = viewManager
-        
+        let hasRecording = sessionManager.doesSessionhasRecording()
+
         if let sessionMetadata = sessionManager.getSessionMetadata() {
             self.sessionContext = SessionContext(otel: otel,
                                                  sessionMetadata: sessionMetadata,
-                                                 userMetadata: userMetadata)
+                                                 userMetadata: userMetadata,
+                                                 hasRecording: hasRecording)
             if let prevSessionMetadata = sessionManager.getPrevSessionMetadata() {
                 self.prevSessionContext = SessionContext(otel: otel,
                                                          sessionMetadata: prevSessionMetadata,
-                                                         userMetadata: userMetadata)
+                                                         userMetadata: userMetadata,
+                                                         hasRecording: hasRecording)
             }
         }
         self.eventContext = EventContext(otel: otel)
@@ -69,7 +72,7 @@ struct CxRum {
         self.labels = labels
         self.logContext = LogContext(otel: otel)
         self.deviceState = DeviceState(networkManager: self.networkManager)
-        self.snapshotContext = SnapshotConext.getSnapshot(otel: otel)
+        self.snapshotContext = SnapshotConext.getSnapshot(otel: otel, sessionManager: self.sessionManager)
         self.interactionContext = InteractionContext(otel: otel)
         self.mobileVitalsContext = MobileVitalsContext(otel: otel)
         self.lifeCycleContext = LifeCycleContext(otel: otel)
@@ -81,7 +84,8 @@ struct CxRum {
                 self.snapshotContext = SnapshotConext(timestemp: Date().timeIntervalSince1970,
                                                       errorCount: sessionManager.getErrorCount(),
                                                       viewCount: viewManager.getUniqueViewCount(),
-                                                      clickCount: sessionManager.getClickCount())
+                                                      clickCount: sessionManager.getClickCount(),
+                                                      hasRecording: sessionManager.hasRecording)
                 self.isOneMinuteFromLastSnapshotPass = true
             }
         }
