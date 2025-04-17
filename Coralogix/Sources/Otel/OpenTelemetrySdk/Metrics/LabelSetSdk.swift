@@ -10,7 +10,7 @@ import Foundation
 class LabelSetSdk: LabelSet {
     internal var labelSetEncoded: String
 
-    required init(labels: [String: String]) {
+    public override init(labels: [String: String]) {
         labelSetEncoded = LabelSetSdk.getLabelSetEncoded(labels: labels)
         super.init(labels: labels)
     }

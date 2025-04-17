@@ -24,20 +24,24 @@ public class NetworkStatusClass {
 #endif
     }
 
-    public func status() -> (String, String?, CTCarrier?) {
+    public func status() -> (String, String?, Any?) {
         switch networkMonitor.getConnection() {
         case .wifi:
             return ("wifi", nil, nil)
         case .cellular:
-            if #available(iOS 13.0, *) {
-                if let serviceId = self.networkInfo?.dataServiceIdentifier, let value = self.networkInfo?.serviceCurrentRadioAccessTechnology?[serviceId] {
-                    if let dataServiceIdentifier = self.networkInfo?.dataServiceIdentifier {
-                        return ("cell", simpleConnectionName(connectionType: value), self.networkInfo?.serviceSubscriberCellularProviders?[dataServiceIdentifier])
+            if #available(iOS 16.0, *) {
+                if let networkInfo = self.networkInfo, let serviceId = networkInfo.dataServiceIdentifier {
+                    if let radioAccessTechnology = networkInfo.serviceCurrentRadioAccessTechnology?[serviceId] {
+                        // iOS 16+: CTServiceCarrier is now used
+                        return ("cell", simpleConnectionName(connectionType: radioAccessTechnology), nil)
                     }
                 }
             } else {
-                if let radioType = self.networkInfo?.currentRadioAccessTechnology {
-                    return ("cell", simpleConnectionName(connectionType: radioType), self.networkInfo?.subscriberCellularProvider)
+                if let networkInfo = self.networkInfo, let serviceId = networkInfo.dataServiceIdentifier {
+                    if let radioAccessTechnology = networkInfo.serviceCurrentRadioAccessTechnology?[serviceId],
+                       let carrier = networkInfo.serviceSubscriberCellularProviders?[serviceId] {
+                        return ("cell", simpleConnectionName(connectionType: radioAccessTechnology), carrier)
+                    }
                 }
             }
             return ("cell", "unknown", nil)

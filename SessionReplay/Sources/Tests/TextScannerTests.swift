@@ -8,7 +8,7 @@
 import XCTest
 import Vision
 import CoreImage
-@testable import Session_Replay
+@testable import SessionReplay
 
 class TextScannerTests: XCTestCase {
     var textScanner: TextScanner!

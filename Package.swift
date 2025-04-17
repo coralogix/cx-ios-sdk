@@ -40,6 +40,12 @@ let package = Package(
         .testTarget(
             name: "CoralogixRumTests",
             dependencies: ["Coralogix"],
-            path: "Coralogix/Tests/")
+            path: "Coralogix/Tests/"
+        ),
+        .testTarget(
+            name: "SessionReplayTests",
+            dependencies: ["SessionReplay"],
+            path: "SessionReplay/Sources/Tests/"
+        )
     ]
 )

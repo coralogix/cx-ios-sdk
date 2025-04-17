@@ -7,7 +7,7 @@
 
 import XCTest
 import CoralogixInternal
-@testable import Session_Replay
+@testable import SessionReplay
 
 
 final class SessionReplayModelTests: XCTestCase {

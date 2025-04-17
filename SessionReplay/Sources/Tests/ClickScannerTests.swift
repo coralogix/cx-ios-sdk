@@ -6,7 +6,7 @@
 //
 
 import XCTest
-@testable import Session_Replay
+@testable import SessionReplay
 
 class ClickScannerTests: XCTestCase {
     var clickScanner: ClickScanner!

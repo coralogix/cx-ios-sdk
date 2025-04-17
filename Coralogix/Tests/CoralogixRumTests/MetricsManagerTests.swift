@@ -21,7 +21,6 @@ final class MetricsManagerTests: XCTestCase {
     }
 
     override func tearDown() {
-        metricsManager = nil
         mockFPSMonitor = nil
         super.tearDown()
     }

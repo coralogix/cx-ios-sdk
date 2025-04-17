@@ -23,12 +23,12 @@ public class CoralogixRum {
     
     let notificationCenter = NotificationCenter.default
     
-    static var isDebug = false
     static var isInitialized = false
     static var sdkFramework: SdkFramework = .swift
     
     public init(options: CoralogixExporterOptions, sdkFramework: SdkFramework = .swift) {
-        CoralogixRum.isDebug = options.debug
+        Log.isDebug = options.debug
+
         self.displayCoralogixWord()
 
         if options.sdkSampler.shouldInitialized() == false {
@@ -88,11 +88,10 @@ public class CoralogixRum {
                 .build())
         
         self.swizzle()
-        
+        self.initializeNavigationInstrumentation()
         let instrumentationMap: [(CoralogixExporterOptions.InstrumentationType, () -> Void)] = [
             (.lifeCycle, self.initializeLifeCycleInstrumentation),
             (.userActions, self.initializeUserActionsInstrumentation),
-            (.navigation, self.initializeNavigationInstrumentation),
             (.network, self.initializeNetworkInstrumentation),
             (.errors, self.initializeCrashInstumentation),
             (.mobileVitals, self.initializeMobileVitalsInstrumentation),
@@ -108,10 +107,14 @@ public class CoralogixRum {
     }
     
     private func initialzeMetricsManager(options: CoralogixExporterOptions) {
+        self.metricsManager.addObservers()
+
         if options.shouldInitInstumentation(instumentation: .mobileVitals) {
             self.metricsManager.startFPSSamplingMonitoring(mobileVitalsFPSSamplingRate: options.mobileVitalsFPSSamplingRate)
             self.metricsManager.startColdStartMonitoring()
-        } else if options.shouldInitInstumentation(instumentation: .anr) {
+        }
+        
+        if options.shouldInitInstumentation(instumentation: .anr) {
             self.metricsManager.startANRMonitoring()
         }
     }
@@ -246,7 +249,6 @@ public struct CoralogixExporterOptions {
     
     public enum InstrumentationType {
         case mobileVitals
-        case navigation
         case custom
         case errors
         case network

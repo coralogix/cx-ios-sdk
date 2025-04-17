@@ -32,7 +32,7 @@ final class CoralogixRumTests: XCTestCase {
             XCTAssertEqual(options.version, "1.0")
             
             // Verify that isDebug flag is set correctly
-            XCTAssertTrue(CoralogixRum.isDebug)
+            XCTAssertTrue(Log.isDebug)
             
             // Verify that isInitialized flag is set to true
             XCTAssertTrue(CoralogixRum.isInitialized)

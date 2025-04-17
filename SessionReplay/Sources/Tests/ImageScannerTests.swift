@@ -7,7 +7,7 @@
 
 import XCTest
 import Vision
-@testable import Session_Replay
+@testable import SessionReplay
 
 class ImageScannerTests: XCTestCase {
     var imageScanner: ImageScanner!
