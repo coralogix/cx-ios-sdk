@@ -1,6 +1,6 @@
 import Foundation
 import Darwin
-import CoralogixInternal
+@_exported import CoralogixInternal
 
 #if canImport(UIKit)
 import UIKit
@@ -75,6 +75,7 @@ public class CoralogixRum {
         }
         
         CoralogixRum.sdkFramework = sdkFramework
+        self.initializeSessionReplay()
         self.initialzeMetricsManager(options: options)
         self.initializeNavigationInstrumentation()
 

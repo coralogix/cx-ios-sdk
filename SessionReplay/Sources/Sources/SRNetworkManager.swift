@@ -32,8 +32,7 @@ public class MetadataBuilder {
                               trackNumber: Int,
                               subIndex: Int,
                               application: String,
-                              sessionCreationTime: TimeInterval,
-                              snapshotId: String) -> [String: Any] {
+                              sessionCreationTime: TimeInterval) -> [String: Any] {
         return [
             Keys.application.rawValue: application,
             Keys.segmentIndex.rawValue: trackNumber,
@@ -42,8 +41,6 @@ public class MetadataBuilder {
             Keys.keySessionCreationDate.rawValue: sessionCreationTime.milliseconds,
             Keys.keySessionId.rawValue: sessionId,
             Keys.subIndex.rawValue: subIndex,
-            Keys.snapshotId.rawValue: UUID().uuidString,
-            Keys.snapshotCreationTime.rawValue: Date().timeIntervalSince1970.milliseconds
         ]
     }
 }
@@ -102,9 +99,8 @@ public class SRNetworkManager {
             subIndex: subIndex,
             application: application,
             sessionCreationTime: sessionCreationTime,
-            snapshotId: UUID().uuidString
         )
-        Log.e("[metadata] \(metadata)")
+        Log.d("[metadata] \(metadata)")
         
         // Convert the JSON to Data
         guard let jsonData = try? JSONSerialization.data(withJSONObject: metadata, options: []) else {
@@ -158,7 +154,7 @@ public class SRNetworkManager {
                 return
             }
             
-            Log.d("[SRNetworkManager] Response status code: \(httpResponse.statusCode)")
+            Log.w("[SRNetworkManager] Response status code: \(httpResponse.statusCode)")
             
             if let data = data, let responseString = String(data: data, encoding: .utf8) {
                 Log.d("[SRNetworkManager] Response body: \(responseString)")

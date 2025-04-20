@@ -120,7 +120,7 @@ public class SessionReplay: SessionReplayInterface {
         }
         
         guard let coralogixSdk = SdkManager.shared.getCoralogixSdk() else {
-            Log.e("[CoralogixSdk] is not initialized")
+            Log.e("[SessionReplay] CoralogixSdk is not initialized")
             return
         }
         

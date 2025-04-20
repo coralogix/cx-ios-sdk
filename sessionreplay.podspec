@@ -30,5 +30,7 @@ Pod::Spec.new do |spec|
   spec.ios.deployment_target = "13.0"
 
   spec.source_files  = 'sessionreplay/Sources/**/*.{swift,h}'
+  spec.dependency 'CoralogixInternal', spec.version.to_s
+
 end
 
