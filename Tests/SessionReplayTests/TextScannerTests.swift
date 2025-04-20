@@ -26,7 +26,10 @@ class TextScannerTests: XCTestCase {
     func testProcessImage_withValidInput_shouldCompleteSuccessfully() {
         let expectation = self.expectation(description: "Image processing should complete successfully.")
         
-        let originalURL = Bundle(for: type(of: self)).url(forResource: "test_image", withExtension: "png")!
+        guard let originalURL = Bundle.module.url(forResource: "test_image", withExtension: "png") else {
+            XCTFail("test_image.png not found in Bundle.module")
+            return
+        }
         do {
             // Create a unique file
             let uniqueFileURL = try createUniqueFile(from: originalURL, withExtension: "png")
@@ -63,7 +66,7 @@ class TextScannerTests: XCTestCase {
 
     func testMaskText_withNoPatterns_shouldMaskAllText() {
         // Mock input image
-        let inputURL = Bundle(for: type(of: self)).url(forResource: "test_image", withExtension: "png")!
+         let inputURL = Bundle.module.url(forResource: "test_image", withExtension: "png")!
         let ciImage = CIImage(contentsOf: inputURL)!
 
         let (maskedImage, totalTextCount, maskedTextCount) = textScanner.maskText(in: ciImage, with: nil)
@@ -75,7 +78,7 @@ class TextScannerTests: XCTestCase {
 
     func testMaskText_withNoText_shouldReturnOriginalImage() {
         // Mock input image without text
-        let inputURL = Bundle(for: type(of: self)).url(forResource: "test_image_2", withExtension: "png")!
+        let inputURL = Bundle.module.url(forResource: "test_image_2", withExtension: "png")!
         let ciImage = CIImage(contentsOf: inputURL)!
 
         let (maskedImage, totalTextCount, maskedTextCount) = textScanner.maskText(in: ciImage, with: ["anyPattern"])
@@ -89,7 +92,10 @@ class TextScannerTests: XCTestCase {
     func testMaskText_withSpecificPattern_shouldMaskOnlyMatchingText() {
         
         // Mock input image
-        let originalURL = Bundle(for: type(of: self)).url(forResource: "test_image", withExtension: "png")!
+        guard let originalURL = Bundle.module.url(forResource: "test_image", withExtension: "png") else {
+            XCTFail("test_image.png not found in Bundle.module")
+            return
+        }
         do {
             // Create a unique file
             let uniqueFileURL = try createUniqueFile(from: originalURL, withExtension: "png")

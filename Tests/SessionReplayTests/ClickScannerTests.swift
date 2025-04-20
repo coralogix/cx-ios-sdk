@@ -21,10 +21,28 @@ class ClickScannerTests: XCTestCase {
         super.tearDown()
     }
     
+    func testPrintBundleContents() {
+        guard let path = Bundle.module.resourcePath else {
+            XCTFail("Bundle.module.resourcePath is nil")
+            return
+        }
+
+        do {
+            let contents = try FileManager.default.contentsOfDirectory(atPath: path)
+            print("📦 Bundle.module contents: \(contents)")
+        } catch {
+            XCTFail("Failed to read bundle contents: \(error)")
+        }
+    }
+
     func testProcessImage_withValidInput_shouldCompleteSuccessfully() {
         let expectation = self.expectation(description: "Image processing should complete successfully.")
         
-        let originalURL = Bundle(for: type(of: self)).url(forResource: "test_image", withExtension: "png")!
+        guard let originalURL = Bundle.module.url(forResource: "test_image", withExtension: "png") else {
+            XCTFail("test_image.png not found in Bundle.module")
+            return
+        }
+        
         do {
             // Create a unique file
             let uniqueFileURL = try createUniqueFile(from: originalURL, withExtension: "png")

@@ -35,7 +35,10 @@ class ImageScannerTests: XCTestCase {
             let expectation = strongSelf.expectation(description: "Recognize credit card text")
             
             // Mock input image
-            let inputURL = Bundle(for: type(of: strongSelf)).url(forResource: "test_image", withExtension: "png")!
+            guard let inputURL = Bundle.module.url(forResource: "test_image", withExtension: "png") else {
+                XCTFail("test_image.png not found in Bundle.module")
+                return
+            }
             let ciImage = CIImage(contentsOf: inputURL)!
             let cgImage = CIContext().createCGImage(ciImage, from: ciImage.extent)!
             
@@ -52,7 +55,10 @@ class ImageScannerTests: XCTestCase {
         let expectation = self.expectation(description: "Process image completes")
         
         // Mock input image
-        let originalURL = Bundle(for: type(of: self)).url(forResource: "test_image", withExtension: "png")!
+        guard let originalURL = Bundle.module.url(forResource: "test_image", withExtension: "png") else {
+            XCTFail("test_image.png not found in Bundle.module")
+            return
+        }
         
         do {
             // Create a unique file
@@ -74,7 +80,10 @@ class ImageScannerTests: XCTestCase {
         let expectation = self.expectation(description: "Process image completes")
         
         // Mock input image
-        let originalURL = Bundle(for: type(of: self)).url(forResource: "test_image", withExtension: "png")!
+        guard let originalURL = Bundle.module.url(forResource: "test_image", withExtension: "png") else {
+            XCTFail("test_image.png not found in Bundle.module")
+            return
+        }
         
         do {
             // Create a unique file
@@ -111,7 +120,10 @@ class ImageScannerTests: XCTestCase {
         let expectation = self.expectation(description: "Detect credit card rectangle")
         
         // Mock input image
-        let originalURL = Bundle(for: type(of: self)).url(forResource: "test_image", withExtension: "png")!
+        guard let originalURL = Bundle.module.url(forResource: "test_image", withExtension: "png") else {
+            XCTFail("test_image.png not found in Bundle.module")
+            return
+        }
         do {
             // Create a unique file
             let uniqueFileURL = try createUniqueFile(from: originalURL, withExtension: "png")
@@ -138,7 +150,11 @@ class ImageScannerTests: XCTestCase {
     
     func testMaskRectangle_withValidObservation_shouldReturnMaskedImage() {
         // Mock input image
-        let originalURL = Bundle(for: type(of: self)).url(forResource: "test_image", withExtension: "png")!
+        guard let originalURL = Bundle.module.url(forResource: "test_image", withExtension: "png") else {
+            XCTFail("test_image.png not found in Bundle.module")
+            return
+        }
+        
         do {
             // Create a unique file
             let uniqueFileURL = try createUniqueFile(from: originalURL, withExtension: "png")

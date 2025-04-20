@@ -163,6 +163,8 @@ final class SRNetworkManagerTests: XCTestCase {
             Keys.segmentTimestamp.rawValue,
             Keys.keySessionCreationDate.rawValue,
             Keys.keySessionId.rawValue,
+            Keys.snapshotCreationTime.rawValue,
+            Keys.snapshotId.rawValue,
             Keys.subIndex.rawValue
         ]
         

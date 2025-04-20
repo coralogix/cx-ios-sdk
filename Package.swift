@@ -45,7 +45,10 @@ let package = Package(
         .testTarget(
             name: "SessionReplayTests",
             dependencies: ["SessionReplay"],
-            path: "Tests/SessionReplayTests"
+            path: "Tests/SessionReplayTests",
+            resources: [
+                    .process("Resources")
+            ]
         )
     ]
 )

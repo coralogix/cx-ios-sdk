@@ -28,7 +28,10 @@ class ScannerPipelineTests: XCTestCase {
         scannerPipeline.isTextScannerEnabled = true
         scannerPipeline.isFaceScannerEnabled = true
         
-        let originalURL = Bundle(for: type(of: self)).url(forResource: "test_image", withExtension: "png")!
+        guard let originalURL = Bundle.module.url(forResource: "test_image", withExtension: "png") else {
+            XCTFail("test_image.png not found in Bundle.module")
+            return
+        }
         do {
             let options = SessionReplayOptions(maskText: ["confidential"], maskAllImages: true)
             
@@ -53,7 +56,10 @@ class ScannerPipelineTests: XCTestCase {
         scannerPipeline.isTextScannerEnabled = false
         scannerPipeline.isFaceScannerEnabled = false
         
-        let originalURL = Bundle(for: type(of: self)).url(forResource: "test_image", withExtension: "png")!
+        guard let originalURL = Bundle.module.url(forResource: "test_image", withExtension: "png") else {
+            XCTFail("test_image.png not found in Bundle.module")
+            return
+        }
         
         do {
             // Create a unique file
@@ -79,7 +85,11 @@ class ScannerPipelineTests: XCTestCase {
         scannerPipeline.isTextScannerEnabled = false
         scannerPipeline.isFaceScannerEnabled = false
         
-        let originalURL = Bundle(for: type(of: self)).url(forResource: "test_image", withExtension: "png")!
+        guard let originalURL = Bundle.module.url(forResource: "test_image", withExtension: "png") else {
+            XCTFail("test_image.png not found in Bundle.module")
+            return
+        }
+        
         do {
             // Create a unique file
             let uniqueFileURL = try createUniqueFile(from: originalURL, withExtension: "png")
@@ -105,7 +115,10 @@ class ScannerPipelineTests: XCTestCase {
         scannerPipeline.isTextScannerEnabled = false
         scannerPipeline.isFaceScannerEnabled = true
         
-        let originalURL = Bundle(for: type(of: self)).url(forResource: "test_image", withExtension: "png")!
+        guard let originalURL = Bundle.module.url(forResource: "test_image", withExtension: "png") else {
+            XCTFail("test_image.png not found in Bundle.module")
+            return
+        }
         do {
             // Create a unique file
             let uniqueFileURL = try createUniqueFile(from: originalURL, withExtension: "png")
@@ -134,7 +147,10 @@ class ScannerPipelineTests: XCTestCase {
         scannerPipeline.isTextScannerEnabled = false
         scannerPipeline.isFaceScannerEnabled = false
         
-        let originalURL = Bundle(for: type(of: self)).url(forResource: "test_image", withExtension: "png")!
+        guard let originalURL = Bundle.module.url(forResource: "test_image", withExtension: "png") else {
+            XCTFail("test_image.png not found in Bundle.module")
+            return
+        }
         do {
             // Create a unique file
             let uniqueFileURL = try createUniqueFile(from: originalURL, withExtension: "png")
