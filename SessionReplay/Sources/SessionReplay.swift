@@ -141,7 +141,7 @@ public class SessionReplay: SessionReplayInterface {
         initializationAttempted = true
 
         // Check if we should initialize based on sampling
-        guard Utils.shouldInitialize(sampleRate: sessionReplayOptions.sessionRecordingSampleRate) else {
+        guard SRUtils.shouldInitialize(sampleRate: sessionReplayOptions.sessionRecordingSampleRate) else {
             Log.d("SessionReplay initialization skipped due to sampling")
             shared = createDummyInstance()
             return

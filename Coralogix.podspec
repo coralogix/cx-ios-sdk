@@ -14,11 +14,11 @@ Pod::Spec.new do |spec|
 
   spec.description  = <<-DESC
   The Coralogix RUM agent for iOS provides a Swift package that captures:
-  HTTP requests, using URLSession instrumentation
-  Unhandled exceptions (NSException, NSError, Error)
-  Custom Log ()
-  Crashes - using PLCrashReporter
-  Page navigation (Swift use swizzeling / SwiftUI use modifier)
+  - HTTP requests, using URLSession instrumentation
+  - Unhandled exceptions (NSException, NSError, Error)
+  - Custom Log ()
+  - Crashes - using PLCrashReporter
+  - Page navigation (Swift use swizzeling / SwiftUI use modifier)
   DESC
 
   spec.swift_version    = '5.9'
@@ -32,11 +32,29 @@ Pod::Spec.new do |spec|
   spec.author             = { "Coralogix" => "www.coralogix.com" }
   spec.ios.deployment_target = "13.0"
 
-  spec.source_files  = 'Coralogix/Sources/**/*.{swift,h}'
+  spec.source_files  = 'Coralogix/Sources/**/*.{swift}'
   spec.exclude_files = 'Coralogix/Sources/Exclude'
 
   spec.static_framework = true
   spec.dependency 'PLCrashReporter', '~> 1.11.1'
-  spec.dependency 'CoralogixInternal', spec.version.to_s
+
+  spec.source_files = [
+    'Coralogix/Sources/**/*.swift',
+    'CoralogixInternal/Sources/**/*.swift'
+  ]
+  spec.subspec 'Internal' do |int|
+    int.source_files = 'CoralogixInternal/Sources/**/*.{swift}'
+    int.pod_target_xcconfig = { 'DEFINES_MODULE' => 'YES' }
+  end
+
+  spec.subspec 'SessionReplay' do |replay|
+    replay.source_files = 'SessionReplay/Sources/**/*.{swift}'
+    replay.dependency 'Coralogix/Internal'
+  end
+
+  spec.test_spec 'Tests' do |test|
+    test.source_files = 'Tests/CoralogixRumTests/**/*.{swift}'
+    test.resources = 'Tests/SessionReplayTests/Resources/**/*'
+  end
 end
 

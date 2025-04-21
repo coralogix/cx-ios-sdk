@@ -150,7 +150,7 @@ public class VideoMaskingProcessor {
             return
         }
         
-        guard let videoTrack = self.videoTrack else {
+        guard let _ = self.videoTrack else {
             Log.e("VideoTrack is nil")
             return
         }

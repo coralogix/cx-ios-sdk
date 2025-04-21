@@ -27,7 +27,7 @@ class ClickScanner {
             return
         }
     
-        Utils.saveImage(clickedCGImage, outputURL: inputURL) { isSuccess in
+        SRUtils.saveImage(clickedCGImage, outputURL: inputURL) { isSuccess in
             completion(isSuccess)
         }
     }

@@ -108,7 +108,7 @@ class SessionReplayModel: UserInteractionRecorder {
             self.sessionId = sessionId
             self.trackNumber = 0
             _ = self.clearSessionReplayFolder()
-            Utils.deleteURLsFromDisk()
+            SRUtils.deleteURLsFromDisk()
         }
     }
     

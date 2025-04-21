@@ -1,5 +1,5 @@
 //
-//  Helper.swift
+//  SRUtils.swift
 //  session-replay
 //
 //  Created by Coralogix DEV TEAM on 08/12/2024.
@@ -8,7 +8,7 @@
 import UIKit
 import CoralogixInternal
 
-class Utils {
+class SRUtils {
     
     /// Saves the provided `CIImage` to the specified URL.
     /// - Parameters:

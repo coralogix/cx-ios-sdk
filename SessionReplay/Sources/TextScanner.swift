@@ -33,7 +33,7 @@ public class TextScanner {
         
         let (maskedImage, totalTextCount, maskedTextCount) = self.maskText(in: inputImage, with: maskText)
         
-        Utils.saveImage(maskedImage, outputURL: inputURL) { isSuccess in
+        SRUtils.saveImage(maskedImage, outputURL: inputURL) { isSuccess in
             completion(isSuccess, totalTextCount, maskedTextCount)
         }
     }
