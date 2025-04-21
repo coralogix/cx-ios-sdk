@@ -12,11 +12,8 @@ public class LabelSet: Hashable {
     /// Dictionary to store labels as key-value pairs.
     public private(set) var labels: [String: String] = [:]
 
-    /// An empty `LabelSet` instance.
-    public static var empty: LabelSet {
-        return LabelSet(labels: [:])
-    }
-    
+    public static let empty: LabelSet = LabelSet(labels: [:])
+
     /// Public initializer with provided labels.
     /// - Parameter labels: A dictionary of string key-value pairs.
     public init(labels: [String: String]) {

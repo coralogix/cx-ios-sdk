@@ -10,7 +10,7 @@ import Vision
 import CoreImage
 import CoralogixInternal
 
-class ImageScanner {
+public class ImageScanner {
     let matches = 2
     var creditCardPredicate: [String]? = nil
     
@@ -28,38 +28,40 @@ class ImageScanner {
 
         self.creditCardPredicate = creditCardPredicate
 
-        func processRectangles(_ rectangles: [VNRectangleObservation], in ciImage: CIImage, using cgImage: CGImage) {
-            var maskedImage = ciImage
-            let dispatchGroup = DispatchGroup()
-            let totalImagesCount = rectangles.count
-            var maskedImagesCount = 0
-            
-            for observation in rectangles {
-                if maskAll {
-                    if let newMaskedImage = maskRectangle(in: maskedImage, using: observation) {
-                        maskedImage = newMaskedImage
-                        maskedImagesCount += 1
-                    }
-                } else {
-                    dispatchGroup.enter()
-                    isCreditCardRectangle(cgImage: cgImage, observation: observation) {[weak self] isCreditCard in
+        func processRectangles(
+            _ rectangles: [VNRectangleObservation],
+            in ciImage: CIImage,
+            using cgImage: CGImage
+        ) {
+            Task {
+                var maskedImage = ciImage
+                let totalImagesCount = rectangles.count
+                var maskedImagesCount = 0
+                
+                for observation in rectangles {
+                    if maskAll {
+                        if let newMaskedImage = await maskRectangle(in: maskedImage, using: observation) {
+                            maskedImage = newMaskedImage
+                            maskedImagesCount += 1
+                        }
+                    } else {
+                        let isCreditCard = await isCreditCardRectangle(cgImage: cgImage, observation: observation)
                         if isCreditCard {
-                            if let newMaskedImage = self?.maskRectangle(in: maskedImage, using: observation) {
+                            if let newMaskedImage = await maskRectangle(in: maskedImage, using: observation) {
                                 maskedImage = newMaskedImage
                                 maskedImagesCount += 1
                             }
                         }
-                        dispatchGroup.leave()
                     }
                 }
-            }
-            
-            dispatchGroup.notify(queue: .global()) {
-                saveMaskedImage(maskedImage, to: inputURL,
+                
+                saveMaskedImage(maskedImage,
+                                to: inputURL,
                                 totalImagesCount: totalImagesCount,
                                 maskedImagesCount: maskedImagesCount)
             }
         }
+        
         
         func saveMaskedImage(_ maskedImage: CIImage, to url: URL,  totalImagesCount: Int, maskedImagesCount: Int) {
             Utils.saveImage(maskedImage, outputURL: url) { result in
@@ -95,6 +97,22 @@ class ImageScanner {
             completion(false, 0, 0)
         }
     }
+    
+    func maskRectangle(in image: CIImage, using observation: VNRectangleObservation) async -> CIImage? {
+        await withCheckedContinuation { continuation in
+            self.maskRectangle(in: image, using: observation) { newImage in
+                continuation.resume(returning: newImage)
+            }
+        }
+    }
+
+    func isCreditCardRectangle(cgImage: CGImage, observation: VNRectangleObservation) async -> Bool {
+        await withCheckedContinuation { continuation in
+            self.isCreditCardRectangle(cgImage: cgImage, observation: observation) { result in
+                continuation.resume(returning: result)
+            }
+        }
+    }
 
     func isCreditCardRectangle(cgImage: CGImage,
                                observation: VNRectangleObservation,
@@ -105,56 +123,63 @@ class ImageScanner {
             
             // Step 3: Recognize text within the corrected image
             self.recognizeText(in: correctedImage) { isCreditCard in
-                if isCreditCard {
-                    completion(true)
-                } else {
-                    completion(false)
-                }
+                completion(isCreditCard)
             }
+        } else {
+            completion(false)
         }
     }
-    
-    func maskRectangle(in ciImage: CIImage, using observation: VNRectangleObservation) -> CIImage? {
-        // Get the image size
-        let imageSize = ciImage.extent.size
-        
-        // Convert normalized rectangle coordinates to image coordinates
-        let topLeft = CGPoint(x: observation.topLeft.x * imageSize.width,
-                              y: (1 - observation.topLeft.y) * imageSize.height)
-        let topRight = CGPoint(x: observation.topRight.x * imageSize.width,
-                               y: (1 - observation.topRight.y) * imageSize.height)
-        let bottomLeft = CGPoint(x: observation.bottomLeft.x * imageSize.width,
-                                 y: (1 - observation.bottomLeft.y) * imageSize.height)
-        let bottomRight = CGPoint(x: observation.bottomRight.x * imageSize.width,
-                                  y: (1 - observation.bottomRight.y) * imageSize.height)
-        
-        // Create a CGPath for the rectangle
-        let path = CGMutablePath()
-        path.move(to: topLeft)
-        path.addLine(to: topRight)
-        path.addLine(to: bottomRight)
-        path.addLine(to: bottomLeft)
-        path.closeSubpath()
-        
-        // Create a black rectangle mask
-        UIGraphicsBeginImageContext(imageSize)
-        guard let context = UIGraphicsGetCurrentContext() else { return nil }
-        
-        // Draw the original image
-        let uiImage = UIImage(ciImage: ciImage)
-        uiImage.draw(in: CGRect(origin: .zero, size: imageSize))
-        
-        // Fill the detected rectangle with black
-        context.setFillColor(UIColor.black.cgColor)
-        context.addPath(path)
-        context.fillPath()
-        
-        // Get the masked image
-        let maskedImage = UIGraphicsGetImageFromCurrentImageContext()
-        UIGraphicsEndImageContext()
-        
-        // Convert the masked image back to CIImage
-        return maskedImage.flatMap { CIImage(image: $0) }
+
+    func maskRectangle(in ciImage: CIImage, using observation: VNRectangleObservation, completion: @escaping (CIImage?) -> Void) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            
+            // Get the image size
+            let imageSize = ciImage.extent.size
+            
+            // Convert normalized rectangle coordinates to image coordinates
+            let topLeft = CGPoint(x: observation.topLeft.x * imageSize.width,
+                                  y: (1 - observation.topLeft.y) * imageSize.height)
+            let topRight = CGPoint(x: observation.topRight.x * imageSize.width,
+                                   y: (1 - observation.topRight.y) * imageSize.height)
+            let bottomLeft = CGPoint(x: observation.bottomLeft.x * imageSize.width,
+                                     y: (1 - observation.bottomLeft.y) * imageSize.height)
+            let bottomRight = CGPoint(x: observation.bottomRight.x * imageSize.width,
+                                      y: (1 - observation.bottomRight.y) * imageSize.height)
+            
+            // Create a CGPath for the rectangle
+            let path = CGMutablePath()
+            path.move(to: topLeft)
+            path.addLine(to: topRight)
+            path.addLine(to: bottomRight)
+            path.addLine(to: bottomLeft)
+            path.closeSubpath()
+            
+            DispatchQueue.main.async {
+                // Create a black rectangle mask
+                UIGraphicsBeginImageContext(imageSize)
+                guard let context = UIGraphicsGetCurrentContext() else {
+                    completion(nil)
+                    return
+                }
+                
+                // Draw the original image
+                let uiImage = UIImage(ciImage: ciImage)
+                uiImage.draw(in: CGRect(origin: .zero, size: imageSize))
+                
+                // Fill the detected rectangle with black
+                context.setFillColor(UIColor.black.cgColor)
+                context.addPath(path)
+                context.fillPath()
+                
+                // Get the masked image
+                let maskedImage = UIGraphicsGetImageFromCurrentImageContext()
+                UIGraphicsEndImageContext()
+                
+                // Convert the masked image back to CIImage
+                let result = maskedImage.flatMap { CIImage(image: $0) }
+                completion(result)
+            }
+        }
     }
 
     // Function to extract and correct the perspective of the detected rectangle

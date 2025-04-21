@@ -19,6 +19,7 @@ class Utils {
         let ciContext = CIContext()
         guard let cgImage = ciContext.createCGImage(ciImage, from: ciImage.extent) else {
             Log.e("Failed to create CGImage.")
+            completion(false)
             return
         }
         
@@ -26,6 +27,7 @@ class Utils {
         
         guard let pngData = uiImage.pngData() else {
             Log.e("Failed to create PNG data.")
+            completion(false)
             return
         }
                 
@@ -44,6 +46,7 @@ class Utils {
         
         guard let pngData = uiImage.pngData() else {
             Log.e("Failed to create PNG data.")
+            completion(false)
             return
         }
         
@@ -161,36 +164,36 @@ class Utils {
     static let creditCardPrefixes: [String] = [
         // Visa
         "4000", "4001", "4002", "4003", "4004", "4005", "4006", "4007", "4008", "4009",
-        "4010", "4999", // Visa range
+        "4010", "4999",
         
         // Mastercard
         "5100", "5101", "5102", "5103", "5104", "5105", "5106", "5107", "5108", "5109",
-        "5200", "5599", // Mastercard range
-        "2221", "2720", // New Mastercard range
-        "5381", // Newly added Mastercard prefix
+        "5200", "5599",
+        "2221", "2720",
+        "5381",
         
         // American Express
         "3400", "3401", "3402", "3403", "3404", "3405", "3406", "3407", "3408", "3409",
-        "3700", "3799", // American Express range
-        "3759", // Added American Express test card prefix
+        "3700", "3799",
+        "3759",
         
         // Discover
         "6011",
         "6221", "6222", "6223", "6224", "6225", "6226", "6227", "6228", "6229",
-        "6440", "6499", // Discover range
-        "6500", "6599", // Discover range
+        "6440", "6499",
+        "6500", "6599",
         
         // Diners Club
-        "3000", "3059", // Diners Club range
+        "3000", "3059",
         "3600", "3699",
         "3800", "3899",
         
         // JCB (Japan Credit Bureau)
         "3528", "3529", "3530", "3531", "3532", "3533", "3534", "3535", "3536", "3537",
-        "3589", // JCB range
+        "3589",
         
         // UnionPay
-        "6200", "6299", // UnionPay range
+        "6200", "6299",
         
         // Maestro
         "5018", "5020", "5038",
@@ -272,7 +275,8 @@ class Utils {
     /// Based on the sampling rate,
     /// it returns random value deciding if the SDK should be "initialized" or not.
     /// - Returns: `true` if SDK should be initialized and `false` if it should be dropped.
-    static func shouldInitialized(sampleRate: Int) -> Bool {
-        return Int.random(in: 0..<100) < sampleRate
+    static func shouldInitialize(sampleRate: Int) -> Bool {
+        let clamped = max(0, min(sampleRate, 100))
+        return Int.random(in: 0..<100) < clamped
     }
 }

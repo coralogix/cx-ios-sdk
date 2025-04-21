@@ -30,24 +30,25 @@ public class SdkManager {
     
     private var coralogixSdk: CoralogixInterface?
     private var sessionReplaySdk: SessionReplayInterface?
+    private let queue = DispatchQueue(label: "cx.sdkmanager.queue")
 
     private init() {}
 
     // Register SDKs
     public func register(coralogixInterface: CoralogixInterface) {
-        self.coralogixSdk = coralogixInterface
+        queue.sync { self.coralogixSdk = coralogixInterface }
     }
 
     public func register(sessionReplayInterface: SessionReplayInterface) {
-        self.sessionReplaySdk = sessionReplayInterface
+        queue.sync { self.sessionReplaySdk = sessionReplayInterface }
     }
 
     // Access SDKs
     public func getCoralogixSdk() -> CoralogixInterface? {
-        return coralogixSdk
+        return queue.sync { coralogixSdk }
     }
 
     public func getSessionReplay() -> SessionReplayInterface? {
-        return sessionReplaySdk
+        return queue.sync { sessionReplaySdk }
     }
 }

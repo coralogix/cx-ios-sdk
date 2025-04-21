@@ -10,7 +10,8 @@ import XCTest
 
 class ScannerPipelineTests: XCTestCase {
     var scannerPipeline: ScannerPipeline!
-    
+    var currentOperationId: UUID? // Track current operation
+
     override func setUp() {
         super.setUp()
         scannerPipeline = ScannerPipeline()
@@ -27,6 +28,8 @@ class ScannerPipelineTests: XCTestCase {
         scannerPipeline.isImageScannerEnabled = true
         scannerPipeline.isTextScannerEnabled = true
         scannerPipeline.isFaceScannerEnabled = true
+        let operationId = UUID()
+        self.currentOperationId = operationId
         
         guard let originalURL = Bundle.module.url(forResource: "test_image", withExtension: "png") else {
             XCTFail("test_image.png not found in Bundle.module")
@@ -38,7 +41,13 @@ class ScannerPipelineTests: XCTestCase {
             // Create a unique file
             let uniqueFileURL = try createUniqueFile(from: originalURL, withExtension: "png")
             
-            scannerPipeline.runPipeline(inputURL: uniqueFileURL, options: options) { result in
+            scannerPipeline.runPipelineWithCancellation(
+                inputURL: uniqueFileURL,
+                options: options,
+                operationId: operationId,
+                isValid: { [weak self] id in
+                    return self?.currentOperationId == id
+                }) { result in
                 XCTAssertTrue(result, "Pipeline should complete successfully.")
                 expectation.fulfill()
             }
@@ -66,8 +75,16 @@ class ScannerPipelineTests: XCTestCase {
             let uniqueFileURL = try createUniqueFile(from: originalURL, withExtension: "png")
             
             let options = SessionReplayOptions(maskText: nil, maskAllImages: true)
+            let operationId = UUID()
+            self.currentOperationId = operationId
             
-            scannerPipeline.runPipeline(inputURL: uniqueFileURL, options: options) { result in
+            scannerPipeline.runPipelineWithCancellation(
+                inputURL: uniqueFileURL,
+                options: options,
+                operationId: operationId,
+            isValid: { [weak self] id in
+                return self?.currentOperationId == id
+            }) { result in
                 XCTAssertTrue(result, "Pipeline should complete successfully.")
                 expectation.fulfill()
             }
@@ -95,8 +112,16 @@ class ScannerPipelineTests: XCTestCase {
             let uniqueFileURL = try createUniqueFile(from: originalURL, withExtension: "png")
             
             let options = SessionReplayOptions(maskText: nil, maskAllImages: false)
-            
-            scannerPipeline.runPipeline(inputURL: uniqueFileURL, options: options) { result in
+            let operationId = UUID()
+            self.currentOperationId = operationId
+                            
+            scannerPipeline.runPipelineWithCancellation(
+                inputURL: uniqueFileURL,
+                options: options,
+                operationId: operationId,
+                isValid: { [weak self] id in
+                    return self?.currentOperationId == id
+                }) { result in
                 XCTAssertTrue(result, "Pipeline should complete successfully.")
                 expectation.fulfill()
             }
@@ -124,8 +149,17 @@ class ScannerPipelineTests: XCTestCase {
             let uniqueFileURL = try createUniqueFile(from: originalURL, withExtension: "png")
             
             let options = SessionReplayOptions(maskText: nil, maskAllImages: false)
+            let operationId = UUID()
+            self.currentOperationId = operationId
             
-            scannerPipeline.runPipeline(inputURL: uniqueFileURL, options: options) { result in
+            scannerPipeline.runPipelineWithCancellation(
+                inputURL: uniqueFileURL,
+                options: options,
+                operationId: operationId,
+                isValid: { [weak self] id in
+                    return self?.currentOperationId == id
+                }
+            ) { result in
                 XCTAssertTrue(result, "Pipeline should skip face scanner and complete successfully on simulator.")
                 expectation.fulfill()
             }
@@ -156,40 +190,23 @@ class ScannerPipelineTests: XCTestCase {
             let uniqueFileURL = try createUniqueFile(from: originalURL, withExtension: "png")
             
             let options = SessionReplayOptions(maskText: nil, maskAllImages: false)
+            let operationId = UUID()
+            self.currentOperationId = operationId
             
-            scannerPipeline.runPipeline(inputURL: uniqueFileURL, options: options) { result in
-                XCTAssertTrue(result, "Pipeline should complete successfully with face scanner disabled.")
-                expectation.fulfill()
-            }
+            scannerPipeline.runPipelineWithCancellation(
+                inputURL: uniqueFileURL,
+                options: options,
+                operationId: operationId,
+                isValid: { [weak self] id in
+                    return self?.currentOperationId == id
+                }) { result in
+                    XCTAssertTrue(result, "Pipeline should complete successfully with face scanner disabled.")
+                    expectation.fulfill()
+                }
             
             waitForExpectations(timeout: 5, handler: nil)
         } catch {
             XCTFail("Failed to create unique file: \(error)")
         }
-    }
-    
-    /// Creates a unique copy of a file with a random name in a temporary directory.
-    ///
-    /// - Parameters:
-    ///   - originalURL: The URL of the original file.
-    ///   - extension: The file extension for the new file (optional; inferred if nil).
-    /// - Returns: The URL of the newly created unique file.
-    /// - Throws: An error if the file copy operation fails.
-    func createUniqueFile(from originalURL: URL, withExtension fileExtension: String? = nil) throws -> URL {
-        // Create a unique directory for the test
-        let uniqueTestDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        try FileManager.default.createDirectory(at: uniqueTestDir, withIntermediateDirectories: true)
-        
-        // Generate a random file name
-        let randomFileName = UUID().uuidString
-        let fullFileName = fileExtension != nil ? "\(randomFileName).\(fileExtension!)" : randomFileName
-        
-        // Generate the URL for the unique file
-        let uniqueFileURL = uniqueTestDir.appendingPathComponent(fullFileName)
-        
-        // Copy the original file to the unique location
-        try FileManager.default.copyItem(at: originalURL, to: uniqueFileURL)
-        
-        return uniqueFileURL
     }
 }

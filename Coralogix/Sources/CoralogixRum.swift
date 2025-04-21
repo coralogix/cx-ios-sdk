@@ -217,6 +217,7 @@ public class CoralogixRum {
     public func shutdown() {
         CoralogixRum.isInitialized = false
         self.coralogixExporter?.shutdown(explicitTimeout: nil)
+        self.metricsManager.removeObservers()
     }
     
     public func isInitialized() -> Bool {

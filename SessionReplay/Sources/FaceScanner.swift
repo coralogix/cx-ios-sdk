@@ -43,6 +43,7 @@ class FaceScanner {
                 Utils.saveImage(cgImage, outputURL: inputURL) { isSuccess in
                     completion(isSuccess)
                 }
+                return
             }
             completion(false)
         }

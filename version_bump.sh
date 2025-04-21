@@ -118,18 +118,22 @@ echo "New version: $new_version"
 
 # Update the version in the Swift file
 update_version_in_swift_file "$new_version" "$swift_file"
+swift_result=$?
 
 # Update the version in the coralogix podspec file
 update_version_in_c_podspec "$new_version" "$podspec_c_file"
+c_result=$?
 
 # Update the version in the coralogix-internal podspec file
 update_version_in_ci_podspec "$new_version" "$podspec_ci_file"
+ci_result=$?
 
 # Update the version in the session recording podspec file
 update_version_in_sr_podspec "$new_version" "$podspec_sr_file"
+sr_result=$?
 
 # Check if the sed command was successful for the Swift file
-if [ $? -eq 0 ]; then
+if [ swift_result -eq 0 ]; then
     echo "Version updated successfully to $new_version in $swift_file"
 else
     echo "Failed to update the version in $swift_file"
@@ -137,7 +141,7 @@ else
 fi
 
 # Check if the sed command was successful for the podspec file
-if [ $? -eq 0 ]; then
+if [ c_result -eq 0 ]; then
     echo "Version updated successfully to $new_version in $podspec_c_file"
 else
     echo "Failed to update the version in $podspec_c_file"
@@ -145,7 +149,7 @@ else
 fi
 
 # Check if the sed command was successful for the podspec file
-if [ $? -eq 0 ]; then
+if [ ci_result -eq 0 ]; then
     echo "Version updated successfully to $new_version in $podspec_ci_file"
 else
     echo "Failed to update the version in $podspec_ci_file"
@@ -153,7 +157,7 @@ else
 fi
 
 # Check if the sed command was successful for the podspec file
-if [ $? -eq 0 ]; then
+if [ sr_result -eq 0 ]; then
     echo "Version updated successfully to $new_version in $podspec_sr_file"
 else
     echo "Failed to update the version in $podspec_sr_file"

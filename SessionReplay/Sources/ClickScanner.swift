@@ -13,6 +13,8 @@ class ClickScanner {
     
     // Function to process the image, detect clicks, and add them to the image
     func processImage(at inputURL: URL,
+                      x: CGFloat,
+                      y: CGFloat,
                       completion: @escaping (Bool) -> Void) {
         guard let ciImage = CIImage(contentsOf: inputURL) else {
             Log.e("Failed to load image.")
@@ -20,7 +22,7 @@ class ClickScanner {
             return
         }
         
-        guard let clickedCGImage = self.addClickMark(to: ciImage, at: 100, y: 100) else {
+        guard let clickedCGImage = self.addClickMark(to: ciImage, at: x, y: y) else {
             completion(false)
             return
         }
@@ -37,7 +39,7 @@ class ClickScanner {
 
         // Convert the CIImage to a CGImage
         guard let baseCGImage = context.createCGImage(ciImage, from: ciImage.extent) else {
-            print("Failed to create CGImage from CIImage")
+            Log.e("Failed to create CGImage from CIImage")
             return nil
         }
 
@@ -67,7 +69,7 @@ class ClickScanner {
 
         // Convert the resulting UIImage back to CGImage
         guard let resultingCGImage = resultingImage?.cgImage else {
-            print("Failed to convert resulting UIImage to CGImage")
+            Log.e("Failed to convert resulting UIImage to CGImage")
             return nil
         }
 
@@ -112,7 +114,7 @@ class ClickScanner {
 
         // Convert the CIImage to a CGImage
         guard let baseCGImage = context.createCGImage(ciImage, from: ciImage.extent) else {
-            print("Failed to create CGImage from CIImage")
+            Log.e("Failed to create CGImage from CIImage")
             return nil
         }
 
@@ -141,7 +143,7 @@ class ClickScanner {
 
         // Convert the resulting UIImage back to CIImage
         guard let resultingCGImage = resultingImage?.cgImage else {
-            print("Failed to convert resulting UIImage to CIImage")
+            Log.e("Failed to convert resulting UIImage to CIImage")
             return nil
         }
 

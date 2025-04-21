@@ -79,6 +79,12 @@ public class SRNetworkManager {
             return
         }
         
+        guard let session = self.session else {
+            Log.e("[SRNetworkManager] URLSession not initialised – aborting send")
+            completion(.failure)
+            return
+        }
+        
         guard let application = self.application else {
             Log.e("[SRNetworkManager] Session Replay missing Application name")
             completion(.failure)
@@ -141,7 +147,7 @@ public class SRNetworkManager {
         // Set the body to the request
         request.httpBody = body
     
-        let task = session?.dataTask(with: request) { data, response, error in
+        let task = session.dataTask(with: request) { data, response, error in
             if let error = error {
                 Log.e("[SRNetworkManager] Request failed with error: \(error.localizedDescription)")
                 completion(.failure)
@@ -156,12 +162,14 @@ public class SRNetworkManager {
             
             Log.w("[SRNetworkManager] Response status code: \(httpResponse.statusCode)")
             
-            if let data = data, let responseString = String(data: data, encoding: .utf8) {
+            if let data = data,
+               let responseString = String(data: data, encoding: .utf8) {
                 Log.d("[SRNetworkManager] Response body: \(responseString)")
-                completion(.success)
             }
+            let successRange = 200..<300
+            completion(successRange.contains(httpResponse.statusCode) ? .success: .failure)
         }
-        task?.resume()
+        task.resume()
     }
     
 //    private func getMetadata(dataSize: Int,

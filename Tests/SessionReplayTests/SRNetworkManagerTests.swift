@@ -16,7 +16,7 @@ final class SRNetworkManagerTests: XCTestCase {
     
     override func setUp() {
         super.setUp()
-        let mockCoralogix = MockCoralogix()
+        mockCoralogix = MockCoralogix()
         // Initialize the SRNetworkManager
         SdkManager.shared.register(coralogixInterface: mockCoralogix)
         networkManager = SRNetworkManager()
@@ -57,6 +57,17 @@ final class SRNetworkManagerTests: XCTestCase {
         // Call the method under test
         networkManager.send(testData, timestamp: timestamp, sessionId: sessionId, trackNumber: trackNumber, subIndex: subIndex) { result in
             XCTAssertEqual(result, .success, "The send method should return .success for a valid request")
+            // Verify request was created and sent
+            XCTAssertNotNil(mockSession.request, "No request was created")
+            
+            // Verify request has correct URL
+            XCTAssertEqual(mockSession.request?.url?.absoluteString, self.networkManager.endPoint, "Request URL doesn't match endpoint")
+            
+            // Verify request method is POST
+            XCTAssertEqual(mockSession.request?.httpMethod, "POST", "Request method should be POST")
+            
+            // Verify request contains data
+            XCTAssertNotNil(mockSession.request?.httpBody, "Request body is nil")
         }
     }
     
@@ -106,7 +117,6 @@ final class SRNetworkManagerTests: XCTestCase {
         let dataSize = 1024
         let trackNumber = 1
         let subIndex = 2
-        let snapshotId = "snapshotId"
         
         // Act
         let metadata = builder.buildMetadata(
@@ -117,7 +127,6 @@ final class SRNetworkManagerTests: XCTestCase {
             subIndex: subIndex,
             application: application,
             sessionCreationTime: sessionCreationTime,
-            snapshotId: snapshotId
         )
         
         // Assert
@@ -141,7 +150,6 @@ final class SRNetworkManagerTests: XCTestCase {
         let dataSize = 1024
         let trackNumber = 1
         let subIndex = 2
-        let snapshotId = "snapshotId"
         
         // Act
         let metadata = builder.buildMetadata(
@@ -151,8 +159,7 @@ final class SRNetworkManagerTests: XCTestCase {
             trackNumber: trackNumber,
             subIndex: subIndex,
             application: application,
-            sessionCreationTime: sessionCreationTime,
-            snapshotId: snapshotId
+            sessionCreationTime: sessionCreationTime
         )
         
         // Assert
@@ -163,8 +170,6 @@ final class SRNetworkManagerTests: XCTestCase {
             Keys.segmentTimestamp.rawValue,
             Keys.keySessionCreationDate.rawValue,
             Keys.keySessionId.rawValue,
-            Keys.snapshotCreationTime.rawValue,
-            Keys.snapshotId.rawValue,
             Keys.subIndex.rawValue
         ]
         

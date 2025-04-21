@@ -86,6 +86,7 @@ class SessionReplayModel: UserInteractionRecorder {
                 return
             }
             
+            self.trackNumber += 1
             let fileName = self.generateFileName()
 
             if let documentsDirectory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
@@ -102,11 +103,8 @@ class SessionReplayModel: UserInteractionRecorder {
     }
     
     internal func updateSessionId(with sessionId: String) {
-        if sessionId == self.sessionId {
-            // Increment track if the session ID is the same
-            self.trackNumber += 1
-        } else {
-            // Set track to 0 and update the current session ID if it's a new session
+        if sessionId != self.sessionId {
+            // Reset track to 0 and update the current session ID if it's a new session
             self.sessionId = sessionId
             self.trackNumber = 0
             _ = self.clearSessionReplayFolder()
@@ -214,12 +212,12 @@ class SessionReplayModel: UserInteractionRecorder {
             urlPointDict[fileURL.absoluteString] = point
         }
         
-        DispatchQueue(label: "com.example.fileOperations").async { [weak self] in
+        DispatchQueue(label: "com.coralogix.fileOperations").async { [weak self] in
             guard let self = self else { return }
 
             _ = self.saveImageToDocumentIfDebug(fileURL: fileURL, data: data)
             
-            //bug
+            //TODO: need to send the image to server when the pipeLine completed (bug) now we send the original image
             _ = self.compressAndSendData(data: data, timestamp: timestamp)
             self.urlManager.addURL(fileURL)
             self.updateSessionId(with: self.sessionId)

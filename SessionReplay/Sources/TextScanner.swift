@@ -90,7 +90,13 @@ public class TextScanner {
         }
         
         let handler = VNImageRequestHandler(ciImage: image, options: [:])
-        try? handler.perform([request])
+        
+        do {
+            try handler.perform([request])
+        } catch {
+            Log.e("Failed to perform text detection: \(error)")
+            return (image, 0, 0)
+        }
         
         let flippedMaskLayer = maskLayer
             .transformed(by: CGAffineTransform(scaleX: 1, y: -1))

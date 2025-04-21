@@ -12,8 +12,11 @@ import CoralogixInternal
 
 /// Represents the configuration options for session replay functionality.
 public struct SessionReplayOptions {
+    public enum RecordingType {
+        case image, video
+    }
     /// The type of recording to be used during the session. image / video (TBD)
-    public var imageRecordingType: Bool
+    public var recordingType: RecordingType
     
     /// The time interval (in seconds) between each capture.
     public var captureTimeInterval: TimeInterval
@@ -67,7 +70,7 @@ public struct SessionReplayOptions {
     ///   - creditCardPredicate: An optional array of text, Determines if an image may contain a credit card based on specific text patterns. (default is `nil`).
     ///   - autoStartSessionRecording: Whether session recording starts automatically (default is `false`).
 
-    public init(imageRecordingType: Bool = true,
+    public init(recordingType: RecordingType = .image,
                 captureTimeInterval: TimeInterval = 10,
                 captureScale: CGFloat = UIScreen.main.scale,
                 captureCompressionQuality: CGFloat = 1.0,
@@ -78,7 +81,7 @@ public struct SessionReplayOptions {
                 maskFaces: Bool = false,
                 creditCardPredicate: [String]? = nil,
                 autoStartSessionRecording: Bool = false) {
-        self.imageRecordingType = imageRecordingType
+        self.recordingType = recordingType
         self.captureTimeInterval = captureTimeInterval
         self.captureScale = captureScale
         self.captureCompressionQuality = captureCompressionQuality
@@ -94,7 +97,8 @@ public struct SessionReplayOptions {
 
 /// Manages session replay functionality, including recording and event capture.
 public class SessionReplay: SessionReplayInterface {
-    
+
+    private static var initializationAttempted = false
     /// The internal model managing session replay data and operations.
     var sessionReplayModel: SessionReplayModel?
     
@@ -106,11 +110,6 @@ public class SessionReplay: SessionReplayInterface {
     
     // Private initializer that requires an Options object
     private init(sessionReplayOptions: SessionReplayOptions) {
-        guard Utils.shouldInitialized(sampleRate: sessionReplayOptions.sessionRecordingSampleRate) else {
-            Log.e("Initialization skipped due to sample rate")
-            return
-        }
-        
         self.sessionReplayOptions = sessionReplayOptions
         self.sessionReplayModel = SessionReplayModel(sessionReplayOptions: sessionReplayOptions)
         
@@ -134,24 +133,47 @@ public class SessionReplay: SessionReplayInterface {
 
     // Method to initialize the singleton with options (called only once)
     public static func initializeWithOptions(sessionReplayOptions: SessionReplayOptions) {
-        guard shared == nil else {
-            Log.e("Singleton already initialized!")
+        guard !initializationAttempted else {
+            Log.e("SessionReplay initialization already attempted!")
+            return
+        }
+
+        initializationAttempted = true
+
+        // Check if we should initialize based on sampling
+        guard Utils.shouldInitialize(sampleRate: sessionReplayOptions.sessionRecordingSampleRate) else {
+            Log.d("SessionReplay initialization skipped due to sampling")
+            shared = createDummyInstance()
             return
         }
         
-        // Create the singleton instance using options
         shared = SessionReplay(sessionReplayOptions: sessionReplayOptions)
     }
     
+    private static func createDummyInstance() -> SessionReplay {
+        let instance = SessionReplay()
+        instance.isDummyInstance = true
+        return instance
+    }
+        
+    private var isDummyInstance = false
+        
+    private init() { }
+    
     /// Starts recording the session, capturing data at the configured interval.
     public func startRecording() {
+        if isDummyInstance {
+            Log.d("SessionReplay.startRecording() called on inactive instance (skipped by sampling)")
+            return
+        }
+        
         guard let sessionReplayModel = self.sessionReplayModel,
               let sessionReplayOptions = sessionReplayModel.sessionReplayOptions else {
             Log.e("[SessionReplay] missing sessionReplayOptions")
             return
         }
         
-        if sessionReplayOptions.imageRecordingType == true {
+        if sessionReplayOptions.recordingType == .image {
             guard !sessionReplayModel.isRecording else { return }
             sessionReplayModel.isRecording = true
             
@@ -164,13 +186,18 @@ public class SessionReplay: SessionReplayInterface {
     
     /// Stops recording the session and releases resources.
     public func stopRecording() {
+        if isDummyInstance {
+            Log.d("SessionReplay.stopRecording() called on inactive instance (skipped by sampling)")
+            return
+        }
+        
         guard let sessionReplayModel = self.sessionReplayModel,
               let sessionReplayOptions = sessionReplayModel.sessionReplayOptions else {
             Log.e("[SessionReplay] missing sessionReplayOptions")
             return
         }
         
-        if sessionReplayOptions.imageRecordingType == true {
+        if sessionReplayOptions.recordingType == .image {
             sessionReplayModel.isRecording = false
             sessionReplayModel.captureTimer?.invalidate()
         } else {
@@ -180,19 +207,29 @@ public class SessionReplay: SessionReplayInterface {
     
     /// Captures a specific event during the session.
     public func captureEvent(properties: [String : Any]?) {
+        if isDummyInstance {
+            Log.d("SessionReplay.captureEvent() called on inactive instance (skipped by sampling)")
+            return
+        }
+        
         guard let sessionReplayModel = self.sessionReplayModel,
               let sessionReplayOptions = sessionReplayModel.sessionReplayOptions else {
             Log.e("[SessionReplay] missing sessionReplayOptions")
             return
         }
         
-        if sessionReplayOptions.imageRecordingType == true {
+        if sessionReplayOptions.recordingType == .image {
             guard sessionReplayModel.isRecording else { return }
             sessionReplayModel.captureImage(properties: properties)
         }
     }
     
     public func update(sessionId: String) {
+        if isDummyInstance {
+            Log.d("SessionReplay.update() called on inactive instance (skipped by sampling)")
+            return
+        }
+        
         guard let sessionReplayModel = self.sessionReplayModel else {
             Log.e("[SessionReplay] missing SessionReplayModel")
             return
@@ -201,6 +238,11 @@ public class SessionReplay: SessionReplayInterface {
     }
     
     internal func update(sessionReplayModel: SessionReplayModel?) {
+        if isDummyInstance {
+            Log.d("SessionReplay.update() called on inactive instance (skipped by sampling)")
+            return
+        }
+        
         guard let model = sessionReplayModel else {
             Log.e("[SessionReplay] missing SessionReplayModel")
             return

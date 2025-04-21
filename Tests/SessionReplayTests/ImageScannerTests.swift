@@ -27,28 +27,22 @@ class ImageScannerTests: XCTestCase {
     }
     
     func testRecognizeText_withValidCreditCardText_shouldReturnTrue() {
-        DispatchQueue.main.async { [weak self] in
-            guard let strongSelf = self else {
-                return
-            }
-            
-            let expectation = strongSelf.expectation(description: "Recognize credit card text")
-            
-            // Mock input image
-            guard let inputURL = Bundle.module.url(forResource: "test_image", withExtension: "png") else {
-                XCTFail("test_image.png not found in Bundle.module")
-                return
-            }
-            let ciImage = CIImage(contentsOf: inputURL)!
-            let cgImage = CIContext().createCGImage(ciImage, from: ciImage.extent)!
-            
-            ImageScanner().recognizeText(in: cgImage) { isCreditCard in
-                XCTAssertTrue(isCreditCard, "The text recognition should identify the credit card.")
-                expectation.fulfill()
-            }
-            
-            strongSelf.waitForExpectations(timeout: 5, handler: nil)
+        let expectation = self.expectation(description: "Recognize credit card text")
+        
+        // Mock input image
+        guard let inputURL = Bundle.module.url(forResource: "test_image", withExtension: "png") else {
+            XCTFail("test_image.png not found in Bundle.module")
+            return
         }
+        let ciImage = CIImage(contentsOf: inputURL)!
+        let cgImage = CIContext().createCGImage(ciImage, from: ciImage.extent)!
+        
+        ImageScanner().recognizeText(in: cgImage) { isCreditCard in
+            XCTAssertTrue(isCreditCard, "The text recognition should identify the credit card.")
+            expectation.fulfill()
+        }
+        
+        waitForExpectations(timeout: 5, handler: nil)
     }
     
     func testProcessImage_withValidInputURL_shouldCompleteSuccessfully() {
@@ -148,28 +142,53 @@ class ImageScannerTests: XCTestCase {
         }
     }
     
-    func testMaskRectangle_withValidObservation_shouldReturnMaskedImage() {
+    func testMaskRectangle_withValidObservation_shouldReturnMaskedImage() async throws {
         // Mock input image
         guard let originalURL = Bundle.module.url(forResource: "test_image", withExtension: "png") else {
             XCTFail("test_image.png not found in Bundle.module")
             return
         }
-        
-        do {
-            // Create a unique file
-            let uniqueFileURL = try createUniqueFile(from: originalURL, withExtension: "png")
-            
-            let ciImage = CIImage(contentsOf: uniqueFileURL)!
-            
-            // Mock rectangle observation
-            let rectangleObservation = VNRectangleObservation()
-            
-            let maskedImage = imageScanner.maskRectangle(in: ciImage, using: rectangleObservation)
-            XCTAssertNotNil(maskedImage, "Masking rectangle should return a valid CIImage.")
-        } catch {
-            XCTFail("Failed to create unique file: \(error)")
+
+        // Create a unique file
+        let uniqueFileURL = try createUniqueFile(from: originalURL, withExtension: "png")
+        guard let ciImage = CIImage(contentsOf: uniqueFileURL) else {
+            XCTFail("Failed to load CIImage from file.")
+            return
         }
+
+        // Create a mock rectangle observation (normally you'd configure the bounding box properly)
+        let rectangleObservation = VNRectangleObservation(
+            boundingBox: CGRect(x: 0.2, y: 0.2, width: 0.6, height: 0.6)
+        )
+
+        // Act: Call the async masking function
+        let maskedImage = await imageScanner.maskRectangle(in: ciImage, using: rectangleObservation)
+
+        // Assert: Check that a masked image was returned
+        XCTAssertNotNil(maskedImage, "Masking rectangle should return a valid CIImage.")
     }
+//    func testMaskRectangle_withValidObservation_shouldReturnMaskedImage() {
+//        // Mock input image
+//        guard let originalURL = Bundle.module.url(forResource: "test_image", withExtension: "png") else {
+//            XCTFail("test_image.png not found in Bundle.module")
+//            return
+//        }
+//        
+//        do {
+//            // Create a unique file
+//            let uniqueFileURL = try createUniqueFile(from: originalURL, withExtension: "png")
+//            
+//            let ciImage = CIImage(contentsOf: uniqueFileURL)!
+//            
+//            // Mock rectangle observation
+//            let rectangleObservation = VNRectangleObservation()
+//            
+//            let maskedImage = imageScanner.maskRectangle(in: ciImage, using: rectangleObservation)
+//            XCTAssertNotNil(maskedImage, "Masking rectangle should return a valid CIImage.")
+//        } catch {
+//            XCTFail("Failed to create unique file: \(error)")
+//        }
+//    }
     
     // MARK: - Private
     private func createRectangleObservation(from image: CGImage) -> VNRectangleObservation? {
@@ -183,31 +202,6 @@ class ImageScannerTests: XCTestCase {
             XCTFail("Failed to detect rectangles: \(error)")
             return nil
         }
-    }
-    
-    /// Creates a unique copy of a file with a random name in a temporary directory.
-    ///
-    /// - Parameters:
-    ///   - originalURL: The URL of the original file.
-    ///   - extension: The file extension for the new file (optional; inferred if nil).
-    /// - Returns: The URL of the newly created unique file.
-    /// - Throws: An error if the file copy operation fails.
-    func createUniqueFile(from originalURL: URL, withExtension fileExtension: String? = nil) throws -> URL {
-        // Create a unique directory for the test
-        let uniqueTestDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        try FileManager.default.createDirectory(at: uniqueTestDir, withIntermediateDirectories: true)
-        
-        // Generate a random file name
-        let randomFileName = UUID().uuidString
-        let fullFileName = fileExtension != nil ? "\(randomFileName).\(fileExtension!)" : randomFileName
-        
-        // Generate the URL for the unique file
-        let uniqueFileURL = uniqueTestDir.appendingPathComponent(fullFileName)
-        
-        // Copy the original file to the unique location
-        try FileManager.default.copyItem(at: originalURL, to: uniqueFileURL)
-        
-        return uniqueFileURL
     }
 }
 

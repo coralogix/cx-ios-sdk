@@ -43,9 +43,9 @@ public class MetricsManager {
                                                object: nil)
     }
     
-    func startCollectingMetrics() {
+    public func removeObservers() {
+        MXMetricManager.shared.remove(MyMetricSubscriber.shared)
     }
-    
     func startFPSSamplingMonitoring(mobileVitalsFPSSamplingRate: Int) {
         self.fpsTrigger.startMonitoring(xTimesPerHour: mobileVitalsFPSSamplingRate)
     }

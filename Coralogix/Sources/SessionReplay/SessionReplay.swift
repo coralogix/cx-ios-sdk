@@ -72,9 +72,9 @@ extension CoralogixRum: CoralogixInterface {
         }
     }
     
-    public func captureEvent() {
+    public func captureEvent(properties: [String: Any] = [:]) {
         if let sessionReplay = SdkManager.shared.getSessionReplay() {
-            sessionReplay.captureEvent(properties: ["key": "value"])
+            sessionReplay.captureEvent(properties: properties)
         } else {
             Log.e("[SessionReplay] is not initialized")
         }

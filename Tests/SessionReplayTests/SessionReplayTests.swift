@@ -12,7 +12,7 @@ import XCTest
 class SessionReplayTests: XCTestCase {
 
     func testStartSessionRecording_startsRecordingWhenNotAlreadyRecording() {
-        let mockOptions = SessionReplayOptions(imageRecordingType: true)
+        let mockOptions = SessionReplayOptions(recordingType: .image)
         SessionReplay.initializeWithOptions(sessionReplayOptions: mockOptions)
         SessionReplay.shared.startRecording()
 
@@ -25,7 +25,7 @@ class SessionReplayTests: XCTestCase {
     }
 
     func testStartSessionRecording_doesNotStartWhenAlreadyRecording() {
-        let mockOptions = SessionReplayOptions(imageRecordingType: true)
+        let mockOptions = SessionReplayOptions(recordingType: .image)
         SessionReplay.initializeWithOptions(sessionReplayOptions: mockOptions)
         SessionReplay.shared.startRecording()
         if let isRecording = SessionReplay.shared.sessionReplayModel?.isRecording {
@@ -38,22 +38,29 @@ class SessionReplayTests: XCTestCase {
     }
 
     func testStopSessionRecording_stopsRecording() {
+        let expectation = self.expectation(description: "Delay between start and stop")
         SessionReplay.shared.startRecording()
-        sleep(1)
+        
+        // Give some time between start and stop, but with expectation instead of sleep
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            expectation.fulfill()
+        }
+        waitForExpectations(timeout: 1.5, handler: nil)
+        
         SessionReplay.shared.stopRecording()
         if let isRecording = SessionReplay.shared.sessionReplayModel?.isRecording {
             XCTAssertFalse(isRecording, "Session recording should stop.")
         }
         
         if let captureTimer = SessionReplay.shared.sessionReplayModel?.captureTimer {
-           let isValid = captureTimer.isValid
+            let isValid = captureTimer.isValid
             XCTAssertFalse(isValid, "Capture timer should be invalidated.")
         }
     }
 
     func testCaptureEvent_capturesImageWhenRecording() {
         let expectation = self.expectation(description: "Timer should trigger captureImage after 3 seconds")
-        let options = SessionReplayOptions(imageRecordingType: true)
+        let options = SessionReplayOptions(recordingType: .image)
         SessionReplay.initializeWithOptions(sessionReplayOptions: options)
 
         let mockSessionReplayModel = MockSessionReplayModel(sessionReplayOptions: options)
