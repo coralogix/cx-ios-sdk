@@ -187,7 +187,7 @@ class MockCoralogix: CoralogixInterface {
     var debugMode: Bool = false
     var reportedErrors: [String] = []
     
-    func hasSessionRecording(_ hasSessionRecoding: Bool) {
+    func hasSessionRecording(_ hasSessionRecording: Bool) {
         // update the coralogix sdk that there is a session recording to that session
     }
     

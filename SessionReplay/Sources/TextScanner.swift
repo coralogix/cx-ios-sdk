@@ -22,7 +22,7 @@ public class TextScanner {
     /// Processes the image at the given URL by masking detected text and saves the result to a new file.
     /// - Parameters:
     ///   - inputURL: The file URL of the input image.
-    ///   - outputURL: The file URL where the processed image will be saved.
+    ///   - maskText:  Optional regex patterns to decide which text to mask.
     public func processImage(at inputURL: URL,
                              maskText: [String]? = nil,
                              completion: @escaping (Bool, Int, Int) -> Void) {

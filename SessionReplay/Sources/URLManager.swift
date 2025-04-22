@@ -11,9 +11,16 @@ import CoralogixInternal
 
 class URLManager: ObservableObject {
     @Published private(set) var savedURLs: [URL] = []
-    
+    private let maxUrlsToKeep: Int
+        
+    init(maxUrlsToKeep: Int = 100) {
+        self.maxUrlsToKeep = max(1, maxUrlsToKeep)
+    }
     func addURL(_ url: URL) {
         savedURLs.append(url)
+        if savedURLs.count > maxUrlsToKeep {
+            savedURLs.removeFirst(savedURLs.count - maxUrlsToKeep)
+        }
     }
 }
 

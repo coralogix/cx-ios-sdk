@@ -1,11 +1,3 @@
- #
-#  Be sure to run `pod spec lint Coralogix.podspec' to ensure this is a
-#  valid spec and to remove all comments including this before submitting the spec.
-#
-#  To learn more about Podspec attributes see https://guides.cocoapods.org/syntax/podspec.html
-#  To see working Podspecs in the CocoaPods repo see https://github.com/CocoaPods/Specs/
-#
-
 Pod::Spec.new do |spec|
 
   spec.name         = "CoralogixInternal"
@@ -13,7 +5,8 @@ Pod::Spec.new do |spec|
   spec.summary      = "Coralogix Internal Package. This module is not for public use."
 
   spec.description  = <<-DESC
-  Coralogix internal files
+   - Coralogix internal files
+   - Coralogix Internal Package. This module is not for public use.
   DESC
 
   spec.swift_version    = '5.9'
@@ -27,8 +20,8 @@ Pod::Spec.new do |spec|
   spec.author             = { "Coralogix" => "www.coralogix.com" }
   spec.ios.deployment_target = "13.0"
 
-  spec.source_files  = 'coralogixinternal/Sources/**/*.swift'
-  spec.exclude_files = 'coralogixinternal/Sources/Exclude'
+  spec.source_files  = 'CoralogixInternal/Sources/**/*.swift'
+  spec.static_framework = true
 end
 
 

@@ -1,11 +1,3 @@
-#
-#  Be sure to run `pod spec lint Coralogix.podspec' to ensure this is a
-#  valid spec and to remove all comments including this before submitting the spec.
-#
-#  To learn more about Podspec attributes see https://guides.cocoapods.org/syntax/podspec.html
-#  To see working Podspecs in the CocoaPods repo see https://github.com/CocoaPods/Specs/
-#
-
 Pod::Spec.new do |spec|
 
   spec.name         = "Coralogix"
@@ -32,29 +24,15 @@ Pod::Spec.new do |spec|
   spec.author             = { "Coralogix" => "www.coralogix.com" }
   spec.ios.deployment_target = "13.0"
 
-  spec.source_files  = 'Coralogix/Sources/**/*.{swift}'
+  spec.source_files  = 'Coralogix/Sources/**/*.swift'
   spec.exclude_files = 'Coralogix/Sources/Exclude'
 
   spec.static_framework = true
   spec.dependency 'PLCrashReporter', '~> 1.11.1'
-
-  spec.source_files = [
-    'Coralogix/Sources/**/*.swift',
-    'CoralogixInternal/Sources/**/*.swift'
-  ]
-  spec.subspec 'Internal' do |int|
-    int.source_files = 'CoralogixInternal/Sources/**/*.{swift}'
-    int.pod_target_xcconfig = { 'DEFINES_MODULE' => 'YES' }
-  end
-
-  spec.subspec 'SessionReplay' do |replay|
-    replay.source_files = 'SessionReplay/Sources/**/*.{swift}'
-    replay.dependency 'Coralogix/Internal'
-  end
+  spec.dependency 'CoralogixInternal'
 
   spec.test_spec 'Tests' do |test|
-    test.source_files = 'Tests/CoralogixRumTests/**/*.{swift}'
-    test.resources = 'Tests/SessionReplayTests/Resources/**/*'
+    test.source_files = 'Tests/CoralogixRumTests/**/*.swift'
   end
 end
 

@@ -49,7 +49,7 @@ class FaceScannerTests: XCTestCase {
         let expectation = self.expectation(description: "Face detection should return false when no faces are present.")
 
         // Mock input image URL
-        guard let inputURL = Bundle.module.url(forResource: "test_image", withExtension: "png") else {
+        guard let inputURL = SDKResources.bundle.url(forResource: "test_image", withExtension: "png") else {
             XCTFail("test_image.png not found in Bundle.module")
             return
         }
@@ -65,7 +65,7 @@ class FaceScannerTests: XCTestCase {
 
     func testApplyFaceMask_withDetectedFaces_shouldMaskCorrectly() {
         // Mock input image
-        guard let inputURL = Bundle.module.url(forResource: "test_image_2", withExtension: "png") else {
+        guard let inputURL = SDKResources.bundle.url(forResource: "test_image_2", withExtension: "png") else {
             XCTFail("test_image_2.png not found in Bundle.module")
             return
         }
@@ -84,7 +84,7 @@ class FaceScannerTests: XCTestCase {
 
     func testApplyFaceMask_withNoDetectedFaces_shouldReturnOriginalImage() {
         // Mock input image
-        guard let inputURL = Bundle.module.url(forResource: "test_image", withExtension: "png") else {
+        guard let inputURL = SDKResources.bundle.url(forResource: "test_image", withExtension: "png") else {
             XCTFail("test_image.png not found in Bundle.module")
             return
         }

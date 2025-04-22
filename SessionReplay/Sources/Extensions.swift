@@ -88,32 +88,39 @@ extension Data {
         return compressedChunks
     }
     
-    private func compressChunk(bufferSize: Int) -> Data? {
-        let streamPointer = UnsafeMutablePointer<UInt8>.allocate(capacity: bufferSize)
-        defer { streamPointer.deallocate() } // Ensure deallocation
-        
+    internal func compressChunk(bufferSize: Int) -> Data? {
         var compressedData = Data()
         var stream = z_stream()
-        stream.next_in = UnsafeMutablePointer<UInt8>(mutating: (self as NSData).bytes.bindMemory(to: UInt8.self, capacity: self.count))
-        stream.avail_in = uInt(self.count)
         
-        let result = deflateInit2_(
-            &stream,
-            Z_BEST_COMPRESSION,          // Compression level
-            Z_DEFLATED,                  // Compression method
-            31,                          // Window bits (31 = GZIP format)
-            8,                           // Memory level
-            Z_DEFAULT_STRATEGY,          // Strategy
-            ZLIB_VERSION,                // Version of zlib
-            Int32(MemoryLayout<z_stream>.size) // Size of the stream structure
-        )
+        let result = self.withUnsafeBytes { (rawBuffer: UnsafeRawBufferPointer) -> Int32 in
+            guard let baseAddress = rawBuffer.bindMemory(to: UInt8.self).baseAddress else {
+                return Z_ERRNO
+            }
+            
+            stream.next_in = UnsafeMutablePointer<UInt8>(mutating: baseAddress)
+            stream.avail_in = uInt(self.count)
+            
+            return deflateInit2_(
+                &stream,
+                Z_BEST_COMPRESSION,
+                Z_DEFLATED,
+                31,
+                8,
+                Z_DEFAULT_STRATEGY,
+                ZLIB_VERSION,
+                Int32(MemoryLayout<z_stream>.size)
+            )
+        }
         
         guard result == Z_OK else {
             Log.e("Failed to initialize zlib stream for GZIP, error code: \(result)")
             return nil
         }
         
-        defer { deflateEnd(&stream) } // Ensure stream cleanup
+        defer { deflateEnd(&stream) }
+        
+        let streamPointer = UnsafeMutablePointer<UInt8>.allocate(capacity: bufferSize)
+        defer { streamPointer.deallocate() }
         
         repeat {
             stream.next_out = streamPointer
@@ -129,10 +136,11 @@ extension Data {
             compressedData.append(streamPointer, count: bytesCompressed)
             
             if status == Z_STREAM_END {
-                break // Compression finished
+                break
             }
         } while stream.avail_out == 0
         
         return compressedData
     }
+    
 }

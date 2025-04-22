@@ -91,7 +91,7 @@ public class VideoMaskingProcessor {
 //        return self.readAsset()
 //    }
     
-    public func calculteFrames() {
+    public func calculateFrames() {
         while true {
             guard let frameImage = self.getNextFrame() else {
                 break

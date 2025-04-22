@@ -103,7 +103,18 @@ public class SessionReplay: SessionReplayInterface {
     var sessionReplayModel: SessionReplayModel?
     
     // The shared instance using static let for thread safety
-    public static var shared: SessionReplay! = nil
+    public static var shared: SessionReplay! {
+        get {
+            guard _shared != nil else {
+                Log.e("SessionReplay.shared accessed before initialization. Call SessionReplay.initializeWithOptions first.")
+                fatalError("SessionReplay.shared accessed before initialization. Call SessionReplay.initializeWithOptions first.")
+            }
+            return _shared
+        }
+    }
+    
+    // Private backing storage
+    private static var _shared: SessionReplay?
     
     // Properties for storing options
     private var sessionReplayOptions: SessionReplayOptions?
@@ -143,16 +154,17 @@ public class SessionReplay: SessionReplayInterface {
         // Check if we should initialize based on sampling
         guard SRUtils.shouldInitialize(sampleRate: sessionReplayOptions.sessionRecordingSampleRate) else {
             Log.d("SessionReplay initialization skipped due to sampling")
-            shared = createDummyInstance()
+            _shared = createDummyInstance(sessionReplayOptions)
             return
         }
         
-        shared = SessionReplay(sessionReplayOptions: sessionReplayOptions)
+        _shared = SessionReplay(sessionReplayOptions: sessionReplayOptions)
     }
     
-    private static func createDummyInstance() -> SessionReplay {
+    private static func createDummyInstance(_ options: SessionReplayOptions? = nil) -> SessionReplay {
         let instance = SessionReplay()
         instance.isDummyInstance = true
+        instance.sessionReplayOptions = options
         return instance
     }
         
@@ -178,8 +190,8 @@ public class SessionReplay: SessionReplayInterface {
             sessionReplayModel.isRecording = true
             
             sessionReplayModel.captureImage()
-            sessionReplayModel.captureTimer = Timer.scheduledTimer(withTimeInterval: sessionReplayOptions.captureTimeInterval, repeats: true) { _ in
-                sessionReplayModel.captureImage()
+            sessionReplayModel.captureTimer = Timer.scheduledTimer(withTimeInterval: sessionReplayOptions.captureTimeInterval, repeats: true) { [weak sessionReplayModel] _ in
+                sessionReplayModel?.captureImage()
             }
         }
     }
@@ -200,6 +212,7 @@ public class SessionReplay: SessionReplayInterface {
         if sessionReplayOptions.recordingType == .image {
             sessionReplayModel.isRecording = false
             sessionReplayModel.captureTimer?.invalidate()
+            sessionReplayModel.captureTimer = nil
         } else {
             // TBD:
         }

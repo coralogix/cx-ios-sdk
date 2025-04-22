@@ -34,3 +34,15 @@ extension XCTestCase {
         return uniqueFileURL
     }
 }
+
+private class _ResourceAnchor {}
+
+enum SDKResources {
+    static var bundle: Bundle {
+        #if SWIFT_PACKAGE
+        return .module
+        #else
+        return Bundle(for: _ResourceAnchor.self)
+        #endif
+    }
+}

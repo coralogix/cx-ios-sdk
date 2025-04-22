@@ -9,8 +9,8 @@ import Foundation
 import CoralogixInternal
 
 extension CoralogixRum: CoralogixInterface {
-    public func hasSessionRecording(_ hasSessionRecoding: Bool) {
-        self.sessionManager?.hasRecording = hasSessionRecoding
+    public func hasSessionRecording(_ hasSessionRecording: Bool) {
+        self.sessionManager?.hasRecording = hasSessionRecording
     }
     
     public func isDebug() -> Bool {

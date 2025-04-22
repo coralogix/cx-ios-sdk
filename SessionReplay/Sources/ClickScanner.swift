@@ -33,7 +33,10 @@ class ClickScanner {
     }
     
     // Function to add a programmatically created click mark to a CIImage
-    func addClickMark(to ciImage: CIImage, at x: CGFloat, y: CGFloat, markSize: CGSize = CGSize(width: 50, height: 50)) -> CGImage? {
+    func addClickMark(to ciImage: CIImage,
+                      at x: CGFloat,
+                      y: CGFloat,
+                      markSize: CGSize = CGSize(width: 50, height: 50)) -> CGImage? {
         // Create a CIContext
         let context = CIContext()
 
@@ -56,9 +59,9 @@ class ClickScanner {
         let adjustedY = baseImage.size.height - y // Adjust for flipped Y-axis
         let centerPoint = CGPoint(x: x, y: adjustedY)
 
-   
-        let outerRadius: CGFloat = 60 // Outer circle radius
-        let gap: CGFloat = 10
+        let fifteenpercent = 0.15
+        let outerRadius: CGFloat = max(markSize.width, markSize.height) / 2
+        let gap: CGFloat = outerRadius * fifteenpercent
         
         // Get the click mark path
         drawConcentricCircles(center: centerPoint, outerRadius: outerRadius, gap: gap)

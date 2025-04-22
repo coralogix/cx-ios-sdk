@@ -242,16 +242,20 @@ class SRUtils {
             let data = try PropertyListEncoder().encode(urls)
             
             // Write data to file in Documents directory
-            let fileURL = getURLsFilePath()
-            try data.write(to: fileURL)
-            Log.d("Saved URLs to disk at \(fileURL)")
+            if let fileURL = getURLsFilePath() {
+                try data.write(to: fileURL)
+                Log.d("Saved URLs to disk at \(fileURL)")
+            }
         } catch {
             Log.e("Failed to save URLs to disk: \(error)")
         }
     }
     
     static func deleteURLsFromDisk() {
-        let fileURL = getURLsFilePath()
+        guard let fileURL = getURLsFilePath() else {
+            Log.e("fileURL is nil")
+            return
+        }
         let fileManager = FileManager.default
         
         do {
@@ -267,8 +271,10 @@ class SRUtils {
     }
 
     // Get the file path for saving the URLs array
-    static func getURLsFilePath() -> URL {
-        let documentsDirectory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+    static func getURLsFilePath() -> URL? {
+        guard let documentsDirectory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else {
+                return nil
+        }
         return documentsDirectory.appendingPathComponent("savedURLs.plist")
     }
     

@@ -1,11 +1,3 @@
-#
-#  Be sure to run `pod spec lint Coralogix.podspec' to ensure this is a
-#  valid spec and to remove all comments including this before submitting the spec.
-#
-#  To learn more about Podspec attributes see https://guides.cocoapods.org/syntax/podspec.html
-#  To see working Podspecs in the CocoaPods repo see https://github.com/CocoaPods/Specs/
-#
-
 Pod::Spec.new do |spec|
 
   spec.name         = "SessionReplay"
@@ -13,9 +5,9 @@ Pod::Spec.new do |spec|
   spec.summary      = "Coralogix Session-Replay pod for iOS."
 
   spec.description  = <<-DESC
-  The `SessionReplay` module provides functionality for recording user sessions,
-  including capturing images or videos at specified intervals. 
-  It also supports masking sensitive data like text, images, and faces during the recording process.
+  - The `SessionReplay` module provides functionality for recording user sessions,
+    including capturing images or videos at specified intervals.
+  - It also supports masking sensitive data like text, images, and faces during the recording process.
   DESC
 
   spec.swift_version    = '5.9'
@@ -28,9 +20,14 @@ Pod::Spec.new do |spec|
   spec.source       = { :git => "https://github.com/coralogix/cx-ios-sdk.git", :tag => "#{spec.version}" }
   spec.author             = { "Coralogix" => "www.coralogix.com" }
   spec.ios.deployment_target = "13.0"
+  spec.static_framework = true
 
-  spec.source_files  = 'sessionreplay/Sources/**/*.{swift,h}'
-  spec.dependency 'CoralogixInternal', spec.version.to_s
-
-end
+  spec.source_files  = 'SessionReplay/Sources/**/*.swift'
+  spec.dependency 'CoralogixInternal'
+  
+    spec.test_spec 'Tests' do |test|
+        test.source_files = 'Tests/SessionReplayTests/**/*.swift'
+        test.resources = 'Tests/SessionReplayTests/Resources/**/*'
+    end
+  end
 

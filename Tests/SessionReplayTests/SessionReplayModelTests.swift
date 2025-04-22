@@ -151,7 +151,7 @@ final class SessionReplayModelTests: XCTestCase {
                 
         // Then
         XCTAssertEqual(result, .success)
-        XCTAssertEqual(mockFileManager.createDirectoryCallCount, 0)
+        XCTAssertEqual(mockFileManager.createDirectoryCallCount, 1)
     }
     
     func testCreateSessionReplayFolder_FolderDoesNotExist_CreatesFolder_ReturnsSuccess() {
@@ -163,7 +163,7 @@ final class SessionReplayModelTests: XCTestCase {
         
         // Then
         XCTAssertEqual(result, .success)
-        XCTAssertEqual(mockFileManager.createDirectoryCallCount, 0)
+        XCTAssertEqual(mockFileManager.createDirectoryCallCount, 1)
     }
 
     func testCalculateSubIndex_withMultipleChunks_shouldReturnCurrentIndex() {
@@ -340,7 +340,7 @@ final class SessionReplayModelTests: XCTestCase {
         let result = sessionReplayModel.saveImageToDocumentIfDebug(fileURL: fileURL, data: testData)
         
         // Assert
-        XCTAssertEqual(result, .failure, "Result should be .success when saving valid data")
+        XCTAssertEqual(result, .failure, "Result should be .failure when debug mode is off")
     }
     
     func testSaveImageToDocument_withValidData_shouldSaveFile() {
@@ -427,7 +427,11 @@ class MockFileManager: FileManager {
         return existingPaths.contains(path)
     }
     
-    override func createDirectory(at url: URL, withIntermediateDirectories createIntermediates: Bool, attributes: [FileAttributeKey : Any]? = nil) throws {
+    override func createDirectory(at url: URL,
+                                  withIntermediateDirectories createIntermediates: Bool,
+                                  attributes: [FileAttributeKey : Any]? = nil
+    ) throws {
+        createDirectoryCallCount += 1
         if shouldThrowErrorOnCreate {
             throw NSError(domain: "MockError", code: 1, userInfo: nil)
         }

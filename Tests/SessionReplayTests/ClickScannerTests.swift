@@ -22,23 +22,29 @@ class ClickScannerTests: XCTestCase {
     }
     
     func testPrintBundleContents() {
-        guard let path = Bundle.module.resourcePath else {
-            XCTFail("Bundle.module.resourcePath is nil")
-            return
-        }
+#if SWIFT_PACKAGE
+    let bundle = Bundle.module
+#else
+    let bundle = Bundle(for: Self.self) // or SDKResources.bundle if using wrapper
+#endif
 
-        do {
-            let contents = try FileManager.default.contentsOfDirectory(atPath: path)
-            print("📦 Bundle.module contents: \(contents)")
-        } catch {
-            XCTFail("Failed to read bundle contents: \(error)")
-        }
+    guard let path = bundle.resourcePath else {
+        XCTFail("bundle.resourcePath is nil")
+        return
+    }
+
+    do {
+        let contents = try FileManager.default.contentsOfDirectory(atPath: path)
+        print("📦 Bundle contents: \(contents)")
+    } catch {
+        XCTFail("Failed to read bundle contents: \(error)")
+    }
     }
 
     func testProcessImage_withValidInput_shouldCompleteSuccessfully() {
         let expectation = self.expectation(description: "Image processing should complete successfully.")
         
-        guard let originalURL = Bundle.module.url(forResource: "test_image", withExtension: "png") else {
+        guard let originalURL = SDKResources.bundle.url(forResource: "test_image", withExtension: "png") else {
             XCTFail("test_image.png not found in Bundle.module")
             return
         }

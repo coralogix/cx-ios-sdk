@@ -31,7 +31,7 @@ class ScannerPipelineTests: XCTestCase {
         let operationId = UUID()
         self.currentOperationId = operationId
         
-        guard let originalURL = Bundle.module.url(forResource: "test_image", withExtension: "png") else {
+        guard let originalURL = SDKResources.bundle.url(forResource: "test_image", withExtension: "png") else {
             XCTFail("test_image.png not found in Bundle.module")
             return
         }
@@ -65,7 +65,7 @@ class ScannerPipelineTests: XCTestCase {
         scannerPipeline.isTextScannerEnabled = false
         scannerPipeline.isFaceScannerEnabled = false
         
-        guard let originalURL = Bundle.module.url(forResource: "test_image", withExtension: "png") else {
+        guard let originalURL = SDKResources.bundle.url(forResource: "test_image", withExtension: "png") else {
             XCTFail("test_image.png not found in Bundle.module")
             return
         }
@@ -102,7 +102,7 @@ class ScannerPipelineTests: XCTestCase {
         scannerPipeline.isTextScannerEnabled = false
         scannerPipeline.isFaceScannerEnabled = false
         
-        guard let originalURL = Bundle.module.url(forResource: "test_image", withExtension: "png") else {
+        guard let originalURL = SDKResources.bundle.url(forResource: "test_image", withExtension: "png") else {
             XCTFail("test_image.png not found in Bundle.module")
             return
         }
@@ -140,7 +140,7 @@ class ScannerPipelineTests: XCTestCase {
         scannerPipeline.isTextScannerEnabled = false
         scannerPipeline.isFaceScannerEnabled = true
         
-        guard let originalURL = Bundle.module.url(forResource: "test_image", withExtension: "png") else {
+        guard let originalURL = SDKResources.bundle.url(forResource: "test_image", withExtension: "png") else {
             XCTFail("test_image.png not found in Bundle.module")
             return
         }
@@ -181,7 +181,7 @@ class ScannerPipelineTests: XCTestCase {
         scannerPipeline.isTextScannerEnabled = false
         scannerPipeline.isFaceScannerEnabled = false
         
-        guard let originalURL = Bundle.module.url(forResource: "test_image", withExtension: "png") else {
+        guard let originalURL = SDKResources.bundle.url(forResource: "test_image", withExtension: "png") else {
             XCTFail("test_image.png not found in Bundle.module")
             return
         }

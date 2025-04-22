@@ -33,6 +33,7 @@ class SessionReplayModel: UserInteractionRecorder {
     private var debounceWorkItem: DispatchWorkItem? = nil
     private let debounceInterval: TimeInterval = 0.5 // 500 milliseconds
     private let srNetworkManager: SRNetworkManager?
+    private let urlPointDictQueue = DispatchQueue(label: "com.coralogix.urlPointDictQueue", attributes: .concurrent)
     private var urlPointDict = [String: CGPoint]()
     
     init(sessionReplayOptions: SessionReplayOptions? = nil,
@@ -179,7 +180,11 @@ class SessionReplayModel: UserInteractionRecorder {
     // MARK: - Protocol
 
     func getUserInteraction(for url: String) -> CGPoint? {
-        return urlPointDict[url] ?? nil
+        var point: CGPoint?
+        urlPointDictQueue.sync {
+            point = urlPointDict[url]
+        }
+        return point
     }
     
     // MARK: - Helper Methods
@@ -209,7 +214,9 @@ class SessionReplayModel: UserInteractionRecorder {
         let timestamp = self.getTimestamp(from: properties)
         
         if let point = self.getClickPoint(from: properties) {
-            urlPointDict[fileURL.absoluteString] = point
+            urlPointDictQueue.async(flags: .barrier) {
+                self.urlPointDict[fileURL.absoluteString] = point
+            }
         }
         
         DispatchQueue(label: "com.coralogix.fileOperations").async { [weak self] in
@@ -278,7 +285,8 @@ class SessionReplayModel: UserInteractionRecorder {
 }
 
 extension UIView {
-    func captureScreenshot(scale: CGFloat = UIScreen.main.scale, compressionQuality: CGFloat = 0.8) -> Data? {
+    func captureScreenshot(scale: CGFloat = UIScreen.main.scale,
+                           compressionQuality: CGFloat = 0.8) -> Data? {
         
         guard let keyWindow = getKeyWindow() else {
             return nil
