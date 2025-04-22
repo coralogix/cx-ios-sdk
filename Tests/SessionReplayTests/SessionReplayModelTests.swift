@@ -369,6 +369,73 @@ final class SessionReplayModelTests: XCTestCase {
         // Assert
         XCTAssertEqual(result, .failure, "Result should be .failure when saving to an invalid path")
     }
+    
+    func testHandleCapturedData_ShouldCallAddURLAndCompress() {
+        let fileURL = URL(string: "file:///mockfile.png")!
+        let data = Data("mock".utf8)
+        let timestamp = Date().timeIntervalSince1970
+        let properties: [String: Any] = [
+            "timestamp": timestamp,
+            "click_point": ["x": 20, "y": 30]
+        ]
+        
+        let mockURLManager = MockURLManager()
+        let mockSessionReplayModel = MockSRModel()
+        mockSessionReplayModel.urlManager = mockURLManager
+        mockSessionReplayModel.sessionId = "mock-session"
+        
+        let expectation = self.expectation(description: "Wait for async addURL completion")
+        
+        mockSessionReplayModel.handleCapturedData(fileURL: fileURL, data: data, properties: properties)
+        
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.2) {
+            // Simulate completion
+            mockURLManager.completion?(true, timestamp)
+            expectation.fulfill()
+        }
+        
+        // Assert
+        waitForExpectations(timeout: 1.0)
+        
+        XCTAssertTrue(mockURLManager.addURLCalled)
+        XCTAssertEqual(mockURLManager.passedURL, fileURL)
+        XCTAssertEqual(mockURLManager.passedTimestamp!, timestamp, accuracy: 0.1)
+        
+        XCTAssertTrue(mockSessionReplayModel.compressCalled)
+        XCTAssertEqual(mockSessionReplayModel.passedData, data)
+        XCTAssertEqual(mockSessionReplayModel.passedTimestamp!, timestamp, accuracy: 0.1)
+    }
+}
+
+class MockSRModel: SessionReplayModel {
+    var compressCalled = false
+    var passedData: Data?
+    var passedTimestamp: TimeInterval?
+    
+    override func compressAndSendData(data: Data, timestamp: TimeInterval) -> SessionReplayResultCode {
+        compressCalled = true
+        passedData = data
+        passedTimestamp = timestamp
+        return .success
+    }
+    
+    override func updateSessionId(with sessionId: String) {
+        // Can assert session ID update if needed
+    }
+}
+
+class MockURLManager: URLManager {
+    var addURLCalled = false
+    var passedURL: URL?
+    var passedTimestamp: TimeInterval?
+    var completion: ((Bool, TimeInterval) -> Void)?
+    
+    override func addURL(_ url: URL, timestamp: TimeInterval, completion: ((Bool, TimeInterval) -> Void)? = nil) {
+        addURLCalled = true
+        passedURL = url
+        passedTimestamp = timestamp
+        self.completion = completion
+    }
 }
 
 final class MockSRNetworkManager: SRNetworkManager {
