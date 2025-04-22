@@ -7,10 +7,12 @@
 
 import UIKit
 import Coralogix
-//import Session_Replay
+import SessionReplay
 @main
 
 class AppDelegate: UIResponder, UIApplicationDelegate {
+    static var coralogixRum: CoralogixRum? = nil
+    
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         
         let userContext = UserContext(userId: "ww",
@@ -20,16 +22,16 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         let options = CoralogixExporterOptions(coralogixDomain: CoralogixDomain.STG,
                                                userContext: userContext,
                                                environment: "PROD",
-                                               application: "Application",
+                                               application: "DemoApp-iOS-swift",
                                                version: "1",
-                                               publicKey: "PublicKey",
-                                               instrumentations: [.mobileVitals: true,
+                                               publicKey: "cxtp_3EBvvOiDcFwgutlSBX507UsXvrSQts",
+                                               instrumentations: [.mobileVitals: false,
                                                                   .custom: false,
                                                                   .errors: true,
-                                                                  .userActions: true,
+                                                                  .userActions: false,
                                                                   .network: true,
-                                                                  .anr: true,
-                                                                  .lifeCycle: true],
+                                                                  .anr: false,
+                                                                  .lifeCycle: false],
                                                collectIPData: true,
                                                beforeSend: { cxRum in
             var editableCxRum = cxRum
@@ -40,7 +42,17 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
             return editableCxRum
         },
                                                 debug: true)
-        _ = CoralogixRum(options: options)
+        AppDelegate.coralogixRum = CoralogixRum(options: options)
+        
+        // Must be initialized after CoralogixRum
+        let sessionReplayOptions = SessionReplayOptions(recordingType: .image,
+                                                        captureTimeInterval: 10.0,
+                                                        captureScale: 2.0,
+                                                        captureCompressionQuality: 0.8,
+                                                        maskText: ["Stop"],
+                                                        maskImages: true ,
+                                                        autoStartSessionRecording: true)
+        SessionReplay.initializeWithOptions(sessionReplayOptions:sessionReplayOptions)
         return true
     }
     

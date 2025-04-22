@@ -67,7 +67,7 @@ class NetworkSim {
                     "fragments": "",
                     "schema": "https"] as [String : Any]
         
-//        CoralogixRum.shared.setNetworkRequestContext(dictionary: dict)
+        AppDelegate.coralogixRum?.setNetworkRequestContext(dictionary: dict)
     }
     
     static func setNetworkRequestContextFailure() {
@@ -80,7 +80,7 @@ class NetworkSim {
                     "fragments": "/404",
                     "schema": "https"] as [String : Any]
         
-//        CoralogixRum.shared.setNetworkRequestContext(dictionary: dict)
+        AppDelegate.coralogixRum?.setNetworkRequestContext(dictionary: dict)
     }
     
     static func performGetRequest() {

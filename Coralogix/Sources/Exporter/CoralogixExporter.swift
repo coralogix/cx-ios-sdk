@@ -5,6 +5,7 @@
 //
 
 import Foundation
+import CoralogixInternal
 
 public class CoralogixExporter: SpanExporter {
     private var options: CoralogixExporterOptions
@@ -241,7 +242,7 @@ public class CoralogixExporter: SpanExporter {
             return true
         }
         
-        if url != self.endPoint {
+        if !Global.containsMonitoredPath(url) {
             if let ignoreUrlsOrRejexs = self.options.ignoreUrls,
                !ignoreUrlsOrRejexs.isEmpty,
                ignoreUrlsOrRejexs.contains(url) {

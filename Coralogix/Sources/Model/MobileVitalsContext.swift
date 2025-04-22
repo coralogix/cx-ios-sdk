@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import CoralogixInternal
 
 struct MobileVitalsContext {
     let mobileVitalsType: String

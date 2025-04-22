@@ -5,6 +5,7 @@
 //
 
 import Foundation
+import CoralogixInternal
 
 public struct UserContext: Equatable {
     let userId: String

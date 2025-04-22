@@ -42,12 +42,28 @@ update_version_in_swift_file() {
   sed -i '' "s/sdk = \".*\"/sdk = \"$new_version\"/" "$swift_file"
 }
 
-# Function to update version in the podspec file
-update_version_in_podspec() {
+# Function to update version in the coralogix podspec file
+update_version_in_c_podspec() {
   local new_version=$1
-  local podspec_file=$2
-  echo "Updating podspec file: $podspec_file"
-  sed -i '' "s/spec.version.*=.*\"[0-9]*\.[0-9]*\.[0-9]*\"/spec.version      = \"$new_version\"/" "$podspec_file"
+  local podspec_c_file=$2
+  echo "Updating podspec file: $podspec_c_file"
+  sed -i '' "s/spec.version.*=.*\"[0-9]*\.[0-9]*\.[0-9]*\"/spec.version      = \"$new_version\"/" "$podspec_c_file"
+}
+
+# Function to update version in the coralogix podspec file
+update_version_in_ci_podspec() {
+  local new_version=$1
+  local podspec_ci_file=$2
+  echo "Updating podspec file: $podspec_ci_file"
+  sed -i '' "s/spec.version.*=.*\"[0-9]*\.[0-9]*\.[0-9]*\"/spec.version      = \"$new_version\"/" "$podspec_ci_file"
+}
+
+# Function to update version in the coralogix podspec file
+update_version_in_sr_podspec() {
+  local new_version=$1
+  local podspec_sr_file=$2
+  echo "Updating podspec file: $podspec_sr_file"
+  sed -i '' "s/spec.version.*=.*\"[0-9]*\.[0-9]*\.[0-9]*\"/spec.version      = \"$new_version\"/" "$podspec_sr_file"
 }
 
 # Main script logic
@@ -62,16 +78,28 @@ part=$1
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 # Combine the script directory with the relative path to get the absolute path of the Swift file
-swift_file="$script_dir/Coralogix/Sources/Utils/Keys.swift"
-podspec_file="$script_dir/Coralogix.podspec"
+swift_file="$script_dir/CoralogixInternal/Sources/Utils.swift"
+podspec_c_file="$script_dir/Coralogix.podspec"
+podspec_ci_file="$script_dir/CoralogixInternal.podspec"
+podspec_sr_file="$script_dir/SessionReplay.podspec"
 
 if [ ! -f "$swift_file" ]; then
   echo "File not found: $swift_file"
   exit 1
 fi
 
-if [ ! -f "$podspec_file" ]; then
-  echo "File not found: $podspec_file"
+if [ ! -f "$podspec_c_file" ]; then
+  echo "File not found: $podspec_c_file"
+  exit 1
+fi
+
+if [ ! -f "$podspec_ci_file" ]; then
+  echo "File not found: $podspec_ci_file"
+  exit 1
+fi
+
+if [ ! -f "$podspec_sr_file" ]; then
+  echo "File not found: $podspec_sr_file"
   exit 1
 fi
 
@@ -90,12 +118,22 @@ echo "New version: $new_version"
 
 # Update the version in the Swift file
 update_version_in_swift_file "$new_version" "$swift_file"
+swift_result=$?
 
-# Update the version in the podspec file
-update_version_in_podspec "$new_version" "$podspec_file"
+# Update the version in the coralogix podspec file
+update_version_in_c_podspec "$new_version" "$podspec_c_file"
+c_result=$?
+
+# Update the version in the coralogix-internal podspec file
+update_version_in_ci_podspec "$new_version" "$podspec_ci_file"
+ci_result=$?
+
+# Update the version in the session recording podspec file
+update_version_in_sr_podspec "$new_version" "$podspec_sr_file"
+sr_result=$?
 
 # Check if the sed command was successful for the Swift file
-if [ $? -eq 0 ]; then
+if [ $swift_result -eq 0 ]; then
     echo "Version updated successfully to $new_version in $swift_file"
 else
     echo "Failed to update the version in $swift_file"
@@ -103,9 +141,25 @@ else
 fi
 
 # Check if the sed command was successful for the podspec file
-if [ $? -eq 0 ]; then
-    echo "Version updated successfully to $new_version in $podspec_file"
+if [ $c_result -eq 0 ]; then
+    echo "Version updated successfully to $new_version in $podspec_c_file"
 else
-    echo "Failed to update the version in $podspec_file"
+    echo "Failed to update the version in $podspec_c_file"
+    exit 1
+fi
+
+# Check if the sed command was successful for the podspec file
+if [ $ci_result -eq 0 ]; then
+    echo "Version updated successfully to $new_version in $podspec_ci_file"
+else
+    echo "Failed to update the version in $podspec_ci_file"
+    exit 1
+fi
+
+# Check if the sed command was successful for the podspec file
+if [ $sr_result -eq 0 ]; then
+    echo "Version updated successfully to $new_version in $podspec_sr_file"
+else
+    echo "Failed to update the version in $podspec_sr_file"
     exit 1
 fi

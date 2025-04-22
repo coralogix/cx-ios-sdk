@@ -9,6 +9,7 @@ import Foundation
 #if canImport(UIKit)
 import UIKit
 #endif
+import CoralogixInternal
 
 public class ViewManager {
     var keyChain: KeyChainProtocol?

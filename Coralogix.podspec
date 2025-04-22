@@ -1,24 +1,16 @@
-#
-#  Be sure to run `pod spec lint Coralogix.podspec' to ensure this is a
-#  valid spec and to remove all comments including this before submitting the spec.
-#
-#  To learn more about Podspec attributes see https://guides.cocoapods.org/syntax/podspec.html
-#  To see working Podspecs in the CocoaPods repo see https://github.com/CocoaPods/Specs/
-#
-
 Pod::Spec.new do |spec|
 
   spec.name         = "Coralogix"
-  spec.version      = "1.0.19"
+  spec.version      = "1.0.20"
   spec.summary      = "Coralogix OpenTelemetry pod for iOS."
 
   spec.description  = <<-DESC
   The Coralogix RUM agent for iOS provides a Swift package that captures:
-  HTTP requests, using URLSession instrumentation
-  Unhandled exceptions (NSException, NSError, Error)
-  Custom Log ()
-  Crashes - using PLCrashReporter
-  Page navigation (Swift use swizzeling / SwiftUI use modifier)
+  - HTTP requests, using URLSession instrumentation
+  - Unhandled exceptions (NSException, NSError, Error)
+  - Custom Log ()
+  - Crashes - using PLCrashReporter
+  - Page navigation (Swift use swizzeling / SwiftUI use modifier)
   DESC
 
   spec.swift_version    = '5.9'
@@ -32,10 +24,15 @@ Pod::Spec.new do |spec|
   spec.author             = { "Coralogix" => "www.coralogix.com" }
   spec.ios.deployment_target = "13.0"
 
-  spec.source_files  = 'Coralogix/Sources/**/*.{swift,h}'
+  spec.source_files  = 'Coralogix/Sources/**/*.swift'
   spec.exclude_files = 'Coralogix/Sources/Exclude'
 
   spec.static_framework = true
   spec.dependency 'PLCrashReporter', '~> 1.11.1'
+  spec.dependency 'CoralogixInternal'
+
+  spec.test_spec 'Tests' do |test|
+    test.source_files = 'Tests/CoralogixRumTests/**/*.swift'
+  end
 end
 

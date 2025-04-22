@@ -10,8 +10,9 @@ import Foundation
 import UIKit
 #endif
 import MetricKit
+import CoralogixInternal
 
-public class MetricsManager: NSObject, MXMetricManagerSubscriber {
+public class MetricsManager {
     var launchStartTime: CFAbsoluteTime?
     var launchEndTime: CFAbsoluteTime?
     var foregroundStartTime: CFAbsoluteTime?
@@ -20,10 +21,9 @@ public class MetricsManager: NSObject, MXMetricManagerSubscriber {
     var fpsTrigger = FPSTrigger()
     let mobileVitalsFPSSamplingRate = 300 // 5 min
     var warmMetricIsActive = false
-    private var isSubscribedToMXMetrics = false
     
-    override init() {
-        super.init()
+    public func addObservers() {
+        MXMetricManager.shared.add(MyMetricSubscriber.shared)
         
         NotificationCenter.default.addObserver(self,
                                                selector: #selector(self.handleNotification(notification:)),
@@ -43,11 +43,9 @@ public class MetricsManager: NSObject, MXMetricManagerSubscriber {
                                                object: nil)
     }
     
-    func startCollectingMetrics() {
-        MXMetricManager.shared.add(self)
-        isSubscribedToMXMetrics = true
+    public func removeObservers() {
+        MXMetricManager.shared.remove(MyMetricSubscriber.shared)
     }
-
     func startFPSSamplingMonitoring(mobileVitalsFPSSamplingRate: Int) {
         self.fpsTrigger.startMonitoring(xTimesPerHour: mobileVitalsFPSSamplingRate)
     }
@@ -107,7 +105,7 @@ public class MetricsManager: NSObject, MXMetricManagerSubscriber {
                 
                 // Convert to an integer if you want to remove the decimal part
                 let millisecondsRounded = Int(coldStartDurationInMilliseconds)
-
+                
                 Log.d("[Metric] Cold start duration: \(millisecondsRounded) milliseconds")
                 
                 // send instrumentaion event
@@ -117,6 +115,20 @@ public class MetricsManager: NSObject, MXMetricManagerSubscriber {
         }
     }
     
+    deinit {
+        NotificationCenter.default.removeObserver(self, name: UIApplication.didEnterBackgroundNotification, object: nil)
+        NotificationCenter.default.removeObserver(self, name: UIApplication.willEnterForegroundNotification, object: nil)
+        NotificationCenter.default.removeObserver(self, name: UIApplication.didBecomeActiveNotification, object: nil)
+        NotificationCenter.default.removeObserver(self, name: .cxRumNotificationMetrics, object: nil)
+        self.anrDetector?.stopMonitoring()
+        self.fpsTrigger.stopMonitoring()
+        self.launchEndTime = 0
+    }
+}
+  
+class MyMetricSubscriber: NSObject, MXMetricManagerSubscriber {
+    static let shared = MyMetricSubscriber()
+
     // Handle received metrics
     public func didReceive(_ payloads: [MXMetricPayload]) {
         for payload in payloads {
@@ -152,18 +164,5 @@ public class MetricsManager: NSObject, MXMetricManagerSubscriber {
                 }
             }
         }
-    }
-    
-    deinit {
-        if isSubscribedToMXMetrics {
-            MXMetricManager.shared.remove(self)
-        }
-        NotificationCenter.default.removeObserver(self, name: UIApplication.didEnterBackgroundNotification, object: nil)
-        NotificationCenter.default.removeObserver(self, name: UIApplication.willEnterForegroundNotification, object: nil)
-        NotificationCenter.default.removeObserver(self, name: UIApplication.didBecomeActiveNotification, object: nil)
-        NotificationCenter.default.removeObserver(self, name: .cxRumNotificationMetrics, object: nil)
-        self.anrDetector?.stopMonitoring()
-        self.fpsTrigger.stopMonitoring()
-        self.launchEndTime = 0
     }
 }

@@ -7,7 +7,6 @@
 
 import UIKit
 import Coralogix
-//import Coralogix_Internal
 
 class SessionReplayViewController: UITableViewController {
     let items = [Keys.startRecoding.rawValue,
@@ -106,15 +105,15 @@ class SessionReplayViewController: UITableViewController {
         self.customView.updateText("Selected item: \(item)")
         
         if item == Keys.startRecoding.rawValue {
-//            CoralogixRum.shared.startRecording()
+            AppDelegate.coralogixRum?.startRecording()
         } else if item == Keys.stopRecoding.rawValue {
-//            CoralogixRum.shared.stopRecording()
+            AppDelegate.coralogixRum?.stopRecording()
         } else if item == Keys.captureEvent.rawValue {
-//            CoralogixRum.shared.captureEvent()
+            AppDelegate.coralogixRum?.captureEvent()
         } else if item == Keys.updateSessionId.rawValue {
-//            if let sessionReplay = SdkManager.shared.getSessionReplay() {
-//                sessionReplay.update(sessionId: NSUUID().uuidString)
-//            }
+            if let sessionReplay = SdkManager.shared.getSessionReplay() {
+               sessionReplay.update(sessionId: NSUUID().uuidString)
+           }
         }
 
         tableView.deselectRow(at: indexPath, animated: true)

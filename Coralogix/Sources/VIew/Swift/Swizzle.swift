@@ -11,6 +11,7 @@
 import UIKit
 #endif
 import SwiftUI
+import CoralogixInternal
 import ObjectiveC.runtime
 
 public struct CXView {
