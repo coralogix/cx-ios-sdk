@@ -41,6 +41,7 @@ public class MetadataBuilder {
             Keys.keySessionCreationDate.rawValue: sessionCreationTime.milliseconds,
             Keys.keySessionId.rawValue: sessionId,
             Keys.subIndex.rawValue: subIndex,
+            Keys.snapshotId.rawValue: UUID().uuidString
         ]
     }
 }
@@ -120,6 +121,7 @@ public class SRNetworkManager {
 
         // Create the URLRequest
         var request = URLRequest(url: url)
+        Log.d(String(describing: request))
         request.httpMethod = "POST"
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         request.addValue("Bearer \(publicKey)", forHTTPHeaderField: "Authorization")
