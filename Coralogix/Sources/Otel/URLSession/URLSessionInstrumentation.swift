@@ -6,34 +6,38 @@
 import Foundation
 import CoralogixInternal
 
+private var idKey: Void?
+
+/// Lock to prevent concurrent calls to injectInNSURLClasses()
+private let injectLock = NSLock()
+private var didInject = false
+
 struct NetworkRequestState {
     var request: URLRequest?
     var dataProcessed: Data?
-
+    
     mutating func setRequest(_ request: URLRequest) {
         self.request = request
     }
-
+    
     mutating func setData(_ data: URLRequest) {
         request = data
     }
 }
 
-private var idKey: Void?
-
 public class URLSessionInstrumentation {
     private var requestMap = [String: NetworkRequestState]()
-
+    
     var configuration: URLSessionInstrumentationConfiguration
-
+    
     private let queue = DispatchQueue(label: "io.opentelemetry.ddnetworkinstrumentation")
-
+    
     static var instrumentedKey = "io.opentelemetry.instrumentedCall"
-
+    
     static let avAssetDownloadTask: AnyClass? = NSClassFromString("__NSCFBackgroundAVAssetDownloadTask")
-
+    
     public private(set) var tracer: Tracer
-
+    
     public var startedRequestSpans: [any Span] {
         var spans = [any Span]()
         URLSessionLogger.runningSpansQueue.sync {
@@ -41,41 +45,45 @@ public class URLSessionInstrumentation {
         }
         return spans
     }
-
+    
     public init(configuration: URLSessionInstrumentationConfiguration) {
         self.configuration = configuration
         tracer = OpenTelemetry.instance.tracerProvider.get(instrumentationName: "NSURLSession", instrumentationVersion: "0.0.1")
         injectInNSURLClasses()
     }
-
+    
     private func injectInNSURLClasses() {
-        #if swift(<5.7)
-            let selectors = [
-                #selector(URLSessionDataDelegate.urlSession(_:dataTask:didReceive:)),
-                #selector(URLSessionDataDelegate.urlSession(_:dataTask:didReceive:completionHandler:)),
-                #selector(URLSessionDataDelegate.urlSession(_:task:didCompleteWithError:)),
-                #selector(URLSessionDataDelegate.urlSession(_:dataTask:didBecome:)! as (URLSessionDataDelegate) -> (URLSession, URLSessionDataTask, URLSessionDownloadTask) -> Void),
-                #selector(URLSessionDataDelegate.urlSession(_:dataTask:didBecome:)! as (URLSessionDataDelegate) -> (URLSession, URLSessionDataTask, URLSessionStreamTask) -> Void),
-            ]
-        #else
-            let selectors = [
-                #selector(URLSessionDataDelegate.urlSession(_:dataTask:didReceive:)),
-                #selector(URLSessionDataDelegate.urlSession(_:dataTask:didReceive:completionHandler:)),
-                #selector(URLSessionDataDelegate.urlSession(_:task:didCompleteWithError:)),
-                #selector(URLSessionDataDelegate.urlSession(_:dataTask:didBecome:) as (URLSessionDataDelegate) -> ((URLSession, URLSessionDataTask, URLSessionDownloadTask) -> Void)?),
-                #selector(URLSessionDataDelegate.urlSession(_:dataTask:didBecome:) as (URLSessionDataDelegate) -> ((URLSession, URLSessionDataTask, URLSessionStreamTask) -> Void)?),
-            ]
-        #endif
+        injectLock.lock()
+        defer { injectLock.unlock() }
+        
+#if swift(<5.7)
+        let selectors = [
+            #selector(URLSessionDataDelegate.urlSession(_:dataTask:didReceive:)),
+            #selector(URLSessionDataDelegate.urlSession(_:dataTask:didReceive:completionHandler:)),
+            #selector(URLSessionDataDelegate.urlSession(_:task:didCompleteWithError:)),
+            #selector(URLSessionDataDelegate.urlSession(_:dataTask:didBecome:)! as (URLSessionDataDelegate) -> (URLSession, URLSessionDataTask, URLSessionDownloadTask) -> Void),
+            #selector(URLSessionDataDelegate.urlSession(_:dataTask:didBecome:)! as (URLSessionDataDelegate) -> (URLSession, URLSessionDataTask, URLSessionStreamTask) -> Void),
+        ]
+#else
+        let selectors = [
+            #selector(URLSessionDataDelegate.urlSession(_:dataTask:didReceive:)),
+            #selector(URLSessionDataDelegate.urlSession(_:dataTask:didReceive:completionHandler:)),
+            #selector(URLSessionDataDelegate.urlSession(_:task:didCompleteWithError:)),
+            #selector(URLSessionDataDelegate.urlSession(_:dataTask:didBecome:) as (URLSessionDataDelegate) -> ((URLSession, URLSessionDataTask, URLSessionDownloadTask) -> Void)?),
+            #selector(URLSessionDataDelegate.urlSession(_:dataTask:didBecome:) as (URLSessionDataDelegate) -> ((URLSession, URLSessionDataTask, URLSessionStreamTask) -> Void)?),
+        ]
+#endif
+        
         let classes = configuration.delegateClassesToInstrument ?? InstrumentationUtils.objc_getClassList()
         let selectorsCount = selectors.count
-        DispatchQueue.concurrentPerform(iterations: classes.count) { iteration in
-            let theClass: AnyClass = classes[iteration]
-            guard theClass != Self.self else { return }
+        
+        for theClass in classes {
+            guard theClass != Self.self else { continue }
             var selectorFound = false
             var methodCount: UInt32 = 0
-            guard let methodList = class_copyMethodList(theClass, &methodCount) else { return }
+            guard let methodList = class_copyMethodList(theClass, &methodCount) else { continue }
             defer { free(methodList) }
-
+            
             for j in 0 ..< selectorsCount {
                 for i in 0 ..< Int(methodCount) {
                     if method_getName(methodList[i]) == selectors[j] {
@@ -89,7 +97,7 @@ public class URLSessionInstrumentation {
                 }
             }
         }
-
+        
         if #available(OSX 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) {
             injectIntoNSURLSessionCreateTaskMethods()
         }
@@ -98,7 +106,7 @@ public class URLSessionInstrumentation {
         injectIntoNSURLSessionAsyncUploadTaskMethods()
         injectIntoNSURLSessionTaskResume()
     }
-
+    
     private func injectIntoDelegateClass(cls: AnyClass) {
         // Sessions
         injectTaskDidReceiveDataIntoDelegateClass(cls: cls)
@@ -109,11 +117,11 @@ public class URLSessionInstrumentation {
         if #available(OSX 13.0, iOS 16.0, watchOS 9.0, tvOS 16.0, *) {
             injectTaskDidFinishCollectingMetricsIntoDelegateClass(cls: cls)
         }
-
+        
         // Data tasks
         injectDataTaskDidBecomeDownloadTaskIntoDelegateClass(cls: cls)
     }
-
+    
     private func injectIntoNSURLSessionCreateTaskMethods() {
         let cls = URLSession.self
         [
@@ -130,7 +138,7 @@ public class URLSessionInstrumentation {
                 return
             }
             var originalIMP: IMP?
-
+            
             let block: @convention(block) (URLSession, AnyObject) -> URLSessionTask = { session, argument in
                 if let url = argument as? URL {
                     let request = URLRequest(url: url)
@@ -142,11 +150,11 @@ public class URLSessionInstrumentation {
                         }
                     }
                 }
-
+                
                 let castedIMP = unsafeBitCast(originalIMP, to: (@convention(c) (URLSession, Selector, Any) -> URLSessionDataTask).self)
                 var task: URLSessionTask
                 let sessionTaskId = UUID().uuidString
-
+                
                 if let request = argument as? URLRequest, objc_getAssociatedObject(argument, &idKey) == nil {
                     let instrumentedRequest = URLSessionLogger.processAndLogRequest(request, sessionTaskId: sessionTaskId, instrumentation: self, shouldInjectHeaders: true)
                     task = castedIMP(session, selector, instrumentedRequest ?? request)
@@ -164,7 +172,7 @@ public class URLSessionInstrumentation {
             originalIMP = method_setImplementation(original, swizzledIMP)
         }
     }
-
+    
     private func injectIntoNSURLSessionCreateTaskWithParameterMethods() {
         let cls = URLSession.self
         [
@@ -177,7 +185,7 @@ public class URLSessionInstrumentation {
                 return
             }
             var originalIMP: IMP?
-
+            
             let block: @convention(block) (URLSession, URLRequest, AnyObject) -> URLSessionTask = { session, request, argument in
                 let sessionTaskId = UUID().uuidString
                 let castedIMP = unsafeBitCast(originalIMP, to: (@convention(c) (URLSession, Selector, URLRequest, AnyObject) -> URLSessionDataTask).self)
@@ -190,7 +198,7 @@ public class URLSessionInstrumentation {
             originalIMP = method_setImplementation(original, swizzledIMP)
         }
     }
-
+    
     private func injectIntoNSURLSessionAsyncDataAndDownloadTaskMethods() {
         let cls = URLSession.self
         [
@@ -206,12 +214,12 @@ public class URLSessionInstrumentation {
                 return
             }
             var originalIMP: IMP?
-
+            
             let block: @convention(block) (URLSession, AnyObject, ((Any?, URLResponse?, Error?) -> Void)?) -> URLSessionTask = { session, argument, completion in
-
+                
                 if let url = argument as? URL {
                     let request = URLRequest(url: url)
-
+                    
                     if self.configuration.shouldInjectTracingHeaders?(request) ?? true {
                         if selector == #selector(URLSession.dataTask(with:completionHandler:) as (URLSession) -> (URL, @escaping (Data?, URLResponse?, Error?) -> Void) -> URLSessionDataTask) {
                             if let completion = completion {
@@ -228,13 +236,13 @@ public class URLSessionInstrumentation {
                         }
                     }
                 }
-
+                
                 let castedIMP = unsafeBitCast(originalIMP, to: (@convention(c) (URLSession, Selector, Any, ((Any?, URLResponse?, Error?) -> Void)?) -> URLSessionDataTask).self)
                 var task: URLSessionTask!
                 let sessionTaskId = UUID().uuidString
-
+                
                 var completionBlock = completion
-
+                
                 if completionBlock != nil {
                     if objc_getAssociatedObject(argument, &idKey) == nil {
                         let completionWrapper: (Any?, URLResponse?, Error?) -> Void = { object, response, error in
@@ -255,7 +263,7 @@ public class URLSessionInstrumentation {
                         completionBlock = completionWrapper
                     }
                 }
-
+                
                 if let request = argument as? URLRequest, objc_getAssociatedObject(argument, &idKey) == nil {
                     let instrumentedRequest = URLSessionLogger.processAndLogRequest(request, sessionTaskId: sessionTaskId, instrumentation: self, shouldInjectHeaders: true)
                     task = castedIMP(session, selector, instrumentedRequest ?? request, completionBlock)
@@ -273,7 +281,7 @@ public class URLSessionInstrumentation {
             originalIMP = method_setImplementation(original, swizzledIMP)
         }
     }
-
+    
     private func injectIntoNSURLSessionAsyncUploadTaskMethods() {
         let cls = URLSession.self
         [
@@ -286,14 +294,14 @@ public class URLSessionInstrumentation {
                 return
             }
             var originalIMP: IMP?
-
+            
             let block: @convention(block) (URLSession, URLRequest, AnyObject, ((Any?, URLResponse?, Error?) -> Void)?) -> URLSessionTask = { session, request, argument, completion in
-
+                
                 let castedIMP = unsafeBitCast(originalIMP, to: (@convention(c) (URLSession, Selector, URLRequest, AnyObject, ((Any?, URLResponse?, Error?) -> Void)?) -> URLSessionDataTask).self)
-
+                
                 var task: URLSessionTask!
                 let sessionTaskId = UUID().uuidString
-
+                
                 var completionBlock = completion
                 if objc_getAssociatedObject(argument, &idKey) == nil {
                     let completionWrapper: (Any?, URLResponse?, Error?) -> Void = { object, response, error in
@@ -313,10 +321,10 @@ public class URLSessionInstrumentation {
                     }
                     completionBlock = completionWrapper
                 }
-
+                
                 let processedRequest = URLSessionLogger.processAndLogRequest(request, sessionTaskId: sessionTaskId, instrumentation: self, shouldInjectHeaders: true)
                 task = castedIMP(session, selector, processedRequest ?? request, argument, completionBlock)
-
+                
                 self.setIdKey(value: sessionTaskId, for: task)
                 return task
             }
@@ -324,19 +332,19 @@ public class URLSessionInstrumentation {
             originalIMP = method_setImplementation(original, swizzledIMP)
         }
     }
-
+    
     private func injectIntoNSURLSessionTaskResume() {
         var methodsToSwizzle = [Method]()
-
+        
         if let method = class_getInstanceMethod(URLSessionTask.self, #selector(URLSessionTask.resume)) {
             methodsToSwizzle.append(method)
         }
-
+        
         if let cfURLSession = NSClassFromString("__NSCFURLSessionTask"),
            let method = class_getInstanceMethod(cfURLSession, NSSelectorFromString("resume")) {
             methodsToSwizzle.append(method)
         }
-
+        
         if NSClassFromString("AFURLSessionManager") != nil {
             let classes = InstrumentationUtils.objc_getClassList()
             classes.forEach {
@@ -345,10 +353,10 @@ public class URLSessionInstrumentation {
                 }
             }
         }
-
+        
         methodsToSwizzle.forEach {
             let theMethod = $0
-
+            
             var originalIMP: IMP?
             let block: @convention(block) (URLSessionTask) -> Void = { anyTask in
                 self.urlSessionTaskWillResume(anyTask)
@@ -363,7 +371,7 @@ public class URLSessionInstrumentation {
             originalIMP = method_setImplementation(theMethod, swizzledIMP)
         }
     }
-
+    
     // Delegate methods
     private func injectTaskDidReceiveDataIntoDelegateClass(cls: AnyClass) {
         let selector = #selector(URLSessionDataDelegate.urlSession(_:dataTask:didReceive:))
@@ -384,7 +392,7 @@ public class URLSessionInstrumentation {
         let swizzledIMP = imp_implementationWithBlock(unsafeBitCast(block, to: AnyObject.self))
         originalIMP = method_setImplementation(original, swizzledIMP)
     }
-
+    
     private func injectTaskDidReceiveResponseIntoDelegateClass(cls: AnyClass) {
         let selector = #selector(URLSessionDataDelegate.urlSession(_:dataTask:didReceive:completionHandler:))
         guard let original = class_getInstanceMethod(cls, selector) else {
@@ -404,7 +412,7 @@ public class URLSessionInstrumentation {
         let swizzledIMP = imp_implementationWithBlock(unsafeBitCast(block, to: AnyObject.self))
         originalIMP = method_setImplementation(original, swizzledIMP)
     }
-
+    
     private func injectTaskDidCompleteWithErrorIntoDelegateClass(cls: AnyClass) {
         let selector = #selector(URLSessionDataDelegate.urlSession(_:task:didCompleteWithError:))
         guard let original = class_getInstanceMethod(cls, selector) else {
@@ -424,7 +432,7 @@ public class URLSessionInstrumentation {
         let swizzledIMP = imp_implementationWithBlock(unsafeBitCast(block, to: AnyObject.self))
         originalIMP = method_setImplementation(original, swizzledIMP)
     }
-
+    
     private func injectTaskDidFinishCollectingMetricsIntoDelegateClass(cls: AnyClass) {
         let selector = #selector(URLSessionTaskDelegate.urlSession(_:task:didFinishCollecting:))
         guard let original = class_getInstanceMethod(cls, selector) else {
@@ -449,7 +457,7 @@ public class URLSessionInstrumentation {
         let swizzledIMP = imp_implementationWithBlock(unsafeBitCast(block, to: AnyObject.self))
         originalIMP = method_setImplementation(original, swizzledIMP)
     }
-
+    
     func injectRespondsToSelectorIntoDelegateClass(cls: AnyClass) {
         let selector = #selector(NSObject.responds(to:))
         guard let original = class_getInstanceMethod(cls, selector),
@@ -457,7 +465,7 @@ public class URLSessionInstrumentation {
         else {
             return
         }
-
+        
         var originalIMP: IMP?
         let block: @convention(block) (Any, Selector) -> Bool = { object, respondsTo in
             if respondsTo == #selector(URLSessionDataDelegate.urlSession(_:dataTask:didReceive:completionHandler:)) {
@@ -469,13 +477,13 @@ public class URLSessionInstrumentation {
         let swizzledIMP = imp_implementationWithBlock(unsafeBitCast(block, to: AnyObject.self))
         originalIMP = method_setImplementation(original, swizzledIMP)
     }
-
+    
     private func injectDataTaskDidBecomeDownloadTaskIntoDelegateClass(cls: AnyClass) {
-        #if swift(<5.7)
-            let selector = #selector(URLSessionDataDelegate.urlSession(_:dataTask:didBecome:)! as (URLSessionDataDelegate) -> (URLSession, URLSessionDataTask, URLSessionDownloadTask) -> Void)
-        #else
-            let selector = #selector(URLSessionDataDelegate.urlSession(_:dataTask:didBecome:) as (URLSessionDataDelegate) -> ((URLSession, URLSessionDataTask, URLSessionDownloadTask) -> Void)?)
-        #endif
+#if swift(<5.7)
+        let selector = #selector(URLSessionDataDelegate.urlSession(_:dataTask:didBecome:)! as (URLSessionDataDelegate) -> (URLSession, URLSessionDataTask, URLSessionDownloadTask) -> Void)
+#else
+        let selector = #selector(URLSessionDataDelegate.urlSession(_:dataTask:didBecome:) as (URLSessionDataDelegate) -> ((URLSession, URLSessionDataTask, URLSessionDownloadTask) -> Void)?)
+#endif
         guard let original = class_getInstanceMethod(cls, selector) else {
             return
         }
@@ -493,7 +501,7 @@ public class URLSessionInstrumentation {
         let swizzledIMP = imp_implementationWithBlock(unsafeBitCast(block, to: AnyObject.self))
         originalIMP = method_setImplementation(original, swizzledIMP)
     }
-
+    
     // URLSessionTask methods
     private func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
         guard configuration.shouldRecordPayload?(session) ?? false else { return }
@@ -511,7 +519,7 @@ public class URLSessionInstrumentation {
             }
         }
     }
-
+    
     private func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive response: URLResponse, completionHandler: @escaping (URLSession.ResponseDisposition) -> Void) {
         guard configuration.shouldRecordPayload?(session) ?? false else { return }
         guard let taskId = objc_getAssociatedObject(dataTask, &idKey) as? String else {
@@ -528,7 +536,7 @@ public class URLSessionInstrumentation {
             }
         }
     }
-
+    
     private func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
         guard let taskId = objc_getAssociatedObject(task, &idKey) as? String else {
             return
@@ -547,14 +555,14 @@ public class URLSessionInstrumentation {
             URLSessionLogger.logResponse(response, dataOrFile: requestState?.dataProcessed, instrumentation: self, sessionTaskId: taskId)
         }
     }
-
+    
     private func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didBecome downloadTask: URLSessionDownloadTask) {
         guard let taskId = objc_getAssociatedObject(dataTask, &idKey) as? String else {
             return
         }
         setIdKey(value: taskId, for: downloadTask)
     }
-
+    
     private func urlSession(_ session: URLSession, task: URLSessionTask, didFinishCollecting metrics: URLSessionTaskMetrics) {
         guard let taskId = objc_getAssociatedObject(task, &idKey) as? String else {
             return
@@ -562,16 +570,16 @@ public class URLSessionInstrumentation {
         var requestState: NetworkRequestState?
         queue.sync {
             requestState = requestMap[taskId]
-
+            
             if requestState?.request != nil {
                 requestMap[taskId] = nil
             }
         }
-
+        
         guard requestState?.request != nil else {
             return
         }
-
+        
         /// Code for instrumenting collection should be written here
         if let error = task.error {
             let status = (task.response as? HTTPURLResponse)?.statusCode ?? 0
@@ -580,14 +588,14 @@ public class URLSessionInstrumentation {
             URLSessionLogger.logResponse(response, dataOrFile: requestState?.dataProcessed, instrumentation: self, sessionTaskId: taskId)
         }
     }
-
+    
     private func urlSessionTaskWillResume(_ task: URLSessionTask) {
         // AV Asset Tasks cannot be auto instrumented, they dont include request attributes, skip them
         if let avAssetTaskClass = Self.avAssetDownloadTask,
            task.isKind(of: avAssetTaskClass) {
             return
         }
-
+        
         let taskId = idKeyForTask(task)
         if let request = task.currentRequest {
             queue.sync {
@@ -596,7 +604,7 @@ public class URLSessionInstrumentation {
                 }
                 requestMap[taskId]?.setRequest(request)
             }
-
+            
             if #available(OSX 13.0, iOS 16.0, watchOS 9.0, tvOS 16.0, *) {
                 guard Task.basePriority != nil else {
                     return
@@ -604,7 +612,7 @@ public class URLSessionInstrumentation {
                 let instrumentedRequest = URLSessionLogger.processAndLogRequest(request, sessionTaskId: taskId, instrumentation: self, shouldInjectHeaders: true)
                 task.setValue(instrumentedRequest, forKey: "currentRequest")
                 self.setIdKey(value: taskId, for: task)
-
+                
                 // If not inside a Task basePriority is nil
                 if task.delegate == nil {
                     task.delegate = FakeDelegate()
@@ -612,7 +620,7 @@ public class URLSessionInstrumentation {
             }
         }
     }
-
+    
     // Helpers
     private func idKeyForTask(_ task: URLSessionTask) -> String {
         var id = objc_getAssociatedObject(task, &idKey) as? String
@@ -622,11 +630,11 @@ public class URLSessionInstrumentation {
         }
         return id!
     }
-
+    
     private func setIdKey(value: String, for task: URLSessionTask) {
         objc_setAssociatedObject(task, &idKey, value, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
     }
-
+    
     private func createRequestState(for id: String) {
         var state = requestMap[id]
         if requestMap[id] == nil {
