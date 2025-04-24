@@ -22,7 +22,7 @@ protocol UserInteractionRecorder {
 }
 
 class SessionReplayModel: UserInteractionRecorder {
-    private let urlManager = URLManager()
+    internal var urlManager = URLManager()
     private var urlObserver: URLObserver?
     internal var sessionId: String = ""
     internal var trackNumber: Int = 0
@@ -90,7 +90,10 @@ class SessionReplayModel: UserInteractionRecorder {
             self.trackNumber += 1
             let fileName = self.generateFileName()
 
-            if let documentsDirectory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
+            if let documentsDirectory = FileManager.default.urls(
+                for: .documentDirectory,
+                in: .userDomainMask
+            ).first {
                 let fileURL = documentsDirectory.appendingPathComponent(fileName)
                 self.handleCapturedData(fileURL: fileURL,
                                         data: screenshotData,
@@ -210,7 +213,7 @@ class SessionReplayModel: UserInteractionRecorder {
         return "SessionReplay/\(sessionId)_\(trackNumber).jpg"
     }
     
-    private func handleCapturedData(fileURL: URL, data: Data, properties: [String: Any]?) {
+    internal func handleCapturedData(fileURL: URL, data: Data, properties: [String: Any]?) {
         let timestamp = self.getTimestamp(from: properties)
         
         if let point = self.getClickPoint(from: properties) {
@@ -224,9 +227,10 @@ class SessionReplayModel: UserInteractionRecorder {
 
             _ = self.saveImageToDocumentIfDebug(fileURL: fileURL, data: data)
             
-            //TODO: need to send the image to server when the pipeLine completed (bug) now we send the original image
-            _ = self.compressAndSendData(data: data, timestamp: timestamp)
-            self.urlManager.addURL(fileURL)
+            self.urlManager.addURL(fileURL,
+                                   timestamp: timestamp) { [weak self] isSuccess, originalTimestamp  in
+                _ = self?.compressAndSendData(data: data, timestamp: originalTimestamp)
+            }
             self.updateSessionId(with: self.sessionId)
         }
     }
