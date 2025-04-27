@@ -160,6 +160,7 @@ final class SRNetworkManagerTests: XCTestCase {
         XCTAssertEqual(metadata[Keys.keySessionId.rawValue] as? String, sessionId, "Session ID value is incorrect")
         XCTAssertEqual(metadata[Keys.subIndex.rawValue] as? Int, subIndex, "Sub-index value is incorrect")
         XCTAssertEqual(metadata[Keys.screenshotId.rawValue] as? String, screenshotId, "ScreenshotsId value is incorrect")
+        XCTAssertEqual(metadata[Keys.page.rawValue] as? String, page, "Page value is incorrect")
     }
     
     func testBuildMetadata_ReturnsAllKeys() {
