@@ -290,9 +290,12 @@ final class SessionReplayModelTests: XCTestCase {
         let testData = "Test data for compression".data(using: .utf8)!
         let mockTimestamp: TimeInterval = 1234567890.0
         let mockNetworkManager = MockSRNetworkManager()
+        let mockScreenshotId: String = "mockScreenshotId"
         sessionReplayModel = SessionReplayModel(networkManager: mockNetworkManager)
         // Act
-        let result = sessionReplayModel.compressAndSendData(data: testData, timestamp: mockTimestamp)
+        let result = sessionReplayModel.compressAndSendData(data: testData,
+                                                            timestamp: mockTimestamp,
+                                                            screenshotId: mockScreenshotId)
         
         // Assert
         XCTAssertEqual(result, .success, "Expected to return .success when compression and send succeed")
@@ -309,9 +312,12 @@ final class SessionReplayModelTests: XCTestCase {
         // Arrange
         let invalidData = Data() // Empty data that cannot be compressed
         let mockTimestamp: TimeInterval = 1234567890.0
-        
+        let mockScreenshotId: String = "mockScreenshotId"
+
         // Act
-        let result = sessionReplayModel.compressAndSendData(data: invalidData, timestamp: mockTimestamp)
+        let result = sessionReplayModel.compressAndSendData(data: invalidData,
+                                                            timestamp: mockTimestamp,
+                                                            screenshotId: mockScreenshotId)
         
         // Assert
         XCTAssertEqual(result, .failure, "Expected to return .failure when compression fails")
@@ -374,8 +380,10 @@ final class SessionReplayModelTests: XCTestCase {
         let fileURL = URL(string: "file:///mockfile.png")!
         let data = Data("mock".utf8)
         let timestamp = Date().timeIntervalSince1970
+        let screenshotId = "mock-screenshot-id"
         let properties: [String: Any] = [
-            "timestamp": timestamp,
+            Keys.timestamp.rawValue: timestamp,
+            Keys.screenshotId.rawValue: screenshotId,
             "click_point": ["x": 20, "y": 30]
         ]
         
@@ -390,7 +398,7 @@ final class SessionReplayModelTests: XCTestCase {
         
         DispatchQueue.global().asyncAfter(deadline: .now() + 0.2) {
             // Simulate completion
-            mockURLManager.completion?(true, timestamp)
+            mockURLManager.completion?(true, timestamp, screenshotId)
             expectation.fulfill()
         }
         
@@ -411,11 +419,15 @@ class MockSRModel: SessionReplayModel {
     var compressCalled = false
     var passedData: Data?
     var passedTimestamp: TimeInterval?
+    var passedScreenshotId: String?
     
-    override func compressAndSendData(data: Data, timestamp: TimeInterval) -> SessionReplayResultCode {
+    override func compressAndSendData(data: Data,
+                                      timestamp: TimeInterval,
+                                      screenshotId: String) -> SessionReplayResultCode {
         compressCalled = true
         passedData = data
         passedTimestamp = timestamp
+        passedScreenshotId = screenshotId
         return .success
     }
     
@@ -428,12 +440,17 @@ class MockURLManager: URLManager {
     var addURLCalled = false
     var passedURL: URL?
     var passedTimestamp: TimeInterval?
-    var completion: ((Bool, TimeInterval) -> Void)?
+    var passedScreenshotId: String?
+    var completion: ((Bool, TimeInterval, String) -> Void)?
     
-    override func addURL(_ url: URL, timestamp: TimeInterval, completion: ((Bool, TimeInterval) -> Void)? = nil) {
+    override func addURL(_ url: URL,
+                         timestamp: TimeInterval,
+                         screenshotId: String,
+                         completion: ((Bool, TimeInterval, String) -> Void)? = nil) {
         addURLCalled = true
         passedURL = url
         passedTimestamp = timestamp
+        passedScreenshotId = screenshotId
         self.completion = completion
     }
 }
@@ -447,6 +464,7 @@ final class MockSRNetworkManager: SRNetworkManager {
                        sessionId: String,
                        trackNumber: Int,
                        subIndex: Int,
+                       screenshotId: String,
                        completion: @escaping (SessionReplayResultCode) -> Void) {
         didSendData = true
         sentChunks.append(data)

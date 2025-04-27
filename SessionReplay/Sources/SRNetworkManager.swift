@@ -32,7 +32,9 @@ public class MetadataBuilder {
                               trackNumber: Int,
                               subIndex: Int,
                               application: String,
-                              sessionCreationTime: TimeInterval) -> [String: Any] {
+                              sessionCreationTime: TimeInterval,
+                              screenshotId: String,
+                              page: String) -> [String: Any] {
         return [
             Keys.application.rawValue: application,
             Keys.segmentIndex.rawValue: trackNumber,
@@ -41,7 +43,8 @@ public class MetadataBuilder {
             Keys.keySessionCreationDate.rawValue: sessionCreationTime.milliseconds,
             Keys.keySessionId.rawValue: sessionId,
             Keys.subIndex.rawValue: subIndex,
-            Keys.snapshotId.rawValue: UUID().uuidString
+            Keys.screenshotId.rawValue: screenshotId, //somehow the be called that snapshotId
+            Keys.page.rawValue: page,
         ]
     }
 }
@@ -72,6 +75,7 @@ public class SRNetworkManager {
                      sessionId: String,
                      trackNumber: Int,
                      subIndex: Int,
+                     screenshotId: String,
                      completion: @escaping (SessionReplayResultCode) -> Void) {
         guard let endPoint = self.endPoint,
               let publicKey = self.publicKey,
@@ -106,6 +110,8 @@ public class SRNetworkManager {
             subIndex: subIndex,
             application: application,
             sessionCreationTime: sessionCreationTime,
+            screenshotId: screenshotId,
+            page: "0"
         )
         Log.d("[metadata] \(metadata)")
         

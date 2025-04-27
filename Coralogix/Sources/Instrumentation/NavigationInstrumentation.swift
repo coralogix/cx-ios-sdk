@@ -16,34 +16,50 @@ extension CoralogixRum {
     }
     
     @objc func handleNotification(notification: Notification) {
-        if let cxView = notification.object as? CXView {
-            let timestemp: TimeInterval = Date().timeIntervalSince1970
-            if cxView.state == .notifyOnAppear {
-                if let sessionReplay = SdkManager.shared.getSessionReplay() {
-                    sessionReplay.captureEvent(properties: [Keys.timestamp.rawValue: timestemp])
-                } else {
-                    Log.e("[SessionReplay] is not initialized")
-                }
-            }
-
-            if viewManager.isUniqueView(name: cxView.name),
-               let sessionManager = self.sessionManager {
-                let span = self.getNavigationSpan()
-
-                let snapshot = SnapshotConext(timestemp: timestemp,
-                                              errorCount: sessionManager.getErrorCount(),
-                                              viewCount: self.viewManager.getUniqueViewCount() + 1,
-                                              clickCount: sessionManager.getClickCount(),
-                                              hasRecording: sessionManager.hasRecording)
-                let dict = Helper.convertDictionary(snapshot.getDictionary())
-                span.setAttribute(key: Keys.snapshotContext.rawValue,
-                                  value: Helper.convertDictionayToJsonString(dict: dict))
-                self.coralogixExporter?.set(cxView: cxView)
-                span.end()
-            } else {
-                self.coralogixExporter?.set(cxView: cxView)
-            }
+        guard let cxView = notification.object as? CXView else { return }
+        
+        let timestamp: TimeInterval = Date().timeIntervalSince1970
+        let span = self.getNavigationSpan()
+        
+        handleAppearStateIfNeeded(cxView: cxView, span: span, timestamp: timestamp)
+        handleUniqueViewIfNeeded(cxView: cxView, span: span, timestamp: timestamp)
+        
+        span.end()
+        self.coralogixExporter?.set(cxView: cxView)
+    }
+    
+    internal func handleAppearStateIfNeeded(cxView: CXView, span: any Span, timestamp: TimeInterval) {
+        guard cxView.state == .notifyOnAppear else { return }
+        
+        guard let sessionReplay = SdkManager.shared.getSessionReplay() else {
+            Log.e("[SessionReplay] is not initialized")
+            return
         }
+        
+        let screenshotId = UUID().uuidString.lowercased()
+        span.setAttribute(key: Keys.screenshotId.rawValue, value: AttributeValue.string(screenshotId))
+        sessionReplay.captureEvent(properties: [
+            Keys.timestamp.rawValue: timestamp,
+            Keys.screenshotId.rawValue: screenshotId
+        ])
+    }
+    
+    internal func handleUniqueViewIfNeeded(cxView: CXView, span: any Span, timestamp: TimeInterval) {
+        guard viewManager.isUniqueView(name: cxView.name),
+              let sessionManager = sessionManager else { return }
+        
+        let snapshot = SnapshotConext(
+            timestemp: timestamp,
+            errorCount: sessionManager.getErrorCount(),
+            viewCount: viewManager.getUniqueViewCount() + 1,
+            clickCount: sessionManager.getClickCount(),
+            hasRecording: sessionManager.hasRecording
+        )
+        
+        let dict = Helper.convertDictionary(snapshot.getDictionary())
+        let jsonString = Helper.convertDictionayToJsonString(dict: dict)
+        
+        span.setAttribute(key: Keys.snapshotContext.rawValue, value: jsonString)
     }
     
     private func getNavigationSpan() -> any Span {
