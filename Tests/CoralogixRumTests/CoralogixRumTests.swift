@@ -255,6 +255,224 @@ final class CoralogixRumTests: XCTestCase {
         // Assert
         XCTAssertFalse(mockSpan.setAttributeCalled)
     }
+    
+    func test_getNavigationSpan_shouldSetCorrectAttributes() {
+        let mockOptions =  CoralogixExporterOptions(coralogixDomain: CoralogixDomain.US2,
+                                                    userContext: nil,
+                                                    environment: "PROD",
+                                                    application: "TestApp-iOS",
+                                                    version: "1.0",
+                                                    publicKey: "token",
+                                                    ignoreUrls: [],
+                                                    ignoreErrors: [],
+                                                    sampleRate: 100,
+                                                    debug: true)
+        let coralogixRum = CoralogixRum(options: mockOptions)
+        
+        coralogixRum.tracerProvider = {
+            return MockTracer()
+        }
+
+        if let mockSpan = coralogixRum.getNavigationSpan() as? MockSpan {
+            // Assert
+            XCTAssertEqual(mockSpan.recordedAttributes[Keys.eventType.rawValue], .string(CoralogixEventType.navigation.rawValue))
+            XCTAssertEqual(mockSpan.recordedAttributes[Keys.source.rawValue], .string(Keys.console.rawValue))
+            XCTAssertEqual(mockSpan.recordedAttributes[Keys.severity.rawValue], .int(CoralogixLogSeverity.info.rawValue))
+        }
+    }
+    
+    func test_handleUniqueViewIfNeeded_whenUniqueView_shouldSetSnapshotContextAttribute() {
+        // Arrange
+        let mockOptions =  CoralogixExporterOptions(coralogixDomain: CoralogixDomain.US2,
+                                                    userContext: nil,
+                                                    environment: "PROD",
+                                                    application: "TestApp-iOS",
+                                                    version: "1.0",
+                                                    publicKey: "token",
+                                                    ignoreUrls: [],
+                                                    ignoreErrors: [],
+                                                    sampleRate: 100,
+                                                    debug: true)
+        let coralogixRum = CoralogixRum(options: mockOptions)
+        let cxView = CXView(state: .notifyOnDisappear, name: "TestView")
+        let timestamp: TimeInterval = 1234567890.0
+        let mockSpan = MockSpan()
+        
+        // Act
+        coralogixRum.handleUniqueViewIfNeeded(cxView: cxView, span: mockSpan, timestamp: timestamp)
+        
+        // Assert
+        XCTAssertTrue(mockSpan.setAttributeCalled, "Expected span.setAttribute to be called.")
+        XCTAssertEqual(mockSpan.setAttributeKey, Keys.snapshotContext.rawValue, "Expected the attribute key to be snapshotContext.")
+        
+        if case let .string(jsonString)? = mockSpan.setAttributeValue {
+            XCTAssertTrue(jsonString.contains("\"errorCount\":0"), "Expected error count to be 0.")
+            XCTAssertTrue(jsonString.contains("\"viewCount\":1"), "Expected view count to be 1.")
+            XCTAssertTrue(jsonString.contains("\"clickCount\":0"), "Expected click count to be 0.")
+            XCTAssertTrue(jsonString.contains("\"hasRecording\":false"), "Expected hasRecording to be false.")
+        } else {
+            XCTFail("Expected setAttribute value to be a JSON string.")
+        }
+    }
+    
+    func test_handleUniqueViewIfNeeded_whenSessionManagerIsNil_shouldNotSetAttribute() {
+        // Arrange
+        let mockOptions =  CoralogixExporterOptions(coralogixDomain: CoralogixDomain.US2,
+                                                    userContext: nil,
+                                                    environment: "PROD",
+                                                    application: "TestApp-iOS",
+                                                    version: "1.0",
+                                                    publicKey: "token",
+                                                    ignoreUrls: [],
+                                                    ignoreErrors: [],
+                                                    sampleRate: 100,
+                                                    debug: true)
+        let coralogixRum = CoralogixRum(options: mockOptions)
+        let cxView = CXView(state: .notifyOnDisappear, name: "TestView")
+        let timestamp: TimeInterval = 1234567890.0
+        let mockSpan = MockSpan()
+
+        coralogixRum.sessionManager = nil // 🚨 Important! Simulate missing session
+            
+        // Act
+        coralogixRum.handleUniqueViewIfNeeded(cxView: cxView, span: mockSpan, timestamp: timestamp)
+            
+        // Assert
+        XCTAssertFalse(mockSpan.setAttributeCalled, "Expected no attribute to be set when sessionManager is nil.")
+    }
+    
+    func test_handleNotification_shouldSetCxViewInExporter() {
+        // Arrange
+        let mockOptions =  CoralogixExporterOptions(coralogixDomain: CoralogixDomain.US2,
+                                                    userContext: nil,
+                                                    environment: "PROD",
+                                                    application: "TestApp-iOS",
+                                                    version: "1.0",
+                                                    publicKey: "token",
+                                                    ignoreUrls: [],
+                                                    ignoreErrors: [],
+                                                    sampleRate: 100,
+                                                    debug: true)
+        let coralogixRum = CoralogixRum(options: mockOptions)
+        let cxView = CXView(state: .notifyOnDisappear, name: "TestView")
+        let mockSessionManager = SessionManager()
+
+        let mockExporter = MockCoralogixExporter(options: mockOptions,
+                                                 sessionManager: mockSessionManager,
+                                                 networkManager: NetworkManager(),
+                                                 viewManager: ViewManager(keyChain: nil),
+                                                 metricsManager: MetricsManager())
+        coralogixRum.coralogixExporter = mockExporter
+        let notification = Notification(name: Notification.Name("TestNotification"), object: cxView, userInfo: nil)
+        
+        // Act
+        coralogixRum.handleNotification(notification: notification)
+        
+        // Assert
+        XCTAssertTrue(mockExporter.setCalled, "Expected coralogixExporter.set(cxView:) to be called.")
+        XCTAssertEqual(mockExporter.capturedCxView?.name, cxView.name, "Expected captured CXView to match the one from notification.")
+    }
+    
+    func test_handleNotification_withInvalidObject_shouldNotCallSetOnExporter() {
+        // Arrange
+        let mockOptions =  CoralogixExporterOptions(coralogixDomain: CoralogixDomain.US2,
+                                                    userContext: nil,
+                                                    environment: "PROD",
+                                                    application: "TestApp-iOS",
+                                                    version: "1.0",
+                                                    publicKey: "token",
+                                                    ignoreUrls: [],
+                                                    ignoreErrors: [],
+                                                    sampleRate: 100,
+                                                    debug: true)
+        let coralogixRum = CoralogixRum(options: mockOptions)
+        let invalidObject = "Not a CXView" // String instead of CXView
+        let mockSessionManager = SessionManager()
+
+        let mockExporter = MockCoralogixExporter(options: mockOptions,
+                                                 sessionManager: mockSessionManager,
+                                                 networkManager: NetworkManager(),
+                                                 viewManager: ViewManager(keyChain: nil),
+                                                 metricsManager: MetricsManager())
+        coralogixRum.coralogixExporter = mockExporter
+        let notification = Notification(name: Notification.Name("TestNotification"), object: invalidObject, userInfo: nil)
+        
+        // Act
+        coralogixRum.handleNotification(notification: notification)
+        
+        // Assert
+        XCTAssertFalse(mockExporter.setCalled, "Expected coralogixExporter.set(cxView:) NOT to be called when object is invalid.")
+    }
+
+}
+
+final class MockCoralogixExporter: CoralogixExporter {
+    var setCalled = false
+    var capturedCxView: CXView?
+    
+    override func set(cxView: CXView) {
+        setCalled = true
+        capturedCxView = cxView
+    }
+}
+
+final class MockTracer: Tracer {
+    var mockSpanBuilder = MockSpanBuilder()
+    
+    func spanBuilder(spanName: String) -> SpanBuilder {
+        return mockSpanBuilder
+    }
+    
+    // If Tracer has more methods, stub them as no-op
+}
+
+final class MockSpanBuilder: SpanBuilder {
+    func setAttribute(key: String, value: Coralogix.AttributeValue) -> Self {
+        return self
+    }
+    
+    func setParent(_ parent: any Coralogix.Span) -> Self {
+        return self
+    }
+    
+    func setParent(_ parent: Coralogix.SpanContext) -> Self {
+        return self
+    }
+    
+    func setNoParent() -> Self {
+        return self
+    }
+    
+    func addLink(spanContext: Coralogix.SpanContext) -> Self {
+        return self
+    }
+    
+    func addLink(spanContext: Coralogix.SpanContext, attributes: [String : Coralogix.AttributeValue]) -> Self {
+        return self
+    }
+    
+    func setSpanKind(spanKind: Coralogix.SpanKind) -> Self {
+        return self
+    }
+    
+    
+    func setStartTime(time: Date) -> Self {
+        return self
+    }
+    
+    func setActive(_ active: Bool) -> Self {
+        return self
+    }
+    
+    var startedSpan: MockSpan?
+    
+    func startSpan() -> any Span {
+        let span = MockSpan()
+        startedSpan = span
+        return span
+    }
+    
+    // Other methods if needed
 }
 
 final class MockSessionRepaly: SessionReplayInterface {
@@ -279,6 +497,7 @@ final class MockSessionRepaly: SessionReplayInterface {
 
 final class MockSpan: Span {
     var kind: SpanKind = .internal
+    var recordedAttributes: [String: AttributeValue] = [:]
     var context: SpanContext = SpanContext.create(traceId: TraceId(),
                                                   spanId: SpanId(),
                                                   traceFlags: TraceFlags(),
@@ -295,6 +514,7 @@ final class MockSpan: Span {
         setAttributeCalled = true
         setAttributeKey = key
         setAttributeValue = value
+        recordedAttributes[key] = value
     }
 
     func addEvent(name: String) {}

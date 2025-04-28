@@ -62,8 +62,8 @@ extension CoralogixRum {
         span.setAttribute(key: Keys.snapshotContext.rawValue, value: jsonString)
     }
     
-    private func getNavigationSpan() -> any Span {
-        var span = tracer().spanBuilder(spanName: Keys.iosSdk.rawValue).startSpan()
+    internal func getNavigationSpan() -> any Span {
+        var span = tracerProvider().spanBuilder(spanName: Keys.iosSdk.rawValue).startSpan()
         self.addUserMetadata(to: &span)
         span.setAttribute(key: Keys.eventType.rawValue, value: CoralogixEventType.navigation.rawValue)
         span.setAttribute(key: Keys.source.rawValue, value: Keys.console.rawValue)

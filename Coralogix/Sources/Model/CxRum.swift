@@ -32,6 +32,7 @@ struct CxRum {
     var interactionContext: InteractionContext?
     var mobileVitalsContext: MobileVitalsContext?
     var lifeCycleContext: LifeCycleContext?
+    var screenshotId: String?
      
     init(otel: SpanDataProtocol,
          versionMetadata: VersionMetadata,
@@ -76,6 +77,7 @@ struct CxRum {
         self.interactionContext = InteractionContext(otel: otel)
         self.mobileVitalsContext = MobileVitalsContext(otel: otel)
         self.lifeCycleContext = LifeCycleContext(otel: otel)
+        self.screenshotId = otel.getAttribute(forKey: Keys.screenshotId.rawValue) as? String
         
         if let sessionManager = self.sessionManager,
            let viewManager = self.viewManager,
@@ -105,9 +107,16 @@ struct CxRum {
         self.addLabels(to: &result)
         self.addMobileVitals(to: &result)
         self.addLifeCycleContext(to: &result)
+        self.addScreenshotId(to: &result)
         return result
     }
     
+    private func addScreenshotId(to result: inout [String: Any]) {
+        if let screenshotId = self.screenshotId {
+            result[Keys.screenshotId.rawValue] = screenshotId
+        }
+    }
+
     private func addLifeCycleContext(to result: inout [String: Any]) {
         result[Keys.lifeCycleContext.rawValue] = self.lifeCycleContext?.getLifeCycleDictionary()
     }

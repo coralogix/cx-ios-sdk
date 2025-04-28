@@ -16,7 +16,7 @@ final class RumTests: XCTestCase {
     var mockNetworkManager: NetworkManager!
     var mockViewerManager: ViewManager!
     var mockCxMetricsManager: MetricsManager!
-
+    
     override func setUpWithError() throws {
         
         let snapshot = SnapshotConext(timestemp: Date().timeIntervalSince1970,
@@ -33,7 +33,8 @@ final class RumTests: XCTestCase {
                                                  Keys.userId.rawValue: AttributeValue("12345"),
                                                  Keys.userName.rawValue: AttributeValue("John Doe"),
                                                  Keys.userEmail.rawValue: AttributeValue("john.doe@example.com"),
-                                                 Keys.snapshotContext.rawValue: AttributeValue(snapshotString)],
+                                                 Keys.snapshotContext.rawValue: AttributeValue(snapshotString),
+                                                 Keys.screenshotId.rawValue: AttributeValue("10")],
                                     startTime: Date(), spanId: "20", traceId: "30")
         mockVersionMetadata = VersionMetadata(appName: "ExampleApp", appVersion: "1.1.1")
         mockSessionManager = SessionManager()
@@ -110,7 +111,7 @@ final class RumTests: XCTestCase {
         XCTAssertEqual(result[Keys.traceId.rawValue] as? String, "30")
         XCTAssertEqual(result[Keys.spanId.rawValue] as? String, "20")
         XCTAssertEqual(result[Keys.platform.rawValue] as? String, "mobile")
-        
+        XCTAssertEqual(result[Keys.screenshotId.rawValue] as? String, "10")
         XCTAssertNotNil(result[Keys.deviceState.rawValue])
         
         if let logContext = result[Keys.logContext.rawValue] as? [String: Any] {
@@ -169,7 +170,7 @@ final class RumTests: XCTestCase {
             labels: ["key": "value"]
         )
         
-        let currentTime = Date()        
+        let currentTime = Date()
         cxRum.snapshotContext = SnapshotConext(timestemp: currentTime.timeIntervalSince1970,
                                                errorCount: 1,
                                                viewCount: 1,
@@ -236,13 +237,13 @@ final class RumTests: XCTestCase {
                                     startTime: Date(), spanId: "20", traceId: "30")
         
         let oneMinuteInThePast: TimeInterval = -120
-
+        
         // Get the current date and time
         let currentDate = Date()
-
+        
         // Calculate the date and time 1 minute in the past
         let pastDate = currentDate.addingTimeInterval(oneMinuteInThePast)
-
+        
         mockSessionManager.lastSnapshotEventTime = pastDate
         let cxRum = CxRum(
             otel: mockSpanData,

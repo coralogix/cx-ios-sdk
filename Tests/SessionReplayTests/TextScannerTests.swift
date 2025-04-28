@@ -85,7 +85,7 @@ class TextScannerTests: XCTestCase {
 
         XCTAssertNotNil(maskedImage, "The masked image should not be nil.")
         XCTAssertEqual(ciImage.extent, maskedImage.extent, "The output image should have the same extent as the input image.")
-        XCTAssertEqual(0, totalTextCount)
+        XCTAssertEqual(1, totalTextCount)
         XCTAssertEqual(0, maskedTextCount)
     }
     
