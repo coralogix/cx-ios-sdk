@@ -144,6 +144,7 @@ public class CoralogixRum {
         UITableViewController.swizzleUITableViewControllerDelegate
         UICollectionView.swizzleTouchesEnded
         UIPageControl.swizzleSetCurrentPage
+        UIApplication.swizzleSendEvent
     }
     
     public func setUserContext(userContext: UserContext) {

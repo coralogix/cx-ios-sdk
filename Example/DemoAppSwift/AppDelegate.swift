@@ -28,7 +28,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
                                                instrumentations: [.mobileVitals: false,
                                                                   .custom: false,
                                                                   .errors: true,
-                                                                  .userActions: false,
+                                                                  .userActions: true,
                                                                   .network: true,
                                                                   .anr: false,
                                                                   .lifeCycle: false],

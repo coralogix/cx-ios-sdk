@@ -47,7 +47,7 @@ let package = Package(
             dependencies: ["SessionReplay"],
             path: "Tests/SessionReplayTests",
             resources: [
-                    .process("Resources")
+                .process("Resources")
             ]
         )
     ]
