@@ -189,9 +189,13 @@ public class SessionReplay: SessionReplayInterface {
             guard !sessionReplayModel.isRecording else { return }
             sessionReplayModel.isRecording = true
             
-            sessionReplayModel.captureImage()
-            sessionReplayModel.captureTimer = Timer.scheduledTimer(withTimeInterval: sessionReplayOptions.captureTimeInterval, repeats: true) { [weak sessionReplayModel] _ in
-                sessionReplayModel?.captureImage()
+            guard let coralogixSdk = SdkManager.shared.getCoralogixSdk() else {
+                Log.e("[SessionReplay] CoralogixSdk is not initialized")
+                return
+            }
+            coralogixSdk.periodicallyCaptureEventTriggered()
+            sessionReplayModel.captureTimer = Timer.scheduledTimer(withTimeInterval: sessionReplayOptions.captureTimeInterval, repeats: true) { _ in
+                coralogixSdk.periodicallyCaptureEventTriggered()
             }
         }
     }

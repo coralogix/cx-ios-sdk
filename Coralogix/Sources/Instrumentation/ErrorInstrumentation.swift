@@ -132,14 +132,14 @@ extension CoralogixRum {
     }
     
     internal func addScreenshotId(to span: inout any Span) {
-        let screenshotId = UUID().uuidString.lowercased()
         if let sessionReplay = SdkManager.shared.getSessionReplay() {
-            let metadata: [String: Any] = [
+            let screenshotId = UUID().uuidString.lowercased()
+            let properties: [String: Any] = [
                 Keys.timestamp.rawValue: Date().timeIntervalSince1970,
                 Keys.screenshotId.rawValue: screenshotId
             ]
             span.setAttribute(key: Keys.screenshotId.rawValue, value: screenshotId)
-            sessionReplay.captureEvent(properties: metadata)
+            sessionReplay.captureEvent(properties: properties)
         }
     }
     
