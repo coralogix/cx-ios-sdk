@@ -1,0 +1,31 @@
+{
+  "configurations" : [
+    {
+      "id" : "6962A43C-34FC-4CB7-A753-F7D0E4664F63",
+      "name" : "Configuration 1",
+      "options" : {
+
+      }
+    }
+  ],
+  "defaultOptions" : {
+
+  },
+  "testTargets" : [
+    {
+      "target" : {
+        "containerPath" : "container:",
+        "identifier" : "SessionReplayTests",
+        "name" : "SessionReplayTests"
+      }
+    },
+    {
+      "target" : {
+        "containerPath" : "container:",
+        "identifier" : "CoralogixRumTests",
+        "name" : "CoralogixRumTests"
+      }
+    }
+  ],
+  "version" : 1
+}

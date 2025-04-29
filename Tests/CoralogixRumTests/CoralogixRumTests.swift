@@ -180,7 +180,7 @@ final class CoralogixRumTests: XCTestCase {
         // Arrange
         let view = CXView(state: .notifyOnAppear, name: "home")
         let timestamp: TimeInterval = 1234567890
-        let mockSessionReplay =  MockSessionRepaly()
+        let mockSessionReplay =  MockSessionReplay()
         SdkManager.shared.register(sessionReplayInterface: mockSessionReplay)
         // Act
         coralogixRum.handleAppearStateIfNeeded(cxView: view, span: mockSpan, timestamp: timestamp)
@@ -197,7 +197,7 @@ final class CoralogixRumTests: XCTestCase {
     func test_handleAppearStateIfNeeded_whenStateIsNotNotifyOnAppear_shouldNotCaptureEvent() {
         let coralogixRum = makeMockCoralogixRum()
         let mockSpan = MockSpan()
-        let mockSessionReplay =  MockSessionRepaly()
+        let mockSessionReplay =  MockSessionReplay()
 
         // Arrange
         let view = CXView(state: .notifyOnDisappear, name: "home")
@@ -450,7 +450,7 @@ final class CoralogixRumTests: XCTestCase {
             return MockTracer()
         }
         let mockSpan = MockSpan()
-        let mockSessionReplay = MockSessionRepaly()
+        let mockSessionReplay = MockSessionReplay()
         SdkManager.shared.register(sessionReplayInterface: mockSessionReplay)
         
         // Act
@@ -473,6 +473,34 @@ final class CoralogixRumTests: XCTestCase {
         XCTAssertTrue(mockSpan.didEnd, "Span should be ended")
     }
 
+    func testAddScreenshotIdAddsAttributeAndCapturesEvent() {
+        // Arrange
+        var span: any Span = MockSpan()
+        let mockSessionReplay = MockSessionReplay()
+        
+        SdkManager.shared.register(sessionReplayInterface: mockSessionReplay)
+
+        let coralogixRum = makeMockCoralogixRum()
+
+        // Act
+        coralogixRum.addScreenshotId(to: &span)
+        
+        guard let mockSpan = span as? MockSpan else {
+            XCTFail("Span is not MockSpan")
+            return
+        }
+
+        
+        // Assert
+        XCTAssertNotNil(mockSpan.recordedAttributes[Keys.screenshotId.rawValue], "ScreenshotId should be set on the span")
+        
+        XCTAssertEqual(mockSessionReplay.captureEventCalledWith?.count, 2, "SessionReplay should have captured exactly one event")
+        
+        if let capturedEvent = mockSessionReplay.captureEventCalledWith?.first as? [String: Any] {
+            XCTAssertNotNil(capturedEvent[Keys.timestamp.rawValue], "Captured event should have a timestamp")
+            XCTAssertNotNil(capturedEvent[Keys.screenshotId.rawValue], "Captured event should have a screenshotId")
+        }
+    }
     
     private func makeMockCoralogixRum() ->  CoralogixRum {
         let mockOptions = CoralogixExporterOptions(
@@ -562,7 +590,7 @@ final class MockSpanBuilder: SpanBuilder {
     // Other methods if needed
 }
 
-final class MockSessionRepaly: SessionReplayInterface {
+final class MockSessionReplay: SessionReplayInterface {
     var captureEventCalledWith: [String: Any]?
     
     func startRecording() {

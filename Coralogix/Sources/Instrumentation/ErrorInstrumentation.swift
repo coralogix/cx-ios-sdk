@@ -127,7 +127,20 @@ extension CoralogixRum {
         span.setAttribute(key: Keys.severity.rawValue, value: AttributeValue.int(CoralogixLogSeverity.error.rawValue))
         self.addUserMetadata(to: &span)
         self.addSnapshotContext(to: &span)
+        self.addScreenshotId(to: &span)
         return span
+    }
+    
+    internal func addScreenshotId(to span: inout any Span) {
+        let screenshotId = UUID().uuidString.lowercased()
+        if let sessionReplay = SdkManager.shared.getSessionReplay() {
+            let metadata: [String: Any] = [
+                Keys.timestamp.rawValue: Date().timeIntervalSince1970,
+                Keys.screenshotId.rawValue: screenshotId
+            ]
+            span.setAttribute(key: Keys.screenshotId.rawValue, value: screenshotId)
+            sessionReplay.captureEvent(properties: metadata)
+        }
     }
     
     private func addSnapshotContext(to span: inout any Span) {
