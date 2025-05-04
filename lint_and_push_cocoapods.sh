@@ -47,6 +47,6 @@ if [[ "$push_main" =~ ^[Yy]$ ]]; then
   pod trunk push "$MAIN" --allow-warnings --verbose
   echo "🎉 $MAIN pushed successfully! 🎉"
 else
-  echo "🚫 Push canceled."
+  echo "⏭️ Skipping … push."
 fi
 

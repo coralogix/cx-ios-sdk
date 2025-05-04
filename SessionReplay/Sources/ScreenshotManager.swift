@@ -7,14 +7,18 @@
 import Foundation
 import CoralogixInternal
 
-class ScreenshotManager {
+public class ScreenshotManager {
     private let queue = DispatchQueue(label: "com.coralogix.screenshotManager.queue")
     internal var _page: Int = 0
     internal var _screenshotCount: Int = 0
     
     // Constants
-    private let maxScreenShotsPerPage: Int = 5
+    private let maxScreenShotsPerPage: Int
 
+    public init(maxScreenShotsPerPage: Int = 5) {
+        self.maxScreenShotsPerPage = maxScreenShotsPerPage
+    }
+    
     public var page: Int {
         get { queue.sync { _page } }
     }

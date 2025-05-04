@@ -310,7 +310,7 @@ final class SessionReplayModelTests: XCTestCase {
     
     func testCompressAndSendData_withInvalidData_shouldReturnFailure() {
         // Arrange
-        let invalidData = Data("".utf8) // Explicitly non-compressible payload
+        let invalidData = Data("".utf8) // Empty payload to test error handling
         let mockTimestamp: TimeInterval = 1234567890.0
         let mockScreenshotId: String = "mockScreenshotId"
 
