@@ -7,7 +7,7 @@ INTERNAL="CoralogixInternal.podspec"
 MAIN="Coralogix.podspec"
 SESSION_REPLAY="SessionReplay.podspec"
 
-# Lint each podspec
+# Lint all podspecs (INTERNAL, SESSION_REPLAY, MAIN)
 echo "🔍 Linting $INTERNAL..."
 pod lib lint "$INTERNAL" --verbose --no-clean --allow-warnings
 echo "✅ $INTERNAL passed lint."
@@ -45,7 +45,7 @@ read -p "🟡 Do you want to push $MAIN to CocoaPods trunk? (y/n): " push_main
 if [[ "$push_main" =~ ^[Yy]$ ]]; then
   echo "🚀 Pushing $MAIN..."
   pod trunk push "$MAIN" --allow-warnings --verbose
-  echo "🎉 Done!"
+  echo "🎉 $MAIN pushed successfully! 🎉"
 else
   echo "🚫 Push canceled."
 fi

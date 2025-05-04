@@ -282,7 +282,7 @@ final class SessionReplayModelTests: XCTestCase {
         let result = sessionReplayModel.generateFileName()
         
         // Assert
-        XCTAssertEqual(result, "SessionReplay/\(mockSessionId)_\(mockSreenshotNumber).jpg", "File name should match the expected format")
+        XCTAssertEqual(result, "\(mockSessionId)_\(mockSreenshotNumber).jpg", "File name should match the expected format")
     }
     
     func testCompressAndSendData_withValidData_shouldReturnSuccess() {
@@ -310,7 +310,7 @@ final class SessionReplayModelTests: XCTestCase {
     
     func testCompressAndSendData_withInvalidData_shouldReturnFailure() {
         // Arrange
-        let invalidData = Data() // Empty data that cannot be compressed
+        let invalidData = Data("".utf8) // Explicitly non-compressible payload
         let mockTimestamp: TimeInterval = 1234567890.0
         let mockScreenshotId: String = "mockScreenshotId"
 

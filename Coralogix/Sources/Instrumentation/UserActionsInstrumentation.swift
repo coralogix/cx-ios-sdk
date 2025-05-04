@@ -58,7 +58,8 @@ extension CoralogixRum {
             Keys.timestamp.rawValue: timestamp,
             Keys.screenshotId.rawValue: screenshotId
         ]
-        metadata.merge(properties) { (_, new) in new }
+        // Keep SDK-generated keys if duplicates exist
+        metadata.merge(properties) { (_, current) in current }
         return metadata
     }
     

@@ -8,26 +8,40 @@ import Foundation
 import CoralogixInternal
 
 class ScreenshotManager {
-    internal var page: Int = 0
-    internal var screenshotCount: Int = 0
+    private let queue = DispatchQueue(label: "com.coralogix.screenshotManager.queue")
+    internal var _page: Int = 0
+    internal var _screenshotCount: Int = 0
     
     // Constants
-    private var sessionStartTimestamp: Date = Date()
-    private var maxScreenShotsPerPage: Int = 5
+    private let maxScreenShotsPerPage: Int = 5
+
+    public var page: Int {
+        get { queue.sync { _page } }
+    }
+    
+    public var screenshotCount: Int {
+        get { queue.sync { _screenshotCount } }
+        set {
+            queue.sync { _screenshotCount = newValue }
+        }
+    }
 
     func takeScreenshot() {
-        screenshotCount += 1
-
-        if screenshotCount % maxScreenShotsPerPage == 0 {
-            page += 1
-            Log.d("Page incremented to: \(page)")
+        queue.sync {
+            _screenshotCount += 1
+            
+            if _screenshotCount % maxScreenShotsPerPage == 0 {
+                _page += 1
+                Log.d("Page incremented to: \(_page)")
+            }
         }
     }
     
     public func resetSession() {
-        page = 0
-        screenshotCount = 0
-        sessionStartTimestamp = Date()
-        Log.d("Session reset. New sessionId")
+        queue.sync {
+            _page = 0
+            _screenshotCount = 0
+            Log.d("Session reset. New sessionId")
+        }
     }
 }

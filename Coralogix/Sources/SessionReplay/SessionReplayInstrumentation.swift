@@ -91,8 +91,4 @@ extension CoralogixRum: CoralogixInterface {
             Log.e("[SessionReplay] is not initialized")
         }
     }
-    
-    internal func a() {
-        
-    }
 }

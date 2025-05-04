@@ -94,7 +94,9 @@ class SessionReplayModel: UserInteractionRecorder {
                 for: .documentDirectory,
                 in: .userDomainMask
             ).first {
-                let fileURL = documentsDirectory.appendingPathComponent(fileName)
+                let fileURL = documentsDirectory
+                    .appendingPathComponent("SessionReplay")
+                    .appendingPathComponent(fileName)
                 self.handleCapturedData(fileURL: fileURL,
                                         data: screenshotData,
                                         properties: properties)
@@ -213,7 +215,7 @@ class SessionReplayModel: UserInteractionRecorder {
     }
     
     internal func generateFileName() -> String {
-        return "SessionReplay/\(sessionId)_\(self.screenshotManager.screenshotCount).jpg"
+        return "\(sessionId)_\(self.screenshotManager.screenshotCount).jpg"
     }
     
     internal func handleCapturedData(fileURL: URL, data: Data, properties: [String: Any]?) {
@@ -232,10 +234,10 @@ class SessionReplayModel: UserInteractionRecorder {
             
             self.urlManager.addURL(fileURL,
                                    timestamp: timestamp,
-                                   screenshotId: screenshotId) { [weak self] isSuccess, originalTimestamp, orignalScreenshotId  in
+                                   screenshotId: screenshotId) { [weak self] isSuccess, originalTimestamp, originalScreenshotId  in
                 _ = self?.compressAndSendData(data: data,
                                               timestamp: originalTimestamp,
-                                              screenshotId: orignalScreenshotId)
+                                              screenshotId: originalScreenshotId)
             }
             self.updateSessionId(with: self.sessionId)
         }
@@ -268,9 +270,9 @@ class SessionReplayModel: UserInteractionRecorder {
     
     internal func compressAndSendData(data: Data, timestamp: TimeInterval, screenshotId: String) -> SessionReplayResultCode {
         if let compressedChunks = data.gzipCompressed(), compressedChunks.count > 0 {
-            //Log.d("Compression succeeded! Number of chunks: \(compressedChunks.count)")
+            // Log.d("Compression succeeded! Number of chunks: \(compressedChunks.count)")
             for (index, chunk) in compressedChunks.enumerated() {
-                //Log.d("Chunk \(index): \(chunk.count) bytes")
+                // Log.d("Chunk \(index): \(chunk.count) bytes")
                 let subIndex = calculateSubIndex(chunkCount: compressedChunks.count, currentIndex: index)
                 let page =  "\(self.screenshotManager.page)"
                 // Send Data

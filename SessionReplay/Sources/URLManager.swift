@@ -9,11 +9,13 @@ import Foundation
 import Combine
 import CoralogixInternal
 
+typealias URLProcessingCompletion = (Bool, TimeInterval, String) -> Void
+
 struct URLEntry {
     let url: URL
     let timestamp: TimeInterval
     let screenshotId: String
-    let completion: ((Bool, TimeInterval, String) -> Void)?
+    let completion: URLProcessingCompletion?
 }
 
 class URLManager: ObservableObject {
@@ -27,7 +29,7 @@ class URLManager: ObservableObject {
     func addURL(_ url: URL,
                 timestamp: TimeInterval,
                 screenshotId: String,
-                completion: ((Bool,TimeInterval, String) -> Void)? = nil) {
+                completion: URLProcessingCompletion? = nil) {
         DispatchQueue.main.async {
             self.savedURLs.append(URLEntry(url: url,
                                            timestamp: timestamp,

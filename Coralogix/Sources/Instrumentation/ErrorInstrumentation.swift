@@ -115,6 +115,7 @@ extension CoralogixRum {
             
             if severity.rawValue == CoralogixLogSeverity.error.rawValue {
                 self.addSnapshotContext(to: &span)
+                self.addScreenshotId(to: &span)
             }
             span.end()
         }

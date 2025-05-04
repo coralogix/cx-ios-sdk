@@ -52,7 +52,7 @@ final class SRNetworkManagerTests: XCTestCase {
         let subIndex = 1
         let screenshotId = UUID().uuidString.lowercased()
         let page: String = "0"
-        let mockSession = MockURLSession()
+        mockSession = MockURLSession()
         networkManager = SRNetworkManager(session: mockSession)
         
         // Call the method under test
@@ -65,16 +65,16 @@ final class SRNetworkManagerTests: XCTestCase {
                             page: page) { result in
             XCTAssertEqual(result, .success, "The send method should return .success for a valid request")
             // Verify request was created and sent
-            XCTAssertNotNil(mockSession.request, "No request was created")
+            XCTAssertNotNil(self.mockSession.request, "No request was created")
             
             // Verify request has correct URL
-            XCTAssertEqual(mockSession.request?.url?.absoluteString, self.networkManager.endPoint, "Request URL doesn't match endpoint")
+            XCTAssertEqual(self.mockSession.request?.url?.absoluteString, self.networkManager.endPoint, "Request URL doesn't match endpoint")
             
             // Verify request method is POST
-            XCTAssertEqual(mockSession.request?.httpMethod, "POST", "Request method should be POST")
+            XCTAssertEqual(self.mockSession.request?.httpMethod, "POST", "Request method should be POST")
             
             // Verify request contains data
-            XCTAssertNotNil(mockSession.request?.httpBody, "Request body is nil")
+            XCTAssertNotNil(self.mockSession.request?.httpBody, "Request body is nil")
         }
     }
     
@@ -158,7 +158,7 @@ final class SRNetworkManagerTests: XCTestCase {
         
         // Assert
         XCTAssertEqual(metadata[Keys.application.rawValue] as? String, application, "Application value is incorrect")
-        XCTAssertEqual(metadata[Keys.segmentIndex.rawValue] as? Int, screenshotNumber, "Track number value is incorrect")
+        XCTAssertEqual(metadata[Keys.segmentIndex.rawValue] as? Int, screenshotNumber, "Screenshot number value is incorrect")
         XCTAssertEqual(metadata[Keys.segmentSize.rawValue] as? Int, dataSize, "Data size value is incorrect")
         XCTAssertEqual(metadata[Keys.segmentTimestamp.rawValue] as? Int, timestamp.milliseconds, "Timestamp value is incorrect")
         XCTAssertEqual(metadata[Keys.keySessionCreationDate.rawValue] as? Int, sessionCreationTime.milliseconds, "Session creation timestamp is incorrect")
@@ -221,9 +221,10 @@ class MockCoralogix: CoralogixInterface {
     var sessionCreationTimestamp: TimeInterval = 1737453647.568056
     var debugMode: Bool = false
     var reportedErrors: [String] = []
+    var periodicallyCaptureEventCalled = false
     
     func periodicallyCaptureEventTriggered() {
-        
+        periodicallyCaptureEventCalled = true
     }
     
     func hasSessionRecording(_ hasSessionRecording: Bool) {

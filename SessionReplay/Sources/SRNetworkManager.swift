@@ -43,7 +43,7 @@ public class MetadataBuilder {
             Keys.keySessionCreationDate.rawValue: sessionCreationTime.milliseconds,
             Keys.keySessionId.rawValue: sessionId,
             Keys.subIndex.rawValue: subIndex,
-            Keys.screenshotId.rawValue: screenshotId, //somehow the be called that snapshotId
+            Keys.screenshotId.rawValue: screenshotId,
             Keys.page.rawValue: page,
         ]
     }
