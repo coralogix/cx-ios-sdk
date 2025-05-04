@@ -25,7 +25,6 @@ class SessionReplayModel: UserInteractionRecorder {
     internal var urlManager = URLManager()
     private var urlObserver: URLObserver?
     internal var sessionId: String = ""
-    internal var trackNumber: Int = 0
     var captureTimer: Timer?
     private var isMaskingProcessorWorking = false
     var sessionReplayOptions: SessionReplayOptions?
@@ -35,6 +34,7 @@ class SessionReplayModel: UserInteractionRecorder {
     private let srNetworkManager: SRNetworkManager?
     private let urlPointDictQueue = DispatchQueue(label: "com.coralogix.urlPointDictQueue", attributes: .concurrent)
     private var urlPointDict = [String: CGPoint]()
+    internal let screenshotManager = ScreenshotManager()
     
     init(sessionReplayOptions: SessionReplayOptions? = nil,
          networkManager: SRNetworkManager? = SRNetworkManager()) {
@@ -87,7 +87,7 @@ class SessionReplayModel: UserInteractionRecorder {
                 return
             }
             
-            self.trackNumber += 1
+            self.screenshotManager.takeScreenshot()
             let fileName = self.generateFileName()
 
             if let documentsDirectory = FileManager.default.urls(
@@ -108,9 +108,8 @@ class SessionReplayModel: UserInteractionRecorder {
     
     internal func updateSessionId(with sessionId: String) {
         if sessionId != self.sessionId {
-            // Reset track to 0 and update the current session ID if it's a new session
             self.sessionId = sessionId
-            self.trackNumber = 0
+            self.screenshotManager.resetSession()
             _ = self.clearSessionReplayFolder()
             SRUtils.deleteURLsFromDisk()
         }
@@ -214,7 +213,7 @@ class SessionReplayModel: UserInteractionRecorder {
     }
     
     internal func generateFileName() -> String {
-        return "SessionReplay/\(sessionId)_\(trackNumber).jpg"
+        return "SessionReplay/\(sessionId)_\(self.screenshotManager.screenshotCount).jpg"
     }
     
     internal func handleCapturedData(fileURL: URL, data: Data, properties: [String: Any]?) {
@@ -273,14 +272,15 @@ class SessionReplayModel: UserInteractionRecorder {
             for (index, chunk) in compressedChunks.enumerated() {
                 //Log.d("Chunk \(index): \(chunk.count) bytes")
                 let subIndex = calculateSubIndex(chunkCount: compressedChunks.count, currentIndex: index)
-                
+                let page =  "\(self.screenshotManager.page)"
                 // Send Data
                 self.srNetworkManager?.send(chunk,
                                             timestamp: timestamp,
                                             sessionId: self.sessionId.lowercased(),
-                                            trackNumber: self.trackNumber,
+                                            screenshotNumber: self.screenshotManager.screenshotCount,
                                             subIndex: subIndex,
-                                            screenshotId: screenshotId) { result in
+                                            screenshotId: screenshotId,
+                                            page: page) { result in
                     if result == .success {
                         if let sdkManager = SdkManager.shared.getCoralogixSdk() {
                             sdkManager.hasSessionRecording(true)

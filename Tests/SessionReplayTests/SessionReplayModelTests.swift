@@ -63,13 +63,13 @@ final class SessionReplayModelTests: XCTestCase {
     func testUpdateSessionId_SameSession_IncrementTrack() {
         // Given
         sessionReplayModel.sessionId = "oldSession"
-        sessionReplayModel.trackNumber = 1
+        sessionReplayModel.screenshotManager.screenshotCount = 1
         
         // When
         sessionReplayModel.updateSessionId(with: "oldSession")
         
         // Then
-        XCTAssertEqual(sessionReplayModel.trackNumber, 1)
+        XCTAssertEqual(sessionReplayModel.screenshotManager.screenshotCount, 1)
         XCTAssertEqual(sessionReplayModel.sessionId, "oldSession")
         XCTAssertEqual(mockFileManager.clearSessionReplayFolderCallCount, 0, "Should not clear folder when session ID is unchanged")
     }
@@ -77,13 +77,13 @@ final class SessionReplayModelTests: XCTestCase {
     func testUpdateSessionId_NewSession_ResetTrackAndClearFolder() {
         // Given
         sessionReplayModel.sessionId = "oldSession"
-        sessionReplayModel.trackNumber = 1
+        sessionReplayModel.screenshotManager.screenshotCount = 1
         
         // When
         sessionReplayModel.updateSessionId(with: "newSession")
         
         // Then
-        XCTAssertEqual(sessionReplayModel.trackNumber, 0)
+        XCTAssertEqual(sessionReplayModel.screenshotManager.screenshotCount, 0)
         XCTAssertEqual(sessionReplayModel.sessionId, "newSession")
     }
     
@@ -274,15 +274,15 @@ final class SessionReplayModelTests: XCTestCase {
     func testGenerateFileName_shouldReturnCorrectFileName() {
         // Arrange
         let mockSessionId = "testSessionId"
-        let mockTrackNumber = 42
+        let mockSreenshotNumber = 42
         sessionReplayModel.sessionId = mockSessionId
-        sessionReplayModel.trackNumber = mockTrackNumber
+        sessionReplayModel.screenshotManager.screenshotCount = mockSreenshotNumber
         
         // Act
         let result = sessionReplayModel.generateFileName()
         
         // Assert
-        XCTAssertEqual(result, "SessionReplay/\(mockSessionId)_\(mockTrackNumber).jpg", "File name should match the expected format")
+        XCTAssertEqual(result, "SessionReplay/\(mockSessionId)_\(mockSreenshotNumber).jpg", "File name should match the expected format")
     }
     
     func testCompressAndSendData_withValidData_shouldReturnSuccess() {
@@ -462,9 +462,10 @@ final class MockSRNetworkManager: SRNetworkManager {
     override func send(_ data: Data,
                        timestamp: TimeInterval,
                        sessionId: String,
-                       trackNumber: Int,
+                       screenshotNumber: Int,
                        subIndex: Int,
                        screenshotId: String,
+                       page: String,
                        completion: @escaping (SessionReplayResultCode) -> Void) {
         didSendData = true
         sentChunks.append(data)

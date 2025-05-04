@@ -48,10 +48,10 @@ final class SRNetworkManagerTests: XCTestCase {
         let testData = Data("Test data".utf8)
         let timestamp = Date().timeIntervalSince1970
         let sessionId = "mockSessionId"
-        let trackNumber = 1
+        let screenshotNumber = 1
         let subIndex = 1
         let screenshotId = UUID().uuidString.lowercased()
-        
+        let page: String = "0"
         let mockSession = MockURLSession()
         networkManager = SRNetworkManager(session: mockSession)
         
@@ -59,9 +59,10 @@ final class SRNetworkManagerTests: XCTestCase {
         networkManager.send(testData,
                             timestamp: timestamp,
                             sessionId: sessionId,
-                            trackNumber: trackNumber,
+                            screenshotNumber: screenshotNumber,
                             subIndex: subIndex,
-                            screenshotId: screenshotId) { result in
+                            screenshotId: screenshotId,
+                            page: page) { result in
             XCTAssertEqual(result, .success, "The send method should return .success for a valid request")
             // Verify request was created and sent
             XCTAssertNotNil(mockSession.request, "No request was created")
@@ -82,10 +83,11 @@ final class SRNetworkManagerTests: XCTestCase {
         let testData = Data("Test data".utf8)
         let timestamp = Date().timeIntervalSince1970
         let sessionId = "mockSessionId"
-        let trackNumber = 1
+        let screenshotNumber = 1
         let subIndex = 1
         let screenshotId = UUID().uuidString.lowercased()
-        
+        let page: String = "0"
+
         // Simulate missing endPoint
         networkManager.endPoint = nil
         
@@ -93,9 +95,10 @@ final class SRNetworkManagerTests: XCTestCase {
         networkManager.send(testData,
                             timestamp: timestamp,
                             sessionId: sessionId,
-                            trackNumber: trackNumber,
+                            screenshotNumber: screenshotNumber,
                             subIndex: subIndex,
-                            screenshotId: screenshotId) { result in
+                            screenshotId: screenshotId,
+                            page: page) { result in
             
             // Assert the result
             XCTAssertEqual(result, .failure, "The send method should return .failure when endPoint is nil")
@@ -107,17 +110,19 @@ final class SRNetworkManagerTests: XCTestCase {
         let invalidData = Data() // Empty data
         let timestamp: TimeInterval = Date().timeIntervalSince1970
         let sessionId = "testSessionId"
-        let trackNumber = 1
+        let screenshotNumber = 1
         let subIndex = 1
         let screenshotId = UUID().uuidString.lowercased()
+        let page: String = "0"
 
         // Call the method under test
         networkManager.send(invalidData,
                             timestamp: timestamp,
                             sessionId: sessionId,
-                            trackNumber: trackNumber,
+                            screenshotNumber: screenshotNumber,
                             subIndex: subIndex,
-                            screenshotId: screenshotId) { result in
+                            screenshotId: screenshotId,
+                            page: page) { result in
             
             // Assert the result
             XCTAssertEqual(result, .failure, "The send method should return .failure for invalid JSON.")
@@ -133,7 +138,7 @@ final class SRNetworkManagerTests: XCTestCase {
         let timestamp: TimeInterval = Date().timeIntervalSince1970
         let sessionId = "testSession123"
         let dataSize = 1024
-        let trackNumber = 1
+        let screenshotNumber = 1
         let subIndex = 2
         let screenshotId = UUID().uuidString.lowercased()
         let page = "0"
@@ -143,7 +148,7 @@ final class SRNetworkManagerTests: XCTestCase {
             dataSize: dataSize,
             timestamp: timestamp,
             sessionId: sessionId,
-            trackNumber: trackNumber,
+            screenshotNumber: screenshotNumber,
             subIndex: subIndex,
             application: application,
             sessionCreationTime: sessionCreationTime,
@@ -153,7 +158,7 @@ final class SRNetworkManagerTests: XCTestCase {
         
         // Assert
         XCTAssertEqual(metadata[Keys.application.rawValue] as? String, application, "Application value is incorrect")
-        XCTAssertEqual(metadata[Keys.segmentIndex.rawValue] as? Int, trackNumber, "Track number value is incorrect")
+        XCTAssertEqual(metadata[Keys.segmentIndex.rawValue] as? Int, screenshotNumber, "Track number value is incorrect")
         XCTAssertEqual(metadata[Keys.segmentSize.rawValue] as? Int, dataSize, "Data size value is incorrect")
         XCTAssertEqual(metadata[Keys.segmentTimestamp.rawValue] as? Int, timestamp.milliseconds, "Timestamp value is incorrect")
         XCTAssertEqual(metadata[Keys.keySessionCreationDate.rawValue] as? Int, sessionCreationTime.milliseconds, "Session creation timestamp is incorrect")
@@ -172,7 +177,7 @@ final class SRNetworkManagerTests: XCTestCase {
         let timestamp: TimeInterval = Date().timeIntervalSince1970
         let sessionId = "testSession123"
         let dataSize = 1024
-        let trackNumber = 1
+        let screenshotNumber = 1
         let subIndex = 2
         let screenshotId = UUID().uuidString.lowercased()
         let page = "0"
@@ -182,7 +187,7 @@ final class SRNetworkManagerTests: XCTestCase {
             dataSize: dataSize,
             timestamp: timestamp,
             sessionId: sessionId,
-            trackNumber: trackNumber,
+            screenshotNumber: screenshotNumber,
             subIndex: subIndex,
             application: application,
             sessionCreationTime: sessionCreationTime,

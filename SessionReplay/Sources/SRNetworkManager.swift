@@ -29,7 +29,7 @@ public class MetadataBuilder {
     public func buildMetadata(dataSize: Int,
                               timestamp: TimeInterval,
                               sessionId: String,
-                              trackNumber: Int,
+                              screenshotNumber: Int,
                               subIndex: Int,
                               application: String,
                               sessionCreationTime: TimeInterval,
@@ -37,7 +37,7 @@ public class MetadataBuilder {
                               page: String) -> [String: Any] {
         return [
             Keys.application.rawValue: application,
-            Keys.segmentIndex.rawValue: trackNumber,
+            Keys.segmentIndex.rawValue: screenshotNumber,
             Keys.segmentSize.rawValue: dataSize,
             Keys.segmentTimestamp.rawValue: timestamp.milliseconds,
             Keys.keySessionCreationDate.rawValue: sessionCreationTime.milliseconds,
@@ -73,9 +73,10 @@ public class SRNetworkManager {
     public func send(_ data: Data,
                      timestamp: TimeInterval,
                      sessionId: String,
-                     trackNumber: Int,
+                     screenshotNumber: Int,
                      subIndex: Int,
                      screenshotId: String,
+                     page: String,
                      completion: @escaping (SessionReplayResultCode) -> Void) {
         guard let endPoint = self.endPoint,
               let publicKey = self.publicKey,
@@ -106,12 +107,12 @@ public class SRNetworkManager {
             dataSize: data.count,
             timestamp: timestamp,
             sessionId: sessionId,
-            trackNumber: trackNumber,
+            screenshotNumber: screenshotNumber,
             subIndex: subIndex,
             application: application,
             sessionCreationTime: sessionCreationTime,
             screenshotId: screenshotId,
-            page: "0"
+            page: page
         )
         Log.d("[metadata] \(metadata)")
         
@@ -179,29 +180,4 @@ public class SRNetworkManager {
         }
         task.resume()
     }
-    
-//    private func getMetadata(dataSize: Int,
-//                             timestamp: TimeInterval,
-//                             sessionId: String,
-//                             trackNumber: Int,
-//                             subIndex: Int) -> [String: Any] {
-//        guard let application = self.application else {
-//            Log.e("[SRNetworkManager] Session Replay missing Application name")
-//            return [String: Any]()
-//        }
-//        
-//        guard let sessionCreationTime = self.sessionCreationTimestamp else {
-//            Log.e("[SRNetworkManager] Session Replay missing Session Creation Time")
-//            return [String: Any]()
-//        }
-//        
-//        let metaData = [Keys.application.rawValue: application,
-//                        Keys.segmentIndex.rawValue: trackNumber,
-//                        Keys.segmentSize.rawValue: dataSize,
-//                        Keys.segmentTimestamp.rawValue: timestamp.milliseconds,
-//                        Keys.keySessionCreationDate.rawValue: sessionCreationTime.milliseconds,
-//                        Keys.keySessionId.rawValue: sessionId,
-//                        Keys.subIndex.rawValue: subIndex] as [String : Any]
-//        return metaData
-//    }
 }

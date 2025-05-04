@@ -81,7 +81,7 @@ class SessionReplayTests: XCTestCase {
         let timestemp: TimeInterval = Date().timeIntervalSince1970
         SessionReplay.shared.captureEvent(properties: [Keys.timestamp.rawValue: timestemp])
         if let sessionReplayModel = SessionReplay.shared.sessionReplayModel {
-            XCTAssertEqual(sessionReplayModel.trackNumber, 0, "Capture image should not be called when not recording.")
+            XCTAssertEqual(sessionReplayModel.screenshotManager.screenshotCount, 0, "Capture image should not be called when not recording.")
         }
     }
 }
