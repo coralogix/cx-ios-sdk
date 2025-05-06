@@ -10,7 +10,7 @@ import UIKit
 #endif
 
 public enum Global: String {
-    case sdk = "1.0.20"
+    case sdk = "1.0.21"
     case swiftVersion = "5.9"
     case coralogixPath = "/browser/v1beta/logs"
     case sessionReplayPath = "/browser/alpha/sessionrecording"
