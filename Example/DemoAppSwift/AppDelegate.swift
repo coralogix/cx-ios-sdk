@@ -7,7 +7,7 @@
 
 import UIKit
 import Coralogix
-import SessionReplay
+//import SessionReplay
 @main
 
 class AppDelegate: UIResponder, UIApplicationDelegate {
@@ -22,9 +22,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         let options = CoralogixExporterOptions(coralogixDomain: CoralogixDomain.STG,
                                                userContext: userContext,
                                                environment: "PROD",
-                                               application: "application",
+                                               application: "REPLACE_ME", // TODO: replace with real application name
                                                version: "1",
-                                               publicKey: "publicKey",
+                                               publicKey: "REPLACE_ME", // TODO: replace with real publicKey name
                                                instrumentations: [.mobileVitals: false,
                                                                   .custom: false,
                                                                   .errors: true,
