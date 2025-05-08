@@ -25,10 +25,10 @@ class ScreenshotManagerTests: XCTestCase {
 
     func testPageIncrementsEveryFiveScreenshots() {
         let manager = ScreenshotManager()
-        for _ in 1...10 {
+        for _ in 1...40 {
             manager.takeScreenshot()
         }
-        XCTAssertEqual(manager.screenshotCount, 10)
+        XCTAssertEqual(manager.screenshotCount, 40)
         XCTAssertEqual(manager.page, 2)
     }
 

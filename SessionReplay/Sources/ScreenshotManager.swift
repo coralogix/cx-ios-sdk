@@ -15,7 +15,7 @@ public class ScreenshotManager {
     // Constants
     private let maxScreenShotsPerPage: Int
 
-    public init(maxScreenShotsPerPage: Int = 5) {
+    public init(maxScreenShotsPerPage: Int = 20) {
         self.maxScreenShotsPerPage = maxScreenShotsPerPage
     }
     
