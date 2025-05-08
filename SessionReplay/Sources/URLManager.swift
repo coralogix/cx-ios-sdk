@@ -9,10 +9,13 @@ import Foundation
 import Combine
 import CoralogixInternal
 
+typealias URLProcessingCompletion = (Bool, TimeInterval, String) -> Void
+
 struct URLEntry {
     let url: URL
     let timestamp: TimeInterval
-    let completion: ((Bool, TimeInterval) -> Void)?
+    let screenshotId: String
+    let completion: URLProcessingCompletion?
 }
 
 class URLManager: ObservableObject {
@@ -23,11 +26,15 @@ class URLManager: ObservableObject {
         self.maxUrlsToKeep = max(1, maxUrlsToKeep)
     }
     
-    func addURL(_ url: URL, timestamp: TimeInterval, completion: ((Bool,TimeInterval) -> Void)? = nil) {
+    func addURL(_ url: URL,
+                timestamp: TimeInterval,
+                screenshotId: String,
+                completion: URLProcessingCompletion? = nil) {
         DispatchQueue.main.async {
             self.savedURLs.append(URLEntry(url: url,
-                                      timestamp: timestamp,
-                                      completion: completion))
+                                           timestamp: timestamp,
+                                           screenshotId: screenshotId,
+                                           completion: completion))
             if self.savedURLs.count > self.maxUrlsToKeep {
                 self.savedURLs.removeFirst(self.savedURLs.count - self.maxUrlsToKeep)
             }
@@ -54,6 +61,7 @@ class URLObserver {
                 let inputURL = lastEntry.url
                 let completion = lastEntry.completion
                 let timestamp = lastEntry.timestamp
+                let screenshotId = lastEntry.screenshotId
                 
                 if let patterns = sessionReplayOptions.maskText {
                     self.pipeline.isTextScannerEnabled = !patterns.isEmpty
@@ -83,7 +91,7 @@ class URLObserver {
                                     } else {
                                         Log.e("Pipeline encountered an error for URL: \(inputURL.lastPathComponent)")
                                     }
-                                    completion?(isSuccess, timestamp)
+                                    completion?(isSuccess, timestamp, screenshotId)
                                 }
                             }
                         }

@@ -243,7 +243,7 @@ public class ImageScanner {
                                  (self.creditCardPredicate ?? [])).map { $0.lowercased() }
             
             for observation in observations {
-                //Log.d("Recognized text: \(topCandidate.string)")
+                // Log.d("Recognized text: \(topCandidate.string)")
                 if let topCandidate = observation.topCandidates(1).first {
                     if allPredicates.contains(topCandidate.string.lowercased()) {
                         count += 1

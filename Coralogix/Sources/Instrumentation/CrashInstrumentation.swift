@@ -29,7 +29,7 @@ extension CoralogixRum {
                 
                 // Retrieving crash reporter data.
                 let report = try PLCrashReport(data: data)
-                var span = tracer().spanBuilder(spanName: Keys.iosSdk.rawValue).startSpan()
+                var span = tracerProvider().spanBuilder(spanName: Keys.iosSdk.rawValue).startSpan()
                 span.setAttribute(key: Keys.eventType.rawValue, value: CoralogixEventType.error.rawValue)
                 span.setAttribute(key: Keys.source.rawValue, value: Keys.console.rawValue)
                 span.setAttribute(key: Keys.severity.rawValue, value: AttributeValue.int(CoralogixLogSeverity.error.rawValue))

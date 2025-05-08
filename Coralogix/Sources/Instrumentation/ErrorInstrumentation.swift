@@ -9,12 +9,6 @@ import Foundation
 import CoralogixInternal
 
 extension CoralogixRum {
-    
-    internal func tracer() -> Tracer {
-        return OpenTelemetry.instance.tracerProvider.get(instrumentationName: Keys.iosSdk.rawValue,
-                                                         instrumentationVersion: Global.sdk.rawValue)
-    }
-    
     func reportErrorWith(exception: NSException) {
         if let options = self.coralogixExporter?.getOptions(),
            options.shouldInitInstumentation(instumentation: .errors) {
@@ -107,7 +101,7 @@ extension CoralogixRum {
         if let options = self.coralogixExporter?.getOptions(),
            options.shouldInitInstumentation(instumentation: .custom) ||
             options.shouldInitInstumentation(instumentation: .lifeCycle) {
-            var span = tracer().spanBuilder(spanName: Keys.iosSdk.rawValue).startSpan()
+            var span = tracerProvider().spanBuilder(spanName: Keys.iosSdk.rawValue).startSpan()
             span.setAttribute(key: Keys.message.rawValue, value: message)
             span.setAttribute(key: Keys.eventType.rawValue, value: CoralogixEventType.log.rawValue)
             span.setAttribute(key: Keys.source.rawValue, value: Keys.code.rawValue)
@@ -121,19 +115,33 @@ extension CoralogixRum {
             
             if severity.rawValue == CoralogixLogSeverity.error.rawValue {
                 self.addSnapshotContext(to: &span)
+                self.addScreenshotId(to: &span)
             }
             span.end()
         }
     }
     
     private func getSpan() -> any Span {
-        var span = tracer().spanBuilder(spanName: Keys.iosSdk.rawValue).startSpan()
+        var span = tracerProvider().spanBuilder(spanName: Keys.iosSdk.rawValue).startSpan()
         span.setAttribute(key: Keys.eventType.rawValue, value: CoralogixEventType.error.rawValue)
         span.setAttribute(key: Keys.source.rawValue, value: Keys.console.rawValue)
         span.setAttribute(key: Keys.severity.rawValue, value: AttributeValue.int(CoralogixLogSeverity.error.rawValue))
         self.addUserMetadata(to: &span)
         self.addSnapshotContext(to: &span)
+        self.addScreenshotId(to: &span)
         return span
+    }
+    
+    internal func addScreenshotId(to span: inout any Span) {
+        if let sessionReplay = SdkManager.shared.getSessionReplay() {
+            let screenshotId = UUID().uuidString.lowercased()
+            let properties: [String: Any] = [
+                Keys.timestamp.rawValue: Date().timeIntervalSince1970,
+                Keys.screenshotId.rawValue: screenshotId
+            ]
+            span.setAttribute(key: Keys.screenshotId.rawValue, value: screenshotId)
+            sessionReplay.captureEvent(properties: properties)
+        }
     }
     
     private func addSnapshotContext(to span: inout any Span) {

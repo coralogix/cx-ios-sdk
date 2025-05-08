@@ -48,26 +48,33 @@ final class SRNetworkManagerTests: XCTestCase {
         let testData = Data("Test data".utf8)
         let timestamp = Date().timeIntervalSince1970
         let sessionId = "mockSessionId"
-        let trackNumber = 1
+        let screenshotNumber = 1
         let subIndex = 1
-        
-        let mockSession = MockURLSession()
+        let screenshotId = UUID().uuidString.lowercased()
+        let page: String = "0"
+        mockSession = MockURLSession()
         networkManager = SRNetworkManager(session: mockSession)
         
         // Call the method under test
-        networkManager.send(testData, timestamp: timestamp, sessionId: sessionId, trackNumber: trackNumber, subIndex: subIndex) { result in
+        networkManager.send(testData,
+                            timestamp: timestamp,
+                            sessionId: sessionId,
+                            screenshotNumber: screenshotNumber,
+                            subIndex: subIndex,
+                            screenshotId: screenshotId,
+                            page: page) { result in
             XCTAssertEqual(result, .success, "The send method should return .success for a valid request")
             // Verify request was created and sent
-            XCTAssertNotNil(mockSession.request, "No request was created")
+            XCTAssertNotNil(self.mockSession.request, "No request was created")
             
             // Verify request has correct URL
-            XCTAssertEqual(mockSession.request?.url?.absoluteString, self.networkManager.endPoint, "Request URL doesn't match endpoint")
+            XCTAssertEqual(self.mockSession.request?.url?.absoluteString, self.networkManager.endPoint, "Request URL doesn't match endpoint")
             
             // Verify request method is POST
-            XCTAssertEqual(mockSession.request?.httpMethod, "POST", "Request method should be POST")
+            XCTAssertEqual(self.mockSession.request?.httpMethod, "POST", "Request method should be POST")
             
             // Verify request contains data
-            XCTAssertNotNil(mockSession.request?.httpBody, "Request body is nil")
+            XCTAssertNotNil(self.mockSession.request?.httpBody, "Request body is nil")
         }
     }
     
@@ -76,14 +83,22 @@ final class SRNetworkManagerTests: XCTestCase {
         let testData = Data("Test data".utf8)
         let timestamp = Date().timeIntervalSince1970
         let sessionId = "mockSessionId"
-        let trackNumber = 1
+        let screenshotNumber = 1
         let subIndex = 1
-        
+        let screenshotId = UUID().uuidString.lowercased()
+        let page: String = "0"
+
         // Simulate missing endPoint
         networkManager.endPoint = nil
         
         // Call the method under test
-        networkManager.send(testData, timestamp: timestamp, sessionId: sessionId, trackNumber: trackNumber, subIndex: subIndex) { result in
+        networkManager.send(testData,
+                            timestamp: timestamp,
+                            sessionId: sessionId,
+                            screenshotNumber: screenshotNumber,
+                            subIndex: subIndex,
+                            screenshotId: screenshotId,
+                            page: page) { result in
             
             // Assert the result
             XCTAssertEqual(result, .failure, "The send method should return .failure when endPoint is nil")
@@ -95,11 +110,19 @@ final class SRNetworkManagerTests: XCTestCase {
         let invalidData = Data() // Empty data
         let timestamp: TimeInterval = Date().timeIntervalSince1970
         let sessionId = "testSessionId"
-        let trackNumber = 1
+        let screenshotNumber = 1
         let subIndex = 1
-        
+        let screenshotId = UUID().uuidString.lowercased()
+        let page: String = "0"
+
         // Call the method under test
-        networkManager.send(invalidData, timestamp: timestamp, sessionId: sessionId, trackNumber: trackNumber, subIndex: subIndex) { result in
+        networkManager.send(invalidData,
+                            timestamp: timestamp,
+                            sessionId: sessionId,
+                            screenshotNumber: screenshotNumber,
+                            subIndex: subIndex,
+                            screenshotId: screenshotId,
+                            page: page) { result in
             
             // Assert the result
             XCTAssertEqual(result, .failure, "The send method should return .failure for invalid JSON.")
@@ -115,28 +138,34 @@ final class SRNetworkManagerTests: XCTestCase {
         let timestamp: TimeInterval = Date().timeIntervalSince1970
         let sessionId = "testSession123"
         let dataSize = 1024
-        let trackNumber = 1
+        let screenshotNumber = 1
         let subIndex = 2
-        
+        let screenshotId = UUID().uuidString.lowercased()
+        let page = "0"
+
         // Act
         let metadata = builder.buildMetadata(
             dataSize: dataSize,
             timestamp: timestamp,
             sessionId: sessionId,
-            trackNumber: trackNumber,
+            screenshotNumber: screenshotNumber,
             subIndex: subIndex,
             application: application,
             sessionCreationTime: sessionCreationTime,
+            screenshotId: screenshotId,
+            page: page
         )
         
         // Assert
         XCTAssertEqual(metadata[Keys.application.rawValue] as? String, application, "Application value is incorrect")
-        XCTAssertEqual(metadata[Keys.segmentIndex.rawValue] as? Int, trackNumber, "Track number value is incorrect")
+        XCTAssertEqual(metadata[Keys.segmentIndex.rawValue] as? Int, screenshotNumber, "Screenshot number value is incorrect")
         XCTAssertEqual(metadata[Keys.segmentSize.rawValue] as? Int, dataSize, "Data size value is incorrect")
         XCTAssertEqual(metadata[Keys.segmentTimestamp.rawValue] as? Int, timestamp.milliseconds, "Timestamp value is incorrect")
         XCTAssertEqual(metadata[Keys.keySessionCreationDate.rawValue] as? Int, sessionCreationTime.milliseconds, "Session creation timestamp is incorrect")
         XCTAssertEqual(metadata[Keys.keySessionId.rawValue] as? String, sessionId, "Session ID value is incorrect")
         XCTAssertEqual(metadata[Keys.subIndex.rawValue] as? Int, subIndex, "Sub-index value is incorrect")
+        XCTAssertEqual(metadata[Keys.screenshotId.rawValue] as? String, screenshotId, "ScreenshotsId value is incorrect")
+        XCTAssertEqual(metadata[Keys.page.rawValue] as? String, page, "Page value is incorrect")
     }
     
     func testBuildMetadata_ReturnsAllKeys() {
@@ -148,18 +177,22 @@ final class SRNetworkManagerTests: XCTestCase {
         let timestamp: TimeInterval = Date().timeIntervalSince1970
         let sessionId = "testSession123"
         let dataSize = 1024
-        let trackNumber = 1
+        let screenshotNumber = 1
         let subIndex = 2
-        
+        let screenshotId = UUID().uuidString.lowercased()
+        let page = "0"
+
         // Act
         let metadata = builder.buildMetadata(
             dataSize: dataSize,
             timestamp: timestamp,
             sessionId: sessionId,
-            trackNumber: trackNumber,
+            screenshotNumber: screenshotNumber,
             subIndex: subIndex,
             application: application,
-            sessionCreationTime: sessionCreationTime
+            sessionCreationTime: sessionCreationTime,
+            screenshotId: screenshotId,
+            page: page
         )
         
         // Assert
@@ -170,7 +203,9 @@ final class SRNetworkManagerTests: XCTestCase {
             Keys.segmentTimestamp.rawValue,
             Keys.keySessionCreationDate.rawValue,
             Keys.keySessionId.rawValue,
-            Keys.subIndex.rawValue
+            Keys.subIndex.rawValue,
+            Keys.screenshotId.rawValue,
+            Keys.page.rawValue
         ]
         
         XCTAssertEqual(metadata.keys.sorted(), expectedKeys.sorted(), "Metadata keys are incorrect")
@@ -186,6 +221,11 @@ class MockCoralogix: CoralogixInterface {
     var sessionCreationTimestamp: TimeInterval = 1737453647.568056
     var debugMode: Bool = false
     var reportedErrors: [String] = []
+    var periodicallyCaptureEventCalled = false
+    
+    func periodicallyCaptureEventTriggered() {
+        periodicallyCaptureEventCalled = true
+    }
     
     func hasSessionRecording(_ hasSessionRecording: Bool) {
         // update the coralogix sdk that there is a session recording to that session

@@ -22,13 +22,13 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         let options = CoralogixExporterOptions(coralogixDomain: CoralogixDomain.STG,
                                                userContext: userContext,
                                                environment: "PROD",
-                                               application: "",
+                                               application: "DemoApp-iOS-swift",
                                                version: "1",
-                                               publicKey: "",
+                                               publicKey: "cxtp_3EBvvOiDcFwgutlSBX507UsXvrSQts",
                                                instrumentations: [.mobileVitals: false,
                                                                   .custom: false,
                                                                   .errors: true,
-                                                                  .userActions: false,
+                                                                  .userActions: true,
                                                                   .network: true,
                                                                   .anr: false,
                                                                   .lifeCycle: false],
@@ -45,14 +45,14 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         AppDelegate.coralogixRum = CoralogixRum(options: options)
         
         // Must be initialized after CoralogixRum
-//        let sessionReplayOptions = SessionReplayOptions(recordingType: .image,
-//                                                        captureTimeInterval: 10.0,
-//                                                        captureScale: 2.0,
-//                                                        captureCompressionQuality: 0.8,
-//                                                        maskText: ["Stop"],
-//                                                        maskImages: true ,
-//                                                        autoStartSessionRecording: true)
-//        SessionReplay.initializeWithOptions(sessionReplayOptions:sessionReplayOptions)
+        let sessionReplayOptions = SessionReplayOptions(recordingType: .image,
+                                                        captureTimeInterval: 10.0,
+                                                        captureScale: 2.0,
+                                                        captureCompressionQuality: 0.8,
+                                                        maskText: ["Stop"],
+                                                        maskImages: true ,
+                                                        autoStartSessionRecording: true)
+        SessionReplay.initializeWithOptions(sessionReplayOptions:sessionReplayOptions)
         return true
     }
     

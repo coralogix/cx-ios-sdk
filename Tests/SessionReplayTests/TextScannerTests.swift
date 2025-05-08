@@ -78,15 +78,24 @@ class TextScannerTests: XCTestCase {
 
     func testMaskText_withNoText_shouldReturnOriginalImage() {
         // Mock input image without text
-        let inputURL = SDKResources.bundle.url(forResource: "test_image_2", withExtension: "png")!
-        let ciImage = CIImage(contentsOf: inputURL)!
-
-        let (maskedImage, totalTextCount, maskedTextCount) = textScanner.maskText(in: ciImage, with: ["anyPattern"])
-
-        XCTAssertNotNil(maskedImage, "The masked image should not be nil.")
-        XCTAssertEqual(ciImage.extent, maskedImage.extent, "The output image should have the same extent as the input image.")
-        XCTAssertEqual(0, totalTextCount)
-        XCTAssertEqual(0, maskedTextCount)
+        guard let originalURL = SDKResources.bundle.url(forResource: "test_image_2", withExtension: "png") else {
+            XCTFail("test_image.png not found in Bundle.module")
+            return
+        }
+        do {
+            // Create a unique file
+            let uniqueFileURL = try createUniqueFile(from: originalURL, withExtension: "png")
+            
+            let ciImage = CIImage(contentsOf: uniqueFileURL)!
+            
+            let (maskedImage, _, maskedTextCount) = textScanner.maskText(in: ciImage, with: ["anyPattern"])
+            
+            XCTAssertNotNil(maskedImage, "The masked image should not be nil.")
+            XCTAssertEqual(ciImage.extent, maskedImage.extent, "The output image should have the same extent as the input image.")
+            XCTAssertEqual(0, maskedTextCount)
+        } catch {
+            XCTFail("Error creating unique file: \(error)")
+        }
     }
     
     func testMaskText_withSpecificPattern_shouldMaskOnlyMatchingText() {

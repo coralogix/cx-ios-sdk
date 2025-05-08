@@ -30,40 +30,46 @@ extension CoralogixRum {
     // Increment the click counter and handle the tap object
     private func processTapObject(_ tapObject: [String: Any]) {
         self.sessionManager?.incrementClickCounter()
-        
-        if containsXY(tapObject) {
-            handleSessionReplayEvent(tapObject)
-        } else {
-            handleNonXYEvent(tapObject)
-        }
+        let span = getUserActionsSpan()
+        handleUserInteractionEvent(tapObject, span: span)
     }
     
     // Handle the case where x and y coordinates are present
-    private func handleSessionReplayEvent(_ tapObject: [String: Any]) {
-        if let sessionReplay = SdkManager.shared.getSessionReplay() {
-            sessionReplay.captureEvent(properties: tapObject)
-        } else {
-            Log.e("[SessionReplay] is not initialized")
-        }
-    }
+    internal func handleUserInteractionEvent(_ properties: [String: Any], span: any Span) {
+        let timestamp = Date().timeIntervalSince1970
+        let screenshotId = UUID().uuidString.lowercased()
 
-    // Handle the case where x and y coordinates are not present
-    private func handleNonXYEvent(_ tapObject: [String: Any]) {
-        let span = getUserActionsSpan()
+        if let sessionReplay = SdkManager.shared.getSessionReplay(),
+           containsXY(properties) {
+            let metadata = buildMetadata(properties: properties, timestamp: timestamp, screenshotId: screenshotId)
+            span.setAttribute(key: Keys.screenshotId.rawValue, value: screenshotId)
+            sessionReplay.captureEvent(properties: metadata)
+        }
+        
         span.setAttribute(
             key: Keys.tapObject.rawValue,
-            value: Helper.convertDictionayToJsonString(dict: tapObject)
+            value: Helper.convertDictionayToJsonString(dict: properties)
         )
         span.end()
     }
     
+    internal func buildMetadata(properties: [String: Any], timestamp: TimeInterval, screenshotId: String) -> [String: Any] {
+        var metadata: [String: Any] = [
+            Keys.timestamp.rawValue: timestamp,
+            Keys.screenshotId.rawValue: screenshotId
+        ]
+        // Keep SDK-generated keys if duplicates exist
+        metadata.merge(properties) { (_, current) in current }
+        return metadata
+    }
+    
     // Check if the dictionary contains x and y properties
-    private func containsXY(_ dict: [String: Any]) -> Bool {
+    internal func containsXY(_ dict: [String: Any]) -> Bool {
         return dict[Keys.positionX.rawValue] != nil && dict[Keys.positionY.rawValue] != nil
     }
     
-    private func getUserActionsSpan() -> any Span {
-        var span = tracer().spanBuilder(spanName: Keys.iosSdk.rawValue).startSpan()
+    internal func getUserActionsSpan() -> any Span {
+        var span = tracerProvider().spanBuilder(spanName: Keys.iosSdk.rawValue).startSpan()
         self.addUserMetadata(to: &span)
         span.setAttribute(key: Keys.eventType.rawValue, value: CoralogixEventType.userInteraction.rawValue)
         span.setAttribute(key: Keys.severity.rawValue, value: AttributeValue.int(CoralogixLogSeverity.info.rawValue))

@@ -20,6 +20,12 @@ public class CoralogixRum {
     internal var sessionManager: SessionManager?
     internal var sessionInstrumentation: URLSessionInstrumentation? = nil
     internal var metricsManager = MetricsManager()
+    internal var tracerProvider: () -> Tracer = {
+        return OpenTelemetry.instance.tracerProvider.get(
+            instrumentationName: Keys.iosSdk.rawValue,
+            instrumentationVersion: Global.sdk.rawValue
+        )
+    }
     
     let notificationCenter = NotificationCenter.default
     
@@ -138,6 +144,7 @@ public class CoralogixRum {
         UITableViewController.swizzleUITableViewControllerDelegate
         UICollectionView.swizzleTouchesEnded
         UIPageControl.swizzleSetCurrentPage
+        UIApplication.swizzleSendEvent
     }
     
     public func setUserContext(userContext: UserContext) {

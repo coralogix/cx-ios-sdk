@@ -85,7 +85,7 @@ public class CoralogixExporter: SpanExporter {
                 return .success
             }
             
-            if (CoralogixRum.sdkFramework == .reactNative && self.options.beforeSendCallBack != nil) {
+            if ([.reactNative, .flutter].contains(CoralogixRum.sdkFramework) && self.options.beforeSendCallBack != nil) {
                 self.options.beforeSendCallBack?(cxSpansDictionary)
                 return .success
             } else {

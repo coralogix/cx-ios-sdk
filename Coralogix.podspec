@@ -1,7 +1,7 @@
 Pod::Spec.new do |spec|
 
   spec.name         = "Coralogix"
-  spec.version      = "1.0.20"
+  spec.version      = "1.0.21"
   spec.summary      = "Coralogix OpenTelemetry pod for iOS."
 
   spec.description  = <<-DESC

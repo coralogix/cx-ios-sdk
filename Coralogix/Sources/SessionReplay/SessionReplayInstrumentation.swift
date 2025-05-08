@@ -9,6 +9,19 @@ import Foundation
 import CoralogixInternal
 
 extension CoralogixRum: CoralogixInterface {
+    public func periodicallyCaptureEventTriggered() {
+        if let sessionReplay = SdkManager.shared.getSessionReplay() {
+            let screenshotId = UUID().uuidString.lowercased()
+            let properties: [String: Any] = [
+                Keys.timestamp.rawValue: Date().timeIntervalSince1970,
+                Keys.screenshotId.rawValue: screenshotId
+            ]
+            sessionReplay.captureEvent(properties: properties)
+        } else {
+            Log.e("[SessionReplay] is not initialized")
+        }
+    }
+    
     public func hasSessionRecording(_ hasSessionRecording: Bool) {
         self.sessionManager?.hasRecording = hasSessionRecording
     }
@@ -58,7 +71,6 @@ extension CoralogixRum: CoralogixInterface {
     public func startRecording() {
         if let sessionReplay = SdkManager.shared.getSessionReplay() {
             sessionReplay.startRecording()
-            sessionReplay.captureEvent(properties: ["key": "value"])
         } else {
             Log.e("[SessionReplay] is not initialized")
         }

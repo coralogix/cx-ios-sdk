@@ -1,0 +1,24 @@
+{
+  "configurations" : [
+    {
+      "id" : "A31E2FDF-82CB-4C6C-9F6F-A37DA4632A3B",
+      "name" : "Configuration 1",
+      "options" : {
+
+      }
+    }
+  ],
+  "defaultOptions" : {
+
+  },
+  "testTargets" : [
+    {
+      "target" : {
+        "containerPath" : "container:",
+        "identifier" : "SessionReplayTests",
+        "name" : "SessionReplayTests"
+      }
+    }
+  ],
+  "version" : 1
+}

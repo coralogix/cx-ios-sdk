@@ -71,7 +71,7 @@ class SessionReplayTests: XCTestCase {
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
             let timestemp: TimeInterval = Date().timeIntervalSince1970
             SessionReplay.shared.captureEvent(properties: [Keys.timestamp.rawValue: timestemp])
-            XCTAssertEqual(mockSessionReplayModel.captureImageCallCount, 2, "Capture image should be called when recording.")
+            XCTAssertEqual(mockSessionReplayModel.captureImageCallCount, 1, "Capture image should be called when recording.")
             expectation.fulfill()
         }
         waitForExpectations(timeout: 4.0, handler: nil)
@@ -81,7 +81,7 @@ class SessionReplayTests: XCTestCase {
         let timestemp: TimeInterval = Date().timeIntervalSince1970
         SessionReplay.shared.captureEvent(properties: [Keys.timestamp.rawValue: timestemp])
         if let sessionReplayModel = SessionReplay.shared.sessionReplayModel {
-            XCTAssertEqual(sessionReplayModel.trackNumber, 0, "Capture image should not be called when not recording.")
+            XCTAssertEqual(sessionReplayModel.screenshotManager.screenshotCount, 0, "Capture image should not be called when not recording.")
         }
     }
 }
