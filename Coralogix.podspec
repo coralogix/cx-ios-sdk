@@ -29,7 +29,7 @@ Pod::Spec.new do |spec|
 
   spec.static_framework = true
   spec.dependency 'PLCrashReporter', '~> 1.11.1'
-  spec.dependency 'CoralogixInternal'
+  spec.dependency 'CoralogixInternal', '1.0.21'
 
   spec.test_spec 'Tests' do |test|
     test.source_files = 'Tests/CoralogixRumTests/**/*.swift'
