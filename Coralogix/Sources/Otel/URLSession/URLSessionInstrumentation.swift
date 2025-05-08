@@ -56,6 +56,9 @@ public class URLSessionInstrumentation {
         injectLock.lock()
         defer { injectLock.unlock() }
         
+        guard !didInject else { return }
+            didInject = true
+        
 #if swift(<5.7)
         let selectors = [
             #selector(URLSessionDataDelegate.urlSession(_:dataTask:didReceive:)),
@@ -79,20 +82,27 @@ public class URLSessionInstrumentation {
         
         for theClass in classes {
             guard theClass != Self.self else { continue }
-            var selectorFound = false
-            var methodCount: UInt32 = 0
-            guard let methodList = class_copyMethodList(theClass, &methodCount) else { continue }
-            defer { free(methodList) }
             
-            for j in 0 ..< selectorsCount {
-                for i in 0 ..< Int(methodCount) {
-                    if method_getName(methodList[i]) == selectors[j] {
-                        selectorFound = true
-                        injectIntoDelegateClass(cls: theClass)
-                        break
-                    }
-                }
-                if selectorFound {
+            // MARK: [FIX] Validate Objective-C class (prevents crash in class_copyMethodList)
+            guard class_getSuperclass(theClass) != nil else {
+                Log.e("Skipping non-ObjC class: \(theClass)")
+                continue
+            }
+            
+            guard !class_isMetaClass(theClass) else {
+                Log.e("Skipping metaclass: \(theClass)")
+                continue
+            }
+            
+            var methodCount: UInt32 = 0
+            guard let methodListPointer = class_copyMethodList(theClass, &methodCount) else { continue }
+            defer { free(methodListPointer) }
+            
+            let methodList = UnsafeBufferPointer(start: methodListPointer, count: Int(methodCount))
+
+            for selector in selectors {
+                if methodList.contains(where: { method_getName($0) == selector }) {
+                    injectIntoDelegateClass(cls: theClass)
                     break
                 }
             }
@@ -124,52 +134,55 @@ public class URLSessionInstrumentation {
     
     private func injectIntoNSURLSessionCreateTaskMethods() {
         let cls = URLSession.self
-        [
+        let selectors: [Selector] = [
             #selector(URLSession.dataTask(with:) as (URLSession) -> (URLRequest) -> URLSessionDataTask),
             #selector(URLSession.dataTask(with:) as (URLSession) -> (URL) -> URLSessionDataTask),
             #selector(URLSession.uploadTask(withStreamedRequest:)),
             #selector(URLSession.downloadTask(with:) as (URLSession) -> (URLRequest) -> URLSessionDownloadTask),
             #selector(URLSession.downloadTask(with:) as (URLSession) -> (URL) -> URLSessionDownloadTask),
             #selector(URLSession.downloadTask(withResumeData:)),
-        ].forEach {
-            let selector = $0
-            guard let original = class_getInstanceMethod(cls, selector) else {
-                Log.d("injectInto \(selector.description) failed")
-                return
+        ]
+        
+        for selector in selectors {
+            guard let method = class_getInstanceMethod(cls, selector) else {
+                Log.e("Method \(selector) not found in \(cls)")
+                continue
             }
-            var originalIMP: IMP?
             
+            // MARK: [FIX] Guard for IMP existence
+            let originalIMP = method_getImplementation(method)
+            
+            // MARK: [FIX] Safe block-based swizzling
             let block: @convention(block) (URLSession, AnyObject) -> URLSessionTask = { session, argument in
+                // MARK: [FIX] Reentrancy guard
+                let key = "cx.reentrancy.\(selector)"
+                if objc_getAssociatedObject(session, key) != nil {
+                    return unsafeBitCast(originalIMP, to: (@convention(c) (URLSession, Selector, AnyObject) -> URLSessionTask).self)(session, selector, argument)
+                }
+                objc_setAssociatedObject(session, key, true, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+                defer { objc_setAssociatedObject(session, key, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC) }
+                
+                let castedIMP = unsafeBitCast(originalIMP, to: (@convention(c) (URLSession, Selector, Any) -> URLSessionTask).self)
+                let sessionTaskId = UUID().uuidString
+                var task: URLSessionTask
+                
                 if let url = argument as? URL {
                     let request = URLRequest(url: url)
-                    if self.configuration.shouldInjectTracingHeaders?(request) ?? true {
-                        if selector == #selector(URLSession.dataTask(with:) as (URLSession) -> (URL) -> URLSessionDataTask) {
-                            return session.dataTask(with: request)
-                        } else {
-                            return session.downloadTask(with: request)
-                        }
-                    }
-                }
-                
-                let castedIMP = unsafeBitCast(originalIMP, to: (@convention(c) (URLSession, Selector, Any) -> URLSessionDataTask).self)
-                var task: URLSessionTask
-                let sessionTaskId = UUID().uuidString
-                
-                if let request = argument as? URLRequest, objc_getAssociatedObject(argument, &idKey) == nil {
-                    let instrumentedRequest = URLSessionLogger.processAndLogRequest(request, sessionTaskId: sessionTaskId, instrumentation: self, shouldInjectHeaders: true)
-                    task = castedIMP(session, selector, instrumentedRequest ?? request)
+                    let instrumented = URLSessionLogger.processAndLogRequest(request, sessionTaskId: sessionTaskId, instrumentation: self, shouldInjectHeaders: true)
+                    task = castedIMP(session, selector, instrumented ?? request)
+                } else if let request = argument as? URLRequest {
+                    let instrumented = URLSessionLogger.processAndLogRequest(request, sessionTaskId: sessionTaskId, instrumentation: self, shouldInjectHeaders: true)
+                    task = castedIMP(session, selector, instrumented ?? request)
                 } else {
                     task = castedIMP(session, selector, argument)
-                    if objc_getAssociatedObject(argument, &idKey) == nil, let currentRequest = task.currentRequest
-                    {
-                        URLSessionLogger.processAndLogRequest(currentRequest, sessionTaskId: sessionTaskId, instrumentation: self, shouldInjectHeaders: false)
-                    }
                 }
                 self.setIdKey(value: sessionTaskId, for: task)
                 return task
             }
-            let swizzledIMP = imp_implementationWithBlock(unsafeBitCast(block, to: AnyObject.self))
-            originalIMP = method_setImplementation(original, swizzledIMP)
+            
+            // MARK: [FIX] Guard method_setImplementation
+            let swizzledIMP = imp_implementationWithBlock(block as Any)
+            _ = method_setImplementation(method, swizzledIMP)
         }
     }
     
