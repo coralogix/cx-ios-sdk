@@ -17,11 +17,7 @@ public enum SessionReplayResultCode {
   case failure
 }
 
-protocol UserInteractionRecorder {
-    func getUserInteraction(for url: String) -> CGPoint?
-}
-
-class SessionReplayModel: UserInteractionRecorder {
+class SessionReplayModel {
     internal var urlManager = URLManager()
     private var urlObserver: URLObserver?
     internal var sessionId: String = ""
@@ -32,8 +28,6 @@ class SessionReplayModel: UserInteractionRecorder {
     private var debounceWorkItem: DispatchWorkItem? = nil
     private let debounceInterval: TimeInterval = 0.5 // 500 milliseconds
     private let srNetworkManager: SRNetworkManager?
-    private let urlPointDictQueue = DispatchQueue(label: "com.coralogix.urlPointDictQueue", attributes: .concurrent)
-    private var urlPointDict = [String: CGPoint]()
     internal let screenshotManager = ScreenshotManager()
     
     init(sessionReplayOptions: SessionReplayOptions? = nil,
@@ -180,17 +174,6 @@ class SessionReplayModel: UserInteractionRecorder {
         }
     }
     
-
-    // MARK: - Protocol
-
-    func getUserInteraction(for url: String) -> CGPoint? {
-        var point: CGPoint?
-        urlPointDictQueue.sync {
-            point = urlPointDict[url]
-        }
-        return point
-    }
-    
     // MARK: - Helper Methods
 
     internal func getKeyWindow(connectedScenes: Set<UIScene> = UIApplication.shared.connectedScenes) -> UIWindow? {
@@ -221,24 +204,26 @@ class SessionReplayModel: UserInteractionRecorder {
     internal func handleCapturedData(fileURL: URL, data: Data, properties: [String: Any]?) {
         let timestamp = self.getTimestamp(from: properties)
         let screenshotId = self.getScreenshotId(from: properties)
-        if let point = self.getClickPoint(from: properties) {
-            urlPointDictQueue.async(flags: .barrier) {
-                self.urlPointDict[fileURL.absoluteString] = point
-            }
-        }
         
         DispatchQueue(label: "com.coralogix.fileOperations").async { [weak self] in
             guard let self = self else { return }
-
+            let point = self.getClickPoint(from: properties)
+            Log.w("Handling point: \(point)")
             _ = self.saveImageToDocumentIfDebug(fileURL: fileURL, data: data)
             
-            self.urlManager.addURL(fileURL,
-                                   timestamp: timestamp,
-                                   screenshotId: screenshotId) { [weak self] isSuccess, originalTimestamp, originalScreenshotId  in
+            let completion: URLProcessingCompletion = { [weak self] isSuccess, originalTimestamp, originalScreenshotId  in
                 _ = self?.compressAndSendData(data: data,
                                               timestamp: originalTimestamp,
                                               screenshotId: originalScreenshotId)
             }
+            
+            let urlEntry = URLEntry(url: fileURL,
+                                    timestamp: timestamp,
+                                    screenshotId: screenshotId,
+                                    completion: completion,
+                                    point: point)
+            
+            self.urlManager.addURL(urlEntry: urlEntry)
             self.updateSessionId(with: self.sessionId)
         }
     }

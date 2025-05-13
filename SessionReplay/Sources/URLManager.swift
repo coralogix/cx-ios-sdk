@@ -16,6 +16,7 @@ struct URLEntry {
     let timestamp: TimeInterval
     let screenshotId: String
     let completion: URLProcessingCompletion?
+    let point: CGPoint?
 }
 
 class URLManager: ObservableObject {
@@ -26,15 +27,9 @@ class URLManager: ObservableObject {
         self.maxUrlsToKeep = max(1, maxUrlsToKeep)
     }
     
-    func addURL(_ url: URL,
-                timestamp: TimeInterval,
-                screenshotId: String,
-                completion: URLProcessingCompletion? = nil) {
+    func addURL(urlEntry: URLEntry) {
         DispatchQueue.main.async {
-            self.savedURLs.append(URLEntry(url: url,
-                                           timestamp: timestamp,
-                                           screenshotId: screenshotId,
-                                           completion: completion))
+            self.savedURLs.append(urlEntry)
             if self.savedURLs.count > self.maxUrlsToKeep {
                 self.savedURLs.removeFirst(self.savedURLs.count - self.maxUrlsToKeep)
             }
@@ -62,6 +57,7 @@ class URLObserver {
                 let completion = lastEntry.completion
                 let timestamp = lastEntry.timestamp
                 let screenshotId = lastEntry.screenshotId
+                let point = lastEntry.point
                 
                 if let patterns = sessionReplayOptions.maskText {
                     self.pipeline.isTextScannerEnabled = !patterns.isEmpty
@@ -82,6 +78,7 @@ class URLObserver {
                         isValid: { [weak self] id in
                             return self?.currentOperationId == id
                         },
+                        tapPoint: point,
                         completion: { isSuccess in
                             DispatchQueue.main.async {
                                 // Only log completion if this is still the current operation

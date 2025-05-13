@@ -16,13 +16,22 @@ class ScannerPipeline {
     private let imageScanner = ImageScanner()
     private let faceScanner = FaceScanner()
     private let clickScanner = ClickScanner()
+    private let coordinateQueue = DispatchQueue(label: "com.coralogix.scannerPipeline.coordinateQueue")
+
+    private var _tapPoint: CGPoint?
+    private var tapPoint: CGPoint? {
+        get { coordinateQueue.sync { _tapPoint } }
+        set { coordinateQueue.sync { _tapPoint = newValue } }
+    }
     
     func runPipelineWithCancellation(
         inputURL: URL,
         options: SessionReplayOptions,
         operationId: UUID,
         isValid: @escaping (UUID) -> Bool,
+        tapPoint: CGPoint? = nil,
         completion: @escaping (Bool) -> Void) {
+            self.tapPoint = tapPoint
             
             // If operation is no longer valid, exit early
             guard isValid(operationId) else {
@@ -30,7 +39,7 @@ class ScannerPipeline {
                 completion(false)
                 return
             }
-            
+                
             // Run Image Scanner if enabled
             if isImageScannerEnabled {
                 imageScanner.processImage(at: inputURL,
@@ -163,8 +172,14 @@ class ScannerPipeline {
                 completion(false)
                 return
             }
-            // TBD: need to have the x, y from Coralogix SDK
-            clickScanner.processImage(at: inputURL, x: 100, y: 100) { result in
+            
+            guard let point = self.tapPoint else {
+                Log.e("Tap point not provided. Cannot run ClickScanner.")
+                completion(false)
+                return
+            }
+            
+            clickScanner.processImage(at: inputURL, x: point.x, y: point.y) { result in
                 guard isValid(operationId) else {
                     // Skip next stage if operation is no longer valid
                     completion(false)

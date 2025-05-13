@@ -249,13 +249,13 @@ extension UIApplication {
         
         // Process touch events
         if let touches = event.allTouches, let touch = touches.first, touch.phase == .began {
-            let location = touch.location(in: nil) // Screen coordinates
-            let positionX = location.x
-            let positionY = location.y
-            
-            // Post the touch event to a notification center or your SDK
-            let tap = [Keys.positionX.rawValue: positionX,
-                       Keys.positionY.rawValue: positionY] as? [String: Any]
+  
+            let location = touch.location(in: nil) // UIKit coordinate system (top-left origin)
+           
+            let tap = [
+                Keys.positionX.rawValue: location.x,
+                Keys.positionY.rawValue: location.y
+            ]
             NotificationCenter.default.post(name: .cxRumNotificationUserActions, object: tap)
         }
     }

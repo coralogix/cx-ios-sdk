@@ -21,8 +21,24 @@ class ClickScanner {
             completion(false)
             return
         }
+        let screenSize = UIScreen.main.bounds.size
+        let imageSize = ciImage.extent.size
         
-        guard let clickedCGImage = self.addClickMark(to: ciImage, at: x, y: y) else {
+        // Scale screen point to image pixels
+        let scaleX = imageSize.width / screenSize.width
+        let scaleY = imageSize.height / screenSize.height
+        
+        let scaledX = x * scaleX
+        let scaledY = y * scaleY
+        let flippedY = imageSize.height - scaledY
+        
+        let imagePoint = CGPoint(x: scaledX, y: flippedY)
+        print("Screen size: \(screenSize)")
+        print("Image size: \(imageSize)")
+        print("Tap point (screen): \(x), \(y)")
+        print("Tap point (image): \(scaledX), flippedY: \(flippedY)")
+        
+        guard let clickedCGImage = self.addClickMark(to: ciImage, at: imagePoint.x, y: imagePoint.y) else {
             completion(false)
             return
         }
@@ -48,16 +64,15 @@ class ClickScanner {
 
         // Create a UIImage from the base CGImage
         let baseImage = UIImage(cgImage: baseCGImage)
-
+        
         // Create a graphics context for the new image
         UIGraphicsBeginImageContext(baseImage.size)
 
         // Draw the base image
         baseImage.draw(in: CGRect(origin: .zero, size: baseImage.size))
+        let flippedY = baseImage.size.height - y
 
-        // Define the click mark center
-        let adjustedY = baseImage.size.height - y // Adjust for flipped Y-axis
-        let centerPoint = CGPoint(x: x, y: adjustedY)
+        let centerPoint = CGPoint(x: x, y: flippedY)
 
         let fifteenpercent = 0.15
         let outerRadius: CGFloat = max(markSize.width, markSize.height) / 2
@@ -109,47 +124,5 @@ class ClickScanner {
         let innermostCirclePath = UIBezierPath(arcCenter: center, radius: innerRadius - gap, startAngle: 0, endAngle: .pi * 2, clockwise: true)
         UIColor.systemTeal.setFill() // Innermost circle color
         innermostCirclePath.fill()
-    }
-        
-    func addClickMark(to ciImage: CIImage, at x: CGFloat, y: CGFloat, clickMark: UIImage) -> CGImage? {
-        // Create a CIContext
-        let context = CIContext()
-
-        // Convert the CIImage to a CGImage
-        guard let baseCGImage = context.createCGImage(ciImage, from: ciImage.extent) else {
-            Log.e("Failed to create CGImage from CIImage")
-            return nil
-        }
-
-        // Create a UIImage from the base CGImage
-        let baseImage = UIImage(cgImage: baseCGImage)
-
-        // Create a graphics context for the new image
-        UIGraphicsBeginImageContext(baseImage.size)
-
-        // Draw the base image
-        baseImage.draw(in: CGRect(origin: .zero, size: baseImage.size))
-
-        // Draw the click mark image at the specified coordinates
-        let clickMarkSize = CGSize(width: 50, height: 50) // Adjust size as needed
-        let clickMarkRect = CGRect(
-            x: x - clickMarkSize.width / 2, // Center the click mark
-            y: baseImage.size.height - y - clickMarkSize.height / 2, // Adjust for flipped Y-axis
-            width: clickMarkSize.width,
-            height: clickMarkSize.height
-        )
-        clickMark.draw(in: clickMarkRect)
-
-        // Get the resulting image from the graphics context
-        let resultingImage = UIGraphicsGetImageFromCurrentImageContext()
-        UIGraphicsEndImageContext()
-
-        // Convert the resulting UIImage back to CIImage
-        guard let resultingCGImage = resultingImage?.cgImage else {
-            Log.e("Failed to convert resulting UIImage to CIImage")
-            return nil
-        }
-
-        return resultingCGImage
     }
 }
