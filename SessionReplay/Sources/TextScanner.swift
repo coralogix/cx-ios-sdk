@@ -23,19 +23,13 @@ public class TextScanner {
     /// - Parameters:
     ///   - inputURL: The file URL of the input image.
     ///   - maskText:  Optional regex patterns to decide which text to mask.
-    public func processImage(at inputURL: URL,
+    public func processImage(ciImage: CIImage,
                              maskText: [String]? = nil,
-                             completion: @escaping (Bool, Int, Int) -> Void) {
-        guard let inputImage = CIImage(contentsOf: inputURL) else {
-            completion(false, 0, 0)
-            return
-        }
+                             completion: @escaping (CIImage) -> Void) {
         
-        let (maskedImage, totalTextCount, maskedTextCount) = self.maskText(in: inputImage, with: maskText)
+        let maskedImage = self.maskText(in: ciImage, with: maskText)
         
-        SRUtils.saveImage(maskedImage, outputURL: inputURL) { isSuccess in
-            completion(isSuccess, totalTextCount, maskedTextCount)
-        }
+        completion(maskedImage)
     }
     
     /// Masks text regions in the provided image.
@@ -43,7 +37,7 @@ public class TextScanner {
     /// - Returns: A new `CIImage` with text regions masked.
     /// - Mask the Detected Text Regions: For each matching text, determine its bounding box,
     ///   adjust it to the image's coordinate system, and overlay a mask on that region.
-    internal func maskText(in image: CIImage, with patterns: [String]?) -> (CIImage, Int, Int) {
+    internal func maskText(in image: CIImage, with patterns: [String]?) -> (CIImage) {
         let blackColor = CIColor.black
         var maskLayer = CIImage.empty().cropped(to: image.extent)
         var totalTextCount = 0
@@ -95,13 +89,13 @@ public class TextScanner {
             try handler.perform([request])
         } catch {
             Log.e("Failed to perform text detection: \(error)")
-            return (image, 0, 0)
+            return image
         }
         
         let flippedMaskLayer = maskLayer
             .transformed(by: CGAffineTransform(scaleX: 1, y: -1))
             .transformed(by: CGAffineTransform(translationX: 0, y: image.extent.height))
         
-        return (flippedMaskLayer.composited(over: image), totalTextCount, maskedTextCount)
+        return (flippedMaskLayer.composited(over: image))
     }
 }

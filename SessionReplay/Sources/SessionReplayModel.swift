@@ -58,25 +58,32 @@ class SessionReplayModel {
         // Create a new work item
         let workItem = DispatchWorkItem { [weak self] in
             guard let self = self else { return }
-            
-            guard let window = self.getKeyWindow() else {
-                Log.e("No key window found")
-                return
-            }
-          
-            guard let options = self.sessionReplayOptions,
-                  self.isValidSessionReplayOptions(options) else {
-                Log.e("Invalid sessionReplayOptions")
-                return
-            }
-            
             guard !sessionId.isEmpty else {
                 Log.e("Invalid sessionId")
                 return
             }
             
-            guard let screenshotData = window.captureScreenshot(scale: options.captureScale,
-                                                      compressionQuality: options.captureCompressionQuality) else {
+            var screenshotData: Data? = properties?[Keys.screenshotData.rawValue] as? Data
+
+            if screenshotData == nil {
+                guard let window = Global.getKeyWindow() else {
+                    Log.e("No key window found")
+                    return
+                }
+
+                guard let options = self.sessionReplayOptions,
+                      self.isValidSessionReplayOptions(options) else {
+                    Log.e("Invalid sessionReplayOptions")
+                    return
+                }
+
+                screenshotData = window.captureScreenshot(
+                    scale: options.captureScale,
+                    compressionQuality: options.captureCompressionQuality
+                )
+            }
+            
+            guard let screenshotData else {
                 Log.e("Failed to capture screenshot")
                 return
             }
@@ -175,16 +182,6 @@ class SessionReplayModel {
     }
     
     // MARK: - Helper Methods
-
-    internal func getKeyWindow(connectedScenes: Set<UIScene> = UIApplication.shared.connectedScenes) -> UIWindow? {
-        guard let windowScene = connectedScenes
-                .first(where: { $0.activationState == .foregroundActive }) as? UIWindowScene else {
-            Log.e("No active window scene found")
-            return nil
-        }
-        return windowScene.windows.first(where: { $0.isKeyWindow })
-    }
-    
     internal func isValidSessionReplayOptions(_ options: SessionReplayOptions) -> Bool {
         return options.captureScale > 0 && options.captureCompressionQuality > 0
     }
@@ -208,18 +205,19 @@ class SessionReplayModel {
         DispatchQueue(label: "com.coralogix.fileOperations").async { [weak self] in
             guard let self = self else { return }
             let point = self.getClickPoint(from: properties)
-            Log.w("Handling point: \(point)")
-            _ = self.saveImageToDocumentIfDebug(fileURL: fileURL, data: data)
             
-            let completion: URLProcessingCompletion = { [weak self] isSuccess, originalTimestamp, originalScreenshotId  in
-                _ = self?.compressAndSendData(data: data,
-                                              timestamp: originalTimestamp,
-                                              screenshotId: originalScreenshotId)
+            let completion: URLProcessingCompletion = { [weak self] ciImage, originalTimestamp, originalScreenshotId  in
+                if let ciImage = ciImage, let ciImageData = Global.ciImageToData(ciImage) {
+                    _ = self?.compressAndSendData(data: ciImageData,
+                                                  timestamp: originalTimestamp,
+                                                  screenshotId: originalScreenshotId)
+                }
             }
             
             let urlEntry = URLEntry(url: fileURL,
                                     timestamp: timestamp,
                                     screenshotId: screenshotId,
+                                    screenshotData: data,
                                     completion: completion,
                                     point: point)
             
@@ -283,34 +281,3 @@ class SessionReplayModel {
     }
 }
 
-extension UIView {
-    func captureScreenshot(scale: CGFloat = UIScreen.main.scale,
-                           compressionQuality: CGFloat = 0.8) -> Data? {
-        
-        guard let keyWindow = getKeyWindow() else {
-            return nil
-        }
-        
-        let rendererFormat = UIGraphicsImageRendererFormat()
-        rendererFormat.scale = scale
-        let renderer = UIGraphicsImageRenderer(bounds: keyWindow.bounds, format: rendererFormat)
-        
-        let image = renderer.image { context in
-            keyWindow.drawHierarchy(in: keyWindow.bounds, afterScreenUpdates: true)
-            
-        }
-        return image.jpegData(compressionQuality: compressionQuality)
-    }
-    
-    func getKeyWindow() -> UIWindow? {
-        guard let keyWindow = UIApplication.shared.connectedScenes
-            .compactMap({ $0 as? UIWindowScene }) // Filter only UIWindowScenes
-            .flatMap({ $0.windows }) // Get all windows in each UIWindowScene
-            .first(where: { $0.isKeyWindow }) // Find the key window
-        else {
-            Log.e("Unable to find the key window")
-            return nil
-        }
-        return keyWindow
-    }
-}

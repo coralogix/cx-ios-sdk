@@ -15,11 +15,10 @@ class FaceScanner {
     /// - Parameters:
     ///   - image: The input `UIImage` to process.
     ///   - completion: A closure returning the processed image with faces masked or an error.
-    func processImage(at inputURL: URL, completion: @escaping (Bool) -> Void) {
-        guard let ciImage = CIImage(contentsOf: inputURL),
-              let cgImage = SRUtils.convertCIImageToCGImage(ciImage) else {
+    func processImage(at ciImage: CIImage, completion: @escaping (CIImage?) -> Void) {
+        guard let cgImage = SRUtils.convertCIImageToCGImage(ciImage) else {
             Log.e("Failed to load image.")
-            completion(false)
+            completion(nil)
             return
         }
         
@@ -27,25 +26,23 @@ class FaceScanner {
         let faceDetectionRequest = VNDetectFaceRectanglesRequest { request, error in
             if let error = error {
                 Log.e("Face detection error: \(error)")
-                completion(false)
+                completion(nil)
                 return
             }
             
             guard let observations = request.results as? [VNFaceObservation], !observations.isEmpty else {
                 Log.e("No faces detected.")
-                completion(false) // Return the original image if no faces are detected
+                completion(nil) // Return the original image if no faces are detected
                 return
             }
             
             // Process the image and mask detected faces
             let maskedImage = self.applyFaceMask(to: UIImage(cgImage: cgImage), with: observations)
-            if let cgImage = maskedImage?.cgImage {
-                SRUtils.saveImage(cgImage, outputURL: inputURL) { isSuccess in
-                    completion(isSuccess)
-                }
+            if let ciImage = maskedImage?.ciImage {
+                completion(ciImage)
                 return
             }
-            completion(false)
+            completion(nil)
         }
         
         // Perform the request
@@ -54,7 +51,7 @@ class FaceScanner {
             try requestHandler.perform([faceDetectionRequest])
         } catch {
             Log.e("Failed to perform face detection: \(error)")
-            completion(false)
+            completion(nil)
         }
     }
     

@@ -12,15 +12,10 @@ import CoralogixInternal
 class ClickScanner {
     
     // Function to process the image, detect clicks, and add them to the image
-    func processImage(at inputURL: URL,
+    func processImage(at ciImage: CIImage,
                       x: CGFloat,
                       y: CGFloat,
-                      completion: @escaping (Bool) -> Void) {
-        guard let ciImage = CIImage(contentsOf: inputURL) else {
-            Log.e("Failed to load image.")
-            completion(false)
-            return
-        }
+                      completion: @escaping (CIImage?) -> Void) {
         let screenSize = UIScreen.main.bounds.size
         let imageSize = ciImage.extent.size
         
@@ -39,20 +34,17 @@ class ClickScanner {
         print("Tap point (image): \(scaledX), flippedY: \(flippedY)")
         
         guard let clickedCGImage = self.addClickMark(to: ciImage, at: imagePoint.x, y: imagePoint.y) else {
-            completion(false)
+            completion(nil)
             return
         }
-    
-        SRUtils.saveImage(clickedCGImage, outputURL: inputURL) { isSuccess in
-            completion(isSuccess)
-        }
+        completion(clickedCGImage)
     }
     
     // Function to add a programmatically created click mark to a CIImage
     func addClickMark(to ciImage: CIImage,
                       at x: CGFloat,
                       y: CGFloat,
-                      markSize: CGSize = CGSize(width: 50, height: 50)) -> CGImage? {
+                      markSize: CGSize = CGSize(width: 50, height: 50)) -> CIImage? {
         // Create a CIContext
         let context = CIContext()
 
@@ -84,14 +76,13 @@ class ClickScanner {
         // Get the resulting image from the graphics context
         let resultingImage = UIGraphicsGetImageFromCurrentImageContext()
         UIGraphicsEndImageContext()
-
-        // Convert the resulting UIImage back to CGImage
-        guard let resultingCGImage = resultingImage?.cgImage else {
-            Log.e("Failed to convert resulting UIImage to CGImage")
+       
+        guard let resultingImage = resultingImage,
+           let ciImage = CIImage(image: resultingImage) else {
             return nil
         }
 
-        return resultingCGImage
+        return ciImage
     }
     
     func drawConcentricCircles(center: CGPoint, outerRadius: CGFloat, gap: CGFloat) {

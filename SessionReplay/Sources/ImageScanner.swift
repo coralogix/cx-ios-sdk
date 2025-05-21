@@ -15,14 +15,14 @@ public class ImageScanner {
     var creditCardPredicate: [String]? = nil
     
     // Function to process the image, detect Images, and mask them
-    func processImage(at inputURL: URL,
+    func processImage(screenshotData: Data,
                       maskAll: Bool = false,
                       creditCardPredicate: [String]? = nil,
-                      completion: @escaping (Bool, Int, Int) -> Void) {
-        guard let ciImage = CIImage(contentsOf: inputURL),
-              let cgImage = SRUtils.convertCIImageToCGImage(ciImage) else {
+                      completion: @escaping (CIImage?) -> Void) {
+        guard let cgImage = Global.cgImage(from: screenshotData),
+                let ciImage = CIImage(data: screenshotData) else {
             Log.e("Failed to load image.")
-            completion(false, 0, 0)
+            completion(nil)
             return
         }
 
@@ -55,25 +55,16 @@ public class ImageScanner {
                     }
                 }
                 
-                saveMaskedImage(maskedImage,
-                                to: inputURL,
-                                totalImagesCount: totalImagesCount,
-                                maskedImagesCount: maskedImagesCount)
+                completion(maskedImage)
             }
         }
         
-        
-        func saveMaskedImage(_ maskedImage: CIImage, to url: URL,  totalImagesCount: Int, maskedImagesCount: Int) {
-            SRUtils.saveImage(maskedImage, outputURL: url) { result in
-                completion(result, totalImagesCount, maskedImagesCount)
-            }
-        }
         
         func configureRectangleDetectionRequest() -> VNDetectRectanglesRequest {
             let request = VNDetectRectanglesRequest { request, _ in
                 guard let results = request.results as? [VNRectangleObservation], !results.isEmpty else {
                     Log.e("No rectangles detected.")
-                    completion(false, 0, 0)
+                    completion(nil)
                     return
                 }
                 
@@ -94,7 +85,7 @@ public class ImageScanner {
             try imageRequestHandler.perform([rectangleDetectionRequest])
         } catch {
             Log.e("Failed to perform rectangle detection: \(error)")
-            completion(false, 0, 0)
+            completion(nil)
         }
     }
     
