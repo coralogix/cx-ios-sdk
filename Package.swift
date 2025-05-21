@@ -20,7 +20,7 @@ let package = Package(
         ),
         .target(
             name: "CoralogixInternal",
-            path: "CoralogixInternal/Sources/",
+            path: "CoralogixInternal/Sources/"
         ),
         .target(
             name: "Coralogix",
