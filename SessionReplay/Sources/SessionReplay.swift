@@ -138,7 +138,9 @@ public class SessionReplay: SessionReplayInterface {
         self.update(sessionId: sessionId)
         
         if sessionReplayOptions.autoStartSessionRecording {
-            self.startRecording()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+                self.startRecording()
+            }
         }
     }
 

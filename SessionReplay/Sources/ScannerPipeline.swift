@@ -233,12 +233,6 @@ class ScannerPipeline {
                     completion(ciImage)
                     return
                 }
-                
-                SRUtils.saveImage(ciImage, outputURL: inputURL) { result in
-                    completion(ciImage)
-                    return
-                }
-
                 completion(ciImage)
             }
         }

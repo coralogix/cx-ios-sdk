@@ -10,11 +10,11 @@ import CoralogixInternal
 
 /// The possible results for the export method.
 public enum SessionReplayResultCode {
-  /// The export operation finished successfully.
-  case success
-  
-  /// The export operation finished with an error.
-  case failure
+    /// The export operation finished successfully.
+    case success
+    
+    /// The export operation finished with an error.
+    case failure
 }
 
 class SessionReplayModel {
@@ -25,8 +25,6 @@ class SessionReplayModel {
     private var isMaskingProcessorWorking = false
     var sessionReplayOptions: SessionReplayOptions?
     var isRecording = false  // Custom flag to track recording state
-    private var debounceWorkItem: DispatchWorkItem? = nil
-    private let debounceInterval: TimeInterval = 0.5 // 500 milliseconds
     private let srNetworkManager: SRNetworkManager?
     internal let screenshotManager = ScreenshotManager()
     
@@ -40,10 +38,6 @@ class SessionReplayModel {
     }
     
     deinit {
-        // Cancel the debounce work item
-        debounceWorkItem?.cancel()
-        debounceWorkItem = nil
-        
         // Invalidate any other timers (like idleTimer if present)
         captureTimer?.invalidate()
         captureTimer = nil
@@ -52,61 +46,50 @@ class SessionReplayModel {
     }
     
     internal func captureImage(properties: [String: Any]? = nil) {
-        // Cancel any ongoing debounce work
-        debounceWorkItem?.cancel()
-        
-        // Create a new work item
-        let workItem = DispatchWorkItem { [weak self] in
-            guard let self = self else { return }
-            guard !sessionId.isEmpty else {
-                Log.e("Invalid sessionId")
-                return
-            }
-            
-            var screenshotData: Data? = properties?[Keys.screenshotData.rawValue] as? Data
-
-            if screenshotData == nil {
-                guard let window = Global.getKeyWindow() else {
-                    Log.e("No key window found")
-                    return
-                }
-
-                guard let options = self.sessionReplayOptions,
-                      self.isValidSessionReplayOptions(options) else {
-                    Log.e("Invalid sessionReplayOptions")
-                    return
-                }
-
-                screenshotData = window.captureScreenshot(
-                    scale: options.captureScale,
-                    compressionQuality: options.captureCompressionQuality
-                )
-            }
-            
-            guard let screenshotData else {
-                Log.e("Failed to capture screenshot")
-                return
-            }
-            
-            self.screenshotManager.takeScreenshot()
-            let fileName = self.generateFileName()
-
-            if let documentsDirectory = FileManager.default.urls(
-                for: .documentDirectory,
-                in: .userDomainMask
-            ).first {
-                let fileURL = documentsDirectory
-                    .appendingPathComponent("SessionReplay")
-                    .appendingPathComponent(fileName)
-                self.handleCapturedData(fileURL: fileURL,
-                                        data: screenshotData,
-                                        properties: properties)
-            }
+        guard !sessionId.isEmpty else {
+            Log.e("Invalid sessionId")
+            return
         }
         
-        // Store the new work item and execute it after the debounce interval
-        debounceWorkItem = workItem
-        DispatchQueue.main.asyncAfter(deadline: .now() + debounceInterval, execute: workItem)
+        var screenshotData: Data? = properties?[Keys.screenshotData.rawValue] as? Data
+        
+        if screenshotData == nil {
+            guard let window = Global.getKeyWindow() else {
+                Log.e("No key window found")
+                return
+            }
+            
+            guard let options = self.sessionReplayOptions,
+                  self.isValidSessionReplayOptions(options) else {
+                Log.e("Invalid sessionReplayOptions")
+                return
+            }
+            
+            screenshotData = window.captureScreenshot(
+                scale: options.captureScale,
+                compressionQuality: options.captureCompressionQuality
+            )
+        }
+        
+        guard let screenshotData else {
+            Log.e("Failed to capture screenshot")
+            return
+        }
+        
+        self.screenshotManager.takeScreenshot()
+        let fileName = self.generateFileName()
+        
+        if let documentsDirectory = FileManager.default.urls(
+            for: .documentDirectory,
+            in: .userDomainMask
+        ).first {
+            let fileURL = documentsDirectory
+                .appendingPathComponent("SessionReplay")
+                .appendingPathComponent(fileName)
+            self.handleCapturedData(fileURL: fileURL,
+                                    data: screenshotData,
+                                    properties: properties)
+        }
     }
     
     internal func updateSessionId(with sessionId: String) {
@@ -207,7 +190,11 @@ class SessionReplayModel {
             let point = self.getClickPoint(from: properties)
             
             let completion: URLProcessingCompletion = { [weak self] ciImage, originalTimestamp, originalScreenshotId  in
-                if let ciImage = ciImage, let ciImageData = Global.ciImageToData(ciImage) {
+                if let ciImage = ciImage,
+                   let ciImageData = Global.ciImageToData(ciImage) {
+                    if let sdkManager = SdkManager.shared.getCoralogixSdk(), sdkManager.isDebug() {
+                        SRUtils.saveImage(ciImage, outputURL: fileURL) { _ in }
+                    }
                     _ = self?.compressAndSendData(data: ciImageData,
                                                   timestamp: originalTimestamp,
                                                   screenshotId: originalScreenshotId)
