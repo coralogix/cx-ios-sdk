@@ -26,7 +26,6 @@ class ScannerPipeline {
     }
     
     func runPipelineWithCancellation(
-        inputURL: URL,
         screenshotData: Data,
         options: SessionReplayOptions,
         operationId: UUID,
@@ -55,7 +54,6 @@ class ScannerPipeline {
                     }
                     
                     self.runTextScannerWithCancellation(
-                        inputURL: inputURL,
                         screenshotData: screenshotData,
                         ciImage: ciImage,
                         options: options,
@@ -65,7 +63,6 @@ class ScannerPipeline {
                 }
             } else {
                 runTextScannerWithCancellation(
-                    inputURL: inputURL,
                     screenshotData: screenshotData,
                     ciImage: nil,
                     options: options,
@@ -77,7 +74,6 @@ class ScannerPipeline {
         }
     
     private func runTextScannerWithCancellation(
-        inputURL: URL,
         screenshotData: Data,
         ciImage: CIImage?,
         options: SessionReplayOptions,
@@ -106,7 +102,6 @@ class ScannerPipeline {
                         return
                     }
                     self.runFaceScannerWithCancellation(
-                        inputURL: inputURL,
                         screenshotData: screenshotData,
                         ciImage: ciImage,
                         options: options,
@@ -117,7 +112,6 @@ class ScannerPipeline {
                 }
             } else {
                 runFaceScannerWithCancellation(
-                    inputURL: inputURL,
                     screenshotData: screenshotData,
                     ciImage: finalImage,
                     options: options,
@@ -129,7 +123,6 @@ class ScannerPipeline {
         }
     
     private func runFaceScannerWithCancellation(
-        inputURL: URL,
         screenshotData: Data,
         ciImage: CIImage?,
         options: SessionReplayOptions,
@@ -152,7 +145,6 @@ class ScannerPipeline {
             // Skip face scanning on the simulator
             Log.e("Skipping FaceScanner as we are running on the simulator")
             runClickScannerWithCancellation(
-                inputURL: inputURL,
                 screenshotData: screenshotData,
                 ciImage: finalImage,
                 options: options,
@@ -176,7 +168,6 @@ class ScannerPipeline {
                     }
                     Log.d("FaceScanner completed successfully.")
                     self.runClickScannerWithCancellation(
-                        inputURL: inputURL,
                         screenshotData: screenshotData,
                         ciImage: finalImage,
                         options: options,
@@ -188,7 +179,6 @@ class ScannerPipeline {
             } else {
                 Log.d("Pipeline completed without FaceScanner.")
                 self.runClickScannerWithCancellation(
-                    inputURL: inputURL,
                     screenshotData: screenshotData,
                     ciImage: finalImage,
                     options: options,
@@ -200,7 +190,6 @@ class ScannerPipeline {
         }
     
     private func runClickScannerWithCancellation(
-        inputURL: URL,
         screenshotData: Data,
         ciImage: CIImage?,
         options: SessionReplayOptions,

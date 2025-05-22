@@ -20,14 +20,14 @@ public class ImageScanner {
                       creditCardPredicate: [String]? = nil,
                       completion: @escaping (CIImage?) -> Void) {
         guard let cgImage = Global.cgImage(from: screenshotData),
-                let ciImage = CIImage(data: screenshotData) else {
+              let ciImage = CIImage(data: screenshotData) else {
             Log.e("Failed to load image.")
             completion(nil)
             return
         }
-
+        
         self.creditCardPredicate = creditCardPredicate
-
+        
         func processRectangles(
             _ rectangles: [VNRectangleObservation],
             in ciImage: CIImage,
@@ -35,21 +35,17 @@ public class ImageScanner {
         ) {
             Task {
                 var maskedImage = ciImage
-                let totalImagesCount = rectangles.count
-                var maskedImagesCount = 0
                 
                 for observation in rectangles {
                     if maskAll {
                         if let newMaskedImage = await maskRectangle(in: maskedImage, using: observation) {
                             maskedImage = newMaskedImage
-                            maskedImagesCount += 1
                         }
                     } else {
                         let isCreditCard = await isCreditCardRectangle(cgImage: cgImage, observation: observation)
                         if isCreditCard {
                             if let newMaskedImage = await maskRectangle(in: maskedImage, using: observation) {
                                 maskedImage = newMaskedImage
-                                maskedImagesCount += 1
                             }
                         }
                     }
@@ -58,7 +54,6 @@ public class ImageScanner {
                 completion(maskedImage)
             }
         }
-        
         
         func configureRectangleDetectionRequest() -> VNDetectRectanglesRequest {
             let request = VNDetectRectanglesRequest { request, _ in
@@ -96,7 +91,7 @@ public class ImageScanner {
             }
         }
     }
-
+    
     func isCreditCardRectangle(cgImage: CGImage, observation: VNRectangleObservation) async -> Bool {
         await withCheckedContinuation { continuation in
             self.isCreditCardRectangle(cgImage: cgImage, observation: observation) { result in
@@ -104,7 +99,7 @@ public class ImageScanner {
             }
         }
     }
-
+    
     func isCreditCardRectangle(cgImage: CGImage,
                                observation: VNRectangleObservation,
                                completion: @escaping (Bool) -> Void) {
@@ -120,7 +115,7 @@ public class ImageScanner {
             completion(false)
         }
     }
-
+    
     func maskRectangle(in ciImage: CIImage, using observation: VNRectangleObservation, completion: @escaping (CIImage?) -> Void) {
         DispatchQueue.global(qos: .userInitiated).async {
             
@@ -172,7 +167,7 @@ public class ImageScanner {
             }
         }
     }
-
+    
     // Function to extract and correct the perspective of the detected rectangle
     private func extractAndCorrectRectangle(from image: CGImage, using observation: VNRectangleObservation) -> CGImage? {
         let ciImage = CIImage(cgImage: image)

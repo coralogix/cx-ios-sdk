@@ -348,13 +348,18 @@ final class CoralogixRumTests: XCTestCase {
         ]
         let timestamp: TimeInterval = 1234567890
         let screenshotId = "screenshot_001"
+        let screenshotData = "fakeImage".data(using: .utf8)
         
         // Act
-        let result = coralogixRum.buildMetadata(properties: properties, timestamp: timestamp, screenshotId: screenshotId)
+        let result = coralogixRum.buildMetadata(properties: properties,
+                                                timestamp: timestamp,
+                                                screenshotId: screenshotId,
+                                                screenshotData: screenshotData)
         
         // Assert
         XCTAssertEqual(result["timestamp"] as? TimeInterval, timestamp)
         XCTAssertEqual(result["screenshotId"] as? String, screenshotId)
+        XCTAssertEqual(result[Keys.screenshotData.rawValue] as? Data, screenshotData)
         XCTAssertEqual(result["key1"] as? String, "value1")
         XCTAssertEqual(result["key2"] as? Int, 123)
     }
@@ -459,11 +464,12 @@ final class CoralogixRumTests: XCTestCase {
             Keys.positionY.rawValue: 200,
             "testKey": "testValue"
         ]
-        
-        coralogixRum.handleUserInteractionEvent(testProperties, span: mockSpan)
+        let window = UIWindow()
+        window.makeKeyAndVisible()
+        coralogixRum.handleUserInteractionEvent(testProperties, span: mockSpan, window: window)
         
         // Assert
-        XCTAssertEqual(mockSessionReplay.captureEventCalledWith?.count, 5, "Should capture exactly one event")
+        XCTAssertEqual(mockSessionReplay.captureEventCalledWith?.count, 6, "Should capture exactly one event")
         
         let capturedMetadata = mockSessionReplay.captureEventCalledWith?.first
         XCTAssertNotNil(capturedMetadata)

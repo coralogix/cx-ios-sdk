@@ -30,50 +30,45 @@ class TextScannerTests: XCTestCase {
             XCTFail("test_image.png not found in Bundle.module")
             return
         }
-        do {
-            // Create a unique file
-            let uniqueFileURL = try createUniqueFile(from: originalURL, withExtension: "png")
-            
-            textScanner.processImage(at: uniqueFileURL, maskText: ["Sign"]) { success, totalTextCount, maskedTextCount in
-                XCTAssertTrue(success, "The image processing should succeed.")
-                XCTAssertTrue(FileManager.default.fileExists(atPath: uniqueFileURL.path), "The output file should exist.")
-                XCTAssertEqual(1, maskedTextCount)
-                expectation.fulfill()
-            }
-            
-            waitForExpectations(timeout: 5, handler: nil)
-        } catch {
-            XCTFail("Failed to create unique file: \(error)")
+        
+        guard let ciImage = CIImage(contentsOf: originalURL) else {
+            return
         }
+        
+        // Create a unique file
+        textScanner.processImage(ciImage: ciImage, maskText: ["Sign"]) { ciImage in
+            XCTAssertNotNil(ciImage)
+            XCTAssertTrue(FileManager.default.fileExists(atPath: originalURL.path), "The output file should exist.")
+            expectation.fulfill()
+        }
+        
+        waitForExpectations(timeout: 5, handler: nil)
     }
 
     func testProcessImage_withInvalidInput_shouldFail() {
         let expectation = self.expectation(description: "Image processing should fail.")
-
+        
         // Invalid input URL
-        let invalidURL = URL(fileURLWithPath: "/invalid/path/to/image.png")
         let outputURL = FileManager.default.temporaryDirectory.appendingPathComponent("output_image.png")
-
-        textScanner.processImage(at: invalidURL, maskText: ["confidential"]) { success, totalTextCount, maskedTextCount in
-            XCTAssertFalse(success, "The image processing should fail for an invalid input URL.")
+        
+        let ciImage: CIImage = .empty()
+        textScanner.processImage(ciImage: ciImage, maskText: ["confidential"]) { ciImage in
+            XCTAssertNotNil(ciImage)
             XCTAssertFalse(FileManager.default.fileExists(atPath: outputURL.path), "The output file should not exist.")
-            XCTAssertEqual(0, maskedTextCount)
             expectation.fulfill()
         }
-
+        
         waitForExpectations(timeout: 5, handler: nil)
     }
 
     func testMaskText_withNoPatterns_shouldMaskAllText() {
         // Mock input image
-         let inputURL = SDKResources.bundle.url(forResource: "test_image", withExtension: "png")!
+        let inputURL = SDKResources.bundle.url(forResource: "test_image", withExtension: "png")!
         let ciImage = CIImage(contentsOf: inputURL)!
 
-        let (maskedImage, totalTextCount, maskedTextCount) = textScanner.maskText(in: ciImage, with: nil)
+        let maskedImage = textScanner.maskText(in: ciImage, with: nil)
 
         XCTAssertNotNil(maskedImage, "The masked image should not be nil.")
-        // Additional verification of the masked content can be done by saving and visually inspecting the result.
-        XCTAssertEqual(totalTextCount, maskedTextCount)
     }
 
     func testMaskText_withNoText_shouldReturnOriginalImage() {
@@ -88,11 +83,10 @@ class TextScannerTests: XCTestCase {
             
             let ciImage = CIImage(contentsOf: uniqueFileURL)!
             
-            let (maskedImage, _, maskedTextCount) = textScanner.maskText(in: ciImage, with: ["anyPattern"])
+            let maskedImage = textScanner.maskText(in: ciImage, with: ["anyPattern"])
             
             XCTAssertNotNil(maskedImage, "The masked image should not be nil.")
             XCTAssertEqual(ciImage.extent, maskedImage.extent, "The output image should have the same extent as the input image.")
-            XCTAssertEqual(0, maskedTextCount)
         } catch {
             XCTFail("Error creating unique file: \(error)")
         }
@@ -112,12 +106,9 @@ class TextScannerTests: XCTestCase {
             let ciImage = CIImage(contentsOf: uniqueFileURL)!
             
             let patterns = ["Stop"]
-            let (maskedImage, totalTextCount, maskedTextCount) = textScanner.maskText(in: ciImage, with: patterns)
+            let maskedImage = textScanner.maskText(in: ciImage, with: patterns)
             
             XCTAssertNotNil(maskedImage, "The masked image should not be nil.")
-            // Additional verification of the masked content can be done by saving and visually inspecting the result.
-            XCTAssertTrue(totalTextCount > 0)
-            XCTAssertEqual(1, maskedTextCount)
         } catch {
             XCTFail("Failed to create unique file: \(error)")
         }

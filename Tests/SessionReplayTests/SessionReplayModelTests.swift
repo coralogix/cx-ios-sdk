@@ -377,41 +377,36 @@ final class SessionReplayModelTests: XCTestCase {
     }
     
     func testHandleCapturedData_ShouldCallAddURLAndCompress() {
+
         let fileURL = URL(string: "file:///mockfile.png")!
         let data = Data("mock".utf8)
         let timestamp = Date().timeIntervalSince1970
         let screenshotId = "mock-screenshot-id"
+        let point = CGPoint(x: 10, y: 20)
         let properties: [String: Any] = [
             Keys.timestamp.rawValue: timestamp,
             Keys.screenshotId.rawValue: screenshotId,
-            "click_point": ["x": 20, "y": 30]
+            Keys.positionX.rawValue: CGFloat(10),
+            Keys.positionY.rawValue: CGFloat(20)
         ]
-        
+
         let mockURLManager = MockURLManager()
         let mockSessionReplayModel = MockSRModel()
         mockSessionReplayModel.urlManager = mockURLManager
         mockSessionReplayModel.sessionId = "mock-session"
         
-        let expectation = self.expectation(description: "Wait for async addURL completion")
+        let expectation = self.expectation(description: "URLManager.addURL called")
+        mockURLManager.expectation = expectation
         
         mockSessionReplayModel.handleCapturedData(fileURL: fileURL, data: data, properties: properties)
         
-        DispatchQueue.global().asyncAfter(deadline: .now() + 0.2) {
-            // Simulate completion
-            mockURLManager.completion?(true, timestamp, screenshotId)
-            expectation.fulfill()
-        }
-        
-        // Assert
         waitForExpectations(timeout: 1.0)
-        
-        XCTAssertTrue(mockURLManager.addURLCalled)
-        XCTAssertEqual(mockURLManager.passedURL, fileURL)
-        XCTAssertEqual(mockURLManager.passedTimestamp!, timestamp, accuracy: 0.1)
-        
-        XCTAssertTrue(mockSessionReplayModel.compressCalled)
-        XCTAssertEqual(mockSessionReplayModel.passedData, data)
-        XCTAssertEqual(mockSessionReplayModel.passedTimestamp!, timestamp, accuracy: 0.1)
+        let entry = mockURLManager.addedURLs.first
+        XCTAssertEqual(entry?.url, fileURL)
+        XCTAssertEqual(entry?.timestamp, timestamp)
+        XCTAssertEqual(entry?.screenshotId, screenshotId)
+        XCTAssertEqual(entry?.screenshotData, data)
+        XCTAssertEqual(entry?.point, point)
     }
 }
 
@@ -437,21 +432,12 @@ class MockSRModel: SessionReplayModel {
 }
 
 class MockURLManager: URLManager {
-    var addURLCalled = false
-    var passedURL: URL?
-    var passedTimestamp: TimeInterval?
-    var passedScreenshotId: String?
-    var completion: ((Bool, TimeInterval, String) -> Void)?
-    
-    override func addURL(_ url: URL,
-                         timestamp: TimeInterval,
-                         screenshotId: String,
-                         completion: ((Bool, TimeInterval, String) -> Void)? = nil) {
-        addURLCalled = true
-        passedURL = url
-        passedTimestamp = timestamp
-        passedScreenshotId = screenshotId
-        self.completion = completion
+    private(set) var addedURLs: [URLEntry] = []
+    var expectation: XCTestExpectation?
+
+    override func addURL(urlEntry: URLEntry) {
+        addedURLs.append(urlEntry)
+        expectation?.fulfill()
     }
 }
 

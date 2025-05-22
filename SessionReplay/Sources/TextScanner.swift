@@ -40,17 +40,13 @@ public class TextScanner {
     internal func maskText(in image: CIImage, with patterns: [String]?) -> (CIImage) {
         let blackColor = CIColor.black
         var maskLayer = CIImage.empty().cropped(to: image.extent)
-        var totalTextCount = 0
-        var maskedTextCount = 0
 
         let request = VNRecognizeTextRequest { (request, error) in
             guard let results = request.results as? [VNRecognizedTextObservation] else {
                 Log.e("No text detected or an error occurred: \(String(describing: error))")
                 return
             }
-            
-            totalTextCount = results.count
-            
+                        
             for observation in results {
                 guard let topCandidate = observation.topCandidates(1).first else { continue }
                 let recognizedText = topCandidate.string
@@ -68,7 +64,6 @@ public class TextScanner {
                 }
                 
                 if shouldMask {
-                    maskedTextCount += 1
                     let boundingBox = observation.boundingBox
                     let adjustedRect = CGRect(
                         x: boundingBox.minX * image.extent.width,

@@ -23,22 +23,22 @@ class ClickScannerTests: XCTestCase {
     
     func testPrintBundleContents() {
 #if SWIFT_PACKAGE
-    let bundle = Bundle.module
+        let bundle = Bundle.module
 #else
-    let bundle = Bundle(for: Self.self) // or SDKResources.bundle if using wrapper
+        let bundle = Bundle(for: Self.self) // or SDKResources.bundle if using wrapper
 #endif
-
-    guard let path = bundle.resourcePath else {
-        XCTFail("bundle.resourcePath is nil")
-        return
-    }
-
-    do {
-        let contents = try FileManager.default.contentsOfDirectory(atPath: path)
-        print("📦 Bundle contents: \(contents)")
-    } catch {
-        XCTFail("Failed to read bundle contents: \(error)")
-    }
+        
+        guard let path = bundle.resourcePath else {
+            XCTFail("bundle.resourcePath is nil")
+            return
+        }
+        
+        do {
+            let contents = try FileManager.default.contentsOfDirectory(atPath: path)
+            print("📦 Bundle contents: \(contents)")
+        } catch {
+            XCTFail("Failed to read bundle contents: \(error)")
+        }
     }
 
     func testProcessImage_withValidInput_shouldCompleteSuccessfully() {
@@ -49,20 +49,16 @@ class ClickScannerTests: XCTestCase {
             return
         }
         
-        do {
-            // Create a unique file
-            let uniqueFileURL = try createUniqueFile(from: originalURL, withExtension: "png")
-            print(uniqueFileURL)
-            
-            clickScanner.processImage(at: uniqueFileURL, x: 100, y: 100) { success in
-                XCTAssertTrue(success, "The image processing should succeed.")
-                XCTAssertTrue(FileManager.default.fileExists(atPath: uniqueFileURL.path), "The output file should exist.")
-                expectation.fulfill()
-            }
-            
-            waitForExpectations(timeout: 5, handler: nil)
-        } catch {
-            XCTFail("Failed to create unique file: \(error)")
+        guard let ciImage = CIImage(contentsOf: originalURL) else {
+            return
         }
+        
+        clickScanner.processImage(at: ciImage, x: 100, y: 100) { ciImage in
+            XCTAssertNotNil(ciImage)
+            XCTAssertTrue(FileManager.default.fileExists(atPath: originalURL.path), "The output file should exist.")
+            expectation.fulfill()
+        }
+        
+        waitForExpectations(timeout: 5, handler: nil)
     }
 }

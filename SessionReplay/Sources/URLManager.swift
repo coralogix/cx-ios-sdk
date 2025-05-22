@@ -75,7 +75,6 @@ class URLObserver {
                 let processingQueue = DispatchQueue(label: "com.coralogix.urlProcessing", qos: .userInitiated)
                 processingQueue.async {
                     self.pipeline.runPipelineWithCancellation(
-                        inputURL: inputURL,
                         screenshotData: screenshotData,
                         options: sessionReplayOptions,
                         operationId: operationId,

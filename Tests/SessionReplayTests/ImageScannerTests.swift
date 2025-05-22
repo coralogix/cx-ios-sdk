@@ -59,12 +59,10 @@ class ImageScannerTests: XCTestCase {
         }
         
         do {
-            // Create a unique file
-            let uniqueFileURL = try createUniqueFile(from: originalURL, withExtension: "png")
-            
-            imageScanner.processImage(at: uniqueFileURL, maskAll: true) { success, totalImagesCount, maskedImagesCount in
-                XCTAssertTrue(success, "Image processing should succeed.")
-                XCTAssertEqual(totalImagesCount, maskedImagesCount)
+            let imageData = try Data(contentsOf: originalURL)
+
+            imageScanner.processImage(screenshotData: imageData, maskAll: true) { ciImage in
+                XCTAssertNotNil(ciImage)
                 expectation.fulfill()
             }
             
@@ -85,12 +83,11 @@ class ImageScannerTests: XCTestCase {
         
         do {
             // Create a unique file
-            let uniqueFileURL = try createUniqueFile(from: originalURL, withExtension: "png")
-            
-            imageScanner.processImage(at: uniqueFileURL, maskAll: false) { success, totalImagesCount, maskedImagesCount in
-                XCTAssertTrue(success, "Image processing should succeed.")
-                XCTAssertGreaterThan(maskedImagesCount, 0, "At least one rectangle should be masked.")
+            //let uniqueFileURL = try createUniqueFile(from: originalURL, withExtension: "png")
+            let imageData = try Data(contentsOf: originalURL)
 
+            imageScanner.processImage(screenshotData: imageData, maskAll: false) { ciImage in
+                XCTAssertNotNil(ciImage)
                 expectation.fulfill()
             }
             
@@ -100,15 +97,14 @@ class ImageScannerTests: XCTestCase {
         }
     }
     
-    func testProcessImage_withInvalidInputURL_shouldFail() {
+    func testProcessImage_withInvalidScreenshotData_shouldFail() {
         let expectation = self.expectation(description: "Process image fails")
         
-        // Invalid input URL
-        let invalidURL = URL(fileURLWithPath: "invalid/path/to/image.jpg")
+        // Invalid Screenshot Data
+        let dummyData = "fake-image".data(using: .utf8)!
         
-        imageScanner.processImage(at: invalidURL, maskAll: true) { success, totalImagesCount, maskedImagesCount in
-            XCTAssertFalse(success, "Image processing should fail with invalid URL.")
-            XCTAssertEqual(0, maskedImagesCount)
+        imageScanner.processImage(screenshotData: dummyData, maskAll: true) { ciImage in
+            XCTAssertNil(ciImage)
             expectation.fulfill()
         }
         
@@ -172,28 +168,6 @@ class ImageScannerTests: XCTestCase {
         // Assert: Check that a masked image was returned
         XCTAssertNotNil(maskedImage, "Masking rectangle should return a valid CIImage.")
     }
-//    func testMaskRectangle_withValidObservation_shouldReturnMaskedImage() {
-//        // Mock input image
-//        guard let originalURL = SDKResources.bundle.url(forResource: "test_image", withExtension: "png") else {
-//            XCTFail("test_image.png not found in Bundle.module")
-//            return
-//        }
-//        
-//        do {
-//            // Create a unique file
-//            let uniqueFileURL = try createUniqueFile(from: originalURL, withExtension: "png")
-//            
-//            let ciImage = CIImage(contentsOf: uniqueFileURL)!
-//            
-//            // Mock rectangle observation
-//            let rectangleObservation = VNRectangleObservation()
-//            
-//            let maskedImage = imageScanner.maskRectangle(in: ciImage, using: rectangleObservation)
-//            XCTAssertNotNil(maskedImage, "Masking rectangle should return a valid CIImage.")
-//        } catch {
-//            XCTFail("Failed to create unique file: \(error)")
-//        }
-//    }
     
     // MARK: - Private
     private func createRectangleObservation(from image: CGImage) -> VNRectangleObservation? {

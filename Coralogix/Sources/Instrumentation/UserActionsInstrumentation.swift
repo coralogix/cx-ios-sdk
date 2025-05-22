@@ -35,14 +35,16 @@ extension CoralogixRum {
     }
     
     // Handle the case where x and y coordinates are present
-    internal func handleUserInteractionEvent(_ properties: [String: Any], span: any Span) {
+    internal func handleUserInteractionEvent(_ properties: [String: Any],
+                                             span: any Span,
+                                             window: UIWindow? = Global.getKeyWindow()) {
         let timestamp = Date().timeIntervalSince1970
         let screenshotId = UUID().uuidString.lowercased()
 
         if let sessionReplay = SdkManager.shared.getSessionReplay(),
            containsXY(properties) {
             
-            guard let window = Global.getKeyWindow() else {
+            guard let window = window else {
                 Log.e("No key window found")
                 return
             }
@@ -74,8 +76,11 @@ extension CoralogixRum {
         var metadata: [String: Any] = [
             Keys.timestamp.rawValue: timestamp,
             Keys.screenshotId.rawValue: screenshotId,
-            Keys.screenshotData.rawValue: screenshotData
         ]
+        
+        if screenshotData != nil {
+            metadata[Keys.screenshotData.rawValue] =  screenshotData
+        }
         // Keep SDK-generated keys if duplicates exist
         metadata.merge(properties) { (_, current) in current }
         return metadata
