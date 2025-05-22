@@ -9,6 +9,12 @@
 import UIKit
 #endif
 
+
+public enum ImageFormat {
+    case png
+    case jpeg(compressionQuality: CGFloat)
+}
+
 public enum Global: String {
     case sdk = "1.0.21"
     case swiftVersion = "5.9"
@@ -48,6 +54,27 @@ public enum Global: String {
         return ProcessInfo.processInfo.processName
     }
     
+    public static func getKeyWindow(connectedScenes: Set<UIScene> = UIApplication.shared.connectedScenes) -> UIWindow? {
+        guard let windowScene = connectedScenes
+                .first(where: { $0.activationState == .foregroundActive }) as? UIWindowScene else {
+            Log.e("No active window scene found")
+            return nil
+        }
+        return windowScene.windows.first(where: { $0.isKeyWindow })
+    }
+    
+    public static func cgImage(from data: Data) -> CGImage? {
+        // Create a CGImageSource from the data
+        guard let imageSource = CGImageSourceCreateWithData(data as CFData, nil) else {
+            Log.e("Failed to create image source.")
+            return nil
+        }
+        
+        // Create CGImage from the source
+        let cgImage = CGImageSourceCreateImageAtIndex(imageSource, 0, nil)
+        return cgImage
+    }
+    
     public static func osVersionInfo() -> String {
         return ProcessInfo.processInfo.operatingSystemVersionString
     }
@@ -75,6 +102,20 @@ public enum Global: String {
         }
         return identifier
     }()
+    
+    public static func ciImageToData(_ ciImage: CIImage, format: ImageFormat = .png, context: CIContext = CIContext()) -> Data? {
+        guard let cgImage = context.createCGImage(ciImage, from: ciImage.extent) else {
+            return nil
+        }
+
+        let uiImage = UIImage(cgImage: cgImage)
+        switch format {
+        case .png:
+            return uiImage.pngData()
+        case .jpeg(let compressionQuality):
+            return uiImage.jpegData(compressionQuality: compressionQuality)
+        }
+    }
     
     public static func isEmulator() -> Bool {
 #if targetEnvironment(simulator)

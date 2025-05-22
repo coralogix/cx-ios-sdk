@@ -38,17 +38,16 @@ class ScannerPipelineTests: XCTestCase {
         do {
             let options = SessionReplayOptions(maskText: ["confidential"], maskAllImages: true)
             
-            // Create a unique file
-            let uniqueFileURL = try createUniqueFile(from: originalURL, withExtension: "png")
-            
+            let imageData = try Data(contentsOf: originalURL)
+
             scannerPipeline.runPipelineWithCancellation(
-                inputURL: uniqueFileURL,
+                screenshotData: imageData,
                 options: options,
                 operationId: operationId,
                 isValid: { [weak self] id in
                     return self?.currentOperationId == id
-                }) { result in
-                XCTAssertTrue(result, "Pipeline should complete successfully.")
+                }) { ciImage in
+                XCTAssertNotNil(ciImage, "Pipeline should complete successfully.")
                 expectation.fulfill()
             }
             
@@ -71,21 +70,19 @@ class ScannerPipelineTests: XCTestCase {
         }
         
         do {
-            // Create a unique file
-            let uniqueFileURL = try createUniqueFile(from: originalURL, withExtension: "png")
-            
             let options = SessionReplayOptions(maskText: nil, maskAllImages: true)
             let operationId = UUID()
             self.currentOperationId = operationId
+            let imageData = try Data(contentsOf: originalURL)
             
             scannerPipeline.runPipelineWithCancellation(
-                inputURL: uniqueFileURL,
+                screenshotData: imageData,
                 options: options,
                 operationId: operationId,
             isValid: { [weak self] id in
                 return self?.currentOperationId == id
-            }) { result in
-                XCTAssertTrue(result, "Pipeline should complete successfully.")
+            }) { ciImage in
+                XCTAssertNotNil(ciImage, "Pipeline should complete successfully.")
                 expectation.fulfill()
             }
             
@@ -108,21 +105,19 @@ class ScannerPipelineTests: XCTestCase {
         }
         
         do {
-            // Create a unique file
-            let uniqueFileURL = try createUniqueFile(from: originalURL, withExtension: "png")
-            
             let options = SessionReplayOptions(maskText: nil, maskAllImages: false)
             let operationId = UUID()
             self.currentOperationId = operationId
-                            
+            let imageData = try Data(contentsOf: originalURL)
+
             scannerPipeline.runPipelineWithCancellation(
-                inputURL: uniqueFileURL,
+                screenshotData: imageData,
                 options: options,
                 operationId: operationId,
                 isValid: { [weak self] id in
                     return self?.currentOperationId == id
-                }) { result in
-                XCTAssertTrue(result, "Pipeline should complete successfully.")
+                }) { ciImage in
+                XCTAssertNotNil(ciImage, "Pipeline should complete successfully.")
                 expectation.fulfill()
             }
             
@@ -151,16 +146,17 @@ class ScannerPipelineTests: XCTestCase {
             let options = SessionReplayOptions(maskText: nil, maskAllImages: false)
             let operationId = UUID()
             self.currentOperationId = operationId
-            
+            let imageData = try Data(contentsOf: originalURL)
+
             scannerPipeline.runPipelineWithCancellation(
-                inputURL: uniqueFileURL,
+                screenshotData: imageData,
                 options: options,
                 operationId: operationId,
                 isValid: { [weak self] id in
                     return self?.currentOperationId == id
                 }
-            ) { result in
-                XCTAssertTrue(result, "Pipeline should skip face scanner and complete successfully on simulator.")
+            ) { ciImage in
+                XCTAssertNotNil(ciImage, "Pipeline should skip face scanner and complete successfully on simulator.")
                 expectation.fulfill()
             }
             
@@ -192,15 +188,16 @@ class ScannerPipelineTests: XCTestCase {
             let options = SessionReplayOptions(maskText: nil, maskAllImages: false)
             let operationId = UUID()
             self.currentOperationId = operationId
-            
+            let imageData = try Data(contentsOf: originalURL)
+
             scannerPipeline.runPipelineWithCancellation(
-                inputURL: uniqueFileURL,
+                screenshotData: imageData,
                 options: options,
                 operationId: operationId,
                 isValid: { [weak self] id in
                     return self?.currentOperationId == id
-                }) { result in
-                    XCTAssertTrue(result, "Pipeline should complete successfully with face scanner disabled.")
+                }) { ciImage in
+                    XCTAssertNotNil(ciImage, "Pipeline should complete successfully with face scanner disabled.")
                     expectation.fulfill()
                 }
             

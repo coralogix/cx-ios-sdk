@@ -10,18 +10,14 @@ import CoralogixInternal
 
 /// The possible results for the export method.
 public enum SessionReplayResultCode {
-  /// The export operation finished successfully.
-  case success
-  
-  /// The export operation finished with an error.
-  case failure
+    /// The export operation finished successfully.
+    case success
+    
+    /// The export operation finished with an error.
+    case failure
 }
 
-protocol UserInteractionRecorder {
-    func getUserInteraction(for url: String) -> CGPoint?
-}
-
-class SessionReplayModel: UserInteractionRecorder {
+class SessionReplayModel {
     internal var urlManager = URLManager()
     private var urlObserver: URLObserver?
     internal var sessionId: String = ""
@@ -29,11 +25,7 @@ class SessionReplayModel: UserInteractionRecorder {
     private var isMaskingProcessorWorking = false
     var sessionReplayOptions: SessionReplayOptions?
     var isRecording = false  // Custom flag to track recording state
-    private var debounceWorkItem: DispatchWorkItem? = nil
-    private let debounceInterval: TimeInterval = 0.5 // 500 milliseconds
     private let srNetworkManager: SRNetworkManager?
-    private let urlPointDictQueue = DispatchQueue(label: "com.coralogix.urlPointDictQueue", attributes: .concurrent)
-    private var urlPointDict = [String: CGPoint]()
     internal let screenshotManager = ScreenshotManager()
     
     init(sessionReplayOptions: SessionReplayOptions? = nil,
@@ -46,10 +38,6 @@ class SessionReplayModel: UserInteractionRecorder {
     }
     
     deinit {
-        // Cancel the debounce work item
-        debounceWorkItem?.cancel()
-        debounceWorkItem = nil
-        
         // Invalidate any other timers (like idleTimer if present)
         captureTimer?.invalidate()
         captureTimer = nil
@@ -58,54 +46,55 @@ class SessionReplayModel: UserInteractionRecorder {
     }
     
     internal func captureImage(properties: [String: Any]? = nil) {
-        // Cancel any ongoing debounce work
-        debounceWorkItem?.cancel()
+        guard !sessionId.isEmpty else {
+            Log.e("Invalid sessionId")
+            return
+        }
         
-        // Create a new work item
-        let workItem = DispatchWorkItem { [weak self] in
-            guard let self = self else { return }
+        var screenshotData: Data? = properties?[Keys.screenshotData.rawValue] as? Data
+        
+        if screenshotData == nil {
+            guard Thread.isMainThread else {
+                DispatchQueue.main.async { self.captureImage(properties: properties) }
+                return
+            }
             
-            guard let window = self.getKeyWindow() else {
+            guard let window = Global.getKeyWindow() else {
                 Log.e("No key window found")
                 return
             }
-          
+            
             guard let options = self.sessionReplayOptions,
                   self.isValidSessionReplayOptions(options) else {
                 Log.e("Invalid sessionReplayOptions")
                 return
             }
             
-            guard !sessionId.isEmpty else {
-                Log.e("Invalid sessionId")
-                return
-            }
-            
-            guard let screenshotData = window.captureScreenshot(scale: options.captureScale,
-                                                      compressionQuality: options.captureCompressionQuality) else {
-                Log.e("Failed to capture screenshot")
-                return
-            }
-            
-            self.screenshotManager.takeScreenshot()
-            let fileName = self.generateFileName()
-
-            if let documentsDirectory = FileManager.default.urls(
-                for: .documentDirectory,
-                in: .userDomainMask
-            ).first {
-                let fileURL = documentsDirectory
-                    .appendingPathComponent("SessionReplay")
-                    .appendingPathComponent(fileName)
-                self.handleCapturedData(fileURL: fileURL,
-                                        data: screenshotData,
-                                        properties: properties)
-            }
+            screenshotData = window.captureScreenshot(
+                scale: options.captureScale,
+                compressionQuality: options.captureCompressionQuality
+            )
         }
         
-        // Store the new work item and execute it after the debounce interval
-        debounceWorkItem = workItem
-        DispatchQueue.main.asyncAfter(deadline: .now() + debounceInterval, execute: workItem)
+        guard let screenshotData else {
+            Log.e("Failed to capture screenshot")
+            return
+        }
+        
+        self.screenshotManager.takeScreenshot()
+        let fileName = self.generateFileName()
+        
+        if let documentsDirectory = FileManager.default.urls(
+            for: .documentDirectory,
+            in: .userDomainMask
+        ).first {
+            let fileURL = documentsDirectory
+                .appendingPathComponent("SessionReplay")
+                .appendingPathComponent(fileName)
+            self.handleCapturedData(fileURL: fileURL,
+                                    data: screenshotData,
+                                    properties: properties)
+        }
     }
     
     internal func updateSessionId(with sessionId: String) {
@@ -180,28 +169,7 @@ class SessionReplayModel: UserInteractionRecorder {
         }
     }
     
-
-    // MARK: - Protocol
-
-    func getUserInteraction(for url: String) -> CGPoint? {
-        var point: CGPoint?
-        urlPointDictQueue.sync {
-            point = urlPointDict[url]
-        }
-        return point
-    }
-    
     // MARK: - Helper Methods
-
-    internal func getKeyWindow(connectedScenes: Set<UIScene> = UIApplication.shared.connectedScenes) -> UIWindow? {
-        guard let windowScene = connectedScenes
-                .first(where: { $0.activationState == .foregroundActive }) as? UIWindowScene else {
-            Log.e("No active window scene found")
-            return nil
-        }
-        return windowScene.windows.first(where: { $0.isKeyWindow })
-    }
-    
     internal func isValidSessionReplayOptions(_ options: SessionReplayOptions) -> Bool {
         return options.captureScale > 0 && options.captureCompressionQuality > 0
     }
@@ -221,24 +189,31 @@ class SessionReplayModel: UserInteractionRecorder {
     internal func handleCapturedData(fileURL: URL, data: Data, properties: [String: Any]?) {
         let timestamp = self.getTimestamp(from: properties)
         let screenshotId = self.getScreenshotId(from: properties)
-        if let point = self.getClickPoint(from: properties) {
-            urlPointDictQueue.async(flags: .barrier) {
-                self.urlPointDict[fileURL.absoluteString] = point
-            }
-        }
         
         DispatchQueue(label: "com.coralogix.fileOperations").async { [weak self] in
             guard let self = self else { return }
-
-            _ = self.saveImageToDocumentIfDebug(fileURL: fileURL, data: data)
+            let point = self.getClickPoint(from: properties)
             
-            self.urlManager.addURL(fileURL,
-                                   timestamp: timestamp,
-                                   screenshotId: screenshotId) { [weak self] isSuccess, originalTimestamp, originalScreenshotId  in
-                _ = self?.compressAndSendData(data: data,
-                                              timestamp: originalTimestamp,
-                                              screenshotId: originalScreenshotId)
+            let completion: URLProcessingCompletion = { [weak self] ciImage, originalTimestamp, originalScreenshotId  in
+                if let ciImage = ciImage,
+                   let ciImageData = Global.ciImageToData(ciImage) {
+                    if let sdkManager = SdkManager.shared.getCoralogixSdk(), sdkManager.isDebug() {
+                        SRUtils.saveImage(ciImage, outputURL: fileURL) { _ in }
+                    }
+                    _ = self?.compressAndSendData(data: ciImageData,
+                                                  timestamp: originalTimestamp,
+                                                  screenshotId: originalScreenshotId)
+                }
             }
+            
+            let urlEntry = URLEntry(url: fileURL,
+                                    timestamp: timestamp,
+                                    screenshotId: screenshotId,
+                                    screenshotData: data,
+                                    completion: completion,
+                                    point: point)
+            
+            self.urlManager.addURL(urlEntry: urlEntry)
             self.updateSessionId(with: self.sessionId)
         }
     }
@@ -298,34 +273,3 @@ class SessionReplayModel: UserInteractionRecorder {
     }
 }
 
-extension UIView {
-    func captureScreenshot(scale: CGFloat = UIScreen.main.scale,
-                           compressionQuality: CGFloat = 0.8) -> Data? {
-        
-        guard let keyWindow = getKeyWindow() else {
-            return nil
-        }
-        
-        let rendererFormat = UIGraphicsImageRendererFormat()
-        rendererFormat.scale = scale
-        let renderer = UIGraphicsImageRenderer(bounds: keyWindow.bounds, format: rendererFormat)
-        
-        let image = renderer.image { context in
-            keyWindow.drawHierarchy(in: keyWindow.bounds, afterScreenUpdates: true)
-            
-        }
-        return image.jpegData(compressionQuality: compressionQuality)
-    }
-    
-    func getKeyWindow() -> UIWindow? {
-        guard let keyWindow = UIApplication.shared.connectedScenes
-            .compactMap({ $0 as? UIWindowScene }) // Filter only UIWindowScenes
-            .flatMap({ $0.windows }) // Get all windows in each UIWindowScene
-            .first(where: { $0.isKeyWindow }) // Find the key window
-        else {
-            Log.e("Unable to find the key window")
-            return nil
-        }
-        return keyWindow
-    }
-}

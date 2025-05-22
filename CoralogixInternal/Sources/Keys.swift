@@ -177,6 +177,7 @@ public enum Keys: String {
     case snapshotCreationTime
     case screenshotId
     case page
+    case screenshotData
 }
 
 public enum CoralogixLogSeverity: Int {
