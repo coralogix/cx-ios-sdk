@@ -23,17 +23,17 @@ struct URLEntry {
 
 class URLManager: ObservableObject {
     @Published private(set) var savedURLs: [URLEntry] = []
-    private let maxUrlsToKeep: Int
+    private let maxURLEntryToKeep: Int
         
-    init(maxUrlsToKeep: Int = 100) {
-        self.maxUrlsToKeep = max(1, maxUrlsToKeep)
+    init(maxURLEntryToKeep: Int = 10) {
+        self.maxURLEntryToKeep = max(1, maxURLEntryToKeep)
     }
     
     func addURL(urlEntry: URLEntry) {
         DispatchQueue.main.async {
             self.savedURLs.append(urlEntry)
-            if self.savedURLs.count > self.maxUrlsToKeep {
-                self.savedURLs.removeFirst(self.savedURLs.count - self.maxUrlsToKeep)
+            if self.savedURLs.count > self.maxURLEntryToKeep {
+                self.savedURLs.removeFirst(self.savedURLs.count - self.maxURLEntryToKeep)
             }
         }
     }

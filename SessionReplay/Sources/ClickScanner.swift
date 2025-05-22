@@ -26,12 +26,7 @@ class ClickScanner {
         let scaledX = x * scaleX
         let scaledY = y * scaleY
         let flippedY = imageSize.height - scaledY
-        
         let imagePoint = CGPoint(x: scaledX, y: flippedY)
-        print("Screen size: \(screenSize)")
-        print("Image size: \(imageSize)")
-        print("Tap point (screen): \(x), \(y)")
-        print("Tap point (image): \(scaledX), flippedY: \(flippedY)")
         
         guard let clickedCGImage = self.addClickMark(to: ciImage, at: imagePoint.x, y: imagePoint.y) else {
             completion(nil)

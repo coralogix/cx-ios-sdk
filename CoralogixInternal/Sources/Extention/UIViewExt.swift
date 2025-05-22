@@ -19,16 +19,4 @@ public extension UIView {
         }
         return image.jpegData(compressionQuality: compressionQuality)
     }
-    
-    func getKeyWindow() -> UIWindow? {
-        guard let keyWindow = UIApplication.shared.connectedScenes
-            .compactMap({ $0 as? UIWindowScene }) // Filter only UIWindowScenes
-            .flatMap({ $0.windows }) // Get all windows in each UIWindowScene
-            .first(where: { $0.isKeyWindow }) // Find the key window
-        else {
-            Log.e("Unable to find the key window")
-            return nil
-        }
-        return keyWindow
-    }
 }

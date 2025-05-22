@@ -54,6 +54,11 @@ class SessionReplayModel {
         var screenshotData: Data? = properties?[Keys.screenshotData.rawValue] as? Data
         
         if screenshotData == nil {
+            guard Thread.isMainThread else {
+                DispatchQueue.main.async { self.captureImage(properties: properties) }
+                return
+            }
+            
             guard let window = Global.getKeyWindow() else {
                 Log.e("No key window found")
                 return
