@@ -23,7 +23,7 @@ Pod::Spec.new do |spec|
   spec.static_framework = true
 
   spec.source_files  = 'SessionReplay/Sources/**/*.swift'
-  spec.dependency 'CoralogixInternal', '1.0.21'
+  spec.dependency 'CoralogixInternal', '1.0.22'
   
     spec.test_spec 'Tests' do |test|
         test.source_files = 'Tests/SessionReplayTests/**/*.swift'
