@@ -55,6 +55,9 @@
 		E6B60A022DB4E53F003AD35D /* SessionReplay in Frameworks */ = {isa = PBXBuildFile; productRef = E6B60A012DB4E53F003AD35D /* SessionReplay */; };
 		E6B60A042DB4E544003AD35D /* SessionReplay in Frameworks */ = {isa = PBXBuildFile; productRef = E6B60A032DB4E544003AD35D /* SessionReplay */; };
 		E6B60A062DB4EAAC003AD35D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E6B60A052DB4EAAC003AD35D /* Assets.xcassets */; };
+		E6D4BBF72DE336310096B46D /* CoralogixRumManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6D4BBF62DE336310096B46D /* CoralogixRumManager.swift */; };
+		E6D4BBF82DE336310096B46D /* CoralogixRumManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6D4BBF62DE336310096B46D /* CoralogixRumManager.swift */; };
+		E6D4BBF92DE336310096B46D /* CoralogixRumManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6D4BBF62DE336310096B46D /* CoralogixRumManager.swift */; };
 		E6FD68F82D01D5570066BDE8 /* CreditCardInputCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6FD68F72D01D5570066BDE8 /* CreditCardInputCell.swift */; };
 		E6FD68FA2D01D97B0066BDE8 /* FullImageCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6FD68F92D01D97B0066BDE8 /* FullImageCell.swift */; };
 /* End PBXBuildFile section */
@@ -127,6 +130,7 @@
 		E68681B22BFA279600B127E7 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		E68681D92BFC739C00B127E7 /* ModalViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModalViewController.swift; sourceTree = "<group>"; };
 		E6B60A052DB4EAAC003AD35D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		E6D4BBF62DE336310096B46D /* CoralogixRumManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoralogixRumManager.swift; sourceTree = "<group>"; };
 		E6FD68F72D01D5570066BDE8 /* CreditCardInputCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreditCardInputCell.swift; sourceTree = "<group>"; };
 		E6FD68F92D01D97B0066BDE8 /* FullImageCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FullImageCell.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -275,6 +279,7 @@
 			children = (
 				E6320FB52BE7CE6800A4547E /* SimulateFolder */,
 				E622116B2BFF2A7B00052682 /* Keys.swift */,
+				E6D4BBF62DE336310096B46D /* CoralogixRumManager.swift */,
 			);
 			path = Shared;
 			sourceTree = "<group>";
@@ -437,6 +442,7 @@
 				E622116D2BFF2D5300052682 /* Keys.swift in Sources */,
 				E62211682BFDF4AD00052682 /* CrashSim.swift in Sources */,
 				E622116A2BFDF4B400052682 /* NetworkSim.swift in Sources */,
+				E6D4BBF72DE336310096B46D /* CoralogixRumManager.swift in Sources */,
 				E622115D2BFDEB8B00052682 /* ContentView.swift in Sources */,
 				E622115B2BFDEB8B00052682 /* DemoAppSwiftUIApp.swift in Sources */,
 			);
@@ -455,6 +461,7 @@
 				E669382A2C722EE60002335F /* AppDelegate.swift in Sources */,
 				E66938442C73760F0002335F /* ModalViewController.swift in Sources */,
 				E669383E2C723D250002335F /* ErrorSim.swift in Sources */,
+				E6D4BBF82DE336310096B46D /* CoralogixRumManager.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -478,6 +485,7 @@
 				E68681A72BFA279500B127E7 /* SceneDelegate.swift in Sources */,
 				E68681DA2BFC739C00B127E7 /* ModalViewController.swift in Sources */,
 				E68681D62BFA300300B127E7 /* CrashSim.swift in Sources */,
+				E6D4BBF92DE336310096B46D /* CoralogixRumManager.swift in Sources */,
 				E68681D82BFA300C00B127E7 /* NetworkSim.swift in Sources */,
 				E68681D72BFA300800B127E7 /* ErrorSim.swift in Sources */,
 			);

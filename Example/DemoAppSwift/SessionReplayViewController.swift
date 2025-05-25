@@ -105,11 +105,11 @@ class SessionReplayViewController: UITableViewController {
         self.customView.updateText("Selected item: \(item)")
         
         if item == Keys.startRecoding.rawValue {
-            AppDelegate.coralogixRum?.startRecording()
+            CoralogixRumManager.shared.sdk.startRecording()
         } else if item == Keys.stopRecoding.rawValue {
-            AppDelegate.coralogixRum?.stopRecording()
+            CoralogixRumManager.shared.sdk.stopRecording()
         } else if item == Keys.captureEvent.rawValue {
-            AppDelegate.coralogixRum?.captureEvent()
+            CoralogixRumManager.shared.sdk.captureEvent()
         } else if item == Keys.updateSessionId.rawValue {
             if let sessionReplay = SdkManager.shared.getSessionReplay() {
                sessionReplay.update(sessionId: NSUUID().uuidString)

@@ -65,9 +65,9 @@ class SdkViewController: UITableViewController {
         self.customView.updateText("Selected item: \(item)")
         
         if item == Keys.shutDownCoralogixRum.rawValue {
-            AppDelegate.coralogixRum?.shutdown()
+            CoralogixRumManager.shared.sdk.shutdown()
         } else if item == Keys.updateLabels.rawValue {
-            AppDelegate.coralogixRum?.setLabels(labels: ["item3" : "playstation 4", "itemPrice" : 400])
+            CoralogixRumManager.shared.sdk.setLabels(labels: ["item3" : "playstation 4", "itemPrice" : 400])
         }
         tableView.deselectRow(at: indexPath, animated: true)
     }
