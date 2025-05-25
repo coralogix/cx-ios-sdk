@@ -11,8 +11,13 @@ import Coralogix
 final class CoralogixRumManager {
     static let shared = CoralogixRumManager()
 
-    private(set) var sdk: CoralogixRum!
-
+    private var _sdk: CoralogixRum?
+    var sdk: CoralogixRum {
+        guard let _sdk = _sdk else {
+            fatalError("CoralogixRumManager must be initialized before accessing sdk")
+        }
+        return _sdk
+    }
     private init() {}
 
     func initialize() {
@@ -47,7 +52,7 @@ final class CoralogixRumManager {
 //        let log = OSLog(subsystem: "test.CoralogixTest", category: .pointsOfInterest)
 //        let signpostID = OSSignpostID(log: log)
 //        os_signpost(.begin, log: log, name: "Init Coralogix", signpostID: signpostID)
-        self.sdk = CoralogixRum(options: options)
+        self._sdk = CoralogixRum(options: options)
 //        os_signpost(.end, log: log, name: "Init Coralogix", signpostID: signpostID)
     }
 }
