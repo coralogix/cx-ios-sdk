@@ -6,7 +6,7 @@ import PackageDescription
 let package = Package(
     name: "Coralogix",
     platforms: [
-        .iOS(.v13),
+        .iOS(.v13)
     ],
     products: [
         .library(name: "Coralogix", targets: ["Coralogix"]),
@@ -20,7 +20,7 @@ let package = Package(
         ),
         .target(
             name: "CoralogixInternal",
-            path: "CoralogixInternal/Sources/",
+            path: "CoralogixInternal/Sources/"
         ),
         .target(
             name: "Coralogix",
@@ -33,7 +33,7 @@ let package = Package(
         .target(
             name: "SessionReplay",
             dependencies: [
-                .target(name: "CoralogixInternal"),
+                .target(name: "CoralogixInternal")
             ],
             path: "SessionReplay/Sources/"
         ),

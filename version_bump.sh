@@ -66,6 +66,14 @@ update_version_in_sr_podspec() {
   sed -i '' "s/spec.version.*=.*\"[0-9]*\.[0-9]*\.[0-9]*\"/spec.version      = \"$new_version\"/" "$podspec_sr_file"
 }
 
+# Function to update CoralogixInternal dependency version in a podspec file
+update_internal_dependency_version() {
+  local new_version=$1
+  local podspec_file=$2
+  echo "Updating dependency version in: $podspec_file"
+  sed -i '' "s/\(spec.dependency 'CoralogixInternal', '\)[0-9]*\.[0-9]*\.[0-9]*\('\)/\1$new_version\2/" "$podspec_file"
+}
+
 # Main script logic
 if [ $# -ne 1 ]; then
   echo "Usage: $0 {major|minor|patch}"
@@ -132,34 +140,58 @@ ci_result=$?
 update_version_in_sr_podspec "$new_version" "$podspec_sr_file"
 sr_result=$?
 
+# Update CoralogixInternal dependency version in Coralogix.podspec and SessionReplay.podspec
+update_internal_dependency_version "$new_version" "$podspec_c_file";
+dep_c_result=$?
+
+update_internal_dependency_version "$new_version" "$podspec_sr_file";
+dep_sr_result=$?
+
+
 # Check if the sed command was successful for the Swift file
 if [ $swift_result -eq 0 ]; then
-    echo "Version updated successfully to $new_version in $swift_file"
+    echo "✅ Version updated successfully to $new_version in $swift_file"
 else
-    echo "Failed to update the version in $swift_file"
+    echo "❌ Failed to update the version in $swift_file"
     exit 1
 fi
 
 # Check if the sed command was successful for the podspec file
 if [ $c_result -eq 0 ]; then
-    echo "Version updated successfully to $new_version in $podspec_c_file"
+    echo "✅ Version updated successfully to $new_version in $podspec_c_file"
 else
-    echo "Failed to update the version in $podspec_c_file"
+    echo "❌ Failed to update the version in $podspec_c_file"
     exit 1
 fi
 
 # Check if the sed command was successful for the podspec file
 if [ $ci_result -eq 0 ]; then
-    echo "Version updated successfully to $new_version in $podspec_ci_file"
+    echo "✅ Version updated successfully to $new_version in $podspec_ci_file"
 else
-    echo "Failed to update the version in $podspec_ci_file"
+    echo "❌ Failed to update the version in $podspec_ci_file"
     exit 1
 fi
 
 # Check if the sed command was successful for the podspec file
 if [ $sr_result -eq 0 ]; then
-    echo "Version updated successfully to $new_version in $podspec_sr_file"
+    echo "✅ Version updated successfully to $new_version in $podspec_sr_file"
 else
-    echo "Failed to update the version in $podspec_sr_file"
+    echo "❌ Failed to update the version in $podspec_sr_file"
+    exit 1
+fi
+
+# Check if the sed command was successful for the podspec file
+if [ $dep_c_result -eq 0 ]; then
+    echo "✅ Dependency version updated in Coralogix.podspec"
+else
+    echo "❌ Failed to update dependency in Coralogix.podspec"
+    exit 1
+fi
+
+# Check if the sed command was successful for the podspec file
+if [ $dep_sr_result -eq 0 ]; then
+    echo "✅ Dependency version updated in SessionReplay.podspec"
+else
+    echo "❌ Failed to update dependency in SessionReplay.podspec"
     exit 1
 fi
