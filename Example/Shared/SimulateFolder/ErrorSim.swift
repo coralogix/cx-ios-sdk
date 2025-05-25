@@ -14,7 +14,7 @@ class ErrorSim {
         let exception = NSException(name: NSExceptionName(rawValue: "IllegalFormatError"),
                                     reason: "This is a custom exception",
                                     userInfo: userInfo)
-        AppDelegate.coralogixRum?.reportError(exception: exception)
+        CoralogixRumManager.shared.sdk.reportError(exception: exception)
     }
     
     static func sendNSError() {
@@ -22,16 +22,16 @@ class ErrorSim {
         let error = NSError(domain: "YourDomain",
                             code: 0,
                             userInfo: userInfo)
-        AppDelegate.coralogixRum?.reportError(error: error)
+        CoralogixRumManager.shared.sdk.reportError(error: error)
     }
     
     static func sendCustomError() {
         let filename = "file.txt"
-        AppDelegate.coralogixRum?.reportError(error: CustomError.fileNotFound("File not found: \(filename)"))
+        CoralogixRumManager.shared.sdk.reportError(error: CustomError.fileNotFound("File not found: \(filename)"))
     }
     
     static func sendStringError() {
-        AppDelegate.coralogixRum?.reportError(message: "errorcode=500 Im cusom Error", data: ["gender": "female", "height": "1.30"])
+        CoralogixRumManager.shared.sdk.reportError(message: "errorcode=500 Im cusom Error", data: ["gender": "female", "height": "1.30"])
     }
     
     static func simulateANR() {
@@ -53,11 +53,11 @@ class ErrorSim {
 #10     RendererBinding.dispatchEvent (package:flutter/src/rendering/binding.dart:425:11)
 #11     GestureBinding.<…>
 """
-        AppDelegate.coralogixRum?.reportError(message: "flutter error", stackTrace: stackTrace)
+        CoralogixRumManager.shared.sdk.reportError(message: "flutter error", stackTrace: stackTrace)
     }
     
     static func sendLog() {
-        AppDelegate.coralogixRum?.log(severity: CoralogixLogSeverity.warn, message: "Im cusom log", data: ["gender": "male", "height": "1.78"])
+        CoralogixRumManager.shared.sdk.log(severity: CoralogixLogSeverity.warn, message: "Im cusom log", data: ["gender": "male", "height": "1.78"])
     }
     
     enum CustomError: Error {

@@ -153,7 +153,7 @@ class ScannerPipeline {
 #else
             // Run Face Scanner if enabled
             if isFaceScannerEnabled {
-                faceScanner.processImage(at: ciImage) { [weak self] ciImage in
+                faceScanner.processImage(at: finalImage) { [weak self] ciImage in
                     guard let self = self, isValid(operationId) else {
                         // Skip next stage if operation is no longer valid
                         completion(ciImage)

@@ -22,8 +22,8 @@ struct DemoAppSwiftUIApp: App {
                                                ignoreErrors: [],
                                                labels: ["item" : "playstation 5", "itemPrice" : 1000],
                                                debug: true)
-
-        self.coralogixRum = CoralogixRum(options: options)
+        CoralogixRumManager.shared.initialize()
+        self.coralogixRum = CoralogixRumManager.shared.sdk
     }
     
     var body: some Scene {
