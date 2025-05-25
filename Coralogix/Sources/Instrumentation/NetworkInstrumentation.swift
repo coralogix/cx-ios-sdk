@@ -11,6 +11,9 @@ import CoralogixInternal
 extension CoralogixRum {
     private static let exporterQueue = DispatchQueue(label: "com.coralogix.exporter.queue")
 
+    /// Initializes network instrumentation for monitoring network requests and responses.
+    ///
+    /// Configures URL session instrumentation if exporter options are available and swizzling is enabled. Logs errors if options are missing or swizzling is disabled.
     public func initializeNetworkInstrumentation() {
         guard let options = self.coralogixExporter?.getOptions() else {
             Log.e("[Coralogix] missing coralogix options")
@@ -30,6 +33,7 @@ extension CoralogixRum {
         }
     }
     
+    /// Customizes the span builder for a network request by setting event type and source attributes.
     private func spanCustomization(request: URLRequest, spanBuilder: SpanBuilder) {
         spanBuilder.setAttribute(key: Keys.eventType.rawValue, value: CoralogixEventType.networkRequest.rawValue)
         spanBuilder.setAttribute(key: Keys.source.rawValue, value: Keys.fetch.rawValue)

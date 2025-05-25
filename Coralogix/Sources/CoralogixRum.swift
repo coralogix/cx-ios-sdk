@@ -364,6 +364,10 @@ public struct CoralogixExporterOptions {
         self.enableSwizzling = enableSwizzling
     }
     
+    /// Determines whether a specific instrumentation type should be initialized based on the current configuration.
+    ///
+    /// - Parameter instumentation: The instrumentation type to check.
+    /// - Returns: `true` if the instrumentation should be initialized, or if not explicitly configured; otherwise, `false`.
     internal func shouldInitInstumentation(instumentation: InstrumentationType) -> Bool {
         if let keys = self.instrumentations?.keys {
             if keys.contains(instumentation) {

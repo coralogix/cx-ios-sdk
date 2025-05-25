@@ -13,6 +13,11 @@ import SessionReplay
 class AppDelegate: UIResponder, UIApplicationDelegate {
     static var coralogixRum: CoralogixRum? = nil
     
+    /// Handles application launch initialization.
+    ///
+    /// Sets up user context, configures and initializes Coralogix RUM monitoring with specified options, and starts session replay recording. Returns `true` to indicate successful launch.
+    ///
+    /// - Returns: `true` after successful initialization of monitoring and session replay tools.
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         
         let userContext = UserContext(userId: "ww",

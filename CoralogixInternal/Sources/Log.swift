@@ -59,10 +59,16 @@ public class Log {
         }
     }
     
+    /// Logs an error message using the provided `Error` instance.
+    ///
+    /// This is a convenience method that delegates to `Log.error(_:)`. The error's localized description is always printed, regardless of the debug mode.
     public static func e(_ error: Error) {
         Log.error(error)
     }
     
+    /// Logs an error message with a red square prefix, displaying the error's localized description regardless of debug mode.
+    ///
+    /// - Parameter error: The error to be logged.
     public static func error(_ error: Error) {
         print("🟥 \(error.localizedDescription)")
     }
