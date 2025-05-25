@@ -12,13 +12,22 @@ extension CoralogixRum {
     private static let exporterQueue = DispatchQueue(label: "com.coralogix.exporter.queue")
 
     public func initializeNetworkInstrumentation() {
-        let configuration = URLSessionInstrumentationConfiguration(spanCustomization: self.spanCustomization, shouldInjectTracingHeaders: { _ /*request*/ in
-            // TBD: need to implement the follow
-            // Received shouldInjectTracingHeaders from Coralogix options options
-            // To do this only on URL that are not internal
-            return true
-        }, receivedResponse: self.receivedResponse)
-        self.sessionInstrumentation = URLSessionInstrumentation(configuration: configuration)
+        guard let options = self.coralogixExporter?.getOptions() else {
+            Log.e("[Coralogix] missing coralogix options")
+            return
+        }
+        
+        if options.enableSwizzling == true {
+            let configuration = URLSessionInstrumentationConfiguration(spanCustomization: self.spanCustomization, shouldInjectTracingHeaders: { _ /*request*/ in
+                // TBD: need to implement the follow
+                // Received shouldInjectTracingHeaders from Coralogix options options
+                // To do this only on URL that are not internal
+                return true
+            }, receivedResponse: self.receivedResponse)
+            self.sessionInstrumentation = URLSessionInstrumentation(configuration: configuration)
+        } else {
+            Log.e("[Coralogix] Swizzling is disabled")
+        }
     }
     
     private func spanCustomization(request: URLRequest, spanBuilder: SpanBuilder) {

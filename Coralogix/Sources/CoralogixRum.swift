@@ -275,53 +275,61 @@ public struct CoralogixExporterOptions {
         case lifeCycle
     }
 
-    // Configuration for user context.
+    /// Configuration for user context.
     var userContext: UserContext?
     
-    // Turns on/off internal debug logging
+    /// Turns on/off internal debug logging
     let debug: Bool
     
-    // Applies for Fetch URLs. URLs that match that regex will not be traced.
+    /// Applies for Fetch URLs. URLs that match that regex will not be traced.
     let ignoreUrls: [String]?
     
-    // A pattern for error messages which should not be sent to Coralogix. By default, all errors will be sent.
+    /// A pattern for error messages which should not be sent to Coralogix. By default, all errors will be sent.
     let ignoreErrors: [String]?
     
-    // Coralogix account domain
+    /// Coralogix account domain
     let coralogixDomain: CoralogixDomain
     
-    // Coralogix token
+    /// Coralogix token
     var publicKey: String
     
-    // Environment
+    /// Environment
     let environment: String
     
-    // Application name
+    /// Application name
     var application: String
     
-    // Appliaction version
+    /// Appliaction version
     var version: String
         
     var labels: [String: Any]?
     
-    // Number between 0-100 as a precentage of SDK should be init.
+    /// Number between 0-100 as a precentage of SDK should be init.
     var sdkSampler: SDKSampler
     
-    // The timeinterval the SDK will run the FPS sampling in an hour. default is every 1 minute.
+    /// The timeinterval the SDK will run the FPS sampling in an hour. default is every 1 minute.
     let mobileVitalsFPSSamplingRate: Int
     
-    // A list of instruments that you wish to switch off during runtime. all instrumentations are active by default.
+    /// A list of instruments that you wish to switch off during runtime. all instrumentations are active by default.
     var instrumentations: [InstrumentationType: Bool]?
     
-    // Determines whether the SDK should collect the user's IP address and corresponding geolocation data. Defaults to true.
+    /// Determines whether the SDK should collect the user's IP address and corresponding geolocation data. Defaults to true.
     var collectIPData: Bool
     
-    // Enable event access and modification before sending to Coralogix, supporting content modification, and event discarding.
+    /// Enable event access and modification before sending to Coralogix, supporting content modification, and event discarding.
     var beforeSend: (([String: Any]) -> [String: Any]?)?
     
-    // Alternative beforeSend for Other Platfoms.
+    /// Alternative beforeSend for Other Platfoms.
     public var beforeSendCallBack: (([[String: Any]]) -> Void)? = nil
-
+    
+    /// When set to `false`, disables Coralogix's automatic method swizzling.
+    ///
+    /// Swizzling is used to auto-instrument various system behaviors (e.g., view controller lifecycle,
+    /// app delegate events, network calls). Disabling it gives you full manual control over instrumentation.
+    ///
+    /// - Remark: As of the current Coralogix SDK version, `enableSwizzling = false` only disables `NSURLSession` instrumentation.
+    public var enableSwizzling: Bool
+    
     public init(coralogixDomain: CoralogixDomain,
                 userContext: UserContext? = nil,
                 environment: String,
@@ -336,6 +344,7 @@ public struct CoralogixExporterOptions {
                 instrumentations: [InstrumentationType: Bool]? = nil,
                 collectIPData: Bool = true,
                 beforeSend: (([String: Any]) -> [String: Any]?)? = nil,
+                enableSwizzling: Bool = true,
                 debug: Bool = false) {
         self.coralogixDomain = coralogixDomain
         self.userContext = userContext
@@ -352,6 +361,7 @@ public struct CoralogixExporterOptions {
         self.instrumentations = instrumentations
         self.collectIPData = collectIPData
         self.beforeSend = beforeSend
+        self.enableSwizzling = enableSwizzling
     }
     
     internal func shouldInitInstumentation(instumentation: InstrumentationType) -> Bool {

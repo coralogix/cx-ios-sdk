@@ -41,7 +41,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
             }
             return editableCxRum
         },
-                                                debug: true)
+                                               enableSwizzling: true,
+                                               debug: true)
         AppDelegate.coralogixRum = CoralogixRum(options: options)
         
         // Must be initialized after CoralogixRum

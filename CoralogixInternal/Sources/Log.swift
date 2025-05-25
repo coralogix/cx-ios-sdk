@@ -64,8 +64,6 @@ public class Log {
     }
     
     public static func error(_ error: Error) {
-        if isDebug {
-            print("🟥 \(error.localizedDescription)")
-        }
+        print("🟥 \(error.localizedDescription)")
     }
 }
