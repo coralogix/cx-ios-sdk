@@ -12,16 +12,6 @@ import Coralogix
 struct DemoAppSwiftUIApp: App {
     @State private var coralogixRum: CoralogixRum
     init() {
-        let options = CoralogixExporterOptions(coralogixDomain: CoralogixDomain.US2,
-                                               userContext: nil,
-                                               environment: "PROD",
-                                               application: "Application",
-                                               version: "1",
-                                               publicKey:"PublicKey",
-                                               ignoreUrls: [],
-                                               ignoreErrors: [],
-                                               labels: ["item" : "playstation 5", "itemPrice" : 1000],
-                                               debug: true)
         CoralogixRumManager.shared.initialize()
         self.coralogixRum = CoralogixRumManager.shared.sdk
     }
