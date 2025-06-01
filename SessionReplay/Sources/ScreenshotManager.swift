@@ -36,6 +36,7 @@ public class ScreenshotManager {
             
             if _screenshotCount % maxScreenShotsPerPage == 0 {
                 _page += 1
+                _screenshotCount = 1
                 Log.d("Page incremented to: \(_page)")
             }
         }
