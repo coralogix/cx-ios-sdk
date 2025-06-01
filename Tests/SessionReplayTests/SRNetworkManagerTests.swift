@@ -164,7 +164,7 @@ final class SRNetworkManagerTests: XCTestCase {
         XCTAssertEqual(metadata[Keys.keySessionCreationDate.rawValue] as? Int, sessionCreationTime.milliseconds, "Session creation timestamp is incorrect")
         XCTAssertEqual(metadata[Keys.keySessionId.rawValue] as? String, sessionId, "Session ID value is incorrect")
         XCTAssertEqual(metadata[Keys.subIndex.rawValue] as? Int, subIndex, "Sub-index value is incorrect")
-        XCTAssertEqual(metadata[Keys.screenshotId.rawValue] as? String, screenshotId, "ScreenshotsId value is incorrect")
+        XCTAssertEqual(metadata[Keys.snapshotId.rawValue] as? String, screenshotId, "snapshotId value is incorrect")
         XCTAssertEqual(metadata[Keys.page.rawValue] as? String, page, "Page value is incorrect")
     }
     
@@ -204,7 +204,7 @@ final class SRNetworkManagerTests: XCTestCase {
             Keys.keySessionCreationDate.rawValue,
             Keys.keySessionId.rawValue,
             Keys.subIndex.rawValue,
-            Keys.screenshotId.rawValue,
+            Keys.snapshotId.rawValue,
             Keys.page.rawValue
         ]
         
