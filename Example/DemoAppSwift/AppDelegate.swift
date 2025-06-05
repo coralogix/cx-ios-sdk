@@ -22,7 +22,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
                                                         captureScale: 2.0,
                                                         captureCompressionQuality: 0.8,
                                                         maskText: ["Stop"],
-                                                        maskImages: true ,
+                                                        maskImages: false ,
                                                         autoStartSessionRecording: true)
         SessionReplay.initializeWithOptions(sessionReplayOptions:sessionReplayOptions)
         return true

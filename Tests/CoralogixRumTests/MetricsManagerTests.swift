@@ -61,7 +61,7 @@ final class MetricsManagerTests: XCTestCase {
         metricsManager.launchStartTime = CFAbsoluteTimeGetCurrent() - 2.0  // Simulate 2 seconds ago
         
         // Prepare a notification with the coldEnd metric
-        let notification = Notification(name: .cxRumNotificationMetrics, object: [Keys.coldEnd.rawValue: CFAbsoluteTimeGetCurrent()])
+        let notification = Notification(name: .cxRumNotificationMetrics, object: [CXMobileVitalsType.cold.rawValue: CFAbsoluteTimeGetCurrent()])
         
         // Handle the notification
         metricsManager.handleNotification(notification: notification)
@@ -88,6 +88,52 @@ final class MetricsManagerTests: XCTestCase {
         
         // FPS monitoring should stop
         XCTAssertFalse(metricsManager.fpsTrigger.isRunning, "FPS sampling should stop when app enters background")
+    }
+    
+    func testWarmStartVital() {
+        self.metricsManager.launchStartTime = nil
+        let warmTimestamp: Double = 1234567890.0
+        
+        let params: [String: Any] = [
+            CXMobileVitalsType.warm.rawValue: warmTimestamp
+        ]
+        
+        let result = metricsManager.getCXMobileVitals(params: params)
+        
+        XCTAssertNotNil(result)
+        XCTAssertEqual(result?.type, .warm)
+        XCTAssertEqual(result?.value, "\(Int(warmTimestamp))")
+    }
+    
+    func testColdStartVital() {
+        let startTime: CFAbsoluteTime = 1000.0
+        let endTime: CFAbsoluteTime = 1001.234  // duration: 1.234 seconds
+        
+        self.metricsManager.launchStartTime = startTime
+        
+        let params: [String: Any] = [
+            CXMobileVitalsType.cold.rawValue: endTime
+        ]
+        
+        let result = metricsManager.getCXMobileVitals(params: params)
+        
+        XCTAssertNotNil(result)
+        XCTAssertEqual(result?.type, .cold)
+        
+        let expectedMilliseconds = Int((endTime - startTime) * 1000)
+        XCTAssertEqual(result?.value, "\(expectedMilliseconds)")
+    }
+    
+    func testNoMatchingVitals() {
+        self.metricsManager.launchStartTime = nil
+
+        let params: [String: Any] = [
+            "nonMatchingKey": 123
+        ]
+        
+        let result = self.metricsManager.getCXMobileVitals(params: params)
+        
+        XCTAssertNil(result)
     }
 }
 

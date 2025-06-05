@@ -27,25 +27,29 @@ public class MetricsManager {
         
         NotificationCenter.default.addObserver(self,
                                                selector: #selector(self.handleNotification(notification:)),
-                                               name: .cxRumNotificationMetrics,
+                                               name: .cxViewDidAppear,
                                                object: nil)
         
         NotificationCenter.default.addObserver(self, selector: #selector(self.appDidEnterBackgroundNotification),
                                                name: UIApplication.didEnterBackgroundNotification,
                                                object: nil)
         // Warm
-        NotificationCenter.default.addObserver(self,
-                                               selector: #selector(self.appWillEnterForegroundNotification),
-                                               name: UIApplication.willEnterForegroundNotification,
-                                               object: nil)
-        NotificationCenter.default.addObserver(self, selector: #selector(self.appDidBecomeActiveNotification),
-                                               name: UIApplication.didBecomeActiveNotification,
-                                               object: nil)
+        if !([.reactNative, .flutter].contains(CoralogixRum.sdkFramework)) {
+            NotificationCenter.default.addObserver(self,
+                                                   selector: #selector(self.appWillEnterForegroundNotification),
+                                                   name: UIApplication.willEnterForegroundNotification,
+                                                   object: nil)
+            
+            NotificationCenter.default.addObserver(self, selector: #selector(self.appDidBecomeActiveNotification),
+                                                   name: UIApplication.didBecomeActiveNotification,
+                                                   object: nil)
+        }
     }
     
     public func removeObservers() {
         MXMetricManager.shared.remove(MyMetricSubscriber.shared)
     }
+    
     func startFPSSamplingMonitoring(mobileVitalsFPSSamplingRate: Int) {
         self.fpsTrigger.startMonitoring(xTimesPerHour: mobileVitalsFPSSamplingRate)
     }
@@ -97,29 +101,60 @@ public class MetricsManager {
     @objc func handleNotification(notification: Notification) {
         if let metrics = notification.object as? [String: Any] {
             if let launchStartTime = self.launchStartTime,
-               let launchEndTime = metrics[Keys.coldEnd.rawValue] as? CFAbsoluteTime,
+               let launchEndTime = metrics[CXMobileVitalsType.cold.rawValue] as? CFAbsoluteTime,
                self.launchEndTime == nil {
                 self.launchEndTime = launchEndTime
-                let coldStartDurationInSeconds = launchEndTime - launchStartTime
-                let coldStartDurationInMilliseconds = coldStartDurationInSeconds * 1000
-                
-                // Convert to an integer if you want to remove the decimal part
-                let millisecondsRounded = Int(coldStartDurationInMilliseconds)
-                
-                Log.d("[Metric] Cold start duration: \(millisecondsRounded) milliseconds")
-                
-                // send instrumentaion event
+                let millisecondsRounded = self.calculateTime(start: launchStartTime, stop: launchEndTime)
                 NotificationCenter.default.post(name: .cxRumNotificationMetrics,
                                                 object: CXMobileVitals(type: .cold, value: "\(millisecondsRounded)"))
             }
         }
     }
     
+    func calculateTime(start: Double, stop: Double) -> Int {
+        let coldStartDurationInSeconds = stop - start
+        let coldStartDurationInMilliseconds = coldStartDurationInSeconds * 1000
+        return Int(coldStartDurationInMilliseconds)
+    }
+    
+    internal func getCXMobileVitals(params: [String: Any]) -> CXMobileVitals? {
+        let handlers: [CXMobileVitalsType: ([String: Any]) -> CXMobileVitals?] = [
+            .cold: getColdTime,
+            .warm: getWarmTime
+        ]
+        
+        for (key, handler) in handlers {
+            if params.keys.contains(key.rawValue) {
+                return handler(params)
+            }
+        }
+        return nil
+    }
+    
+    internal func getWarmTime(params: [String: Any]) -> CXMobileVitals? {
+        if let launchEndTime = params[CXMobileVitalsType.warm.rawValue] as? Double {
+            let millisecondsRounded = Int(launchEndTime)
+            return CXMobileVitals(type: .warm, value: "\(millisecondsRounded)")
+        }
+        return nil
+    }
+    
+    internal func getColdTime(params: [String: Any]) -> CXMobileVitals? {
+        if let launchStartTime = self.launchStartTime,
+           let launchEndTime = params[CXMobileVitalsType.cold.rawValue] as? CFAbsoluteTime {
+            self.launchEndTime = launchEndTime
+            let millisecondsRounded = self.calculateTime(start: launchStartTime, stop: launchEndTime)
+            return CXMobileVitals(type: .cold, value: "\(millisecondsRounded)")
+        }
+        return nil
+    }
+    
     deinit {
         NotificationCenter.default.removeObserver(self, name: UIApplication.didEnterBackgroundNotification, object: nil)
         NotificationCenter.default.removeObserver(self, name: UIApplication.willEnterForegroundNotification, object: nil)
         NotificationCenter.default.removeObserver(self, name: UIApplication.didBecomeActiveNotification, object: nil)
-        NotificationCenter.default.removeObserver(self, name: .cxRumNotificationMetrics, object: nil)
+        NotificationCenter.default.removeObserver(self, name: .cxViewDidAppear, object: nil)
+        
         self.anrDetector?.stopMonitoring()
         self.fpsTrigger.stopMonitoring()
         self.launchEndTime = 0

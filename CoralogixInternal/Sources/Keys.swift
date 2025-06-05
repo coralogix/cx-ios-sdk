@@ -144,7 +144,6 @@ public enum Keys: String {
     case isCrash = "is_crash"
     case tvos
     case television
-    case coldEnd
     case mobileVitalsContext = "mobile_vitals_context"
     case lifeCycleContext = "life_cycle_context"
     case fps = "fps"

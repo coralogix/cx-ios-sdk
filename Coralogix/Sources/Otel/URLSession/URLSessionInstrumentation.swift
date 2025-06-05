@@ -78,19 +78,18 @@ public class URLSessionInstrumentation {
 #endif
         
         let classes = configuration.delegateClassesToInstrument ?? InstrumentationUtils.objc_getClassList()
-        let selectorsCount = selectors.count
         
         for theClass in classes {
             guard theClass != Self.self else { continue }
             
             // MARK: [FIX] Validate Objective-C class (prevents crash in class_copyMethodList)
             guard class_getSuperclass(theClass) != nil else {
-                Log.d("Skipping non-ObjC class: \(theClass)")
+                //Log.d("Skipping non-ObjC class: \(theClass)")
                 continue
             }
             
             guard !class_isMetaClass(theClass) else {
-                Log.d("Skipping metaclass: \(theClass)")
+                //Log.d("Skipping metaclass: \(theClass)")
                 continue
             }
             

@@ -14,7 +14,8 @@ class MainViewController: UITableViewController {
                  Keys.errorInstumentation.rawValue,
                  Keys.sdkFunctions.rawValue,
                  Keys.userActionsInstumentation.rawValue,
-                 Keys.sessionReplay.rawValue]
+                 Keys.sessionReplay.rawValue,
+                 Keys.clock.rawValue]
    
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -60,6 +61,9 @@ class MainViewController: UITableViewController {
         } else if item == Keys.sessionReplay.rawValue {
             let sessionReplayViewController = SessionReplayViewController()
             self.navigationController?.pushViewController(sessionReplayViewController, animated: true)
+        } else if item == Keys.clock.rawValue {
+            let clockViewController = ClockViewController()
+            self.navigationController?.pushViewController(clockViewController, animated: true)
         }
         
         tableView.deselectRow(at: indexPath, animated: true)
