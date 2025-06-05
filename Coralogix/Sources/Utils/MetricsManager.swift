@@ -104,17 +104,17 @@ public class MetricsManager {
                let launchEndTime = metrics[CXMobileVitalsType.cold.rawValue] as? CFAbsoluteTime,
                self.launchEndTime == nil {
                 self.launchEndTime = launchEndTime
-                let coldStartDurationInSeconds = launchEndTime - launchStartTime
-                let coldStartDurationInMilliseconds = coldStartDurationInSeconds * 1000
-                
-                // Convert to an integer if you want to remove the decimal part
-                let millisecondsRounded = Int(coldStartDurationInMilliseconds)
-                                
-                // send instrumentaion event
+                let millisecondsRounded = self.calculateTime(start: launchStartTime, stop: launchEndTime)
                 NotificationCenter.default.post(name: .cxRumNotificationMetrics,
                                                 object: CXMobileVitals(type: .cold, value: "\(millisecondsRounded)"))
             }
         }
+    }
+    
+    func calculateTime(start: Double, stop: Double) -> Int {
+        let coldStartDurationInSeconds = stop - start
+        let coldStartDurationInMilliseconds = coldStartDurationInSeconds * 1000
+        return Int(coldStartDurationInMilliseconds)
     }
     
     internal func getCXMobileVitals(params: [String: Any]) -> CXMobileVitals? {
@@ -143,11 +143,7 @@ public class MetricsManager {
         if let launchStartTime = self.launchStartTime,
            let launchEndTime = params[CXMobileVitalsType.cold.rawValue] as? CFAbsoluteTime {
             self.launchEndTime = launchEndTime
-            let coldStartDurationInSeconds = launchEndTime - launchStartTime
-            let coldStartDurationInMilliseconds = coldStartDurationInSeconds * 1000
-            
-            // Convert to an integer if you want to remove the decimal part
-            let millisecondsRounded = Int(coldStartDurationInMilliseconds)
+            let millisecondsRounded = self.calculateTime(start: launchStartTime, stop: launchEndTime)
             return CXMobileVitals(type: .cold, value: "\(millisecondsRounded)")
         }
         return nil
