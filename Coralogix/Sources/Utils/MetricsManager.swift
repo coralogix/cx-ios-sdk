@@ -27,25 +27,29 @@ public class MetricsManager {
         
         NotificationCenter.default.addObserver(self,
                                                selector: #selector(self.handleNotification(notification:)),
-                                               name: .cxRumNotificationMetrics,
+                                               name: .cxViewDidAppear,
                                                object: nil)
         
         NotificationCenter.default.addObserver(self, selector: #selector(self.appDidEnterBackgroundNotification),
                                                name: UIApplication.didEnterBackgroundNotification,
                                                object: nil)
         // Warm
-        NotificationCenter.default.addObserver(self,
-                                               selector: #selector(self.appWillEnterForegroundNotification),
-                                               name: UIApplication.willEnterForegroundNotification,
-                                               object: nil)
-        NotificationCenter.default.addObserver(self, selector: #selector(self.appDidBecomeActiveNotification),
-                                               name: UIApplication.didBecomeActiveNotification,
-                                               object: nil)
+        if !([.reactNative, .flutter].contains(CoralogixRum.sdkFramework)) {
+            NotificationCenter.default.addObserver(self,
+                                                   selector: #selector(self.appWillEnterForegroundNotification),
+                                                   name: UIApplication.willEnterForegroundNotification,
+                                                   object: nil)
+            
+            NotificationCenter.default.addObserver(self, selector: #selector(self.appDidBecomeActiveNotification),
+                                                   name: UIApplication.didBecomeActiveNotification,
+                                                   object: nil)
+        }
     }
     
     public func removeObservers() {
         MXMetricManager.shared.remove(MyMetricSubscriber.shared)
     }
+    
     func startFPSSamplingMonitoring(mobileVitalsFPSSamplingRate: Int) {
         self.fpsTrigger.startMonitoring(xTimesPerHour: mobileVitalsFPSSamplingRate)
     }
@@ -97,7 +101,7 @@ public class MetricsManager {
     @objc func handleNotification(notification: Notification) {
         if let metrics = notification.object as? [String: Any] {
             if let launchStartTime = self.launchStartTime,
-               let launchEndTime = metrics[Keys.coldEnd.rawValue] as? CFAbsoluteTime,
+               let launchEndTime = metrics[CXMobileVitalsType.cold.rawValue] as? CFAbsoluteTime,
                self.launchEndTime == nil {
                 self.launchEndTime = launchEndTime
                 let coldStartDurationInSeconds = launchEndTime - launchStartTime
@@ -113,6 +117,38 @@ public class MetricsManager {
                                                 object: CXMobileVitals(type: .cold, value: "\(millisecondsRounded)"))
             }
         }
+    }
+    
+    internal func getCXMobileVitals(params: [String: Any]) -> CXMobileVitals? {
+        let handlers: [CXMobileVitalsType: ([String: Any]) -> CXMobileVitals?] = [
+            .cold: getColdTime,
+            .warm: getWarmTime
+        ]
+        
+        return handlers.first { params.keys.contains($0.key.rawValue) }?.value(params)
+    }
+    
+    internal func getWarmTime(params: [String: Any]) -> CXMobileVitals? {
+        if let launchEndTime = params[CXMobileVitalsType.cold.rawValue] as? CFAbsoluteTime {
+            let millisecondsRounded = Int(launchEndTime)
+            return CXMobileVitals(type: .warm, value: "\(millisecondsRounded)")
+        }
+        return nil
+    }
+    
+    internal func getColdTime(params: [String: Any]) -> CXMobileVitals? {
+        if let launchStartTime = self.launchStartTime,
+           let launchEndTime = params[CXMobileVitalsType.cold.rawValue] as? CFAbsoluteTime {
+            let coldStartDurationInSeconds = launchEndTime - launchStartTime
+            let coldStartDurationInMilliseconds = coldStartDurationInSeconds * 1000
+            
+            // Convert to an integer if you want to remove the decimal part
+            let millisecondsRounded = Int(coldStartDurationInMilliseconds)
+            
+            Log.d("[Metric] Cold start duration: \(millisecondsRounded) milliseconds")
+            return CXMobileVitals(type: .cold, value: "\(millisecondsRounded)")
+        }
+        return nil
     }
     
     deinit {

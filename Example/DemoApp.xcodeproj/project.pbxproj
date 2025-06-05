@@ -60,6 +60,8 @@
 		E6D4BBF92DE336310096B46D /* CoralogixRumManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6D4BBF62DE336310096B46D /* CoralogixRumManager.swift */; };
 		E6FD68F82D01D5570066BDE8 /* CreditCardInputCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6FD68F72D01D5570066BDE8 /* CreditCardInputCell.swift */; };
 		E6FD68FA2D01D97B0066BDE8 /* FullImageCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6FD68F92D01D97B0066BDE8 /* FullImageCell.swift */; };
+		E6FDDA2D2DF176DC0005F274 /* ClockViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6FDDA2C2DF176DC0005F274 /* ClockViewController.swift */; };
+		E6FDDA2F2DF176DC0005F274 /* ClockViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6FDDA2C2DF176DC0005F274 /* ClockViewController.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -133,6 +135,7 @@
 		E6D4BBF62DE336310096B46D /* CoralogixRumManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoralogixRumManager.swift; sourceTree = "<group>"; };
 		E6FD68F72D01D5570066BDE8 /* CreditCardInputCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreditCardInputCell.swift; sourceTree = "<group>"; };
 		E6FD68F92D01D97B0066BDE8 /* FullImageCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FullImageCell.swift; sourceTree = "<group>"; };
+		E6FDDA2C2DF176DC0005F274 /* ClockViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClockViewController.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -257,6 +260,7 @@
 				E66938562C74A8830002335F /* UserActionsViewController.swift */,
 				E669384E2C747E860002335F /* CustomView.swift */,
 				E674E7F72CD7C6480041784E /* SessionReplayViewController.swift */,
+				E6FDDA2C2DF176DC0005F274 /* ClockViewController.swift */,
 				E6B60A052DB4EAAC003AD35D /* Assets.xcassets */,
 				E68681AA2BFA279500B127E7 /* Main.storyboard */,
 				E68681AF2BFA279600B127E7 /* LaunchScreen.storyboard */,
@@ -456,6 +460,7 @@
 				E669383C2C723B9E0002335F /* Keys.swift in Sources */,
 				E66938552C74A8010002335F /* PageController.swift in Sources */,
 				E669383D2C723D210002335F /* NetworkSim.swift in Sources */,
+				E6FDDA2F2DF176DC0005F274 /* ClockViewController.swift in Sources */,
 				E669383F2C723D290002335F /* CrashSim.swift in Sources */,
 				E66938402C73447C0002335F /* CollectionViewController.swift in Sources */,
 				E669382A2C722EE60002335F /* AppDelegate.swift in Sources */,
@@ -472,6 +477,7 @@
 				E6FD68FA2D01D97B0066BDE8 /* FullImageCell.swift in Sources */,
 				E603F6CC2C5631CF007C55DA /* CollectionViewController.swift in Sources */,
 				E66938532C7489050002335F /* SdkViewController.swift in Sources */,
+				E6FDDA2D2DF176DC0005F274 /* ClockViewController.swift in Sources */,
 				E669384F2C747E860002335F /* CustomView.swift in Sources */,
 				E66938572C74A8830002335F /* UserActionsViewController.swift in Sources */,
 				E674E7F82CD7C6480041784E /* SessionReplayViewController.swift in Sources */,

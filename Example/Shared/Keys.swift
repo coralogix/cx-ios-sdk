@@ -41,4 +41,5 @@ enum Keys: String {
     case afnetworkingRequest = "AFNetworking Request"
     case postRequestToServer = "Post Request to Server"
     case getRequestToServer = "Get Request to Server"
+    case clock = "Clock"
 }

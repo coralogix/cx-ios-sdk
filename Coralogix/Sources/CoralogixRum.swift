@@ -11,6 +11,7 @@ extension Notification.Name {
     static let cxRumNotificationSessionEnded = Notification.Name("cxRumNotificationSessionEnded")
     static let cxRumNotificationUserActions = Notification.Name("cxRumNotificationUserActions")
     static let cxRumNotificationMetrics = Notification.Name("cxRumNotificationMetrics")
+    static let cxViewDidAppear = Notification.Name("cxViewDidAppear")
 }
 
 public class CoralogixRum {
@@ -53,6 +54,7 @@ public class CoralogixRum {
         NotificationCenter.default.removeObserver(self, name: .cxRumNotificationUserActions, object: nil)
         NotificationCenter.default.removeObserver(self, name: .cxRumNotificationSessionEnded, object: nil)
         NotificationCenter.default.removeObserver(self, name: .cxRumNotificationMetrics, object: nil)
+        NotificationCenter.default.removeObserver(self, name: .cxViewDidAppear, object: nil)
         self.removeLifeCycleNotification()
     }
     
@@ -241,6 +243,12 @@ public class CoralogixRum {
     
     public func sendBeforeSendData(data: [[String: Any]]) {
         self.coralogixExporter?.sendSpansPayload(data)
+    }
+    
+    public func recordFirstFrameTime(params: [String: Any]) {
+        if let cxMobileVitals = self.metricsManager.getCXMobileVitals(params: params) {
+            NotificationCenter.default.post(name: .cxRumNotificationMetrics, object: cxMobileVitals)
+        }
     }
     
     internal func addUserMetadata(to span: inout any Span) {
