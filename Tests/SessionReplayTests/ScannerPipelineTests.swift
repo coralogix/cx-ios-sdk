@@ -140,9 +140,6 @@ class ScannerPipelineTests: XCTestCase {
             return
         }
         do {
-            // Create a unique file
-            let uniqueFileURL = try createUniqueFile(from: originalURL, withExtension: "png")
-            
             let options = SessionReplayOptions(maskText: nil, maskAllImages: false)
             let operationId = UUID()
             self.currentOperationId = operationId

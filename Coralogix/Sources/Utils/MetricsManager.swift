@@ -109,9 +109,7 @@ public class MetricsManager {
                 
                 // Convert to an integer if you want to remove the decimal part
                 let millisecondsRounded = Int(coldStartDurationInMilliseconds)
-                
-                Log.d("[Metric] Cold start duration: \(millisecondsRounded) milliseconds")
-                
+                                
                 // send instrumentaion event
                 NotificationCenter.default.post(name: .cxRumNotificationMetrics,
                                                 object: CXMobileVitals(type: .cold, value: "\(millisecondsRounded)"))
@@ -125,11 +123,16 @@ public class MetricsManager {
             .warm: getWarmTime
         ]
         
-        return handlers.first { params.keys.contains($0.key.rawValue) }?.value(params)
+        for (key, handler) in handlers {
+            if params.keys.contains(key.rawValue) {
+                return handler(params)
+            }
+        }
+        return nil
     }
     
     internal func getWarmTime(params: [String: Any]) -> CXMobileVitals? {
-        if let launchEndTime = params[CXMobileVitalsType.cold.rawValue] as? CFAbsoluteTime {
+        if let launchEndTime = params[CXMobileVitalsType.warm.rawValue] as? Double {
             let millisecondsRounded = Int(launchEndTime)
             return CXMobileVitals(type: .warm, value: "\(millisecondsRounded)")
         }
@@ -139,13 +142,12 @@ public class MetricsManager {
     internal func getColdTime(params: [String: Any]) -> CXMobileVitals? {
         if let launchStartTime = self.launchStartTime,
            let launchEndTime = params[CXMobileVitalsType.cold.rawValue] as? CFAbsoluteTime {
+            self.launchEndTime = launchEndTime
             let coldStartDurationInSeconds = launchEndTime - launchStartTime
             let coldStartDurationInMilliseconds = coldStartDurationInSeconds * 1000
             
             // Convert to an integer if you want to remove the decimal part
             let millisecondsRounded = Int(coldStartDurationInMilliseconds)
-            
-            Log.d("[Metric] Cold start duration: \(millisecondsRounded) milliseconds")
             return CXMobileVitals(type: .cold, value: "\(millisecondsRounded)")
         }
         return nil
@@ -155,7 +157,8 @@ public class MetricsManager {
         NotificationCenter.default.removeObserver(self, name: UIApplication.didEnterBackgroundNotification, object: nil)
         NotificationCenter.default.removeObserver(self, name: UIApplication.willEnterForegroundNotification, object: nil)
         NotificationCenter.default.removeObserver(self, name: UIApplication.didBecomeActiveNotification, object: nil)
-        NotificationCenter.default.removeObserver(self, name: .cxRumNotificationMetrics, object: nil)
+        NotificationCenter.default.removeObserver(self, name: .cxViewDidAppear, object: nil)
+        
         self.anrDetector?.stopMonitoring()
         self.fpsTrigger.stopMonitoring()
         self.launchEndTime = 0
