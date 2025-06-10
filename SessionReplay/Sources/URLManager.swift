@@ -10,7 +10,7 @@ import Combine
 import CoralogixInternal
 import CoreImage
 
-typealias URLProcessingCompletion = (CIImage?, TimeInterval, String) -> Void
+typealias URLProcessingCompletion = (CIImage?, URLEntry?) -> Void
 
 struct URLEntry {
     let url: URL
@@ -19,22 +19,22 @@ struct URLEntry {
     let screenshotData: Data
     let completion: URLProcessingCompletion?
     let point: CGPoint?
+    var finalImage: CIImage? = nil
+    var ciImage: CIImage? {
+        guard let originalImage = CIImage(data: screenshotData) else {
+            Log.e("Failed to decode screenshot data into CIImage.")
+            return nil
+        }
+        return originalImage
+    }
 }
 
 class URLManager: ObservableObject {
-    @Published private(set) var savedURLs: [URLEntry] = []
-    private let maxURLEntryToKeep: Int
-        
-    init(maxURLEntryToKeep: Int = 10) {
-        self.maxURLEntryToKeep = max(1, maxURLEntryToKeep)
-    }
+    @Published private(set) var lastEntry: URLEntry?
     
     func addURL(urlEntry: URLEntry) {
         DispatchQueue.main.async {
-            self.savedURLs.append(urlEntry)
-            if self.savedURLs.count > self.maxURLEntryToKeep {
-                self.savedURLs.removeFirst(self.savedURLs.count - self.maxURLEntryToKeep)
-            }
+            self.lastEntry = urlEntry
         }
     }
 }
@@ -42,57 +42,31 @@ class URLManager: ObservableObject {
 class URLObserver {
     private var cancellable: AnyCancellable?
     private let pipeline = ScannerPipeline()
-    private var sessionReplayOptions: SessionReplayOptions?
-    private var currentOperationId: UUID? // Track current operation
     
     init(urlManager: URLManager, sessionReplayOptions: SessionReplayOptions?) {
-        self.sessionReplayOptions = sessionReplayOptions
-        cancellable = urlManager.$savedURLs
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] updatedEntries in
-                
-                guard let self = self,
-                      let lastEntry = updatedEntries.last,
-                      let sessionReplayOptions = self.sessionReplayOptions else { return }
-                
-                let inputURL = lastEntry.url
-                let completion = lastEntry.completion
-                let timestamp = lastEntry.timestamp
-                let screenshotId = lastEntry.screenshotId
-                let screenshotData = lastEntry.screenshotData
-                let point = lastEntry.point
-                
-                if let patterns = sessionReplayOptions.maskText {
-                    self.pipeline.isTextScannerEnabled = !patterns.isEmpty
-                }
-                self.pipeline.isFaceScannerEnabled = sessionReplayOptions.maskFaces
-                self.pipeline.isImageScannerEnabled = sessionReplayOptions.maskImages
-                
-                // Generate a new operation ID for this pipeline run
-                let operationId = UUID()
-                self.currentOperationId = operationId
-                
+        cancellable = urlManager.$lastEntry
+            .compactMap { $0 }
+            .sink { [weak self] entry in
                 let processingQueue = DispatchQueue(label: "com.coralogix.urlProcessing", qos: .userInitiated)
                 processingQueue.async {
-                    self.pipeline.runPipelineWithCancellation(
-                        screenshotData: screenshotData,
+                    guard let self = self,
+                          let sessionReplayOptions = sessionReplayOptions,
+                          let entry = entry as? URLEntry else {
+                        Log.e("Invalid entry received")
+                        return
+                    }
+                                        
+                    self.pipeline.runPipeline(
                         options: sessionReplayOptions,
-                        operationId: operationId,
-                        isValid: { [weak self] id in
-                            return self?.currentOperationId == id
-                        },
-                        tapPoint: point,
-                        completion: { ciImage in
+                        urlEntry: entry,
+                        completion: { ciImage, urlEntry in
                             DispatchQueue.main.async {
-                                // Only log completion if this is still the current operation
-                                if self.currentOperationId == operationId {
-                                    if ciImage != nil {
-                                        Log.d("Pipeline completed successfully for URL: \(inputURL.lastPathComponent)")
-                                    } else {
-                                        Log.e("Pipeline encountered an error for URL: \(inputURL.lastPathComponent)")
-                                    }
-                                    completion?(ciImage, timestamp, screenshotId)
+                                if ciImage != nil {
+                                    Log.d("Pipeline completed successfully for URL: \(urlEntry?.url.lastPathComponent)")
+                                } else {
+                                    Log.e("Pipeline encountered an error for URL: \(urlEntry?.url.lastPathComponent)")
                                 }
+                                urlEntry?.completion?(ciImage, urlEntry)
                             }
                         }
                     )

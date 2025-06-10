@@ -72,7 +72,7 @@ public struct SessionReplayOptions {
 
     public init(recordingType: RecordingType = .image,
                 captureTimeInterval: TimeInterval = 10,
-                captureScale: CGFloat = UIScreen.main.scale,
+                captureScale: CGFloat = 2.0,
                 captureCompressionQuality: CGFloat = 1.0,
                 sessionRecordingSampleRate: Int = 100,
                 maskText: [String]? = nil,
@@ -237,9 +237,12 @@ public class SessionReplay: SessionReplayInterface {
             return
         }
         
+        var updatedProperties = properties ?? [:]
+        updatedProperties[Keys.timestamp.rawValue] = Date().timeIntervalSince1970
+        
         if sessionReplayOptions.recordingType == .image {
             guard sessionReplayModel.isRecording else { return }
-            sessionReplayModel.captureImage(properties: properties)
+            sessionReplayModel.captureImage(properties: updatedProperties)
         }
     }
     

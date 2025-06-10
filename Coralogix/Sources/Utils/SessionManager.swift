@@ -138,7 +138,9 @@ public class SessionManager {
     // Call this function every time the monitored function is executed
     func updateActivityTime() {
         lastActivityTime = Date()
-        Log.d("Activity updated at \(lastActivityTime!)")
+        if let lastActivityTime = lastActivityTime {
+            Log.d("Activity updated at \(lastActivityTime)")
+        }
     }
     
     @objc private func checkIdleTime() {

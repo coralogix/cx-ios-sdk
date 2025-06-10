@@ -33,7 +33,6 @@ class SRUtils {
                 
         do {
             try pngData.write(to: outputURL)
-            Log.d("Image saved to \(outputURL.path)")
             completion(true)
         } catch {
             Log.e("Failed to save image: \(error.localizedDescription)")
@@ -52,7 +51,6 @@ class SRUtils {
         
         do {
             try pngData.write(to: outputURL)
-            Log.d("Image saved to \(outputURL.path)")
             completion(true)
         } catch {
             Log.e("Failed to save image: \(error.localizedDescription)")

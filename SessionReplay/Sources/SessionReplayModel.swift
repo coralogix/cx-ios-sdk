@@ -187,22 +187,19 @@ class SessionReplayModel {
     }
     
     internal func handleCapturedData(fileURL: URL, data: Data, properties: [String: Any]?) {
-        let timestamp = self.getTimestamp(from: properties)
-        let screenshotId = self.getScreenshotId(from: properties)
-        
         DispatchQueue(label: "com.coralogix.fileOperations").async { [weak self] in
             guard let self = self else { return }
+            let timestamp = self.getTimestamp(from: properties)
+            let screenshotId = self.getScreenshotId(from: properties)
             let point = self.getClickPoint(from: properties)
             
-            let completion: URLProcessingCompletion = { [weak self] ciImage, originalTimestamp, originalScreenshotId  in
+            let completion: URLProcessingCompletion = { [weak self] ciImage, urlEntry  in
                 if let ciImage = ciImage,
                    let ciImageData = Global.ciImageToData(ciImage) {
                     if let sdkManager = SdkManager.shared.getCoralogixSdk(), sdkManager.isDebug() {
                         SRUtils.saveImage(ciImage, outputURL: fileURL) { _ in }
                     }
-                    _ = self?.compressAndSendData(data: ciImageData,
-                                                  timestamp: originalTimestamp,
-                                                  screenshotId: originalScreenshotId)
+                    _ = self?.compressAndSendData(data: ciImageData, urlEntry: urlEntry)
                 }
             }
             
@@ -243,33 +240,38 @@ class SessionReplayModel {
         return chunkCount > 1 ? currentIndex : -1
     }
     
-    internal func compressAndSendData(data: Data, timestamp: TimeInterval, screenshotId: String) -> SessionReplayResultCode {
-        if let compressedChunks = data.gzipCompressed(), compressedChunks.count > 0 {
-            // Log.d("Compression succeeded! Number of chunks: \(compressedChunks.count)")
-            for (index, chunk) in compressedChunks.enumerated() {
-                // Log.d("Chunk \(index): \(chunk.count) bytes")
-                let subIndex = calculateSubIndex(chunkCount: compressedChunks.count, currentIndex: index)
-                let page =  "\(self.screenshotManager.page)"
-                // Send Data
-                self.srNetworkManager?.send(chunk,
-                                            timestamp: timestamp,
-                                            sessionId: self.sessionId.lowercased(),
-                                            screenshotNumber: self.screenshotManager.screenshotCount,
-                                            subIndex: subIndex,
-                                            screenshotId: screenshotId,
-                                            page: page) { result in
-                    if result == .success {
-                        if let sdkManager = SdkManager.shared.getCoralogixSdk() {
-                            sdkManager.hasSessionRecording(true)
+    internal func compressAndSendData(
+        data: Data,
+        urlEntry: URLEntry?) -> SessionReplayResultCode {
+            let sizeInBytes = data.count
+            let sizeInMB = Double(sizeInBytes) / (1024.0 * 1024.0)
+            Log.d("Data size: \(String(format: "%.2f", sizeInMB)) MB")
+            
+            if let compressedChunks = data.gzipCompressed(), compressedChunks.count > 0 {
+                Log.d("Compression succeeded! Number of chunks: \(compressedChunks.count)")
+                for (index, chunk) in compressedChunks.enumerated() {
+                    // Log.d("Chunk \(index): \(chunk.count) bytes")
+                    let subIndex = calculateSubIndex(chunkCount: compressedChunks.count, currentIndex: index)
+
+                    // Send Data
+                    self.srNetworkManager?.send(chunk,
+                                                urlEntry: urlEntry,
+                                                sessionId: self.sessionId.lowercased(),
+                                                screenshotNumber: self.screenshotManager.screenshotCount,
+                                                subIndex: subIndex,
+                                                page: "\(self.screenshotManager.page)") { result in
+                        if result == .success {
+                            if let sdkManager = SdkManager.shared.getCoralogixSdk() {
+                                sdkManager.hasSessionRecording(true)
+                            }
                         }
                     }
                 }
+                return .success
+            } else {
+                Log.e("Compression failed")
+                return .failure
             }
-            return .success
-        } else {
-            Log.e("Compression failed")
-            return .failure
         }
-    }
 }
 

@@ -39,7 +39,6 @@ extension CoralogixRum {
         let screenshotId = UUID().uuidString.lowercased()
         span.setAttribute(key: Keys.screenshotId.rawValue, value: AttributeValue.string(screenshotId))
         sessionReplay.captureEvent(properties: [
-            Keys.timestamp.rawValue: timestamp,
             Keys.screenshotId.rawValue: screenshotId
         ])
     }

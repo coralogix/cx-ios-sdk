@@ -13,7 +13,6 @@ extension CoralogixRum: CoralogixInterface {
         if let sessionReplay = SdkManager.shared.getSessionReplay() {
             let screenshotId = UUID().uuidString.lowercased()
             let properties: [String: Any] = [
-                Keys.timestamp.rawValue: Date().timeIntervalSince1970,
                 Keys.screenshotId.rawValue: screenshotId
             ]
             sessionReplay.captureEvent(properties: properties)

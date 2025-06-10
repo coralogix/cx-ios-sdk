@@ -31,7 +31,7 @@ Represents the configuration options for session replay functionality.
 public init(
     recordingType: RecordingType = .image,
     captureTimeInterval: TimeInterval = 10,
-    captureScale: CGFloat = UIScreen.main.scale,
+    captureScale: CGFloat = 2.0,
     captureCompressionQuality: CGFloat = 1.0,
     maskText: [String]? = nil,
     maskImages: Bool = false,

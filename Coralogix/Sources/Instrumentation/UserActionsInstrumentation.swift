@@ -55,7 +55,6 @@ extension CoralogixRum {
             }
             
             let metadata = buildMetadata(properties: properties,
-                                         timestamp: timestamp,
                                          screenshotId: screenshotId,
                                          screenshotData: screenshotData)
             span.setAttribute(key: Keys.screenshotId.rawValue, value: screenshotId)
@@ -70,11 +69,9 @@ extension CoralogixRum {
     }
     
     internal func buildMetadata(properties: [String: Any],
-                                timestamp: TimeInterval,
                                 screenshotId: String,
                                 screenshotData: Data?) -> [String: Any] {
         var metadata: [String: Any] = [
-            Keys.timestamp.rawValue: timestamp,
             Keys.screenshotId.rawValue: screenshotId,
         ]
         
