@@ -188,7 +188,10 @@ public class SessionReplay: SessionReplayInterface {
         }
         
         if sessionReplayOptions.recordingType == .image {
-            guard !sessionReplayModel.isRecording else { return }
+            guard !sessionReplayModel.isRecording else {
+                Log.e("[SessionReplay] already recording")
+                return
+            }
             sessionReplayModel.isRecording = true
             
             guard let coralogixSdk = SdkManager.shared.getCoralogixSdk() else {
@@ -241,7 +244,10 @@ public class SessionReplay: SessionReplayInterface {
         updatedProperties[Keys.timestamp.rawValue] = Date().timeIntervalSince1970
         
         if sessionReplayOptions.recordingType == .image {
-            guard sessionReplayModel.isRecording else { return }
+            guard sessionReplayModel.isRecording else {
+                Log.e("[SessionReplay] Session Replay not recording ...")
+                return
+            }
             sessionReplayModel.captureImage(properties: updatedProperties)
         }
     }

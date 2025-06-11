@@ -11,11 +11,8 @@ import CoralogixInternal
 extension CoralogixRum: CoralogixInterface {
     public func periodicallyCaptureEventTriggered() {
         if let sessionReplay = SdkManager.shared.getSessionReplay() {
-            let screenshotId = UUID().uuidString.lowercased()
-            let properties: [String: Any] = [
-                Keys.screenshotId.rawValue: screenshotId
-            ]
-            sessionReplay.captureEvent(properties: properties)
+            let screensShotLocation = self.screenshotManager.nextScreenshotLocation
+            sessionReplay.captureEvent(properties: screensShotLocation.toProperties())
         } else {
             Log.e("[SessionReplay] is not initialized")
         }
@@ -83,9 +80,10 @@ extension CoralogixRum: CoralogixInterface {
         }
     }
     
-    public func captureEvent(properties: [String: Any] = [:]) {
+    public func captureEvent() {
         if let sessionReplay = SdkManager.shared.getSessionReplay() {
-            sessionReplay.captureEvent(properties: properties)
+            let screenshootLocation = self.screenshotManager.nextScreenshotLocation
+            sessionReplay.captureEvent(properties: screenshootLocation.toProperties())
         } else {
             Log.e("[SessionReplay] is not initialized")
         }

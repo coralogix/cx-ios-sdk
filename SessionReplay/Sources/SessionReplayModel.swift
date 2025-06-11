@@ -26,7 +26,6 @@ class SessionReplayModel {
     var sessionReplayOptions: SessionReplayOptions?
     var isRecording = false  // Custom flag to track recording state
     private let srNetworkManager: SRNetworkManager?
-    internal let screenshotManager = ScreenshotManager()
     
     init(sessionReplayOptions: SessionReplayOptions? = nil,
          networkManager: SRNetworkManager? = SRNetworkManager()) {
@@ -81,8 +80,7 @@ class SessionReplayModel {
             return
         }
         
-        self.screenshotManager.takeScreenshot()
-        let fileName = self.generateFileName()
+        let fileName = self.generateFileName(properties: properties)
         
         if let documentsDirectory = FileManager.default.urls(
             for: .documentDirectory,
@@ -100,7 +98,6 @@ class SessionReplayModel {
     internal func updateSessionId(with sessionId: String) {
         if sessionId != self.sessionId {
             self.sessionId = sessionId
-            self.screenshotManager.resetSession()
             _ = self.clearSessionReplayFolder()
             SRUtils.deleteURLsFromDisk()
         }
@@ -182,8 +179,26 @@ class SessionReplayModel {
         return (properties?[Keys.screenshotId.rawValue] as? String) ?? UUID().uuidString.lowercased()
     }
     
-    internal func generateFileName() -> String {
-        return "\(sessionId)_\(self.screenshotManager.screenshotCount).jpg"
+    internal func getScreenshotIndex(from properties: [String: Any]?) -> Int {
+        return (properties?[Keys.segmentIndex.rawValue] as? Int) ?? 0
+    }
+    
+    internal func getPage(from properties: [String: Any]?) -> String {
+        guard let properties = properties,
+                let page = properties[Keys.page.rawValue] as? Int else {
+            return "Unknown"
+        }
+        return "\(page)"
+    }
+    
+    internal func generateFileName(properties: [String: Any]?) -> String {
+        guard let properties = properties,
+              let segmentIndex = properties[Keys.segmentIndex.rawValue] as? Int,
+              let page = properties[Keys.page.rawValue] as? Int else {
+            return "file_name_error"
+        }
+        
+        return "\(sessionId)_ֿֿ\(page)_\(segmentIndex).jpg"
     }
     
     internal func handleCapturedData(fileURL: URL, data: Data, properties: [String: Any]?) {
@@ -191,6 +206,8 @@ class SessionReplayModel {
             guard let self = self else { return }
             let timestamp = self.getTimestamp(from: properties)
             let screenshotId = self.getScreenshotId(from: properties)
+            let screenshotIndex = self.getScreenshotIndex(from: properties)
+            let page = self.getPage(from: properties)
             let point = self.getClickPoint(from: properties)
             
             let completion: URLProcessingCompletion = { [weak self] ciImage, urlEntry  in
@@ -206,9 +223,11 @@ class SessionReplayModel {
             let urlEntry = URLEntry(url: fileURL,
                                     timestamp: timestamp,
                                     screenshotId: screenshotId,
+                                    screenshotIndex: screenshotIndex,
+                                    page: page,
                                     screenshotData: data,
-                                    completion: completion,
-                                    point: point)
+                                    point: point,
+                                    completion: completion)
             
             self.urlManager.addURL(urlEntry: urlEntry)
             self.updateSessionId(with: self.sessionId)
@@ -243,12 +262,12 @@ class SessionReplayModel {
     internal func compressAndSendData(
         data: Data,
         urlEntry: URLEntry?) -> SessionReplayResultCode {
-            let sizeInBytes = data.count
-            let sizeInMB = Double(sizeInBytes) / (1024.0 * 1024.0)
-            Log.d("Data size: \(String(format: "%.2f", sizeInMB)) MB")
+//            let sizeInBytes = data.count
+//            let sizeInMB = Double(sizeInBytes) / (1024.0 * 1024.0)
+//            Log.d("Data size: \(String(format: "%.2f", sizeInMB)) MB")
             
             if let compressedChunks = data.gzipCompressed(), compressedChunks.count > 0 {
-                Log.d("Compression succeeded! Number of chunks: \(compressedChunks.count)")
+                //Log.d("Compression succeeded! Number of chunks: \(compressedChunks.count)")
                 for (index, chunk) in compressedChunks.enumerated() {
                     // Log.d("Chunk \(index): \(chunk.count) bytes")
                     let subIndex = calculateSubIndex(chunkCount: compressedChunks.count, currentIndex: index)
@@ -257,9 +276,7 @@ class SessionReplayModel {
                     self.srNetworkManager?.send(chunk,
                                                 urlEntry: urlEntry,
                                                 sessionId: self.sessionId.lowercased(),
-                                                screenshotNumber: self.screenshotManager.screenshotCount,
-                                                subIndex: subIndex,
-                                                page: "\(self.screenshotManager.page)") { result in
+                                                subIndex: subIndex) { result in
                         if result == .success {
                             if let sdkManager = SdkManager.shared.getCoralogixSdk() {
                                 sdkManager.hasSessionRecording(true)

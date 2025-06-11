@@ -33,6 +33,7 @@ struct CxRum {
     var mobileVitalsContext: MobileVitalsContext?
     var lifeCycleContext: LifeCycleContext?
     var screenshotId: String?
+    var page: String?
      
     init(otel: SpanDataProtocol,
          versionMetadata: VersionMetadata,
@@ -78,6 +79,7 @@ struct CxRum {
         self.mobileVitalsContext = MobileVitalsContext(otel: otel)
         self.lifeCycleContext = LifeCycleContext(otel: otel)
         self.screenshotId = otel.getAttribute(forKey: Keys.screenshotId.rawValue) as? String
+        self.page = otel.getAttribute(forKey: Keys.page.rawValue) as? String
         
         if let sessionManager = self.sessionManager,
            let viewManager = self.viewManager,
@@ -107,13 +109,17 @@ struct CxRum {
         self.addLabels(to: &result)
         self.addMobileVitals(to: &result)
         self.addLifeCycleContext(to: &result)
-        self.addScreenshotId(to: &result)
+        self.addScreenshotIdAndPage(to: &result)
         return result
     }
     
-    private func addScreenshotId(to result: inout [String: Any]) {
+    private func addScreenshotIdAndPage(to result: inout [String: Any]) {
         if let screenshotId = self.screenshotId {
             result[Keys.screenshotId.rawValue] = screenshotId
+        }
+        
+        if let page = self.page {
+            result[Keys.page.rawValue] = page
         }
     }
 

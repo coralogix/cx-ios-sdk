@@ -73,9 +73,7 @@ public class SRNetworkManager {
     internal func send(_ data: Data,
                      urlEntry: URLEntry?,
                      sessionId: String,
-                     screenshotNumber: Int,
                      subIndex: Int,
-                     page: String,
                      completion: @escaping (SessionReplayResultCode) -> Void) {
         guard let endPoint = self.endPoint,
               let publicKey = self.publicKey,
@@ -112,12 +110,12 @@ public class SRNetworkManager {
             dataSize: data.count,
             timestamp: urlEntry.timestamp,
             sessionId: sessionId,
-            screenshotNumber: screenshotNumber,
+            screenshotNumber: urlEntry.screenshotIndex,
             subIndex: subIndex,
             application: application,
             sessionCreationTime: sessionCreationTime,
             screenshotId: urlEntry.screenshotId,
-            page: page
+            page: urlEntry.page
         )
         
         // Convert the JSON to Data

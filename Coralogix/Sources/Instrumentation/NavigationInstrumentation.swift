@@ -36,11 +36,10 @@ extension CoralogixRum {
             return
         }
         
-        let screenshotId = UUID().uuidString.lowercased()
-        span.setAttribute(key: Keys.screenshotId.rawValue, value: AttributeValue.string(screenshotId))
-        sessionReplay.captureEvent(properties: [
-            Keys.screenshotId.rawValue: screenshotId
-        ])
+        let screenshotLocation = self.screenshotManager.nextScreenshotLocation
+        span.setAttribute(key: Keys.screenshotId.rawValue, value: screenshotLocation.screenshotId)
+        span.setAttribute(key: Keys.page.rawValue, value: screenshotLocation.page)
+        sessionReplay.captureEvent(properties: screenshotLocation.toProperties())
     }
     
     internal func handleUniqueViewIfNeeded(cxView: CXView, span: any Span, timestamp: TimeInterval) {

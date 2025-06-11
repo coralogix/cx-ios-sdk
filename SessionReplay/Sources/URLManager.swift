@@ -16,9 +16,11 @@ struct URLEntry {
     let url: URL
     let timestamp: TimeInterval
     let screenshotId: String
+    let screenshotIndex: Int
+    let page: String
     let screenshotData: Data
-    let completion: URLProcessingCompletion?
     let point: CGPoint?
+    let completion: URLProcessingCompletion?
     var finalImage: CIImage? = nil
     var ciImage: CIImage? {
         guard let originalImage = CIImage(data: screenshotData) else {
@@ -62,7 +64,9 @@ class URLObserver {
                         completion: { ciImage, urlEntry in
                             DispatchQueue.main.async {
                                 if ciImage != nil {
-                                    Log.d("Pipeline completed successfully for URL: \(urlEntry?.url.lastPathComponent)")
+                                    if let url = urlEntry?.url {
+                                        Log.d("Pipeline completed successfully for URL: \(url.lastPathComponent)")
+                                    }
                                 } else {
                                     Log.e("Pipeline encountered an error for URL: \(urlEntry?.url.lastPathComponent)")
                                 }

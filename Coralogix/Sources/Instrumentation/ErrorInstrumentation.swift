@@ -134,12 +134,10 @@ extension CoralogixRum {
     
     internal func addScreenshotId(to span: inout any Span) {
         if let sessionReplay = SdkManager.shared.getSessionReplay() {
-            let screenshotId = UUID().uuidString.lowercased()
-            let properties: [String: Any] = [
-                Keys.screenshotId.rawValue: screenshotId
-            ]
-            span.setAttribute(key: Keys.screenshotId.rawValue, value: screenshotId)
-            sessionReplay.captureEvent(properties: properties)
+            let screenshotLocation = self.screenshotManager.nextScreenshotLocation
+            span.setAttribute(key: Keys.screenshotId.rawValue, value: screenshotLocation.screenshotId)
+            span.setAttribute(key: Keys.page.rawValue, value: screenshotLocation.page)
+            sessionReplay.captureEvent(properties: screenshotLocation.toProperties())
         }
     }
     
