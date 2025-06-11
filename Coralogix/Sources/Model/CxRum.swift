@@ -109,17 +109,18 @@ struct CxRum {
         self.addLabels(to: &result)
         self.addMobileVitals(to: &result)
         self.addLifeCycleContext(to: &result)
-        self.addScreenshotIdAndPage(to: &result)
+        self.addScreenshotContext(to: &result)
         return result
     }
     
-    private func addScreenshotIdAndPage(to result: inout [String: Any]) {
-        if let screenshotId = self.screenshotId {
-            result[Keys.screenshotId.rawValue] = screenshotId
-        }
-        
-        if let page = self.page {
-            result[Keys.page.rawValue] = page
+    private func addScreenshotContext(to result: inout [String: Any]) {
+        if let screenshotId = self.screenshotId, let page = self.page {
+            var screenshotContext = [String: Any]()
+            screenshotContext[Keys.screenshotId.rawValue] = screenshotId
+            screenshotContext[Keys.page.rawValue] = page
+            screenshotContext[Keys.segmentTimestamp.rawValue] = self.timeStamp.milliseconds
+            
+            result[Keys.screenshotContext.rawValue] = screenshotContext
         }
     }
 

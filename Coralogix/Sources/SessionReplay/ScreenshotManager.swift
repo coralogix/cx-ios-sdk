@@ -7,7 +7,6 @@
 import Foundation
 import CoralogixInternal
 
-
 public struct ScreenshotLocation {
     public let segmentIndex: Int
     public let page: Int
