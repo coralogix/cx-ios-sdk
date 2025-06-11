@@ -28,10 +28,10 @@ final class CoralogixRumManager {
         let options = CoralogixExporterOptions(coralogixDomain: CoralogixDomain.STG,
                                                userContext: userContext,
                                                environment: "PROD",
-                                               application: "REPLACE_ME", // TODO: replace with real application name
+                                               application: Secrets.applicationName,
                                                version: "1",
-                                               publicKey: "REPLACE_ME", // TODO: replace with real publicKey name
-                                               instrumentations: [.mobileVitals: true,
+                                               publicKey: Secrets.stagingKey,
+                                               instrumentations: [.mobileVitals: false,
                                                                   .custom: true,
                                                                   .errors: true,
                                                                   .userActions: true,
