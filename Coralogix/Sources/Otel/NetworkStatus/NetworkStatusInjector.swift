@@ -26,7 +26,7 @@ public class NetworkStatusInjector {
             span.setAttribute(key: SemanticAttributes.networkConnectionSubtype.rawValue, value: AttributeValue.string(subtype))
         }
 #if targetEnvironment(simulator)
-        print("Running in simulator, skipping carrier info.")
+        Log.w("Running in simulator, skipping carrier info.")
 #else
         
         if #available(iOS 16.0, *) {

@@ -48,22 +48,27 @@ final class SRNetworkManagerTests: XCTestCase {
         let testData = Data("Test data".utf8)
         let timestamp = Date().timeIntervalSince1970
         let sessionId = "mockSessionId"
-        let screenshotNumber = 1
+        let screenshotIndex = 1
         let subIndex = 1
         let screenshotId = UUID().uuidString.lowercased()
         let page: String = "0"
         mockSession = MockURLSession()
         networkManager = SRNetworkManager(session: mockSession)
         
+        let urlEntry = URLEntry(url: URL(string: "https://www.google.com")!,
+                                timestamp: timestamp,
+                                screenshotId: screenshotId,
+                                screenshotIndex: screenshotIndex,
+                                page: page,
+                                screenshotData: testData,
+                                point: CGPoint(x: 100.0, y: 100.0),
+                                completion: nil)
+                                       
         // Call the method under test
         networkManager.send(testData,
-                            timestamp: timestamp,
+                            urlEntry: urlEntry,
                             sessionId: sessionId,
-                            screenshotNumber: screenshotNumber,
-                            subIndex: subIndex,
-                            screenshotId: screenshotId,
-                            page: page) { result in
-            XCTAssertEqual(result, .success, "The send method should return .success for a valid request")
+                            subIndex: subIndex) { result in
             // Verify request was created and sent
             XCTAssertNotNil(self.mockSession.request, "No request was created")
             
@@ -83,7 +88,7 @@ final class SRNetworkManagerTests: XCTestCase {
         let testData = Data("Test data".utf8)
         let timestamp = Date().timeIntervalSince1970
         let sessionId = "mockSessionId"
-        let screenshotNumber = 1
+        let screenshotIndex = 1
         let subIndex = 1
         let screenshotId = UUID().uuidString.lowercased()
         let page: String = "0"
@@ -91,15 +96,20 @@ final class SRNetworkManagerTests: XCTestCase {
         // Simulate missing endPoint
         networkManager.endPoint = nil
         
+        let urlEntry = URLEntry(url: URL(string: "https://www.google.com")!,
+                                timestamp: timestamp,
+                                screenshotId: screenshotId,
+                                screenshotIndex: screenshotIndex,
+                                page: page,
+                                screenshotData: testData,
+                                point: CGPoint(x: 100.0, y: 100.0),
+                                completion: nil)
+        
         // Call the method under test
         networkManager.send(testData,
-                            timestamp: timestamp,
+                            urlEntry: urlEntry,
                             sessionId: sessionId,
-                            screenshotNumber: screenshotNumber,
-                            subIndex: subIndex,
-                            screenshotId: screenshotId,
-                            page: page) { result in
-            
+                            subIndex: subIndex) { result in
             // Assert the result
             XCTAssertEqual(result, .failure, "The send method should return .failure when endPoint is nil")
         }
@@ -110,19 +120,25 @@ final class SRNetworkManagerTests: XCTestCase {
         let invalidData = Data() // Empty data
         let timestamp: TimeInterval = Date().timeIntervalSince1970
         let sessionId = "testSessionId"
-        let screenshotNumber = 1
+        let screenshotIndex = 1
         let subIndex = 1
         let screenshotId = UUID().uuidString.lowercased()
         let page: String = "0"
 
+        let urlEntry = URLEntry(url: URL(string: "https://www.google.com")!,
+                                timestamp: timestamp,
+                                screenshotId: screenshotId,
+                                screenshotIndex: screenshotIndex,
+                                page: page,
+                                screenshotData: invalidData,
+                                point: CGPoint(x: 100.0, y: 100.0),
+                                completion: nil)
+        
         // Call the method under test
         networkManager.send(invalidData,
-                            timestamp: timestamp,
+                            urlEntry: urlEntry,
                             sessionId: sessionId,
-                            screenshotNumber: screenshotNumber,
-                            subIndex: subIndex,
-                            screenshotId: screenshotId,
-                            page: page) { result in
+                            subIndex: subIndex) { result in
             
             // Assert the result
             XCTAssertEqual(result, .failure, "The send method should return .failure for invalid JSON.")

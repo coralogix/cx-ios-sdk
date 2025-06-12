@@ -10,7 +10,7 @@ import UIKit
 class SegmentedCollectionViewController: UIViewController, UICollectionViewDataSource, UICollectionViewDelegateFlowLayout {
     
     // MARK: - Properties
-    private let segmentedControl: UISegmentedControl = {
+    private lazy var segmentedControl: UISegmentedControl = {
         let sc = UISegmentedControl(items: ["Segment 1", "Segment 2", "Segment 3"])
         sc.selectedSegmentIndex = 0
         sc.addTarget(self, action: #selector(segmentChanged(_:)), for: .valueChanged)

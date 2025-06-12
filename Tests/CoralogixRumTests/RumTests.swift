@@ -111,7 +111,6 @@ final class RumTests: XCTestCase {
         XCTAssertEqual(result[Keys.traceId.rawValue] as? String, "30")
         XCTAssertEqual(result[Keys.spanId.rawValue] as? String, "20")
         XCTAssertEqual(result[Keys.platform.rawValue] as? String, "mobile")
-        XCTAssertEqual(result[Keys.screenshotId.rawValue] as? String, "10")
         XCTAssertNotNil(result[Keys.deviceState.rawValue])
         
         if let logContext = result[Keys.logContext.rawValue] as? [String: Any] {

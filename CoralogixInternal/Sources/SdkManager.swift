@@ -36,11 +36,11 @@ public class SdkManager {
     private init() {}
 
     // Register SDKs
-    public func register(coralogixInterface: CoralogixInterface) {
+    public func register(coralogixInterface: CoralogixInterface?) {
         queue.sync { self.coralogixSdk = coralogixInterface }
     }
 
-    public func register(sessionReplayInterface: SessionReplayInterface) {
+    public func register(sessionReplayInterface: SessionReplayInterface?) {
         queue.sync { self.sessionReplaySdk = sessionReplayInterface }
     }
 
