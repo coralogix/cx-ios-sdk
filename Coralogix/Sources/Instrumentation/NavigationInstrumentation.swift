@@ -18,17 +18,16 @@ extension CoralogixRum {
     @objc func handleNotification(notification: Notification) {
         guard let cxView = notification.object as? CXView else { return }
         
-        let timestamp: TimeInterval = Date().timeIntervalSince1970
         let span = self.getNavigationSpan()
         
-        handleAppearStateIfNeeded(cxView: cxView, span: span, timestamp: timestamp)
-        handleUniqueViewIfNeeded(cxView: cxView, span: span, timestamp: timestamp)
+        handleAppearStateIfNeeded(cxView: cxView, span: span)
+        handleUniqueViewIfNeeded(cxView: cxView, span: span)
         
         span.end()
         self.coralogixExporter?.set(cxView: cxView)
     }
     
-    internal func handleAppearStateIfNeeded(cxView: CXView, span: any Span, timestamp: TimeInterval) {
+    internal func handleAppearStateIfNeeded(cxView: CXView, span: any Span) {
         guard cxView.state == .notifyOnAppear else { return }
         
         guard let sessionReplay = SdkManager.shared.getSessionReplay() else {
@@ -42,10 +41,10 @@ extension CoralogixRum {
         sessionReplay.captureEvent(properties: screenshotLocation.toProperties())
     }
     
-    internal func handleUniqueViewIfNeeded(cxView: CXView, span: any Span, timestamp: TimeInterval) {
+    internal func handleUniqueViewIfNeeded(cxView: CXView, span: any Span) {
         guard viewManager.isUniqueView(name: cxView.name),
               let sessionManager = sessionManager else { return }
-        
+        let timestamp: TimeInterval = Date().timeIntervalSince1970
         let snapshot = SnapshotConext(
             timestemp: timestamp,
             errorCount: sessionManager.getErrorCount(),

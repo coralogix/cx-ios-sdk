@@ -76,21 +76,4 @@ class SessionReplayTests: XCTestCase {
         }
         waitForExpectations(timeout: 4.0, handler: nil)
     }
-
-    func testCaptureEvent_doesNotCaptureImageWhenNotRecording() {
-        let timestemp: TimeInterval = Date().timeIntervalSince1970
-        SessionReplay.shared.captureEvent(properties: [Keys.timestamp.rawValue: timestemp])
-        if let sessionReplayModel = SessionReplay.shared.sessionReplayModel {
-            XCTAssertEqual(sessionReplayModel.screenshotManager.screenshotCount, 0, "Capture image should not be called when not recording.")
-        }
-    }
-}
-
-// Mock SessionReplayModel
-class MockSessionReplayModel: SessionReplayModel {
-    var captureImageCallCount = 0
-
-    override func captureImage(properties: [String : Any]?) {
-        captureImageCallCount += 1
-    }
 }

@@ -179,16 +179,13 @@ final class CoralogixRumTests: XCTestCase {
 
         // Arrange
         let view = CXView(state: .notifyOnAppear, name: "home")
-        let timestamp: TimeInterval = 1234567890
         let mockSessionReplay =  MockSessionReplay()
         SdkManager.shared.register(sessionReplayInterface: mockSessionReplay)
         // Act
-        coralogixRum.handleAppearStateIfNeeded(cxView: view, span: mockSpan, timestamp: timestamp)
+        coralogixRum.handleAppearStateIfNeeded(cxView: view, span: mockSpan)
         
         // Assert
-        XCTAssertEqual(mockSessionReplay.captureEventCalledWith?[Keys.timestamp.rawValue] as? TimeInterval, timestamp)
         XCTAssertNotNil(mockSessionReplay.captureEventCalledWith?[Keys.screenshotId.rawValue] as? String)
-        
         XCTAssertTrue(mockSpan.setAttributeCalled)
         XCTAssertNotNil(mockSpan.setAttributeKey)
         XCTAssertNotNil(mockSpan.setAttributeValue)
@@ -201,10 +198,9 @@ final class CoralogixRumTests: XCTestCase {
 
         // Arrange
         let view = CXView(state: .notifyOnDisappear, name: "home")
-        let timestamp: TimeInterval = 1234567890
 
         // Act
-        coralogixRum.handleAppearStateIfNeeded(cxView: view, span: mockSpan, timestamp: timestamp)
+        coralogixRum.handleAppearStateIfNeeded(cxView: view, span: mockSpan)
 
         // Assert
         XCTAssertNil(mockSessionReplay.captureEventCalledWith)
@@ -216,10 +212,9 @@ final class CoralogixRumTests: XCTestCase {
         let mockSpan = MockSpan()
 
         let view = CXView(state: .notifyOnAppear, name: "home")
-        let timestamp: TimeInterval = 1234567890
         
         // Act
-        coralogixRum.handleAppearStateIfNeeded(cxView: view, span: mockSpan, timestamp: timestamp)
+        coralogixRum.handleAppearStateIfNeeded(cxView: view, span: mockSpan)
         
         // Assert
         XCTAssertFalse(mockSpan.setAttributeCalled)
@@ -243,11 +238,10 @@ final class CoralogixRumTests: XCTestCase {
     func test_handleUniqueViewIfNeeded_whenUniqueView_shouldSetSnapshotContextAttribute() {
         let coralogixRum = makeMockCoralogixRum()
         let cxView = CXView(state: .notifyOnDisappear, name: "TestView")
-        let timestamp: TimeInterval = 1234567890.0
         let mockSpan = MockSpan()
         
         // Act
-        coralogixRum.handleUniqueViewIfNeeded(cxView: cxView, span: mockSpan, timestamp: timestamp)
+        coralogixRum.handleUniqueViewIfNeeded(cxView: cxView, span: mockSpan)
         
         // Assert
         XCTAssertTrue(mockSpan.setAttributeCalled, "Expected span.setAttribute to be called.")
@@ -266,13 +260,12 @@ final class CoralogixRumTests: XCTestCase {
     func test_handleUniqueViewIfNeeded_whenSessionManagerIsNil_shouldNotSetAttribute() {
         let coralogixRum = makeMockCoralogixRum()
         let cxView = CXView(state: .notifyOnDisappear, name: "TestView")
-        let timestamp: TimeInterval = 1234567890.0
         let mockSpan = MockSpan()
 
         coralogixRum.sessionManager = nil // 🚨 Important! Simulate missing session
             
         // Act
-        coralogixRum.handleUniqueViewIfNeeded(cxView: cxView, span: mockSpan, timestamp: timestamp)
+        coralogixRum.handleUniqueViewIfNeeded(cxView: cxView, span: mockSpan)
             
         // Assert
         XCTAssertFalse(mockSpan.setAttributeCalled, "Expected no attribute to be set when sessionManager is nil.")
@@ -346,24 +339,24 @@ final class CoralogixRumTests: XCTestCase {
             "key1": "value1",
             "key2": 123
         ]
-        let timestamp: TimeInterval = 1234567890
         let screenshotId = "screenshot_001"
         let screenshotData = "fakeImage".data(using: .utf8)
         
-        // Act
+        let screenshotLocation = ScreenshotLocation(segmentIndex: 0, page: 0, screenshotId: screenshotId)
         let result = coralogixRum.buildMetadata(properties: properties,
-                                                timestamp: timestamp,
-                                                screenshotId: screenshotId,
+                                                screenshotLocation: screenshotLocation,
                                                 screenshotData: screenshotData)
-        
         // Assert
-        XCTAssertEqual(result["timestamp"] as? TimeInterval, timestamp)
+        XCTAssertNil(result["timestamp"] as? TimeInterval)
         XCTAssertEqual(result["screenshotId"] as? String, screenshotId)
         XCTAssertEqual(result[Keys.screenshotData.rawValue] as? Data, screenshotData)
+        XCTAssertEqual(result[Keys.page.rawValue] as? Int, 0)
+        XCTAssertEqual(result[Keys.segmentIndex.rawValue] as? Int, 0)
+        XCTAssertEqual(result[Keys.screenshotId.rawValue] as? String, screenshotId)
         XCTAssertEqual(result["key1"] as? String, "value1")
         XCTAssertEqual(result["key2"] as? Int, 123)
     }
-    
+
     func testContainsXYReturnsTrueWhenBothKeysExist() {
         let coralogixRum = makeMockCoralogixRum()
         let dict: [String: Any] = [
@@ -469,7 +462,7 @@ final class CoralogixRumTests: XCTestCase {
         coralogixRum.handleUserInteractionEvent(testProperties, span: mockSpan, window: window)
         
         // Assert
-        XCTAssertEqual(mockSessionReplay.captureEventCalledWith?.count, 6, "Should capture exactly one event")
+        XCTAssertEqual(mockSessionReplay.captureEventCalledWith?.count, 7, "Should capture exactly one event")
         
         let capturedMetadata = mockSessionReplay.captureEventCalledWith?.first
         XCTAssertNotNil(capturedMetadata)
@@ -496,14 +489,13 @@ final class CoralogixRumTests: XCTestCase {
             return
         }
 
-        
-        // Assert
         XCTAssertNotNil(mockSpan.recordedAttributes[Keys.screenshotId.rawValue], "ScreenshotId should be set on the span")
         
-        XCTAssertEqual(mockSessionReplay.captureEventCalledWith?.count, 2, "SessionReplay should have captured exactly one event")
+        XCTAssertEqual(mockSessionReplay.captureEventCalledWith?.count, 3, "SessionReplay should have captured exactly one event")
         
-        if let capturedEvent = mockSessionReplay.captureEventCalledWith?.first as? [String: Any] {
-            XCTAssertNotNil(capturedEvent[Keys.timestamp.rawValue], "Captured event should have a timestamp")
+        if let capturedEvent = mockSessionReplay.captureEventCalledWith {
+            XCTAssertNotNil(capturedEvent[Keys.segmentIndex.rawValue], "Captured event should have a timestamp")
+            XCTAssertNotNil(capturedEvent[Keys.page.rawValue], "Captured event should have a page")
             XCTAssertNotNil(capturedEvent[Keys.screenshotId.rawValue], "Captured event should have a screenshotId")
         }
     }

@@ -26,6 +26,9 @@ class SessionReplayModel {
     var sessionReplayOptions: SessionReplayOptions?
     var isRecording = false  // Custom flag to track recording state
     private let srNetworkManager: SRNetworkManager?
+    internal var getKeyWindow: () -> UIWindow? = {
+        Global.getKeyWindow()
+    }
     
     init(sessionReplayOptions: SessionReplayOptions? = nil,
          networkManager: SRNetworkManager? = SRNetworkManager()) {
@@ -43,7 +46,64 @@ class SessionReplayModel {
         
         Log.d("SessionManager deinitialized and resources cleaned up.")
     }
+   
+    internal func isSessionIdValid() -> Bool {
+        if sessionId.isEmpty {
+            Log.e("Invalid sessionId")
+            return false
+        }
+        return true
+    }
     
+    internal func prepareScreenshotIfNeeded(properties: [String: Any]?) -> Data? {
+        guard Thread.isMainThread else {
+            DispatchQueue.main.async { [weak self] in
+                self?.captureImage(properties: properties)
+            }
+            return nil
+        }
+
+        guard let window = getKeyWindow() else {
+            Log.e("No key window found")
+            return nil
+        }
+
+        guard let options = self.sessionReplayOptions,
+              self.isValidSessionReplayOptions(options) else {
+            Log.e("Invalid sessionReplayOptions")
+            return nil
+        }
+
+        return window.captureScreenshot(
+            scale: options.captureScale,
+            compressionQuality: options.captureCompressionQuality
+        )
+    }
+    
+    internal func saveScreenshotToFileSystem(
+        screenshotData: Data,
+        properties: [String: Any]?
+    ) {
+        guard let documentsDirectory = FileManager.default.urls(
+            for: .documentDirectory,
+            in: .userDomainMask
+        ).first else {
+            Log.e("Failed to locate documents directory")
+            return
+        }
+        
+        let fileName = generateFileName(properties: properties)
+        let fileURL = documentsDirectory
+            .appendingPathComponent("SessionReplay")
+            .appendingPathComponent(fileName)
+        
+        handleCapturedData(
+            fileURL: fileURL,
+            data: screenshotData,
+            properties: properties
+        )
+    }
+
     internal func captureImage(properties: [String: Any]? = nil) {
         guard !sessionId.isEmpty else {
             Log.e("Invalid sessionId")
@@ -51,28 +111,8 @@ class SessionReplayModel {
         }
         
         var screenshotData: Data? = properties?[Keys.screenshotData.rawValue] as? Data
-        
         if screenshotData == nil {
-            guard Thread.isMainThread else {
-                DispatchQueue.main.async { self.captureImage(properties: properties) }
-                return
-            }
-            
-            guard let window = Global.getKeyWindow() else {
-                Log.e("No key window found")
-                return
-            }
-            
-            guard let options = self.sessionReplayOptions,
-                  self.isValidSessionReplayOptions(options) else {
-                Log.e("Invalid sessionReplayOptions")
-                return
-            }
-            
-            screenshotData = window.captureScreenshot(
-                scale: options.captureScale,
-                compressionQuality: options.captureCompressionQuality
-            )
+            screenshotData = prepareScreenshotIfNeeded(properties: properties)
         }
         
         guard let screenshotData else {
@@ -80,19 +120,7 @@ class SessionReplayModel {
             return
         }
         
-        let fileName = self.generateFileName(properties: properties)
-        
-        if let documentsDirectory = FileManager.default.urls(
-            for: .documentDirectory,
-            in: .userDomainMask
-        ).first {
-            let fileURL = documentsDirectory
-                .appendingPathComponent("SessionReplay")
-                .appendingPathComponent(fileName)
-            self.handleCapturedData(fileURL: fileURL,
-                                    data: screenshotData,
-                                    properties: properties)
-        }
+        saveScreenshotToFileSystem(screenshotData: screenshotData, properties: properties)
     }
     
     internal func updateSessionId(with sessionId: String) {
@@ -198,7 +226,7 @@ class SessionReplayModel {
             return "file_name_error"
         }
         
-        return "\(sessionId)_ֿֿ\(page)_\(segmentIndex).jpg"
+        return "\(sessionId)_\(page)_\(segmentIndex).jpg"
     }
     
     internal func handleCapturedData(fileURL: URL, data: Data, properties: [String: Any]?) {

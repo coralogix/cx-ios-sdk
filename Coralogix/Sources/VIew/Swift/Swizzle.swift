@@ -340,7 +340,7 @@ extension UIApplication {
         let selectedIndex = segmentedControl.selectedSegmentIndex
         let selectedTitle = segmentedControl.titleForSegment(at: selectedIndex)
         attributes[Keys.text.rawValue] = "\(selectedTitle ?? "None")"
-        var tap = [Keys.tapName.rawValue: "UISegmentedControl",
+        let tap = [Keys.tapName.rawValue: "UISegmentedControl",
                    Keys.tapCount.rawValue: 1,
                    Keys.tapAttributes.rawValue: Helper.convertDictionayToJsonString(dict: attributes)] as [String: Any]
         NotificationCenter.default.post(name: .cxRumNotificationUserActions, object: tap)

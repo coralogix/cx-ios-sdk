@@ -25,9 +25,6 @@ class ScannerPipelineTests: XCTestCase {
     func testRunPipeline_withAllScannersEnabled() {
         let expectation = self.expectation(description: "Pipeline should complete successfully with all scanners enabled.")
         
-        scannerPipeline.isImageScannerEnabled = true
-        scannerPipeline.isTextScannerEnabled = true
-        scannerPipeline.isFaceScannerEnabled = true
         let operationId = UUID()
         self.currentOperationId = operationId
         
@@ -36,17 +33,21 @@ class ScannerPipelineTests: XCTestCase {
             return
         }
         do {
-            let options = SessionReplayOptions(maskText: ["confidential"], maskAllImages: true)
-            
+            let options = SessionReplayOptions(maskText: ["confidential"],
+                                               maskImages: true,
+                                               maskFaces: true)
+           
             let imageData = try Data(contentsOf: originalURL)
-
-            scannerPipeline.runPipelineWithCancellation(
-                screenshotData: imageData,
-                options: options,
-                operationId: operationId,
-                isValid: { [weak self] id in
-                    return self?.currentOperationId == id
-                }) { ciImage in
+            let urlEntry = URLEntry(url: URL(string: "https://www.google.com")!,
+                                    timestamp: Date().timeIntervalSince1970,
+                                    screenshotId: UUID().uuidString,
+                                    screenshotIndex: 0,
+                                    page: "0",
+                                    screenshotData: imageData,
+                                    point: CGPoint(x: 100.0, y: 100.0),
+                                    completion: nil)
+            
+            scannerPipeline.runPipeline(options: options, urlEntry: urlEntry) { ciImage, urlEntry in
                 XCTAssertNotNil(ciImage, "Pipeline should complete successfully.")
                 expectation.fulfill()
             }
@@ -60,28 +61,30 @@ class ScannerPipelineTests: XCTestCase {
     func testRunPipeline_withOnlyImageScannerEnabled() {
         let expectation = self.expectation(description: "Pipeline should complete successfully with only image scanner enabled.")
         
-        scannerPipeline.isImageScannerEnabled = true
-        scannerPipeline.isTextScannerEnabled = false
-        scannerPipeline.isFaceScannerEnabled = false
-        
         guard let originalURL = SDKResources.bundle.url(forResource: "test_image", withExtension: "png") else {
             XCTFail("test_image.png not found in Bundle.module")
             return
         }
         
         do {
-            let options = SessionReplayOptions(maskText: nil, maskAllImages: true)
+            let options = SessionReplayOptions(maskText: nil,
+                                               maskImages: true,
+                                               maskAllImages: true,
+                                               maskFaces: false)
+           
             let operationId = UUID()
             self.currentOperationId = operationId
             let imageData = try Data(contentsOf: originalURL)
             
-            scannerPipeline.runPipelineWithCancellation(
-                screenshotData: imageData,
-                options: options,
-                operationId: operationId,
-            isValid: { [weak self] id in
-                return self?.currentOperationId == id
-            }) { ciImage in
+            let urlEntry = URLEntry(url: URL(string: "https://www.google.com")!,
+                                    timestamp: Date().timeIntervalSince1970,
+                                    screenshotId: UUID().uuidString,
+                                    screenshotIndex: 0,
+                                    page: "0",
+                                    screenshotData: imageData,
+                                    point: CGPoint(x: 100.0, y: 100.0),
+                                    completion: nil)
+            scannerPipeline.runPipeline(options: options, urlEntry: urlEntry) { ciImage, urlEntry in
                 XCTAssertNotNil(ciImage, "Pipeline should complete successfully.")
                 expectation.fulfill()
             }
@@ -94,29 +97,30 @@ class ScannerPipelineTests: XCTestCase {
     
     func testRunPipeline_withNoScannersEnabled() {
         let expectation = self.expectation(description: "Pipeline should complete successfully with no scanners enabled.")
-        
-        scannerPipeline.isImageScannerEnabled = false
-        scannerPipeline.isTextScannerEnabled = false
-        scannerPipeline.isFaceScannerEnabled = false
-        
         guard let originalURL = SDKResources.bundle.url(forResource: "test_image", withExtension: "png") else {
             XCTFail("test_image.png not found in Bundle.module")
             return
         }
         
         do {
-            let options = SessionReplayOptions(maskText: nil, maskAllImages: false)
-            let operationId = UUID()
+            let options = SessionReplayOptions(maskText: nil,
+                                               maskImages: false,
+                                               maskAllImages: false,
+                                               maskFaces: false)
+                       let operationId = UUID()
             self.currentOperationId = operationId
             let imageData = try Data(contentsOf: originalURL)
-
-            scannerPipeline.runPipelineWithCancellation(
-                screenshotData: imageData,
-                options: options,
-                operationId: operationId,
-                isValid: { [weak self] id in
-                    return self?.currentOperationId == id
-                }) { ciImage in
+            
+            let urlEntry = URLEntry(url: URL(string: "https://www.google.com")!,
+                                    timestamp: Date().timeIntervalSince1970,
+                                    screenshotId: UUID().uuidString,
+                                    screenshotIndex: 0,
+                                    page: "0",
+                                    screenshotData: imageData,
+                                    point: CGPoint(x: 100.0, y: 100.0),
+                                    completion: nil)
+            
+            scannerPipeline.runPipeline(options: options, urlEntry: urlEntry) { ciImage, urlEntry in
                 XCTAssertNotNil(ciImage, "Pipeline should complete successfully.")
                 expectation.fulfill()
             }
@@ -130,29 +134,27 @@ class ScannerPipelineTests: XCTestCase {
     func testRunPipeline_withSimulatorEnvironment_shouldSkipFaceScanner() {
 #if targetEnvironment(simulator)
         let expectation = self.expectation(description: "Pipeline should complete successfully and skip face scanner on simulator.")
-        
-        scannerPipeline.isImageScannerEnabled = false
-        scannerPipeline.isTextScannerEnabled = false
-        scannerPipeline.isFaceScannerEnabled = true
-        
         guard let originalURL = SDKResources.bundle.url(forResource: "test_image", withExtension: "png") else {
             XCTFail("test_image.png not found in Bundle.module")
             return
         }
         do {
-            let options = SessionReplayOptions(maskText: nil, maskAllImages: false)
+            let options = SessionReplayOptions(maskText: nil,
+                                               maskImages: false,
+                                               maskAllImages: false,
+                                               maskFaces: false)
             let operationId = UUID()
             self.currentOperationId = operationId
             let imageData = try Data(contentsOf: originalURL)
-
-            scannerPipeline.runPipelineWithCancellation(
-                screenshotData: imageData,
-                options: options,
-                operationId: operationId,
-                isValid: { [weak self] id in
-                    return self?.currentOperationId == id
-                }
-            ) { ciImage in
+            let urlEntry = URLEntry(url: URL(string: "https://www.google.com")!,
+                                    timestamp: Date().timeIntervalSince1970,
+                                    screenshotId: UUID().uuidString,
+                                    screenshotIndex: 0,
+                                    page: "0",
+                                    screenshotData: imageData,
+                                    point: CGPoint(x: 100.0, y: 100.0),
+                                    completion: nil)
+            scannerPipeline.runPipeline(options: options, urlEntry: urlEntry) { ciImage, urlEntry in
                 XCTAssertNotNil(ciImage, "Pipeline should skip face scanner and complete successfully on simulator.")
                 expectation.fulfill()
             }
@@ -170,10 +172,6 @@ class ScannerPipelineTests: XCTestCase {
     func testRunPipeline_withFaceScannerDisabled() {
         let expectation = self.expectation(description: "Pipeline should complete successfully with face scanner disabled.")
         
-        scannerPipeline.isImageScannerEnabled = false
-        scannerPipeline.isTextScannerEnabled = false
-        scannerPipeline.isFaceScannerEnabled = false
-        
         guard let originalURL = SDKResources.bundle.url(forResource: "test_image", withExtension: "png") else {
             XCTFail("test_image.png not found in Bundle.module")
             return
@@ -181,22 +179,27 @@ class ScannerPipelineTests: XCTestCase {
         do {
             // Create a unique file
             let uniqueFileURL = try createUniqueFile(from: originalURL, withExtension: "png")
-            
-            let options = SessionReplayOptions(maskText: nil, maskAllImages: false)
+            let options = SessionReplayOptions(maskText: nil,
+                                               maskImages: true,
+                                               maskAllImages: true,
+                                               maskFaces: false)
             let operationId = UUID()
             self.currentOperationId = operationId
             let imageData = try Data(contentsOf: originalURL)
-
-            scannerPipeline.runPipelineWithCancellation(
-                screenshotData: imageData,
-                options: options,
-                operationId: operationId,
-                isValid: { [weak self] id in
-                    return self?.currentOperationId == id
-                }) { ciImage in
-                    XCTAssertNotNil(ciImage, "Pipeline should complete successfully with face scanner disabled.")
-                    expectation.fulfill()
-                }
+            let urlEntry = URLEntry(url: URL(string: "https://www.google.com")!,
+                                                timestamp: Date().timeIntervalSince1970,
+                                                screenshotId: UUID().uuidString,
+                                                screenshotIndex: 0,
+                                                page: "0",
+                                                screenshotData: imageData,
+                                                point: CGPoint(x: 100.0, y: 100.0),
+                                                completion: nil)
+            
+                       
+            scannerPipeline.runPipeline(options: options, urlEntry: urlEntry) { ciImage, urlEntry in
+                XCTAssertNotNil(ciImage, "Pipeline should complete successfully with face scanner disabled.")
+                expectation.fulfill()
+            }
             
             waitForExpectations(timeout: 5, handler: nil)
         } catch {
