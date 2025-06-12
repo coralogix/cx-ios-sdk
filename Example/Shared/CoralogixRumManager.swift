@@ -6,6 +6,7 @@
 //
 
 import Coralogix
+import Foundation
 //import os
 
 final class CoralogixRumManager {
@@ -25,12 +26,15 @@ final class CoralogixRumManager {
                                       userName: "?",
                                       userEmail: "a@a.com",
                                       userMetadata: ["d":"d"])
+        guard let publicKey = ProcessInfo.processInfo.environment["PUBLIC_KEY"] else {
+            fatalError("🚫 PUBLIC_KEY environment variable is not set.")
+        }
         let options = CoralogixExporterOptions(coralogixDomain: CoralogixDomain.STG,
                                                userContext: userContext,
                                                environment: "PROD",
-                                               application: Secrets.applicationName,
+                                               application: "DemoApp-iOS-swift",
                                                version: "1",
-                                               publicKey: Secrets.stagingKey,
+                                               publicKey: publicKey,
                                                instrumentations: [.mobileVitals: false,
                                                                   .custom: true,
                                                                   .errors: true,
