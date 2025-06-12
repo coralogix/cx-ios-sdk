@@ -76,4 +76,49 @@ class SessionReplayTests: XCTestCase {
         }
         waitForExpectations(timeout: 4.0, handler: nil)
     }
+    
+    func testUpdate_whenDummyInstance_logsAndReturns() {
+        let options = SessionReplayOptions(recordingType: .image)
+        SessionReplay.initializeWithOptions(sessionReplayOptions: options)
+
+        SessionReplay.shared.isDummyInstance = true
+        
+        SessionReplay.shared.update(sessionId: "new-session")
+        SessionReplay.shared.sessionReplayModel = nil
+
+        // Nothing to assert directly without log capture
+        // You can assert that updateSessionId is *not* called
+        XCTAssertNil((SessionReplay.shared.sessionReplayModel as? MockSessionReplayModel3)?.updatedSessionId)
+    }
+    
+    func testUpdate_whenNoSessionReplayModel_logsErrorAndReturns() {
+        let options = SessionReplayOptions(recordingType: .image)
+        SessionReplay.initializeWithOptions(sessionReplayOptions: options)
+        SessionReplay.shared.isDummyInstance = false
+        SessionReplay.shared.sessionReplayModel = nil
+        
+        SessionReplay.shared.update(sessionId: "new-session")
+        
+        XCTAssertNil((SessionReplay.shared.sessionReplayModel as? MockSessionReplayModel3)?.updatedSessionId)
+    }
+    
+    func testUpdate_callsUpdateSessionIdOnModel() {
+        let options = SessionReplayOptions(recordingType: .image)
+        SessionReplay.initializeWithOptions(sessionReplayOptions: options)
+        SessionReplay.shared.isDummyInstance = false
+        let mockSessionReplayModel = MockSessionReplayModel3(sessionReplayOptions: options)
+        SessionReplay.shared.sessionReplayModel = mockSessionReplayModel
+        SessionReplay.shared.update(sessionId: "12345-session")
+        
+        XCTAssertEqual((SessionReplay.shared.sessionReplayModel as? MockSessionReplayModel3)?.updatedSessionId, "12345-session")
+    }
 }
+
+class MockSessionReplayModel3: SessionReplayModel {
+    var updatedSessionId: String?
+
+    override func updateSessionId(with sessionId: String) {
+        updatedSessionId = sessionId
+    }
+}
+

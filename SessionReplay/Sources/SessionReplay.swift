@@ -118,7 +118,9 @@ public class SessionReplay: SessionReplayInterface {
     
     // Properties for storing options
     private var sessionReplayOptions: SessionReplayOptions?
-    
+
+    internal var isDummyInstance = false
+
     // Private initializer that requires an Options object
     private init(sessionReplayOptions: SessionReplayOptions) {
         self.sessionReplayOptions = sessionReplayOptions
@@ -170,7 +172,6 @@ public class SessionReplay: SessionReplayInterface {
         return instance
     }
         
-    private var isDummyInstance = false
         
     private init() { }
     

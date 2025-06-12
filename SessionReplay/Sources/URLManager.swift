@@ -52,8 +52,7 @@ class URLObserver {
                 let processingQueue = DispatchQueue(label: "com.coralogix.urlProcessing", qos: .userInitiated)
                 processingQueue.async {
                     guard let self = self,
-                          let sessionReplayOptions = sessionReplayOptions,
-                          let entry = entry as? URLEntry else {
+                          let sessionReplayOptions = sessionReplayOptions else {
                         Log.e("Invalid entry received")
                         return
                     }
@@ -68,7 +67,9 @@ class URLObserver {
                                         Log.d("Pipeline completed successfully for URL: \(url.lastPathComponent)")
                                     }
                                 } else {
-                                    Log.e("Pipeline encountered an error for URL: \(urlEntry?.url.lastPathComponent)")
+                                    if let url = urlEntry?.url {
+                                        Log.e("Pipeline encountered an error for URL: \(url.lastPathComponent)")
+                                    }
                                 }
                                 urlEntry?.completion?(ciImage, urlEntry)
                             }
