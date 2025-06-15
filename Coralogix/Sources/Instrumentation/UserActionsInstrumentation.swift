@@ -73,8 +73,8 @@ extension CoralogixRum {
         if screenshotData != nil {
             metadata[Keys.screenshotData.rawValue] =  screenshotData
         }
-        // Keep SDK-generated keys if duplicates exist
-        metadata.merge(properties) { (_, current) in current }
+
+        metadata.merge(properties) { current, _ in current } // keep SDK value
         return metadata
     }
     

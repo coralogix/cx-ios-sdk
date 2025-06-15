@@ -257,4 +257,61 @@ final class RumTests: XCTestCase {
         XCTAssertNotNil(cxRum.snapshotContext)
         XCTAssertTrue(cxRum.isOneMinuteFromLastSnapshotPass)
     }
+    
+    func testAddScreenshotContextAddsExpectedValues() {
+        // Arrange
+        var cxRum = CxRum(
+            otel: mockSpanData,
+            versionMetadata: mockVersionMetadata,
+            sessionManager: mockSessionManager,
+            viewManager: mockViewerManager,
+            networkManager: mockNetworkManager,
+            metricsManager: mockCxMetricsManager,
+            userMetadata: ["userId": "12345"],
+            labels: ["key": "value"]
+        )
+        cxRum.screenshotId = "abc123"
+        cxRum.page = 2
+        let date = Date(timeIntervalSince1970: 1_000_000)
+        cxRum.timeStamp = date.timeIntervalSince1970
+        
+        var result: [String: Any] = [:]
+        
+        // Act
+        cxRum.addScreenshotContext(to: &result)
+        
+        // Assert
+        guard let context = result[Keys.screenshotContext.rawValue] as? [String: Any] else {
+            XCTFail("Expected screenshotContext to be present")
+            return
+        }
+        
+        XCTAssertEqual(context[Keys.screenshotId.rawValue] as? String, "abc123")
+        XCTAssertEqual(context[Keys.page.rawValue] as? Int, 2)
+        XCTAssertEqual(context[Keys.segmentTimestamp.rawValue] as? Int, Int(date.timeIntervalSince1970 * 1000))
+    }
+
+        func testAddScreenshotContextDoesNothingWhenValuesAreNil() {
+            // Arrange
+            var cxRum = CxRum(
+                otel: mockSpanData,
+                versionMetadata: mockVersionMetadata,
+                sessionManager: mockSessionManager,
+                viewManager: mockViewerManager,
+                networkManager: mockNetworkManager,
+                metricsManager: mockCxMetricsManager,
+                userMetadata: ["userId": "12345"],
+                labels: ["key": "value"]
+            )
+            cxRum.screenshotId = nil
+            cxRum.page = nil
+            var result: [String: Any] = ["existingKey": "value"]
+
+            // Act
+            cxRum.addScreenshotContext(to: &result)
+
+            // Assert
+            XCTAssertNil(result[Keys.screenshotContext.rawValue])
+            XCTAssertEqual(result["existingKey"] as? String, "value")
+        }
 }

@@ -134,6 +134,10 @@ final class SRNetworkManagerTests: XCTestCase {
                                 point: CGPoint(x: 100.0, y: 100.0),
                                 completion: nil)
         
+        mockSession = MockURLSession()
+        mockSession.shouldReturnError = true
+        networkManager = SRNetworkManager(session: mockSession)
+        
         // Call the method under test
         networkManager.send(invalidData,
                             urlEntry: urlEntry,
@@ -154,7 +158,7 @@ final class SRNetworkManagerTests: XCTestCase {
         let timestamp: TimeInterval = Date().timeIntervalSince1970
         let sessionId = "testSession123"
         let dataSize = 1024
-        let screenshotNumber = 1
+        let segmentIndex = 1
         let subIndex = 2
         let screenshotId = UUID().uuidString.lowercased()
         let page = "0"
@@ -164,7 +168,7 @@ final class SRNetworkManagerTests: XCTestCase {
             dataSize: dataSize,
             timestamp: timestamp,
             sessionId: sessionId,
-            screenshotNumber: screenshotNumber,
+            segmentIndex: segmentIndex,
             subIndex: subIndex,
             application: application,
             sessionCreationTime: sessionCreationTime,
@@ -174,7 +178,7 @@ final class SRNetworkManagerTests: XCTestCase {
         
         // Assert
         XCTAssertEqual(metadata[Keys.application.rawValue] as? String, application, "Application value is incorrect")
-        XCTAssertEqual(metadata[Keys.segmentIndex.rawValue] as? Int, screenshotNumber, "Screenshot number value is incorrect")
+        XCTAssertEqual(metadata[Keys.segmentIndex.rawValue] as? Int, segmentIndex, "Screenshot number value is incorrect")
         XCTAssertEqual(metadata[Keys.segmentSize.rawValue] as? Int, dataSize, "Data size value is incorrect")
         XCTAssertEqual(metadata[Keys.segmentTimestamp.rawValue] as? Int, timestamp.milliseconds, "Timestamp value is incorrect")
         XCTAssertEqual(metadata[Keys.keySessionCreationDate.rawValue] as? Int, sessionCreationTime.milliseconds, "Session creation timestamp is incorrect")
@@ -193,7 +197,7 @@ final class SRNetworkManagerTests: XCTestCase {
         let timestamp: TimeInterval = Date().timeIntervalSince1970
         let sessionId = "testSession123"
         let dataSize = 1024
-        let screenshotNumber = 1
+        let segmentIndex = 1
         let subIndex = 2
         let screenshotId = UUID().uuidString.lowercased()
         let page = "0"
@@ -203,7 +207,7 @@ final class SRNetworkManagerTests: XCTestCase {
             dataSize: dataSize,
             timestamp: timestamp,
             sessionId: sessionId,
-            screenshotNumber: screenshotNumber,
+            segmentIndex: segmentIndex,
             subIndex: subIndex,
             application: application,
             sessionCreationTime: sessionCreationTime,
@@ -286,18 +290,29 @@ class MockCoralogix: CoralogixInterface {
 public class MockURLSession: URLSessionProtocol {
     var request: URLRequest?
     var completionHandler: ((Data?, URLResponse?, Error?) -> Void)?
-    
+
+    public var shouldReturnError: Bool = false
+    public var mockData: Data? = Data("Mock response".utf8)
+    public var mockStatusCode: Int = 200
+    public var mockError: Error? = NSError(domain: "MockError", code: 1, userInfo: nil)
+
     public func dataTask(with request: URLRequest, completionHandler: @escaping (Data?, URLResponse?, Error?) -> Void) -> URLSessionDataTaskProtocol {
         self.request = request
         self.completionHandler = completionHandler
+        
+        
         return MockURLSessionDataTask() {
-            // Simulate a successful response
-            let mockData = Data("Mock response".utf8) // Mock response data
-            let mockResponse = HTTPURLResponse(url: request.url!,
-                                               statusCode: 200,
-                                               httpVersion: nil,
-                                               headerFields: nil) // Mock HTTP response
-            completionHandler(mockData, mockResponse, nil)
+            
+            if self.shouldReturnError {
+                completionHandler(nil, nil, self.mockError)
+            } else {
+                let mockData = Data("Mock response".utf8)
+                let mockResponse = HTTPURLResponse(url: request.url!,
+                                                   statusCode: self.mockStatusCode,
+                                                   httpVersion: nil,
+                                                   headerFields: nil)
+                completionHandler(mockData, mockResponse, nil)
+            }
         }
     }
 }

@@ -41,7 +41,7 @@ public class ScreenshotManager {
     }
     
     public var nextScreenshotLocation: ScreenshotLocation {
-        queue.sync {
+        queue.sync(flags: .barrier) {
             _screenshotCount += 1
             
             if _screenshotCount > maxScreenshotsPerPage {
@@ -60,7 +60,7 @@ public class ScreenshotManager {
     }
 
     @objc func resetSession(notification: Notification) {
-        queue.sync {
+        queue.sync(flags: .barrier) {
             _page = 0
             _screenshotCount = 0
             _screenshotId = UUID().uuidString.lowercased()

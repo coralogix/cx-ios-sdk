@@ -82,9 +82,8 @@ class SessionReplayTests: XCTestCase {
         SessionReplay.initializeWithOptions(sessionReplayOptions: options)
 
         SessionReplay.shared.isDummyInstance = true
-        
-        SessionReplay.shared.update(sessionId: "new-session")
         SessionReplay.shared.sessionReplayModel = nil
+        SessionReplay.shared.update(sessionId: "new-session")
 
         // Nothing to assert directly without log capture
         // You can assert that updateSessionId is *not* called

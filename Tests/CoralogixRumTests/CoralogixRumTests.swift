@@ -184,10 +184,13 @@ final class CoralogixRumTests: XCTestCase {
         coralogixRum.handleAppearStateIfNeeded(cxView: view, span: mockSpan)
         
         // Assert
-        XCTAssertNotNil(mockSessionReplay.captureEventCalledWith?[Keys.screenshotId.rawValue] as? String)
+        XCTAssertNotNil(mockSessionReplay.captureEventCalledWith, "Expected SessionReplay.captureEvent to be invoked")
+        XCTAssertNotNil(mockSessionReplay.captureEventCalledWith?[Keys.screenshotId.rawValue] as? String, "Expected screenshotId to be present in captured metadata")
+       
         XCTAssertTrue(mockSpan.setAttributeCalled)
         XCTAssertNotNil(mockSpan.setAttributeKey)
         XCTAssertNotNil(mockSpan.setAttributeValue)
+        SdkManager.shared.register(sessionReplayInterface: nil)
     }
     
     func testHandleAppearStateIfNeededWhenStateIsNotNotifyOnAppearShouldNotCaptureEvent() {
@@ -199,6 +202,7 @@ final class CoralogixRumTests: XCTestCase {
         let view = CXView(state: .notifyOnDisappear, name: "home")
 
         // Act
+        SdkManager.shared.register(sessionReplayInterface: mockSessionReplay)
         coralogixRum.handleAppearStateIfNeeded(cxView: view, span: mockSpan)
 
         // Assert
@@ -463,7 +467,15 @@ final class CoralogixRumTests: XCTestCase {
         coralogixRum.handleUserInteractionEvent(testProperties, span: mockSpan, window: window)
         
         // Assert
-        XCTAssertEqual(mockSessionReplay.captureEventCalledWith?.count, 7, "Should capture exactly one event")
+        XCTAssertNotNil(mockSessionReplay.captureEventCalledWith, "Event was not captured")
+        let required = [Keys.segmentIndex.rawValue,
+                        Keys.page.rawValue,
+                        Keys.screenshotId.rawValue,
+                        Keys.screenshotData.rawValue,
+                        Keys.positionX.rawValue,
+                        Keys.positionY.rawValue,
+                        "testKey"]
+       XCTAssertTrue(required.allSatisfy { mockSessionReplay.captureEventCalledWith!.keys.contains($0) }, "Captured metadata is missing expected keys")
         
         let capturedMetadata = mockSessionReplay.captureEventCalledWith?.first
         XCTAssertNotNil(capturedMetadata)
@@ -491,13 +503,11 @@ final class CoralogixRumTests: XCTestCase {
         }
 
         XCTAssertNotNil(mockSpan.recordedAttributes[Keys.screenshotId.rawValue], "ScreenshotId should be set on the span")
-        
-        XCTAssertEqual(mockSessionReplay.captureEventCalledWith?.count, 3, "SessionReplay should have captured exactly one event")
-        
+        XCTAssertNotNil(mockSessionReplay.captureEventCalledWith, "captureEvent should be invoked")
         if let capturedEvent = mockSessionReplay.captureEventCalledWith {
-            XCTAssertNotNil(capturedEvent[Keys.segmentIndex.rawValue], "Captured event should have a timestamp")
-            XCTAssertNotNil(capturedEvent[Keys.page.rawValue], "Captured event should have a page")
-            XCTAssertNotNil(capturedEvent[Keys.screenshotId.rawValue], "Captured event should have a screenshotId")
+            XCTAssertEqual(Set(capturedEvent.keys),
+                           [Keys.segmentIndex.rawValue, Keys.page.rawValue, Keys.screenshotId.rawValue],
+                           "Unexpected keys in captured metadata")
         }
     }
     

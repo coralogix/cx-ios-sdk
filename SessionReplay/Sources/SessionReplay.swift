@@ -60,7 +60,7 @@ public struct SessionReplayOptions {
     /// - Parameters:
     ///   - imageRecordingType: The type of recording (default is `image`).
     ///   - captureTimeInterval: The interval between captures (default is 10 seconds).
-    ///   - captureScale: The scale factor for the captured images (default is the screen scale).
+    ///   - captureScale: The scale factor for the captured images (default scale is 2).
     ///   - captureCompressionQuality: The compression quality for the images (default is 1.0).
     ///   - sessionRecordingSampleRate: The sampling rate for session recording events (default is `100%`).
     ///   - maskText: An optional array of text patterns to mask (default is `nil`).

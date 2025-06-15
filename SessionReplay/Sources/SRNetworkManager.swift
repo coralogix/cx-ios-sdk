@@ -29,7 +29,7 @@ public class MetadataBuilder {
     public func buildMetadata(dataSize: Int,
                               timestamp: TimeInterval,
                               sessionId: String,
-                              screenshotNumber: Int,
+                              segmentIndex: Int,
                               subIndex: Int,
                               application: String,
                               sessionCreationTime: TimeInterval,
@@ -37,7 +37,7 @@ public class MetadataBuilder {
                               page: String) -> [String: Any] {
         return [
             Keys.application.rawValue: application,
-            Keys.segmentIndex.rawValue: screenshotNumber,
+            Keys.segmentIndex.rawValue: segmentIndex,
             Keys.segmentSize.rawValue: dataSize,
             Keys.segmentTimestamp.rawValue: timestamp.milliseconds,
             Keys.keySessionCreationDate.rawValue: sessionCreationTime.milliseconds,
@@ -110,7 +110,7 @@ public class SRNetworkManager {
             dataSize: data.count,
             timestamp: urlEntry.timestamp,
             sessionId: sessionId,
-            screenshotNumber: urlEntry.screenshotIndex,
+            segmentIndex: urlEntry.screenshotIndex,
             subIndex: subIndex,
             application: application,
             sessionCreationTime: sessionCreationTime,
