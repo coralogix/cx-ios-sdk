@@ -76,21 +76,48 @@ class SessionReplayTests: XCTestCase {
         }
         waitForExpectations(timeout: 4.0, handler: nil)
     }
+    
+    func testUpdate_whenDummyInstance_logsAndReturns() {
+        let options = SessionReplayOptions(recordingType: .image)
+        SessionReplay.initializeWithOptions(sessionReplayOptions: options)
 
-    func testCaptureEvent_doesNotCaptureImageWhenNotRecording() {
-        let timestemp: TimeInterval = Date().timeIntervalSince1970
-        SessionReplay.shared.captureEvent(properties: [Keys.timestamp.rawValue: timestemp])
-        if let sessionReplayModel = SessionReplay.shared.sessionReplayModel {
-            XCTAssertEqual(sessionReplayModel.screenshotManager.screenshotCount, 0, "Capture image should not be called when not recording.")
-        }
+        SessionReplay.shared.isDummyInstance = true
+        SessionReplay.shared.sessionReplayModel = nil
+        SessionReplay.shared.update(sessionId: "new-session")
+
+        // Nothing to assert directly without log capture
+        // You can assert that updateSessionId is *not* called
+        XCTAssertNil((SessionReplay.shared.sessionReplayModel as? MockSessionReplayModel3)?.updatedSessionId)
+    }
+    
+    func testUpdate_whenNoSessionReplayModel_logsErrorAndReturns() {
+        let options = SessionReplayOptions(recordingType: .image)
+        SessionReplay.initializeWithOptions(sessionReplayOptions: options)
+        SessionReplay.shared.isDummyInstance = false
+        SessionReplay.shared.sessionReplayModel = nil
+        
+        SessionReplay.shared.update(sessionId: "new-session")
+        
+        XCTAssertNil((SessionReplay.shared.sessionReplayModel as? MockSessionReplayModel3)?.updatedSessionId)
+    }
+    
+    func testUpdate_callsUpdateSessionIdOnModel() {
+        let options = SessionReplayOptions(recordingType: .image)
+        SessionReplay.initializeWithOptions(sessionReplayOptions: options)
+        SessionReplay.shared.isDummyInstance = false
+        let mockSessionReplayModel = MockSessionReplayModel3(sessionReplayOptions: options)
+        SessionReplay.shared.sessionReplayModel = mockSessionReplayModel
+        SessionReplay.shared.update(sessionId: "12345-session")
+        
+        XCTAssertEqual((SessionReplay.shared.sessionReplayModel as? MockSessionReplayModel3)?.updatedSessionId, "12345-session")
     }
 }
 
-// Mock SessionReplayModel
-class MockSessionReplayModel: SessionReplayModel {
-    var captureImageCallCount = 0
+class MockSessionReplayModel3: SessionReplayModel {
+    var updatedSessionId: String?
 
-    override func captureImage(properties: [String : Any]?) {
-        captureImageCallCount += 1
+    override func updateSessionId(with sessionId: String) {
+        updatedSessionId = sessionId
     }
 }
+

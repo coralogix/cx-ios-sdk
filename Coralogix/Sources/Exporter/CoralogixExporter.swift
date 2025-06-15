@@ -119,7 +119,7 @@ public class CoralogixExporter: SpanExporter {
         do {
             let jsonData = try JSONSerialization.data(withJSONObject: jsonObject, options: [])
             request.httpBody = jsonData
-            self.logJSON(from: jsonData, prettyPrint: false)
+            self.logJSON(from: jsonData, prettyPrint: true)
         } catch {
             Log.e(error)
             return .failure

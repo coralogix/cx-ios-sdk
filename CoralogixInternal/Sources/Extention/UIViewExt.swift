@@ -8,7 +8,7 @@
 import UIKit
 
 public extension UIView {
-    func captureScreenshot(scale: CGFloat = UIScreen.main.scale,
+    func captureScreenshot(scale: CGFloat = 2.0,
                            compressionQuality: CGFloat = 0.8) -> Data? {
         let rendererFormat = UIGraphicsImageRendererFormat()
         rendererFormat.scale = scale

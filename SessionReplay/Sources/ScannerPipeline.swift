@@ -4,227 +4,107 @@
 //
 //  Created by Coralogix DEV TEAM on 12/12/2024.
 //
+
 import Foundation
-import CoralogixInternal
 import CoreImage
+import CoralogixInternal
 
 class ScannerPipeline {
-    var isImageScannerEnabled: Bool = false
-    var isTextScannerEnabled: Bool = false
-    var isFaceScannerEnabled: Bool = false
-    
-    private let textScanner = TextScanner()
-    private let imageScanner = ImageScanner()
-    private let faceScanner = FaceScanner()
-    private let clickScanner = ClickScanner()
-    
-    func runPipelineWithCancellation(
-        screenshotData: Data,
+    func runPipeline(
         options: SessionReplayOptions,
-        operationId: UUID,
-        isValid: @escaping (UUID) -> Bool,
-        tapPoint: CGPoint? = nil,
-        completion: @escaping (CIImage?) -> Void) {
-            
-            // If operation is no longer valid, exit early
-            guard isValid(operationId) else {
-                Log.d("Pipeline operation \(operationId) was cancelled")
-                completion(nil)
+        urlEntry: URLEntry? = nil,
+        completion: @escaping (CIImage?,URLEntry?) -> Void
+    ) {
+        guard let urlEntry = urlEntry else {
+            Log.e("Missing urlEntry")
+            completion(nil, urlEntry)
+            return
+        }
+        
+        // Decode CIImage once and reuse it
+        guard let originalImage = urlEntry.ciImage else {
+            Log.e("Failed to decode screenshot data into CIImage.")
+            completion(nil, urlEntry)
+            return
+        }
+        
+        var isTextScannerEnabled = false
+        var isFaceScannerEnabled = false
+        var isImageScannerEnabled = false
+        
+        if let patterns = options.maskText {
+            isTextScannerEnabled = !patterns.isEmpty
+        }
+        isFaceScannerEnabled = options.maskFaces
+        isImageScannerEnabled = options.maskImages
+
+        let imageScanner = ImageScanner()
+        let textScanner = TextScanner()
+        let faceScanner = FaceScanner()
+        let clickScanner = ClickScanner()
+
+        func runImageScanner(input: CIImage, completion: @escaping (CIImage) -> Void) {
+            guard isImageScannerEnabled else {
+                completion(input)
                 return
             }
-                
-            // Run Image Scanner if enabled
-            if isImageScannerEnabled {
-                imageScanner.processImage(screenshotData: screenshotData,
-                                          maskAll: options.maskAllImages,
-                                          creditCardPredicate: options.creditCardPredicate
-                ) { [weak self] ciImage in
-                    guard let self = self, isValid(operationId) else {
-                        // Skip next stage if operation is no longer valid
-                        completion(ciImage)
-                        return
-                    }
-                    
-                    self.runTextScannerWithCancellation(
-                        screenshotData: screenshotData,
-                        ciImage: ciImage,
-                        options: options,
-                        operationId: operationId,
-                        isValid: isValid,
-                        tapPoint: tapPoint,
-                        completion: completion)
-                }
-            } else {
-                runTextScannerWithCancellation(
-                    screenshotData: screenshotData,
-                    ciImage: nil,
-                    options: options,
-                    operationId: operationId,
-                    isValid: isValid,
-                    tapPoint: tapPoint,
-                    completion: completion
-                )
+
+            imageScanner.processImage(
+                screenshotData: urlEntry.screenshotData,
+                maskAll: options.maskAllImages,
+                creditCardPredicate: options.creditCardPredicate
+            ) { outputImage in
+                completion(outputImage ?? input)
             }
         }
-    
-    private func runTextScannerWithCancellation(
-        screenshotData: Data,
-        ciImage: CIImage?,
-        options: SessionReplayOptions,
-        operationId: UUID,
-        isValid: @escaping (UUID) -> Bool,
-        tapPoint: CGPoint?,
-        completion: @escaping (CIImage?) -> Void) {
-            
-            // Check if operation is still valid
-            guard isValid(operationId) else {
-                completion(ciImage)
+
+        func runTextScanner(input: CIImage, completion: @escaping (CIImage) -> Void) {
+            guard isTextScannerEnabled else {
+                completion(input)
                 return
             }
-            
-            let resolvedCIImage = ciImage ?? CIImage(data: screenshotData)
-            guard let finalImage = resolvedCIImage else {
-                completion(ciImage)
-                return
-            }
-            
-            // Run Text Scanner if enabled
-            if isTextScannerEnabled {
-                textScanner.processImage(ciImage: finalImage, maskText: options.maskText) { [weak self] ciImage in
-                    guard let self = self, isValid(operationId) else {
-                        // Skip next stage if operation is no longer valid
-                        completion(ciImage)
-                        return
-                    }
-                    self.runFaceScannerWithCancellation(
-                        screenshotData: screenshotData,
-                        ciImage: ciImage,
-                        options: options,
-                        operationId: operationId,
-                        isValid: isValid,
-                        tapPoint: tapPoint,
-                        completion: completion
-                    )
-                }
-            } else {
-                runFaceScannerWithCancellation(
-                    screenshotData: screenshotData,
-                    ciImage: finalImage,
-                    options: options,
-                    operationId: operationId,
-                    isValid: isValid,
-                    tapPoint: tapPoint,
-                    completion: completion
-                )
+
+            textScanner.processImage(ciImage: input, maskText: options.maskText) { outputImage in
+                completion(outputImage ?? input)
             }
         }
-    
-    private func runFaceScannerWithCancellation(
-        screenshotData: Data,
-        ciImage: CIImage?,
-        options: SessionReplayOptions,
-        operationId: UUID,
-        isValid: @escaping (UUID) -> Bool,
-        tapPoint: CGPoint?,
-        completion: @escaping (CIImage?) -> Void) {
-            
-            // Check if operation is still valid
-            guard isValid(operationId) else {
-                completion(ciImage)
-                return
-            }
-            
-            let resolvedCIImage = ciImage ?? CIImage(data: screenshotData)
-            guard let finalImage = resolvedCIImage else {
-                completion(ciImage)
-                return
-            }
+
+        func runFaceScanner(input: CIImage, completion: @escaping (CIImage) -> Void) {
 #if targetEnvironment(simulator)
-            // Skip face scanning on the simulator
             Log.e("Skipping FaceScanner as we are running on the simulator")
-            runClickScannerWithCancellation(
-                screenshotData: screenshotData,
-                ciImage: finalImage,
-                options: options,
-                operationId: operationId,
-                isValid: isValid,
-                tapPoint: tapPoint,
-                completion: completion)
+            completion(input)
 #else
-            // Run Face Scanner if enabled
-            if isFaceScannerEnabled {
-                faceScanner.processImage(at: finalImage) { [weak self] ciImage in
-                    guard let self = self, isValid(operationId) else {
-                        // Skip next stage if operation is no longer valid
-                        completion(ciImage)
-                        return
-                    }
-                    
-                    let resolvedCIImage = ciImage ?? CIImage(data: screenshotData)
-                    guard let finalImage = resolvedCIImage else {
-                        completion(ciImage)
-                        return
-                    }
-                    Log.d("FaceScanner completed successfully.")
-                    self.runClickScannerWithCancellation(
-                        screenshotData: screenshotData,
-                        ciImage: finalImage,
-                        options: options,
-                        operationId: operationId,
-                        isValid: isValid,
-                        tapPoint: tapPoint,
-                        completion: completion
-                    )
-                }
-            } else {
-                Log.d("Pipeline completed without FaceScanner.")
-                self.runClickScannerWithCancellation(
-                    screenshotData: screenshotData,
-                    ciImage: finalImage,
-                    options: options,
-                    operationId: operationId,
-                    isValid: isValid,
-                    tapPoint: tapPoint,
-                    completion: completion)
+            guard isFaceScannerEnabled else {
+                completion(input)
+                return
+            }
+
+            faceScanner.processImage(at: input) { outputImage in
+                completion(outputImage ?? input)
             }
 #endif
         }
-    
-    private func runClickScannerWithCancellation(
-        screenshotData: Data,
-        ciImage: CIImage?,
-        options: SessionReplayOptions,
-        operationId: UUID,
-        isValid: @escaping (UUID) -> Bool,
-        tapPoint: CGPoint?,
-        completion: @escaping (CIImage?) -> Void) {
-            
-            // Check if operation is still valid
-            guard isValid(operationId) else {
-                completion(ciImage)
-                return
-            }
-            
-            guard let point = tapPoint else {
+
+        func runClickScanner(input: CIImage, completion: @escaping (CIImage) -> Void) {
+            guard let point = urlEntry.point else {
                 Log.e("Tap point not provided. Cannot run ClickScanner.")
-                completion(ciImage)
+                completion(input)
                 return
             }
-            
-            let resolvedCIImage = ciImage ?? CIImage(data: screenshotData)
-            guard let finalImage = resolvedCIImage else {
-                completion(ciImage)
-                return
-            }
-            
-            clickScanner.processImage(at: finalImage, x: point.x, y: point.y) { ciImage in
-                guard isValid(operationId),
-                      let ciImage = ciImage else {
-                    // Skip next stage if operation is no longer valid
-                    completion(ciImage)
-                    return
-                }
-                completion(ciImage)
+
+            clickScanner.processImage(at: input, x: point.x, y: point.y) { outputImage in
+                completion(outputImage ?? input)
             }
         }
+
+        runImageScanner(input: originalImage) { img1 in
+            runTextScanner(input: img1) { img2 in
+                runFaceScanner(input: img2) { img3 in
+                    runClickScanner(input: img3) { finalImage in
+                        completion(finalImage, urlEntry)
+                    }
+                }
+            }
+        }
+    }
 }

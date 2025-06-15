@@ -60,7 +60,7 @@ public struct SessionReplayOptions {
     /// - Parameters:
     ///   - imageRecordingType: The type of recording (default is `image`).
     ///   - captureTimeInterval: The interval between captures (default is 10 seconds).
-    ///   - captureScale: The scale factor for the captured images (default is the screen scale).
+    ///   - captureScale: The scale factor for the captured images (default scale is 2).
     ///   - captureCompressionQuality: The compression quality for the images (default is 1.0).
     ///   - sessionRecordingSampleRate: The sampling rate for session recording events (default is `100%`).
     ///   - maskText: An optional array of text patterns to mask (default is `nil`).
@@ -72,7 +72,7 @@ public struct SessionReplayOptions {
 
     public init(recordingType: RecordingType = .image,
                 captureTimeInterval: TimeInterval = 10,
-                captureScale: CGFloat = UIScreen.main.scale,
+                captureScale: CGFloat = 2.0,
                 captureCompressionQuality: CGFloat = 1.0,
                 sessionRecordingSampleRate: Int = 100,
                 maskText: [String]? = nil,
@@ -118,7 +118,9 @@ public class SessionReplay: SessionReplayInterface {
     
     // Properties for storing options
     private var sessionReplayOptions: SessionReplayOptions?
-    
+
+    internal var isDummyInstance = false
+
     // Private initializer that requires an Options object
     private init(sessionReplayOptions: SessionReplayOptions) {
         self.sessionReplayOptions = sessionReplayOptions
@@ -170,7 +172,6 @@ public class SessionReplay: SessionReplayInterface {
         return instance
     }
         
-    private var isDummyInstance = false
         
     private init() { }
     
@@ -188,7 +189,10 @@ public class SessionReplay: SessionReplayInterface {
         }
         
         if sessionReplayOptions.recordingType == .image {
-            guard !sessionReplayModel.isRecording else { return }
+            guard !sessionReplayModel.isRecording else {
+                Log.e("[SessionReplay] already recording")
+                return
+            }
             sessionReplayModel.isRecording = true
             
             guard let coralogixSdk = SdkManager.shared.getCoralogixSdk() else {
@@ -237,9 +241,15 @@ public class SessionReplay: SessionReplayInterface {
             return
         }
         
+        var updatedProperties = properties ?? [:]
+        updatedProperties[Keys.timestamp.rawValue] = Date().timeIntervalSince1970
+        
         if sessionReplayOptions.recordingType == .image {
-            guard sessionReplayModel.isRecording else { return }
-            sessionReplayModel.captureImage(properties: properties)
+            guard sessionReplayModel.isRecording else {
+                Log.e("[SessionReplay] Session Replay not recording ...")
+                return
+            }
+            sessionReplayModel.captureImage(properties: updatedProperties)
         }
     }
     

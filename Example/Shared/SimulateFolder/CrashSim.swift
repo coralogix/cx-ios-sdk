@@ -27,7 +27,7 @@ class CrashSim {
     }
     
     private static func forceUnwrappingOfNil() {
-        var optionalString: String?
+        let optionalString: String? = nil
         print(optionalString!)
     }
     

@@ -111,7 +111,6 @@ final class RumTests: XCTestCase {
         XCTAssertEqual(result[Keys.traceId.rawValue] as? String, "30")
         XCTAssertEqual(result[Keys.spanId.rawValue] as? String, "20")
         XCTAssertEqual(result[Keys.platform.rawValue] as? String, "mobile")
-        XCTAssertEqual(result[Keys.screenshotId.rawValue] as? String, "10")
         XCTAssertNotNil(result[Keys.deviceState.rawValue])
         
         if let logContext = result[Keys.logContext.rawValue] as? [String: Any] {
@@ -258,4 +257,61 @@ final class RumTests: XCTestCase {
         XCTAssertNotNil(cxRum.snapshotContext)
         XCTAssertTrue(cxRum.isOneMinuteFromLastSnapshotPass)
     }
+    
+    func testAddScreenshotContextAddsExpectedValues() {
+        // Arrange
+        var cxRum = CxRum(
+            otel: mockSpanData,
+            versionMetadata: mockVersionMetadata,
+            sessionManager: mockSessionManager,
+            viewManager: mockViewerManager,
+            networkManager: mockNetworkManager,
+            metricsManager: mockCxMetricsManager,
+            userMetadata: ["userId": "12345"],
+            labels: ["key": "value"]
+        )
+        cxRum.screenshotId = "abc123"
+        cxRum.page = 2
+        let date = Date(timeIntervalSince1970: 1_000_000)
+        cxRum.timeStamp = date.timeIntervalSince1970
+        
+        var result: [String: Any] = [:]
+        
+        // Act
+        cxRum.addScreenshotContext(to: &result)
+        
+        // Assert
+        guard let context = result[Keys.screenshotContext.rawValue] as? [String: Any] else {
+            XCTFail("Expected screenshotContext to be present")
+            return
+        }
+        
+        XCTAssertEqual(context[Keys.screenshotId.rawValue] as? String, "abc123")
+        XCTAssertEqual(context[Keys.page.rawValue] as? Int, 2)
+        XCTAssertEqual(context[Keys.segmentTimestamp.rawValue] as? Int, Int(date.timeIntervalSince1970 * 1000))
+    }
+
+        func testAddScreenshotContextDoesNothingWhenValuesAreNil() {
+            // Arrange
+            var cxRum = CxRum(
+                otel: mockSpanData,
+                versionMetadata: mockVersionMetadata,
+                sessionManager: mockSessionManager,
+                viewManager: mockViewerManager,
+                networkManager: mockNetworkManager,
+                metricsManager: mockCxMetricsManager,
+                userMetadata: ["userId": "12345"],
+                labels: ["key": "value"]
+            )
+            cxRum.screenshotId = nil
+            cxRum.page = nil
+            var result: [String: Any] = ["existingKey": "value"]
+
+            // Act
+            cxRum.addScreenshotContext(to: &result)
+
+            // Assert
+            XCTAssertNil(result[Keys.screenshotContext.rawValue])
+            XCTAssertEqual(result["existingKey"] as? String, "value")
+        }
 }
