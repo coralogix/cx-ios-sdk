@@ -41,17 +41,7 @@ final class SessionReplayModelTests: XCTestCase {
         super.tearDown()
     }
     
-    func testSessionIdValidity_whenEmpty_shouldReturnFalse() {
-        let isValid = sessionReplayModel.isSessionIdValid()
-        XCTAssertFalse(isValid)
-    }
     
-    func testSessionIdValidity_whenNonEmpty_shouldReturnTrue() {
-        sessionReplayModel.sessionId = "abc-123"
-        
-        let isValid = sessionReplayModel.isSessionIdValid()
-        XCTAssertTrue(isValid)
-    }
     
     func testPrepareScreenshotIfNeeded_returnsScreenshotData_whenAllValid() {
         let mockWindow = MockWindow()

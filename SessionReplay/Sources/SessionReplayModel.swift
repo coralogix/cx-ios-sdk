@@ -46,14 +46,6 @@ class SessionReplayModel {
         
         Log.d("SessionManager deinitialized and resources cleaned up.")
     }
-   
-    internal func isSessionIdValid() -> Bool {
-        if sessionId.isEmpty {
-            Log.e("Invalid sessionId")
-            return false
-        }
-        return true
-    }
     
     internal func prepareScreenshotIfNeeded(properties: [String: Any]?) -> Data? {
         guard Thread.isMainThread else {
