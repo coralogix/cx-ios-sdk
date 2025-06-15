@@ -207,7 +207,7 @@ class SessionReplayModel {
         return (properties?[Keys.screenshotId.rawValue] as? String) ?? UUID().uuidString.lowercased()
     }
     
-    internal func getScreenshotIndex(from properties: [String: Any]?) -> Int {
+    internal func getSegmentIndex(from properties: [String: Any]?) -> Int {
         return (properties?[Keys.segmentIndex.rawValue] as? Int) ?? 0
     }
     
@@ -234,7 +234,7 @@ class SessionReplayModel {
             guard let self = self else { return }
             let timestamp = self.getTimestamp(from: properties)
             let screenshotId = self.getScreenshotId(from: properties)
-            let screenshotIndex = self.getScreenshotIndex(from: properties)
+            let segmentIndex = self.getSegmentIndex(from: properties)
             let page = self.getPage(from: properties)
             let point = self.getClickPoint(from: properties)
             
@@ -251,7 +251,7 @@ class SessionReplayModel {
             let urlEntry = URLEntry(url: fileURL,
                                     timestamp: timestamp,
                                     screenshotId: screenshotId,
-                                    screenshotIndex: screenshotIndex,
+                                    segmentIndex: segmentIndex,
                                     page: page,
                                     screenshotData: data,
                                     point: point,

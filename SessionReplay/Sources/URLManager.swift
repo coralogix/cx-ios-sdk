@@ -16,7 +16,7 @@ struct URLEntry {
     let url: URL
     let timestamp: TimeInterval
     let screenshotId: String
-    let screenshotIndex: Int
+    let segmentIndex: Int
     let page: String
     let screenshotData: Data
     let point: CGPoint?

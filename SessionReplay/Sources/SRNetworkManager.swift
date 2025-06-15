@@ -110,7 +110,7 @@ public class SRNetworkManager {
             dataSize: data.count,
             timestamp: urlEntry.timestamp,
             sessionId: sessionId,
-            segmentIndex: urlEntry.screenshotIndex,
+            segmentIndex: urlEntry.segmentIndex,
             subIndex: subIndex,
             application: application,
             sessionCreationTime: sessionCreationTime,

@@ -48,7 +48,7 @@ final class SRNetworkManagerTests: XCTestCase {
         let testData = Data("Test data".utf8)
         let timestamp = Date().timeIntervalSince1970
         let sessionId = "mockSessionId"
-        let screenshotIndex = 1
+        let segmentIndex = 1
         let subIndex = 1
         let screenshotId = UUID().uuidString.lowercased()
         let page: String = "0"
@@ -58,7 +58,7 @@ final class SRNetworkManagerTests: XCTestCase {
         let urlEntry = URLEntry(url: URL(string: "https://www.google.com")!,
                                 timestamp: timestamp,
                                 screenshotId: screenshotId,
-                                screenshotIndex: screenshotIndex,
+                                segmentIndex: segmentIndex,
                                 page: page,
                                 screenshotData: testData,
                                 point: CGPoint(x: 100.0, y: 100.0),
@@ -88,7 +88,7 @@ final class SRNetworkManagerTests: XCTestCase {
         let testData = Data("Test data".utf8)
         let timestamp = Date().timeIntervalSince1970
         let sessionId = "mockSessionId"
-        let screenshotIndex = 1
+        let segmentIndex = 1
         let subIndex = 1
         let screenshotId = UUID().uuidString.lowercased()
         let page: String = "0"
@@ -99,7 +99,7 @@ final class SRNetworkManagerTests: XCTestCase {
         let urlEntry = URLEntry(url: URL(string: "https://www.google.com")!,
                                 timestamp: timestamp,
                                 screenshotId: screenshotId,
-                                screenshotIndex: screenshotIndex,
+                                segmentIndex: segmentIndex,
                                 page: page,
                                 screenshotData: testData,
                                 point: CGPoint(x: 100.0, y: 100.0),
@@ -120,7 +120,7 @@ final class SRNetworkManagerTests: XCTestCase {
         let invalidData = Data() // Empty data
         let timestamp: TimeInterval = Date().timeIntervalSince1970
         let sessionId = "testSessionId"
-        let screenshotIndex = 1
+        let segmentIndex = 1
         let subIndex = 1
         let screenshotId = UUID().uuidString.lowercased()
         let page: String = "0"
@@ -128,7 +128,7 @@ final class SRNetworkManagerTests: XCTestCase {
         let urlEntry = URLEntry(url: URL(string: "https://www.google.com")!,
                                 timestamp: timestamp,
                                 screenshotId: screenshotId,
-                                screenshotIndex: screenshotIndex,
+                                segmentIndex: segmentIndex,
                                 page: page,
                                 screenshotData: invalidData,
                                 point: CGPoint(x: 100.0, y: 100.0),
