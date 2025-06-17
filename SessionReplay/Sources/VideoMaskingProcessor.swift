@@ -20,7 +20,7 @@ public class VideoMaskingProcessor {
     var frames: [CGImage] = []
     
     // MARK: For writing video
-    private let writerQueue = DispatchQueue(label: "mediaInputQueue")
+    private let writerQueue = DispatchQueue(label: Keys.queueMediaInput.rawValue)
     
     // MARK: video properties
     // frames per second

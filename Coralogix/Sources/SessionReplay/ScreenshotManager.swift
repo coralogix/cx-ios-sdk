@@ -22,13 +22,14 @@ public struct ScreenshotLocation {
 }
 
 public class ScreenshotManager {
-    private let queue = DispatchQueue(label: "com.coralogix.screenshotManager.queue", attributes: .concurrent)
+    private let queue = DispatchQueue(label: Keys.queueScreenshotManager.rawValue, attributes: .concurrent)
     internal var _page: Int = 0
     internal var _screenshotCount: Int = 0
     internal var _screenshotId: String = UUID().uuidString.lowercased()
     private let maxScreenshotsPerPage: Int
+    public static let defaultMaxScreenShotsPerPage = 20
 
-    public init(maxScreenShotsPerPage: Int = 20) {
+    public init(maxScreenShotsPerPage: Int = ScreenshotManager.defaultMaxScreenShotsPerPage) {
         self.maxScreenshotsPerPage = maxScreenShotsPerPage
         NotificationCenter.default.addObserver(self,
                                                selector: #selector(resetSession(notification:)),

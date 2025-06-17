@@ -76,24 +76,27 @@ class SessionReplayModel {
         screenshotData: Data,
         properties: [String: Any]?
     ) {
-        guard let documentsDirectory = FileManager.default.urls(
-            for: .documentDirectory,
-            in: .userDomainMask
-        ).first else {
-            Log.e("Failed to locate documents directory")
-            return
+        DispatchQueue.global(qos: .background).async { [weak self] in
+            guard let documentsDirectory = FileManager.default.urls(
+                for: .documentDirectory,
+                in: .userDomainMask
+            ).first else {
+                Log.e("Failed to locate documents directory")
+                return
+            }
+            
+            if let fileName = self?.generateFileName(properties: properties) {
+                let fileURL = documentsDirectory
+                    .appendingPathComponent("SessionReplay")
+                    .appendingPathComponent(fileName)
+                
+                self?.handleCapturedData(
+                    fileURL: fileURL,
+                    data: screenshotData,
+                    properties: properties
+                )
+            }
         }
-        
-        let fileName = generateFileName(properties: properties)
-        let fileURL = documentsDirectory
-            .appendingPathComponent("SessionReplay")
-            .appendingPathComponent(fileName)
-        
-        handleCapturedData(
-            fileURL: fileURL,
-            data: screenshotData,
-            properties: properties
-        )
     }
 
     internal func captureImage(properties: [String: Any]? = nil) {
@@ -222,7 +225,7 @@ class SessionReplayModel {
     }
     
     internal func handleCapturedData(fileURL: URL, data: Data, properties: [String: Any]?) {
-        DispatchQueue(label: "com.coralogix.fileOperations").async { [weak self] in
+        DispatchQueue(label: Keys.queueFileOperations.rawValue).async { [weak self] in
             guard let self = self else { return }
             let timestamp = self.getTimestamp(from: properties)
             let screenshotId = self.getScreenshotId(from: properties)

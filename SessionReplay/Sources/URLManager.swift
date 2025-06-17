@@ -49,7 +49,7 @@ class URLObserver {
         cancellable = urlManager.$lastEntry
             .compactMap { $0 }
             .sink { [weak self] entry in
-                let processingQueue = DispatchQueue(label: "com.coralogix.urlProcessing", qos: .userInitiated)
+                let processingQueue = DispatchQueue(label: Keys.queueUrlProcessing.rawValue, qos: .userInitiated)
                 processingQueue.async {
                     guard let self = self,
                           let sessionReplayOptions = sessionReplayOptions else {

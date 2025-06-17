@@ -178,6 +178,13 @@ public enum Keys: String {
     case page
     case screenshotData
     case screenshotContext = "screenshot_context"
+    case queueScreenshotManager = "com.coralogix.screenshotmanager.queue"
+    case queueExporter = "com.coralogix.exporter.queue"
+    case queueSdkManager = "com.coralogix.sdkmanager.queue"
+    case queueFileOperations = "com.coralogix.fileoperations"
+    case queueUrlProcessing = "com.coralogix.urlProcessing"
+    case queueMediaInput = "com.coralogix.mediainput"
+
 }
 
 public enum CoralogixLogSeverity: Int {

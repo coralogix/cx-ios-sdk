@@ -108,10 +108,7 @@ extension UICollectionView {
             Keys.tapAttributes.rawValue: attributes
         ]
         
-        let locationInScreen = touch.location(in: nil) // UIKit coordinate system (top-left origin)
-        tapData[Keys.positionX.rawValue] = locationInScreen.x
-        tapData[Keys.positionY.rawValue] = locationInScreen.y
-        
+        Global.updateLocation(tapData: &tapData, touch: touch)
         NotificationCenter.default.post(name: .cxRumNotificationUserActions, object: tapData)
         
         self.cx_touchesEnded(touches, with: event) // Call original method
@@ -152,10 +149,7 @@ extension UITableView {
             Keys.tapAttributes.rawValue: attributes
         ]
         
-        let locationScreen = touch.location(in: nil) // UIKit coordinate system (top-left origin)
-        tapData[Keys.positionX.rawValue] = locationScreen.x
-        tapData[Keys.positionY.rawValue] = locationScreen.y
-        
+        Global.updateLocation(tapData: &tapData, touch: touch)
         NotificationCenter.default.post(name: .cxRumNotificationUserActions, object: tapData)
         
         self.cx_touchesEnded(touches, with: event) // Call original method
@@ -258,14 +252,9 @@ extension UIApplication {
         
         // Process touch events
         if let touches = event.allTouches, let touch = touches.first, touch.phase == .began {
-  
-            let location = touch.location(in: nil) // UIKit coordinate system (top-left origin)
-           
-            let tap = [
-                Keys.positionX.rawValue: location.x,
-                Keys.positionY.rawValue: location.y
-            ]
-            NotificationCenter.default.post(name: .cxRumNotificationUserActions, object: tap)
+            var tapData = [String : Any]()
+            Global.updateLocation(tapData: &tapData, touch: touch)
+            NotificationCenter.default.post(name: .cxRumNotificationUserActions, object: tapData)
         }
     }
     
@@ -320,17 +309,15 @@ extension UIApplication {
     
     private func handleBackButtonAction(sender: AnyObject?, event: UIEvent?) {
         if sender != nil {
-            var tap = [Keys.tapName.rawValue: "backButton",
+            var tapData = [Keys.tapName.rawValue: "backButton",
                        Keys.tapCount.rawValue: 1,
                        Keys.tapAttributes.rawValue: [:]] as [String: Any]
             
             if let allTouches = event?.allTouches, let touch = allTouches.first {
-                let location = touch.location(in: nil) // UIKit coordinate system (top-left origin)
-                tap[Keys.positionX.rawValue] = location.x
-                tap[Keys.positionY.rawValue] = location.y
+                Global.updateLocation(tapData: &tapData, touch: touch)
             }
             
-            NotificationCenter.default.post(name: .cxRumNotificationUserActions, object: tap)
+            NotificationCenter.default.post(name: .cxRumNotificationUserActions, object: tapData)
         }
     }
     
@@ -353,16 +340,14 @@ extension UIApplication {
             attributes[Keys.text.rawValue] = tabBar.selectedItem?.title
         }
         let senderClass = NSStringFromClass(type(of: sender))
-        var tap = [Keys.tapName.rawValue: "\(senderClass)",
+        var tapData = [Keys.tapName.rawValue: "\(senderClass)",
                    Keys.tapCount.rawValue: 1,
                    Keys.tapAttributes.rawValue: Helper.convertDictionayToJsonString(dict: attributes)] as [String: Any]
         
         if let allTouches = event?.allTouches, let touch = allTouches.first {
-            let location = touch.location(in: nil) // UIKit coordinate system (top-left origin)
-            tap[Keys.positionX.rawValue] = location.x
-            tap[Keys.positionY.rawValue] = location.y
+            Global.updateLocation(tapData: &tapData, touch: touch)
         }
-        NotificationCenter.default.post(name: .cxRumNotificationUserActions, object: tap)
+        NotificationCenter.default.post(name: .cxRumNotificationUserActions, object: tapData)
     }
 }
 

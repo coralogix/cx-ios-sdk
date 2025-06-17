@@ -42,10 +42,10 @@ final class SessionReplayModelTests: XCTestCase {
     }
     
     
-    
     func testPrepareScreenshotIfNeeded_returnsScreenshotData_whenAllValid() {
         let mockWindow = MockWindow()
         sessionReplayModel.getKeyWindow = { mockWindow }
+        mockWindow.setAsKeyWindow(true)
         sessionReplayModel.sessionReplayOptions = SessionReplayOptions(
             recordingType: .image,
             captureScale: 1.0,
@@ -173,9 +173,16 @@ final class SessionReplayModelTests: XCTestCase {
         let sampleData = "dummy image".data(using: .utf8)!
         let sampleProperties: [String: Any] = ["source": "test"]
         
+        let expectation = self.expectation(description: "Save completes in background")
+
         // When
         mockModel.saveScreenshotToFileSystem(screenshotData: sampleData, properties: sampleProperties)
+        mockModel.onHandleCapturedData = { fileURL, data, properties in
+            expectation.fulfill()
+        }
         
+        wait(for: [expectation], timeout: 2.0) // Adjust timeout if necessary
+
         // Then
         XCTAssertNotNil(mockModel.capturedFileURL, "Expected a valid file URL")
         XCTAssertEqual(mockModel.capturedData, sampleData, "Expected the data to be passed correctly")
@@ -644,6 +651,7 @@ class MockSessionReplayModel: SessionReplayModel {
     var didCallPrepareScreenshot = false
     var didCallSaveScreenshot = false
     var captureImageCallCount = 0
+    var onHandleCapturedData: ((URL, Data, [String: Any]?) -> Void)?
 
     override func clearSessionReplayFolder(fileManager: FileManager = .default) -> SessionReplayResultCode {
         clearSessionReplayFolderCalled = true
@@ -667,6 +675,7 @@ class MockSessionReplayModel: SessionReplayModel {
         capturedFileURL = fileURL
         capturedData = data
         capturedProperties = properties
+        onHandleCapturedData?(fileURL, data, properties)
     }
 
     override func generateFileName(properties: [String : Any]?) -> String {

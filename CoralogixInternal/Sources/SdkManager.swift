@@ -31,7 +31,7 @@ public class SdkManager {
     
     private var coralogixSdk: CoralogixInterface?
     private var sessionReplaySdk: SessionReplayInterface?
-    private let queue = DispatchQueue(label: "cx.sdkmanager.queue")
+    private let queue = DispatchQueue(label: Keys.queueSdkManager.rawValue)
 
     private init() {}
 

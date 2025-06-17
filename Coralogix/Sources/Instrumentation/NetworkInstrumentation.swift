@@ -9,7 +9,7 @@ import Foundation
 import CoralogixInternal
 
 extension CoralogixRum {
-    private static let exporterQueue = DispatchQueue(label: "com.coralogix.exporter.queue")
+    private static let exporterQueue = DispatchQueue(label: Keys.queueExporter.rawValue)
 
     public func initializeNetworkInstrumentation() {
         guard let options = self.coralogixExporter?.getOptions() else {
