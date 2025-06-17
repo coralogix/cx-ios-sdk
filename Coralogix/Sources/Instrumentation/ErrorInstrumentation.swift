@@ -12,7 +12,7 @@ extension CoralogixRum {
     func reportErrorWith(exception: NSException) {
         if let options = self.coralogixExporter?.getOptions(),
            options.shouldInitInstumentation(instumentation: .errors) {
-            let span = self.getSpan()
+            let span = self.getErrorSpan()
             span.setAttribute(key: Keys.domain.rawValue, value: exception.name.rawValue)
             span.setAttribute(key: Keys.code.rawValue, value: 0)
             span.setAttribute(key: Keys.errorMessage.rawValue, value: exception.reason ?? "")
@@ -27,7 +27,7 @@ extension CoralogixRum {
     func reportErrorWith(error: NSError) {
         if let options = self.coralogixExporter?.getOptions(),
            options.shouldInitInstumentation(instumentation: .errors) {
-            let span = self.getSpan()
+            let span = self.getErrorSpan()
             span.setAttribute(key: Keys.domain.rawValue, value: error.domain)
             span.setAttribute(key: Keys.code.rawValue, value: error.code)
             span.setAttribute(key: Keys.errorMessage.rawValue, value: error.localizedDescription)
@@ -39,7 +39,7 @@ extension CoralogixRum {
     func reportErrorWith(error: Error) {
         if let options = self.coralogixExporter?.getOptions(),
            options.shouldInitInstumentation(instumentation: .errors) {
-            let span = self.getSpan()
+            let span = self.getErrorSpan()
             span.setAttribute(key: Keys.domain.rawValue, value: String(describing: type(of: error)))
             span.setAttribute(key: Keys.code.rawValue, value: 0)
             span.setAttribute(key: Keys.errorMessage.rawValue, value: error.localizedDescription)
@@ -78,7 +78,7 @@ extension CoralogixRum {
                                      errorType: String? = nil) {
         if let options = self.coralogixExporter?.getOptions(),
            options.shouldInitInstumentation(instumentation: .errors) {
-            let span = self.getSpan()
+            let span = self.getErrorSpan()
             span.setAttribute(key: Keys.domain.rawValue, value: "")
             span.setAttribute(key: Keys.code.rawValue, value: 0)
             span.setAttribute(key: Keys.errorMessage.rawValue, value: message)
@@ -121,7 +121,7 @@ extension CoralogixRum {
         }
     }
     
-    private func getSpan() -> any Span {
+    internal func getErrorSpan() -> any Span {
         var span = tracerProvider().spanBuilder(spanName: Keys.iosSdk.rawValue).startSpan()
         span.setAttribute(key: Keys.eventType.rawValue, value: CoralogixEventType.error.rawValue)
         span.setAttribute(key: Keys.source.rawValue, value: Keys.console.rawValue)
@@ -134,13 +134,10 @@ extension CoralogixRum {
     
     internal func addScreenshotId(to span: inout any Span) {
         if let sessionReplay = SdkManager.shared.getSessionReplay() {
-            let screenshotId = UUID().uuidString.lowercased()
-            let properties: [String: Any] = [
-                Keys.timestamp.rawValue: Date().timeIntervalSince1970,
-                Keys.screenshotId.rawValue: screenshotId
-            ]
-            span.setAttribute(key: Keys.screenshotId.rawValue, value: screenshotId)
-            sessionReplay.captureEvent(properties: properties)
+            let screenshotLocation = self.screenshotManager.nextScreenshotLocation
+            span.setAttribute(key: Keys.screenshotId.rawValue, value: screenshotLocation.screenshotId)
+            span.setAttribute(key: Keys.page.rawValue, value: screenshotLocation.page)
+            sessionReplay.captureEvent(properties: screenshotLocation.toProperties())
         }
     }
     

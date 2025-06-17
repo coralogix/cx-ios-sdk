@@ -38,12 +38,8 @@ extension CoralogixRum {
     internal func handleUserInteractionEvent(_ properties: [String: Any],
                                              span: any Span,
                                              window: UIWindow? = Global.getKeyWindow()) {
-        let timestamp = Date().timeIntervalSince1970
-        let screenshotId = UUID().uuidString.lowercased()
-
-        if let sessionReplay = SdkManager.shared.getSessionReplay(),
-           containsXY(properties) {
-            
+        let screenshotLocation = self.screenshotManager.nextScreenshotLocation
+        if let sessionReplay = SdkManager.shared.getSessionReplay() {
             guard let window = window else {
                 Log.e("No key window found")
                 return
@@ -55,10 +51,10 @@ extension CoralogixRum {
             }
             
             let metadata = buildMetadata(properties: properties,
-                                         timestamp: timestamp,
-                                         screenshotId: screenshotId,
+                                         screenshotLocation: screenshotLocation,
                                          screenshotData: screenshotData)
-            span.setAttribute(key: Keys.screenshotId.rawValue, value: screenshotId)
+            span.setAttribute(key: Keys.screenshotId.rawValue, value: screenshotLocation.screenshotId)
+            span.setAttribute(key: Keys.page.rawValue, value: screenshotLocation.page)
             sessionReplay.captureEvent(properties: metadata)
         }
         
@@ -70,19 +66,15 @@ extension CoralogixRum {
     }
     
     internal func buildMetadata(properties: [String: Any],
-                                timestamp: TimeInterval,
-                                screenshotId: String,
+                                screenshotLocation: ScreenshotLocation,
                                 screenshotData: Data?) -> [String: Any] {
-        var metadata: [String: Any] = [
-            Keys.timestamp.rawValue: timestamp,
-            Keys.screenshotId.rawValue: screenshotId,
-        ]
+        var metadata = screenshotLocation.toProperties()
         
         if screenshotData != nil {
             metadata[Keys.screenshotData.rawValue] =  screenshotData
         }
-        // Keep SDK-generated keys if duplicates exist
-        metadata.merge(properties) { (_, current) in current }
+
+        metadata.merge(properties) { current, _ in current } // keep SDK value
         return metadata
     }
     

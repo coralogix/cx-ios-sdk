@@ -41,50 +41,156 @@ final class SessionReplayModelTests: XCTestCase {
         super.tearDown()
     }
     
-    func testCaptureImage() {
-        // Arrange
-        //            let expectation = self.expectation(description: "testCaptureImage")
-        //
-        //            mockWindow.shouldReturnScreenshotData = true
-        //
-        //            sut.handleCapturedData = { fileURL, data, timestamp in
-        //                XCTAssertNotNil(data, "Screenshot data should not be nil")
-        //                XCTAssertTrue(fileURL.absoluteString.contains("screenshot_"), "File name should contain 'screenshot_' prefix")
-        //                expectation.fulfill()
-        //            }
-        //
-        //            // Act
-        //            sut.captureImage()
-        //
-        //            // Assert
-        //            waitForExpectations(timeout: 1.0)
+    
+    func testPrepareScreenshotIfNeeded_returnsScreenshotData_whenAllValid() {
+        let mockWindow = MockWindow()
+        sessionReplayModel.getKeyWindow = { mockWindow }
+        mockWindow.setAsKeyWindow(true)
+        sessionReplayModel.sessionReplayOptions = SessionReplayOptions(
+            recordingType: .image,
+            captureScale: 1.0,
+            captureCompressionQuality: 0.9,
+            maskText: nil,
+            maskAllImages: false,
+            creditCardPredicate: nil
+        )
+        
+        let result = sessionReplayModel.prepareScreenshotIfNeeded(properties: nil)
+        XCTAssertNotNil(result)
     }
     
-    func testUpdateSessionId_SameSession_IncrementTrack() {
-        // Given
-        sessionReplayModel.sessionId = "oldSession"
-        sessionReplayModel.screenshotManager.screenshotCount = 1
+    func testPrepareScreenshotIfNeeded_returnsNil_whenNoWindow() {
+        sessionReplayModel.getKeyWindow = { nil }
         
-        // When
-        sessionReplayModel.updateSessionId(with: "oldSession")
+        sessionReplayModel.sessionReplayOptions = SessionReplayOptions(
+            recordingType: .image,
+            captureScale: 1.0,
+            captureCompressionQuality: 0.9,
+            maskText: nil,
+            maskAllImages: false,
+            creditCardPredicate: nil
+        )
         
-        // Then
-        XCTAssertEqual(sessionReplayModel.screenshotManager.screenshotCount, 1)
-        XCTAssertEqual(sessionReplayModel.sessionId, "oldSession")
-        XCTAssertEqual(mockFileManager.clearSessionReplayFolderCallCount, 0, "Should not clear folder when session ID is unchanged")
+        let result = sessionReplayModel.prepareScreenshotIfNeeded(properties: nil)
+        XCTAssertNil(result)
     }
     
-    func testUpdateSessionId_NewSession_ResetTrackAndClearFolder() {
+    func testPrepareScreenshotIfNeeded_returnsNil_whenOptionsInvalid() {
+        let mockWindow = MockWindow()
+        sessionReplayModel.getKeyWindow = { mockWindow }
+        sessionReplayModel.sessionReplayOptions = nil // deliberately invalid
+        let result = sessionReplayModel.prepareScreenshotIfNeeded(properties: nil)
+        XCTAssertNil(result)
+    }
+
+    func testCaptureImage_whenSessionIdIsEmpty_doesNotProceed() {
+        let mockSessionReplayModel = MockSessionReplayModel()
+        mockSessionReplayModel.sessionId = ""
+        
+        mockSessionReplayModel.captureImage(properties: nil)
+        
+        XCTAssertFalse(mockSessionReplayModel.didCallPrepareScreenshot)
+        XCTAssertFalse(mockSessionReplayModel.didCallSaveScreenshot)
+    }
+    
+    func testCaptureImage_usesProvidedScreenshotData() {
+        let mockSessionReplayModel = MockSessionReplayModel()
+        mockSessionReplayModel.sessionId = "abc123"
+        
+        let data = "mock image".data(using: .utf8)!
+        let props: [String: Any] = ["screenshotData": data]
+        
+        mockSessionReplayModel.captureImage(properties: props)
+        
+        XCTAssertFalse(mockSessionReplayModel.didCallPrepareScreenshot, "Should not call fallback screenshot")
+        XCTAssertFalse(mockSessionReplayModel.didCallSaveScreenshot)
+        XCTAssertEqual(mockSessionReplayModel.capturedData, data)
+    }
+    
+    func testCaptureImage_fallsBackToPrepareScreenshotIfNoneProvided() {
+        let model = MockSessionReplayModel2()
+        model.sessionId = "abc123"
+        
+        model.captureImage(properties: nil)
+        
+        XCTAssertTrue(model.didCallPrepareScreenshot)
+        XCTAssertTrue(model.didCallSaveScreenshot)
+        XCTAssertEqual(model.passedScreenshotData, "mock image".data(using: .utf8))
+    }
+    
+    func testCaptureImage_logsAndReturnsIfPrepareScreenshotFails() {
+        class FailingScreenshotModel: MockSessionReplayModel2 {
+            override func prepareScreenshotIfNeeded(properties: [String : Any]? = nil) -> Data? {
+                didCallPrepareScreenshot = true
+                return nil
+            }
+        }
+        
+        let model = FailingScreenshotModel()
+        model.sessionId = "abc123"
+        
+        model.captureImage(properties: nil)
+        
+        XCTAssertTrue(model.didCallPrepareScreenshot)
+        XCTAssertFalse(model.didCallSaveScreenshot)
+    }
+    
+    func testUpdateSessionId_whenChanged_triggersClearAndDelete() {
+        let mockSessionReplayModel = MockSessionReplayModel()
+        mockSessionReplayModel.sessionId = "abc"
+        
+        mockSessionReplayModel.updateSessionId(with: "xyz")
+        
+        XCTAssertEqual(mockSessionReplayModel.sessionId, "xyz")
+        XCTAssertTrue(mockSessionReplayModel.clearSessionReplayFolderCalled)
+    }
+    
+    func testUpdateSessionId_whenUnchanged_doesNothing() {
+        let mockSessionReplayModel = MockSessionReplayModel()
+        mockSessionReplayModel.sessionId = "same"
+        
+        mockSessionReplayModel.updateSessionId(with: "same")
+        
+        XCTAssertEqual(mockSessionReplayModel.sessionId, "same")
+        XCTAssertFalse(mockSessionReplayModel.clearSessionReplayFolderCalled)
+    }
+    
+    func testPrepareScreenshotIfNeeded_dispatchesToMain_ifNotMainThread() {
+        let expectation = XCTestExpectation(description: "captureImage called on main")
+        let mockSessionReplayModel = MockSessionReplayModel()
+        mockSessionReplayModel.expectation = expectation
+        
+        DispatchQueue.global().async {
+            let result = mockSessionReplayModel.prepareScreenshotIfNeeded(properties: nil)
+            XCTAssertNil(result)
+        }
+        wait(for: [expectation], timeout: 1.0)
+    }
+    
+    func testSaveScreenshotToFileSystem_savesToCorrectPathAndCallsHandleCapturedData() {
         // Given
-        sessionReplayModel.sessionId = "oldSession"
-        sessionReplayModel.screenshotManager.screenshotCount = 1
+        let mockModel = MockSessionReplayModel()
+        let sampleData = "dummy image".data(using: .utf8)!
+        let sampleProperties: [String: Any] = ["source": "test"]
         
+        let expectation = self.expectation(description: "Save completes in background")
+
         // When
-        sessionReplayModel.updateSessionId(with: "newSession")
+        mockModel.saveScreenshotToFileSystem(screenshotData: sampleData, properties: sampleProperties)
+        mockModel.onHandleCapturedData = { fileURL, data, properties in
+            expectation.fulfill()
+        }
         
+        wait(for: [expectation], timeout: 2.0) // Adjust timeout if necessary
+
         // Then
-        XCTAssertEqual(sessionReplayModel.screenshotManager.screenshotCount, 0)
-        XCTAssertEqual(sessionReplayModel.sessionId, "newSession")
+        XCTAssertNotNil(mockModel.capturedFileURL, "Expected a valid file URL")
+        XCTAssertEqual(mockModel.capturedData, sampleData, "Expected the data to be passed correctly")
+        XCTAssertEqual(mockModel.capturedProperties?["source"] as? String, "test", "Expected properties to be passed correctly")
+        
+        // Confirm the file path is within the SessionReplay directory
+        let fileURL = mockModel.capturedFileURL!.path
+        XCTAssertTrue(fileURL.contains("/SessionReplay/mock_screenshot.jpg"), "Expected file URL to contain correct subpath")
     }
     
     func testClearSessionReplayFolder_NoDocumentsDirectory_ReturnsFailure() {
@@ -274,15 +380,14 @@ final class SessionReplayModelTests: XCTestCase {
     func testGenerateFileName_shouldReturnCorrectFileName() {
         // Arrange
         let mockSessionId = "testSessionId"
-        let mockSreenshotNumber = 42
+        let segmentIndex = 2
+        let page = 1
         sessionReplayModel.sessionId = mockSessionId
-        sessionReplayModel.screenshotManager.screenshotCount = mockSreenshotNumber
         
-        // Act
-        let result = sessionReplayModel.generateFileName()
+        let properties = [Keys.segmentIndex.rawValue: segmentIndex, Keys.page.rawValue: page]
+        let result = sessionReplayModel.generateFileName(properties: properties)
         
-        // Assert
-        XCTAssertEqual(result, "\(mockSessionId)_\(mockSreenshotNumber).jpg", "File name should match the expected format")
+        XCTAssertEqual(result, "\(mockSessionId)_\(page)_\(segmentIndex).jpg", "File name should match the expected format")
     }
     
     func testCompressAndSendData_withValidData_shouldReturnSuccess() {
@@ -292,10 +397,17 @@ final class SessionReplayModelTests: XCTestCase {
         let mockNetworkManager = MockSRNetworkManager()
         let mockScreenshotId: String = "mockScreenshotId"
         sessionReplayModel = SessionReplayModel(networkManager: mockNetworkManager)
+        
+        let urlEntry = URLEntry(url: URL(string: "https://www.google.com")!,
+                                timestamp: mockTimestamp,
+                                screenshotId: mockScreenshotId,
+                                segmentIndex: 1,
+                                page: "0",
+                                screenshotData: testData,
+                                point: CGPoint(x: 100.0, y: 100.0),
+                                completion: nil)
         // Act
-        let result = sessionReplayModel.compressAndSendData(data: testData,
-                                                            timestamp: mockTimestamp,
-                                                            screenshotId: mockScreenshotId)
+        let result = sessionReplayModel.compressAndSendData(data: testData, urlEntry: urlEntry)
         
         // Assert
         XCTAssertEqual(result, .success, "Expected to return .success when compression and send succeed")
@@ -313,11 +425,17 @@ final class SessionReplayModelTests: XCTestCase {
         let invalidData = Data("".utf8) // Empty payload to test error handling
         let mockTimestamp: TimeInterval = 1234567890.0
         let mockScreenshotId: String = "mockScreenshotId"
+        let urlEntry = URLEntry(url: URL(string: "https://www.google.com")!,
+                                timestamp: mockTimestamp,
+                                screenshotId: mockScreenshotId,
+                                segmentIndex: 1,
+                                page: "0",
+                                screenshotData: invalidData,
+                                point: CGPoint(x: 100.0, y: 100.0),
+                                completion: nil)
 
         // Act
-        let result = sessionReplayModel.compressAndSendData(data: invalidData,
-                                                            timestamp: mockTimestamp,
-                                                            screenshotId: mockScreenshotId)
+        let result = sessionReplayModel.compressAndSendData(data: invalidData, urlEntry: urlEntry)
         
         // Assert
         XCTAssertEqual(result, .failure, "Expected to return .failure when compression fails")
@@ -417,12 +535,11 @@ class MockSRModel: SessionReplayModel {
     var passedScreenshotId: String?
     
     override func compressAndSendData(data: Data,
-                                      timestamp: TimeInterval,
-                                      screenshotId: String) -> SessionReplayResultCode {
+                                      urlEntry: URLEntry?) -> SessionReplayResultCode {
         compressCalled = true
         passedData = data
-        passedTimestamp = timestamp
-        passedScreenshotId = screenshotId
+        passedTimestamp = urlEntry?.timestamp
+        passedScreenshotId = urlEntry?.screenshotId
         return .success
     }
     
@@ -446,12 +563,9 @@ final class MockSRNetworkManager: SRNetworkManager {
     var sentChunks: [Data] = []
     
     override func send(_ data: Data,
-                       timestamp: TimeInterval,
+                       urlEntry: URLEntry?,
                        sessionId: String,
-                       screenshotNumber: Int,
                        subIndex: Int,
-                       screenshotId: String,
-                       page: String,
                        completion: @escaping (SessionReplayResultCode) -> Void) {
         didSendData = true
         sentChunks.append(data)
@@ -478,7 +592,7 @@ class MockWindow: UIWindow {
     override var isKeyWindow: Bool {
         return mockIsKeyWindow
     }
-
+    
     func setAsKeyWindow(_ isKeyWindow: Bool) {
         self.mockIsKeyWindow = isKeyWindow
     }
@@ -525,9 +639,64 @@ class MockFileManager: FileManager {
             throw NSError(domain: "TestErrorDomain", code: 1, userInfo: nil)
         }
     }
-    
-    func clearSessionReplayFolder() -> SessionReplayResultCode {
-        clearSessionReplayFolderCallCount += 1
+}
+
+class MockSessionReplayModel: SessionReplayModel {
+    var captureCalled = false
+    var expectation: XCTestExpectation?
+    var capturedFileURL: URL?
+    var capturedData: Data?
+    var capturedProperties: [String: Any]?
+    var clearSessionReplayFolderCalled = false
+    var didCallPrepareScreenshot = false
+    var didCallSaveScreenshot = false
+    var captureImageCallCount = 0
+    var onHandleCapturedData: ((URL, Data, [String: Any]?) -> Void)?
+
+    override func clearSessionReplayFolder(fileManager: FileManager = .default) -> SessionReplayResultCode {
+        clearSessionReplayFolderCalled = true
         return .success
+    }
+    
+    override func captureImage(properties: [String : Any]? = nil) {
+        captureImageCallCount += 1
+
+        captureCalled = true
+        capturedData = "mock image".data(using: .utf8)
+        XCTAssertTrue(Thread.isMainThread, "captureImage should be called on the main thread")
+        expectation?.fulfill()
+    }
+    
+    override func handleCapturedData(
+        fileURL: URL,
+        data: Data,
+        properties: [String : Any]?
+    ) {
+        capturedFileURL = fileURL
+        capturedData = data
+        capturedProperties = properties
+        onHandleCapturedData?(fileURL, data, properties)
+    }
+
+    override func generateFileName(properties: [String : Any]?) -> String {
+        return "mock_screenshot.jpg"
+    }
+}
+
+class MockSessionReplayModel2: SessionReplayModel {
+    var didCallPrepareScreenshot = false
+    var didCallSaveScreenshot = false
+    var passedScreenshotData: Data?
+    var passedProperties: [String: Any]?
+
+    override func prepareScreenshotIfNeeded(properties: [String : Any]? = nil) -> Data? {
+        didCallPrepareScreenshot = true
+        return "mock image".data(using: .utf8)
+    }
+
+    override func saveScreenshotToFileSystem(screenshotData: Data, properties: [String : Any]?) {
+        didCallSaveScreenshot = true
+        passedScreenshotData = screenshotData
+        passedProperties = properties
     }
 }

@@ -29,7 +29,7 @@ public class MetadataBuilder {
     public func buildMetadata(dataSize: Int,
                               timestamp: TimeInterval,
                               sessionId: String,
-                              screenshotNumber: Int,
+                              segmentIndex: Int,
                               subIndex: Int,
                               application: String,
                               sessionCreationTime: TimeInterval,
@@ -37,7 +37,7 @@ public class MetadataBuilder {
                               page: String) -> [String: Any] {
         return [
             Keys.application.rawValue: application,
-            Keys.segmentIndex.rawValue: screenshotNumber,
+            Keys.segmentIndex.rawValue: segmentIndex,
             Keys.segmentSize.rawValue: dataSize,
             Keys.segmentTimestamp.rawValue: timestamp.milliseconds,
             Keys.keySessionCreationDate.rawValue: sessionCreationTime.milliseconds,
@@ -70,13 +70,10 @@ public class SRNetworkManager {
         self.session = session
     }
     
-    public func send(_ data: Data,
-                     timestamp: TimeInterval,
+    internal func send(_ data: Data,
+                     urlEntry: URLEntry?,
                      sessionId: String,
-                     screenshotNumber: Int,
                      subIndex: Int,
-                     screenshotId: String,
-                     page: String,
                      completion: @escaping (SessionReplayResultCode) -> Void) {
         guard let endPoint = self.endPoint,
               let publicKey = self.publicKey,
@@ -103,24 +100,33 @@ public class SRNetworkManager {
             return
         }
         
+        guard let urlEntry = urlEntry else {
+            Log.e("[SRNetworkManager] Session Replay missing URL Entry")
+            completion(.failure)
+            return
+        }
+        
         let metadata = metadataBuilder.buildMetadata(
             dataSize: data.count,
-            timestamp: timestamp,
+            timestamp: urlEntry.timestamp,
             sessionId: sessionId,
-            screenshotNumber: screenshotNumber,
+            segmentIndex: urlEntry.segmentIndex,
             subIndex: subIndex,
             application: application,
             sessionCreationTime: sessionCreationTime,
-            screenshotId: screenshotId,
-            page: page
+            screenshotId: urlEntry.screenshotId,
+            page: urlEntry.page
         )
-        Log.d("[metadata] \(metadata)")
         
         // Convert the JSON to Data
-        guard let jsonData = try? JSONSerialization.data(withJSONObject: metadata, options: []) else {
+        guard let jsonData = try? JSONSerialization.data(withJSONObject: metadata, options: .prettyPrinted) else {
             Log.e("[SRNetworkManager] Failed to convert JSON to Data")
             completion(.failure)
             return
+        }
+        
+        if let jsonString = String(data: jsonData, encoding: .utf8) {
+            Log.d("[metadata] \(jsonString)")
         }
         
         // Boundary for separating parts
@@ -128,7 +134,7 @@ public class SRNetworkManager {
 
         // Create the URLRequest
         var request = URLRequest(url: url)
-        Log.d(String(describing: request))
+        //Log.d("[SRNetworkManager] \(String(describing: request))")
         request.httpMethod = "POST"
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         request.addValue("Bearer \(publicKey)", forHTTPHeaderField: "Authorization")
@@ -170,11 +176,10 @@ public class SRNetworkManager {
             }
             
             Log.w("[SRNetworkManager] Response status code: \(httpResponse.statusCode)")
-            
-            if let data = data,
-               let responseString = String(data: data, encoding: .utf8) {
-                Log.d("[SRNetworkManager] Response body: \(responseString)")
-            }
+//            if let data = data,
+//               let responseString = String(data: data, encoding: .utf8) {
+//                Log.d("[SRNetworkManager] Response body: \(responseString)")
+//            }
             let successRange = 200..<300
             completion(successRange.contains(httpResponse.statusCode) ? .success: .failure)
         }

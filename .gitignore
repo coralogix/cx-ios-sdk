@@ -10,3 +10,6 @@ DerivedData/
 .swiftpm/xcode/package.xcworkspace/contents.xcworkspacedata
 .netrc
 .swiftpm/
+
+# Ignore secret config
+Secrets.swift

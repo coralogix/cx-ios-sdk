@@ -102,12 +102,13 @@ extension UICollectionView {
             Keys.text.rawValue: Helper.findFirstLabelText(in: cell) ?? ""
         ]
         
-        let tapData: [String: Any] = [
+        var tapData: [String: Any] = [
             Keys.tapName.rawValue: "UICollectionView.didSelectRowAt",
             Keys.tapCount.rawValue: 1,
             Keys.tapAttributes.rawValue: attributes
         ]
         
+        Global.updateLocation(tapData: &tapData, touch: touch)
         NotificationCenter.default.post(name: .cxRumNotificationUserActions, object: tapData)
         
         self.cx_touchesEnded(touches, with: event) // Call original method
@@ -141,12 +142,14 @@ extension UITableView {
             Keys.text.rawValue: Helper.findFirstLabelText(in: cell) ?? ""
         ]
         
-        let tapData: [String: Any] = [
+        
+        var tapData: [String: Any] = [
             Keys.tapName.rawValue: "UITableView.didSelectRowAt",
             Keys.tapCount.rawValue: 1,
             Keys.tapAttributes.rawValue: attributes
         ]
         
+        Global.updateLocation(tapData: &tapData, touch: touch)
         NotificationCenter.default.post(name: .cxRumNotificationUserActions, object: tapData)
         
         self.cx_touchesEnded(touches, with: event) // Call original method
@@ -249,14 +252,9 @@ extension UIApplication {
         
         // Process touch events
         if let touches = event.allTouches, let touch = touches.first, touch.phase == .began {
-  
-            let location = touch.location(in: nil) // UIKit coordinate system (top-left origin)
-           
-            let tap = [
-                Keys.positionX.rawValue: location.x,
-                Keys.positionY.rawValue: location.y
-            ]
-            NotificationCenter.default.post(name: .cxRumNotificationUserActions, object: tap)
+            var tapData = [String : Any]()
+            Global.updateLocation(tapData: &tapData, touch: touch)
+            NotificationCenter.default.post(name: .cxRumNotificationUserActions, object: tapData)
         }
     }
     
@@ -269,11 +267,11 @@ extension UIApplication {
         if selectorNameString.contains("tabBarItemClicked") {
             self.handleTabBarItemClicked(sender: sender)
         } else if selectorNameString.contains("backButtonAction") {
-            self.handleBackButtonAction(sender: sender)
+            self.handleBackButtonAction(sender: sender, event: event)
         } else if selectorNameString.contains("segmentChanged") {
             self.handleSegmentChanged(sender: sender)
         } else if selectorNameString.contains("buttonDown") {
-            self.handleButtonDown(sender: sender, target: target)
+            self.handleButtonDown(sender: sender, target: target, event: event)
         } else if selectorNameString.contains("dismissViewController") {
             self.handleDismissViewController(sender: sender)
         }
@@ -309,12 +307,17 @@ extension UIApplication {
         NotificationCenter.default.post(name: .cxRumNotificationUserActions, object: tap)
     }
     
-    private func handleBackButtonAction(sender: AnyObject?) {
+    private func handleBackButtonAction(sender: AnyObject?, event: UIEvent?) {
         if sender != nil {
-            let tap = [Keys.tapName.rawValue: "backButton",
+            var tapData = [Keys.tapName.rawValue: "backButton",
                        Keys.tapCount.rawValue: 1,
                        Keys.tapAttributes.rawValue: [:]] as [String: Any]
-            NotificationCenter.default.post(name: .cxRumNotificationUserActions, object: tap)
+            
+            if let allTouches = event?.allTouches, let touch = allTouches.first {
+                Global.updateLocation(tapData: &tapData, touch: touch)
+            }
+            
+            NotificationCenter.default.post(name: .cxRumNotificationUserActions, object: tapData)
         }
     }
     
@@ -330,17 +333,21 @@ extension UIApplication {
         NotificationCenter.default.post(name: .cxRumNotificationUserActions, object: tap)
     }
     
-    private func handleButtonDown(sender: AnyObject?, target: AnyObject?) {
+    private func handleButtonDown(sender: AnyObject?, target: AnyObject?, event: UIEvent?) {
         guard let sender = sender else { return }
         var attributes = [String: Any]()
         if let tabBar = target as? UITabBar {
             attributes[Keys.text.rawValue] = tabBar.selectedItem?.title
         }
         let senderClass = NSStringFromClass(type(of: sender))
-        let tap = [Keys.tapName.rawValue: "\(senderClass)",
+        var tapData = [Keys.tapName.rawValue: "\(senderClass)",
                    Keys.tapCount.rawValue: 1,
                    Keys.tapAttributes.rawValue: Helper.convertDictionayToJsonString(dict: attributes)] as [String: Any]
-        NotificationCenter.default.post(name: .cxRumNotificationUserActions, object: tap)
+        
+        if let allTouches = event?.allTouches, let touch = allTouches.first {
+            Global.updateLocation(tapData: &tapData, touch: touch)
+        }
+        NotificationCenter.default.post(name: .cxRumNotificationUserActions, object: tapData)
     }
 }
 

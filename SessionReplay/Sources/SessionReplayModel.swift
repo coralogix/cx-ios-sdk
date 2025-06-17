@@ -26,7 +26,9 @@ class SessionReplayModel {
     var sessionReplayOptions: SessionReplayOptions?
     var isRecording = false  // Custom flag to track recording state
     private let srNetworkManager: SRNetworkManager?
-    internal let screenshotManager = ScreenshotManager()
+    internal var getKeyWindow: () -> UIWindow? = {
+        Global.getKeyWindow()
+    }
     
     init(sessionReplayOptions: SessionReplayOptions? = nil,
          networkManager: SRNetworkManager? = SRNetworkManager()) {
@@ -45,6 +47,58 @@ class SessionReplayModel {
         Log.d("SessionManager deinitialized and resources cleaned up.")
     }
     
+    internal func prepareScreenshotIfNeeded(properties: [String: Any]?) -> Data? {
+        guard Thread.isMainThread else {
+            DispatchQueue.main.async { [weak self] in
+                self?.captureImage(properties: properties)
+            }
+            return nil
+        }
+
+        guard let window = getKeyWindow() else {
+            Log.e("No key window found")
+            return nil
+        }
+
+        guard let options = self.sessionReplayOptions,
+              self.isValidSessionReplayOptions(options) else {
+            Log.e("Invalid sessionReplayOptions")
+            return nil
+        }
+
+        return window.captureScreenshot(
+            scale: options.captureScale,
+            compressionQuality: options.captureCompressionQuality
+        )
+    }
+    
+    internal func saveScreenshotToFileSystem(
+        screenshotData: Data,
+        properties: [String: Any]?
+    ) {
+        DispatchQueue.global(qos: .background).async { [weak self] in
+            guard let documentsDirectory = FileManager.default.urls(
+                for: .documentDirectory,
+                in: .userDomainMask
+            ).first else {
+                Log.e("Failed to locate documents directory")
+                return
+            }
+            
+            if let fileName = self?.generateFileName(properties: properties) {
+                let fileURL = documentsDirectory
+                    .appendingPathComponent("SessionReplay")
+                    .appendingPathComponent(fileName)
+                
+                self?.handleCapturedData(
+                    fileURL: fileURL,
+                    data: screenshotData,
+                    properties: properties
+                )
+            }
+        }
+    }
+
     internal func captureImage(properties: [String: Any]? = nil) {
         guard !sessionId.isEmpty else {
             Log.e("Invalid sessionId")
@@ -52,28 +106,8 @@ class SessionReplayModel {
         }
         
         var screenshotData: Data? = properties?[Keys.screenshotData.rawValue] as? Data
-        
         if screenshotData == nil {
-            guard Thread.isMainThread else {
-                DispatchQueue.main.async { self.captureImage(properties: properties) }
-                return
-            }
-            
-            guard let window = Global.getKeyWindow() else {
-                Log.e("No key window found")
-                return
-            }
-            
-            guard let options = self.sessionReplayOptions,
-                  self.isValidSessionReplayOptions(options) else {
-                Log.e("Invalid sessionReplayOptions")
-                return
-            }
-            
-            screenshotData = window.captureScreenshot(
-                scale: options.captureScale,
-                compressionQuality: options.captureCompressionQuality
-            )
+            screenshotData = prepareScreenshotIfNeeded(properties: properties)
         }
         
         guard let screenshotData else {
@@ -81,26 +115,12 @@ class SessionReplayModel {
             return
         }
         
-        self.screenshotManager.takeScreenshot()
-        let fileName = self.generateFileName()
-        
-        if let documentsDirectory = FileManager.default.urls(
-            for: .documentDirectory,
-            in: .userDomainMask
-        ).first {
-            let fileURL = documentsDirectory
-                .appendingPathComponent("SessionReplay")
-                .appendingPathComponent(fileName)
-            self.handleCapturedData(fileURL: fileURL,
-                                    data: screenshotData,
-                                    properties: properties)
-        }
+        saveScreenshotToFileSystem(screenshotData: screenshotData, properties: properties)
     }
     
     internal func updateSessionId(with sessionId: String) {
         if sessionId != self.sessionId {
             self.sessionId = sessionId
-            self.screenshotManager.resetSession()
             _ = self.clearSessionReplayFolder()
             SRUtils.deleteURLsFromDisk()
         }
@@ -182,36 +202,55 @@ class SessionReplayModel {
         return (properties?[Keys.screenshotId.rawValue] as? String) ?? UUID().uuidString.lowercased()
     }
     
-    internal func generateFileName() -> String {
-        return "\(sessionId)_\(self.screenshotManager.screenshotCount).jpg"
+    internal func getSegmentIndex(from properties: [String: Any]?) -> Int {
+        return (properties?[Keys.segmentIndex.rawValue] as? Int) ?? 0
+    }
+    
+    internal func getPage(from properties: [String: Any]?) -> String {
+        guard let properties = properties,
+                let page = properties[Keys.page.rawValue] as? Int else {
+            return "Unknown"
+        }
+        return "\(page)"
+    }
+    
+    internal func generateFileName(properties: [String: Any]?) -> String {
+        guard let properties = properties,
+              let segmentIndex = properties[Keys.segmentIndex.rawValue] as? Int,
+              let page = properties[Keys.page.rawValue] as? Int else {
+            return "file_name_error"
+        }
+        
+        return "\(sessionId)_\(page)_\(segmentIndex).jpg"
     }
     
     internal func handleCapturedData(fileURL: URL, data: Data, properties: [String: Any]?) {
-        let timestamp = self.getTimestamp(from: properties)
-        let screenshotId = self.getScreenshotId(from: properties)
-        
-        DispatchQueue(label: "com.coralogix.fileOperations").async { [weak self] in
+        DispatchQueue(label: Keys.queueFileOperations.rawValue).async { [weak self] in
             guard let self = self else { return }
+            let timestamp = self.getTimestamp(from: properties)
+            let screenshotId = self.getScreenshotId(from: properties)
+            let segmentIndex = self.getSegmentIndex(from: properties)
+            let page = self.getPage(from: properties)
             let point = self.getClickPoint(from: properties)
             
-            let completion: URLProcessingCompletion = { [weak self] ciImage, originalTimestamp, originalScreenshotId  in
+            let completion: URLProcessingCompletion = { [weak self] ciImage, urlEntry  in
                 if let ciImage = ciImage,
                    let ciImageData = Global.ciImageToData(ciImage) {
                     if let sdkManager = SdkManager.shared.getCoralogixSdk(), sdkManager.isDebug() {
                         SRUtils.saveImage(ciImage, outputURL: fileURL) { _ in }
                     }
-                    _ = self?.compressAndSendData(data: ciImageData,
-                                                  timestamp: originalTimestamp,
-                                                  screenshotId: originalScreenshotId)
+                    _ = self?.compressAndSendData(data: ciImageData, urlEntry: urlEntry)
                 }
             }
             
             let urlEntry = URLEntry(url: fileURL,
                                     timestamp: timestamp,
                                     screenshotId: screenshotId,
+                                    segmentIndex: segmentIndex,
+                                    page: page,
                                     screenshotData: data,
-                                    completion: completion,
-                                    point: point)
+                                    point: point,
+                                    completion: completion)
             
             self.urlManager.addURL(urlEntry: urlEntry)
             self.updateSessionId(with: self.sessionId)
@@ -243,33 +282,36 @@ class SessionReplayModel {
         return chunkCount > 1 ? currentIndex : -1
     }
     
-    internal func compressAndSendData(data: Data, timestamp: TimeInterval, screenshotId: String) -> SessionReplayResultCode {
-        if let compressedChunks = data.gzipCompressed(), compressedChunks.count > 0 {
-            // Log.d("Compression succeeded! Number of chunks: \(compressedChunks.count)")
-            for (index, chunk) in compressedChunks.enumerated() {
-                // Log.d("Chunk \(index): \(chunk.count) bytes")
-                let subIndex = calculateSubIndex(chunkCount: compressedChunks.count, currentIndex: index)
-                let page =  "\(self.screenshotManager.page)"
-                // Send Data
-                self.srNetworkManager?.send(chunk,
-                                            timestamp: timestamp,
-                                            sessionId: self.sessionId.lowercased(),
-                                            screenshotNumber: self.screenshotManager.screenshotCount,
-                                            subIndex: subIndex,
-                                            screenshotId: screenshotId,
-                                            page: page) { result in
-                    if result == .success {
-                        if let sdkManager = SdkManager.shared.getCoralogixSdk() {
-                            sdkManager.hasSessionRecording(true)
+    internal func compressAndSendData(
+        data: Data,
+        urlEntry: URLEntry?) -> SessionReplayResultCode {
+//            let sizeInBytes = data.count
+//            let sizeInMB = Double(sizeInBytes) / (1024.0 * 1024.0)
+//            Log.d("Data size: \(String(format: "%.2f", sizeInMB)) MB")
+            
+            if let compressedChunks = data.gzipCompressed(), compressedChunks.count > 0 {
+                //Log.d("Compression succeeded! Number of chunks: \(compressedChunks.count)")
+                for (index, chunk) in compressedChunks.enumerated() {
+                    // Log.d("Chunk \(index): \(chunk.count) bytes")
+                    let subIndex = calculateSubIndex(chunkCount: compressedChunks.count, currentIndex: index)
+
+                    // Send Data
+                    self.srNetworkManager?.send(chunk,
+                                                urlEntry: urlEntry,
+                                                sessionId: self.sessionId.lowercased(),
+                                                subIndex: subIndex) { result in
+                        if result == .success {
+                            if let sdkManager = SdkManager.shared.getCoralogixSdk() {
+                                sdkManager.hasSessionRecording(true)
+                            }
                         }
                     }
                 }
+                return .success
+            } else {
+                Log.e("Compression failed")
+                return .failure
             }
-            return .success
-        } else {
-            Log.e("Compression failed")
-            return .failure
         }
-    }
 }
 

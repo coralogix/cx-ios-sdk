@@ -117,6 +117,13 @@ public enum Global: String {
         }
     }
     
+    
+    public static func updateLocation(tapData: inout [String: Any], touch: UITouch) {
+        let locationInScreen = touch.location(in: nil) // UIKit coordinate system (top-left origin)
+        tapData[Keys.positionX.rawValue] = locationInScreen.x
+        tapData[Keys.positionY.rawValue] = locationInScreen.y
+    }
+    
     public static func isEmulator() -> Bool {
 #if targetEnvironment(simulator)
         // Code to execute on the Simulator
