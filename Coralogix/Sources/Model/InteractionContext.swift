@@ -17,7 +17,7 @@ struct InteractionContext {
         if let jsonString = otel.getAttribute(forKey: Keys.tapObject.rawValue) as? String,
            let tapObject = Helper.convertJsonStringToDict(jsonString: jsonString) {
             self.eventName = Keys.click.rawValue
-            self.elementId = tapObject[Keys.tapName.rawValue] as? String ?? ""
+            self.elementId = tapObject[Keys.tapName.rawValue] as? String ?? Keys.undifined.rawValue
             self.attributes = tapObject[Keys.tapAttributes.rawValue] as? [String: Any] ?? nil
         }
     }

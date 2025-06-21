@@ -9,7 +9,7 @@ import CoralogixInternal
 
 struct CxRum {
     var timeStamp: TimeInterval
-    let eventTypeContext: EventTypeContext
+    let networkRequestContext: NetworkRequestContext
     let mobileSdk: String
     let versionMetadata: VersionMetadata
     var sessionContext: SessionContext?
@@ -45,7 +45,7 @@ struct CxRum {
          labels: [String: Any]?) {
 
         self.timeStamp = otel.getStartTime() ?? Date().timeIntervalSince1970
-        self.eventTypeContext = EventTypeContext(otel: otel)
+        self.networkRequestContext = NetworkRequestContext(otel: otel)
         self.mobileSdk = Global.sdk.rawValue
         self.versionMetadata = versionMetadata
         self.sessionManager = sessionManager
@@ -103,12 +103,9 @@ struct CxRum {
     mutating func getDictionary() -> [String: Any] {
         var result = [String: Any]()
         self.addBasicDetails(to: &result)
-        self.addOptionalContexts(to: &result)
         self.addConditionalContexts(to: &result)
         self.addViewManagerContext(to: &result)
         self.addLabels(to: &result)
-        self.addMobileVitals(to: &result)
-        self.addLifeCycleContext(to: &result)
         self.addScreenshotContext(to: &result)
         return result
     }
@@ -119,7 +116,6 @@ struct CxRum {
             screenshotContext[Keys.screenshotId.rawValue] = screenshotId
             screenshotContext[Keys.page.rawValue] = page
             screenshotContext[Keys.segmentTimestamp.rawValue] = self.timeStamp.milliseconds
-            
             result[Keys.screenshotContext.rawValue] = screenshotContext
         }
     }
@@ -129,9 +125,8 @@ struct CxRum {
     }
     
     private func addMobileVitals(to result: inout [String: Any]) {
-        if let mobileVitalsDictionary = self.mobileVitalsContext?.getMobileVitalsDictionary(),
-           !Helper.isEmptyDictionary(mobileVitalsDictionary) {
-            result[Keys.mobileVitalsContext.rawValue] = self.mobileVitalsContext?.getMobileVitalsDictionary()
+        if let mobileVitalsContext = self.mobileVitalsContext {
+            result[Keys.mobileVitalsContext.rawValue] = mobileVitalsContext.getMobileVitalsDictionary()
         }
     }
     
@@ -150,12 +145,6 @@ struct CxRum {
         result[Keys.deviceContext.rawValue] = self.deviceContext.getDictionary()
         result[Keys.deviceState.rawValue] = self.deviceState.getDictionary()
     }
-    
-    private func addOptionalContexts(to result: inout [String: Any]) {
-        if let prevSessionContext = self.prevSessionContext {
-            result[Keys.prevSession.rawValue] = prevSessionContext.getPrevSessionDictionary()
-        }
-    }
 
     private mutating func addConditionalContexts(to result: inout [String: Any]) {
         if eventContext.type == CoralogixEventType.error {
@@ -169,13 +158,16 @@ struct CxRum {
             self.addSnapshotContext(to: &result)
         }
         
-        if isOneMinuteFromLastSnapshotPass == true, self.snapshotContext != nil {
-            self.addSnapshotContext(to: &result)
-            self.isOneMinuteFromLastSnapshotPass = false
+        if eventContext.type == CoralogixEventType.networkRequest {
+            result[Keys.networkRequestContext.rawValue] = self.networkRequestContext.getDictionary()
         }
         
-        if eventContext.type == CoralogixEventType.networkRequest {
-            result[Keys.networkRequestContext.rawValue] = self.eventTypeContext.getDictionary()
+        if eventContext.type == CoralogixEventType.mobileVitals {
+            self.addMobileVitals(to: &result)
+        }
+        
+        if eventContext.type == CoralogixEventType.lifeCycle {
+            self.addLifeCycleContext(to: &result)
         }
         
         if eventContext.type == CoralogixEventType.log {
@@ -185,6 +177,15 @@ struct CxRum {
         if eventContext.type == CoralogixEventType.userInteraction,
            let interactionContext = self.interactionContext {
             result[Keys.interactionContext.rawValue] = interactionContext.getDictionary()
+        }
+        
+        if let prevSessionContext = self.prevSessionContext {
+            result[Keys.prevSession.rawValue] = prevSessionContext.getPrevSessionDictionary()
+        }
+        
+        if isOneMinuteFromLastSnapshotPass == true, self.snapshotContext != nil {
+            self.addSnapshotContext(to: &result)
+            self.isOneMinuteFromLastSnapshotPass = false
         }
     }
     

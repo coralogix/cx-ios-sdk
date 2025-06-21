@@ -13,6 +13,7 @@ public class CoralogixExporter: SpanExporter {
     private var sessionManager: SessionManager
     private var networkManager: NetworkProtocol
     private var metricsManager: MetricsManager
+    private let spanProcessingQueue = DispatchQueue(label: Keys.queueSpanProcessingQueue.rawValue, attributes: .concurrent)
     
     public init(options: CoralogixExporterOptions,
                 sessionManager: SessionManager,
@@ -149,7 +150,11 @@ public class CoralogixExporter: SpanExporter {
     }
     
     func encodeSpans(spans: [SpanData]) -> [[String: Any]] {
-        return spans.compactMap { self.spanDatatoCxSpan(otelSpan: $0) }
+        var encodedSpans: [[String: Any]] = []
+        spanProcessingQueue.sync(flags: .barrier) {
+            encodedSpans = spans.compactMap { self.spanDatatoCxSpan(otelSpan: $0) }
+        }
+        return encodedSpans
     }
     
     @objc func handleNotification(notification: Notification) {

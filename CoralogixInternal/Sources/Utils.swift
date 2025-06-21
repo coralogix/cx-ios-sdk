@@ -16,7 +16,7 @@ public enum ImageFormat {
 }
 
 public enum Global: String {
-    case sdk = "1.0.23"
+    case sdk = "1.0.24"
     case swiftVersion = "5.9"
     case coralogixPath = "/browser/v1beta/logs"
     case sessionReplayPath = "/browser/alpha/sessionrecording"
@@ -117,6 +117,14 @@ public enum Global: String {
         }
     }
     
+    public static func durationToMilliseconds(duration: [UInt64]) -> UInt64 {
+        guard duration.count == 2 else { return 0 }
+
+        let secondsInMs = duration[0] * 1000
+        let nanosInMs = max(1, UInt64(round(Double(duration[1]) / 1_000_000.0)))
+
+        return secondsInMs + nanosInMs
+    }
     
     public static func updateLocation(tapData: inout [String: Any], touch: UITouch) {
         let locationInScreen = touch.location(in: nil) // UIKit coordinate system (top-left origin)

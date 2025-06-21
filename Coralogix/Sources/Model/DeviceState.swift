@@ -15,11 +15,11 @@ struct DeviceState {
     
     init(networkManager: NetworkProtocol?) {
 #if targetEnvironment(simulator)
-        self.battery = ""
+        self.battery = Keys.undifined.rawValue
 #else
         self.battery = String(deviceBatteryManager.getBatteryLevel())
 #endif
-        self.networkType = networkManager?.getNetworkType() ?? ""
+        self.networkType = networkManager?.getNetworkType() ?? Keys.undifined.rawValue
     }
     
     func getDictionary() -> [String: Any] {

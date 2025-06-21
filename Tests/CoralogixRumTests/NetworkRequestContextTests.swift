@@ -9,7 +9,7 @@ import XCTest
 import CoralogixInternal
 @testable import Coralogix
 
-final class EventTypeContextTests: XCTestCase {
+final class NetworkRequestContextTests: XCTestCase {
     var mockSpanData: SpanDataProtocol!
 
     override func setUpWithError() throws {
@@ -30,7 +30,7 @@ final class EventTypeContextTests: XCTestCase {
 
     func testEventTypeContextInitialization() {
             // Initialize EventTypeContext with mock SpanData
-            let context = EventTypeContext(otel: mockSpanData)
+            let context = NetworkRequestContext(otel: mockSpanData)
             
             // Verify the initialization
             XCTAssertEqual(context.method, "GET")
@@ -44,7 +44,7 @@ final class EventTypeContextTests: XCTestCase {
         }
         
         func testGetDictionary() {
-            let context = EventTypeContext(otel: mockSpanData)
+            let context = NetworkRequestContext(otel: mockSpanData)
             
             let dictionary = context.getDictionary()
             
