@@ -1,5 +1,5 @@
 //
-//  EventTypeContext.swift
+//  NetworkRequestContext.swift
 //
 //  Created by Coralogix DEV TEAM on 01/04/2024.
 //
@@ -7,7 +7,7 @@
 import Foundation
 import CoralogixInternal
 
-struct EventTypeContext {
+struct NetworkRequestContext {
     let method: String
     var statusCode: Int = 0
     let url: String
@@ -18,24 +18,29 @@ struct EventTypeContext {
     let responseContentLength: String
     
     init(otel: SpanDataProtocol) {
-        self.method = otel.getAttribute(forKey: SemanticAttributes.httpMethod.rawValue) as? String ?? ""
+        self.method = otel.getAttribute(forKey: SemanticAttributes.httpMethod.rawValue) as? String ?? Keys.undefined.rawValue
         
         if let statusCode = otel.getAttribute(forKey: SemanticAttributes.httpStatusCode.rawValue) as? String {
             self.statusCode = Int(statusCode) ?? 0
         }
         
-        self.url = otel.getAttribute(forKey: SemanticAttributes.httpUrl.rawValue) as? String ?? ""
-        self.fragments = otel.getAttribute(forKey: SemanticAttributes.httpTarget.rawValue) as? String ?? ""
-        self.host = otel.getAttribute(forKey: SemanticAttributes.netPeerName.rawValue) as? String ?? ""
-        self.schema = otel.getAttribute(forKey: SemanticAttributes.httpScheme.rawValue) as? String ?? ""
+        self.url = otel.getAttribute(forKey: SemanticAttributes.httpUrl.rawValue) as? String ?? Keys.undefined.rawValue
+        
+        self.fragments = otel.getAttribute(forKey: SemanticAttributes.httpTarget.rawValue) as? String ?? Keys.undefined.rawValue
+        
+        self.host = otel.getAttribute(forKey: SemanticAttributes.netPeerName.rawValue) as? String ?? Keys.undefined.rawValue
+        
+        self.schema = otel.getAttribute(forKey: SemanticAttributes.httpScheme.rawValue) as? String ?? Keys.undefined.rawValue
+        
         if let startTime = otel.getStartTime(),
            let endTime = otel.getEndTime() {
             let delta = endTime - startTime
-            self.duration = delta.openTelemetryMilliseconds
+            self.duration = Global.durationToMilliseconds(duration: delta.openTelemetryFormat)
         } else {
             self.duration = 0
         }
-        self.responseContentLength = otel.getAttribute(forKey: SemanticAttributes.httpResponseBodySize.rawValue) as? String ?? ""
+        
+        self.responseContentLength = otel.getAttribute(forKey: SemanticAttributes.httpResponseBodySize.rawValue) as? String ?? Keys.undefined.rawValue
     }
     
     func getDictionary() -> [String: Any] {
