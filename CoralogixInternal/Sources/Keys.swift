@@ -185,7 +185,7 @@ public enum Keys: String {
     case queueUrlProcessing = "com.coralogix.urlProcessing"
     case queueMediaInput = "com.coralogix.mediainput"
     case queueSpanProcessingQueue = "com.coralogix.spanProcessingQueue"
-    case undifined
+    case undefined
 }
 
 public enum CoralogixLogSeverity: Int {

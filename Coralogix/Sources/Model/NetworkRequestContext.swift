@@ -18,19 +18,19 @@ struct NetworkRequestContext {
     let responseContentLength: String
     
     init(otel: SpanDataProtocol) {
-        self.method = otel.getAttribute(forKey: SemanticAttributes.httpMethod.rawValue) as? String ?? Keys.undifined.rawValue
+        self.method = otel.getAttribute(forKey: SemanticAttributes.httpMethod.rawValue) as? String ?? Keys.undefined.rawValue
         
         if let statusCode = otel.getAttribute(forKey: SemanticAttributes.httpStatusCode.rawValue) as? String {
             self.statusCode = Int(statusCode) ?? 0
         }
         
-        self.url = otel.getAttribute(forKey: SemanticAttributes.httpUrl.rawValue) as? String ?? Keys.undifined.rawValue
+        self.url = otel.getAttribute(forKey: SemanticAttributes.httpUrl.rawValue) as? String ?? Keys.undefined.rawValue
         
-        self.fragments = otel.getAttribute(forKey: SemanticAttributes.httpTarget.rawValue) as? String ?? Keys.undifined.rawValue
+        self.fragments = otel.getAttribute(forKey: SemanticAttributes.httpTarget.rawValue) as? String ?? Keys.undefined.rawValue
         
-        self.host = otel.getAttribute(forKey: SemanticAttributes.netPeerName.rawValue) as? String ?? Keys.undifined.rawValue
+        self.host = otel.getAttribute(forKey: SemanticAttributes.netPeerName.rawValue) as? String ?? Keys.undefined.rawValue
         
-        self.schema = otel.getAttribute(forKey: SemanticAttributes.httpScheme.rawValue) as? String ?? Keys.undifined.rawValue
+        self.schema = otel.getAttribute(forKey: SemanticAttributes.httpScheme.rawValue) as? String ?? Keys.undefined.rawValue
         
         if let startTime = otel.getStartTime(),
            let endTime = otel.getEndTime() {
@@ -40,7 +40,7 @@ struct NetworkRequestContext {
             self.duration = 0
         }
         
-        self.responseContentLength = otel.getAttribute(forKey: SemanticAttributes.httpResponseBodySize.rawValue) as? String ?? Keys.undifined.rawValue
+        self.responseContentLength = otel.getAttribute(forKey: SemanticAttributes.httpResponseBodySize.rawValue) as? String ?? Keys.undefined.rawValue
     }
     
     func getDictionary() -> [String: Any] {
