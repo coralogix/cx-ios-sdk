@@ -25,7 +25,7 @@ final class DeviceStateTests: XCTestCase {
         let context = DeviceState(networkManager: mockNetworkManager)
         
         // Assert that properties are initialized correctly
-        XCTAssertEqual(context.battery, Keys.undifined.rawValue)
+        XCTAssertEqual(context.battery, Keys.undefined.rawValue)
         XCTAssertEqual(context.networkType, "5G")
     }
     
@@ -37,6 +37,6 @@ final class DeviceStateTests: XCTestCase {
         
         // Assert dictionary contents
         XCTAssertEqual(dictionary[Keys.networkType.rawValue] as? String, "5G")
-        XCTAssertEqual(dictionary[Keys.battery.rawValue] as? String, Keys.undifined.rawValue)
+        XCTAssertEqual(dictionary[Keys.battery.rawValue] as? String, Keys.undefined.rawValue)
     }
 }

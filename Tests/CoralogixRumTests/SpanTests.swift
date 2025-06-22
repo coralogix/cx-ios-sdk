@@ -142,7 +142,7 @@ final class SpanTests: XCTestCase {
                     }
                     
                     if let battery = deviceState[Keys.battery.rawValue] as? String {
-                        XCTAssertEqual(battery, Keys.undifined.rawValue)
+                        XCTAssertEqual(battery, Keys.undefined.rawValue)
                     }
                     
                     if let networkType = deviceState[Keys.networkType.rawValue] as? String {
