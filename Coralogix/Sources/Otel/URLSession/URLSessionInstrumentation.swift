@@ -378,7 +378,7 @@ public class URLSessionInstrumentation {
         }
 
         
-        for (cls, selector, method) in methodsToSwizzle {
+        for (_, selector, method) in methodsToSwizzle {
             
             // ✅ Safety check: ensure method signature is void-return, no args
             guard let typeEncoding = method_getTypeEncoding(method),

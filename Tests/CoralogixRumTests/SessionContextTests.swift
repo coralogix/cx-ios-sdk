@@ -23,7 +23,7 @@ final class SessionContextTests: XCTestCase {
                                                  Keys.userEmail.rawValue: AttributeValue("john.doe@example.com")])
         sessionMetadata = SessionMetadata(sessionId: "session_001",
                                           sessionCreationDate: TimeInterval(1609459200),
-                                          keychain: MockKeyschainManager())
+                                          using: MockKeyschainManager())
         versionMetadata = VersionMetadata(appName: "test-app", appVersion: "1.1.1")
     }
 

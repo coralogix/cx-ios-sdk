@@ -85,7 +85,7 @@ public class SessionManager {
     public func shutdown() {
         self.sessionMetadata = SessionMetadata(sessionId: "",
                                                sessionCreationDate: 0,
-                                               keychain: KeychainManager())
+                                               using: KeychainManager())
         self.idleTimer?.invalidate()
         self.hasRecording = false
     }
@@ -120,7 +120,7 @@ public class SessionManager {
         self.prevSessionMetadata = self.sessionMetadata
         self.sessionMetadata = SessionMetadata(sessionId: NSUUID().uuidString,
                                                sessionCreationDate: Date().timeIntervalSince1970,
-                                               keychain: KeychainManager())
+                                               using: KeychainManager())
         // Publish the new session Id
         if let sessionId = self.sessionMetadata?.sessionId {
             self.sessionChangedCallback?(sessionId)
