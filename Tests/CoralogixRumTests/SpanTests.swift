@@ -332,7 +332,7 @@ class VersionMetadataTests: XCTestCase {
 class SessionMetadataTests: XCTestCase {
     func testSessionMetadataInitializationNoPrevSession() {
         let mockKeyschainManager = MockKeyschainManager()
-        let metadata = SessionMetadata(sessionId: "sessionId123", sessionCreationDate: 1622505600, keychain: mockKeyschainManager)
+        let metadata = SessionMetadata(sessionId: "sessionId123", sessionCreationDate: 1622505600, using: mockKeyschainManager)
         XCTAssertEqual(metadata.sessionId, "sessionId123")
         XCTAssertEqual(metadata.sessionCreationDate, 1622505600)
     }
@@ -345,7 +345,7 @@ class SessionMetadataTests: XCTestCase {
         mockKeyschainManager.writeStringToKeychain(service: "com.coralogix.sdk", key: "sessionId", value: "session12345")
         mockKeyschainManager.writeStringToKeychain(service: "com.coralogix.sdk", key: "sessionTimeInterval", value: String(timeInterval))
         
-        let metadata = SessionMetadata(sessionId: "sessionId123", sessionCreationDate: 1622505600, keychain: mockKeyschainManager)
+        let metadata = SessionMetadata(sessionId: "sessionId123", sessionCreationDate: 1622505600, using: mockKeyschainManager)
         
         XCTAssertEqual(metadata.sessionId, "sessionId123")
         XCTAssertEqual(metadata.sessionCreationDate, 1622505600)
@@ -356,7 +356,7 @@ class SessionMetadataTests: XCTestCase {
     
     func testResetSessionMetadata() {
         let mockKeyschainManager = MockKeyschainManager()
-        var metadata = SessionMetadata(sessionId: "sessionId123", sessionCreationDate: 1622505600, keychain: mockKeyschainManager)
+        var metadata = SessionMetadata(sessionId: "sessionId123", sessionCreationDate: 1622505600, using: mockKeyschainManager)
         metadata.resetSessionMetadata()
         
         XCTAssertEqual(metadata.sessionId, "")

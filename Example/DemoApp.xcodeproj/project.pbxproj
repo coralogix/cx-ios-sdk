@@ -48,9 +48,6 @@
 		E68681D72BFA300800B127E7 /* ErrorSim.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6320FB32BE7CE6800A4547E /* ErrorSim.swift */; };
 		E68681D82BFA300C00B127E7 /* NetworkSim.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6320FB42BE7CE6800A4547E /* NetworkSim.swift */; };
 		E68681DA2BFC739C00B127E7 /* ModalViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E68681D92BFC739C00B127E7 /* ModalViewController.swift */; };
-		E6941B812D4F9E5D0037AD9B /* AFNetworking in Frameworks */ = {isa = PBXBuildFile; productRef = E6941B802D4F9E5D0037AD9B /* AFNetworking */; };
-		E6941B832D5148650037AD9B /* AFNetworking in Frameworks */ = {isa = PBXBuildFile; productRef = E6941B822D5148650037AD9B /* AFNetworking */; };
-		E6941B852D51488D0037AD9B /* AFNetworking in Frameworks */ = {isa = PBXBuildFile; productRef = E6941B842D51488D0037AD9B /* AFNetworking */; };
 		E6B60A002DB4E531003AD35D /* SessionReplay in Frameworks */ = {isa = PBXBuildFile; productRef = E6B609FF2DB4E531003AD35D /* SessionReplay */; };
 		E6B60A022DB4E53F003AD35D /* SessionReplay in Frameworks */ = {isa = PBXBuildFile; productRef = E6B60A012DB4E53F003AD35D /* SessionReplay */; };
 		E6B60A042DB4E544003AD35D /* SessionReplay in Frameworks */ = {isa = PBXBuildFile; productRef = E6B60A032DB4E544003AD35D /* SessionReplay */; };
@@ -143,7 +140,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				E6941B832D5148650037AD9B /* AFNetworking in Frameworks */,
 				E66E3B6C2DA7FB6400FBC86B /* Coralogix in Frameworks */,
 				E6B60A022DB4E53F003AD35D /* SessionReplay in Frameworks */,
 			);
@@ -153,7 +149,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				E6941B852D51488D0037AD9B /* AFNetworking in Frameworks */,
 				E66E3B6A2DA7FAE900FBC86B /* Coralogix in Frameworks */,
 				E6B60A002DB4E531003AD35D /* SessionReplay in Frameworks */,
 			);
@@ -163,7 +158,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				E6941B812D4F9E5D0037AD9B /* AFNetworking in Frameworks */,
 				E66E3B682DA7F76C00FBC86B /* Coralogix in Frameworks */,
 				E6B60A042DB4E544003AD35D /* SessionReplay in Frameworks */,
 			);
@@ -306,7 +300,6 @@
 			);
 			name = DemoAppSwiftUI;
 			packageProductDependencies = (
-				E6941B822D5148650037AD9B /* AFNetworking */,
 				E66E3B6B2DA7FB6400FBC86B /* Coralogix */,
 				E6B60A012DB4E53F003AD35D /* SessionReplay */,
 			);
@@ -329,7 +322,6 @@
 			);
 			name = DemoAppTvOS;
 			packageProductDependencies = (
-				E6941B842D51488D0037AD9B /* AFNetworking */,
 				E66E3B692DA7FAE900FBC86B /* Coralogix */,
 				E6B609FF2DB4E531003AD35D /* SessionReplay */,
 			);
@@ -352,7 +344,6 @@
 			);
 			name = DemoAppSwift;
 			packageProductDependencies = (
-				E6941B802D4F9E5D0037AD9B /* AFNetworking */,
 				E66E3B672DA7F76C00FBC86B /* Coralogix */,
 				E6B60A032DB4E544003AD35D /* SessionReplay */,
 			);
@@ -391,7 +382,6 @@
 			);
 			mainGroup = E6320F792BE7C94F00A4547E;
 			packageReferences = (
-				E6941B7F2D4F9E5D0037AD9B /* XCRemoteSwiftPackageReference "AFNetworking" */,
 				E66E3B662DA7F76C00FBC86B /* XCLocalSwiftPackageReference "../../cx-ios-sdk" */,
 			);
 			productRefGroup = E6320F832BE7C94F00A4547E /* Products */;
@@ -876,17 +866,6 @@
 		};
 /* End XCLocalSwiftPackageReference section */
 
-/* Begin XCRemoteSwiftPackageReference section */
-		E6941B7F2D4F9E5D0037AD9B /* XCRemoteSwiftPackageReference "AFNetworking" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/AFNetworking/AFNetworking.git";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 4.0.1;
-			};
-		};
-/* End XCRemoteSwiftPackageReference section */
-
 /* Begin XCSwiftPackageProductDependency section */
 		E66E3B672DA7F76C00FBC86B /* Coralogix */ = {
 			isa = XCSwiftPackageProductDependency;
@@ -901,21 +880,6 @@
 			isa = XCSwiftPackageProductDependency;
 			package = E66E3B662DA7F76C00FBC86B /* XCLocalSwiftPackageReference "../../cx-ios-sdk" */;
 			productName = Coralogix;
-		};
-		E6941B802D4F9E5D0037AD9B /* AFNetworking */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = E6941B7F2D4F9E5D0037AD9B /* XCRemoteSwiftPackageReference "AFNetworking" */;
-			productName = AFNetworking;
-		};
-		E6941B822D5148650037AD9B /* AFNetworking */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = E6941B7F2D4F9E5D0037AD9B /* XCRemoteSwiftPackageReference "AFNetworking" */;
-			productName = AFNetworking;
-		};
-		E6941B842D51488D0037AD9B /* AFNetworking */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = E6941B7F2D4F9E5D0037AD9B /* XCRemoteSwiftPackageReference "AFNetworking" */;
-			productName = AFNetworking;
 		};
 		E6B609FF2DB4E531003AD35D /* SessionReplay */ = {
 			isa = XCSwiftPackageProductDependency;
