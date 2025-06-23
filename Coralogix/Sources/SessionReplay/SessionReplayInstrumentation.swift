@@ -10,12 +10,8 @@ import CoralogixInternal
 
 extension CoralogixRum: CoralogixInterface {
     public func periodicallyCaptureEventTriggered() {
-        if let sessionReplay = SdkManager.shared.getSessionReplay() {
-            let screensShotLocation = self.screenshotManager.nextScreenshotLocation
-            sessionReplay.captureEvent(properties: screensShotLocation.toProperties())
-        } else {
-            Log.e("[SessionReplay] is not initialized")
-        }
+        let span = self.getScreenShotSpan()
+        span.end()
     }
     
     public func hasSessionRecording(_ hasSessionRecording: Bool) {
@@ -36,6 +32,10 @@ extension CoralogixRum: CoralogixInterface {
     
     public func getCoralogixDomain() -> String {
         return self.coralogixExporter?.getOptions().coralogixDomain.rawValue ?? ""
+    }
+    
+    public func getProxyUrl() -> String {
+        return self.coralogixExporter?.getOptions().proxyUrl ?? ""
     }
     
     public func getPublicKey() -> String {
@@ -87,5 +87,14 @@ extension CoralogixRum: CoralogixInterface {
         } else {
             Log.e("[SessionReplay] is not initialized")
         }
+    }
+    
+    internal func getScreenShotSpan() -> any Span {
+        var span = tracerProvider().spanBuilder(spanName: Keys.iosSdk.rawValue).startSpan()
+        span.setAttribute(key: Keys.eventType.rawValue, value: CoralogixEventType.screenshot.rawValue)
+        span.setAttribute(key: Keys.severity.rawValue, value: AttributeValue.int(CoralogixLogSeverity.info.rawValue))
+        self.addUserMetadata(to: &span)
+        self.addScreenshotId(to: &span)
+        return span
     }
 }

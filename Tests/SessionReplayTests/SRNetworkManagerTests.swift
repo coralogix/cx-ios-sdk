@@ -54,6 +54,7 @@ final class SRNetworkManagerTests: XCTestCase {
         let page: String = "0"
         mockSession = MockURLSession()
         networkManager = SRNetworkManager(session: mockSession)
+        networkManager.proxyUrl = nil
         
         let urlEntry = URLEntry(url: URL(string: "https://www.google.com")!,
                                 timestamp: timestamp,
@@ -230,12 +231,75 @@ final class SRNetworkManagerTests: XCTestCase {
         
         XCTAssertEqual(metadata.keys.sorted(), expectedKeys.sorted(), "Metadata keys are incorrect")
     }
+    
+    func test_resolvedUrlString_withValidProxyUrl() {
+        // Given
+        let endPoint = "https://mock-coralogix.com/browser/alpha/sessionrecording"
+        
+        mockSession = MockURLSession()
+        mockSession.shouldReturnError = true
+        networkManager = SRNetworkManager(session: mockSession)
+        networkManager.proxyUrl = "https://proxy.example.com"
+        
+        // When
+        let result = networkManager.resolvedUrlString()
+        
+        // Then
+        XCTAssertNotNil(result)
+        
+        guard let urlString = result,
+              let components = URLComponents(string: urlString),
+              let queryItems = components.queryItems else {
+            XCTFail("URL is invalid or missing query items")
+            return
+        }
+        
+        XCTAssertEqual(components.scheme, "https")
+        XCTAssertEqual(components.host, "proxy.example.com")
+        
+        let cxforwardItem = queryItems.first { $0.name == Keys.cxforward.rawValue }
+        XCTAssertNotNil(cxforwardItem)
+        XCTAssertEqual(cxforwardItem?.value, endPoint)
+    }
+     
+     func test_resolvedUrlString_withEmptyProxyUrl() {
+         // Given
+         let endPoint = "https://mock-coralogix.com/browser/alpha/sessionrecording"
+         
+         mockSession = MockURLSession()
+         mockSession.shouldReturnError = true
+         networkManager = SRNetworkManager(session: mockSession)
+         networkManager.proxyUrl = ""
+         
+         // When
+         let result = networkManager.resolvedUrlString()
+         
+         // Then
+         XCTAssertEqual(result, endPoint)
+     }
+     
+     func test_resolvedUrlString_withNilProxyUrl() {
+         // Given
+         let endPoint = "https://mock-coralogix.com/browser/alpha/sessionrecording"
+         
+         mockSession = MockURLSession()
+         mockSession.shouldReturnError = true
+         networkManager = SRNetworkManager(session: mockSession)
+         networkManager.proxyUrl = nil
+         
+         // When
+         let result = networkManager.resolvedUrlString()
+
+         // Then
+         XCTAssertEqual(result, endPoint)
+     }
 }
 
 class MockCoralogix: CoralogixInterface {
     // Properties to hold mock values
     var sessionID: String = "mockSessionID"
     var coralogixDomain: String = "https://mock-coralogix.com"
+    var proxyUrl: String = "https://proxy.example.com"
     var publicKey: String = "mockPublicKey"
     var application: String = "mockApplication"
     var sessionCreationTimestamp: TimeInterval = 1737453647.568056
@@ -254,6 +318,10 @@ class MockCoralogix: CoralogixInterface {
     // Simulate getSessionID
     func getSessionID() -> String {
         return sessionID
+    }
+    
+    func getProxyUrl() -> String {
+        return proxyUrl
     }
     
     // Simulate getCoralogixDomain
