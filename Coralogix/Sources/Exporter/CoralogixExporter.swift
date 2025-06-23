@@ -100,7 +100,8 @@ public class CoralogixExporter: SpanExporter {
     @discardableResult
     public func sendSpansPayload(_ spans: [[String: Any]]) -> SpanExporterResultCode {
         guard CoralogixRum.isInitialized,
-              let url = URL(string: self.endPoint) else {
+              let urlString = self.resolvedUrlString(),
+              let url = URL(string: urlString) else {
             return .failure
         }
 
@@ -160,6 +161,18 @@ public class CoralogixExporter: SpanExporter {
     @objc func handleNotification(notification: Notification) {
         self.viewManager.reset()
         self.sessionManager.reset()
+    }
+    
+    internal func resolvedUrlString() -> String? {
+        if let proxyUrl = self.options.proxyUrl,
+            var urlComponents = URLComponents(string: proxyUrl) {
+            urlComponents.queryItems = [
+                URLQueryItem(name: Keys.cxforward.rawValue, value: self.endPoint),
+            ]
+            return urlComponents.url?.absoluteString
+        } else {
+            return self.endPoint
+        }
     }
     
     private func logJSON(from jsonData: Data, prettyPrint: Bool) {
