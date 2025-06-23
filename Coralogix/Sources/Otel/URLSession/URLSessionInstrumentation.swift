@@ -348,42 +348,64 @@ public class URLSessionInstrumentation {
         }
     }
     
+    private static var resumeSwizzleKey: UInt8 = 0
+
     private func injectIntoNSURLSessionTaskResume() {
-        var methodsToSwizzle = [Method]()
+        typealias ResumeIMPType = @convention(c) (AnyObject, Selector) -> Void
+        var methodsToSwizzle = [(cls: AnyClass, sel: Selector, method: Method)]()
         
-        if let method = class_getInstanceMethod(URLSessionTask.self, #selector(URLSessionTask.resume)) {
-            methodsToSwizzle.append(method)
+        // Helper: Adds method for class + selector if it exists
+        func appendMethodIfExists(for cls: AnyClass, selector: Selector) {
+            if let method = class_getInstanceMethod(cls, selector) {
+                methodsToSwizzle.append((cls, selector, method))
+            }
         }
         
-        if let cfURLSession = NSClassFromString("__NSCFURLSessionTask"),
-           let method = class_getInstanceMethod(cfURLSession, NSSelectorFromString("resume")) {
-            methodsToSwizzle.append(method)
+        // Swizzle URLSessionTask
+        appendMethodIfExists(for: URLSessionTask.self, selector: #selector(URLSessionTask.resume))
+
+        // Swizzle internal Apple class (if exists)
+        if let cfURLSession = NSClassFromString("__NSCFURLSessionTask") {
+            appendMethodIfExists(for: cfURLSession, selector: NSSelectorFromString("resume"))
         }
         
+        // Swizzle AFNetworking (if used)
         if NSClassFromString("AFURLSessionManager") != nil {
             let classes = InstrumentationUtils.objc_getClassList()
-            classes.forEach {
-                if let method = class_getInstanceMethod($0, NSSelectorFromString("af_resume")) {
-                    methodsToSwizzle.append(method)
-                }
+            for cls in classes {
+                appendMethodIfExists(for: cls, selector: NSSelectorFromString("af_resume"))
             }
         }
+
         
-        methodsToSwizzle.forEach {
-            let theMethod = $0
+        for (cls, selector, method) in methodsToSwizzle {
             
-            var originalIMP: IMP?
-            let block: @convention(block) (URLSessionTask) -> Void = { anyTask in
-                self.urlSessionTaskWillResume(anyTask)
-                guard anyTask.currentRequest != nil else { return }
-                let key = String(theMethod.hashValue)
-                objc_setAssociatedObject(anyTask, key, true, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
-                let castedIMP = unsafeBitCast(originalIMP, to: (@convention(c) (Any) -> Void).self)
-                castedIMP(anyTask)
-                objc_setAssociatedObject(anyTask, key, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+            // ✅ Safety check: ensure method signature is void-return, no args
+            guard let typeEncoding = method_getTypeEncoding(method),
+                  String(cString: typeEncoding) == "v@:" else {
+                continue // Skip this method – wrong signature
             }
-            let swizzledIMP = imp_implementationWithBlock(unsafeBitCast(block, to: AnyObject.self))
-            originalIMP = method_setImplementation(theMethod, swizzledIMP)
+
+            let originalIMP = method_getImplementation(method)
+            
+            let block: @convention(block) (AnyObject) -> Void = { [weak self] task in
+                guard let self = self else { return }
+                
+                // Call hook
+                if let urlSessionTask = task as? URLSessionTask {
+                    self.urlSessionTaskWillResume(urlSessionTask)
+                }
+                
+                objc_setAssociatedObject(task, &Self.resumeSwizzleKey, true, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+                // Call original implementation
+                let original: ResumeIMPType = unsafeBitCast(originalIMP, to: ResumeIMPType.self)
+                original(task, selector)
+                
+                objc_setAssociatedObject(task, &Self.resumeSwizzleKey, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+            }
+            
+            let swizzledIMP = imp_implementationWithBlock(block as Any)
+            method_setImplementation(method, swizzledIMP)
         }
     }
     

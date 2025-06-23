@@ -134,7 +134,7 @@ public struct VersionMetadata {
     }
 }
 
-protocol KeyChainProtocol {
+protocol KeyChainProtocol: AnyObject {
     func readStringFromKeychain(service: String, key: String) -> String?
     func writeStringToKeychain(service: String, key: String, value: String)
 }
@@ -145,13 +145,11 @@ public struct SessionMetadata {
     var oldPid: String?
     var oldSessionId: String?
     var oldSessionTimeInterval: TimeInterval?
-    var keyChain: KeyChainProtocol?
     
-    init(sessionId: String, sessionCreationDate: TimeInterval, keychain: KeyChainProtocol) {
+    init(sessionId: String, sessionCreationDate: TimeInterval,using keychain: KeyChainProtocol) {
         self.sessionId = sessionId
         self.sessionCreationDate = sessionCreationDate
-        self.keyChain = keychain
-        self.loadPrevSession()
+        self.loadPrevSession(keychain: keychain)
     }
     
     mutating func resetSessionMetadata() {
@@ -159,34 +157,29 @@ public struct SessionMetadata {
         self.sessionCreationDate = 0
     }
     
-    mutating func loadPrevSession() {
+    mutating func loadPrevSession(keychain: KeyChainProtocol) {
         let newPid = getpid()
         
-        if let oldPid = keyChain?.readStringFromKeychain(service: Keys.service.rawValue, 
+        if let oldPid = keychain.readStringFromKeychain(service: Keys.service.rawValue,
                                                          key: Keys.pid.rawValue),
-           let oldSessionId = keyChain?.readStringFromKeychain(service: Keys.service.rawValue,
+           let oldSessionId = keychain.readStringFromKeychain(service: Keys.service.rawValue,
                                                                key: Keys.keySessionId.rawValue),
-           let oldSessionTimeInterval = keyChain?.readStringFromKeychain(service: Keys.service.rawValue,
+           let oldSessionTimeInterval = keychain.readStringFromKeychain(service: Keys.service.rawValue,
                                                                          key: Keys.keySessionTimeInterval.rawValue) {
-            Log.d("OLD Process ID:\(oldPid)")
-            Log.d("OLD Session ID:\(oldSessionId)")
-            Log.d("OLD Session TimeInterval:\(oldSessionTimeInterval)")
+            Log.d("OLD Process ID:\(oldPid), Session ID:\(oldSessionId), TimeInterval:\(oldSessionTimeInterval)")
             self.oldPid = oldPid
             self.oldSessionId = oldSessionId
             self.oldSessionTimeInterval = TimeInterval(oldSessionTimeInterval)
         }
         
-        Log.d("NEW Process ID:\(newPid)")
-        Log.d("NEW Session ID:\(sessionId)")
-        Log.d("NEW Session TimeInterval:\(sessionCreationDate)")
-
-        keyChain?.writeStringToKeychain(service: Keys.service.rawValue,
+        Log.d("NEW Process ID:\(newPid), Session ID:\(sessionId), TimeInterval:\(sessionCreationDate)")
+        keychain.writeStringToKeychain(service: Keys.service.rawValue,
                                         key: Keys.pid.rawValue,
                                         value: String(newPid))
-        keyChain?.writeStringToKeychain(service: Keys.service.rawValue,
+        keychain.writeStringToKeychain(service: Keys.service.rawValue,
                                         key: Keys.keySessionId.rawValue,
                                         value: sessionId)
-        keyChain?.writeStringToKeychain(service: Keys.service.rawValue,
+        keychain.writeStringToKeychain(service: Keys.service.rawValue,
                                         key: Keys.keySessionTimeInterval.rawValue,
                                         value: String(sessionCreationDate))
     }

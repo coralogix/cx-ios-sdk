@@ -9,7 +9,7 @@ import Foundation
 import  UIKit
 import Coralogix
 //import Alamofire
-import AFNetworking
+//import AFNetworking
 
 class NetworkSim {
     static func failureNetworkRequest() {
@@ -39,22 +39,22 @@ class NetworkSim {
     }
     
     static func semdAFNetworkingRequest() {
-        let urlString = "https://jsonplaceholder.typicode.com/posts111"
-        let manager = AFHTTPSessionManager()
-        
-        // Set response serializer (JSON in this case)
-        manager.responseSerializer = AFJSONResponseSerializer()
-        
-        // Perform GET request
-        manager.get(urlString, parameters: nil, headers: nil, progress: nil, success: { task, responseObject in
-            // Success block
-            if let response = responseObject {
-                print("Response: \(response)")
-            }
-        }) { task, error in
-            // Failure block
-            print("Error: \(error.localizedDescription)")
-        }
+//        let urlString = "https://jsonplaceholder.typicode.com/posts111"
+//        let manager = AFHTTPSessionManager()
+//        
+//        // Set response serializer (JSON in this case)
+//        manager.responseSerializer = AFJSONResponseSerializer()
+//        
+//        // Perform GET request
+//        manager.get(urlString, parameters: nil, headers: nil, progress: nil, success: { task, responseObject in
+//            // Success block
+//            if let response = responseObject {
+//                print("Response: \(response)")
+//            }
+//        }) { task, error in
+//            // Failure block
+//            print("Error: \(error.localizedDescription)")
+//        }
     }
     
     static func setNetworkRequestContextSuccsess() {
