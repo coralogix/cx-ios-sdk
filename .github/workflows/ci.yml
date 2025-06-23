@@ -17,11 +17,6 @@ jobs:
       - name: Select Xcode version
         run: sudo xcode-select -s /Applications/Xcode_15.3.app
 
-      - name: Install CocoaPods (if needed)
-        run: |
-          cd Example
-          pod install
-
       - name: Run Unit Tests
         run: |
           cd Example
