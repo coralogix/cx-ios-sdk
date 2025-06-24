@@ -116,10 +116,10 @@ public struct CoralogixExporterOptions {
         self.traceParentInHeader = traceParentInHeader
     }
     
-    internal func shouldInitInstrumentation(instumentation: InstrumentationType) -> Bool {
+    internal func shouldInitInstrumentation(instrumentation: InstrumentationType) -> Bool {
         if let keys = self.instrumentations?.keys {
-            if keys.contains(instumentation) {
-                return self.instrumentations?[instumentation] ?? true
+            if keys.contains(instrumentation) {
+                return self.instrumentations?[instrumentation] ?? true
             }
         }
         return true

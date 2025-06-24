@@ -119,7 +119,7 @@ public class CoralogixRum {
         ]
 
         for (type, initializer) in instrumentationMap
-            where options.shouldInitInstrumentation(instumentation: type) {
+            where options.shouldInitInstrumentation(instrumentation: type) {
             initializer()
         }
         
@@ -129,12 +129,12 @@ public class CoralogixRum {
     private func initialzeMetricsManager(options: CoralogixExporterOptions) {
         self.metricsManager.addObservers()
 
-        if options.shouldInitInstrumentation(instumentation: .mobileVitals) {
+        if options.shouldInitInstrumentation(instrumentation: .mobileVitals) {
             self.metricsManager.startFPSSamplingMonitoring(mobileVitalsFPSSamplingRate: options.mobileVitalsFPSSamplingRate)
             self.metricsManager.startColdStartMonitoring()
         }
         
-        if options.shouldInitInstrumentation(instumentation: .anr) {
+        if options.shouldInitInstrumentation(instrumentation: .anr) {
             self.metricsManager.startANRMonitoring()
         }
     }
