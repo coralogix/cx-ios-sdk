@@ -22,6 +22,7 @@ extension CoralogixRum {
                 return self?.shouldAddTraceParent(to: request, options: options) ?? false
             }, receivedResponse: self.receivedResponse)
             self.sessionInstrumentation = URLSessionInstrumentation(configuration: configuration)
+            self.sessionInstrumentation?.enableNetworkInstrumentation()
         } else {
             Log.e("[Coralogix] Swizzling is disabled")
         }
