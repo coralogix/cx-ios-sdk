@@ -17,6 +17,7 @@ public protocol CoralogixInterface {
     func isDebug() -> Bool
     func hasSessionRecording(_ hasSessionRecording: Bool)
     func periodicallyCaptureEventTriggered()
+    func getProxyUrl() -> String
 }
 
 public protocol SessionReplayInterface {

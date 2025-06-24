@@ -53,6 +53,7 @@ public class SRNetworkManager {
     public var endPoint: String?
     public var publicKey: String?
     public var application: String?
+    public var proxyUrl: String?
     public var sessionCreationTimestamp: TimeInterval?
     var session: URLSessionProtocol?
     private let metadataBuilder = MetadataBuilder()
@@ -63,6 +64,7 @@ public class SRNetworkManager {
             return
         }
         let coralogixDomain = sdkManager.getCoralogixDomain()
+        self.proxyUrl = sdkManager.getProxyUrl()
         self.endPoint = "\(coralogixDomain)\(Global.sessionReplayPath.rawValue)"
         self.publicKey = sdkManager.getPublicKey()
         self.application = sdkManager.getApplication()
@@ -70,6 +72,18 @@ public class SRNetworkManager {
         self.session = session
     }
     
+    internal func resolvedUrlString() -> String? {
+        if let proxyUrl = self.proxyUrl, proxyUrl != "",
+            var urlComponents = URLComponents(string: proxyUrl) {
+            urlComponents.queryItems = [
+                URLQueryItem(name: Keys.cxforward.rawValue, value: self.endPoint),
+            ]
+            return urlComponents.url?.absoluteString
+        } else {
+            return self.endPoint
+        }
+    }
+
     internal func send(_ data: Data,
                      urlEntry: URLEntry?,
                      sessionId: String,
@@ -77,7 +91,8 @@ public class SRNetworkManager {
                      completion: @escaping (SessionReplayResultCode) -> Void) {
         guard let endPoint = self.endPoint,
               let publicKey = self.publicKey,
-              let url = URL(string: endPoint) else {
+              let resolvedUrl = self.resolvedUrlString(),
+              let url = URL(string: resolvedUrl) else {
             completion(.failure)
             return
         }

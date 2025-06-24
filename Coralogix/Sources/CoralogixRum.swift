@@ -340,6 +340,8 @@ public struct CoralogixExporterOptions {
     /// - Remark: As of the current Coralogix SDK version, `enableSwizzling = false` only disables `NSURLSession` instrumentation.
     public var enableSwizzling: Bool
     
+    public var proxyUrl: String?
+    
     public init(coralogixDomain: CoralogixDomain,
                 userContext: UserContext? = nil,
                 environment: String,
@@ -355,6 +357,7 @@ public struct CoralogixExporterOptions {
                 collectIPData: Bool = true,
                 beforeSend: (([String: Any]) -> [String: Any]?)? = nil,
                 enableSwizzling: Bool = true,
+                proxyUrl: String? = nil,
                 debug: Bool = false) {
         self.coralogixDomain = coralogixDomain
         self.userContext = userContext
@@ -372,6 +375,7 @@ public struct CoralogixExporterOptions {
         self.collectIPData = collectIPData
         self.beforeSend = beforeSend
         self.enableSwizzling = enableSwizzling
+        self.proxyUrl = proxyUrl
     }
     
     internal func shouldInitInstumentation(instumentation: InstrumentationType) -> Bool {

@@ -186,6 +186,7 @@ public enum Keys: String {
     case queueMediaInput = "com.coralogix.mediainput"
     case queueSpanProcessingQueue = "com.coralogix.spanProcessingQueue"
     case undefined
+    case cxforward
 }
 
 public enum CoralogixLogSeverity: Int {
@@ -209,5 +210,6 @@ public enum CoralogixEventType: String {
     case navigation
     case mobileVitals = "mobile-vitals"
     case lifeCycle = "life-cycle"
+    case screenshot
     case unknown
 }
