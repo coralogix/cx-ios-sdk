@@ -49,7 +49,12 @@ public class URLSessionInstrumentation {
     public init(configuration: URLSessionInstrumentationConfiguration) {
         self.configuration = configuration
         tracer = OpenTelemetry.instance.tracerProvider.get(instrumentationName: "NSURLSession", instrumentationVersion: "0.0.1")
-        injectInNSURLClasses()
+    }
+    
+    public func enableNetworkInstrumentation() {
+        DispatchQueue.main.async {
+            self.injectInNSURLClasses()
+        }
     }
     
     private func injectInNSURLClasses() {

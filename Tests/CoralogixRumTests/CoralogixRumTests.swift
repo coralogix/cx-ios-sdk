@@ -528,6 +528,135 @@ final class CoralogixRumTests: XCTestCase {
         XCTAssertEqual(mockSpan.recordedAttributes[Keys.severity.rawValue], .int(CoralogixLogSeverity.error.rawValue))
     }
     
+    func testShouldReturnFalse_WhenURLContainsCoralogixDomain() {
+        let request = URLRequest(url: URL(string: "https://ingress.us2.rum-ingress-coralogix.com")!)
+        let mockOptions = CoralogixExporterOptions(
+            coralogixDomain: .US2,
+            userContext: nil,
+            environment: "PROD",
+            application: "TestApp-iOS",
+            version: "1.0",
+            publicKey: "token",
+            ignoreUrls: [],
+            ignoreErrors: [],
+            sampleRate: 100,
+            debug: true
+        )
+        
+        let coralogixRum = CoralogixRum(options: mockOptions)
+        let result = coralogixRum.shouldAddTraceParent(to: request, options: mockOptions)
+        XCTAssertFalse(result)
+    }
+    
+    func testShouldReturnFalse_WhenTraceParentInHeaderIsNil() {
+        let request = URLRequest(url: URL(string: "https://example.com")!)
+        let mockOptions = CoralogixExporterOptions(
+            coralogixDomain: .US2,
+            userContext: nil,
+            environment: "PROD",
+            application: "TestApp-iOS",
+            version: "1.0",
+            publicKey: "token",
+            ignoreUrls: [],
+            ignoreErrors: [],
+            sampleRate: 100,
+            debug: true
+        )
+        
+        let coralogixRum = CoralogixRum(options: mockOptions)
+        let result = coralogixRum.shouldAddTraceParent(to: request, options: mockOptions)
+        XCTAssertFalse(result)
+    }
+    
+    func testShouldReturnFalse_WhenTracingIsDisabled() {
+        let request = URLRequest(url: URL(string: "https://example.com")!)
+        let mockOptions = CoralogixExporterOptions(
+            coralogixDomain: .US2,
+            userContext: nil,
+            environment: "PROD",
+            application: "TestApp-iOS",
+            version: "1.0",
+            publicKey: "token",
+            ignoreUrls: [],
+            ignoreErrors: [],
+            sampleRate: 100,
+            traceParentInHeader: ["enable": false],
+            debug: true
+        )
+        
+        let coralogixRum = CoralogixRum(options: mockOptions)
+        let result = coralogixRum.shouldAddTraceParent(to: request, options: mockOptions)
+        XCTAssertFalse(result)
+    }
+    
+    func testShouldReturnTrue_WhenAllowedUrlsContainsRequestURL() {
+        let request = URLRequest(url: URL(string: "https://allowed.com/path")!)
+        let mockOptions = CoralogixExporterOptions(
+            coralogixDomain: .US2,
+            userContext: nil,
+            environment: "PROD",
+            application: "TestApp-iOS",
+            version: "1.0",
+            publicKey: "token",
+            ignoreUrls: [],
+            ignoreErrors: [],
+            sampleRate: 100,
+            traceParentInHeader: ["enable": true,
+                                  "options" : [
+                                  "allowedTracingUrls": ["https://allowed.com/path"]]],
+            debug: true
+        )
+        
+        let coralogixRum = CoralogixRum(options: mockOptions)
+        let result = coralogixRum.shouldAddTraceParent(to: request, options: mockOptions)
+        XCTAssertTrue(result)
+    }
+    
+    func testShouldReturnTrue_WhenRegexMatchesRequestURL() {
+        let request = URLRequest(url: URL(string: "https://test.com/path")!)
+        let mockOptions = CoralogixExporterOptions(
+            coralogixDomain: .US2,
+            userContext: nil,
+            environment: "PROD",
+            application: "TestApp-iOS",
+            version: "1.0",
+            publicKey: "token",
+            ignoreUrls: [],
+            ignoreErrors: [],
+            sampleRate: 100,
+            traceParentInHeader: ["enable": true,
+                                  "options" : [
+                                  "allowedTracingUrls": [".*test\\.com.*"]]],
+            debug: true
+        )
+               
+        // Mock Global.isHostMatchesRegexPattern for test environment if needed
+        let coralogixRum = CoralogixRum(options: mockOptions)
+        let result = coralogixRum.shouldAddTraceParent(to: request, options: mockOptions)
+        XCTAssertTrue(result)
+    }
+    
+    func testShouldReturnTrue_WhenNoAllowedUrlsDefined() {
+        let request = URLRequest(url: URL(string: "https://random.com")!)
+        let mockOptions = CoralogixExporterOptions(
+            coralogixDomain: .US2,
+            userContext: nil,
+            environment: "PROD",
+            application: "TestApp-iOS",
+            version: "1.0",
+            publicKey: "token",
+            ignoreUrls: [],
+            ignoreErrors: [],
+            sampleRate: 100,
+            traceParentInHeader: ["enable": true],
+            debug: true
+        )
+        
+        let coralogixRum = CoralogixRum(options: mockOptions)
+        let result = coralogixRum.shouldAddTraceParent(to: request, options: mockOptions)
+        XCTAssertTrue(result)
+    }
+    
     private func makeMockCoralogixRum() ->  CoralogixRum {
         let mockOptions = CoralogixExporterOptions(
             coralogixDomain: .US2,
