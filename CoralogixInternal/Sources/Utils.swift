@@ -132,6 +132,29 @@ public enum Global: String {
         tapData[Keys.positionY.rawValue] = locationInScreen.y
     }
     
+    public static func isHostMatchesRegexPattern(string: String, regexs: [String]) -> Bool {
+        guard let url = URL(string: string), let host = url.host else {
+            return false // Return false if URL creation fails or no host part exists
+        }
+        
+        // Iterate over the regex patterns
+        for regex in regexs {
+            do {
+                let regex = try NSRegularExpression(pattern: regex)
+                let range = NSRange(location: 0, length: host.utf16.count)
+                if regex.firstMatch(in: host, options: [], range: range) != nil {
+                    return true
+                }
+            } catch {
+                Log.d("Invalid regex pattern: \(regex) — Error: \(error)")
+                continue // Skip invalid regex instead of crashing
+            }
+        }
+        
+        // Return false if no regex matches the host
+        return false
+    }
+    
     public static func isEmulator() -> Bool {
 #if targetEnvironment(simulator)
         // Code to execute on the Simulator

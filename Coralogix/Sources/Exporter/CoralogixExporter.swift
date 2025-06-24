@@ -222,29 +222,6 @@ public class CoralogixExporter: SpanExporter {
         return false
     }
     
-    private func isHostMatchesRegexPattern(string: String, regexs: [String]) -> Bool {
-        guard let url = URL(string: string), let host = url.host else {
-            return false // Return false if URL creation fails or no host part exists
-        }
-        
-        // Iterate over the regex patterns
-        for regex in regexs {
-            do {
-                let regex = try NSRegularExpression(pattern: regex)
-                let range = NSRange(location: 0, length: host.utf16.count)
-                if regex.firstMatch(in: host, options: [], range: range) != nil {
-                    return true
-                }
-            } catch {
-                Log.d("Invalid regex pattern: \(regex) — Error: \(error)")
-                continue // Skip invalid regex instead of crashing
-            }
-        }
-        
-        // Return false if no regex matches the host
-        return false
-    }
-    
     internal func shouldRemoveSpan(span: SpanDataProtocol) -> Bool {
         // if the closure returns true, the element stays in the result.
         let attributes = span.getAttributes()
@@ -269,7 +246,7 @@ public class CoralogixExporter: SpanExporter {
             
             if let ignoreUrlsOrRejexs = self.options.ignoreUrls,
                !ignoreUrlsOrRejexs.isEmpty {
-                let isMatch = self.isHostMatchesRegexPattern(string: url, regexs: ignoreUrlsOrRejexs)
+                let isMatch = Global.isHostMatchesRegexPattern(string: url, regexs: ignoreUrlsOrRejexs)
                 return !isMatch
             }
             return true

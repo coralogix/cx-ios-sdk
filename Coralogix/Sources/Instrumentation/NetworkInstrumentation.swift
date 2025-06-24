@@ -18,16 +18,43 @@ extension CoralogixRum {
         }
         
         if options.enableSwizzling == true {
-            let configuration = URLSessionInstrumentationConfiguration(spanCustomization: self.spanCustomization, shouldInjectTracingHeaders: { _ /*request*/ in
-                // TBD: need to implement the follow
-                // Received shouldInjectTracingHeaders from Coralogix options options
-                // To do this only on URL that are not internal
-                return true
+            let configuration = URLSessionInstrumentationConfiguration(spanCustomization: self.spanCustomization, shouldInjectTracingHeaders: { [weak self] request in
+                return self?.shouldAddTraceParent(to: request, options: options) ?? false
             }, receivedResponse: self.receivedResponse)
             self.sessionInstrumentation = URLSessionInstrumentation(configuration: configuration)
         } else {
             Log.e("[Coralogix] Swizzling is disabled")
         }
+    }
+    
+    internal func shouldAddTraceParent(to request: URLRequest, options: CoralogixExporterOptions) -> Bool {
+        guard let requestURLString = request.url?.absoluteString else {
+            return false
+        }
+        
+        if requestURLString.contains(options.coralogixDomain.rawValue) {
+            return false
+        }
+        
+        guard let traceParentDict = options.traceParentInHeader else {
+            return false
+        }
+        
+        let traceParent = TraceParentInHeader(params: traceParentDict)
+        
+        guard traceParent.enable else {
+            return false
+        }
+        
+        if let allowedUrls = traceParent.allowedTracingUrls, !allowedUrls.isEmpty {
+            if allowedUrls.contains(requestURLString) {
+                return true
+            }
+            
+            return Global.isHostMatchesRegexPattern(string: requestURLString, regexs: allowedUrls)
+        }
+        
+        return true
     }
     
     private func spanCustomization(request: URLRequest, spanBuilder: SpanBuilder) {
