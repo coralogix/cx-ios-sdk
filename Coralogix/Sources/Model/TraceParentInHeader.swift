@@ -13,7 +13,7 @@ internal struct TraceParentInHeader {
     
     init(params: [String : Any]?) {
         guard let params = params else {
-            Log.e("[TraceParentInHeader missing parmas]")
+            Log.e("[TraceParentInHeader missing params]")
             return
         }
         enable = params["enable"] as? Bool ?? false
