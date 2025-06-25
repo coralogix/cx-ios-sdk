@@ -43,6 +43,11 @@ let package = Package(
             path: "Tests/CoralogixRumTests/"
         ),
         .testTarget(
+            name: "CoralogixInternalTests",
+            dependencies: ["CoralogixInternal"],
+            path: "Tests/CoralogixInternalTests/"
+        ),
+        .testTarget(
             name: "SessionReplayTests",
             dependencies: ["SessionReplay"],
             path: "Tests/SessionReplayTests",

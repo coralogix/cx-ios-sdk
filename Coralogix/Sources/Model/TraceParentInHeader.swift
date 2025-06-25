@@ -1,11 +1,12 @@
 //
-//  File.swift
+//  TraceParentInHeader.swift
 //  Coralogix
 //
 //  Created by Tomer Har Yoffi on 24/06/2025.
 //
 
 import Foundation
+import CoralogixInternal
 
 internal struct TraceParentInHeader {
     var enable: Bool = false
@@ -16,8 +17,8 @@ internal struct TraceParentInHeader {
             Log.e("[TraceParentInHeader missing params]")
             return
         }
-        enable = params["enable"] as? Bool ?? false
-        let options = params["options"] as? [String: Any]
-        allowedTracingUrls = options?["allowedTracingUrls"] as? [String]
+        enable = params[Keys.enable.rawValue] as? Bool ?? false
+        let options = params[Keys.options.rawValue] as? [String: Any]
+        allowedTracingUrls = options?[Keys.allowedTracingUrls.rawValue] as? [String]
     }
 }

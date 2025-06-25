@@ -187,6 +187,9 @@ public enum Keys: String {
     case queueSpanProcessingQueue = "com.coralogix.spanProcessingQueue"
     case undefined
     case cxforward
+    case enable
+    case options
+    case allowedTracingUrls
 }
 
 public enum CoralogixLogSeverity: Int {

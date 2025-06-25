@@ -33,8 +33,9 @@ public enum Global: String {
     
     // Function to check if the URL contains any monitored path
     public static func containsMonitoredPath(_ urlString: String) -> Bool {
-        guard let url = URL(string: urlString) else { return false }
-        return monitoredPaths.contains(url.path)
+        return monitoredPaths.contains { path in
+            urlString.contains(path)
+        }
     }
     
     public static func appVersionInfo(indludeBuild: Bool = true) -> String {
