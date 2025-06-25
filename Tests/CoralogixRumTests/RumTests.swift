@@ -271,7 +271,7 @@ final class RumTests: XCTestCase {
             labels: ["key": "value"]
         )
         cxRum.screenshotId = "abc123"
-        cxRum.page = 2
+        cxRum.page = "2"
         let date = Date(timeIntervalSince1970: 1_000_000)
         cxRum.timeStamp = date.timeIntervalSince1970
         
