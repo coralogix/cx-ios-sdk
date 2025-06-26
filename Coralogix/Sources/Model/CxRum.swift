@@ -44,15 +44,34 @@ struct CxRum {
          userMetadata: [String: String]?,
          labels: [String: Any]?) {
 
-        self.timeStamp = otel.getStartTime() ?? Date().timeIntervalSince1970
         self.networkRequestContext = NetworkRequestContext(otel: otel)
+        self.errorContext = ErrorContext(otel: otel)
+        self.deviceContext = DeviceContext(otel: otel)
         self.mobileSdk = Global.sdk.rawValue
+        self.logContext = LogContext(otel: otel)
+        self.deviceState = DeviceState(networkManager: self.networkManager)
+        self.snapshotContext = SnapshotConext.getSnapshot(otel: otel, sessionManager: self.sessionManager)
+        self.interactionContext = InteractionContext(otel: otel)
+        self.mobileVitalsContext = MobileVitalsContext(otel: otel)
+        self.lifeCycleContext = LifeCycleContext(otel: otel)
+        self.eventContext = EventContext(otel: otel)
+
+        self.timeStamp = otel.getStartTime() ?? Date().timeIntervalSince1970
+        self.screenshotId = otel.getAttribute(forKey: Keys.screenshotId.rawValue) as? String
+        self.page = otel.getAttribute(forKey: Keys.page.rawValue) as? String ?? "0"
+        self.environment = otel.getAttribute(forKey: Keys.environment.rawValue) as? String ?? ""
+
         self.versionMetadata = versionMetadata
         self.sessionManager = sessionManager
         self.networkManager = networkManager
         self.viewManager = viewManager
-        let hasRecording = sessionManager.doesSessionhasRecording()
+        self.labels = labels
 
+        let traceContext = Helper.getTraceAndSpanId(otel: otel)
+        self.traceId = traceContext.traceId
+        self.spanId = traceContext.spanId
+        
+        let hasRecording = sessionManager.doesSessionhasRecording()
         if let sessionMetadata = sessionManager.getSessionMetadata() {
             self.sessionContext = SessionContext(otel: otel,
                                                  sessionMetadata: sessionMetadata,
@@ -65,22 +84,7 @@ struct CxRum {
                                                          hasRecording: hasRecording)
             }
         }
-        self.eventContext = EventContext(otel: otel)
-        self.environment = otel.getAttribute(forKey: Keys.environment.rawValue) as? String ?? ""
-        self.traceId = otel.getTraceId() ?? ""
-        self.spanId = otel.getSpanId() ?? ""
-        self.errorContext = ErrorContext(otel: otel)
-        self.deviceContext = DeviceContext(otel: otel)
-        self.labels = labels
-        self.logContext = LogContext(otel: otel)
-        self.deviceState = DeviceState(networkManager: self.networkManager)
-        self.snapshotContext = SnapshotConext.getSnapshot(otel: otel, sessionManager: self.sessionManager)
-        self.interactionContext = InteractionContext(otel: otel)
-        self.mobileVitalsContext = MobileVitalsContext(otel: otel)
-        self.lifeCycleContext = LifeCycleContext(otel: otel)
-        self.screenshotId = otel.getAttribute(forKey: Keys.screenshotId.rawValue) as? String
-        self.page = otel.getAttribute(forKey: Keys.page.rawValue) as? String ?? "0"
-        
+
         if let sessionManager = self.sessionManager,
            let viewManager = self.viewManager,
            let lastSnapshotSent = sessionManager.lastSnapshotEventTime {
@@ -95,7 +99,7 @@ struct CxRum {
         }
     }
     
-    func isMoreThanOneMinuteDifference(interval1: TimeInterval, interval2: TimeInterval) -> Bool {
+    internal func isMoreThanOneMinuteDifference(interval1: TimeInterval, interval2: TimeInterval) -> Bool {
         let difference = abs(interval1 - interval2)
         return difference > 60
     }
