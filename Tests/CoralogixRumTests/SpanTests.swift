@@ -146,7 +146,7 @@ final class SpanTests: XCTestCase {
                     }
                     
                     if let networkType = deviceState[Keys.networkType.rawValue] as? String {
-                        XCTAssertEqual(networkType, "No connection or unknown type")
+                        XCTAssertEqual(networkType, Keys.undefined.rawValue)
                     }
                 }
                 
