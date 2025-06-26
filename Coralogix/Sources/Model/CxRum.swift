@@ -114,8 +114,13 @@ struct CxRum {
         if let screenshotId = self.screenshotId, let page = self.page {
             var screenshotContext = [String: Any]()
             screenshotContext[Keys.screenshotId.rawValue] = screenshotId
-            screenshotContext[Keys.page.rawValue] = Int(page)
             screenshotContext[Keys.segmentTimestamp.rawValue] = self.timeStamp.milliseconds
+            if let pageInt = Int(page) {
+                screenshotContext[Keys.page.rawValue] = pageInt
+            } else {
+                Log.w("Invalid page value: \(page), defaulting to 0")
+                screenshotContext[Keys.page.rawValue] = 0
+            }
             result[Keys.screenshotContext.rawValue] = screenshotContext
         }
     }
