@@ -118,10 +118,10 @@ public class CoralogixExporter: SpanExporter {
             Keys.skipEnrichmentWithIp.rawValue: !options.collectIPData
         ]
 
+        var requestJsonData: Data? = nil
         do {
-            let jsonData = try JSONSerialization.data(withJSONObject: jsonObject, options: [])
-            request.httpBody = jsonData
-            self.logJSON(from: jsonData, prettyPrint: true)
+            requestJsonData = try JSONSerialization.data(withJSONObject: jsonObject, options: [])
+            request.httpBody = requestJsonData
         } catch {
             Log.e(error)
             return .failure
@@ -129,10 +129,20 @@ public class CoralogixExporter: SpanExporter {
 
         var status: SpanExporterResultCode = .failure
         let semaphore = DispatchSemaphore(value: 0)
-
-        let task = URLSession.shared.dataTask(with: request) { jsonData, _, error in
-            status = (error == nil) ? .success : .failure
-            semaphore.signal()
+        
+        let task = URLSession.shared.dataTask(with: request) { [weak self] jsonData, _, error in
+            defer { semaphore.signal() }
+            
+            if let error = error {
+                status = .failure
+                return
+            }
+            
+            status = .success
+            
+            if let data = requestJsonData {
+                self?.logJSON(from: data, prettyPrint: true)
+            }
         }
 
         task.resume()
