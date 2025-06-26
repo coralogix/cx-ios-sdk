@@ -33,7 +33,7 @@ struct CxRum {
     var mobileVitalsContext: MobileVitalsContext?
     var lifeCycleContext: LifeCycleContext?
     var screenshotId: String?
-    var page: Int?
+    var page: String?
      
     init(otel: SpanDataProtocol,
          versionMetadata: VersionMetadata,
@@ -79,7 +79,7 @@ struct CxRum {
         self.mobileVitalsContext = MobileVitalsContext(otel: otel)
         self.lifeCycleContext = LifeCycleContext(otel: otel)
         self.screenshotId = otel.getAttribute(forKey: Keys.screenshotId.rawValue) as? String
-        self.page = otel.getAttribute(forKey: Keys.page.rawValue) as? Int ?? 0
+        self.page = otel.getAttribute(forKey: Keys.page.rawValue) as? String ?? "0"
         
         if let sessionManager = self.sessionManager,
            let viewManager = self.viewManager,
@@ -114,8 +114,13 @@ struct CxRum {
         if let screenshotId = self.screenshotId, let page = self.page {
             var screenshotContext = [String: Any]()
             screenshotContext[Keys.screenshotId.rawValue] = screenshotId
-            screenshotContext[Keys.page.rawValue] = page
             screenshotContext[Keys.segmentTimestamp.rawValue] = self.timeStamp.milliseconds
+            if let pageInt = Int(page) {
+                screenshotContext[Keys.page.rawValue] = pageInt
+            } else {
+                Log.w("Invalid page value: \(page), defaulting to 0")
+                screenshotContext[Keys.page.rawValue] = 0
+            }
             result[Keys.screenshotContext.rawValue] = screenshotContext
         }
     }
