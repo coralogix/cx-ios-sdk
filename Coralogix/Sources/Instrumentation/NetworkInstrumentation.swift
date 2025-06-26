@@ -105,6 +105,8 @@ extension CoralogixRum {
         span.setAttribute(key: SemanticAttributes.httpResponseBodySize.rawValue, value: dictionary[Keys.httpResponseBodySize.rawValue] as? Int ?? 0)
         span.setAttribute(key: SemanticAttributes.httpTarget.rawValue, value: dictionary[Keys.fragments.rawValue] as? String ?? "")
         span.setAttribute(key: SemanticAttributes.httpScheme.rawValue, value: dictionary[Keys.schema.rawValue] as? String ?? "")
+        span.setAttribute(key: Keys.customSpanId.rawValue, value: dictionary[Keys.spanId.rawValue] as? String ?? "")
+        span.setAttribute(key: Keys.customTraceId.rawValue, value: dictionary[Keys.traceId.rawValue] as? String ?? "")
         span.end()
     }
     

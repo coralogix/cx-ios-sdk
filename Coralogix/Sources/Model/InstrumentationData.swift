@@ -37,8 +37,10 @@ struct OtelSpan {
     let duration: [UInt64]
     
     init(otel: SpanDataProtocol, labels: [String: Any]?) {
-        self.spanId = otel.getSpanId() ?? ""
-        self.traceId = otel.getTraceId() ?? ""
+        let traceContext = Helper.getTraceAndSpanId(otel: otel)
+        self.traceId = traceContext.traceId
+        self.spanId = traceContext.spanId
+        
         self.name = otel.getName() ?? ""
         var attributes = [String: Any]()
         

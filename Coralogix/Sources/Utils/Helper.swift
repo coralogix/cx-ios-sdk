@@ -199,4 +199,23 @@ class Helper {
         }
         return result
     }
+    
+    internal static func getTraceAndSpanId(otel: SpanDataProtocol) -> (traceId: String, spanId: String) {
+        let attributeTraceId = otel.getAttribute(forKey: Keys.customTraceId.rawValue) as? String
+        let attributeSpanId = otel.getAttribute(forKey: Keys.customSpanId.rawValue) as? String
+
+        let traceId: String
+        let spanId: String
+
+        if let attributeTraceId, !attributeTraceId.isEmpty,
+           let attributeSpanId, !attributeSpanId.isEmpty {
+            traceId = attributeTraceId
+            spanId = attributeSpanId
+        } else {
+            traceId = otel.getTraceId() ?? ""
+            spanId = otel.getSpanId() ?? ""
+        }
+
+        return (traceId, spanId)
+    }
 }
