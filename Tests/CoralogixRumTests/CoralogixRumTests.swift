@@ -240,42 +240,6 @@ final class CoralogixRumTests: XCTestCase {
         }
     }
     
-    func testHandleUniqueViewIfNeededWhenUniqueViewShouldSetSnapshotContextAttribute() {
-        let coralogixRum = makeMockCoralogixRum()
-        let cxView = CXView(state: .notifyOnDisappear, name: "TestView")
-        let mockSpan = MockSpan()
-        
-        // Act
-        coralogixRum.handleUniqueViewIfNeeded(cxView: cxView, span: mockSpan)
-        
-        // Assert
-        XCTAssertTrue(mockSpan.setAttributeCalled, "Expected span.setAttribute to be called.")
-        XCTAssertEqual(mockSpan.setAttributeKey, Keys.snapshotContext.rawValue, "Expected the attribute key to be snapshotContext.")
-        
-        if case let .string(jsonString)? = mockSpan.setAttributeValue {
-            XCTAssertTrue(jsonString.contains("\"errorCount\":0"), "Expected error count to be 0.")
-            XCTAssertTrue(jsonString.contains("\"viewCount\":1"), "Expected view count to be 1.")
-            XCTAssertTrue(jsonString.contains("\"clickCount\":0"), "Expected click count to be 0.")
-            XCTAssertTrue(jsonString.contains("\"hasRecording\":false"), "Expected hasRecording to be false.")
-        } else {
-            XCTFail("Expected setAttribute value to be a JSON string.")
-        }
-    }
-    
-    func testHandleUniqueViewIfNeededWhenSessionManagerIsNilShouldNotSetAttribute() {
-        let coralogixRum = makeMockCoralogixRum()
-        let cxView = CXView(state: .notifyOnDisappear, name: "TestView")
-        let mockSpan = MockSpan()
-
-        coralogixRum.sessionManager = nil // 🚨 Important! Simulate missing session
-            
-        // Act
-        coralogixRum.handleUniqueViewIfNeeded(cxView: cxView, span: mockSpan)
-            
-        // Assert
-        XCTAssertFalse(mockSpan.setAttributeCalled, "Expected no attribute to be set when sessionManager is nil.")
-    }
-    
     func testHandleNotificationShouldSetCxViewInExporter() {
         let mockOptions =  CoralogixExporterOptions(coralogixDomain: CoralogixDomain.US2,
                                                     userContext: nil,

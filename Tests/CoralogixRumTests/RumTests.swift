@@ -19,7 +19,7 @@ final class RumTests: XCTestCase {
     
     override func setUpWithError() throws {
         
-        let snapshot = SnapshotConext(timestemp: Date().timeIntervalSince1970,
+        let snapshot = SnapshotContext(timestamp: Date().timeIntervalSince1970,
                                       errorCount: 1,
                                       viewCount: 2,
                                       clickCount: 0,
@@ -132,7 +132,7 @@ final class RumTests: XCTestCase {
         
         let currentTime = Date()
         cxRum.isOneMinuteFromLastSnapshotPass = true
-        cxRum.snapshotContext = SnapshotConext(timestemp: currentTime.timeIntervalSince1970,
+        cxRum.snapshotContext = SnapshotContext(timestamp: currentTime.timeIntervalSince1970,
                                                errorCount: 1,
                                                viewCount: 1,
                                                clickCount: 0,
@@ -170,7 +170,7 @@ final class RumTests: XCTestCase {
         )
         
         let currentTime = Date()
-        cxRum.snapshotContext = SnapshotConext(timestemp: currentTime.timeIntervalSince1970,
+        cxRum.snapshotContext = SnapshotContext(timestamp: currentTime.timeIntervalSince1970,
                                                errorCount: 1,
                                                viewCount: 1,
                                                clickCount: 0,
@@ -208,7 +208,7 @@ final class RumTests: XCTestCase {
         )
         
         let currentTime = Date()
-        cxRum.snapshotContext = SnapshotConext(timestemp: currentTime.timeIntervalSince1970,
+        cxRum.snapshotContext = SnapshotContext(timestamp: currentTime.timeIntervalSince1970,
                                                errorCount: 0,
                                                viewCount: 1,
                                                clickCount: 0,
