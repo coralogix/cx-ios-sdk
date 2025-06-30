@@ -11,6 +11,7 @@ import Network
 public class NetworkStatusClass {
     public private(set) var networkInfo: CTTelephonyNetworkInfo?
     public private(set) var networkMonitor: NetworkMonitorProtocol
+    
     public convenience init() throws {
         self.init(with: try NetworkMonitor())
     }
@@ -25,29 +26,44 @@ public class NetworkStatusClass {
     }
 
     public func status() -> (String, String?, Any?) {
-        switch networkMonitor.getConnection() {
-        case .wifi:
-            return ("wifi", nil, nil)
-        case .cellular:
-            if #available(iOS 16.0, *) {
-                if let networkInfo = self.networkInfo, let serviceId = networkInfo.dataServiceIdentifier {
-                    if let radioAccessTechnology = networkInfo.serviceCurrentRadioAccessTechnology?[serviceId] {
-                        // iOS 16+: CTServiceCarrier is now used
-                        return ("cell", simpleConnectionName(connectionType: radioAccessTechnology), nil)
+        var connectionType: Connection = .unavailable
+        var result: (String, String?, Any?) = ("unavailable", nil, nil)
+        
+        let fetchStatus = {
+            switch self.networkMonitor.getConnection() {
+            case .wifi:
+                result = ("wifi", nil, nil)
+            case .cellular:
+                if #available(iOS 16.0, *) {
+                    if let networkInfo = self.networkInfo,
+                       let serviceId = networkInfo.dataServiceIdentifier,
+                       let radioAccessTechnology = networkInfo.serviceCurrentRadioAccessTechnology?[serviceId] {
+                        result = ("cell", self.simpleConnectionName(connectionType: radioAccessTechnology), nil)
+                    } else {
+                        result = ("cell", "unknown", nil)
                     }
-                }
-            } else {
-                if let networkInfo = self.networkInfo, let serviceId = networkInfo.dataServiceIdentifier {
-                    if let radioAccessTechnology = networkInfo.serviceCurrentRadioAccessTechnology?[serviceId],
+                } else {
+                    if let networkInfo = self.networkInfo, let serviceId = networkInfo.dataServiceIdentifier,
+                       let radioAccessTechnology = networkInfo.serviceCurrentRadioAccessTechnology?[serviceId],
                        let carrier = networkInfo.serviceSubscriberCellularProviders?[serviceId] {
-                        return ("cell", simpleConnectionName(connectionType: radioAccessTechnology), carrier)
+                        result = ("cell", self.simpleConnectionName(connectionType: radioAccessTechnology), carrier)
+                    } else {
+                        result = ("cell", "unknown", nil)
                     }
                 }
+            case .unavailable:
+                result = ("unavailable", nil, nil)
             }
-            return ("cell", "unknown", nil)
-        case .unavailable:
-            return ("unavailable", nil, nil)
         }
+        
+        if Thread.isMainThread {
+            fetchStatus()
+        } else {
+            DispatchQueue.main.sync {
+                fetchStatus()
+            }
+        }
+        return result
     }
 
     func simpleConnectionName(connectionType: String) -> String {
