@@ -26,7 +26,6 @@ public class NetworkStatusClass {
     }
 
     public func status() -> (String, String?, Any?) {
-        var connectionType: Connection = .unavailable
         var result: (String, String?, Any?) = ("unavailable", nil, nil)
         
         let fetchStatus = {
