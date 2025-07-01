@@ -22,7 +22,7 @@ final class CxRumTests: XCTestCase {
         let snapshot = SnapshotContext(timestamp: Date().timeIntervalSince1970,
                                        errorCount: 1,
                                        viewCount: 2,
-                                       clickCount: 0,
+                                       actionCount: 0,
                                        hasRecording: false)
         let dict = Helper.convertDictionary(snapshot.getDictionary())
         let snapshotString = Helper.convertDictionayToJsonString(dict: dict)
@@ -135,7 +135,7 @@ final class CxRumTests: XCTestCase {
         cxRum.snapshotContext = SnapshotContext(timestamp: currentTime.timeIntervalSince1970,
                                                 errorCount: 1,
                                                 viewCount: 1,
-                                                clickCount: 0,
+                                                actionCount: 0,
                                                 hasRecording: false)
         // Invoke getDictionary
         let result = cxRum.getDictionary()
@@ -173,7 +173,7 @@ final class CxRumTests: XCTestCase {
         cxRum.snapshotContext = SnapshotContext(timestamp: currentTime.timeIntervalSince1970,
                                                 errorCount: 1,
                                                 viewCount: 1,
-                                                clickCount: 0,
+                                                actionCount: 0,
                                                 hasRecording: false)
         // Invoke getDictionary
         let result = cxRum.getDictionary()
@@ -211,7 +211,7 @@ final class CxRumTests: XCTestCase {
         cxRum.snapshotContext = SnapshotContext(timestamp: currentTime.timeIntervalSince1970,
                                                 errorCount: 0,
                                                 viewCount: 1,
-                                                clickCount: 0,
+                                                actionCount: 0,
                                                 hasRecording: false)
         // Invoke getDictionary
         let result = cxRum.getDictionary()

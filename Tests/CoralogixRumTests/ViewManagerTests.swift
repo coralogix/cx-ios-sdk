@@ -47,7 +47,8 @@ final class ViewManagerTests: XCTestCase {
         XCTAssertEqual(viewManager.getDictionary()[Keys.view.rawValue] as? String, "View1")
         
         viewManager.set(cxView: nil)
-        XCTAssertTrue(viewManager.getDictionary().isEmpty)
+        let dict = viewManager.getDictionary()
+        XCTAssertEqual(dict[Keys.view.rawValue] as? String, Keys.undefined.rawValue)
     }
     
     func testGetDictionary() {

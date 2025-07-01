@@ -15,11 +15,11 @@ public struct SnapshotContext {
     let actionCount: Int
     let hasRecording: Bool
 
-    init(timestamp: TimeInterval, errorCount: Int, viewCount: Int, clickCount: Int, hasRecording: Bool) {
+    init(timestamp: TimeInterval, errorCount: Int, viewCount: Int, actionCount: Int, hasRecording: Bool) {
         self.timestamp = timestamp
         self.errorCount = errorCount
         self.viewCount = viewCount
-        self.actionCount = clickCount
+        self.actionCount = actionCount
         self.hasRecording = hasRecording
     }
     

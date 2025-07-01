@@ -89,7 +89,7 @@ public class SRNetworkManager {
                      sessionId: String,
                      subIndex: Int,
                      completion: @escaping (SessionReplayResultCode) -> Void) {
-        guard let endPoint = self.endPoint,
+        guard let _ = self.endPoint,
               let publicKey = self.publicKey,
               let resolvedUrl = self.resolvedUrlString(),
               let url = URL(string: resolvedUrl) else {

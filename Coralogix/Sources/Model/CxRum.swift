@@ -117,7 +117,7 @@ struct CxRum {
             timestamp: Date().timeIntervalSince1970,
             errorCount: sessionManager.getErrorCount(),
             viewCount: viewManager.getUniqueViewCount(),
-            clickCount: sessionManager.getClickCount(),
+            actionCount: sessionManager.getClickCount(),
             hasRecording: sessionManager.hasRecording
         )
     }
