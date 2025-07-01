@@ -54,7 +54,7 @@ public class ViewManager {
     
     func getDictionary() -> [String: Any] {
         guard let visibleView = self.visibleView else {
-            return [String: Any]()
+            return [Keys.view.rawValue: Keys.undefined.rawValue]
         }
         return [Keys.view.rawValue: visibleView.name]
     }
