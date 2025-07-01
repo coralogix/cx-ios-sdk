@@ -114,7 +114,6 @@ extension CoralogixRum {
             self.addUserMetadata(to: &span)
             
             if severity.rawValue == CoralogixLogSeverity.error.rawValue {
-                self.addSnapshotContext(to: &span)
                 self.addScreenshotId(to: &span)
             }
             span.end()
@@ -127,7 +126,6 @@ extension CoralogixRum {
         span.setAttribute(key: Keys.source.rawValue, value: Keys.console.rawValue)
         span.setAttribute(key: Keys.severity.rawValue, value: AttributeValue.int(CoralogixLogSeverity.error.rawValue))
         self.addUserMetadata(to: &span)
-        self.addSnapshotContext(to: &span)
         self.addScreenshotId(to: &span)
         return span
     }
@@ -139,20 +137,5 @@ extension CoralogixRum {
             span.setAttribute(key: Keys.page.rawValue, value: screenshotLocation.page)
             sessionReplay.captureEvent(properties: screenshotLocation.toProperties())
         }
-    }
-    
-    private func addSnapshotContext(to span: inout any Span) {
-        guard let sessionManager = self.sessionManager else {
-            return
-        }
-        sessionManager.incrementErrorCounter()
-        let snapshot = SnapshotConext(timestemp: Date().timeIntervalSince1970,
-                                      errorCount: sessionManager.getErrorCount(),
-                                      viewCount: self.viewManager.getUniqueViewCount(),
-                                      clickCount: sessionManager.getClickCount(),
-                                      hasRecording: sessionManager.hasRecording)
-        let dict = Helper.convertDictionary(snapshot.getDictionary())
-        span.setAttribute(key: Keys.snapshotContext.rawValue,
-                          value: Helper.convertDictionayToJsonString(dict: dict))
     }
 }

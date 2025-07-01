@@ -115,7 +115,7 @@ public enum Keys: String {
     case snapshotContext = "snapshot_context"
     case errorCount
     case viewCount
-    case clickCount
+    case actionCount
     case isViewUnique
     case isSnapshotEvent
     case threads

@@ -133,7 +133,7 @@ public class CoralogixExporter: SpanExporter {
         let task = URLSession.shared.dataTask(with: request) { [weak self] jsonData, _, error in
             defer { semaphore.signal() }
             
-            if let error = error {
+            if let _ = error {
                 status = .failure
                 return
             }

@@ -21,7 +21,6 @@ extension CoralogixRum {
         let span = self.getNavigationSpan()
         
         handleAppearStateIfNeeded(cxView: cxView, span: span)
-        handleUniqueViewIfNeeded(cxView: cxView, span: span)
         
         span.end()
         self.coralogixExporter?.set(cxView: cxView)
@@ -40,25 +39,7 @@ extension CoralogixRum {
         span.setAttribute(key: Keys.page.rawValue, value: screenshotLocation.page)
         sessionReplay.captureEvent(properties: screenshotLocation.toProperties())
     }
-    
-    internal func handleUniqueViewIfNeeded(cxView: CXView, span: any Span) {
-        guard viewManager.isUniqueView(name: cxView.name),
-              let sessionManager = sessionManager else { return }
-        let timestamp: TimeInterval = Date().timeIntervalSince1970
-        let snapshot = SnapshotConext(
-            timestemp: timestamp,
-            errorCount: sessionManager.getErrorCount(),
-            viewCount: viewManager.getUniqueViewCount() + 1,
-            clickCount: sessionManager.getClickCount(),
-            hasRecording: sessionManager.hasRecording
-        )
-        
-        let dict = Helper.convertDictionary(snapshot.getDictionary())
-        let jsonString = Helper.convertDictionayToJsonString(dict: dict)
-        
-        span.setAttribute(key: Keys.snapshotContext.rawValue, value: jsonString)
-    }
-    
+
     internal func getNavigationSpan() -> any Span {
         var span = tracerProvider().spanBuilder(spanName: Keys.iosSdk.rawValue).startSpan()
         self.addUserMetadata(to: &span)

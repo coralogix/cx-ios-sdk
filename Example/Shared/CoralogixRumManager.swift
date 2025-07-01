@@ -59,4 +59,8 @@ final class CoralogixRumManager {
         self._sdk = CoralogixRum(options: options)
 //        os_signpost(.end, log: log, name: "Init Coralogix", signpostID: signpostID)
     }
+    
+    func getSessionId() -> String? {
+        return _sdk?.getSessionId()
+    }
 }

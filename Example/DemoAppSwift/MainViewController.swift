@@ -20,7 +20,45 @@ class MainViewController: UITableViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         tableView.register(UITableViewCell.self, forCellReuseIdentifier: "cell")
-        self.title = "DemoApp swift"
+        self.title = CoralogixRumManager.shared.getSessionId() ?? "No Session"
+        // then tell the nav bar to use a 10‑point font
+        navigationController?.navigationBar.titleTextAttributes = [
+            .font: UIFont.systemFont(ofSize: 10)
+        ]
+        
+        // 3) Add a Copy button on the right
+        navigationItem.rightBarButtonItem = UIBarButtonItem(
+            title: "Copy",
+            style: .plain,
+            target: self,
+            action: #selector(copySessionIDToClipboard)
+        )
+    }
+    
+    @objc private func copySessionIDToClipboard() {
+        guard let sessionID = CoralogixRumManager.shared.getSessionId() {
+            let alert = UIAlertController(title: nil,
+                                          message: "No session ID available",
+                                          preferredStyle: .alert)
+            present(alert, animated: true)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+                alert.dismiss(animated: true)
+            }
+            return
+        }
+        
+        UIPasteboard.general.string = sessionID
+        
+        // (Optional) quick user feedback
+        let alert = UIAlertController(title: nil,
+                                      message: "Copied to clipboard!",
+                                      preferredStyle: .alert)
+        present(alert, animated: true)
+        
+        // auto‑dismiss after 1s
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+            alert.dismiss(animated: true, completion: nil)
+        }
     }
 
     // MARK: - Table view data source
