@@ -36,7 +36,17 @@ class MainViewController: UITableViewController {
     }
     
     @objc private func copySessionIDToClipboard() {
-        let sessionID = CoralogixRumManager.shared.getSessionId()
+        guard let sessionID = CoralogixRumManager.shared.getSessionId() {
+            let alert = UIAlertController(title: nil,
+                                          message: "No session ID available",
+                                          preferredStyle: .alert)
+            present(alert, animated: true)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+                alert.dismiss(animated: true)
+            }
+            return
+        }
+        
         UIPasteboard.general.string = sessionID
         
         // (Optional) quick user feedback
@@ -47,7 +57,7 @@ class MainViewController: UITableViewController {
         
         // auto‑dismiss after 1s
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-            alert.dismiss(animated: true)
+            alert.dismiss(animated: true, completion: nil)
         }
     }
 
