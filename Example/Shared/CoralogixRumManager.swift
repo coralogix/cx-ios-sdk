@@ -11,7 +11,6 @@ import Foundation
 
 final class CoralogixRumManager {
     static let shared = CoralogixRumManager()
-
     private var _sdk: CoralogixRum?
     var sdk: CoralogixRum {
         guard let _sdk = _sdk else {
