@@ -20,7 +20,7 @@ class MainViewController: UITableViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         tableView.register(UITableViewCell.self, forCellReuseIdentifier: "cell")
-        self.title = CoralogixRumManager.shared.getSessionId()
+        self.title = CoralogixRumManager.shared.getSessionId() ?? "No Session"
         // then tell the nav bar to use a 10‑point font
         navigationController?.navigationBar.titleTextAttributes = [
             .font: UIFont.systemFont(ofSize: 10)
