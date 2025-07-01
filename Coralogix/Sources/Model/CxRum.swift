@@ -158,12 +158,15 @@ struct CxRum {
         result[Keys.platform.rawValue] = Global.getOs() == Keys.tvos.rawValue ? Keys.television.rawValue : Keys.mobile.rawValue
         result[Keys.deviceContext.rawValue] = self.deviceContext.getDictionary()
         result[Keys.deviceState.rawValue] = self.deviceState.getDictionary()
-        result[Keys.screenshotContext.rawValue] = self.screenShotContext?.getDictionary()
     }
 
     private mutating func addConditionalContexts(to result: inout [String: Any]) {
         if eventContext.type == CoralogixEventType.error {
             result[Keys.errorContext.rawValue] = self.errorContext.getDictionary()
+        }
+        
+        if let screenShotContext = self.screenShotContext, screenShotContext.isValid() {
+            result[Keys.screenshotContext.rawValue] = self.screenShotContext?.getDictionary()
         }
         
         if eventContext.type == CoralogixEventType.networkRequest {

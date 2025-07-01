@@ -28,6 +28,10 @@ public struct ScreenshotContext {
         }
     }
     
+    func isValid() -> Bool {
+        return self.screenshotId != Keys.undefined.rawValue
+    }
+    
     func getDictionary() -> [String: Any] {
         var result = [String: Any]()
         result[Keys.screenshotId.rawValue] = self.screenshotId
