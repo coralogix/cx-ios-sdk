@@ -192,6 +192,7 @@ public enum Keys: String {
     case allowedTracingUrls
     case customTraceId
     case customSpanId
+    case isManual
 }
 
 public enum CoralogixLogSeverity: Int {

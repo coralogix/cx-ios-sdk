@@ -32,8 +32,7 @@ struct CxRum {
     var interactionContext: InteractionContext?
     var mobileVitalsContext: MobileVitalsContext?
     var lifeCycleContext: LifeCycleContext?
-    var screenshotId: String?
-    var page: String?
+    var screenShotContext: ScreenshotContext?
      
     init(otel: SpanDataProtocol,
          versionMetadata: VersionMetadata,
@@ -54,10 +53,9 @@ struct CxRum {
         self.mobileVitalsContext = MobileVitalsContext(otel: otel)
         self.lifeCycleContext = LifeCycleContext(otel: otel)
         self.eventContext = EventContext(otel: otel)
-
+        self.screenShotContext = ScreenshotContext(otel: otel)
+        
         self.timeStamp = otel.getStartTime() ?? Date().timeIntervalSince1970
-        self.screenshotId = otel.getAttribute(forKey: Keys.screenshotId.rawValue) as? String
-        self.page = otel.getAttribute(forKey: Keys.page.rawValue) as? String ?? "0"
         self.environment = otel.getAttribute(forKey: Keys.environment.rawValue) as? String ?? ""
 
         self.versionMetadata = versionMetadata
@@ -133,23 +131,7 @@ struct CxRum {
         self.addConditionalContexts(to: &result)
         self.addViewManagerContext(to: &result)
         self.addLabels(to: &result)
-        self.addScreenshotContext(to: &result)
         return result
-    }
-    
-    internal func addScreenshotContext(to result: inout [String: Any]) {
-        if let screenshotId = self.screenshotId, let page = self.page {
-            var screenshotContext = [String: Any]()
-            screenshotContext[Keys.screenshotId.rawValue] = screenshotId
-            screenshotContext[Keys.segmentTimestamp.rawValue] = self.timeStamp.milliseconds
-            if let pageInt = Int(page) {
-                screenshotContext[Keys.page.rawValue] = pageInt
-            } else {
-                Log.w("Invalid page value: \(page), defaulting to 0")
-                screenshotContext[Keys.page.rawValue] = 0
-            }
-            result[Keys.screenshotContext.rawValue] = screenshotContext
-        }
     }
 
     private func addLifeCycleContext(to result: inout [String: Any]) {
@@ -176,6 +158,7 @@ struct CxRum {
         result[Keys.platform.rawValue] = Global.getOs() == Keys.tvos.rawValue ? Keys.television.rawValue : Keys.mobile.rawValue
         result[Keys.deviceContext.rawValue] = self.deviceContext.getDictionary()
         result[Keys.deviceState.rawValue] = self.deviceState.getDictionary()
+        result[Keys.screenshotContext.rawValue] = self.screenShotContext?.getDictionary()
     }
 
     private mutating func addConditionalContexts(to result: inout [String: Any]) {
