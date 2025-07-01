@@ -416,4 +416,41 @@ final class CxRumTests: XCTestCase {
         cxRum.updateSnapshotContextIfNeeded(for: eventContext)
         XCTAssertNil(cxRum.snapshotContext)
     }
+    
+    func test_buildSnapshotContext_returnsCorrectValues() {
+        class MockSessionManager: SessionManager {
+            override func getErrorCount() -> Int { return 5 }
+            override func getClickCount() -> Int { return 12 }
+        }
+        
+        class MockViewManager: ViewManager {
+            override func getUniqueViewCount() -> Int { return 3 }
+        }
+        
+        mockSessionManager = MockSessionManager()
+        mockSessionManager.hasRecording = true
+        mockViewerManager = MockViewManager(keyChain: MockKeyChain())
+        let cxRum = CxRum(
+            otel: mockSpanData,
+            versionMetadata: mockVersionMetadata,
+            sessionManager: mockSessionManager,
+            viewManager: mockViewerManager,
+            networkManager: mockNetworkManager,
+            metricsManager: mockCxMetricsManager,
+            userMetadata: ["userId": "12345"],
+            labels: ["key": "value"]
+        )
+        
+        let snapshotContext = cxRum.buildSnapshotContext(sessionManager: mockSessionManager,
+                                                         viewManager: mockViewerManager)
+        // Assert
+        XCTAssertEqual(snapshotContext.errorCount, 5)
+        XCTAssertEqual(snapshotContext.viewCount, 3)
+        XCTAssertEqual(snapshotContext.actionCount, 12)
+        XCTAssertEqual(snapshotContext.hasRecording, true)
+        
+        // Optionally test timestamp is recent (within 1 second)
+        let currentTime = Date().timeIntervalSince1970
+        XCTAssertLessThanOrEqual(abs(currentTime - snapshotContext.timestamp), 1.0)
+    }
 }
