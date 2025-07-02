@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import CoralogixInternal
 
 public struct ScreenshotContext {
     let screenshotId: String
@@ -23,8 +24,9 @@ public struct ScreenshotContext {
             self.page = 0
         }
         self.segmentTimestamp = otel.getStartTime() ?? Date().timeIntervalSince1970
-        if let attribute = otel.getAttribute(forKey: Keys.isManual.rawValue) as? String {
-            self.isManual = Bool(attribute) ?? false
+        if let attribute = otel.getAttribute(forKey: Keys.isManual.rawValue) as? String,
+            let isManual = Bool(attribute.description) {
+            self.isManual = isManual
         }
     }
     

@@ -166,7 +166,7 @@ struct CxRum {
         }
         
         if let screenShotContext = self.screenShotContext, screenShotContext.isValid() {
-            result[Keys.screenshotContext.rawValue] = self.screenShotContext?.getDictionary()
+            result[Keys.screenshotContext.rawValue] = screenShotContext.getDictionary()
         }
         
         if eventContext.type == CoralogixEventType.networkRequest {
