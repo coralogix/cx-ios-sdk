@@ -36,7 +36,7 @@ class MainViewController: UITableViewController {
     }
     
     @objc private func copySessionIDToClipboard() {
-        guard let sessionID = CoralogixRumManager.shared.getSessionId() {
+        guard let sessionID = CoralogixRumManager.shared.getSessionId() else {
             let alert = UIAlertController(title: nil,
                                           message: "No session ID available",
                                           preferredStyle: .alert)

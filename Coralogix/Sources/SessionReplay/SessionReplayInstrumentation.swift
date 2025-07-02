@@ -81,12 +81,9 @@ extension CoralogixRum: CoralogixInterface {
     }
     
     public func captureEvent() {
-        if let sessionReplay = SdkManager.shared.getSessionReplay() {
-            let screenshootLocation = self.screenshotManager.nextScreenshotLocation
-            sessionReplay.captureEvent(properties: screenshootLocation.toProperties())
-        } else {
-            Log.e("[SessionReplay] is not initialized")
-        }
+        let span = self.getScreenShotSpan()
+        span.setAttribute(key: Keys.isManual.rawValue, value: AttributeValue(true))
+        span.end()
     }
     
     internal func getScreenShotSpan() -> any Span {
