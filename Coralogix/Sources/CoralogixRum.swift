@@ -115,7 +115,7 @@ public class CoralogixRum {
             (.network, self.initializeNetworkInstrumentation),
             (.errors, self.initializeCrashInstumentation),
             (.mobileVitals, self.initializeMobileVitalsInstrumentation),
-            (.anr, self.initializeANRInstrumentation)
+            (.anr, self.initializeMobileVitalsInstrumentation)
         ]
 
         for (type, initializer) in instrumentationMap
