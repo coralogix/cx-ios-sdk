@@ -120,7 +120,9 @@ public class MetricsManager {
     internal func getCXMobileVitals(params: [String: Any]) -> CXMobileVitals? {
         let handlers: [CXMobileVitalsType: ([String: Any]) -> CXMobileVitals?] = [
             .cold: getColdTime,
-            .warm: getWarmTime
+            .coldJS: getColdTime,
+            .warm: getWarmTime,
+            .warmJS: getWarmTime,
         ]
         
         for (key, handler) in handlers {

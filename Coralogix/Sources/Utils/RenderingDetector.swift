@@ -82,7 +82,9 @@ class FPSTrigger {
 
 enum CXMobileVitalsType: String {
     case cold
+    case coldJS
     case warm
+    case warmJS
     case fps
     case anr
     case metricKit
