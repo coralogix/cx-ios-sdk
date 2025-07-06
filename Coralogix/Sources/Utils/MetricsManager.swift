@@ -134,20 +134,36 @@ public class MetricsManager {
     }
     
     internal func getWarmTime(params: [String: Any]) -> CXMobileVitals? {
-        if let launchEndTime = params[CXMobileVitalsType.warm.rawValue] as? Double {
-            let millisecondsRounded = Int(launchEndTime)
-            return CXMobileVitals(type: .warm, value: "\(millisecondsRounded)")
+        if let warmTime = params[CXMobileVitalsType.warm.rawValue] as? Double {
+            let roundedTime = Int(warmTime)
+            return CXMobileVitals(type: .warm, value: "\(roundedTime)")
         }
+        
+        if let warmJsTime = params[CXMobileVitalsType.warmJS.rawValue] as? Double {
+            let roundedTime = Int(warmJsTime)
+            return CXMobileVitals(type: .warmJS, value: "\(roundedTime)")
+        }
+        
         return nil
     }
     
     internal func getColdTime(params: [String: Any]) -> CXMobileVitals? {
-        if let launchStartTime = self.launchStartTime,
-           let launchEndTime = params[CXMobileVitalsType.cold.rawValue] as? CFAbsoluteTime {
-            self.launchEndTime = launchEndTime
-            let millisecondsRounded = self.calculateTime(start: launchStartTime, stop: launchEndTime)
-            return CXMobileVitals(type: .cold, value: "\(millisecondsRounded)")
+        guard let launchStartTime = self.launchStartTime else {
+            return nil
         }
+        
+        if let nativeLaunchEnd = params[CXMobileVitalsType.cold.rawValue] as? CFAbsoluteTime {
+            self.launchEndTime = nativeLaunchEnd
+            let durationMs = calculateTime(start: launchStartTime, stop: nativeLaunchEnd)
+            return CXMobileVitals(type: .cold, value: "\(durationMs)")
+        }
+        
+        if let coldJsTimestamp = params[CXMobileVitalsType.coldJS.rawValue] as? Double {
+            self.launchEndTime = coldJsTimestamp
+            let durationMs = calculateTime(start: launchStartTime, stop: coldJsTimestamp)
+            return CXMobileVitals(type: .coldJS, value: "\(durationMs)")
+        }
+        
         return nil
     }
     

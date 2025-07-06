@@ -105,6 +105,21 @@ final class MetricsManagerTests: XCTestCase {
         XCTAssertEqual(result?.value, "\(Int(warmTimestamp))")
     }
     
+    func testWarmJSStartVital() {
+        self.metricsManager.launchStartTime = nil
+        let warmTimestamp: Double = 1234567890.0
+        
+        let params: [String: Any] = [
+            CXMobileVitalsType.warmJS.rawValue: warmTimestamp
+        ]
+        
+        let result = metricsManager.getCXMobileVitals(params: params)
+        
+        XCTAssertNotNil(result)
+        XCTAssertEqual(result?.type, .warmJS)
+        XCTAssertEqual(result?.value, "\(Int(warmTimestamp))")
+    }
+    
     func testColdStartVital() {
         let startTime: CFAbsoluteTime = 1000.0
         let endTime: CFAbsoluteTime = 1001.234  // duration: 1.234 seconds
@@ -119,6 +134,25 @@ final class MetricsManagerTests: XCTestCase {
         
         XCTAssertNotNil(result)
         XCTAssertEqual(result?.type, .cold)
+        
+        let expectedMilliseconds = Int((endTime - startTime) * 1000)
+        XCTAssertEqual(result?.value, "\(expectedMilliseconds)")
+    }
+    
+    func testColdJSStartVital() {
+        let startTime: CFAbsoluteTime = 1000.0
+        let endTime: CFAbsoluteTime = 1001.234  // duration: 1.234 seconds
+        
+        self.metricsManager.launchStartTime = startTime
+        
+        let params: [String: Any] = [
+            CXMobileVitalsType.coldJS.rawValue: endTime
+        ]
+        
+        let result = metricsManager.getCXMobileVitals(params: params)
+        
+        XCTAssertNotNil(result)
+        XCTAssertEqual(result?.type, .coldJS)
         
         let expectedMilliseconds = Int((endTime - startTime) * 1000)
         XCTAssertEqual(result?.value, "\(expectedMilliseconds)")
