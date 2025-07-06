@@ -153,13 +153,11 @@ public class MetricsManager {
         }
         
         if let nativeLaunchEnd = params[CXMobileVitalsType.cold.rawValue] as? CFAbsoluteTime {
-            self.launchEndTime = nativeLaunchEnd
             let durationMs = calculateTime(start: launchStartTime, stop: nativeLaunchEnd)
             return CXMobileVitals(type: .cold, value: "\(durationMs)")
         }
         
         if let coldJsTimestamp = params[CXMobileVitalsType.coldJS.rawValue] as? Double {
-            self.launchEndTime = coldJsTimestamp
             let durationMs = calculateTime(start: launchStartTime, stop: coldJsTimestamp)
             return CXMobileVitals(type: .coldJS, value: "\(durationMs)")
         }
