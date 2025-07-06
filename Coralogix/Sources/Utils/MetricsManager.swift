@@ -104,7 +104,10 @@ public class MetricsManager {
                let launchEndTime = metrics[CXMobileVitalsType.cold.rawValue] as? CFAbsoluteTime,
                self.launchEndTime == nil {
                 self.launchEndTime = launchEndTime
-                let millisecondsRounded = self.calculateTime(start: launchStartTime, stop: launchEndTime)
+                let epochStartTime = Helper.convertCFAbsoluteTimeToEpoch(launchStartTime)
+                let epochEndTime = Helper.convertCFAbsoluteTimeToEpoch(launchEndTime)
+                let millisecondsRounded = self.calculateTime(start: epochStartTime, stop: epochEndTime)
+
                 NotificationCenter.default.post(name: .cxRumNotificationMetrics,
                                                 object: CXMobileVitals(type: .cold, value: "\(millisecondsRounded)"))
             }
@@ -113,7 +116,7 @@ public class MetricsManager {
     
     func calculateTime(start: Double, stop: Double) -> Int {
         let coldStartDurationInSeconds = stop - start
-        let coldStartDurationInMilliseconds = coldStartDurationInSeconds * 1000
+        let coldStartDurationInMilliseconds = coldStartDurationInSeconds
         return Int(coldStartDurationInMilliseconds)
     }
     
@@ -148,11 +151,13 @@ public class MetricsManager {
     }
     
     internal func getColdTime(params: [String: Any]) -> CXMobileVitals? {
-        guard let launchStartTime = self.launchStartTime else {
+        guard let startTime = self.launchStartTime else {
             return nil
         }
         
-        if let nativeLaunchEnd = params[CXMobileVitalsType.cold.rawValue] as? CFAbsoluteTime {
+        let launchStartTime = Helper.convertCFAbsoluteTimeToEpoch(startTime)
+
+        if let nativeLaunchEnd = params[CXMobileVitalsType.cold.rawValue] as? Double {
             let durationMs = calculateTime(start: launchStartTime, stop: nativeLaunchEnd)
             return CXMobileVitals(type: .cold, value: "\(durationMs)")
         }
