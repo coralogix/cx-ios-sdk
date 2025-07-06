@@ -51,6 +51,7 @@ public class SessionManager {
     public var sessionChangedCallback: ((String) -> Void)?
     var lastSnapshotEventTime: Date?
     public var hasRecording: Bool = false
+    public var hasInitializedMobileVitals = false
 
     public init() {
         self.setupSessionMetadata()

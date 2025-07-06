@@ -10,9 +10,13 @@ import CoralogixInternal
 
 extension CoralogixRum {
     public func initializeMobileVitalsInstrumentation() {
+        guard let sessionManager = self.sessionManager,
+              !sessionManager.hasInitializedMobileVitals else { return }
+
         NotificationCenter.default.addObserver(self,
                                                selector: #selector(handleMobileVitalsNotification(notification:)),
                                                name: .cxRumNotificationMetrics, object: nil)
+        self.sessionManager?.hasInitializedMobileVitals = true
     }
     
     @objc func handleMobileVitalsNotification(notification: Notification) {
