@@ -7,6 +7,10 @@
 
 import Foundation
 import CoralogixInternal
+
+#if canImport(UIKit)
+import UIKit
+#endif
 /**
  * When Is a New Session Created?
  *
@@ -39,34 +43,26 @@ import CoralogixInternal
  *    The `setupSessionMetadata` method can also be invoked explicitly, such as during a reset or other custom logic.
  */
 
-public enum SDKState {
-    case idle
-    case running
-}
-
 public class SessionManager {
     private var sessionMetadata: SessionMetadata?
     private var prevSessionMetadata: SessionMetadata?
 
-    private var lastActivityTime: Date?
-    private var idleTimer: Timer?
+    private var lastActivity = Date()
     private let idleInterval: TimeInterval = 15 * 60  // 15 minutes in seconds
     private var errorCount: Int = 0
     private var clickCount: Int = 0
     public var sessionChangedCallback: ((String) -> Void)?
-    var lastSnapshotEventTime: Date?
     public var hasRecording: Bool = false
+    
     public var hasInitializedMobileVitals = false
-    public private(set) var sdkState: SDKState = .running
-
+    public var lastSnapshotEventTime: Date?
+    
     public init() {
         self.setupSessionMetadata()
-        self.setupIdleTimer()
-        self.updateActivityTime()
-    }
-    
-    public func isSdkIdle() -> Bool {
-        return sdkState == .idle
+        NotificationCenter.default.addObserver(self,
+                                               selector: #selector(appDidBecomeActiveNotification),
+                                               name: UIApplication.didBecomeActiveNotification,
+                                               object: nil)
     }
     
     public func doesSessionhasRecording() -> Bool {
@@ -85,10 +81,19 @@ public class SessionManager {
         return self.prevSessionMetadata
     }
     
+    public func getErrorCount() -> Int {
+        return errorCount
+    }
+    
+    public func getClickCount() -> Int {
+        return clickCount
+    }
+    
     public func getSessionMetadata() -> SessionMetadata? {
         if let sessionCreationDate = self.sessionMetadata?.sessionCreationDate,
             self.hasAnHourPassed(since: sessionCreationDate) == true {
             self.setupSessionMetadata()
+            NotificationCenter.default.post(name: .cxRumNotificationSessionEnded, object: nil)
         }
         return self.sessionMetadata
     }
@@ -97,8 +102,7 @@ public class SessionManager {
         self.sessionMetadata = SessionMetadata(sessionId: "",
                                                sessionCreationDate: 0,
                                                using: KeychainManager())
-        self.idleTimer?.invalidate()
-        self.hasRecording = false
+        self.reset()
     }
     
     public func reset() {
@@ -107,12 +111,8 @@ public class SessionManager {
         self.hasRecording = false
     }
     
-    public func getErrorCount() -> Int {
-        return errorCount
-    }
-    
-    public func getClickCount() -> Int {
-        return clickCount
+    @objc private func appDidBecomeActiveNotification(notification: Notification) {
+        self.updateActivityTime()
     }
     
     private func hasAnHourPassed(since timeInterval: TimeInterval) -> Bool {
@@ -127,55 +127,35 @@ public class SessionManager {
         return timeDifference >= hourInSeconds
     }
     
-    private func setupSessionMetadata() {
+    var isIdle: Bool {
+        let timeSinceLastActivity = Date().timeIntervalSince(self.lastActivity)
+        let idle = timeSinceLastActivity > idleInterval
+        if idle { Log.d("[SDK] is \(idle).") }
+        return idle
+    }
+    
+    internal func setupSessionMetadata() {
         self.prevSessionMetadata = self.sessionMetadata
         self.sessionMetadata = SessionMetadata(sessionId: NSUUID().uuidString,
                                                sessionCreationDate: Date().timeIntervalSince1970,
                                                using: KeychainManager())
-        // Publish the new session Id
+
         if let sessionId = self.sessionMetadata?.sessionId {
             self.sessionChangedCallback?(sessionId)
         }
     }
     
-    private func setupIdleTimer() {
-        idleTimer = Timer.scheduledTimer(timeInterval: 60,
-                                         target: self,
-                                         selector: #selector(checkIdleTime),
-                                         userInfo: nil,
-                                         repeats: true)
-    }
-    
-    func updateActivityTime() {
-        lastActivityTime = Date()
-        sdkState = .running
-        if let lastActivityTime = lastActivityTime {
-            Log.d("Activity updated at \(lastActivityTime)")
-        }
-    }
-    
-    @objc private func checkIdleTime() {
-        guard let lastActivity = lastActivityTime else {
-            Log.e("No activity has been recorded yet.")
-            return
-        }
-        
-        let now = Date()
-        let timeSinceLastActivity = now.timeIntervalSince(lastActivity)
-        
-        if timeSinceLastActivity > idleInterval {
-            self.setupSessionMetadata()
+    internal func updateActivityTime() {
+        if isIdle {
+            setupSessionMetadata()
             NotificationCenter.default.post(name: .cxRumNotificationSessionEnded, object: nil)
-            sdkState = .idle
-            Log.d("[SDK] has been idle for 15 minutes.")
-        } else {
-            sdkState = .running
-            let minutes = Int((idleInterval - timeSinceLastActivity) / 60)
-            Log.d("[SDK] is Idle for approximately \(minutes) minutes.")
         }
+        lastActivity = Date()
     }
-
+    
     deinit {
-        idleTimer?.invalidate()
+        NotificationCenter.default.removeObserver(self,
+                                            name: UIApplication.didBecomeActiveNotification,
+                                            object: nil)
     }
 }

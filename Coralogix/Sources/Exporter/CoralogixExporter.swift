@@ -76,6 +76,10 @@ public class CoralogixExporter: SpanExporter {
     }
     
     public func export(spans: [SpanData], explicitTimeout: TimeInterval?) -> SpanExporterResultCode {
+        if self.sessionManager.isIdle {
+            Log.d("CoralogixExporter: Skipping export, session is idle")
+            return .success
+        }
         
         // ignore Urls
         var filterSpans = spans.filter { self.shouldRemoveSpan(span: $0) }
