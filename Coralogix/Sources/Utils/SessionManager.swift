@@ -39,6 +39,11 @@ import CoralogixInternal
  *    The `setupSessionMetadata` method can also be invoked explicitly, such as during a reset or other custom logic.
  */
 
+public enum SDKState {
+    case idle
+    case running
+}
+
 public class SessionManager {
     private var sessionMetadata: SessionMetadata?
     private var prevSessionMetadata: SessionMetadata?
@@ -52,11 +57,16 @@ public class SessionManager {
     var lastSnapshotEventTime: Date?
     public var hasRecording: Bool = false
     public var hasInitializedMobileVitals = false
+    public private(set) var sdkState: SDKState = .running
 
     public init() {
         self.setupSessionMetadata()
         self.setupIdleTimer()
         self.updateActivityTime()
+    }
+    
+    public func isSdkIdle() -> Bool {
+        return sdkState == .idle
     }
     
     public func doesSessionhasRecording() -> Bool {
@@ -136,9 +146,9 @@ public class SessionManager {
                                          repeats: true)
     }
     
-    // Call this function every time the monitored function is executed
     func updateActivityTime() {
         lastActivityTime = Date()
+        sdkState = .running
         if let lastActivityTime = lastActivityTime {
             Log.d("Activity updated at \(lastActivityTime)")
         }
@@ -156,10 +166,12 @@ public class SessionManager {
         if timeSinceLastActivity > idleInterval {
             self.setupSessionMetadata()
             NotificationCenter.default.post(name: .cxRumNotificationSessionEnded, object: nil)
-            Log.d("Function has been idle for 15 minutes.")
+            sdkState = .idle
+            Log.d("[SDK] has been idle for 15 minutes.")
         } else {
+            sdkState = .running
             let minutes = Int((idleInterval - timeSinceLastActivity) / 60)
-            Log.d("Function is active. Idle in approximately \(minutes) minutes.")
+            Log.d("[SDK] is Idle for approximately \(minutes) minutes.")
         }
     }
 

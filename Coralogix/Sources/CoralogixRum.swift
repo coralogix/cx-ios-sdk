@@ -21,7 +21,6 @@ public class CoralogixRum {
     internal var sessionManager: SessionManager?
     internal var sessionInstrumentation: URLSessionInstrumentation? = nil
     internal var metricsManager = MetricsManager()
-    internal var screenshotManager = ScreenshotManager()
 
     internal var tracerProvider: () -> Tracer = {
         return OpenTelemetry.instance.tracerProvider.get(
@@ -85,30 +84,18 @@ public class CoralogixRum {
         }
         
         CoralogixRum.sdkFramework = sdkFramework
-        self.initializeSessionReplay()
-        self.initialzeMetricsManager(options: options)
-        self.initializeNavigationInstrumentation()
-
         Log.isDebug = options.debug
 
-        let coralogixExporter = CoralogixExporter(options: options,
-                                                  sessionManager: sessionManager,
-                                                  networkManager: self.networkManager,
-                                                  viewManager: self.viewManager,
-                                                  metricsManager: self.metricsManager)
-        self.coralogixExporter = coralogixExporter
-        
-        let resource = Resource(attributes: [
-            ResourceAttributes.serviceName.rawValue: AttributeValue.string(options.application)
-        ])
-        
-        OpenTelemetry.registerTracerProvider(tracerProvider: TracerProviderBuilder().with(resource: resource)
-            .add(spanProcessor: BatchSpanProcessor(spanExporter: coralogixExporter,
-                                                   scheduleDelay: Double(Global.BatchSpan.scheduleDelay.rawValue),
-                                                   maxExportBatchSize: Global.BatchSpan.maxExportBatchSize.rawValue))
-                .build())
-        
+        self.setupCoreModules(options: options)
+        self.setupExporter(sessionManager: sessionManager, options: options)
+        self.setupTracer(applicationName: options.application)
         self.swizzle()
+        self.initializeEnabledInstrumentations(using: options)
+        
+        CoralogixRum.isInitialized = true
+    }
+    
+    private func initializeEnabledInstrumentations(using options: CoralogixExporterOptions) {
         let instrumentationMap: [(CoralogixExporterOptions.InstrumentationType, () -> Void)] = [
             (.lifeCycle, self.initializeLifeCycleInstrumentation),
             (.userActions, self.initializeUserActionsInstrumentation),
@@ -122,10 +109,29 @@ public class CoralogixRum {
             where options.shouldInitInstrumentation(instrumentation: type) {
             initializer()
         }
-        
-        CoralogixRum.isInitialized = true
     }
     
+    private func setupTracer(applicationName: String) {
+        guard let exporter = self.coralogixExporter else { return }
+
+        let resource = Resource(attributes: [
+            ResourceAttributes.serviceName.rawValue: .string(applicationName)
+        ])
+
+        let spanProcessor = BatchSpanProcessor(
+            spanExporter: exporter,
+            scheduleDelay: Double(Global.BatchSpan.scheduleDelay.rawValue),
+            maxExportBatchSize: Global.BatchSpan.maxExportBatchSize.rawValue
+        )
+
+        let tracerProvider = TracerProviderBuilder()
+            .with(resource: resource)
+            .add(spanProcessor: spanProcessor)
+            .build()
+
+        OpenTelemetry.registerTracerProvider(tracerProvider: tracerProvider)
+    }
+
     private func initialzeMetricsManager(options: CoralogixExporterOptions) {
         self.metricsManager.addObservers()
 
@@ -137,6 +143,23 @@ public class CoralogixRum {
         if options.shouldInitInstrumentation(instrumentation: .anr) {
             self.metricsManager.startANRMonitoring()
         }
+    }
+    
+    private func setupExporter(sessionManager: SessionManager, options: CoralogixExporterOptions) {
+        let exporter = CoralogixExporter(
+            options: options,
+            sessionManager: sessionManager,
+            networkManager: self.networkManager,
+            viewManager: self.viewManager,
+            metricsManager: self.metricsManager
+        )
+        self.coralogixExporter = exporter
+    }
+    
+    private func setupCoreModules(options: CoralogixExporterOptions) {
+        self.initializeSessionReplay()
+        self.initialzeMetricsManager(options: options)
+        self.initializeNavigationInstrumentation()
     }
     
     private func swizzle() {

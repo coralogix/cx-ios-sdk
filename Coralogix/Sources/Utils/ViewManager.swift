@@ -68,6 +68,9 @@ public class ViewManager {
     
     func reset() {
         self.uniqueViewsPerSession.removeAll()
+        if let currentView = self.visibleView {
+            self.uniqueViewsPerSession.insert(currentView.name ?? Keys.undefined.rawValue)
+        }
     }
     
     func shutdown() {

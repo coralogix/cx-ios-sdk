@@ -29,6 +29,7 @@ extension CoralogixRum {
     
     // Increment the click counter and handle the tap object
     private func processTapObject(_ tapObject: [String: Any]) {
+        self.sessionManager?.updateActivityTime()
         self.sessionManager?.incrementClickCounter()
         let span = getUserActionsSpan()
         handleUserInteractionEvent(tapObject, span: span)
@@ -38,8 +39,9 @@ extension CoralogixRum {
     internal func handleUserInteractionEvent(_ properties: [String: Any],
                                              span: any Span,
                                              window: UIWindow? = Global.getKeyWindow()) {
-        let screenshotLocation = self.screenshotManager.nextScreenshotLocation
-        if let sessionReplay = SdkManager.shared.getSessionReplay() {
+       
+        if let sessionReplay = SdkManager.shared.getSessionReplay(),
+           let screenshotLocation = self.coralogixExporter?.getScreenshotManager().nextScreenshotLocation {
             guard let window = window else {
                 Log.e("No key window found")
                 return

@@ -164,7 +164,7 @@ struct CxRum {
         if eventContext.type == CoralogixEventType.error {
             result[Keys.errorContext.rawValue] = self.errorContext.getDictionary()
         }
-        
+                
         if let screenShotContext = self.screenShotContext, screenShotContext.isValid() {
             result[Keys.screenshotContext.rawValue] = screenShotContext.getDictionary()
         }
