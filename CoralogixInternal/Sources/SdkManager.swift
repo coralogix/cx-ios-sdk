@@ -7,6 +7,13 @@
 
 import Foundation
 
+public enum CaptureEventError: Error {
+    case dummyInstance
+    case sdkIdle
+    case missingSessionReplayOptions
+    case notRecording
+}
+
 public protocol CoralogixInterface {
     func getSessionID() -> String
     func getCoralogixDomain() -> String
@@ -24,7 +31,7 @@ public protocol CoralogixInterface {
 public protocol SessionReplayInterface {
     func startRecording()
     func stopRecording()
-    func captureEvent(properties: [String: Any]?)
+    func captureEvent(properties: [String: Any]?) -> Result<Void, CaptureEventError>
     func update(sessionId: String)
 }
 

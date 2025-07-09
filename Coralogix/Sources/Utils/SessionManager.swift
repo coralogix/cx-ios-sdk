@@ -44,11 +44,11 @@ import UIKit
  */
 
 public class SessionManager {
-    private var sessionMetadata: SessionMetadata?
+    internal var sessionMetadata: SessionMetadata?
     private var prevSessionMetadata: SessionMetadata?
 
-    private var lastActivity = Date()
-    private let idleInterval: TimeInterval = 1 * 60  // 15 minutes in seconds
+    internal var lastActivity = Date()
+    private let idleInterval: TimeInterval = 15 * 60  // 15 minutes in seconds
     private var errorCount: Int = 0
     private var clickCount: Int = 0
     public var sessionChangedCallback: ((String) -> Void)?
@@ -117,6 +117,11 @@ public class SessionManager {
     }
     
     private func hasAnHourPassed(since timeInterval: TimeInterval) -> Bool {
+        // If the time is 0, treat it as invalid or "not passed"
+        guard timeInterval > 0 else {
+            return false
+        }
+        
         let dateFromInterval = Date(timeIntervalSince1970: timeInterval)
         let currentDate = Date()
         let hourInSeconds: TimeInterval = 3600  // Number of seconds in an hour

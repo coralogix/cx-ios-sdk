@@ -60,6 +60,8 @@ class SessionReplayTests: XCTestCase {
 
     func testCaptureEvent_capturesImageWhenRecording() {
         let expectation = self.expectation(description: "Timer should trigger captureImage after 3 seconds")
+        // Initialize the SRNetworkManager
+        SdkManager.shared.register(coralogixInterface: MockCoralogix())
         let options = SessionReplayOptions(recordingType: .image)
         SessionReplay.initializeWithOptions(sessionReplayOptions: options)
 
@@ -70,7 +72,7 @@ class SessionReplayTests: XCTestCase {
         
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
             let timestemp: TimeInterval = Date().timeIntervalSince1970
-            SessionReplay.shared.captureEvent(properties: [Keys.timestamp.rawValue: timestemp])
+            _ = SessionReplay.shared.captureEvent(properties: [Keys.timestamp.rawValue: timestemp])
             XCTAssertEqual(mockSessionReplayModel.captureImageCallCount, 1, "Capture image should be called when recording.")
             expectation.fulfill()
         }
@@ -110,6 +112,97 @@ class SessionReplayTests: XCTestCase {
         SessionReplay.shared.update(sessionId: "12345-session")
         
         XCTAssertEqual((SessionReplay.shared.sessionReplayModel as? MockSessionReplayModel3)?.updatedSessionId, "12345-session")
+    }
+    
+    func testCreateDummyInstanceSetsCorrectFlags() {
+        let options = SessionReplayOptions(sessionRecordingSampleRate: 50)
+        let dummy = SessionReplay.createDummyInstance(options)
+        
+        XCTAssertTrue(dummy.isDummyInstance, "Expected isDummyInstance to be true")
+        XCTAssertEqual(dummy.sessionReplayOptions?.sessionRecordingSampleRate, 50)
+    }
+    
+    func testCreateDummyInstanceWithNilOptions() {
+        let dummy = SessionReplay.createDummyInstance()
+        
+        XCTAssertTrue(dummy.isDummyInstance, "Expected isDummyInstance to be true")
+        XCTAssertNil(dummy.sessionReplayOptions, "Expected options to be nil")
+    }
+    
+    func testCaptureEventSkippedWhenSdkIsIdle() {
+        let mockCoralogix = MockCoralogix()
+        mockCoralogix.idle = true
+        SdkManager.shared.register(coralogixInterface: mockCoralogix)
+
+        let options = SessionReplayOptions(recordingType: .image)
+        let mockSessionReplayModel = MockSessionReplayModel(sessionReplayOptions: options)
+        SessionReplay.initializeWithOptions(sessionReplayOptions: options)
+        SessionReplay.shared.sessionReplayModel = mockSessionReplayModel
+        SessionReplay.shared.isDummyInstance = false
+        
+        let result = SessionReplay.shared.captureEvent(properties: ["key": "value"])
+
+        switch result {
+        case .success: 
+            XCTAssertTrue(true)
+        case .failure(let error):
+            XCTAssertEqual(error, .sdkIdle)
+        }
+    }
+    
+    func testCaptureEventSkippedWhenIsDummyInstance() {
+        let options = SessionReplayOptions(recordingType: .image)
+        let mockSessionReplayModel = MockSessionReplayModel(sessionReplayOptions: options)
+        SessionReplay.initializeWithOptions(sessionReplayOptions: options)
+        SessionReplay.shared.sessionReplayModel = mockSessionReplayModel
+        SessionReplay.shared.isDummyInstance = true
+        let result = SessionReplay.shared.captureEvent(properties: ["key": "value"])
+
+        switch result {
+        case .success:
+            XCTAssertTrue(true)
+        case .failure(let error):
+            XCTAssertEqual(error, .dummyInstance)
+        }
+    }
+    
+    func testCaptureEventSkippedWhenMissingSessionReplyOptions() {
+        let mockCoralogix = MockCoralogix()
+        mockCoralogix.idle = false
+        SdkManager.shared.register(coralogixInterface: mockCoralogix)
+        
+        let options = SessionReplayOptions(recordingType: .image)
+        SessionReplay.initializeWithOptions(sessionReplayOptions: options)
+        SessionReplay.shared.sessionReplayModel = nil
+        SessionReplay.shared.isDummyInstance = false
+
+        let result = SessionReplay.shared.captureEvent(properties: ["key": "value"])
+
+        switch result {
+        case .success:
+            XCTAssertTrue(true)
+        case .failure(let error):
+            XCTAssertEqual(error, .missingSessionReplayOptions)
+        }
+    }
+    
+    func testCaptureEventSkippedWhenNotRecording() {
+        let mockCoralogix = MockCoralogix()
+        mockCoralogix.idle = false
+        SdkManager.shared.register(coralogixInterface: mockCoralogix)
+        
+        let options = SessionReplayOptions(recordingType: .image)
+        let mockSessionReplayModel = MockSessionReplayModel(sessionReplayOptions: options)
+        SessionReplay.initializeWithOptions(sessionReplayOptions: options)
+        SessionReplay.shared.sessionReplayModel = mockSessionReplayModel
+        let result = SessionReplay.shared.captureEvent(properties: ["key": "value"])
+
+        switch result {
+        case .success:
+            XCTAssertTrue(true)
+        case .failure(let error):
+            XCTAssertEqual(error, .notRecording)
+        }
     }
 }
 

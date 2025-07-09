@@ -66,7 +66,7 @@ class ScreenshotManagerTests: XCTestCase {
         let oldId = manager._screenshotId
         
         // Act
-        manager.resetSession(notification: Notification(name: Notification.Name("ResetSession")))
+        manager.reset()
         
         // Assert
         XCTAssertEqual(manager._page, 0)

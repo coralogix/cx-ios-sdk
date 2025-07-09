@@ -710,6 +710,11 @@ final class MockSpanBuilder: SpanBuilder {
 }
 
 final class MockSessionReplay: SessionReplayInterface {
+    func captureEvent(properties: [String : Any]?) -> Result<Void, CoralogixInternal.CaptureEventError> {
+        captureEventCalledWith = properties
+        return .success(())
+    }
+    
     var captureEventCalledWith: [String: Any]?
     
     func startRecording() {
@@ -718,10 +723,6 @@ final class MockSessionReplay: SessionReplayInterface {
     
     func stopRecording() {
         
-    }
-    
-    func captureEvent(properties: [String : Any]?) {
-        captureEventCalledWith = properties
     }
     
     func update(sessionId: String) {

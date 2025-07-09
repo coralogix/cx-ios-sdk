@@ -117,7 +117,7 @@ public class SessionReplay: SessionReplayInterface {
     private static var _shared: SessionReplay?
     
     // Properties for storing options
-    private var sessionReplayOptions: SessionReplayOptions?
+    internal var sessionReplayOptions: SessionReplayOptions?
 
     // It's a design pattern to handle situations where initialization is skipped due
     // to sampling, so you can avoid null checks everywhere and safely no-op the API.
@@ -166,13 +166,12 @@ public class SessionReplay: SessionReplayInterface {
         _shared = SessionReplay(sessionReplayOptions: sessionReplayOptions)
     }
     
-    private static func createDummyInstance(_ options: SessionReplayOptions? = nil) -> SessionReplay {
+    internal static func createDummyInstance(_ options: SessionReplayOptions? = nil) -> SessionReplay {
         let instance = SessionReplay()
         instance.isDummyInstance = true
         instance.sessionReplayOptions = options
         return instance
     }
-        
         
     private init() { }
     
@@ -230,22 +229,22 @@ public class SessionReplay: SessionReplayInterface {
     }
     
     /// Captures a specific event during the session.
-    public func captureEvent(properties: [String : Any]?) {
+    public func captureEvent(properties: [String : Any]?) -> Result<Void, CaptureEventError> {
         if isDummyInstance {
             Log.d("SessionReplay.captureEvent() called on inactive instance (skipped by sampling)")
-            return
+            return .failure(.dummyInstance)
         }
         
         guard let coralogixSdk = SdkManager.shared.getCoralogixSdk(),
               !coralogixSdk.isIdle() else {
             Log.d("[SessionReplay] CoralogixSdk is idle and skiped capture event")
-            return
+            return .failure(.sdkIdle)
         }
         
         guard let sessionReplayModel = self.sessionReplayModel,
               let sessionReplayOptions = sessionReplayModel.sessionReplayOptions else {
             Log.e("[SessionReplay] missing sessionReplayOptions")
-            return
+            return .failure(.missingSessionReplayOptions)
         }
         
         var updatedProperties = properties ?? [:]
@@ -254,10 +253,11 @@ public class SessionReplay: SessionReplayInterface {
         if sessionReplayOptions.recordingType == .image {
             guard sessionReplayModel.isRecording else {
                 Log.e("[SessionReplay] Session Replay not recording ...")
-                return
+                return .failure(.notRecording)
             }
             sessionReplayModel.captureImage(properties: updatedProperties)
         }
+        return .success(())
     }
     
     public func update(sessionId: String) {
