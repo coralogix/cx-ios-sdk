@@ -194,6 +194,8 @@ public enum Keys: String {
     case customSpanId
     case isManual
     case metricKitLog = "metricKit log"
+    case idle
+    case active
 }
 
 public enum CoralogixLogSeverity: Int {

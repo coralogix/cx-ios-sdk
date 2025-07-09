@@ -119,6 +119,8 @@ public class SessionReplay: SessionReplayInterface {
     // Properties for storing options
     private var sessionReplayOptions: SessionReplayOptions?
 
+    // It's a design pattern to handle situations where initialization is skipped due
+    // to sampling, so you can avoid null checks everywhere and safely no-op the API.
     internal var isDummyInstance = false
 
     // Private initializer that requires an Options object
@@ -126,7 +128,6 @@ public class SessionReplay: SessionReplayInterface {
         self.sessionReplayOptions = sessionReplayOptions
         self.sessionReplayModel = SessionReplayModel(sessionReplayOptions: sessionReplayOptions)
         
-        // Register with SDK Manager
         DispatchQueue.main.async {
             SdkManager.shared.register(sessionReplayInterface: self)
         }
@@ -232,6 +233,12 @@ public class SessionReplay: SessionReplayInterface {
     public func captureEvent(properties: [String : Any]?) {
         if isDummyInstance {
             Log.d("SessionReplay.captureEvent() called on inactive instance (skipped by sampling)")
+            return
+        }
+        
+        guard let coralogixSdk = SdkManager.shared.getCoralogixSdk(),
+              !coralogixSdk.isIdle() else {
+            Log.d("[SessionReplay] CoralogixSdk is idle and skiped capture event")
             return
         }
         

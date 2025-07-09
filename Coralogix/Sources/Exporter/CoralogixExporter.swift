@@ -50,6 +50,10 @@ public class CoralogixExporter: SpanExporter {
         return self.screenshotManager
     }
     
+    public func getSessionManager() -> SessionManager {
+        return self.sessionManager
+    }
+    
     public func set(cxView: CXView) {
         if cxView.state == .notifyOnAppear {
             self.viewManager.set(cxView: cxView)
@@ -77,7 +81,7 @@ public class CoralogixExporter: SpanExporter {
     
     public func export(spans: [SpanData], explicitTimeout: TimeInterval?) -> SpanExporterResultCode {
         if self.sessionManager.isIdle {
-            Log.d("CoralogixExporter: Skipping export, session is idle")
+            Log.d("[SDK] Skipping export, session is idle")
             return .success
         }
         

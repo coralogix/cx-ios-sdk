@@ -94,4 +94,8 @@ extension CoralogixRum: CoralogixInterface {
         self.addScreenshotId(to: &span)
         return span
     }
+    
+    public func isIdle() -> Bool {
+        return self.coralogixExporter?.getSessionManager().isIdle ?? false
+    }
 }

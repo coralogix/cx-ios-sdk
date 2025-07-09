@@ -48,7 +48,7 @@ public class SessionManager {
     private var prevSessionMetadata: SessionMetadata?
 
     private var lastActivity = Date()
-    private let idleInterval: TimeInterval = 15 * 60  // 15 minutes in seconds
+    private let idleInterval: TimeInterval = 1 * 60  // 15 minutes in seconds
     private var errorCount: Int = 0
     private var clickCount: Int = 0
     public var sessionChangedCallback: ((String) -> Void)?
@@ -91,6 +91,7 @@ public class SessionManager {
     
     public func getSessionMetadata() -> SessionMetadata? {
         if let sessionCreationDate = self.sessionMetadata?.sessionCreationDate,
+           self.isIdle == false,
             self.hasAnHourPassed(since: sessionCreationDate) == true {
             self.setupSessionMetadata()
             NotificationCenter.default.post(name: .cxRumNotificationSessionEnded, object: nil)
@@ -130,7 +131,8 @@ public class SessionManager {
     var isIdle: Bool {
         let timeSinceLastActivity = Date().timeIntervalSince(self.lastActivity)
         let idle = timeSinceLastActivity > idleInterval
-        if idle { Log.d("[SDK] is \(idle).") }
+        let idleString = idle ? Keys.idle.rawValue : Keys.active.rawValue
+        if idle { Log.d("[SDK] is \(idleString).") }
         return idle
     }
     
