@@ -13,12 +13,12 @@ public struct ScreenshotLocation {
     public let screenshotId: String
     
     public func toProperties() -> [String: Any] {
-            return [
-                Keys.screenshotId.rawValue: screenshotId,
-                Keys.page.rawValue: page,
-                Keys.segmentIndex.rawValue: segmentIndex
-            ]
-        }
+        return [
+            Keys.screenshotId.rawValue: screenshotId,
+            Keys.page.rawValue: page,
+            Keys.segmentIndex.rawValue: segmentIndex
+        ]
+    }
 }
 
 public class ScreenshotManager {

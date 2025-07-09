@@ -38,7 +38,7 @@ extension CoralogixRum {
         let screenshotLocation = coralogixExporter.getScreenshotManager().nextScreenshotLocation
         span.setAttribute(key: Keys.screenshotId.rawValue, value: screenshotLocation.screenshotId)
         span.setAttribute(key: Keys.page.rawValue, value: screenshotLocation.page)
-        sessionReplay.captureEvent(properties: screenshotLocation.toProperties())
+        _ = sessionReplay.captureEvent(properties: screenshotLocation.toProperties())
     }
 
     internal func getNavigationSpan() -> any Span {

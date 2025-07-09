@@ -216,9 +216,10 @@ public class CoralogixRum {
     }
     
     public func setView(name: String) {
-        let cxView = CXView(state: .notifyOnAppear, name: name)
-        self.coralogixExporter?.getViewManager().reset()
-        self.coralogixExporter?.set(cxView: cxView)
+        if CoralogixRum.isInitialized {
+            let cxView = CXView(state: .notifyOnAppear, name: name)
+            self.coralogixExporter?.set(cxView: cxView)
+        }
     }
     
     public func reportError(message: String, data: [String: Any]?) {

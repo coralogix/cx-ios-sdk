@@ -621,6 +621,26 @@ final class CoralogixRumTests: XCTestCase {
         XCTAssertTrue(result)
     }
     
+    func testSetView() {
+        let mockOptions = CoralogixExporterOptions(
+            coralogixDomain: .US2,
+            userContext: nil,
+            environment: "PROD",
+            application: "TestApp-iOS",
+            version: "1.0",
+            publicKey: "token",
+            ignoreUrls: [],
+            ignoreErrors: [],
+            sampleRate: 100,
+            traceParentInHeader: ["enable": true],
+            debug: true
+        )
+        
+        let coralogixRum = CoralogixRum(options: mockOptions)
+        coralogixRum.setView(name: "TestView")
+        XCTAssertNotNil(coralogixRum.coralogixExporter?.getViewManager().visibleView)
+    }
+    
     private func makeMockCoralogixRum() ->  CoralogixRum {
         let mockOptions = CoralogixExporterOptions(
             coralogixDomain: .US2,
