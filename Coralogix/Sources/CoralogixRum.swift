@@ -111,8 +111,11 @@ public class CoralogixRum {
         }
     }
     
-    private func setupTracer(applicationName: String) {
-        guard let exporter = self.coralogixExporter else { return }
+    internal func setupTracer(applicationName: String, register: (TracerProvider) -> Void = OpenTelemetry.registerTracerProvider) {
+        guard let exporter = self.coralogixExporter else {
+            Log.e("Failed to setup tracer: coralogixExporter is nil")
+            return
+        }
 
         let resource = Resource(attributes: [
             ResourceAttributes.serviceName.rawValue: .string(applicationName)
@@ -130,6 +133,7 @@ public class CoralogixRum {
             .build()
 
         OpenTelemetry.registerTracerProvider(tracerProvider: tracerProvider)
+        register(tracerProvider)
     }
 
     private func initialzeMetricsManager(options: CoralogixExporterOptions) {

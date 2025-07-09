@@ -56,6 +56,10 @@ public class SessionManager {
     
     public var hasInitializedMobileVitals = false
     public var lastSnapshotEventTime: Date?
+    public var isIdle: Bool {
+        let timeSinceLastActivity = Date().timeIntervalSince(self.lastActivity)
+        return timeSinceLastActivity > idleInterval
+    }
     
     public init() {
         self.setupSessionMetadata()
@@ -133,14 +137,6 @@ public class SessionManager {
         return timeDifference >= hourInSeconds
     }
     
-    var isIdle: Bool {
-        let timeSinceLastActivity = Date().timeIntervalSince(self.lastActivity)
-        let idle = timeSinceLastActivity > idleInterval
-        let idleString = idle ? Keys.idle.rawValue : Keys.active.rawValue
-        if idle { Log.d("[SDK] is \(idleString).") }
-        return idle
-    }
-    
     internal func setupSessionMetadata() {
         self.prevSessionMetadata = self.sessionMetadata
         self.sessionMetadata = SessionMetadata(sessionId: NSUUID().uuidString,
@@ -154,6 +150,7 @@ public class SessionManager {
     
     internal func updateActivityTime() {
         if isIdle {
+            Log.d("[SDK] transitioning from idle to active state")
             setupSessionMetadata()
             NotificationCenter.default.post(name: .cxRumNotificationSessionEnded, object: nil)
         }

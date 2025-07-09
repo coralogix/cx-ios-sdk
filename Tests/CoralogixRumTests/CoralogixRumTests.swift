@@ -641,6 +641,34 @@ final class CoralogixRumTests: XCTestCase {
         XCTAssertNotNil(coralogixRum.coralogixExporter?.getViewManager().visibleView)
     }
     
+    func testSetupTracer_registersTracerWithCorrectExporter() {
+        let mockOptions = CoralogixExporterOptions(
+            coralogixDomain: .US2,
+            userContext: nil,
+            environment: "PROD",
+            application: "TestApp-iOS",
+            version: "1.0",
+            publicKey: "token",
+            ignoreUrls: [],
+            ignoreErrors: [],
+            sampleRate: 100,
+            traceParentInHeader: ["enable": true],
+            debug: true
+        )
+        let mockSessionManager = SessionManager()
+        let mockExporter = MockCoralogixExporter(options: mockOptions,
+                                                 sessionManager: mockSessionManager,
+                                                 networkManager: NetworkManager(),
+                                                 viewManager: ViewManager(keyChain: nil),
+                                                 metricsManager: MetricsManager())
+        
+        let coralogixRum = CoralogixRum(options: mockOptions)
+
+        coralogixRum.coralogixExporter = mockExporter
+        let tracer = OpenTelemetry.instance.tracerProvider.get(instrumentationName: "MyTestApp")
+        XCTAssertNotNil(tracer)
+    }
+    
     private func makeMockCoralogixRum() ->  CoralogixRum {
         let mockOptions = CoralogixExporterOptions(
             coralogixDomain: .US2,

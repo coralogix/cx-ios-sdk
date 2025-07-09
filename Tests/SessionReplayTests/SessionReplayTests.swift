@@ -144,7 +144,7 @@ class SessionReplayTests: XCTestCase {
 
         switch result {
         case .success: 
-            XCTAssertTrue(true)
+            XCTFail("Expected .failure(.sdkIdle) but got success")
         case .failure(let error):
             XCTAssertEqual(error, .sdkIdle)
         }
@@ -160,7 +160,7 @@ class SessionReplayTests: XCTestCase {
 
         switch result {
         case .success:
-            XCTAssertTrue(true)
+            XCTFail("Expected .failure(.dummyInstance) but got success")
         case .failure(let error):
             XCTAssertEqual(error, .dummyInstance)
         }
@@ -180,7 +180,7 @@ class SessionReplayTests: XCTestCase {
 
         switch result {
         case .success:
-            XCTAssertTrue(true)
+            XCTFail("Expected .failure(.missingSessionReplayOptions) but got success")
         case .failure(let error):
             XCTAssertEqual(error, .missingSessionReplayOptions)
         }
@@ -199,7 +199,7 @@ class SessionReplayTests: XCTestCase {
 
         switch result {
         case .success:
-            XCTAssertTrue(true)
+            XCTFail("Expected .failure(.notRecording) but got success")
         case .failure(let error):
             XCTAssertEqual(error, .notRecording)
         }

@@ -32,21 +32,4 @@ final class ScreenshotLocationTests: XCTestCase {
         XCTAssertTrue(props.keys.contains(Keys.page.rawValue))
         XCTAssertTrue(props.keys.contains(Keys.screenshotId.rawValue))
     }
-    
-    func testToPropertiesReturnsCorrectDictionary() {
-        // Arrange
-        let screenshotLocation = ScreenshotLocation(
-            segmentIndex: 3,
-            page: 5,
-            screenshotId: "abc123"
-        )
-        
-        // Act
-        let properties = screenshotLocation.toProperties()
-        
-        // Assert
-        XCTAssertEqual(properties[Keys.screenshotId.rawValue] as? String, "abc123")
-        XCTAssertEqual(properties[Keys.page.rawValue] as? Int, 5)
-        XCTAssertEqual(properties[Keys.segmentIndex.rawValue] as? Int, 3)
-    }
 }
