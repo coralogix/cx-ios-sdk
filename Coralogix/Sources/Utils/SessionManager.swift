@@ -7,6 +7,10 @@
 
 import Foundation
 import CoralogixInternal
+
+#if canImport(UIKit)
+import UIKit
+#endif
 /**
  * When Is a New Session Created?
  *
@@ -40,22 +44,29 @@ import CoralogixInternal
  */
 
 public class SessionManager {
-    private var sessionMetadata: SessionMetadata?
+    internal var sessionMetadata: SessionMetadata?
     private var prevSessionMetadata: SessionMetadata?
 
-    private var lastActivityTime: Date?
-    private var idleTimer: Timer?
+    internal var lastActivity = Date()
     private let idleInterval: TimeInterval = 15 * 60  // 15 minutes in seconds
     private var errorCount: Int = 0
     private var clickCount: Int = 0
     public var sessionChangedCallback: ((String) -> Void)?
-    var lastSnapshotEventTime: Date?
     public var hasRecording: Bool = false
-
+    
+    public var hasInitializedMobileVitals = false
+    public var lastSnapshotEventTime: Date?
+    public var isIdle: Bool {
+        let timeSinceLastActivity = Date().timeIntervalSince(self.lastActivity)
+        return timeSinceLastActivity > idleInterval
+    }
+    
     public init() {
         self.setupSessionMetadata()
-        self.setupIdleTimer()
-        self.updateActivityTime()
+        NotificationCenter.default.addObserver(self,
+                                               selector: #selector(appDidBecomeActiveNotification),
+                                               name: UIApplication.didBecomeActiveNotification,
+                                               object: nil)
     }
     
     public func doesSessionhasRecording() -> Bool {
@@ -74,28 +85,6 @@ public class SessionManager {
         return self.prevSessionMetadata
     }
     
-    public func getSessionMetadata() -> SessionMetadata? {
-        if let sessionCreationDate = self.sessionMetadata?.sessionCreationDate,
-            self.hasAnHourPassed(since: sessionCreationDate) == true {
-            self.setupSessionMetadata()
-        }
-        return self.sessionMetadata
-    }
-    
-    public func shutdown() {
-        self.sessionMetadata = SessionMetadata(sessionId: "",
-                                               sessionCreationDate: 0,
-                                               using: KeychainManager())
-        self.idleTimer?.invalidate()
-        self.hasRecording = false
-    }
-    
-    public func reset() {
-        self.errorCount = 0
-        self.clickCount = 0
-        self.hasRecording = false
-    }
-    
     public func getErrorCount() -> Int {
         return errorCount
     }
@@ -104,7 +93,39 @@ public class SessionManager {
         return clickCount
     }
     
+    public func getSessionMetadata() -> SessionMetadata? {
+        if let sessionCreationDate = self.sessionMetadata?.sessionCreationDate,
+           self.isIdle == false,
+            self.hasAnHourPassed(since: sessionCreationDate) == true {
+            self.setupSessionMetadata()
+            NotificationCenter.default.post(name: .cxRumNotificationSessionEnded, object: nil)
+        }
+        return self.sessionMetadata
+    }
+    
+    public func shutdown() {
+        self.sessionMetadata = SessionMetadata(sessionId: "",
+                                               sessionCreationDate: 0,
+                                               using: KeychainManager())
+        self.reset()
+    }
+    
+    public func reset() {
+        self.errorCount = 0
+        self.clickCount = 0
+        self.hasRecording = false
+    }
+    
+    @objc private func appDidBecomeActiveNotification(notification: Notification) {
+        self.updateActivityTime()
+    }
+    
     private func hasAnHourPassed(since timeInterval: TimeInterval) -> Bool {
+        // If the time is 0, treat it as invalid or "not passed"
+        guard timeInterval > 0 else {
+            return false
+        }
+        
         let dateFromInterval = Date(timeIntervalSince1970: timeInterval)
         let currentDate = Date()
         let hourInSeconds: TimeInterval = 3600  // Number of seconds in an hour
@@ -116,53 +137,29 @@ public class SessionManager {
         return timeDifference >= hourInSeconds
     }
     
-    private func setupSessionMetadata() {
+    internal func setupSessionMetadata() {
         self.prevSessionMetadata = self.sessionMetadata
         self.sessionMetadata = SessionMetadata(sessionId: NSUUID().uuidString,
                                                sessionCreationDate: Date().timeIntervalSince1970,
                                                using: KeychainManager())
-        // Publish the new session Id
+
         if let sessionId = self.sessionMetadata?.sessionId {
             self.sessionChangedCallback?(sessionId)
         }
     }
     
-    private func setupIdleTimer() {
-        idleTimer = Timer.scheduledTimer(timeInterval: 60,
-                                         target: self,
-                                         selector: #selector(checkIdleTime),
-                                         userInfo: nil,
-                                         repeats: true)
-    }
-    
-    // Call this function every time the monitored function is executed
-    func updateActivityTime() {
-        lastActivityTime = Date()
-        if let lastActivityTime = lastActivityTime {
-            Log.d("Activity updated at \(lastActivityTime)")
-        }
-    }
-    
-    @objc private func checkIdleTime() {
-        guard let lastActivity = lastActivityTime else {
-            Log.e("No activity has been recorded yet.")
-            return
-        }
-        
-        let now = Date()
-        let timeSinceLastActivity = now.timeIntervalSince(lastActivity)
-        
-        if timeSinceLastActivity > idleInterval {
-            self.setupSessionMetadata()
+    internal func updateActivityTime() {
+        if isIdle {
+            Log.d("[SDK] transitioning from idle to active state")
+            setupSessionMetadata()
             NotificationCenter.default.post(name: .cxRumNotificationSessionEnded, object: nil)
-            Log.d("Function has been idle for 15 minutes.")
-        } else {
-            let minutes = Int((idleInterval - timeSinceLastActivity) / 60)
-            Log.d("Function is active. Idle in approximately \(minutes) minutes.")
         }
+        lastActivity = Date()
     }
-
+    
     deinit {
-        idleTimer?.invalidate()
+        NotificationCenter.default.removeObserver(self,
+                                            name: UIApplication.didBecomeActiveNotification,
+                                            object: nil)
     }
 }

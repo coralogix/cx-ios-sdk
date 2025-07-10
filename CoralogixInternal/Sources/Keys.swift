@@ -185,7 +185,7 @@ public enum Keys: String {
     case queueUrlProcessing = "com.coralogix.urlProcessing"
     case queueMediaInput = "com.coralogix.mediainput"
     case queueSpanProcessingQueue = "com.coralogix.spanProcessingQueue"
-    case undefined
+    case undefined = "N/A"
     case cxforward
     case enable
     case options
@@ -193,6 +193,9 @@ public enum Keys: String {
     case customTraceId
     case customSpanId
     case isManual
+    case metricKitLog = "metricKit log"
+    case idle
+    case active
 }
 
 public enum CoralogixLogSeverity: Int {

@@ -108,6 +108,12 @@ struct CxRum {
         if eventContext.type.rawValue == CoralogixEventType.navigation.rawValue {
             self.snapshotContext = buildSnapshotContext(sessionManager: sessionManager, viewManager: viewManager)
         }
+        
+        // Check for User Interaction
+        if eventContext.type.rawValue == CoralogixEventType.userInteraction.rawValue {
+            sessionManager.incrementErrorCounter()
+            self.snapshotContext = buildSnapshotContext(sessionManager: sessionManager, viewManager: viewManager)
+        }
     }
     
     internal func buildSnapshotContext(sessionManager: SessionManager, viewManager: ViewManager) -> SnapshotContext {
@@ -164,7 +170,7 @@ struct CxRum {
         if eventContext.type == CoralogixEventType.error {
             result[Keys.errorContext.rawValue] = self.errorContext.getDictionary()
         }
-        
+                
         if let screenShotContext = self.screenShotContext, screenShotContext.isValid() {
             result[Keys.screenshotContext.rawValue] = screenShotContext.getDictionary()
         }

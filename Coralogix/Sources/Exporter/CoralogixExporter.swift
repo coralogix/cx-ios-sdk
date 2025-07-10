@@ -13,6 +13,8 @@ public class CoralogixExporter: SpanExporter {
     private var sessionManager: SessionManager
     private var networkManager: NetworkProtocol
     private var metricsManager: MetricsManager
+    private var screenshotManager = ScreenshotManager()
+
     private let spanProcessingQueue = DispatchQueue(label: Keys.queueSpanProcessingQueue.rawValue, attributes: .concurrent)
     
     public init(options: CoralogixExporterOptions,
@@ -44,6 +46,14 @@ public class CoralogixExporter: SpanExporter {
         return self.viewManager
     }
     
+    public func getScreenshotManager() -> ScreenshotManager {
+        return self.screenshotManager
+    }
+    
+    public func getSessionManager() -> SessionManager {
+        return self.sessionManager
+    }
+    
     public func set(cxView: CXView) {
         if cxView.state == .notifyOnAppear {
             self.viewManager.set(cxView: cxView)
@@ -70,6 +80,10 @@ public class CoralogixExporter: SpanExporter {
     }
     
     public func export(spans: [SpanData], explicitTimeout: TimeInterval?) -> SpanExporterResultCode {
+        if self.sessionManager.isIdle {
+            Log.d("[SDK] Skipping export, session is idle")
+            return .success
+        }
         
         // ignore Urls
         var filterSpans = spans.filter { self.shouldRemoveSpan(span: $0) }
@@ -105,8 +119,6 @@ public class CoralogixExporter: SpanExporter {
             return .failure
         }
 
-        self.sessionManager.updateActivityTime()
-
         var request = URLRequest(url: url)
         request.timeoutInterval = min(TimeInterval.greatestFiniteMagnitude, 10)
         request.httpMethod = "POST"
@@ -141,7 +153,7 @@ public class CoralogixExporter: SpanExporter {
             status = .success
             
             if let data = requestJsonData {
-                self?.logJSON(from: data, prettyPrint: true)
+                self?.logJSON(from: data, prettyPrint: false)
             }
         }
 
@@ -171,6 +183,7 @@ public class CoralogixExporter: SpanExporter {
     @objc func handleNotification(notification: Notification) {
         self.viewManager.reset()
         self.sessionManager.reset()
+        self.screenshotManager.reset()
     }
     
     internal func resolvedUrlString() -> String? {

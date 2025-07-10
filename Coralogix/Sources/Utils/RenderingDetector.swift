@@ -82,7 +82,9 @@ class FPSTrigger {
 
 enum CXMobileVitalsType: String {
     case cold
+    case coldJS
     case warm
+    case warmJS
     case fps
     case anr
     case metricKit
@@ -91,4 +93,35 @@ enum CXMobileVitalsType: String {
 struct CXMobileVitals {
     let type: CXMobileVitalsType
     let value: String
+}
+
+extension CXMobileVitalsType {
+    var spanAttributes: [String: AttributeValue] {
+        switch self {
+        case .anr:
+            return [
+                Keys.eventType.rawValue: .string(CoralogixEventType.error.rawValue),
+                Keys.source.rawValue: .string(Keys.console.rawValue),
+                Keys.severity.rawValue: .int(CoralogixLogSeverity.error.rawValue)
+            ]
+        default:
+            return [
+                Keys.eventType.rawValue: .string(CoralogixEventType.mobileVitals.rawValue),
+                Keys.severity.rawValue: .int(CoralogixLogSeverity.info.rawValue)
+            ]
+        }
+    }
+    
+    func specificAttributes(for value: String) -> [String: AttributeValue] {
+        switch self {
+        case .anr:
+            return [
+                Keys.errorMessage.rawValue: .string(Keys.anr.rawValue)
+            ]
+        default:
+            return [
+                Keys.mobileVitalsValue.rawValue: .string(value)
+            ]
+        }
+    }
 }

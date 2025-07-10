@@ -304,6 +304,7 @@ class MockCoralogix: CoralogixInterface {
     var application: String = "mockApplication"
     var sessionCreationTimestamp: TimeInterval = 1737453647.568056
     var debugMode: Bool = false
+    var idle: Bool = false
     var reportedErrors: [String] = []
     var periodicallyCaptureEventCalled = false
     
@@ -352,6 +353,10 @@ class MockCoralogix: CoralogixInterface {
     // Simulate isDebug
     func isDebug() -> Bool {
         return debugMode
+    }
+    
+    func isIdle() -> Bool {
+        return idle
     }
 }
 

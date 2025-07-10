@@ -11,20 +11,19 @@ The `SessionReplay` module provides functionality for recording user sessions, i
 ### 1. `SessionReplayOptions`
 
 #### Description
-Represents the configuration options for session replay functionality.
-
+Holds the configuration used to initialize SessionReplay. This includes capture mode, timing, scale, compression, sampling, and masking rules.
 #### Properties
-- `autoStartSessionRecording`: Automatically starts session recording if enabled in the options.
-- `recordingType`: The type of recording (`image` or `video`).
+- `autoStartSessionRecording`: If true, recording begins automatically upon initialization.
+- `recordingType`: The recording mode – .image (available) or .video (TBD).
 - `captureTimeInterval`: Time interval between each capture in seconds.
-- `captureScale`: Scale factor for captured images.
-- `captureCompressionQuality`: Compression quality for captured images (range: 0.0 to 1.0).
-- `sessionRecordingSampleRate`: The sampling rate for session recording events.
-- `maskText`: Array of text patterns to mask (supports strings and regex).
+- `captureScale`: Scale factor for image resolution.
+- `captureCompressionQuality`: Compression level for image quality (0.0–1.0).
+- `sessionRecordingSampleRate`: Sampling percentage (0–100) to determine whether the session is recorded.
+- `maskText`: Text patterns (strings or regex) to redact from captured content.
 - `maskImages`: Whether specific images should be masked (default: `false`).
 - `maskAllImages`: Whether all images should be masked. If `false`, only credit card images will be masked (default: `true`).
 - `maskFaces`: Whether faces should be masked (default: `false`).
-- `creditCardPredicate`: Optional array of text patterns to identify potential credit card content.
+- `creditCardPredicate`: Custom text patterns to identify images that may contain credit card content.
 
 #### Initializer
 ```swift
@@ -33,11 +32,13 @@ public init(
     captureTimeInterval: TimeInterval = 10,
     captureScale: CGFloat = 2.0,
     captureCompressionQuality: CGFloat = 1.0,
+    sessionRecordingSampleRate: Int = 100,
     maskText: [String]? = nil,
     maskImages: Bool = false,
     maskAllImages: Bool = true,
     maskFaces: Bool = false,
-    creditCardPredicate: [String]? = nil
+    creditCardPredicate: [String]? = nil,
+    autoStartSessionRecording: Bool = false
 )
 ```
 
@@ -46,10 +47,13 @@ public init(
 let options = SessionReplayOptions(
     recordingType: .image,
     captureTimeInterval: 5.0,
-    maskText: ["Confidential", "\d{16}"], // Regex for credit card numbers
+    maskText: ["Confidential", ".*"], // ".*" mask all text
     maskImages: true,
-    maskFaces: true
+    maskFaces: true,
+    autoStartSessionRecording: true
 )
+
+SessionReplay.initializeWithOptions(sessionReplayOptions: options)
 ```
 
 ---
@@ -57,14 +61,14 @@ let options = SessionReplayOptions(
 ### 2. `SessionReplay`
 
 #### Description
-Manages session replay functionality, including recording, event capture, and masking sensitive content.
+Singleton class responsible for session capture, and masking sensitive content.
 
-#### Properties
-- `sessionReplayModel`: Internal model managing session replay data and operations.
+#### Access
+- `SessionReplay.shared` // must be initialized first using initializeWithOptions
 
 #### Initializer
 ```swift
-public init(sessionId: String, sessionReplayOptions: SessionReplayOptions)
+SessionReplay.initializeWithOptions(sessionReplayOptions: options)
 ```
 
 #### Methods
@@ -73,33 +77,37 @@ public init(sessionId: String, sessionReplayOptions: SessionReplayOptions)
 Starts recording the session and captures data at the configured interval.
 
 ```swift
-public func startSessionRecording()
+SessionReplay.shared.startRecording()
 ```
 
 ##### `stopSessionRecording`
 Stops the session recording and releases resources.
 
 ```swift
-public func stopSessionRecording()
+SessionReplay.shared.stopRecording()
 ```
 
 ##### `captureEvent`
 Captures a specific event during the session.
 
 ```swift
-public func captureEvent()
+let result = SessionReplay.shared.captureEvent()
 ```
 
 #### Example Usage
 ```swift
-let sessionReplay = SessionReplay(sessionId: "12345", sessionReplayOptions: options)
-sessionReplay.startSessionRecording()
+let options = SessionReplayOptions(
+    recordingType: .image,
+    captureTimeInterval: 5.0,
+    maskText: [".*"], // ".*" mask all text
+    maskImages: true,
+    maskFaces: true,
+    autoStartSessionRecording: false
+)
 
-// After some events
-sessionReplay.captureEvent()
-
-// Stop recording
-sessionReplay.stopSessionRecording()
+SessionReplay.initializeWithOptions(sessionReplayOptions: options)
+SessionReplay.shared.startRecording()
+_ = SessionReplay.shared.captureEvent(properties: nil)
 ```
 
 ---
@@ -125,3 +133,4 @@ Defines the type of recording:
 - `.video`
 
 ---
+

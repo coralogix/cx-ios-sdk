@@ -621,6 +621,54 @@ final class CoralogixRumTests: XCTestCase {
         XCTAssertTrue(result)
     }
     
+    func testSetView() {
+        let mockOptions = CoralogixExporterOptions(
+            coralogixDomain: .US2,
+            userContext: nil,
+            environment: "PROD",
+            application: "TestApp-iOS",
+            version: "1.0",
+            publicKey: "token",
+            ignoreUrls: [],
+            ignoreErrors: [],
+            sampleRate: 100,
+            traceParentInHeader: ["enable": true],
+            debug: true
+        )
+        
+        let coralogixRum = CoralogixRum(options: mockOptions)
+        coralogixRum.setView(name: "TestView")
+        XCTAssertNotNil(coralogixRum.coralogixExporter?.getViewManager().visibleView)
+    }
+    
+    func testSetupTracer_registersTracerWithCorrectExporter() {
+        let mockOptions = CoralogixExporterOptions(
+            coralogixDomain: .US2,
+            userContext: nil,
+            environment: "PROD",
+            application: "TestApp-iOS",
+            version: "1.0",
+            publicKey: "token",
+            ignoreUrls: [],
+            ignoreErrors: [],
+            sampleRate: 100,
+            traceParentInHeader: ["enable": true],
+            debug: true
+        )
+        let mockSessionManager = SessionManager()
+        let mockExporter = MockCoralogixExporter(options: mockOptions,
+                                                 sessionManager: mockSessionManager,
+                                                 networkManager: NetworkManager(),
+                                                 viewManager: ViewManager(keyChain: nil),
+                                                 metricsManager: MetricsManager())
+        
+        let coralogixRum = CoralogixRum(options: mockOptions)
+
+        coralogixRum.coralogixExporter = mockExporter
+        let tracer = OpenTelemetry.instance.tracerProvider.get(instrumentationName: "MyTestApp")
+        XCTAssertNotNil(tracer)
+    }
+    
     private func makeMockCoralogixRum() ->  CoralogixRum {
         let mockOptions = CoralogixExporterOptions(
             coralogixDomain: .US2,
@@ -710,6 +758,11 @@ final class MockSpanBuilder: SpanBuilder {
 }
 
 final class MockSessionReplay: SessionReplayInterface {
+    func captureEvent(properties: [String : Any]?) -> Result<Void, CoralogixInternal.CaptureEventError> {
+        captureEventCalledWith = properties
+        return .success(())
+    }
+    
     var captureEventCalledWith: [String: Any]?
     
     func startRecording() {
@@ -718,10 +771,6 @@ final class MockSessionReplay: SessionReplayInterface {
     
     func stopRecording() {
         
-    }
-    
-    func captureEvent(properties: [String : Any]?) {
-        captureEventCalledWith = properties
     }
     
     func update(sessionId: String) {
