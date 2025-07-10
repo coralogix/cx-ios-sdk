@@ -122,6 +122,6 @@ By default, this property is optional, and custom patterns can be supplied durin
 ### `RecordingType`
 Defines the type of recording:
 - `.image`
-- `.video`
+- `.video` - Not supported at the moment
 
 ---
