@@ -119,7 +119,7 @@ public class TextScanner {
 
             return CIImage(color: color).cropped(to: adjustedRect)
         } catch {
-            print("Error getting bounding box: \(error)")
+            Log.e("Error getting bounding box: \(error)")
             return nil
         }
     }
