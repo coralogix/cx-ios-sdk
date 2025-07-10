@@ -104,8 +104,9 @@ public class TextScanner {
                                in image: CIImage,
                                matching pattern: String,
                                color: CIColor) -> CIImage? {
-        guard let range = candidate.string.range(of: pattern) else { return nil }
-
+        guard let range = candidate.string.range(of: pattern, options: .regularExpression) else {
+            return nil
+        }
         do {
             let wordBox = try candidate.boundingBox(for: range)
             guard let boundingBox = wordBox?.boundingBox else { return nil }
