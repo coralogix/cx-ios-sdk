@@ -36,61 +36,97 @@ public class TextScanner {
     /// - Parameter image: The input `CIImage` to process.
     /// - Returns: A new `CIImage` with text regions masked.
     /// - Mask the Detected Text Regions: For each matching text, determine its bounding box,
-    ///   adjust it to the image's coordinate system, and overlay a mask on that region.
-    internal func maskText(in image: CIImage, with patterns: [String]?) -> (CIImage) {
+    ///   adjust it to the image's coordinate system, and overlay a mask on that region.    
+    internal func maskText(in image: CIImage, with patterns: [String]?) -> CIImage {
         let blackColor = CIColor.black
         var maskLayer = CIImage.empty().cropped(to: image.extent)
 
-        let request = VNRecognizeTextRequest { (request, error) in
-            guard let results = request.results as? [VNRecognizedTextObservation] else {
+        let request = VNRecognizeTextRequest { [weak self] request, error in
+            guard let observations = request.results as? [VNRecognizedTextObservation] else {
                 Log.e("No text detected or an error occurred: \(String(describing: error))")
                 return
             }
-                        
-            for observation in results {
+
+            for observation in observations {
                 guard let topCandidate = observation.topCandidates(1).first else { continue }
-                let recognizedText = topCandidate.string
-                
-                // Determine if we should mask this text
-                let shouldMask: Bool
-                if let patterns = patterns {
-                    // Mask if any pattern matches
-                    shouldMask = patterns.contains { pattern in
-                        recognizedText.range(of: pattern, options: .regularExpression) != nil
-                    }
-                } else {
-                    // Mask all text if patterns is nil
-                    shouldMask = true
-                }
-                
-                if shouldMask {
-                    let boundingBox = observation.boundingBox
-                    let adjustedRect = CGRect(
-                        x: boundingBox.minX * image.extent.width,
-                        y: (1 - boundingBox.minY - boundingBox.height) * image.extent.height,
-                        width: boundingBox.width * image.extent.width,
-                        height: boundingBox.height * image.extent.height
-                    )
-                    
-                    let mask = CIImage(color: blackColor).cropped(to: adjustedRect)
-                    maskLayer = mask.composited(over: maskLayer)
-                }
+                maskLayer = self?.processCandidate(topCandidate, in: image, with: patterns, baseMask: maskLayer, color: blackColor) ?? maskLayer
             }
         }
-        
+
+        performTextRecognition(request, on: image)
+
+        let flippedMaskLayer = flipVertically(maskLayer, height: image.extent.height)
+        return flippedMaskLayer.composited(over: image)
+    }
+    
+    private func performTextRecognition(_ request: VNRequest, on image: CIImage) {
         let handler = VNImageRequestHandler(ciImage: image, options: [:])
-        
         do {
             try handler.perform([request])
         } catch {
             Log.e("Failed to perform text detection: \(error)")
-            return image
         }
-        
-        let flippedMaskLayer = maskLayer
+    }
+    
+    private func processCandidate(_ candidate: VNRecognizedText,
+                                  in image: CIImage,
+                                  with patterns: [String]?,
+                                  baseMask: CIImage,
+                                  color: CIColor) -> CIImage {
+        var updatedMask = baseMask
+        let recognizedText = candidate.string
+
+        guard let patterns = patterns else { return baseMask }
+
+        for pattern in patterns {
+            if matchesPattern(recognizedText, pattern: pattern) {
+                if let masked = maskCandidate(candidate, in: image, matching: pattern, color: color) {
+                    updatedMask = masked.composited(over: updatedMask)
+                }
+                break
+            }
+        }
+        return updatedMask
+    }
+    
+    private func matchesPattern(_ text: String, pattern: String) -> Bool {
+        do {
+            let regex = try NSRegularExpression(pattern: pattern, options: [.caseInsensitive])
+            let range = NSRange(text.startIndex..<text.endIndex, in: text)
+            return regex.firstMatch(in: text, options: [], range: range) != nil
+        } catch {
+            Log.e("Invalid regex pattern: \(pattern)")
+            return false
+        }
+    }
+    
+    private func maskCandidate(_ candidate: VNRecognizedText,
+                               in image: CIImage,
+                               matching pattern: String,
+                               color: CIColor) -> CIImage? {
+        guard let range = candidate.string.range(of: pattern) else { return nil }
+
+        do {
+            let wordBox = try candidate.boundingBox(for: range)
+            guard let boundingBox = wordBox?.boundingBox else { return nil }
+
+            let adjustedRect = CGRect(
+                x: boundingBox.minX * image.extent.width,
+                y: (1 - boundingBox.minY - boundingBox.height) * image.extent.height,
+                width: boundingBox.width * image.extent.width,
+                height: boundingBox.height * image.extent.height
+            )
+
+            return CIImage(color: color).cropped(to: adjustedRect)
+        } catch {
+            print("Error getting bounding box: \(error)")
+            return nil
+        }
+    }
+    
+    private func flipVertically(_ image: CIImage, height: CGFloat) -> CIImage {
+        return image
             .transformed(by: CGAffineTransform(scaleX: 1, y: -1))
-            .transformed(by: CGAffineTransform(translationX: 0, y: image.extent.height))
-        
-        return (flippedMaskLayer.composited(over: image))
+            .transformed(by: CGAffineTransform(translationX: 0, y: height))
     }
 }

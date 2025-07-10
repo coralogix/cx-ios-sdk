@@ -32,9 +32,7 @@ class ScannerPipeline {
         var isFaceScannerEnabled = false
         var isImageScannerEnabled = false
         
-        if let patterns = options.maskText {
-            isTextScannerEnabled = !patterns.isEmpty
-        }
+        isTextScannerEnabled = !(options.maskText?.isEmpty ?? true)
         isFaceScannerEnabled = options.maskFaces
         isImageScannerEnabled = options.maskImages
 
