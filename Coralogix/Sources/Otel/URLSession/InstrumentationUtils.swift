@@ -24,6 +24,45 @@ enum InstrumentationUtils {
         allClasses.deallocate()
         return classes
     }
+    
+    static func objc_getSafeClassList() -> [AnyClass] {
+        let ignoredPrefixes = [
+            "SVG",     // SVGKit
+            "SK",      // SpriteKit
+            "CN",      // Contacts
+            "AV",      // AVFoundation
+            "UI",      // UIKit
+            "NS",      // Foundation
+            "CA",      // CoreAnimation
+            "WK",      // WebKit
+        ]
+
+        let safePrefixes = [
+            "AF",          // AFNetworking
+            "NSURL",       // Foundation
+            "Coralogix"    // SDK internal
+        ]
+        
+        let allClasses = objc_getClassList()
+        var safeClasses: [AnyClass] = []
+        
+        for cls in allClasses {
+            let className = NSStringFromClass(cls)
+
+            // Skip problematic or irrelevant classes
+            if ignoredPrefixes.contains(where: { className.hasPrefix($0) }) {
+                continue
+            }
+
+            // Focus only on known targets (e.g., AFNetworking)
+            if !safePrefixes.contains(where: { className.hasPrefix($0) }) {
+                continue
+            }
+            
+            safeClasses.append(cls)
+        }
+        return safeClasses
+    }
 
     static func instanceRespondsAndImplements(cls: AnyClass, selector: Selector) -> Bool {
         var implements = false

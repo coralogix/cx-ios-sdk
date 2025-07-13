@@ -376,7 +376,7 @@ public class URLSessionInstrumentation {
         
         // Swizzle AFNetworking (if used)
         if NSClassFromString("AFURLSessionManager") != nil {
-            let classes = InstrumentationUtils.objc_getClassList()
+            let classes = InstrumentationUtils.objc_getSafeClassList()
             for cls in classes {
                 appendMethodIfExists(for: cls, selector: NSSelectorFromString("af_resume"))
             }
