@@ -49,12 +49,7 @@ public class URLSessionInstrumentation {
     public init(configuration: URLSessionInstrumentationConfiguration) {
         self.configuration = configuration
         tracer = OpenTelemetry.instance.tracerProvider.get(instrumentationName: "NSURLSession", instrumentationVersion: "0.0.1")
-    }
-    
-    public func enableNetworkInstrumentation() {
-        DispatchQueue.main.async {
-            self.injectInNSURLClasses()
-        }
+        self.injectInNSURLClasses()
     }
     
     private func injectInNSURLClasses() {
@@ -376,18 +371,27 @@ public class URLSessionInstrumentation {
         
         // Swizzle AFNetworking (if used)
         if NSClassFromString("AFURLSessionManager") != nil {
-            let classes = InstrumentationUtils.objc_getClassList()
-            for cls in classes {
-                appendMethodIfExists(for: cls, selector: NSSelectorFromString("af_resume"))
+            let classes = InstrumentationUtils.objc_getSafeClassList(
+                ignoredPrefixes: configuration.ignoredClassPrefixes
+            )
+            if classes.isEmpty {
+                Log.d("[URLSessionInstrumentation] No safe classes found for af_resume swizzling")
+            } else {
+                for cls in classes {
+                    appendMethodIfExists(for: cls, selector: NSSelectorFromString("af_resume"))
+                }
             }
+        } else {
+            Log.d("[URLSessionInstrumentation] AFNetworking not detected, skipping swizzling")
         }
 
         
-        for (_, selector, method) in methodsToSwizzle {
+        for (cls, selector, method) in methodsToSwizzle {
             
             // ✅ Safety check: ensure method signature is void-return, no args
             guard let typeEncoding = method_getTypeEncoding(method),
                   String(cString: typeEncoding) == "v@:" else {
+                Log.d("[URLSessionInstrumentation] Skipping method \(selector) on \(cls) due to invalid signature")
                 continue // Skip this method – wrong signature
             }
 
