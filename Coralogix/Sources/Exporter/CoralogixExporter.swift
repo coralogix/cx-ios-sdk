@@ -95,13 +95,16 @@ public class CoralogixExporter: SpanExporter {
         let uniqueSpans = uniqueSpansDict.compactMap { $0.value.first }
 
         if !uniqueSpans.isEmpty {
-            let cxSpansDictionary = encodeSpans(spans: uniqueSpans)
+            let cxSpansDictionary = autoreleasepool {
+                encodeSpans(spans: uniqueSpans)
+            }
             if cxSpansDictionary.isEmpty {
                 return .success
             }
             
             if ([.reactNative, .flutter].contains(CoralogixRum.sdkFramework) && self.options.beforeSendCallBack != nil) {
-                self.options.beforeSendCallBack?(cxSpansDictionary)
+                let clonedSpans = cxSpansDictionary.deepCopy()
+                self.options.beforeSendCallBack?(clonedSpans)
                 return .success
             } else {
                 // Normal flow
@@ -141,8 +144,8 @@ public class CoralogixExporter: SpanExporter {
 
         var status: SpanExporterResultCode = .failure
         let semaphore = DispatchSemaphore(value: 0)
-        
-        let task = URLSession.shared.dataTask(with: request) { [weak self] jsonData, _, error in
+        let jsonDataCopy = requestJsonData
+        let task = URLSession.shared.dataTask(with: request) { [weak self] _, _, error in
             defer { semaphore.signal() }
             
             if let _ = error {
@@ -152,7 +155,7 @@ public class CoralogixExporter: SpanExporter {
             
             status = .success
             
-            if let data = requestJsonData {
+            if let data = jsonDataCopy {
                 self?.logJSON(from: data, prettyPrint: false)
             }
         }

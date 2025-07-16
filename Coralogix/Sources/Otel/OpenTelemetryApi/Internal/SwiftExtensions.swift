@@ -44,3 +44,9 @@ private extension FixedWidthInteger {
         self = converted
     }
 }
+
+extension Array where Element == [String: Any] {
+    func deepCopy() -> [[String: Any]] {
+        return self.map { $0.mapValues { $0 } }
+    }
+}
