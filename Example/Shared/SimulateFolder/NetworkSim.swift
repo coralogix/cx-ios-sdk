@@ -86,7 +86,7 @@ class NetworkSim {
     static func performGetRequest() {
            let url = URL(string: "https://jsonplaceholder.typicode.com/posts/1")! // Example API
            
-           var request = URLRequest(url: url)
+           var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData)
            request.httpMethod = "GET"
 
            let task = URLSession.shared.dataTask(with: request) { data, response, error in
