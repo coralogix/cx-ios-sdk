@@ -15,7 +15,7 @@ public class CoralogixExporter: SpanExporter {
     private var metricsManager: MetricsManager
     private var screenshotManager = ScreenshotManager()
 
-    private let spanProcessingQueue = DispatchQueue(label: Keys.queueSpanProcessingQueue.rawValue, attributes: .concurrent)
+    private let spanProcessingQueue = DispatchQueue(label: Keys.queueSpanProcessingQueue.rawValue)
     
     public init(options: CoralogixExporterOptions,
                 sessionManager: SessionManager,
@@ -174,9 +174,21 @@ public class CoralogixExporter: SpanExporter {
     
     func encodeSpans(spans: [SpanData]) -> [[String: Any]] {
         var encodedSpans: [[String: Any]] = []
-        spanProcessingQueue.sync(flags: .barrier) {
-            encodedSpans = spans.compactMap { self.spanDatatoCxSpan(otelSpan: $0) }
+        let group = DispatchGroup()
+        group.enter()
+        spanProcessingQueue.async(flags: .barrier) { [weak self] in
+            defer { group.leave() }
+            guard let self = self else { return }
+            encodedSpans = spans.compactMap { span in
+                do {
+                    return try? self.spanDatatoCxSpan(otelSpan: span)
+                } catch {
+                    Log.e("❌ Failed to encode span \(span.name): \(error)")
+                    return nil
+                }
+            }
         }
+        group.wait()
         return encodedSpans
     }
     
@@ -215,7 +227,13 @@ public class CoralogixExporter: SpanExporter {
     }
     
     private func spanDatatoCxSpan(otelSpan: SpanData) -> [String: Any]? {
-        let metatadata = VersionMetadata(appName: self.options.application, appVersion: self.options.version)
+        guard otelSpan.spanId.isValid, !otelSpan.attributes.isEmpty else {
+            Log.e("Invalid otelSpan: \(otelSpan)")
+            return nil
+        }
+        
+        let metatadata = VersionMetadata(appName: self.options.application,
+                                         appVersion: self.options.version)
         return CxSpan(otel: otelSpan,
                       versionMetadata: metatadata,
                       sessionManager: self.sessionManager,
