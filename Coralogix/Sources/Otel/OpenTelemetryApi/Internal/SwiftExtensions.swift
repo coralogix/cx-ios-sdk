@@ -46,7 +46,51 @@ private extension FixedWidthInteger {
 }
 
 extension Array where Element == [String: Any] {
+    /// Returns a full deep copy of self, recursively copying any nested
+    /// [String: Any] dictionaries or [Any] arrays.
     func deepCopy() -> [[String: Any]] {
-        return self.map { $0.mapValues { $0 } }
+        return self.map { dict in
+            return dict.deepCopy()
+        }
+    }
+}
+
+extension Dictionary where Key == String, Value == Any {
+    /// Recursively deep‐copies this dictionary
+    func deepCopy() -> [String: Any] {
+        var copy: [String: Any] = [:]
+        for (key, value) in self {
+            copy[key] = deepCopy(value: value)
+        }
+        return copy
+    }
+
+    /// Helper that inspects a value and copies dicts / arrays recursively
+    private func deepCopy(value: Any) -> Any {
+        switch value {
+        case let dict as [String: Any]:
+            return dict.deepCopy()
+        case let array as [Any]:
+            return array.deepCopyAnyArray()
+        default:
+            // Primitives (String, Int, Double, Bool, etc.) are value types
+            return value
+        }
+    }
+}
+
+extension Array where Element == Any {
+    /// Recursively deep‐copies this array
+    func deepCopyAnyArray() -> [Any] {
+        return self.map { element in
+            switch element {
+            case let dict as [String: Any]:
+                return dict.deepCopy()
+            case let array as [Any]:
+                return array.deepCopyAnyArray()
+            default:
+                return element
+            }
+        }
     }
 }
