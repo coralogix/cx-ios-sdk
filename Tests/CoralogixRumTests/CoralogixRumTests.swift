@@ -635,10 +635,17 @@ final class CoralogixRumTests: XCTestCase {
             traceParentInHeader: ["enable": true],
             debug: true
         )
-        
         let coralogixRum = CoralogixRum(options: mockOptions)
+        let expectation = XCTestExpectation(description: "Wait for async setView to complete")
         coralogixRum.setView(name: "TestView")
-        XCTAssertNotNil(coralogixRum.coralogixExporter?.getViewManager().visibleView)
+
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.2) {
+            let visibleView = coralogixRum.coralogixExporter?.getViewManager().visibleView
+            XCTAssertNotNil(visibleView)
+            XCTAssertEqual(visibleView?.name, "TestView")
+            expectation.fulfill()
+        }
+        wait(for: [expectation], timeout: 1.0)
     }
     
     func testSetupTracer_registersTracerWithCorrectExporter() {

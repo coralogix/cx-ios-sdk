@@ -24,6 +24,25 @@ enum InstrumentationUtils {
         allClasses.deallocate()
         return classes
     }
+    
+    static func objc_getSafeClassList(ignoredPrefixes: [String]? = nil) -> [AnyClass] {
+        let allClasses = objc_getClassList()
+        var safeClasses: [AnyClass] = []
+        
+        for cls in allClasses {
+            let className = NSStringFromClass(cls)
+            if let ignoredPrefixes = ignoredPrefixes {
+                if ignoredPrefixes.contains(where: { className.hasPrefix($0) }) {
+                    //Log.d("[URLSessionInstrumentation] Skipping class \(className) due to ignored prefix")
+                    continue
+                }
+            }
+            
+            safeClasses.append(cls)
+        }
+        Log.d("[URLSessionInstrumentation] Found \(safeClasses.count) safe classes for swizzling")
+        return safeClasses
+    }
 
     static func instanceRespondsAndImplements(cls: AnyClass, selector: Selector) -> Bool {
         var implements = false

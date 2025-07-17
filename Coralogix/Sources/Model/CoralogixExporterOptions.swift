@@ -78,6 +78,9 @@ public struct CoralogixExporterOptions {
     
     public var traceParentInHeader: [String: Any]?
     
+    /// The Array of Prefixes you can avoid in swizzle process (Network)
+    public let ignoredClassPrefixes: [String]?
+    
     public init(coralogixDomain: CoralogixDomain,
                 userContext: UserContext? = nil,
                 environment: String,
@@ -95,6 +98,7 @@ public struct CoralogixExporterOptions {
                 enableSwizzling: Bool = true,
                 proxyUrl: String? = nil,
                 traceParentInHeader: [String: Any]? = nil,
+                ignoredClassPrefixes: [String]? = nil,
                 debug: Bool = false) {
         self.coralogixDomain = coralogixDomain
         self.userContext = userContext
@@ -114,6 +118,7 @@ public struct CoralogixExporterOptions {
         self.enableSwizzling = enableSwizzling
         self.proxyUrl = proxyUrl
         self.traceParentInHeader = traceParentInHeader
+        self.ignoredClassPrefixes = ignoredClassPrefixes
     }
     
     internal func shouldInitInstrumentation(instrumentation: InstrumentationType) -> Bool {
