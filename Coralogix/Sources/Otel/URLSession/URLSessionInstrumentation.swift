@@ -57,7 +57,7 @@ public class URLSessionInstrumentation {
         defer { injectLock.unlock() }
         
         guard !didInject else { return }
-            didInject = true
+        didInject = true
         
 #if swift(<5.7)
         let selectors = [
@@ -98,7 +98,7 @@ public class URLSessionInstrumentation {
             defer { free(methodListPointer) }
             
             let methodList = UnsafeBufferPointer(start: methodListPointer, count: Int(methodCount))
-
+            
             for selector in selectors {
                 if methodList.contains(where: { method_getName($0) == selector }) {
                     injectIntoDelegateClass(cls: theClass)
@@ -187,28 +187,61 @@ public class URLSessionInstrumentation {
     }
     
     private func injectIntoNSURLSessionCreateTaskWithParameterMethods() {
+        typealias UploadWithDataIMP = @convention(c) (URLSession, Selector, URLRequest, Data?) -> URLSessionTask
+        typealias UploadWithFileIMP = @convention(c) (URLSession, Selector, URLRequest, URL) -> URLSessionTask
+        
         let cls = URLSession.self
-        [
-            #selector(URLSession.uploadTask(with:from:)),
-            #selector(URLSession.uploadTask(with:fromFile:)),
-        ].forEach {
-            let selector = $0
-            guard let original = class_getInstanceMethod(cls, selector) else {
-                Log.d("injectInto \(selector.description) failed")
-                return
-            }
-            var originalIMP: IMP?
-            let instrumentation = self
-            let block: @convention(block) (URLSession, URLRequest, AnyObject) -> URLSessionTask = { session, request, argument in
+        
+        // MARK: Swizzle `uploadTask(with:from:)`
+        if let method = class_getInstanceMethod(cls, #selector(URLSession.uploadTask(with:from:))) {
+            let originalIMP = method_getImplementation(method)
+            let imp = unsafeBitCast(originalIMP, to: UploadWithDataIMP.self)
+            
+            let block: @convention(block) (URLSession, URLRequest, Data?) -> URLSessionTask = { [weak self] session, request, data in
+                guard let instrumentation = self else {
+                    return imp(session, #selector(URLSession.uploadTask(with:from:)), request, data)
+                }
+                
                 let sessionTaskId = UUID().uuidString
-                let castedIMP = unsafeBitCast(originalIMP, to: (@convention(c) (URLSession, Selector, URLRequest, AnyObject) -> URLSessionDataTask).self)
-                let instrumentedRequest = URLSessionLogger.processAndLogRequest(request, sessionTaskId: sessionTaskId, instrumentation: self, shouldInjectHeaders: true)
-                let task = castedIMP(session, selector, instrumentedRequest ?? request, argument)
+                let instrumentedRequest = URLSessionLogger.processAndLogRequest(
+                    request,
+                    sessionTaskId: sessionTaskId,
+                    instrumentation: instrumentation,
+                    shouldInjectHeaders: true
+                )
+                
+                let task = imp(session, #selector(URLSession.uploadTask(with:from:)), instrumentedRequest ?? request, data)
                 instrumentation.setIdKey(value: sessionTaskId, for: task)
                 return task
             }
-            let swizzledIMP = imp_implementationWithBlock(unsafeBitCast(block, to: AnyObject.self))
-            originalIMP = method_setImplementation(original, swizzledIMP)
+            let swizzledIMP = imp_implementationWithBlock(block)
+            method_setImplementation(method, swizzledIMP)
+        }
+        
+        // MARK: Swizzle `uploadTask(with:fromFile:)`
+        if let method = class_getInstanceMethod(cls, #selector(URLSession.uploadTask(with:fromFile:))) {
+            let originalIMP = method_getImplementation(method)
+            let imp = unsafeBitCast(originalIMP, to: UploadWithFileIMP.self)
+            
+            let block: @convention(block) (URLSession, URLRequest, URL) -> URLSessionTask = { [weak self] session, request, fileURL in
+                guard let instrumentation = self else {
+                    return imp(session, #selector(URLSession.uploadTask(with:fromFile:)), request, fileURL)
+                }
+                
+                let sessionTaskId = UUID().uuidString
+                let instrumentedRequest = URLSessionLogger.processAndLogRequest(
+                    request,
+                    sessionTaskId: sessionTaskId,
+                    instrumentation: instrumentation,
+                    shouldInjectHeaders: true
+                )
+                
+                let task = imp(session, #selector(URLSession.uploadTask(with:fromFile:)), instrumentedRequest ?? request, fileURL)
+                instrumentation.setIdKey(value: sessionTaskId, for: task)
+                return task
+            }
+            let swizzledIMP = imp_implementationWithBlock(block)
+            method_setImplementation(method, swizzledIMP)
         }
     }
     
@@ -349,7 +382,7 @@ public class URLSessionInstrumentation {
     }
     
     private static var resumeSwizzleKey: UInt8 = 0
-
+    
     private func injectIntoNSURLSessionTaskResume() {
         typealias ResumeIMPType = @convention(c) (AnyObject, Selector) -> Void
         var methodsToSwizzle = [(cls: AnyClass, sel: Selector, method: Method)]()
@@ -363,7 +396,7 @@ public class URLSessionInstrumentation {
         
         // Swizzle URLSessionTask
         appendMethodIfExists(for: URLSessionTask.self, selector: #selector(URLSessionTask.resume))
-
+        
         // Swizzle internal Apple class (if exists)
         if let cfURLSession = NSClassFromString("__NSCFURLSessionTask") {
             appendMethodIfExists(for: cfURLSession, selector: NSSelectorFromString("resume"))
@@ -384,7 +417,7 @@ public class URLSessionInstrumentation {
         } else {
             Log.d("[URLSessionInstrumentation] AFNetworking not detected, skipping swizzling")
         }
-
+        
         
         for (cls, selector, method) in methodsToSwizzle {
             
@@ -394,7 +427,7 @@ public class URLSessionInstrumentation {
                 Log.d("[URLSessionInstrumentation] Skipping method \(selector) on \(cls) due to invalid signature")
                 continue // Skip this method – wrong signature
             }
-
+            
             let originalIMP = method_getImplementation(method)
             
             let block: @convention(block) (AnyObject) -> Void = { [weak self] task in

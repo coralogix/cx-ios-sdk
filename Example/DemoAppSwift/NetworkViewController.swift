@@ -15,6 +15,7 @@ class NetworkViewController: UITableViewController {
                  Keys.succesfullNetworkRequestFlutter.rawValue,
                  Keys.succesfullAlmofire.rawValue,
                  Keys.failureAlmofire.rawValue,
+                 Keys.almofireUploadRequest.rawValue,
                  Keys.afnetworkingRequest.rawValue,
                  Keys.postRequestToServer.rawValue,
                  Keys.getRequestToServer.rawValue]
@@ -80,9 +81,12 @@ class NetworkViewController: UITableViewController {
         } else if item == Keys.failureNetworkRequestFlutter.rawValue {
             NetworkSim.setNetworkRequestContextFailure()
         } else if item ==  Keys.succesfullAlmofire.rawValue {
-//            NetworkSim.succesfullAlmofire()
+            NetworkSim.succesfullAlmofire()
         } else if item == Keys.failureAlmofire.rawValue {
-//            NetworkSim.failureAlmofire()
+            NetworkSim.failureAlmofire()
+        } else if item == Keys.almofireUploadRequest.rawValue {
+            let fileUrl = NetworkSim.createSampleFile(sizeInMB: 10)
+            NetworkSim.uploadFile(fileURL: fileUrl)
         } else if item == Keys.afnetworkingRequest.rawValue {
             NetworkSim.semdAFNetworkingRequest()
         } else if item == Keys.postRequestToServer.rawValue {
