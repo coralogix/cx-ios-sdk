@@ -28,8 +28,8 @@ enum Keys: String {
     case modalPresentation = "Modal Presentation"
     case segmentedCollectionView = "Segmented / Collection"
     case simulateANR = "Simulate ANR"
-    case succesfullAlmofire = "Succesfull Almofire Request"
-    case failureAlmofire = "Failure Almofire Request"
+    case succesfullAlamofire = "Succesfull Alamofire Request"
+    case failureAlamofire = "Failure Alamofire Request"
     case sessionReplay = "Session Replay"
     case startRecoding = "Start Recoding"
     case stopRecoding = "Stop Recoding"
@@ -42,4 +42,5 @@ enum Keys: String {
     case postRequestToServer = "Post Request to Server"
     case getRequestToServer = "Get Request to Server"
     case clock = "Clock"
+    case alamofireUploadRequest = "Upload Alamofire Request"
 }
