@@ -221,7 +221,7 @@ class NetworkSim {
         //
         //        // Simulated file — use a file from your local bundle or Documents directory
         //        guard let fileURL = fileURL else {
-        //            print(#function, ": File URL not found.")
+        //            print("UploadFile: File URL not found.")
         //            return
         //        }
         //
