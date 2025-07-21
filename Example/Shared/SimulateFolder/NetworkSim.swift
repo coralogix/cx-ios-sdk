@@ -140,7 +140,7 @@ class NetworkSim {
         task.resume()
     }
     
-    static func succesfullAlmofire() {
+    static func succesfullAlamofire() {
         //        // Define the URL
         //        let url = "https://jsonplaceholder.typicode.com/posts"
         //
@@ -163,7 +163,7 @@ class NetworkSim {
         //            }
     }
     
-    static func failureAlmofire() {
+    static func failureAlamofire() {
 //        let url = "https://www.coralogix.com/404"
 //        
 //        // Create a request using Alamofire
