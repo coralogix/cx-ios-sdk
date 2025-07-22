@@ -11,45 +11,65 @@ import Coralogix
 import Alamofire
 import AFNetworking
 import SDWebImage
+
 //https://github.com/AFNetworking/AFNetworking.git
 //https://github.com/Alamofire/Alamofire.git
 //https://github.com/SDWebImage/SDWebImage.git
+
 class NetworkSim {
+    static let url = "https://jsonplaceholder.typicode.com/posts"
+    static let errorUrl = "https://jsonplaceholder.typicode.com/posts1"
+    
     static func failureNetworkRequest() {
-        let url = URL(string: "https://www.google.com/404")!
+        let url = URL(string: errorUrl)!
         let request = URLRequest(url: url)
         
-        let task = URLSession.shared.dataTask(with: request) { data, _, _ in
-            //            if let data = data {
-            //                let string = String(decoding: data, as: UTF8.self)
-            //                print(string)
-            //            }
+        let task = URLSession.shared.dataTask(with: request) { data, response, error in
+            if let error = error {
+                print("GET Request Error:", error)
+                return
+            }
+            
+            if let httpResponse = response as? HTTPURLResponse {
+                print("GET Response Code:", httpResponse.statusCode)
+            }
+            
+            if let data = data, let jsonString = String(data: data, encoding: .utf8) {
+                print("GET Response Data:\n", jsonString)
+            }
         }
         task.resume()
     }
     
     static func sendSuccesfullRequest() {
-        let url = URL(string: "https://www.coralogix.com")!
+        let url = URL(string: url)!
         let request = URLRequest(url: url)
         
-        let task = URLSession.shared.dataTask(with: request) { data, _, _ in
-            //            if let data = data {
-            //                let string = String(decoding: data, as: UTF8.self)
-            //                print(string)
-            //            }
+        let task = URLSession.shared.dataTask(with: request) { data, response, error in
+            if let error = error {
+                print("GET Request Error:", error)
+                return
+            }
+            
+            if let httpResponse = response as? HTTPURLResponse {
+                print("GET Response Code:", httpResponse.statusCode)
+            }
+            
+            if let data = data, let jsonString = String(data: data, encoding: .utf8) {
+                print("GET Response Data:\n", jsonString)
+            }
         }
         task.resume()
     }
     
-    static func semdAFNetworkingRequest() {
-        let urlString = "https://jsonplaceholder.typicode.com/posts1"
+    static func sendAFNetworkingRequest() {
         let manager = AFHTTPSessionManager()
         
         // Set response serializer (JSON in this case)
         manager.responseSerializer = AFJSONResponseSerializer()
         
         // Perform GET request
-        manager.get(urlString, parameters: nil, headers: nil, progress: nil, success: { task, responseObject in
+        manager.get(url, parameters: nil, headers: nil, progress: nil, success: { task, responseObject in
             // Success block
             if let response = responseObject {
                 print("Response: \(response)")
@@ -61,7 +81,7 @@ class NetworkSim {
     }
     
     static func setNetworkRequestContextSuccsess() {
-        let dict = ["url" : "https://www.coralogix.com",
+        let dict = ["url" : "\(url)",
                     "host" : "coralogix.com",
                     "method" : "GET",
                     "status_code": 200,
@@ -74,7 +94,7 @@ class NetworkSim {
     }
     
     static func setNetworkRequestContextFailure() {
-        let dict = ["url" : "https://www.coralogix.com/404",
+        let dict = ["url" : errorUrl,
                     "host" : "coralogix.com",
                     "method" : "GET",
                     "status_code": 404,
@@ -111,7 +131,7 @@ class NetworkSim {
     }
     
     static func performPostRequest() {
-        let url = URL(string: "https://jsonplaceholder.typicode.com/posts")! // Example API
+        let url = URL(string: url)! // Example API
         
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -144,22 +164,11 @@ class NetworkSim {
     }
     
     static func succesfullAlamofire() {
-        
-        // Custom configuration with a 30-second timeout
-        let configuration = URLSessionConfiguration.default
-        configuration.timeoutIntervalForRequest = 30
-        configuration.timeoutIntervalForResource = 30
-        
-        // Optional: disable caching
-        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
-        
-        // Create Alamofire Session
-        let session = Session(configuration: configuration)
         // Define the URL
-        let url = "https://jsonplaceholder.typicode.com/posts"
+        
         
         // Create a request using Alamofire
-        session.request(url, method: .get)
+        AF.request(url, method: .get)
             .validate()  // Validates the response status code
             .responseData { response in
                 switch response.result {
@@ -178,10 +187,7 @@ class NetworkSim {
     }
     
     static func failureAlamofire() {
-        let url = "https://www.coralogix.com/404"
-        
-        // Create a request using Alamofire
-        AF.request(url, method: .get)
+        AF.request(errorUrl, method: .get)
             .validate()  // Validates the response status code
             .responseData { response in
                 switch response.result {

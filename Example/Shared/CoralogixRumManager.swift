@@ -52,7 +52,7 @@ final class CoralogixRumManager {
 //            return editableCxRum
 //        },
                                                enableSwizzling: true,
-                                               ignoredClassPrefixes: ["SVG", "SK", "CN", "AV", "UI", "CA", "WK"],
+                                               //ignoredClassPrefixes: ["SVG", "SK", "CN", "AV", "UI", "CA", "WK"],
                                                debug: true)
 //        let log = OSLog(subsystem: "test.CoralogixTest", category: .pointsOfInterest)
 //        let signpostID = OSSignpostID(log: log)

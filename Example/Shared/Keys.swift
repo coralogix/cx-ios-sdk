@@ -8,7 +8,7 @@
 import Foundation
 
 enum Keys: String {
-    case failureNetworkRequest = "Failure Network Request"
+    case failureNetworkRequest = "❌ Failure Network Request"
     case succesfullNetworkRequest = "✅ Succesfull Network Request"
     case sendNSException = "NSException"
     case sendNSError = "NSError"
@@ -19,7 +19,7 @@ enum Keys: String {
     case shutDownCoralogixRum = "SDK Shutdown"
     case updateLabels = "Update Labels"
     case pageController = "PageControl view"
-    case failureNetworkRequestFlutter = "Failure Network Request (Flutter)"
+    case failureNetworkRequestFlutter = "❌ Failure Network Request (Flutter)"
     case succesfullNetworkRequestFlutter = "✅ Succesfull Network Request (Flutter)"
     case networkInstumentation =  "Network Instumentation"
     case errorInstumentation =  "Error Instumentation"
@@ -29,7 +29,7 @@ enum Keys: String {
     case segmentedCollectionView = "Segmented / Collection"
     case simulateANR = "Simulate ANR"
     case succesfullAlamofire = "✅ Succesfull Alamofire Request"
-    case failureAlamofire = "Failure Alamofire Request"
+    case failureAlamofire = "❌ Failure Alamofire Request"
     case sessionReplay = "Session Replay"
     case startRecoding = "Start Recoding"
     case stopRecoding = "Stop Recoding"
@@ -38,10 +38,10 @@ enum Keys: String {
     case creditCardElement = "CreditCard Element"
     case creditCardImgElement = "Credit Card Img Element"
     case updateSessionId = "Update session Id"
-    case afnetworkingRequest = "AFNetworking Request"
-    case postRequestToServer = "Post Request to Server"
-    case getRequestToServer = "Get Request to Server"
+    case afnetworkingRequest = "🔌 AFNetworking Request"
+    case postRequestToServer = "🔌 Post Request to Server"
+    case getRequestToServer = "🔌 Get Request to Server"
     case clock = "Clock"
-    case alamofireUploadRequest = "Upload Alamofire Request"
-    case downloadSDWebImage = "Download SDWebImage"
+    case alamofireUploadRequest = "🔌 Upload Alamofire Request"
+    case downloadSDWebImage = "🔌 Download SDWebImage"
 }

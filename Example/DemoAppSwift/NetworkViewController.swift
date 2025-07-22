@@ -13,11 +13,11 @@ class NetworkViewController: UITableViewController {
                  Keys.succesfullNetworkRequest.rawValue,
                  Keys.failureNetworkRequestFlutter.rawValue,
                  Keys.succesfullNetworkRequestFlutter.rawValue,
-                 Keys.downloadSDWebImage.rawValue,
-                 Keys.succesfullAlamofire.rawValue,
                  Keys.failureAlamofire.rawValue,
+                 Keys.succesfullAlamofire.rawValue,
                  Keys.alamofireUploadRequest.rawValue,
                  Keys.afnetworkingRequest.rawValue,
+                 Keys.downloadSDWebImage.rawValue,
                  Keys.postRequestToServer.rawValue,
                  Keys.getRequestToServer.rawValue]
     
@@ -89,7 +89,7 @@ class NetworkViewController: UITableViewController {
             let fileUrl = NetworkSim.createSampleFile(sizeInMB: 10)
             NetworkSim.uploadFile(fileURL: fileUrl)
         } else if item == Keys.afnetworkingRequest.rawValue {
-            NetworkSim.semdAFNetworkingRequest()
+            NetworkSim.sendAFNetworkingRequest()
         } else if item == Keys.postRequestToServer.rawValue {
             NetworkSim.performPostRequest()
         } else if item == Keys.getRequestToServer.rawValue {
