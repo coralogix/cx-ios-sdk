@@ -5,6 +5,10 @@
 
 import Foundation
 
+#if canImport(FoundationNetworking)
+  import FoundationNetworking
+#endif
+
 public typealias DataOrFile = Any
 public typealias SessionTaskId = String
 public typealias HTTPStatus = Int
@@ -20,7 +24,8 @@ public struct URLSessionInstrumentationConfiguration {
                 receivedResponse: ((URLResponse, DataOrFile?, any Span) -> Void)? = nil,
                 receivedError: ((Error, DataOrFile?, HTTPStatus, any Span) -> Void)? = nil,
                 delegateClassesToInstrument: [AnyClass]? = nil,
-                ignoredClassPrefixes: [String]? = nil) {
+                ignoredClassPrefixes: [String]? = nil,
+                tracer: Tracer? = nil) {
         self.shouldRecordPayload = shouldRecordPayload
         self.shouldInstrument = shouldInstrument
         self.shouldInjectTracingHeaders = shouldInjectTracingHeaders
@@ -32,7 +37,11 @@ public struct URLSessionInstrumentationConfiguration {
         self.receivedError = receivedError
         self.delegateClassesToInstrument = delegateClassesToInstrument
         self.ignoredClassPrefixes = ignoredClassPrefixes
+        self.tracer = tracer ??
+             OpenTelemetry.instance.tracerProvider.get(instrumentationName: "NSURLSession", instrumentationVersion: "0.0.1")
     }
+    
+    public var tracer: Tracer
 
     // Instrumentation Callbacks
 

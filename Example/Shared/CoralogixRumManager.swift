@@ -23,9 +23,9 @@ final class CoralogixRumManager {
 
     func initialize() {
         let userContext = UserContext(userId: "ww",
-                                      userName: "?",
-                                      userEmail: "a@a.com",
-                                      userMetadata: ["d":"d"])
+                                      userName: "Tomer har yoffi",
+                                      userEmail: "Tomer.har.yoffi@gmail.com",
+                                      userMetadata: ["Trader":"10000"])
         guard let publicKey = ProcessInfo.processInfo.environment["PUBLIC_KEY"] else {
             fatalError("🚫 PUBLIC_KEY environment variable is not set.")
         }
@@ -41,17 +41,18 @@ final class CoralogixRumManager {
                                                                   .userActions: true,
                                                                   .network: true,
                                                                   .anr: true,
-                                                                  .lifeCycle: true],
+                                                                  .lifeCycle: false],
                                                collectIPData: true,
-                                               beforeSend: { cxRum in
-            var editableCxRum = cxRum
-            if var sessionContext = editableCxRum["session_context"] as? [String: Any] {
-                sessionContext["user_email"] = "jone.dow@coralogix.com"
-                editableCxRum["session_context"] = sessionContext
-            }
-            return editableCxRum
-        },
+//                                               beforeSend: { cxRum in
+//            var editableCxRum = cxRum
+//            if var sessionContext = editableCxRum["session_context"] as? [String: Any] {
+//                sessionContext["user_email"] = "jone.dow@coralogix.com"
+//                editableCxRum["session_context"] = sessionContext
+//            }
+//            return editableCxRum
+//        },
                                                enableSwizzling: true,
+                                               //ignoredClassPrefixes: ["SVG", "SK", "CN", "AV", "UI", "CA", "WK"],
                                                debug: true)
 //        let log = OSLog(subsystem: "test.CoralogixTest", category: .pointsOfInterest)
 //        let signpostID = OSSignpostID(log: log)
