@@ -90,7 +90,7 @@ struct CustomButton: View {
             if item == Keys.failureNetworkRequest.rawValue {
                 NetworkSim.failureNetworkRequest()
             } else if item == Keys.succesfullNetworkRequest.rawValue {
-                NetworkSim.sendSuccesfullRequest()
+                    NetworkSim.sendSuccesfullRequest()
             } else if item == Keys.sendNSException.rawValue {
                 ErrorSim.sendNSException()
             } else if item == Keys.sendNSError.rawValue {

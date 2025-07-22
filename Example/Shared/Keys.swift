@@ -9,7 +9,7 @@ import Foundation
 
 enum Keys: String {
     case failureNetworkRequest = "Failure Network Request"
-    case succesfullNetworkRequest = "Succesfull Network Request"
+    case succesfullNetworkRequest = "✅ Succesfull Network Request"
     case sendNSException = "NSException"
     case sendNSError = "NSError"
     case sendErrorString = "Error String"
@@ -20,7 +20,7 @@ enum Keys: String {
     case updateLabels = "Update Labels"
     case pageController = "PageControl view"
     case failureNetworkRequestFlutter = "Failure Network Request (Flutter)"
-    case succesfullNetworkRequestFlutter = "Succesfull Network Request (Flutter)"
+    case succesfullNetworkRequestFlutter = "✅ Succesfull Network Request (Flutter)"
     case networkInstumentation =  "Network Instumentation"
     case errorInstumentation =  "Error Instumentation"
     case sdkFunctions = "SDK Functions"
@@ -28,7 +28,7 @@ enum Keys: String {
     case modalPresentation = "Modal Presentation"
     case segmentedCollectionView = "Segmented / Collection"
     case simulateANR = "Simulate ANR"
-    case succesfullAlamofire = "Succesfull Alamofire Request"
+    case succesfullAlamofire = "✅ Succesfull Alamofire Request"
     case failureAlamofire = "Failure Alamofire Request"
     case sessionReplay = "Session Replay"
     case startRecoding = "Start Recoding"
@@ -43,4 +43,5 @@ enum Keys: String {
     case getRequestToServer = "Get Request to Server"
     case clock = "Clock"
     case alamofireUploadRequest = "Upload Alamofire Request"
+    case downloadSDWebImage = "Download SDWebImage"
 }

@@ -85,6 +85,13 @@
             ReferencedContainer = "container:DemoApp.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
+      <EnvironmentVariables>
+         <EnvironmentVariable
+            key = "PUBLIC_KEY"
+            value = "cxtp_D2vLlPFbt6JTCvYZHKcU5XLbW3F3E3"
+            isEnabled = "YES">
+         </EnvironmentVariable>
+      </EnvironmentVariables>
    </LaunchAction>
    <ProfileAction
       buildConfiguration = "Release"

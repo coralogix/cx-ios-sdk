@@ -13,6 +13,7 @@ class NetworkViewController: UITableViewController {
                  Keys.succesfullNetworkRequest.rawValue,
                  Keys.failureNetworkRequestFlutter.rawValue,
                  Keys.succesfullNetworkRequestFlutter.rawValue,
+                 Keys.downloadSDWebImage.rawValue,
                  Keys.succesfullAlamofire.rawValue,
                  Keys.failureAlamofire.rawValue,
                  Keys.alamofireUploadRequest.rawValue,
@@ -93,6 +94,8 @@ class NetworkViewController: UITableViewController {
             NetworkSim.performPostRequest()
         } else if item == Keys.getRequestToServer.rawValue {
             NetworkSim.performGetRequest()
+        } else if item == Keys.downloadSDWebImage.rawValue {
+            NetworkSim.downloadImage()
         }
         tableView.deselectRow(at: indexPath, animated: true)
     }

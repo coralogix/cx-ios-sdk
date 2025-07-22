@@ -33,7 +33,7 @@ public class URLSessionInstrumentation {
         get { configurationQueue.sync { _configuration } }
     }
     
-    private let queue = DispatchQueue(label: "io.opentelemetry.ddnetworkinstrumentation")
+    private let queue = DispatchQueue(label: "io.opentelemetry.ddnetworkinstrumentation", attributes: .concurrent)
     private let configurationQueue = DispatchQueue(label: "io.opentelemetry.configuration")
     
     static var instrumentedKey = "io.opentelemetry.instrumentedCall"
@@ -281,7 +281,6 @@ public class URLSessionInstrumentation {
                 let sessionTaskId = UUID().uuidString
                 
                 var completionBlock = completion
-                let instrumentation = self
                 
                 if completionBlock != nil {
                     if objc_getAssociatedObject(argument, &idKey) == nil {
@@ -314,7 +313,7 @@ public class URLSessionInstrumentation {
                         URLSessionLogger.processAndLogRequest(currentRequest, sessionTaskId: sessionTaskId, instrumentation: self, shouldInjectHeaders: false)
                     }
                 }
-                instrumentation.setIdKey(value: sessionTaskId, for: task)
+                self.setIdKey(value: sessionTaskId, for: task)
                 return task
             }
             let swizzledIMP = imp_implementationWithBlock(unsafeBitCast(block, to: AnyObject.self))
@@ -335,7 +334,6 @@ public class URLSessionInstrumentation {
             }
             var originalIMP: IMP?
             
-            let instrumentation = self
             let block: @convention(block) (URLSession, URLRequest, AnyObject, ((Any?, URLResponse?, Error?) -> Void)?) -> URLSessionTask = { session, request, argument, completion in
                 
                 let castedIMP = unsafeBitCast(originalIMP, to: (@convention(c) (URLSession, Selector, URLRequest, AnyObject, ((Any?, URLResponse?, Error?) -> Void)?) -> URLSessionDataTask).self)
@@ -366,7 +364,7 @@ public class URLSessionInstrumentation {
                 let processedRequest = URLSessionLogger.processAndLogRequest(request, sessionTaskId: sessionTaskId, instrumentation: self, shouldInjectHeaders: true)
                 task = castedIMP(session, selector, processedRequest ?? request, argument, completionBlock)
                 
-                instrumentation.setIdKey(value: sessionTaskId, for: task)
+                self.setIdKey(value: sessionTaskId, for: task)
                 return task
             }
             let swizzledIMP = imp_implementationWithBlock(unsafeBitCast(block, to: AnyObject.self))
@@ -582,13 +580,13 @@ public class URLSessionInstrumentation {
             return
         }
         let dataCopy = data
-        queue.sync {
-            if (requestMap[taskId]?.request) != nil {
-                createRequestState(for: taskId)
-                if requestMap[taskId]?.dataProcessed == nil {
-                    requestMap[taskId]?.dataProcessed = Data()
+        queue.async(flags: .barrier) {
+            if (self.requestMap[taskId]?.request) != nil {
+                self.createRequestState(for: taskId)
+                if self.requestMap[taskId]?.dataProcessed == nil {
+                    self.requestMap[taskId]?.dataProcessed = Data()
                 }
-                requestMap[taskId]?.dataProcessed?.append(dataCopy)
+                self.requestMap[taskId]?.dataProcessed?.append(dataCopy)
             }
         }
     }
@@ -598,13 +596,13 @@ public class URLSessionInstrumentation {
         guard let taskId = objc_getAssociatedObject(dataTask, &idKey) as? String else {
             return
         }
-        queue.sync {
-            if (requestMap[taskId]?.request) != nil {
-                createRequestState(for: taskId)
+        queue.async(flags: .barrier) {
+            if (self.requestMap[taskId]?.request) != nil {
+                self.createRequestState(for: taskId)
                 if response.expectedContentLength < 0 {
-                    requestMap[taskId]?.dataProcessed = Data()
+                    self.requestMap[taskId]?.dataProcessed = Data()
                 } else {
-                    requestMap[taskId]?.dataProcessed = Data(capacity: Int(response.expectedContentLength))
+                    self.requestMap[taskId]?.dataProcessed = Data(capacity: Int(response.expectedContentLength))
                 }
             }
         }
@@ -615,7 +613,7 @@ public class URLSessionInstrumentation {
             return
         }
         var requestState: NetworkRequestState?
-        queue.sync {
+        queue.sync(flags: .barrier) {
             requestState = requestMap[taskId]
             if requestState != nil {
                 requestMap[taskId] = nil
@@ -641,7 +639,7 @@ public class URLSessionInstrumentation {
             return
         }
         var requestState: NetworkRequestState?
-        queue.sync {
+        queue.sync(flags: .barrier) {
             requestState = requestMap[taskId]
             
             if requestState?.request != nil {
@@ -679,11 +677,11 @@ public class URLSessionInstrumentation {
 
       let taskId = idKeyForTask(task)
       if let request = task.currentRequest {
-        queue.sync {
-          if requestMap[taskId] == nil {
-            requestMap[taskId] = NetworkRequestState()
+        queue.sync(flags: .barrier) {
+            if self.requestMap[taskId] == nil {
+                self.requestMap[taskId] = NetworkRequestState()
           }
-          requestMap[taskId]?.setRequest(request)
+            self.requestMap[taskId]?.setRequest(request)
         }
 
         // For iOS 15+/macOS 12+, handle async/await methods differently
