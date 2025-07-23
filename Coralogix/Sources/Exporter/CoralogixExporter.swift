@@ -87,6 +87,8 @@ public class CoralogixExporter: SpanExporter {
         
         // ignore Urls
         var filterSpans = spans.filter { self.shouldRemoveSpan(span: $0) }
+        if filterSpans.isEmpty { return .failure }
+        
         // ignore Error
         filterSpans = filterSpans.filter { self.shouldFilterIgnoreError(span: $0) }
         
@@ -290,7 +292,7 @@ public class CoralogixExporter: SpanExporter {
             
             if let ignoreUrlsOrRejexs = self.options.ignoreUrls,
                !ignoreUrlsOrRejexs.isEmpty {
-                let isMatch = Global.isHostMatchesRegexPattern(string: url, regexs: ignoreUrlsOrRejexs)
+                let isMatch = Global.isURLMatchesRegexPattern(string: url, regexs: ignoreUrlsOrRejexs)
                 return !isMatch
             }
             return true
