@@ -66,7 +66,7 @@ extension CoralogixRum {
                 return true
             }
             
-            return Global.isHostMatchesRegexPattern(string: requestURLString, regexs: allowedUrls)
+            return Global.isURLMatchesRegexPattern(string: requestURLString, regexs: allowedUrls)
         }
         
         return true

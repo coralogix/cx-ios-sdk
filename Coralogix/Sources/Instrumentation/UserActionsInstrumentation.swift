@@ -57,7 +57,7 @@ extension CoralogixRum {
                                          screenshotData: screenshotData)
             span.setAttribute(key: Keys.screenshotId.rawValue, value: screenshotLocation.screenshotId)
             span.setAttribute(key: Keys.page.rawValue, value: screenshotLocation.page)
-            sessionReplay.captureEvent(properties: metadata)
+            _ = sessionReplay.captureEvent(properties: metadata)
         }
         
         span.setAttribute(
