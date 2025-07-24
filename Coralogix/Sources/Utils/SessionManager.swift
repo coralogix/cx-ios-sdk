@@ -139,7 +139,7 @@ public class SessionManager {
     
     internal func setupSessionMetadata() {
         self.prevSessionMetadata = self.sessionMetadata
-        self.sessionMetadata = SessionMetadata(sessionId: NSUUID().uuidString.lowercased(),
+        self.sessionMetadata = SessionMetadata(sessionId: UUID().uuidString.lowercased(),
                                                sessionCreationDate: Date().timeIntervalSince1970,
                                                using: KeychainManager())
 
