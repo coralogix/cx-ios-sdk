@@ -49,7 +49,7 @@ struct SessionContext {
     func getDictionary() -> [String: Any] {
         var result = [String: Any]()
         
-        result[Keys.sessionId.rawValue] = self.sessionId.lowercased()
+        result[Keys.sessionId.rawValue] = self.sessionId
         result[Keys.sessionCreationDate.rawValue] = self.sessionCreationDate.milliseconds
         result[Keys.operatingSystem.rawValue] = self.operatingSystem
         result[Keys.osVersion.rawValue] = self.osVersion
@@ -66,7 +66,7 @@ struct SessionContext {
     
     func getPrevSessionDictionary() -> [String: Any] {
         var result = [String: Any]()
-        result[Keys.sessionId.rawValue] = self.sessionId.lowercased()
+        result[Keys.sessionId.rawValue] = self.sessionId
         result[Keys.sessionCreationDate.rawValue] = self.sessionCreationDate.milliseconds
         return result
     }

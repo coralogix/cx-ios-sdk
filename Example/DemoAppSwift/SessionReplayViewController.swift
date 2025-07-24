@@ -112,7 +112,7 @@ class SessionReplayViewController: UITableViewController {
             CoralogixRumManager.shared.sdk.captureEvent()
         } else if item == Keys.updateSessionId.rawValue {
             if let sessionReplay = SdkManager.shared.getSessionReplay() {
-               sessionReplay.update(sessionId: NSUUID().uuidString)
+                sessionReplay.update(sessionId: NSUUID().uuidString.lowercased())
            }
         }
 
