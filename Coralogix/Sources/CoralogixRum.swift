@@ -167,13 +167,8 @@ public class CoralogixRum {
     
     private func swizzle() {
         UIApplication.swizzleTouchesEnded
-        UIApplication.swizzleSendAction
         UIViewController.swizzleViewDidAppear
         UIViewController.swizzleViewDidDisappear
-        UITableView.swizzleTouchesEnded
-        UITableViewController.swizzleUITableViewControllerDelegate
-        UICollectionView.swizzleTouchesEnded
-        UIPageControl.swizzleSetCurrentPage
         UIApplication.swizzleSendEvent
     }
     
