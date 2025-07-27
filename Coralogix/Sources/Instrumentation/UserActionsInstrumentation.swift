@@ -30,7 +30,6 @@ extension CoralogixRum {
     // Increment the click counter and handle the tap object
     private func processTapObject(_ tapObject: [String: Any]) {
         self.sessionManager?.updateActivityTime()
-        self.sessionManager?.incrementClickCounter()
         let span = getUserActionsSpan()
         handleUserInteractionEvent(tapObject, span: span)
     }
