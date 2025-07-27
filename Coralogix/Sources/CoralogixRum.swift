@@ -32,7 +32,7 @@ public class CoralogixRum {
     let notificationCenter = NotificationCenter.default
     
     static var isInitialized = false
-    static var sdkFramework: SdkFramework = .swift
+    static var sdkMobile: SDKMobile = SDKMobile()
     
     public init(options: CoralogixExporterOptions,
                            sdkFramework: SdkFramework = .swift,
@@ -46,7 +46,8 @@ public class CoralogixRum {
             return
         }
         
-        self.startup(sdkFramework: sdkFramework, options: options)
+        CoralogixRum.sdkMobile = SDKMobile(sdkFramework: sdkFramework)
+        self.startup(options: options)
     }
     
     deinit {
@@ -77,13 +78,12 @@ public class CoralogixRum {
                                             object: nil)
     }
     
-    private func startup(sdkFramework: SdkFramework, options: CoralogixExporterOptions) {
+    private func startup(options: CoralogixExporterOptions) {
         guard let sessionManager = self.sessionManager else {
             Log.e("SessionManager is nil.")
             return
         }
         
-        CoralogixRum.sdkFramework = sdkFramework
         Log.isDebug = options.debug
 
         self.setupCoreModules(options: options)
@@ -287,10 +287,4 @@ public class CoralogixRum {
         let coralogixText = "[CORALOGIX]\nVerion: \(Global.sdk.rawValue) \nSwift Verion: \(Global.swiftVersion.rawValue) \nSupport iOS, tvOS\n\n\n"
         print(coralogixText)
     }
-}
-
-public enum SdkFramework: String {
-    case swift
-    case flutter
-    case reactNative = "react-native"
 }

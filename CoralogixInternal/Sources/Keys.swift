@@ -20,6 +20,7 @@ public enum Keys: String {
     case iosSdk = "ios_sdk"
     case errorContext = "error_context"
     case sdkVersion = "sdk_version"
+    case nativeVersion = "native_version"
     case sessionId = "session_id"
     case sessionCreationDate = "session_creation_date"
     case userAgent = "user_agent"

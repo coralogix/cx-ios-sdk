@@ -34,7 +34,7 @@ public class MetricsManager {
                                                name: UIApplication.didEnterBackgroundNotification,
                                                object: nil)
         // Warm
-        if !([.reactNative, .flutter].contains(CoralogixRum.sdkFramework)) {
+        if !([SdkFramework.reactNative, SdkFramework.flutter].contains(CoralogixRum.sdkMobile.sdkFramework)) {
             NotificationCenter.default.addObserver(self,
                                                    selector: #selector(self.appWillEnterForegroundNotification),
                                                    name: UIApplication.willEnterForegroundNotification,
