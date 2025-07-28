@@ -14,7 +14,7 @@ public struct SDKMobile {
         self.sdkFramework = sdkFramework
     }
 
-    func getDictionary() -> [String: Any] {
+    public func getDictionary() -> [String: Any] {
         if sdkFramework == .swift {
             return [Keys.sdkVersion.rawValue: sdkFramework.version,
                     Keys.framework.rawValue: sdkFramework.name,
