@@ -8,7 +8,7 @@
 import XCTest
 @testable import Coralogix
 
-final class mobileSDKTests: XCTestCase {
+final class MobileSDKTests: XCTestCase {
     func testSwiftFrameworkDictionary() {
         let sdk = MobileSDK(sdkFramework: .swift)
         let dict = sdk.getDictionary()
