@@ -9,25 +9,14 @@ import Foundation
 
 public enum SdkFramework: Equatable {
     case swift
-    case flutter
-    case reactNative
-    case hybrid(HybridFramework)
-    
-    public enum HybridFramework: Equatable {
-        case flutter(version: String)
-        case reactNative(version: String)
-    }
+    case flutter(version: String)
+    case reactNative(version: String)
     
     var name: String {
         switch self {
         case .swift: return "swift"
         case .flutter: return "flutter"
         case .reactNative: return "react-native"
-        case .hybrid(let hybridFramework):
-            switch hybridFramework {
-            case .flutter: return "flutter"
-            case .reactNative: return "react-native"
-            }
         }
     }
     
@@ -35,26 +24,21 @@ public enum SdkFramework: Equatable {
         switch self {
         case .swift:
             return true
-        case .flutter, .reactNative, .hybrid:
+        case .flutter, .reactNative:
             return false
         }
     }
     
-    var version: String? {
+    var version: String {
         switch self {
-        case .hybrid(let hybridFramework):
-            switch hybridFramework {
-            case .flutter(let version), .reactNative(let version):
-                return version
-            }
+        case .flutter(let version), .reactNative(let version):
+            return version
         case .swift:
             return Global.sdk.rawValue
-        default:
-            return nil
         }
     }
     
-    var nativeVersion: String? {
-        return isNative ? nil : version
+    var nativeVersion: String {
+        return isNative ? Keys.undefined.rawValue : Global.sdk.rawValue
     }
 }

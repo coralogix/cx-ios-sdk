@@ -33,8 +33,15 @@ public class MetricsManager {
         NotificationCenter.default.addObserver(self, selector: #selector(self.appDidEnterBackgroundNotification),
                                                name: UIApplication.didEnterBackgroundNotification,
                                                object: nil)
+        let sdk = CoralogixRum.sdkMobile.sdkFramework
+
         // Warm
-        if !([SdkFramework.reactNative, SdkFramework.flutter].contains(CoralogixRum.sdkMobile.sdkFramework)) {
+        switch sdk {
+        case .flutter, .reactNative:
+            // it's flutter or react-native
+            break
+        case .swift:
+            // it's not flutter or react-native
             NotificationCenter.default.addObserver(self,
                                                    selector: #selector(self.appWillEnterForegroundNotification),
                                                    name: UIApplication.willEnterForegroundNotification,
@@ -43,6 +50,7 @@ public class MetricsManager {
             NotificationCenter.default.addObserver(self, selector: #selector(self.appDidBecomeActiveNotification),
                                                    name: UIApplication.didBecomeActiveNotification,
                                                    object: nil)
+            break
         }
     }
     

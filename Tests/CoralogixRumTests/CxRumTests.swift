@@ -66,7 +66,7 @@ final class CxRumTests: XCTestCase {
         // Verify initialization
         XCTAssertNotNil(cxRum.timeStamp)
         XCTAssertEqual(cxRum.environment, "prod")
-        XCTAssertEqual(cxRum.mobileSdk, Global.sdk.rawValue)
+        XCTAssertEqual(cxRum.sdkMobile.sdkFramework.version, Global.sdk.rawValue)
         XCTAssertEqual(cxRum.versionMetadata.appName, "ExampleApp")
         XCTAssertEqual(cxRum.traceId, "30")
         XCTAssertEqual(cxRum.spanId, "20")

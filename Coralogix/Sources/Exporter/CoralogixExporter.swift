@@ -104,12 +104,15 @@ public class CoralogixExporter: SpanExporter {
                 return .success
             }
             
-            if ([SdkFramework.reactNative, SdkFramework.flutter].contains(CoralogixRum.sdkMobile.sdkFramework) && self.options.beforeSendCallBack != nil) {
-                let clonedSpans = cxSpansDictionary.deepCopy()
-                self.options.beforeSendCallBack?(clonedSpans)
-                return .success
-            } else {
-                // Normal flow
+            let sdk = CoralogixRum.sdkMobile.sdkFramework
+            switch sdk {
+            case .flutter, .reactNative:
+                if let callback = self.options.beforeSendCallBack {
+                    let clonedSpans = cxSpansDictionary.deepCopy()
+                    callback(clonedSpans)
+                    return .success
+                }
+            default:
                 return sendSpansPayload(cxSpansDictionary)
             }
         }
