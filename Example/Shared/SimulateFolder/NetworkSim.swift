@@ -6,11 +6,11 @@
 //
 
 import Foundation
-import  UIKit
+import UIKit
 import Coralogix
-import Alamofire
-import AFNetworking
-import SDWebImage
+//import Alamofire
+//import AFNetworking
+//import SDWebImage
 
 //https://github.com/AFNetworking/AFNetworking.git
 //https://github.com/Alamofire/Alamofire.git
@@ -63,21 +63,21 @@ class NetworkSim {
     }
     
     static func sendAFNetworkingRequest() {
-        let manager = AFHTTPSessionManager()
-        
-        // Set response serializer (JSON in this case)
-        manager.responseSerializer = AFJSONResponseSerializer()
-        
-        // Perform GET request
-        manager.get(url, parameters: nil, headers: nil, progress: nil, success: { task, responseObject in
-            // Success block
-            if let response = responseObject {
-                print("Response: \(response)")
-            }
-        }) { task, error in
-            // Failure block
-            print("Error: \(error.localizedDescription)")
-        }
+//        let manager = AFHTTPSessionManager()
+//        
+//        // Set response serializer (JSON in this case)
+//        manager.responseSerializer = AFJSONResponseSerializer()
+//        
+//        // Perform GET request
+//        manager.get(url, parameters: nil, headers: nil, progress: nil, success: { task, responseObject in
+//            // Success block
+//            if let response = responseObject {
+//                print("Response: \(response)")
+//            }
+//        }) { task, error in
+//            // Failure block
+//            print("Error: \(error.localizedDescription)")
+//        }
     }
     
     static func setNetworkRequestContextSuccsess() {
@@ -164,45 +164,42 @@ class NetworkSim {
     }
     
     static func succesfullAlamofire() {
-        // Define the URL
-        
-        
-        // Create a request using Alamofire
-        AF.request(url, method: .get)
-            .validate()  // Validates the response status code
-            .responseData { response in
-                switch response.result {
-                case .success(let data):
-                    do {
-                        let json = try JSONSerialization.jsonObject(with: data, options: [])
-                        print("Request Successful")
-                        print("Response Data: \(json)")
-                    } catch {
-                        print("JSON Parsing Error: \(error)")
-                    }
-                case .failure(let error):
-                    print("Request failed with error: \(error)")
-                }
-            }
+//        // Create a request using Alamofire
+//        AF.request(url, method: .get)
+//            .validate()  // Validates the response status code
+//            .responseData { response in
+//                switch response.result {
+//                case .success(let data):
+//                    do {
+//                        let json = try JSONSerialization.jsonObject(with: data, options: [])
+//                        print("Request Successful")
+//                        print("Response Data: \(json)")
+//                    } catch {
+//                        print("JSON Parsing Error: \(error)")
+//                    }
+//                case .failure(let error):
+//                    print("Request failed with error: \(error)")
+//                }
+//            }
     }
     
     static func failureAlamofire() {
-        AF.request(errorUrl, method: .get)
-            .validate()  // Validates the response status code
-            .responseData { response in
-                switch response.result {
-                case .success(let data):
-                    do {
-                        let json = try JSONSerialization.jsonObject(with: data, options: [])
-                        print("Request Successful")
-                        print("Response Data: \(json)")
-                    } catch {
-                        print("JSON Parsing Error: \(error)")
-                    }
-                case .failure(let error):
-                    print("Request failed with error: \(error)")
-                }
-            }
+//        AF.request(errorUrl, method: .get)
+//            .validate()  // Validates the response status code
+//            .responseData { response in
+//                switch response.result {
+//                case .success(let data):
+//                    do {
+//                        let json = try JSONSerialization.jsonObject(with: data, options: [])
+//                        print("Request Successful")
+//                        print("Response Data: \(json)")
+//                    } catch {
+//                        print("JSON Parsing Error: \(error)")
+//                    }
+//                case .failure(let error):
+//                    print("Request failed with error: \(error)")
+//                }
+//            }
     }
     
     static func createSampleFile() -> URL? {
@@ -237,52 +234,52 @@ class NetworkSim {
     }
     
     static func uploadFile(fileURL: URL?) {
-        let url = "https://api.escuelajs.co/api/v1/files/upload"
-        
-        // Simulated file — use a file from your local bundle or Documents directory
-        guard let fileURL = fileURL else {
-            print("UploadFile: File URL not found.")
-            return
-        }
-        
-        // Start upload
-        AF.upload(multipartFormData: { multipartFormData in
-            multipartFormData.append(fileURL, withName: "file", fileName: "sample.txt", mimeType: "text/plain")
-        }, to: url)
-        .uploadProgress { progress in
-            print("Upload Progress: \(progress.fractionCompleted)")
-        }
-        .response { response in
-            switch response.result {
-            case .success(let data):
-                print("Upload succeeded")
-                if let data = data, let responseString = String(data: data, encoding: .utf8) {
-                    print("Response: \(responseString)")
-                }
-            case .failure(let error):
-                print("Upload failed: \(error)")
-            }
-        }
+//        let url = "https://api.escuelajs.co/api/v1/files/upload"
+//        
+//        // Simulated file — use a file from your local bundle or Documents directory
+//        guard let fileURL = fileURL else {
+//            print("UploadFile: File URL not found.")
+//            return
+//        }
+//        
+//        // Start upload
+//        AF.upload(multipartFormData: { multipartFormData in
+//            multipartFormData.append(fileURL, withName: "file", fileName: "sample.txt", mimeType: "text/plain")
+//        }, to: url)
+//        .uploadProgress { progress in
+//            print("Upload Progress: \(progress.fractionCompleted)")
+//        }
+//        .response { response in
+//            switch response.result {
+//            case .success(let data):
+//                print("Upload succeeded")
+//                if let data = data, let responseString = String(data: data, encoding: .utf8) {
+//                    print("Response: \(responseString)")
+//                }
+//            case .failure(let error):
+//                print("Upload failed: \(error)")
+//            }
+//        }
     }
     
     static func downloadImage() {
-        let urlString = "https://www.google.com/url?sa=i&url=https%3A%2F%2Funikal.az%2Fnews%2F490204%2Ftramp-meshur-aparicinin-verilisini-baglatdirir&psig=AOvVaw1NJs_lRnGqkjnhDu8j3AOd&ust=1753266023938000&source=images&cd=vfe&opi=89978449&ved=2ahUKEwjIstmFn9COAxX0UqQEHfprJpkQjRx6BAgAEBo"
-        guard let url = URL(string: urlString) else { return }
-        
-        DispatchQueue.global(qos: .background).async {
-            SDWebImageDownloader.shared.downloadImage(
-                with: url,
-                options: [],
-                progress: nil
-            ) { image, data, error, finished in
-                guard let image = image, finished else { return }
-                DispatchQueue.main.async {
-                    let imageView = UIImageView(image: image)
-                    if imageView.image != nil {
-                        print("Image downloaded")
-                    }
-                }
-            }
-        }
+//        let urlString = "https://www.google.com/url?sa=i&url=https%3A%2F%2Funikal.az%2Fnews%2F490204%2Ftramp-meshur-aparicinin-verilisini-baglatdirir&psig=AOvVaw1NJs_lRnGqkjnhDu8j3AOd&ust=1753266023938000&source=images&cd=vfe&opi=89978449&ved=2ahUKEwjIstmFn9COAxX0UqQEHfprJpkQjRx6BAgAEBo"
+//        guard let url = URL(string: urlString) else { return }
+//        
+//        DispatchQueue.global(qos: .background).async {
+//            SDWebImageDownloader.shared.downloadImage(
+//                with: url,
+//                options: [],
+//                progress: nil
+//            ) { image, data, error, finished in
+//                guard let image = image, finished else { return }
+//                DispatchQueue.main.async {
+//                    let imageView = UIImageView(image: image)
+//                    if imageView.image != nil {
+//                        print("Image downloaded")
+//                    }
+//                }
+//            }
+//        }
     }
 }

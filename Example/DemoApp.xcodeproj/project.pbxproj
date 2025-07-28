@@ -18,10 +18,6 @@
 		E622116A2BFDF4B400052682 /* NetworkSim.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6320FB42BE7CE6800A4547E /* NetworkSim.swift */; };
 		E622116C2BFF2A7B00052682 /* Keys.swift in Sources */ = {isa = PBXBuildFile; fileRef = E622116B2BFF2A7B00052682 /* Keys.swift */; };
 		E622116D2BFF2D5300052682 /* Keys.swift in Sources */ = {isa = PBXBuildFile; fileRef = E622116B2BFF2A7B00052682 /* Keys.swift */; };
-		E6525B112E2F9CAE006DB4AA /* SDWebImage in Frameworks */ = {isa = PBXBuildFile; productRef = E6525B102E2F9CAE006DB4AA /* SDWebImage */; };
-		E6525B132E2F9CAE006DB4AA /* SDWebImageMapKit in Frameworks */ = {isa = PBXBuildFile; productRef = E6525B122E2F9CAE006DB4AA /* SDWebImageMapKit */; };
-		E6525B162E2FA589006DB4AA /* Alamofire in Frameworks */ = {isa = PBXBuildFile; productRef = E6525B152E2FA589006DB4AA /* Alamofire */; };
-		E6525B192E2FA5C5006DB4AA /* AFNetworking in Frameworks */ = {isa = PBXBuildFile; productRef = E6525B182E2FA5C5006DB4AA /* AFNetworking */; };
 		E669382A2C722EE60002335F /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = E66938292C722EE60002335F /* AppDelegate.swift */; };
 		E669382C2C722EE60002335F /* MainViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E669382B2C722EE60002335F /* MainViewController.swift */; };
 		E669382F2C722EE60002335F /* Base in Resources */ = {isa = PBXBuildFile; fileRef = E669382E2C722EE60002335F /* Base */; };
@@ -162,12 +158,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				E6525B162E2FA589006DB4AA /* Alamofire in Frameworks */,
-				E6525B112E2F9CAE006DB4AA /* SDWebImage in Frameworks */,
 				E66E3B682DA7F76C00FBC86B /* Coralogix in Frameworks */,
-				E6525B132E2F9CAE006DB4AA /* SDWebImageMapKit in Frameworks */,
 				E6B60A042DB4E544003AD35D /* SessionReplay in Frameworks */,
-				E6525B192E2FA5C5006DB4AA /* AFNetworking in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -354,10 +346,6 @@
 			packageProductDependencies = (
 				E66E3B672DA7F76C00FBC86B /* Coralogix */,
 				E6B60A032DB4E544003AD35D /* SessionReplay */,
-				E6525B102E2F9CAE006DB4AA /* SDWebImage */,
-				E6525B122E2F9CAE006DB4AA /* SDWebImageMapKit */,
-				E6525B152E2FA589006DB4AA /* Alamofire */,
-				E6525B182E2FA5C5006DB4AA /* AFNetworking */,
 			);
 			productName = DemoAppSwift;
 			productReference = E68681A22BFA279500B127E7 /* DemoAppSwift.app */;
@@ -395,9 +383,6 @@
 			mainGroup = E6320F792BE7C94F00A4547E;
 			packageReferences = (
 				E66E3B662DA7F76C00FBC86B /* XCLocalSwiftPackageReference "../../cx-ios-sdk" */,
-				E6525B0F2E2F9CAE006DB4AA /* XCRemoteSwiftPackageReference "SDWebImage" */,
-				E6525B142E2FA589006DB4AA /* XCRemoteSwiftPackageReference "Alamofire" */,
-				E6525B172E2FA5C5006DB4AA /* XCRemoteSwiftPackageReference "AFNetworking" */,
 			);
 			productRefGroup = E6320F832BE7C94F00A4547E /* Products */;
 			projectDirPath = "";
@@ -881,54 +866,7 @@
 		};
 /* End XCLocalSwiftPackageReference section */
 
-/* Begin XCRemoteSwiftPackageReference section */
-		E6525B0F2E2F9CAE006DB4AA /* XCRemoteSwiftPackageReference "SDWebImage" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/SDWebImage/SDWebImage.git";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 5.21.1;
-			};
-		};
-		E6525B142E2FA589006DB4AA /* XCRemoteSwiftPackageReference "Alamofire" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/Alamofire/Alamofire.git";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 5.10.2;
-			};
-		};
-		E6525B172E2FA5C5006DB4AA /* XCRemoteSwiftPackageReference "AFNetworking" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/AFNetworking/AFNetworking.git";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 4.0.1;
-			};
-		};
-/* End XCRemoteSwiftPackageReference section */
-
 /* Begin XCSwiftPackageProductDependency section */
-		E6525B102E2F9CAE006DB4AA /* SDWebImage */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = E6525B0F2E2F9CAE006DB4AA /* XCRemoteSwiftPackageReference "SDWebImage" */;
-			productName = SDWebImage;
-		};
-		E6525B122E2F9CAE006DB4AA /* SDWebImageMapKit */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = E6525B0F2E2F9CAE006DB4AA /* XCRemoteSwiftPackageReference "SDWebImage" */;
-			productName = SDWebImageMapKit;
-		};
-		E6525B152E2FA589006DB4AA /* Alamofire */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = E6525B142E2FA589006DB4AA /* XCRemoteSwiftPackageReference "Alamofire" */;
-			productName = Alamofire;
-		};
-		E6525B182E2FA5C5006DB4AA /* AFNetworking */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = E6525B172E2FA5C5006DB4AA /* XCRemoteSwiftPackageReference "AFNetworking" */;
-			productName = AFNetworking;
-		};
 		E66E3B672DA7F76C00FBC86B /* Coralogix */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = Coralogix;

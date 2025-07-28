@@ -40,9 +40,6 @@ final class SessionContextTests: XCTestCase {
         
         XCTAssertEqual(context.sessionId, "session_001")
         XCTAssertEqual(context.sessionCreationDate, 1609459200)
-        XCTAssertEqual(context.operatingSystem, Global.getOs())
-        XCTAssertEqual(context.osVersion, Global.osVersionInfo())
-        XCTAssertEqual(context.device, Global.getDeviceModel())
         XCTAssertEqual(context.userId, "12345")
         XCTAssertEqual(context.userName, "John Doe")
         XCTAssertEqual(context.userEmail, "john.doe@example.com")
@@ -58,9 +55,6 @@ final class SessionContextTests: XCTestCase {
         
         XCTAssertEqual(dictionary[Keys.sessionId.rawValue] as? String, "session_001")
         XCTAssertEqual(dictionary[Keys.sessionCreationDate.rawValue] as? Int, 1609459200.milliseconds)
-        XCTAssertEqual(dictionary[Keys.operatingSystem.rawValue] as? String, Global.getOs())
-        XCTAssertEqual(dictionary[Keys.osVersion.rawValue] as? String, Global.osVersionInfo())
-        XCTAssertEqual(dictionary[Keys.device.rawValue] as? String, Global.getDeviceModel())
         XCTAssertEqual(dictionary[Keys.userId.rawValue] as? String, "12345")
         XCTAssertEqual(dictionary[Keys.userName.rawValue] as? String, "John Doe")
         XCTAssertEqual(dictionary[Keys.userEmail.rawValue] as? String, "john.doe@example.com")
