@@ -104,7 +104,7 @@ public class CoralogixExporter: SpanExporter {
                 return .success
             }
             
-            let sdk = CoralogixRum.sdkMobile.sdkFramework
+            let sdk = CoralogixRum.mobileSDK.sdkFramework
             switch sdk {
             case .flutter, .reactNative:
                 if let callback = self.options.beforeSendCallBack {

@@ -33,7 +33,7 @@ public class MetricsManager {
         NotificationCenter.default.addObserver(self, selector: #selector(self.appDidEnterBackgroundNotification),
                                                name: UIApplication.didEnterBackgroundNotification,
                                                object: nil)
-        let sdk = CoralogixRum.sdkMobile.sdkFramework
+        let sdk = CoralogixRum.mobileSDK.sdkFramework
 
         // Warm
         switch sdk {

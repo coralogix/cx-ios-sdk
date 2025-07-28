@@ -32,7 +32,7 @@ public class CoralogixRum {
     let notificationCenter = NotificationCenter.default
     
     static var isInitialized = false
-    static var sdkMobile: SDKMobile = SDKMobile()
+    static var mobileSDK: MobileSDK = MobileSDK()
     
     public init(options: CoralogixExporterOptions,
                            sdkFramework: SdkFramework = .swift,
@@ -46,7 +46,7 @@ public class CoralogixRum {
             return
         }
         
-        CoralogixRum.sdkMobile = SDKMobile(sdkFramework: sdkFramework)
+        CoralogixRum.mobileSDK = MobileSDK(sdkFramework: sdkFramework)
         self.startup(options: options)
     }
     

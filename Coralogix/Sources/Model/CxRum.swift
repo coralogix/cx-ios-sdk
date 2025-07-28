@@ -17,7 +17,7 @@ struct CxRum {
     var sessionManager: SessionManager?
     let eventContext: EventContext
     let logContext: LogContext
-    let sdkMobile: SDKMobile
+    let mobileSDK: MobileSDK
     let environment: String
     var traceId: String = ""
     var spanId: String = ""
@@ -62,7 +62,7 @@ struct CxRum {
         self.networkManager = networkManager
         self.viewManager = viewManager
         self.labels = labels
-        self.sdkMobile = CoralogixRum.sdkMobile
+        self.mobileSDK = CoralogixRum.mobileSDK
 
         let traceContext = Helper.getTraceAndSpanId(otel: otel)
         self.traceId = traceContext.traceId
@@ -151,7 +151,7 @@ struct CxRum {
     
     private func addBasicDetails(to result: inout [String: Any]) {
         result[Keys.timestamp.rawValue] = self.timeStamp.milliseconds
-        result[Keys.mobileSdk.rawValue] = self.sdkMobile.getDictionary()
+        result[Keys.mobileSdk.rawValue] = self.mobileSDK.getDictionary()
         result[Keys.versionMetaData.rawValue] = self.versionMetadata.getDictionary()
         result[Keys.sessionContext.rawValue] = self.sessionContext?.getDictionary()
         result[Keys.eventContext.rawValue] = self.eventContext.getDictionary()
