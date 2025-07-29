@@ -13,4 +13,4 @@ DerivedData/
 
 # Ignore secret config
 Secrets.swift
-envs.swift
+Example/envs.swift
