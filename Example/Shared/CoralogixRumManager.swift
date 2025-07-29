@@ -29,6 +29,9 @@ final class CoralogixRumManager {
         guard let publicKey = ProcessInfo.processInfo.environment["PUBLIC_KEY"] else {
             fatalError("🚫 PUBLIC_KEY environment variable is not set.")
         }
+        guard let proxyUrl = ProcessInfo.processInfo.environment["PROXY_URL"] else {
+             fatalError("🚫 PROXY_URL environment variable is not set.")
+        }
         let options = CoralogixExporterOptions(coralogixDomain: CoralogixDomain.STG,
                                                userContext: userContext,
                                                environment: "PROD",
@@ -52,14 +55,16 @@ final class CoralogixRumManager {
             return editableCxRum
         },
                                                enableSwizzling: true,
-                                               debug: true)
+                                               proxyUrl: proxyUrl,
+                                               debug: true
+        )
 //        let log = OSLog(subsystem: "test.CoralogixTest", category: .pointsOfInterest)
 //        let signpostID = OSSignpostID(log: log)
 //        os_signpost(.begin, log: log, name: "Init Coralogix", signpostID: signpostID)
         self._sdk = CoralogixRum(options: options)
 //        os_signpost(.end, log: log, name: "Init Coralogix", signpostID: signpostID)
     }
-    
+
     func getSessionId() -> String? {
         return _sdk?.getSessionId()
     }
