@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 60;
+	objectVersion = 70;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -18,6 +18,10 @@
 		E622116A2BFDF4B400052682 /* NetworkSim.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6320FB42BE7CE6800A4547E /* NetworkSim.swift */; };
 		E622116C2BFF2A7B00052682 /* Keys.swift in Sources */ = {isa = PBXBuildFile; fileRef = E622116B2BFF2A7B00052682 /* Keys.swift */; };
 		E622116D2BFF2D5300052682 /* Keys.swift in Sources */ = {isa = PBXBuildFile; fileRef = E622116B2BFF2A7B00052682 /* Keys.swift */; };
+		E6525B5B2E38BE3C006DB4AA /* envs.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6525B5A2E38BE3A006DB4AA /* envs.swift */; };
+		E6525B602E38C548006DB4AA /* envs.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6525B5A2E38BE3A006DB4AA /* envs.swift */; };
+		E6525B612E38C548006DB4AA /* envs.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6525B5A2E38BE3A006DB4AA /* envs.swift */; };
+		E6525B622E38C548006DB4AA /* envs.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6525B5A2E38BE3A006DB4AA /* envs.swift */; };
 		E669382A2C722EE60002335F /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = E66938292C722EE60002335F /* AppDelegate.swift */; };
 		E669382C2C722EE60002335F /* MainViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E669382B2C722EE60002335F /* MainViewController.swift */; };
 		E669382F2C722EE60002335F /* Base in Resources */ = {isa = PBXBuildFile; fileRef = E669382E2C722EE60002335F /* Base */; };
@@ -58,8 +62,19 @@
 		E6FD68F82D01D5570066BDE8 /* CreditCardInputCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6FD68F72D01D5570066BDE8 /* CreditCardInputCell.swift */; };
 		E6FD68FA2D01D97B0066BDE8 /* FullImageCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6FD68F92D01D97B0066BDE8 /* FullImageCell.swift */; };
 		E6FDDA2D2DF176DC0005F274 /* ClockViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6FDDA2C2DF176DC0005F274 /* ClockViewController.swift */; };
+		E6FDDA2E2DF176DC0005F275 /* SchemaValidationViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6FDDA312DF176DC0005F275 /* SchemaValidationViewController.swift */; };
 		E6FDDA2F2DF176DC0005F274 /* ClockViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6FDDA2C2DF176DC0005F274 /* ClockViewController.swift */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		1E8D06852E27BBC8002C4FCE /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = E6320F7A2BE7C94F00A4547E /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = E68681A12BFA279500B127E7;
+			remoteInfo = DemoAppSwift;
+		};
+/* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
 		E653CC4B2C2423490095276C /* Embed Frameworks */ = {
@@ -95,6 +110,8 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		1E8D067F2E27BBC8002C4FCE /* DemoAppUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DemoAppUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		1E8D068F2E27BC82002C4FCE /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		E603F6CB2C5631CF007C55DA /* CollectionViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollectionViewController.swift; sourceTree = "<group>"; };
 		E603F6CD2C56792D007C55DA /* PageController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PageController.swift; sourceTree = "<group>"; };
 		E620516B2C9821720015D2DE /* CrashReporter.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = CrashReporter.xcframework; path = "../cx-ios-sdk/Coralogix/Frameworks/PLCrashReporter/CrashReporter.xcframework"; sourceTree = "<group>"; };
@@ -107,6 +124,7 @@
 		E6320FB22BE7CE6800A4547E /* CrashSim.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = CrashSim.swift; sourceTree = "<group>"; };
 		E6320FB32BE7CE6800A4547E /* ErrorSim.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ErrorSim.swift; sourceTree = "<group>"; };
 		E6320FB42BE7CE6800A4547E /* NetworkSim.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = NetworkSim.swift; sourceTree = "<group>"; };
+		E6525B5A2E38BE3A006DB4AA /* envs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = envs.swift; sourceTree = "<group>"; };
 		E66938272C722EE60002335F /* DemoAppTvOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DemoAppTvOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		E66938292C722EE60002335F /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		E669382B2C722EE60002335F /* MainViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainViewController.swift; sourceTree = "<group>"; };
@@ -133,9 +151,21 @@
 		E6FD68F72D01D5570066BDE8 /* CreditCardInputCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreditCardInputCell.swift; sourceTree = "<group>"; };
 		E6FD68F92D01D97B0066BDE8 /* FullImageCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FullImageCell.swift; sourceTree = "<group>"; };
 		E6FDDA2C2DF176DC0005F274 /* ClockViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClockViewController.swift; sourceTree = "<group>"; };
+		E6FDDA312DF176DC0005F275 /* SchemaValidationViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SchemaValidationViewController.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		1E8D06802E27BBC8002C4FCE /* DemoAppUITests */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = DemoAppUITests; sourceTree = "<group>"; };
+/* End PBXFileSystemSynchronizedRootGroup section */
+
 /* Begin PBXFrameworksBuildPhase section */
+		1E8D067C2E27BBC8002C4FCE /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		E62211552BFDEB8B00052682 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -188,10 +218,12 @@
 		E6320F792BE7C94F00A4547E = {
 			isa = PBXGroup;
 			children = (
+				E6525B5A2E38BE3A006DB4AA /* envs.swift */,
 				E68681D52BFA2FEC00B127E7 /* Shared */,
 				E62211592BFDEB8B00052682 /* DemoAppSwiftUI */,
 				E68681A32BFA279500B127E7 /* DemoAppSwift */,
 				E66938282C722EE60002335F /* DemoAppTvOS */,
+				1E8D06802E27BBC8002C4FCE /* DemoAppUITests */,
 				E6320F832BE7C94F00A4547E /* Products */,
 				E68681D22BFA2ABB00B127E7 /* Frameworks */,
 			);
@@ -203,6 +235,7 @@
 				E68681A22BFA279500B127E7 /* DemoAppSwift.app */,
 				E62211582BFDEB8B00052682 /* DemoAppSwiftUI.app */,
 				E66938272C722EE60002335F /* DemoAppTvOS.app */,
+				1E8D067F2E27BBC8002C4FCE /* DemoAppUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -220,6 +253,7 @@
 		E66938282C722EE60002335F /* DemoAppTvOS */ = {
 			isa = PBXGroup;
 			children = (
+				1E8D068F2E27BC82002C4FCE /* Info.plist */,
 				E66938292C722EE60002335F /* AppDelegate.swift */,
 				E669382B2C722EE60002335F /* MainViewController.swift */,
 				E669382D2C722EE60002335F /* Main.storyboard */,
@@ -255,6 +289,7 @@
 				E669384E2C747E860002335F /* CustomView.swift */,
 				E674E7F72CD7C6480041784E /* SessionReplayViewController.swift */,
 				E6FDDA2C2DF176DC0005F274 /* ClockViewController.swift */,
+				E6FDDA312DF176DC0005F275 /* SchemaValidationViewController.swift */,
 				E6B60A052DB4EAAC003AD35D /* Assets.xcassets */,
 				E68681AA2BFA279500B127E7 /* Main.storyboard */,
 				E68681AF2BFA279600B127E7 /* LaunchScreen.storyboard */,
@@ -285,6 +320,29 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		1E8D067E2E27BBC8002C4FCE /* DemoAppUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 1E8D06892E27BBC8002C4FCE /* Build configuration list for PBXNativeTarget "DemoAppUITests" */;
+			buildPhases = (
+				1E8D067B2E27BBC8002C4FCE /* Sources */,
+				1E8D067C2E27BBC8002C4FCE /* Frameworks */,
+				1E8D067D2E27BBC8002C4FCE /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				1E8D06862E27BBC8002C4FCE /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				1E8D06802E27BBC8002C4FCE /* DemoAppUITests */,
+			);
+			name = DemoAppUITests;
+			packageProductDependencies = (
+			);
+			productName = DemoAppUITests;
+			productReference = 1E8D067F2E27BBC8002C4FCE /* DemoAppUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 		E62211572BFDEB8B00052682 /* DemoAppSwiftUI */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = E62211632BFDEB8C00052682 /* Build configuration list for PBXNativeTarget "DemoAppSwiftUI" */;
@@ -358,9 +416,13 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 1530;
+				LastSwiftUpdateCheck = 1640;
 				LastUpgradeCheck = 1530;
 				TargetAttributes = {
+					1E8D067E2E27BBC8002C4FCE = {
+						CreatedOnToolsVersion = 16.4;
+						TestTargetID = E68681A12BFA279500B127E7;
+					};
 					E62211572BFDEB8B00052682 = {
 						CreatedOnToolsVersion = 15.3;
 					};
@@ -391,11 +453,19 @@
 				E68681A12BFA279500B127E7 /* DemoAppSwift */,
 				E62211572BFDEB8B00052682 /* DemoAppSwiftUI */,
 				E66938262C722EE60002335F /* DemoAppTvOS */,
+				1E8D067E2E27BBC8002C4FCE /* DemoAppUITests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		1E8D067D2E27BBC8002C4FCE /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		E62211562BFDEB8B00052682 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -428,11 +498,20 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		1E8D067B2E27BBC8002C4FCE /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E6525B5B2E38BE3C006DB4AA /* envs.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		E62211542BFDEB8B00052682 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 				E62211692BFDF4B000052682 /* ErrorSim.swift in Sources */,
+				E6525B612E38C548006DB4AA /* envs.swift in Sources */,
 				E622116D2BFF2D5300052682 /* Keys.swift in Sources */,
 				E62211682BFDF4AD00052682 /* CrashSim.swift in Sources */,
 				E622116A2BFDF4B400052682 /* NetworkSim.swift in Sources */,
@@ -451,6 +530,7 @@
 				E66938552C74A8010002335F /* PageController.swift in Sources */,
 				E669383D2C723D210002335F /* NetworkSim.swift in Sources */,
 				E6FDDA2F2DF176DC0005F274 /* ClockViewController.swift in Sources */,
+				E6525B622E38C548006DB4AA /* envs.swift in Sources */,
 				E669383F2C723D290002335F /* CrashSim.swift in Sources */,
 				E66938402C73447C0002335F /* CollectionViewController.swift in Sources */,
 				E669382A2C722EE60002335F /* AppDelegate.swift in Sources */,
@@ -468,6 +548,7 @@
 				E603F6CC2C5631CF007C55DA /* CollectionViewController.swift in Sources */,
 				E66938532C7489050002335F /* SdkViewController.swift in Sources */,
 				E6FDDA2D2DF176DC0005F274 /* ClockViewController.swift in Sources */,
+				E6FDDA2E2DF176DC0005F275 /* SchemaValidationViewController.swift in Sources */,
 				E669384F2C747E860002335F /* CustomView.swift in Sources */,
 				E66938572C74A8830002335F /* UserActionsViewController.swift in Sources */,
 				E674E7F82CD7C6480041784E /* SessionReplayViewController.swift in Sources */,
@@ -476,6 +557,7 @@
 				E6FD68F82D01D5570066BDE8 /* CreditCardInputCell.swift in Sources */,
 				E669384D2C74769C0002335F /* NetworkViewController.swift in Sources */,
 				E622116C2BFF2A7B00052682 /* Keys.swift in Sources */,
+				E6525B602E38C548006DB4AA /* envs.swift in Sources */,
 				E68681A52BFA279500B127E7 /* AppDelegate.swift in Sources */,
 				E603F6CE2C56792D007C55DA /* PageController.swift in Sources */,
 				E68681A72BFA279500B127E7 /* SceneDelegate.swift in Sources */,
@@ -488,6 +570,14 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		1E8D06862E27BBC8002C4FCE /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = E68681A12BFA279500B127E7 /* DemoAppSwift */;
+			targetProxy = 1E8D06852E27BBC8002C4FCE /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin PBXVariantGroup section */
 		E669382D2C722EE60002335F /* Main.storyboard */ = {
@@ -525,6 +615,45 @@
 /* End PBXVariantGroup section */
 
 /* Begin XCBuildConfiguration section */
+		1E8D06872E27BBC8002C4FCE /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = BT2A743BQ5;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Example/DemoAppUITests/Info.plist;
+				"INFOPLIST_FILE[sdk=*]" = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.5;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.coralogix.DemoAppUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = DemoAppSwift;
+			};
+			name = Debug;
+		};
+		1E8D06882E27BBC8002C4FCE /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = BT2A743BQ5;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Example/DemoAppUITests/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.5;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.coralogix.DemoAppUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = DemoAppSwift;
+			};
+			name = Release;
+		};
 		E62211642BFDEB8C00052682 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -764,10 +893,11 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				DEVELOPMENT_TEAM = KB76G8PF7B;
+				DEVELOPMENT_TEAM = BT2A743BQ5;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = DemoAppSwift/Info.plist;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -781,8 +911,9 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.coralogix.DemoAppSwift;
+				PRODUCT_BUNDLE_IDENTIFIER = com.coralogix.DemoAppSwift2;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -794,9 +925,10 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = KB76G8PF7B;
+				DEVELOPMENT_TEAM = BT2A743BQ5;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = DemoAppSwift/Info.plist;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -810,8 +942,9 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.coralogix.DemoAppSwift;
+				PRODUCT_BUNDLE_IDENTIFIER = com.coralogix.DemoAppSwift2;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -821,6 +954,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		1E8D06892E27BBC8002C4FCE /* Build configuration list for PBXNativeTarget "DemoAppUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1E8D06872E27BBC8002C4FCE /* Debug */,
+				1E8D06882E27BBC8002C4FCE /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		E62211632BFDEB8C00052682 /* Build configuration list for PBXNativeTarget "DemoAppSwiftUI" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

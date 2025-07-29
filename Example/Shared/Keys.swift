@@ -44,4 +44,5 @@ enum Keys: String {
     case clock = "Clock"
     case alamofireUploadRequest = "🔌 Upload Alamofire Request"
     case downloadSDWebImage = "🔌 Download SDWebImage"
+    case schemaValidation = "Verify schema"
 }
