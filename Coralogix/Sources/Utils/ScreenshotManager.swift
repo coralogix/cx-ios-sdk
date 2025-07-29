@@ -13,12 +13,12 @@ public struct ScreenshotLocation {
     public let screenshotId: String
     
     public func toProperties() -> [String: Any] {
-            return [
-                Keys.screenshotId.rawValue: screenshotId,
-                Keys.page.rawValue: page,
-                Keys.segmentIndex.rawValue: segmentIndex
-            ]
-        }
+        return [
+            Keys.screenshotId.rawValue: screenshotId,
+            Keys.page.rawValue: page,
+            Keys.segmentIndex.rawValue: segmentIndex
+        ]
+    }
 }
 
 public class ScreenshotManager {
@@ -31,14 +31,6 @@ public class ScreenshotManager {
 
     public init(maxScreenShotsPerPage: Int = ScreenshotManager.defaultMaxScreenShotsPerPage) {
         self.maxScreenshotsPerPage = maxScreenShotsPerPage
-        NotificationCenter.default.addObserver(self,
-                                               selector: #selector(resetSession(notification:)),
-                                               name: .cxRumNotificationSessionEnded, object: nil)
-        
-    }
-    
-    deinit {
-        NotificationCenter.default.removeObserver(self, name: .cxRumNotificationSessionEnded, object: nil)
     }
     
     public var nextScreenshotLocation: ScreenshotLocation {
@@ -60,7 +52,7 @@ public class ScreenshotManager {
         }
     }
 
-    @objc func resetSession(notification: Notification) {
+    public func reset() {
         queue.sync(flags: .barrier) {
             _page = 0
             _screenshotCount = 0

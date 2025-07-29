@@ -5,8 +5,6 @@
 //  Created by Coralogix DEV TEAM on 19/05/2024.
 //
 
-// swiftlint:disable file_length
-
 #if canImport(UIKit)
 import UIKit
 #endif
@@ -75,112 +73,6 @@ class SwizzleUtils {
     }
 }
 
-extension UICollectionView {
-    static let swizzleTouchesEnded: Void = {
-        let originalSelector = #selector(UIResponder.touchesEnded(_:with:))
-        let swizzledSelector = #selector(cx_touchesEnded(_:with:))
-        
-        SwizzleUtils.swizzleInstanceMethod(for: UICollectionView.self,
-                                           originalSelector: originalSelector,
-                                           swizzledSelector: swizzledSelector)
-    }()
-    
-    @objc func cx_touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
-        guard let touch = touches.first else {
-            self.cx_touchesEnded(touches, with: event) // Call original method
-            return
-        }
-        
-        let location = touch.location(in: self)
-        guard let indexPath = self.indexPathForItem(at: location),
-              let cell = self.cellForItem(at: indexPath) else {
-            self.cx_touchesEnded(touches, with: event) // Call original method
-            return
-        }
-        
-        let attributes: [String: Any] = [
-            Keys.text.rawValue: Helper.findFirstLabelText(in: cell) ?? ""
-        ]
-        
-        var tapData: [String: Any] = [
-            Keys.tapName.rawValue: "UICollectionView.didSelectRowAt",
-            Keys.tapCount.rawValue: 1,
-            Keys.tapAttributes.rawValue: attributes
-        ]
-        
-        Global.updateLocation(tapData: &tapData, touch: touch)
-        NotificationCenter.default.post(name: .cxRumNotificationUserActions, object: tapData)
-        
-        self.cx_touchesEnded(touches, with: event) // Call original method
-    }
-}
-
-extension UITableView {
-    static let swizzleTouchesEnded: Void = {
-        let originalSelector = #selector(UITableView.touchesEnded(_:with:))
-        let swizzledSelector = #selector(cx_touchesEnded(_:with:))
-        
-        SwizzleUtils.swizzleInstanceMethod(for: UITableView.self,
-                                           originalSelector: originalSelector,
-                                           swizzledSelector: swizzledSelector)
-    }()
-    
-    @objc func cx_touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
-        guard let touch = touches.first else {
-            self.cx_touchesEnded(touches, with: event) // Call original method
-            return
-        }
-        
-        let location = touch.location(in: self)
-        guard let indexPath = self.indexPathForRow(at: location),
-              let cell = self.cellForRow(at: indexPath) else {
-            self.cx_touchesEnded(touches, with: event) // Call original method
-            return
-        }
-        
-        let attributes: [String: Any] = [
-            Keys.text.rawValue: Helper.findFirstLabelText(in: cell) ?? ""
-        ]
-        
-        
-        var tapData: [String: Any] = [
-            Keys.tapName.rawValue: "UITableView.didSelectRowAt",
-            Keys.tapCount.rawValue: 1,
-            Keys.tapAttributes.rawValue: attributes
-        ]
-        
-        Global.updateLocation(tapData: &tapData, touch: touch)
-        NotificationCenter.default.post(name: .cxRumNotificationUserActions, object: tapData)
-        
-        self.cx_touchesEnded(touches, with: event) // Call original method
-    }
-}
-
-extension UITableViewController {
-    static let swizzleUITableViewControllerDelegate: Void = {
-        let originalSelector = #selector(UITableViewController.tableView(_:didSelectRowAt:))
-        let swizzledSelector = #selector(cx_tableView(_:didSelectRowAt:))
-        
-        SwizzleUtils.swizzleInstanceMethod(for: UITableViewController.self,
-                                           originalSelector: originalSelector,
-                                           swizzledSelector: swizzledSelector)
-    }()
-    
-    @objc func cx_tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
-        self.cx_tableView(tableView, didSelectRowAt: indexPath)
-        
-        if let cell = tableView.cellForRow(at: indexPath) {
-            var attributes = [String: Any]()
-            attributes[Keys.text.rawValue] = cell.textLabel?.text ?? ""
-            
-            let tap = [Keys.tapName.rawValue: "UITableView.didSelectRowAt",
-                       Keys.tapCount.rawValue: 1,
-                       Keys.tapAttributes.rawValue: attributes] as [String: Any]
-            NotificationCenter.default.post(name: .cxRumNotificationUserActions, object: tap)
-        }
-    }
-}
-
 extension UIGestureRecognizer {
     @objc func cx_touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
         self.cx_touchesEnded(touches, with: event)
@@ -194,26 +86,6 @@ extension UIGestureRecognizer {
     }
 }
 
-extension UIPageControl {
-    static let swizzleSetCurrentPage: Void = {
-        let originalSelector = #selector(setter: currentPage)
-        let swizzledSelector = #selector(cx_setCurrentPage(_:))
-        
-        SwizzleUtils.swizzleInstanceMethod(for: UIPageControl.self,
-                                           originalSelector: originalSelector,
-                                           swizzledSelector: swizzledSelector)
-    }()
-    
-    @objc private func cx_setCurrentPage(_ page: Int) {
-        self.cx_setCurrentPage(page)
-        
-        let tap = [Keys.tapName.rawValue: "UIPageController",
-                   Keys.tapCount.rawValue: 1,
-                   Keys.tapAttributes.rawValue: Helper.convertDictionayToJsonString(dict: [:])] as [String: Any]
-        NotificationCenter.default.post(name: .cxRumNotificationUserActions, object: tap)
-    }
-}
-
 extension UIApplication {
     public static let swizzleTouchesEnded: Void = {
         guard let targetClass = NSClassFromString("SwiftUI.UIKitGestureRecognizer") else {
@@ -224,15 +96,6 @@ extension UIApplication {
         let swizzledSelector = #selector(UIGestureRecognizer.cx_touchesEnded(_:with:))
         
         SwizzleUtils.swizzleInstanceMethod(for: targetClass,
-                                           originalSelector: originalSelector,
-                                           swizzledSelector: swizzledSelector)
-    }()
-    
-    public static let swizzleSendAction: Void = {
-        let originalSelector = #selector(UIApplication.sendAction(_:to:from:for:))
-        let swizzledSelector = #selector(cx_sendAction(_:to:from:for:))
-        
-        SwizzleUtils.swizzleInstanceMethod(for: UIApplication.self,
                                            originalSelector: originalSelector,
                                            swizzledSelector: swizzledSelector)
     }()
@@ -251,103 +114,36 @@ extension UIApplication {
         cx_sendEvent(event)
         
         // Process touch events
-        if let touches = event.allTouches, let touch = touches.first, touch.phase == .began {
-            var tapData = [String : Any]()
-            Global.updateLocation(tapData: &tapData, touch: touch)
-            NotificationCenter.default.post(name: .cxRumNotificationUserActions, object: tapData)
-        }
-    }
-    
-    @objc private func cx_sendAction(_ action: Selector,
-                                     to target: AnyObject?,
-                                     from sender: AnyObject?,
-                                     for event: UIEvent?) -> Bool {
-        let selectorNameCString = sel_getName(action)
-        let selectorNameString = String(cString: selectorNameCString)
-        if selectorNameString.contains("tabBarItemClicked") {
-            self.handleTabBarItemClicked(sender: sender)
-        } else if selectorNameString.contains("backButtonAction") {
-            self.handleBackButtonAction(sender: sender, event: event)
-        } else if selectorNameString.contains("segmentChanged") {
-            self.handleSegmentChanged(sender: sender)
-        } else if selectorNameString.contains("buttonDown") {
-            self.handleButtonDown(sender: sender, target: target, event: event)
-        } else if selectorNameString.contains("dismissViewController") {
-            self.handleDismissViewController(sender: sender)
-        }
-        
-        return cx_sendAction(action, to: target, from: sender, for: event)
-    }
-    
-    private func handleDismissViewController(sender: AnyObject?) {
-        guard let sender = sender else { return }
-        let senderClass = NSStringFromClass(type(of: sender))
-        var attributes = [String: Any]()
-        if let button = sender as? UIButton {
-            attributes[Keys.text.rawValue] = button.titleLabel?.text
-        }
-        
-        let tap = [Keys.tapName.rawValue: "\(senderClass)",
-                   Keys.tapCount.rawValue: 1,
-                   Keys.tapAttributes.rawValue: Helper.convertDictionayToJsonString(dict: attributes)] as [String: Any]
-        NotificationCenter.default.post(name: .cxRumNotificationUserActions, object: tap)
-    }
-    
-    private func handleTabBarItemClicked(sender: AnyObject?) {
-        guard let sender = sender else { return }
-        let senderClass = NSStringFromClass(type(of: sender))
-        var attributes = [String: Any]()
-        if let description = sender.description,
-           let title = ViewHelper.extractTitleUITabBarItem(from: description) {
-            attributes[Keys.text.rawValue] = title
-        }
-        let tap = [Keys.tapName.rawValue: "\(senderClass)",
-                   Keys.tapCount.rawValue: 1,
-                   Keys.tapAttributes.rawValue: Helper.convertDictionayToJsonString(dict: attributes)] as [String: Any]
-        NotificationCenter.default.post(name: .cxRumNotificationUserActions, object: tap)
-    }
-    
-    private func handleBackButtonAction(sender: AnyObject?, event: UIEvent?) {
-        if sender != nil {
-            var tapData = [Keys.tapName.rawValue: "backButton",
-                       Keys.tapCount.rawValue: 1,
-                       Keys.tapAttributes.rawValue: [:]] as [String: Any]
-            
-            if let allTouches = event?.allTouches, let touch = allTouches.first {
+        if let touches = event.allTouches,
+           let touch = touches.first,
+           touch.phase == .began {
+            if let view = touch.view {
+                var tapData = [String : Any]()
                 Global.updateLocation(tapData: &tapData, touch: touch)
+
+                let className = NSStringFromClass(type(of: view))
+                if className.contains("UITableViewCellContentView") {
+                    tapData[Keys.tapName.rawValue] = "UITableView Cell"
+                } else if className.contains("_UIPageIndicatorView") {
+                    tapData[Keys.tapName.rawValue] = "UIPageIndicatorView"
+                } else if className.contains("UITabBarButton") {
+                    tapData[Keys.tapName.rawValue] = "UITabBarButton"
+                } else if className.contains("UITableView") {
+                    tapData[Keys.tapName.rawValue] = "UITableView"
+                } else {
+                    Log.w("Unsupported view class: \(className)")
+                }
+                
+                if let labelText = Helper.findFirstLabelText(in: view),
+                   let existing = tapData[Keys.tapName.rawValue] as? String {
+                    tapData[Keys.tapName.rawValue] = "\(existing.lowercased()) - \(labelText.lowercased())"
+                }
+                
+                Log.d("Sending tap event: \(tapData)")
+                NotificationCenter.default.post(name: .cxRumNotificationUserActions,
+                                                object: tapData)
             }
-            
-            NotificationCenter.default.post(name: .cxRumNotificationUserActions, object: tapData)
         }
-    }
-    
-    private func handleSegmentChanged(sender: AnyObject?) {
-        guard let sender = sender, let segmentedControl = sender as? UISegmentedControl else { return }
-        var attributes = [String: Any]()
-        let selectedIndex = segmentedControl.selectedSegmentIndex
-        let selectedTitle = segmentedControl.titleForSegment(at: selectedIndex)
-        attributes[Keys.text.rawValue] = "\(selectedTitle ?? "None")"
-        let tap = [Keys.tapName.rawValue: "UISegmentedControl",
-                   Keys.tapCount.rawValue: 1,
-                   Keys.tapAttributes.rawValue: Helper.convertDictionayToJsonString(dict: attributes)] as [String: Any]
-        NotificationCenter.default.post(name: .cxRumNotificationUserActions, object: tap)
-    }
-    
-    private func handleButtonDown(sender: AnyObject?, target: AnyObject?, event: UIEvent?) {
-        guard let sender = sender else { return }
-        var attributes = [String: Any]()
-        if let tabBar = target as? UITabBar {
-            attributes[Keys.text.rawValue] = tabBar.selectedItem?.title
-        }
-        let senderClass = NSStringFromClass(type(of: sender))
-        var tapData = [Keys.tapName.rawValue: "\(senderClass)",
-                   Keys.tapCount.rawValue: 1,
-                   Keys.tapAttributes.rawValue: Helper.convertDictionayToJsonString(dict: attributes)] as [String: Any]
-        
-        if let allTouches = event?.allTouches, let touch = allTouches.first {
-            Global.updateLocation(tapData: &tapData, touch: touch)
-        }
-        NotificationCenter.default.post(name: .cxRumNotificationUserActions, object: tapData)
     }
 }
 

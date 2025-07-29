@@ -5,6 +5,10 @@
 
 import Foundation
 
+#if canImport(FoundationNetworking)
+  import FoundationNetworking
+#endif
+
 public typealias DataOrFile = Any
 public typealias SessionTaskId = String
 public typealias HTTPStatus = Int
@@ -19,7 +23,9 @@ public struct URLSessionInstrumentationConfiguration {
                 createdRequest: ((URLRequest, any Span) -> Void)? = nil,
                 receivedResponse: ((URLResponse, DataOrFile?, any Span) -> Void)? = nil,
                 receivedError: ((Error, DataOrFile?, HTTPStatus, any Span) -> Void)? = nil,
-                delegateClassesToInstrument: [AnyClass]? = nil) {
+                delegateClassesToInstrument: [AnyClass]? = nil,
+                ignoredClassPrefixes: [String]? = nil,
+                tracer: Tracer? = nil) {
         self.shouldRecordPayload = shouldRecordPayload
         self.shouldInstrument = shouldInstrument
         self.shouldInjectTracingHeaders = shouldInjectTracingHeaders
@@ -30,7 +36,12 @@ public struct URLSessionInstrumentationConfiguration {
         self.receivedResponse = receivedResponse
         self.receivedError = receivedError
         self.delegateClassesToInstrument = delegateClassesToInstrument
+        self.ignoredClassPrefixes = ignoredClassPrefixes
+        self.tracer = tracer ??
+             OpenTelemetry.instance.tracerProvider.get(instrumentationName: "NSURLSession", instrumentationVersion: "0.0.1")
     }
+    
+    public var tracer: Tracer
 
     // Instrumentation Callbacks
 
@@ -67,4 +78,7 @@ public struct URLSessionInstrumentationConfiguration {
     
     ///  The array of URLSession delegate classes that will be instrumented by the library, will autodetect if nil is passed.
     public var delegateClassesToInstrument: [AnyClass]?
+    
+    /// The Array of Prefixes you can avoid in swizzle process
+    public let ignoredClassPrefixes: [String]?
 }

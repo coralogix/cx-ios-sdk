@@ -200,6 +200,10 @@ class Helper {
         return result
     }
     
+    internal static func convertCFAbsoluteTimeToEpoch(_ cfTime: CFAbsoluteTime) -> Double {
+        return (cfTime + kCFAbsoluteTimeIntervalSince1970) * 1000 // returns ms
+    }
+    
     internal static func getTraceAndSpanId(otel: SpanDataProtocol) -> (traceId: String, spanId: String) {
         let attributeTraceId = otel.getAttribute(forKey: Keys.customTraceId.rawValue) as? String
         let attributeSpanId = otel.getAttribute(forKey: Keys.customSpanId.rawValue) as? String

@@ -74,3 +74,35 @@ Sets sample rate, value between `0.0` and `100.0`, where `0.0` means SDK will no
 let mobileVitalsFPSSamplingRate: Int
 ```
 Defines the interval, in seconds, at which the SDK will perform FPS sampling. This value determines how frequently the FPS (Frames Per Second) calculator should be triggered, allowing the SDK to monitor rendering performance at regular intervals.
+
+### Usage Examples
+#### Ignoring Specific URLs
+You can exclude certain URLs from being captured or instrumented by using the ignoreUrl property. There are two ways to define which URLs to ignore:
+
+1. Exact Match
+Provide the full URL string to ignore a specific request:
+
+```swift
+ignoreUrl: ["https://jsonplaceholder.typicode.com/posts"]
+```
+This will ignore only the exact URL above — it won’t match any variations like query parameters or sub-paths.
+
+2. Regex Pattern
+Use a regex string to match a broader pattern. For example, to ignore any URL containing /posts, such as:
+
+    https://jsonplaceholder.typicode.com/posts
+
+    https://jsonplaceholder.typicode.com/posts/1
+
+    https://jsonplaceholder.typicode.com/posts/123?userId=4
+
+you can use:
+
+```swift
+ignoreUrl: [#"/posts(/\d+)?(\?.*?)?"#]
+```
+
+This pattern matches /posts, /posts/ID, and optional query parameters.
+
+⚠️ Regex patterns must follow Swift’s raw string literal syntax (#""#) when defined in code.
+

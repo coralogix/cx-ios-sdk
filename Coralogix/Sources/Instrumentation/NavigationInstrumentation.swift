@@ -29,15 +29,16 @@ extension CoralogixRum {
     internal func handleAppearStateIfNeeded(cxView: CXView, span: any Span) {
         guard cxView.state == .notifyOnAppear else { return }
         
-        guard let sessionReplay = SdkManager.shared.getSessionReplay() else {
+        guard let sessionReplay = SdkManager.shared.getSessionReplay(),
+              let coralogixExporter = self.coralogixExporter else {
             Log.e("[SessionReplay] is not initialized")
             return
         }
         
-        let screenshotLocation = self.screenshotManager.nextScreenshotLocation
+        let screenshotLocation = coralogixExporter.getScreenshotManager().nextScreenshotLocation
         span.setAttribute(key: Keys.screenshotId.rawValue, value: screenshotLocation.screenshotId)
         span.setAttribute(key: Keys.page.rawValue, value: screenshotLocation.page)
-        sessionReplay.captureEvent(properties: screenshotLocation.toProperties())
+        _ = sessionReplay.captureEvent(properties: screenshotLocation.toProperties())
     }
 
     internal func getNavigationSpan() -> any Span {

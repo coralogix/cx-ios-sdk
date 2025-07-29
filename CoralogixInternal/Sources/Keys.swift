@@ -20,6 +20,7 @@ public enum Keys: String {
     case iosSdk = "ios_sdk"
     case errorContext = "error_context"
     case sdkVersion = "sdk_version"
+    case nativeVersion = "native_version"
     case sessionId = "session_id"
     case sessionCreationDate = "session_creation_date"
     case userAgent = "user_agent"
@@ -185,7 +186,8 @@ public enum Keys: String {
     case queueUrlProcessing = "com.coralogix.urlProcessing"
     case queueMediaInput = "com.coralogix.mediainput"
     case queueSpanProcessingQueue = "com.coralogix.spanProcessingQueue"
-    case undefined
+    case queueViewManagerQueue = "com.coralogix.viewManagerQueue"
+    case undefined = ""
     case cxforward
     case enable
     case options
@@ -193,6 +195,9 @@ public enum Keys: String {
     case customTraceId
     case customSpanId
     case isManual
+    case metricKitLog = "metricKit log"
+    case idle
+    case active
 }
 
 public enum CoralogixLogSeverity: Int {

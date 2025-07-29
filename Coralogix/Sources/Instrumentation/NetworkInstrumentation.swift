@@ -18,14 +18,28 @@ extension CoralogixRum {
         }
         
         if options.enableSwizzling == true {
-            let configuration = URLSessionInstrumentationConfiguration(spanCustomization: self.spanCustomization, shouldInjectTracingHeaders: { [weak self] request in
-                return self?.shouldAddTraceParent(to: request, options: options) ?? false
-            }, receivedResponse: self.receivedResponse)
-            self.sessionInstrumentation = URLSessionInstrumentation(configuration: configuration)
-            self.sessionInstrumentation?.enableNetworkInstrumentation()
+            if Thread.isMainThread {
+                initializeInstrumentation(options: options)
+            } else {
+                DispatchQueue.main.sync {
+                    initializeInstrumentation(options: options)
+                }
+            }
         } else {
             Log.e("[Coralogix] Swizzling is disabled")
         }
+    }
+    
+    internal func initializeInstrumentation(options: CoralogixExporterOptions) {
+        let configuration = URLSessionInstrumentationConfiguration(
+            spanCustomization: self.spanCustomization,
+            shouldInjectTracingHeaders: { [weak self] request in
+                return self?.shouldAddTraceParent(to: request, options: options) ?? false
+            },
+            receivedResponse: self.receivedResponse,
+            ignoredClassPrefixes: options.ignoredClassPrefixes
+        )
+        self.sessionInstrumentation = URLSessionInstrumentation(configuration: configuration)
     }
     
     internal func shouldAddTraceParent(to request: URLRequest, options: CoralogixExporterOptions) -> Bool {
@@ -52,7 +66,7 @@ extension CoralogixRum {
                 return true
             }
             
-            return Global.isHostMatchesRegexPattern(string: requestURLString, regexs: allowedUrls)
+            return Global.isURLMatchesRegexPattern(string: requestURLString, regexs: allowedUrls)
         }
         
         return true

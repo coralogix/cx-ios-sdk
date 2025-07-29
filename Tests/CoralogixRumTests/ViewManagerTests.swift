@@ -66,6 +66,46 @@ final class ViewManagerTests: XCTestCase {
         let prevDict = viewManager.getPrevDictionary()
         XCTAssertEqual(prevDict[Keys.view.rawValue] as? String, "PreviousView")
     }
+    
+    func testGetPrevDictionary_emptyWhenNoPrevView() {
+        let manager = ViewManager(keyChain: nil)
+        XCTAssertTrue(manager.getPrevDictionary().isEmpty)
+    }
+    
+    func testReset_clearsAndAddsCurrentVisibleView() {
+        let manager = ViewManager(keyChain: nil)
+        manager.set(cxView: CXView(state: .notifyOnAppear, name: "Home"))
+        manager.set(cxView: CXView(state: .notifyOnAppear, name: "Profile"))
+        
+        XCTAssertEqual(manager.getUniqueViewCount(), 2)
+        
+        manager.reset()
+        
+        XCTAssertEqual(manager.getUniqueViewCount(), 1)
+        XCTAssertFalse(manager.isUniqueView(name: "Profile"))
+    }
+    
+    func testShutdown_resetsAllFields() {
+        let manager = ViewManager(keyChain: nil)
+        manager.set(cxView: CXView(state: .notifyOnAppear, name: "Notifications"))
+        manager.shutdown()
+        
+        XCTAssertNil(manager.visibleView)
+        XCTAssertNil(manager.prevViewName)
+        XCTAssertEqual(manager.getUniqueViewCount(), 0)
+    }
+    
+    func testSet_doesNotDuplicateSameView() {
+        let mockKeychain = MockKeyChain()
+        let manager = ViewManager(keyChain: mockKeychain)
+
+        let view = CXView(state: .notifyOnAppear, name: "Dashboard")
+        manager.set(cxView: view)
+        manager.set(cxView: view)  // setting same view again
+        
+        XCTAssertEqual(manager.getUniqueViewCount(), 1)
+        XCTAssertEqual(mockKeychain.readStringFromKeychain(service: "service", key: "view"), "Dashboard")
+    }
 }
 
 class MockKeyChain: KeyChainProtocol {

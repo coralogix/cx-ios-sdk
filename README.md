@@ -201,6 +201,8 @@ let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
             }
         })
 ```
+### Session Recording
+See the [Session Recording Guide](SessionReplay/Sources/Docs/README.md) for installation steps and examples.
 
 ## License
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

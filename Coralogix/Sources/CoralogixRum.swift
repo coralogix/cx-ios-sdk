@@ -21,7 +21,6 @@ public class CoralogixRum {
     internal var sessionManager: SessionManager?
     internal var sessionInstrumentation: URLSessionInstrumentation? = nil
     internal var metricsManager = MetricsManager()
-    internal var screenshotManager = ScreenshotManager()
 
     internal var tracerProvider: () -> Tracer = {
         return OpenTelemetry.instance.tracerProvider.get(
@@ -33,7 +32,7 @@ public class CoralogixRum {
     let notificationCenter = NotificationCenter.default
     
     static var isInitialized = false
-    static var sdkFramework: SdkFramework = .swift
+    static var mobileSDK: MobileSDK = MobileSDK()
     
     public init(options: CoralogixExporterOptions,
                            sdkFramework: SdkFramework = .swift,
@@ -47,7 +46,8 @@ public class CoralogixRum {
             return
         }
         
-        self.startup(sdkFramework: sdkFramework, options: options)
+        CoralogixRum.mobileSDK = MobileSDK(sdkFramework: sdkFramework)
+        self.startup(options: options)
     }
     
     deinit {
@@ -78,54 +78,63 @@ public class CoralogixRum {
                                             object: nil)
     }
     
-    private func startup(sdkFramework: SdkFramework, options: CoralogixExporterOptions) {
+    private func startup(options: CoralogixExporterOptions) {
         guard let sessionManager = self.sessionManager else {
             Log.e("SessionManager is nil.")
             return
         }
         
-        CoralogixRum.sdkFramework = sdkFramework
-        self.initializeSessionReplay()
-        self.initialzeMetricsManager(options: options)
-        self.initializeNavigationInstrumentation()
-
         Log.isDebug = options.debug
 
-        let coralogixExporter = CoralogixExporter(options: options,
-                                                  sessionManager: sessionManager,
-                                                  networkManager: self.networkManager,
-                                                  viewManager: self.viewManager,
-                                                  metricsManager: self.metricsManager)
-        self.coralogixExporter = coralogixExporter
-        
-        let resource = Resource(attributes: [
-            ResourceAttributes.serviceName.rawValue: AttributeValue.string(options.application)
-        ])
-        
-        OpenTelemetry.registerTracerProvider(tracerProvider: TracerProviderBuilder().with(resource: resource)
-            .add(spanProcessor: BatchSpanProcessor(spanExporter: coralogixExporter,
-                                                   scheduleDelay: Double(Global.BatchSpan.scheduleDelay.rawValue),
-                                                   maxExportBatchSize: Global.BatchSpan.maxExportBatchSize.rawValue))
-                .build())
-        
+        self.setupCoreModules(options: options)
+        self.setupExporter(sessionManager: sessionManager, options: options)
+        self.setupTracer(applicationName: options.application)
         self.swizzle()
+        self.initializeEnabledInstrumentations(using: options)
+        
+        CoralogixRum.isInitialized = true
+    }
+    
+    private func initializeEnabledInstrumentations(using options: CoralogixExporterOptions) {
         let instrumentationMap: [(CoralogixExporterOptions.InstrumentationType, () -> Void)] = [
             (.lifeCycle, self.initializeLifeCycleInstrumentation),
             (.userActions, self.initializeUserActionsInstrumentation),
             (.network, self.initializeNetworkInstrumentation),
             (.errors, self.initializeCrashInstumentation),
             (.mobileVitals, self.initializeMobileVitalsInstrumentation),
-            (.anr, self.initializeANRInstrumentation)
+            (.anr, self.initializeMobileVitalsInstrumentation)
         ]
 
         for (type, initializer) in instrumentationMap
             where options.shouldInitInstrumentation(instrumentation: type) {
             initializer()
         }
-        
-        CoralogixRum.isInitialized = true
     }
     
+    internal func setupTracer(applicationName: String) {
+        guard let exporter = self.coralogixExporter else {
+            Log.e("Failed to setup tracer: coralogixExporter is nil")
+            return
+        }
+
+        let resource = Resource(attributes: [
+            ResourceAttributes.serviceName.rawValue: .string(applicationName)
+        ])
+
+        let spanProcessor = BatchSpanProcessor(
+            spanExporter: exporter,
+            scheduleDelay: Double(Global.BatchSpan.scheduleDelay.rawValue),
+            maxExportBatchSize: Global.BatchSpan.maxExportBatchSize.rawValue
+        )
+
+        let tracerProvider = TracerProviderBuilder()
+            .with(resource: resource)
+            .add(spanProcessor: spanProcessor)
+            .build()
+
+        OpenTelemetry.registerTracerProvider(tracerProvider: tracerProvider)
+    }
+
     private func initialzeMetricsManager(options: CoralogixExporterOptions) {
         self.metricsManager.addObservers()
 
@@ -139,15 +148,27 @@ public class CoralogixRum {
         }
     }
     
+    private func setupExporter(sessionManager: SessionManager, options: CoralogixExporterOptions) {
+        let exporter = CoralogixExporter(
+            options: options,
+            sessionManager: sessionManager,
+            networkManager: self.networkManager,
+            viewManager: self.viewManager,
+            metricsManager: self.metricsManager
+        )
+        self.coralogixExporter = exporter
+    }
+    
+    private func setupCoreModules(options: CoralogixExporterOptions) {
+        self.initializeSessionReplay()
+        self.initialzeMetricsManager(options: options)
+        self.initializeNavigationInstrumentation()
+    }
+    
     private func swizzle() {
         UIApplication.swizzleTouchesEnded
-        UIApplication.swizzleSendAction
         UIViewController.swizzleViewDidAppear
         UIViewController.swizzleViewDidDisappear
-        UITableView.swizzleTouchesEnded
-        UITableViewController.swizzleUITableViewControllerDelegate
-        UICollectionView.swizzleTouchesEnded
-        UIPageControl.swizzleSetCurrentPage
         UIApplication.swizzleSendEvent
     }
     
@@ -193,9 +214,10 @@ public class CoralogixRum {
     }
     
     public func setView(name: String) {
-        let cxView = CXView(state: .notifyOnAppear, name: name)
-        self.coralogixExporter?.getViewManager().reset()
-        self.coralogixExporter?.set(cxView: cxView)
+        if CoralogixRum.isInitialized {
+            let cxView = CXView(state: .notifyOnAppear, name: name)
+            self.coralogixExporter?.set(cxView: cxView)
+        }
     }
     
     public func reportError(message: String, data: [String: Any]?) {
@@ -265,10 +287,4 @@ public class CoralogixRum {
         let coralogixText = "[CORALOGIX]\nVerion: \(Global.sdk.rawValue) \nSwift Verion: \(Global.swiftVersion.rawValue) \nSupport iOS, tvOS\n\n\n"
         print(coralogixText)
     }
-}
-
-public enum SdkFramework: String {
-    case swift
-    case flutter
-    case reactNative = "react-native"
 }

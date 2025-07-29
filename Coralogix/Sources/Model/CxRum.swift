@@ -10,7 +10,6 @@ import CoralogixInternal
 struct CxRum {
     var timeStamp: TimeInterval
     let networkRequestContext: NetworkRequestContext
-    let mobileSdk: String
     let versionMetadata: VersionMetadata
     var sessionContext: SessionContext?
     var prevSessionContext: SessionContext?
@@ -18,6 +17,7 @@ struct CxRum {
     var sessionManager: SessionManager?
     let eventContext: EventContext
     let logContext: LogContext
+    let mobileSDK: MobileSDK
     let environment: String
     var traceId: String = ""
     var spanId: String = ""
@@ -46,7 +46,6 @@ struct CxRum {
         self.networkRequestContext = NetworkRequestContext(otel: otel)
         self.errorContext = ErrorContext(otel: otel)
         self.deviceContext = DeviceContext(otel: otel)
-        self.mobileSdk = Global.sdk.rawValue
         self.logContext = LogContext(otel: otel)
         self.deviceState = DeviceState(networkManager: self.networkManager)
         self.interactionContext = InteractionContext(otel: otel)
@@ -63,6 +62,7 @@ struct CxRum {
         self.networkManager = networkManager
         self.viewManager = viewManager
         self.labels = labels
+        self.mobileSDK = CoralogixRum.mobileSDK
 
         let traceContext = Helper.getTraceAndSpanId(otel: otel)
         self.traceId = traceContext.traceId
@@ -82,6 +82,11 @@ struct CxRum {
             }
         }
         self.updateSnapshotContextIfNeeded(for: eventContext)
+        
+        // Check for User Interaction
+        if eventContext.type.rawValue == CoralogixEventType.userInteraction.rawValue {
+            sessionManager.incrementClickCounter()
+        }
     }
     
     internal mutating func updateSnapshotContextIfNeeded(for eventContext: EventContext) {
@@ -146,9 +151,7 @@ struct CxRum {
     
     private func addBasicDetails(to result: inout [String: Any]) {
         result[Keys.timestamp.rawValue] = self.timeStamp.milliseconds
-        result[Keys.mobileSdk.rawValue] = [Keys.sdkVersion.rawValue: self.mobileSdk,
-                                           Keys.framework.rawValue: CoralogixRum.sdkFramework.rawValue,
-                                           Keys.operatingSystem.rawValue: Global.getOs()]
+        result[Keys.mobileSdk.rawValue] = self.mobileSDK.getDictionary()
         result[Keys.versionMetaData.rawValue] = self.versionMetadata.getDictionary()
         result[Keys.sessionContext.rawValue] = self.sessionContext?.getDictionary()
         result[Keys.eventContext.rawValue] = self.eventContext.getDictionary()
@@ -164,7 +167,7 @@ struct CxRum {
         if eventContext.type == CoralogixEventType.error {
             result[Keys.errorContext.rawValue] = self.errorContext.getDictionary()
         }
-        
+                
         if let screenShotContext = self.screenShotContext, screenShotContext.isValid() {
             result[Keys.screenshotContext.rawValue] = screenShotContext.getDictionary()
         }

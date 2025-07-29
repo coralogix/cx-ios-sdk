@@ -44,16 +44,16 @@ final class CoralogixRumManager {
                                                                   .userActions: true,
                                                                   .network: true,
                                                                   .anr: true,
-                                                                  .lifeCycle: true],
+                                                                  .lifeCycle: false],
                                                collectIPData: true,
-                                               beforeSend: { cxRum in
-            var editableCxRum = cxRum
-            if var sessionContext = editableCxRum["session_context"] as? [String: Any] {
-                sessionContext["user_email"] = "jone.dow@coralogix.com"
-                editableCxRum["session_context"] = sessionContext
-            }
-            return editableCxRum
-        },
+//                                               beforeSend: { cxRum in
+//            var editableCxRum = cxRum
+//            if var sessionContext = editableCxRum["session_context"] as? [String: Any] {
+//                sessionContext["user_email"] = "jone.dow@coralogix.com"
+//                editableCxRum["session_context"] = sessionContext
+//            }
+//            return editableCxRum
+//        },
                                                enableSwizzling: true,
                                                proxyUrl: proxyUrl,
                                                debug: true

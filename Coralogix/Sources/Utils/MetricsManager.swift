@@ -33,8 +33,15 @@ public class MetricsManager {
         NotificationCenter.default.addObserver(self, selector: #selector(self.appDidEnterBackgroundNotification),
                                                name: UIApplication.didEnterBackgroundNotification,
                                                object: nil)
+        let sdk = CoralogixRum.mobileSDK.sdkFramework
+
         // Warm
-        if !([.reactNative, .flutter].contains(CoralogixRum.sdkFramework)) {
+        switch sdk {
+        case .flutter, .reactNative:
+            // it's flutter or react-native
+            break
+        case .swift:
+            // it's not flutter or react-native
             NotificationCenter.default.addObserver(self,
                                                    selector: #selector(self.appWillEnterForegroundNotification),
                                                    name: UIApplication.willEnterForegroundNotification,
@@ -43,6 +50,7 @@ public class MetricsManager {
             NotificationCenter.default.addObserver(self, selector: #selector(self.appDidBecomeActiveNotification),
                                                    name: UIApplication.didBecomeActiveNotification,
                                                    object: nil)
+            break
         }
     }
     
@@ -104,7 +112,10 @@ public class MetricsManager {
                let launchEndTime = metrics[CXMobileVitalsType.cold.rawValue] as? CFAbsoluteTime,
                self.launchEndTime == nil {
                 self.launchEndTime = launchEndTime
-                let millisecondsRounded = self.calculateTime(start: launchStartTime, stop: launchEndTime)
+                let epochStartTime = Helper.convertCFAbsoluteTimeToEpoch(launchStartTime)
+                let epochEndTime = Helper.convertCFAbsoluteTimeToEpoch(launchEndTime)
+                let millisecondsRounded = self.calculateTime(start: epochStartTime, stop: epochEndTime)
+
                 NotificationCenter.default.post(name: .cxRumNotificationMetrics,
                                                 object: CXMobileVitals(type: .cold, value: "\(millisecondsRounded)"))
             }
@@ -113,14 +124,16 @@ public class MetricsManager {
     
     func calculateTime(start: Double, stop: Double) -> Int {
         let coldStartDurationInSeconds = stop - start
-        let coldStartDurationInMilliseconds = coldStartDurationInSeconds * 1000
+        let coldStartDurationInMilliseconds = coldStartDurationInSeconds
         return Int(coldStartDurationInMilliseconds)
     }
     
     internal func getCXMobileVitals(params: [String: Any]) -> CXMobileVitals? {
         let handlers: [CXMobileVitalsType: ([String: Any]) -> CXMobileVitals?] = [
             .cold: getColdTime,
-            .warm: getWarmTime
+            .coldJS: getColdTime,
+            .warm: getWarmTime,
+            .warmJS: getWarmTime,
         ]
         
         for (key, handler) in handlers {
@@ -132,20 +145,36 @@ public class MetricsManager {
     }
     
     internal func getWarmTime(params: [String: Any]) -> CXMobileVitals? {
-        if let launchEndTime = params[CXMobileVitalsType.warm.rawValue] as? Double {
-            let millisecondsRounded = Int(launchEndTime)
-            return CXMobileVitals(type: .warm, value: "\(millisecondsRounded)")
+        if let warmTime = params[CXMobileVitalsType.warm.rawValue] as? Double {
+            let roundedTime = Int(warmTime)
+            return CXMobileVitals(type: .warm, value: "\(roundedTime)")
         }
+        
+        if let warmJsTime = params[CXMobileVitalsType.warmJS.rawValue] as? Double {
+            let roundedTime = Int(warmJsTime)
+            return CXMobileVitals(type: .warmJS, value: "\(roundedTime)")
+        }
+        
         return nil
     }
     
     internal func getColdTime(params: [String: Any]) -> CXMobileVitals? {
-        if let launchStartTime = self.launchStartTime,
-           let launchEndTime = params[CXMobileVitalsType.cold.rawValue] as? CFAbsoluteTime {
-            self.launchEndTime = launchEndTime
-            let millisecondsRounded = self.calculateTime(start: launchStartTime, stop: launchEndTime)
-            return CXMobileVitals(type: .cold, value: "\(millisecondsRounded)")
+        guard let startTime = self.launchStartTime else {
+            return nil
         }
+        
+        let launchStartTime = Helper.convertCFAbsoluteTimeToEpoch(startTime)
+
+        if let nativeLaunchEnd = params[CXMobileVitalsType.cold.rawValue] as? Double {
+            let durationMs = calculateTime(start: launchStartTime, stop: nativeLaunchEnd)
+            return CXMobileVitals(type: .cold, value: "\(durationMs)")
+        }
+        
+        if let coldJsTimestamp = params[CXMobileVitalsType.coldJS.rawValue] as? Double {
+            let durationMs = calculateTime(start: launchStartTime, stop: coldJsTimestamp)
+            return CXMobileVitals(type: .coldJS, value: "\(durationMs)")
+        }
+        
         return nil
     }
     

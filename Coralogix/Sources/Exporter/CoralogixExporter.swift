@@ -13,7 +13,9 @@ public class CoralogixExporter: SpanExporter {
     private var sessionManager: SessionManager
     private var networkManager: NetworkProtocol
     private var metricsManager: MetricsManager
-    private let spanProcessingQueue = DispatchQueue(label: Keys.queueSpanProcessingQueue.rawValue, attributes: .concurrent)
+    private var screenshotManager = ScreenshotManager()
+
+    private let spanProcessingQueue = DispatchQueue(label: Keys.queueSpanProcessingQueue.rawValue)
     
     public init(options: CoralogixExporterOptions,
                 sessionManager: SessionManager,
@@ -44,6 +46,14 @@ public class CoralogixExporter: SpanExporter {
         return self.viewManager
     }
     
+    public func getScreenshotManager() -> ScreenshotManager {
+        return self.screenshotManager
+    }
+    
+    public func getSessionManager() -> SessionManager {
+        return self.sessionManager
+    }
+    
     public func set(cxView: CXView) {
         if cxView.state == .notifyOnAppear {
             self.viewManager.set(cxView: cxView)
@@ -70,9 +80,15 @@ public class CoralogixExporter: SpanExporter {
     }
     
     public func export(spans: [SpanData], explicitTimeout: TimeInterval?) -> SpanExporterResultCode {
+        if self.sessionManager.isIdle {
+            Log.d("[SDK] Skipping export, session is idle")
+            return .success
+        }
         
         // ignore Urls
         var filterSpans = spans.filter { self.shouldRemoveSpan(span: $0) }
+        if filterSpans.isEmpty { return .failure }
+        
         // ignore Error
         filterSpans = filterSpans.filter { self.shouldFilterIgnoreError(span: $0) }
         
@@ -81,16 +97,22 @@ public class CoralogixExporter: SpanExporter {
         let uniqueSpans = uniqueSpansDict.compactMap { $0.value.first }
 
         if !uniqueSpans.isEmpty {
-            let cxSpansDictionary = encodeSpans(spans: uniqueSpans)
+            let cxSpansDictionary = autoreleasepool {
+                encodeSpans(spans: uniqueSpans)
+            }
             if cxSpansDictionary.isEmpty {
                 return .success
             }
             
-            if ([.reactNative, .flutter].contains(CoralogixRum.sdkFramework) && self.options.beforeSendCallBack != nil) {
-                self.options.beforeSendCallBack?(cxSpansDictionary)
-                return .success
-            } else {
-                // Normal flow
+            let sdk = CoralogixRum.mobileSDK.sdkFramework
+            switch sdk {
+            case .flutter, .reactNative:
+                if let callback = self.options.beforeSendCallBack {
+                    let clonedSpans = cxSpansDictionary.deepCopy()
+                    callback(clonedSpans)
+                    return .success
+                }
+            default:
                 return sendSpansPayload(cxSpansDictionary)
             }
         }
@@ -104,8 +126,6 @@ public class CoralogixExporter: SpanExporter {
               let url = URL(string: urlString) else {
             return .failure
         }
-
-        self.sessionManager.updateActivityTime()
 
         var request = URLRequest(url: url)
         request.timeoutInterval = min(TimeInterval.greatestFiniteMagnitude, 10)
@@ -129,8 +149,8 @@ public class CoralogixExporter: SpanExporter {
 
         var status: SpanExporterResultCode = .failure
         let semaphore = DispatchSemaphore(value: 0)
-        
-        let task = URLSession.shared.dataTask(with: request) { [weak self] jsonData, _, error in
+        let jsonDataCopy = requestJsonData
+        let task = URLSession.shared.dataTask(with: request) { [weak self] _, _, error in
             defer { semaphore.signal() }
             
             if let _ = error {
@@ -140,8 +160,8 @@ public class CoralogixExporter: SpanExporter {
             
             status = .success
             
-            if let data = requestJsonData {
-                self?.logJSON(from: data, prettyPrint: true)
+            if let data = jsonDataCopy {
+                self?.logJSON(from: data, prettyPrint: false)
             }
         }
 
@@ -162,15 +182,28 @@ public class CoralogixExporter: SpanExporter {
     
     func encodeSpans(spans: [SpanData]) -> [[String: Any]] {
         var encodedSpans: [[String: Any]] = []
-        spanProcessingQueue.sync(flags: .barrier) {
-            encodedSpans = spans.compactMap { self.spanDatatoCxSpan(otelSpan: $0) }
+        let group = DispatchGroup()
+        group.enter()
+        spanProcessingQueue.async(flags: .barrier) { [weak self] in
+            defer { group.leave() }
+            guard let self = self else { return }
+            encodedSpans = spans.compactMap { span in
+                do {
+                    return try? self.spanDatatoCxSpan(otelSpan: span)
+                } catch {
+                    Log.e("❌ Failed to encode span \(span.name): \(error)")
+                    return nil
+                }
+            }
         }
+        group.wait()
         return encodedSpans
     }
     
     @objc func handleNotification(notification: Notification) {
         self.viewManager.reset()
         self.sessionManager.reset()
+        self.screenshotManager.reset()
     }
     
     internal func resolvedUrlString() -> String? {
@@ -202,7 +235,13 @@ public class CoralogixExporter: SpanExporter {
     }
     
     private func spanDatatoCxSpan(otelSpan: SpanData) -> [String: Any]? {
-        let metatadata = VersionMetadata(appName: self.options.application, appVersion: self.options.version)
+        guard otelSpan.spanId.isValid, !otelSpan.attributes.isEmpty else {
+            Log.e("Invalid otelSpan: \(otelSpan)")
+            return nil
+        }
+        
+        let metatadata = VersionMetadata(appName: self.options.application,
+                                         appVersion: self.options.version)
         return CxSpan(otel: otelSpan,
                       versionMetadata: metatadata,
                       sessionManager: self.sessionManager,
@@ -256,7 +295,7 @@ public class CoralogixExporter: SpanExporter {
             
             if let ignoreUrlsOrRejexs = self.options.ignoreUrls,
                !ignoreUrlsOrRejexs.isEmpty {
-                let isMatch = Global.isHostMatchesRegexPattern(string: url, regexs: ignoreUrlsOrRejexs)
+                let isMatch = Global.isURLMatchesRegexPattern(string: url, regexs: ignoreUrlsOrRejexs)
                 return !isMatch
             }
             return true

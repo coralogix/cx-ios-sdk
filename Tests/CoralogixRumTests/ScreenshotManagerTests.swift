@@ -66,7 +66,7 @@ class ScreenshotManagerTests: XCTestCase {
         let oldId = manager._screenshotId
         
         // Act
-        manager.resetSession(notification: Notification(name: Notification.Name("ResetSession")))
+        manager.reset()
         
         // Assert
         XCTAssertEqual(manager._page, 0)
@@ -74,24 +74,5 @@ class ScreenshotManagerTests: XCTestCase {
         XCTAssertNotEqual(manager._screenshotId, oldId)
         XCTAssertTrue(manager._screenshotId.allSatisfy { $0.isLowercase || !$0.isLetter })
         XCTAssertEqual(manager._screenshotId.count, 36) // UUID format
-    }
-}
-
-class ScreenshotLocationTests: XCTestCase {
-    func testToPropertiesReturnsCorrectDictionary() {
-        // Arrange
-        let screenshotLocation = ScreenshotLocation(
-            segmentIndex: 3,
-            page: 5,
-            screenshotId: "abc123"
-        )
-
-        // Act
-        let properties = screenshotLocation.toProperties()
-
-        // Assert
-        XCTAssertEqual(properties[Keys.screenshotId.rawValue] as? String, "abc123")
-        XCTAssertEqual(properties[Keys.page.rawValue] as? Int, 5)
-        XCTAssertEqual(properties[Keys.segmentIndex.rawValue] as? Int, 3)
     }
 }

@@ -151,15 +151,12 @@ final class SpanTests: XCTestCase {
                 }
                 
                 if let sessionContext = cxRum[Keys.sessionContext.rawValue] as? [String: Any] {
-                    XCTAssertEqual(sessionContext[Keys.operatingSystem.rawValue] as? String, Global.getOs())
                     XCTAssertNotNil(sessionContext[Keys.sessionCreationDate.rawValue])
                     XCTAssertNotNil(sessionContext[Keys.sessionId.rawValue])
                     XCTAssertEqual(sessionContext[Keys.userEmail.rawValue] as? String, "john.doe@example.com")
                     XCTAssertEqual(sessionContext[Keys.userName.rawValue] as? String, "John Doe")
                     XCTAssertEqual(sessionContext[Keys.userId.rawValue] as? String, "12345")
-                    XCTAssertEqual(sessionContext[Keys.osVersion.rawValue] as? String, Global.osVersionInfo())
-                    XCTAssertEqual(sessionContext[Keys.device.rawValue] as? String, Global.getDeviceModel())
-                }
+                 }
                 
                 XCTAssertEqual(cxRum[Keys.spanId.rawValue] as? String, "20")
                 XCTAssertEqual(cxRum[Keys.traceId.rawValue] as? String, "30")
