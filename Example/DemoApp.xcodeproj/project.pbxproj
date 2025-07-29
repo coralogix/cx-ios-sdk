@@ -58,8 +58,8 @@
 		E6FD68F82D01D5570066BDE8 /* CreditCardInputCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6FD68F72D01D5570066BDE8 /* CreditCardInputCell.swift */; };
 		E6FD68FA2D01D97B0066BDE8 /* FullImageCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6FD68F92D01D97B0066BDE8 /* FullImageCell.swift */; };
 		E6FDDA2D2DF176DC0005F274 /* ClockViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6FDDA2C2DF176DC0005F274 /* ClockViewController.swift */; };
+		E6FDDA2E2DF176DC0005F275 /* SchemaValidationViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6FDDA312DF176DC0005F275 /* SchemaValidationViewController.swift */; };
 		E6FDDA2F2DF176DC0005F274 /* ClockViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6FDDA2C2DF176DC0005F274 /* ClockViewController.swift */; };
-		E6FDDA312DF176DC0005F274 /* DebugNetworkViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6FDDA302DF176DC0005F274 /* DebugNetworkViewController.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -146,6 +146,7 @@
 		E6FD68F72D01D5570066BDE8 /* CreditCardInputCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreditCardInputCell.swift; sourceTree = "<group>"; };
 		E6FD68F92D01D97B0066BDE8 /* FullImageCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FullImageCell.swift; sourceTree = "<group>"; };
 		E6FDDA2C2DF176DC0005F274 /* ClockViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClockViewController.swift; sourceTree = "<group>"; };
+		E6FDDA312DF176DC0005F275 /* SchemaValidationViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SchemaValidationViewController.swift; sourceTree = "<group>"; };
 		E6FDDA302DF176DC0005F274 /* DebugNetworkViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugNetworkViewController.swift; sourceTree = "<group>"; };
 
 /* End PBXFileReference section */
@@ -283,8 +284,8 @@
 				E66938562C74A8830002335F /* UserActionsViewController.swift */,
 				E669384E2C747E860002335F /* CustomView.swift */,
 				E674E7F72CD7C6480041784E /* SessionReplayViewController.swift */,
-						E6FDDA2C2DF176DC0005F274 /* ClockViewController.swift */,
-		E6FDDA302DF176DC0005F274 /* DebugNetworkViewController.swift */,
+				E6FDDA2C2DF176DC0005F274 /* ClockViewController.swift */,
+				E6FDDA312DF176DC0005F275 /* SchemaValidationViewController.swift */,
 
 				E6B60A052DB4EAAC003AD35D /* Assets.xcassets */,
 				E68681AA2BFA279500B127E7 /* Main.storyboard */,
@@ -540,8 +541,8 @@
 				E6FD68FA2D01D97B0066BDE8 /* FullImageCell.swift in Sources */,
 				E603F6CC2C5631CF007C55DA /* CollectionViewController.swift in Sources */,
 				E66938532C7489050002335F /* SdkViewController.swift in Sources */,
-						E6FDDA2D2DF176DC0005F274 /* ClockViewController.swift in Sources */,
-		E6FDDA312DF176DC0005F274 /* DebugNetworkViewController.swift in Sources */,
+				E6FDDA2D2DF176DC0005F274 /* ClockViewController.swift in Sources */,
+				E6FDDA2E2DF176DC0005F275 /* SchemaValidationViewController.swift in Sources */,
 
 				E669384F2C747E860002335F /* CustomView.swift in Sources */,
 				E66938572C74A8830002335F /* UserActionsViewController.swift in Sources */,
