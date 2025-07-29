@@ -26,18 +26,12 @@ final class CoralogixRumManager {
                                       userName: "?",
                                       userEmail: "a@a.com",
                                       userMetadata: ["d":"d"])
-        guard let publicKey = ProcessInfo.processInfo.environment["PUBLIC_KEY"] else {
-            fatalError("🚫 PUBLIC_KEY environment variable is not set.")
-        }
-        guard let proxyUrl = ProcessInfo.processInfo.environment["PROXY_URL"] else {
-             fatalError("🚫 PROXY_URL environment variable is not set.")
-        }
         let options = CoralogixExporterOptions(coralogixDomain: CoralogixDomain.STG,
                                                userContext: userContext,
                                                environment: "PROD",
                                                application: "DemoApp-iOS-swift",
                                                version: "1",
-                                               publicKey: publicKey,
+                                               publicKey: Envs.PUBLIC_KEY.rawValue,
                                                instrumentations: [.mobileVitals: false,
                                                                   .custom: true,
                                                                   .errors: true,
@@ -55,7 +49,7 @@ final class CoralogixRumManager {
 //            return editableCxRum
 //        },
                                                enableSwizzling: true,
-                                               proxyUrl: proxyUrl,
+                                               proxyUrl: Envs.PROXY_URL.rawValue, // remove if not need to use proxy
                                                debug: true
         )
 //        let log = OSLog(subsystem: "test.CoralogixTest", category: .pointsOfInterest)

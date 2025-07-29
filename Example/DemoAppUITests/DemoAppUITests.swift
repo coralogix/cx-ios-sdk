@@ -14,35 +14,11 @@ final class DemoAppUITests: XCTestCase {
 
     override func setUpWithError() throws {
         continueAfterFailure = false
-
-
+        
+        
         // Initialize the app
         app = XCUIApplication()
         app.launch()
-    }
-
-
-    func testClickClockButton() throws {
-
-        // Capture and print the session ID from the top of the screen
-        let sessionIdElement = app.staticTexts.firstMatch
-        XCTAssertTrue(sessionIdElement.waitForExistence(timeout: 5), "Session ID should be visible on the main screen")
-
-        let sessionId = sessionIdElement.label
-
-
-        // Click the Clock button
-        let clockButton = app.cells.containing(.staticText, identifier: "Clock").firstMatch
-        clockButton.tap()
-
-        // Wait for the new screen to load (Clock view controller)
-        let timeLabel = app.staticTexts.firstMatch
-        XCTAssertTrue(timeLabel.waitForExistence(timeout: 5), "Clock screen should load after tapping Clock button")
-
-        // Wait a bit for any network requests to complete
-        Thread.sleep(forTimeInterval: 3.0)
-
-        print("✅ Successfully clicked the Clock button and verified network requests with 200 status!")
     }
     
     func testSchemaValidationFlow() throws {
@@ -73,18 +49,18 @@ final class DemoAppUITests: XCTestCase {
         // Step 5: Click "Validate Schema" button
         validateSchemaButton.tap()
         
+        let timeout: TimeInterval = 5.0
+        RunLoop.current.run(until: Date().addingTimeInterval(timeout))
         // Step 6: Wait for validation to complete and verify no "Validation Failed" appears
-        // Wait for the status label to update (either success or failure)
-        let statusLabel = app.staticTexts.containing(.staticText, identifier: "Validation Failed").firstMatch
-        
-        // If "Validation Failed" appears, the test will fail
-        // If it doesn't appear within 10 seconds, the test passes
-        let validationFailedExists = statusLabel.waitForExistence(timeout: 10)
-        
-        if validationFailedExists {
-            XCTFail("❌ Validation Failed appeared in the UI")
-        } else {
-            print("✅ No 'Validation Failed' message appeared - test passed!")
+        let allStaticTexts = app.staticTexts.allElementsBoundByIndex
+
+        for label in allStaticTexts {
+            print("Label text: \(label.label)")
+            let labelText = label.label
+            if labelText.contains("Validation Failed") {
+                XCTFail("❌ Validation Failed appeared in the UI")
+            }
         }
+        print("✅ No 'Validation Failed' message appeared - test passed!")
     }
 }

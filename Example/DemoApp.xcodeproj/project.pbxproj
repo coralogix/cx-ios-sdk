@@ -18,6 +18,10 @@
 		E622116A2BFDF4B400052682 /* NetworkSim.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6320FB42BE7CE6800A4547E /* NetworkSim.swift */; };
 		E622116C2BFF2A7B00052682 /* Keys.swift in Sources */ = {isa = PBXBuildFile; fileRef = E622116B2BFF2A7B00052682 /* Keys.swift */; };
 		E622116D2BFF2D5300052682 /* Keys.swift in Sources */ = {isa = PBXBuildFile; fileRef = E622116B2BFF2A7B00052682 /* Keys.swift */; };
+		E6525B5B2E38BE3C006DB4AA /* envs.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6525B5A2E38BE3A006DB4AA /* envs.swift */; };
+		E6525B602E38C548006DB4AA /* envs.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6525B5A2E38BE3A006DB4AA /* envs.swift */; };
+		E6525B612E38C548006DB4AA /* envs.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6525B5A2E38BE3A006DB4AA /* envs.swift */; };
+		E6525B622E38C548006DB4AA /* envs.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6525B5A2E38BE3A006DB4AA /* envs.swift */; };
 		E669382A2C722EE60002335F /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = E66938292C722EE60002335F /* AppDelegate.swift */; };
 		E669382C2C722EE60002335F /* MainViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E669382B2C722EE60002335F /* MainViewController.swift */; };
 		E669382F2C722EE60002335F /* Base in Resources */ = {isa = PBXBuildFile; fileRef = E669382E2C722EE60002335F /* Base */; };
@@ -120,6 +124,7 @@
 		E6320FB22BE7CE6800A4547E /* CrashSim.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = CrashSim.swift; sourceTree = "<group>"; };
 		E6320FB32BE7CE6800A4547E /* ErrorSim.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ErrorSim.swift; sourceTree = "<group>"; };
 		E6320FB42BE7CE6800A4547E /* NetworkSim.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = NetworkSim.swift; sourceTree = "<group>"; };
+		E6525B5A2E38BE3A006DB4AA /* envs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = envs.swift; sourceTree = "<group>"; };
 		E66938272C722EE60002335F /* DemoAppTvOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DemoAppTvOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		E66938292C722EE60002335F /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		E669382B2C722EE60002335F /* MainViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainViewController.swift; sourceTree = "<group>"; };
@@ -147,8 +152,6 @@
 		E6FD68F92D01D97B0066BDE8 /* FullImageCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FullImageCell.swift; sourceTree = "<group>"; };
 		E6FDDA2C2DF176DC0005F274 /* ClockViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClockViewController.swift; sourceTree = "<group>"; };
 		E6FDDA312DF176DC0005F275 /* SchemaValidationViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SchemaValidationViewController.swift; sourceTree = "<group>"; };
-		E6FDDA302DF176DC0005F274 /* DebugNetworkViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugNetworkViewController.swift; sourceTree = "<group>"; };
-
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -215,6 +218,7 @@
 		E6320F792BE7C94F00A4547E = {
 			isa = PBXGroup;
 			children = (
+				E6525B5A2E38BE3A006DB4AA /* envs.swift */,
 				E68681D52BFA2FEC00B127E7 /* Shared */,
 				E62211592BFDEB8B00052682 /* DemoAppSwiftUI */,
 				E68681A32BFA279500B127E7 /* DemoAppSwift */,
@@ -286,7 +290,6 @@
 				E674E7F72CD7C6480041784E /* SessionReplayViewController.swift */,
 				E6FDDA2C2DF176DC0005F274 /* ClockViewController.swift */,
 				E6FDDA312DF176DC0005F275 /* SchemaValidationViewController.swift */,
-
 				E6B60A052DB4EAAC003AD35D /* Assets.xcassets */,
 				E68681AA2BFA279500B127E7 /* Main.storyboard */,
 				E68681AF2BFA279600B127E7 /* LaunchScreen.storyboard */,
@@ -499,6 +502,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E6525B5B2E38BE3C006DB4AA /* envs.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -507,6 +511,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				E62211692BFDF4B000052682 /* ErrorSim.swift in Sources */,
+				E6525B612E38C548006DB4AA /* envs.swift in Sources */,
 				E622116D2BFF2D5300052682 /* Keys.swift in Sources */,
 				E62211682BFDF4AD00052682 /* CrashSim.swift in Sources */,
 				E622116A2BFDF4B400052682 /* NetworkSim.swift in Sources */,
@@ -525,6 +530,7 @@
 				E66938552C74A8010002335F /* PageController.swift in Sources */,
 				E669383D2C723D210002335F /* NetworkSim.swift in Sources */,
 				E6FDDA2F2DF176DC0005F274 /* ClockViewController.swift in Sources */,
+				E6525B622E38C548006DB4AA /* envs.swift in Sources */,
 				E669383F2C723D290002335F /* CrashSim.swift in Sources */,
 				E66938402C73447C0002335F /* CollectionViewController.swift in Sources */,
 				E669382A2C722EE60002335F /* AppDelegate.swift in Sources */,
@@ -543,7 +549,6 @@
 				E66938532C7489050002335F /* SdkViewController.swift in Sources */,
 				E6FDDA2D2DF176DC0005F274 /* ClockViewController.swift in Sources */,
 				E6FDDA2E2DF176DC0005F275 /* SchemaValidationViewController.swift in Sources */,
-
 				E669384F2C747E860002335F /* CustomView.swift in Sources */,
 				E66938572C74A8830002335F /* UserActionsViewController.swift in Sources */,
 				E674E7F82CD7C6480041784E /* SessionReplayViewController.swift in Sources */,
@@ -552,6 +557,7 @@
 				E6FD68F82D01D5570066BDE8 /* CreditCardInputCell.swift in Sources */,
 				E669384D2C74769C0002335F /* NetworkViewController.swift in Sources */,
 				E622116C2BFF2A7B00052682 /* Keys.swift in Sources */,
+				E6525B602E38C548006DB4AA /* envs.swift in Sources */,
 				E68681A52BFA279500B127E7 /* AppDelegate.swift in Sources */,
 				E603F6CE2C56792D007C55DA /* PageController.swift in Sources */,
 				E68681A72BFA279500B127E7 /* SceneDelegate.swift in Sources */,

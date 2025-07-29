@@ -148,10 +148,7 @@ class SchemaValidationViewController: UIViewController {
         statusLabel.text = "Validating schema..."
         statusLabel.textColor = .secondaryLabel
 
-        guard let proxyUrl = ProcessInfo.processInfo.environment["PROXY_URL"] else {
-            fatalError("🚫 PROXY_URL environment variable is not set.")
-         }
-
+        let proxyUrl = Envs.PROXY_URL.rawValue
         let urlString = "\(proxyUrl)/validate/\(sessionId.lowercased())"
         print("🌐 Schema validation URL: \(urlString)")
         lastRequestURL = urlString // Store for copying
