@@ -49,7 +49,7 @@ final class CoralogixRumManager {
 //            return editableCxRum
 //        },
                                                enableSwizzling: true,
-                                               proxyUrl: Envs.PROXY_URL.rawValue, // remove if not need to use proxy
+                                               //proxyUrl: Envs.PROXY_URL.rawValue, // remove if not need to use proxy
                                                debug: true
         )
 //        let log = OSLog(subsystem: "test.CoralogixTest", category: .pointsOfInterest)

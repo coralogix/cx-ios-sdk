@@ -28,7 +28,7 @@ Pod::Spec.new do |spec|
   spec.exclude_files = 'Coralogix/Sources/Exclude'
 
   spec.static_framework = true
-  spec.dependency 'PLCrashReporter', '~> 1.11.1'
+  spec.dependency 'PLCrashReporter', '1.11.1'
   spec.dependency 'CoralogixInternal', '1.1.2'
 
   spec.test_spec 'Tests' do |test|

@@ -13,11 +13,10 @@ let package = Package(
         .library(name: "CoralogixInternal", targets: ["CoralogixInternal"]),
         .library(name: "SessionReplay", targets: ["SessionReplay"])
     ],
+    dependencies: [
+        .package(url: "https://github.com/microsoft/plcrashreporter", exact: "1.11.1")
+    ],
     targets: [
-        .binaryTarget(
-            name: "CrashReporter",
-            path:"Coralogix/Frameworks/PLCrashReporter/CrashReporter.xcframework"
-        ),
         .target(
             name: "CoralogixInternal",
             path: "CoralogixInternal/Sources/"
@@ -26,7 +25,7 @@ let package = Package(
             name: "Coralogix",
             dependencies: [
                 .target(name: "CoralogixInternal"),
-                .target(name: "CrashReporter")
+                .product(name: "CrashReporter", package: "plcrashreporter")
             ],
             path: "Coralogix/Sources/"
         ),

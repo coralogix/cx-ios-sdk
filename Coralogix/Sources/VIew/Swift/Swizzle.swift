@@ -139,9 +139,7 @@ extension UIApplication {
                     tapData[Keys.tapName.rawValue] = "\(existing.lowercased()) - \(labelText.lowercased())"
                 }
                 
-                Log.d("Sending tap event: \(tapData)")
-                NotificationCenter.default.post(name: .cxRumNotificationUserActions,
-                                                object: tapData)
+                NotificationCenter.default.post(name: .cxRumNotificationUserActions, object: tapData)
             }
         }
     }
