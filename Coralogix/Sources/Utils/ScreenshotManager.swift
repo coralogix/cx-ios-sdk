@@ -23,9 +23,9 @@ public struct ScreenshotLocation {
 
 public class ScreenshotManager {
     private let queue = DispatchQueue(label: Keys.queueScreenshotManager.rawValue, attributes: .concurrent)
-    internal var _page: Int = 0
-    internal var _screenshotCount: Int = 0
-    internal var _screenshotId: String = UUID().uuidString.lowercased()
+    internal var page: Int = 0
+    internal var screenshotCount: Int = 0
+    internal var screenshotId: String = UUID().uuidString.lowercased()
     private let maxScreenshotsPerPage: Int
     public static let defaultMaxScreenShotsPerPage = 20
 
@@ -35,28 +35,28 @@ public class ScreenshotManager {
     
     public var nextScreenshotLocation: ScreenshotLocation {
         queue.sync(flags: .barrier) {
-            _screenshotCount += 1
+            screenshotCount += 1
             
-            if _screenshotCount > maxScreenshotsPerPage {
+            if screenshotCount > maxScreenshotsPerPage {
                                   
-                _page += 1
-                _screenshotCount = 1
-                Log.d("Page incremented to: \(_page)")
+                page += 1
+                screenshotCount = 1
+                Log.d("Page incremented to: \(page)")
             }
             
             return ScreenshotLocation(
-                segmentIndex: _screenshotCount,
-                page: _page,
-                screenshotId: _screenshotId
+                segmentIndex: screenshotCount,
+                page: page,
+                screenshotId: screenshotId
             )
         }
     }
 
     public func reset() {
         queue.sync(flags: .barrier) {
-            _page = 0
-            _screenshotCount = 0
-            _screenshotId = UUID().uuidString.lowercased()
+            page = 0
+            screenshotCount = 0
+            screenshotId = UUID().uuidString.lowercased()
         }
     }
 }

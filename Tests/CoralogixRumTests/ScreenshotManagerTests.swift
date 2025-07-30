@@ -20,7 +20,7 @@ class ScreenshotManagerTests: XCTestCase {
     
     func testNextScreenshotLocationInitialPageAndSegment() {
         let manager = ScreenshotManager(maxScreenShotsPerPage: 3)
-        manager._screenshotId = "id-1"
+        manager.screenshotId = "id-1"
         let loc1 = manager.nextScreenshotLocation
         XCTAssertEqual(loc1.segmentIndex, 1)
         XCTAssertEqual(loc1.page, 0)
@@ -33,7 +33,7 @@ class ScreenshotManagerTests: XCTestCase {
     
     func testNextScreenshotLocationPageIncrements() {
         let manager = ScreenshotManager(maxScreenShotsPerPage: 2)
-        manager._screenshotId = "id-2"
+        manager.screenshotId = "id-2"
 
         _ = manager.nextScreenshotLocation // 1
         _ = manager.nextScreenshotLocation // 2 (max reached)
@@ -45,7 +45,7 @@ class ScreenshotManagerTests: XCTestCase {
     
     func testMultiplePageIncrements() {
         let manager = ScreenshotManager(maxScreenShotsPerPage: 2)
-        manager._screenshotId = "id-3"
+        manager.screenshotId = "id-3"
 
         var pages: [Int] = []
         var segments: [Int] = []
@@ -63,16 +63,16 @@ class ScreenshotManagerTests: XCTestCase {
     func testResetSessionResetsPageAndScreenshotCountAndGeneratesNewId() {
         // Arrange
         let manager = ScreenshotManager()
-        let oldId = manager._screenshotId
+        let oldId = manager.screenshotId
         
         // Act
         manager.reset()
         
         // Assert
-        XCTAssertEqual(manager._page, 0)
-        XCTAssertEqual(manager._screenshotCount, 0)
-        XCTAssertNotEqual(manager._screenshotId, oldId)
-        XCTAssertTrue(manager._screenshotId.allSatisfy { $0.isLowercase || !$0.isLetter })
-        XCTAssertEqual(manager._screenshotId.count, 36) // UUID format
+        XCTAssertEqual(manager.page, 0)
+        XCTAssertEqual(manager.screenshotCount, 0)
+        XCTAssertNotEqual(manager.screenshotId, oldId)
+        XCTAssertTrue(manager.screenshotId.allSatisfy { $0.isLowercase || !$0.isLetter })
+        XCTAssertEqual(manager.screenshotId.count, 36) // UUID format
     }
 }

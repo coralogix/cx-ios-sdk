@@ -27,7 +27,7 @@ struct CxRum {
     let viewContext: String? = nil
     var labels: [String: Any]?
     var viewManager: ViewManager?
-    var snapshotContext: SnapshotContext? = nil
+    var snapshotContext: SnapshotContext?
     var isOneMinuteFromLastSnapshotPass = false
     var interactionContext: InteractionContext?
     var mobileVitalsContext: MobileVitalsContext?

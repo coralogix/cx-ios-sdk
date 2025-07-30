@@ -118,7 +118,7 @@ extension UIApplication {
            let touch = touches.first,
            touch.phase == .began {
             if let view = touch.view {
-                var tapData = [String : Any]()
+                var tapData = [String: Any]()
                 Global.updateLocation(tapData: &tapData, touch: touch)
 
                 let className = NSStringFromClass(type(of: view))

@@ -10,9 +10,9 @@ import CoralogixInternal
 
 internal struct TraceParentInHeader {
     var enable: Bool = false
-    var allowedTracingUrls: [String]? = nil
+    var allowedTracingUrls: [String]?
     
-    init(params: [String : Any]?) {
+    init(params: [String: Any]?) {
         guard let params = params else {
             Log.e("[TraceParentInHeader missing params]")
             return

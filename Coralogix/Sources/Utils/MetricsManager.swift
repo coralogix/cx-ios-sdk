@@ -50,7 +50,6 @@ public class MetricsManager {
             NotificationCenter.default.addObserver(self, selector: #selector(self.appDidBecomeActiveNotification),
                                                    name: UIApplication.didBecomeActiveNotification,
                                                    object: nil)
-            break
         }
     }
     
@@ -133,13 +132,11 @@ public class MetricsManager {
             .cold: getColdTime,
             .coldJS: getColdTime,
             .warm: getWarmTime,
-            .warmJS: getWarmTime,
+            .warmJS: getWarmTime
         ]
         
-        for (key, handler) in handlers {
-            if params.keys.contains(key.rawValue) {
-                return handler(params)
-            }
+        if let match = handlers.first(where: { params.keys.contains($0.key.rawValue) }) {
+            return match.value(params)
         }
         return nil
     }
