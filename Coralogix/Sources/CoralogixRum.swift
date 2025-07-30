@@ -15,11 +15,11 @@ extension Notification.Name {
 }
 
 public class CoralogixRum {
-    internal var coralogixExporter: CoralogixExporter? = nil
+    internal var coralogixExporter: CoralogixExporter?
     internal var networkManager = NetworkManager()
     internal var viewManager = ViewManager(keyChain: KeychainManager())
     internal var sessionManager: SessionManager?
-    internal var sessionInstrumentation: URLSessionInstrumentation? = nil
+    internal var sessionInstrumentation: URLSessionInstrumentation?
     internal var metricsManager = MetricsManager()
 
     internal var tracerProvider: () -> Tracer = {
@@ -35,8 +35,8 @@ public class CoralogixRum {
     static var mobileSDK: MobileSDK = MobileSDK()
     
     public init(options: CoralogixExporterOptions,
-                           sdkFramework: SdkFramework = .swift,
-                           sessionManager: SessionManager? = SessionManager()) {
+                sdkFramework: SdkFramework = .swift,
+                sessionManager: SessionManager? = SessionManager()) {
         Log.isDebug = options.debug
         self.sessionManager = sessionManager
         self.displayCoralogixWord()
@@ -266,7 +266,7 @@ public class CoralogixRum {
     }
     
     public func sendBeforeSendData(data: [[String: Any]]) {
-        self.coralogixExporter?.sendSpansPayload(data)
+        self.coralogixExporter?.sendBeforeSendData(data: data)
     }
     
     public func recordFirstFrameTime(params: [String: Any]) {

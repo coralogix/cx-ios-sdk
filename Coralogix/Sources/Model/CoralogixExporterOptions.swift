@@ -64,7 +64,7 @@ public struct CoralogixExporterOptions {
     var beforeSend: (([String: Any]) -> [String: Any]?)?
     
     /// Alternative beforeSend for Other Platfoms.
-    public var beforeSendCallBack: (([[String: Any]]) -> Void)? = nil
+    public var beforeSendCallBack: (([[String: Any]]) -> Void)?
     
     /// When set to `false`, disables Coralogix's automatic method swizzling.
     ///

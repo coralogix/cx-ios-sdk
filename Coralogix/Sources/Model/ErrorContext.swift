@@ -13,7 +13,7 @@ struct ErrorContext {
     let code: String
     let errorMessage: String
     var userInfo: [String: Any]?
-    let errorType: String
+    var errorType: String
     let exceptionType: String
     let crashTimestamp: String
     let processName: String
@@ -23,7 +23,6 @@ struct ErrorContext {
     var stackTrace: [[String: Any]]?
     let baseAddress: String
     let arch: String
-    let eventType: String
     
     init(otel: SpanDataProtocol) {
         self.domain = otel.getAttribute(forKey: Keys.domain.rawValue) as? String ?? ""
@@ -60,8 +59,10 @@ struct ErrorContext {
         }
         self.baseAddress = otel.getAttribute(forKey: Keys.baseAddress.rawValue) as? String ?? ""
         self.arch = otel.getAttribute(forKey: Keys.arch.rawValue) as? String ?? ""
-        self.eventType = otel.getAttribute(forKey: Keys.mobileVitalsType.rawValue) as? String ?? ""
         self.errorType = otel.getAttribute(forKey: Keys.errorType.rawValue) as? String ?? ""
+        if let anr = otel.getAttribute(forKey: Keys.mobileVitalsType.rawValue) as? String {
+            self.errorType = anr
+        }
     }
     
     func getDictionary() -> [String: Any] {
@@ -106,10 +107,6 @@ struct ErrorContext {
             }
             
             errorContext[Keys.isCrash.rawValue] = false
-            
-            if !self.eventType.isEmpty {
-                errorContext[Keys.eventType.rawValue] = eventType
-            }
         }
         return errorContext
     }

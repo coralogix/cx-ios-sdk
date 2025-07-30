@@ -146,7 +146,7 @@ public struct SessionMetadata {
     var oldSessionId: String?
     var oldSessionTimeInterval: TimeInterval?
     
-    init(sessionId: String, sessionCreationDate: TimeInterval,using keychain: KeyChainProtocol) {
+    init(sessionId: String, sessionCreationDate: TimeInterval, using keychain: KeyChainProtocol) {
         self.sessionId = sessionId
         self.sessionCreationDate = sessionCreationDate
         self.loadPrevSession(keychain: keychain)

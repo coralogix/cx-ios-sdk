@@ -14,6 +14,7 @@ public class CoralogixExporter: SpanExporter {
     private var networkManager: NetworkProtocol
     private var metricsManager: MetricsManager
     private var screenshotManager = ScreenshotManager()
+    lazy var spanUploader = SpanUploader(options: self.options)
 
     private let spanProcessingQueue = DispatchQueue(label: Keys.queueSpanProcessingQueue.rawValue)
     
@@ -79,6 +80,10 @@ public class CoralogixExporter: SpanExporter {
         self.options.application = application
     }
     
+    internal func sendBeforeSendData(data: [[String: Any]]) {
+        self.spanUploader.upload(data, endPoint: self.endPoint)
+    }
+    
     public func export(spans: [SpanData], explicitTimeout: TimeInterval?) -> SpanExporterResultCode {
         if self.sessionManager.isIdle {
             Log.d("[SDK] Skipping export, session is idle")
@@ -113,64 +118,12 @@ public class CoralogixExporter: SpanExporter {
                     return .success
                 }
             default:
-                return sendSpansPayload(cxSpansDictionary)
+                return spanUploader.upload(cxSpansDictionary, endPoint: self.endPoint)
             }
         }
         return .failure
     }
-    
-    @discardableResult
-    public func sendSpansPayload(_ spans: [[String: Any]]) -> SpanExporterResultCode {
-        guard CoralogixRum.isInitialized,
-              let urlString = self.resolvedUrlString(),
-              let url = URL(string: urlString) else {
-            return .failure
-        }
 
-        var request = URLRequest(url: url)
-        request.timeoutInterval = min(TimeInterval.greatestFiniteMagnitude, 10)
-        request.httpMethod = "POST"
-        request.addValue("Bearer \(self.options.publicKey)", forHTTPHeaderField: "Authorization")
-        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-
-        let jsonObject: [String: Any] = [
-            Keys.logs.rawValue: spans,
-            Keys.skipEnrichmentWithIp.rawValue: !options.collectIPData
-        ]
-
-        var requestJsonData: Data? = nil
-        do {
-            requestJsonData = try JSONSerialization.data(withJSONObject: jsonObject, options: [])
-            request.httpBody = requestJsonData
-        } catch {
-            Log.e(error)
-            return .failure
-        }
-
-        var status: SpanExporterResultCode = .failure
-        let semaphore = DispatchSemaphore(value: 0)
-        let jsonDataCopy = requestJsonData
-        let task = URLSession.shared.dataTask(with: request) { [weak self] _, _, error in
-            defer { semaphore.signal() }
-            
-            if let _ = error {
-                status = .failure
-                return
-            }
-            
-            status = .success
-            
-            if let data = jsonDataCopy {
-                self?.logJSON(from: data, prettyPrint: false)
-            }
-        }
-
-        task.resume()
-        semaphore.wait()
-        return status
-    }
-
-    
     public func flush(explicitTimeout: TimeInterval?) -> SpanExporterResultCode {
         return .success
     }
@@ -204,34 +157,6 @@ public class CoralogixExporter: SpanExporter {
         self.viewManager.reset()
         self.sessionManager.reset()
         self.screenshotManager.reset()
-    }
-    
-    internal func resolvedUrlString() -> String? {
-        if let proxyUrl = self.options.proxyUrl,
-            var urlComponents = URLComponents(string: proxyUrl) {
-            urlComponents.queryItems = [
-                URLQueryItem(name: Keys.cxforward.rawValue, value: self.endPoint),
-            ]
-            return urlComponents.url?.absoluteString
-        } else {
-            return self.endPoint
-        }
-    }
-    
-    private func logJSON(from jsonData: Data, prettyPrint: Bool) {
-        guard let jsonObject = try? JSONSerialization.jsonObject(with: jsonData, options: []) else {
-            Log.d("❌ Failed to parse JSON data.")
-            return
-        }
-        
-        let options: JSONSerialization.WritingOptions = prettyPrint ? .prettyPrinted : []
-        
-        if let formattedData = try? JSONSerialization.data(withJSONObject: jsonObject, options: options),
-           let jsonString = String(data: formattedData, encoding: .utf8) {
-            Log.d("⚡️ JSON string: ⚡️\n\(jsonString)")
-        } else {
-            Log.d("❌ Failed to format JSON string.")
-        }
     }
     
     private func spanDatatoCxSpan(otelSpan: SpanData) -> [String: Any]? {

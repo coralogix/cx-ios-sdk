@@ -361,7 +361,7 @@ final class CoralogixExporterTests: XCTestCase {
 
     func test_resolvedUrlString_withProxyUrl() {
         let proxyUrl = "https://proxy.example.com"
-        
+        let endPoint = coralogixExporter.endPoint
         options = CoralogixExporterOptions(coralogixDomain: CoralogixDomain.US2,
                                            userContext: nil,
                                            environment: "PROD",
@@ -377,7 +377,7 @@ final class CoralogixExporterTests: XCTestCase {
         let coralogixRum = CoralogixRum(options: options!)
         
         // When
-        let result = coralogixRum.coralogixExporter?.resolvedUrlString()
+        let result = coralogixRum.coralogixExporter?.spanUploader.resolvedUrlString(endPoint: endPoint)
         
         // Then
         guard let result = result else {
@@ -391,6 +391,7 @@ final class CoralogixExporterTests: XCTestCase {
     }
     
     func test_resolvedUrlString_withoutProxyUrl() {
+        let endPoint = coralogixExporter.endPoint
         options = CoralogixExporterOptions(coralogixDomain: CoralogixDomain.US2,
                                            userContext: nil,
                                            environment: "PROD",
@@ -405,7 +406,7 @@ final class CoralogixExporterTests: XCTestCase {
                                            debug: true)
         let coralogixRum = CoralogixRum(options: options!)
         // When
-        let result = coralogixRum.coralogixExporter?.resolvedUrlString()
+        let result = coralogixRum.coralogixExporter?.spanUploader.resolvedUrlString(endPoint: endPoint)
 
         // Then
         XCTAssertEqual(result, coralogixRum.coralogixExporter?.endPoint)

@@ -118,7 +118,7 @@ extension UIApplication {
            let touch = touches.first,
            touch.phase == .began {
             if let view = touch.view {
-                var tapData = [String : Any]()
+                var tapData = [String: Any]()
                 Global.updateLocation(tapData: &tapData, touch: touch)
 
                 let className = NSStringFromClass(type(of: view))
@@ -139,9 +139,7 @@ extension UIApplication {
                     tapData[Keys.tapName.rawValue] = "\(existing.lowercased()) - \(labelText.lowercased())"
                 }
                 
-                Log.d("Sending tap event: \(tapData)")
-                NotificationCenter.default.post(name: .cxRumNotificationUserActions,
-                                                object: tapData)
+                NotificationCenter.default.post(name: .cxRumNotificationUserActions, object: tapData)
             }
         }
     }
