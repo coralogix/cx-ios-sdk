@@ -153,18 +153,13 @@ public class URLSessionInstrumentation {
                 
                 let castedIMP = unsafeBitCast(originalIMP, to: (@convention(c) (URLSession, Selector, Any) -> URLSessionTask).self)
                 let sessionTaskId = UUID().uuidString
-                var task: URLSessionTask
-                
-                if let url = argument as? URL {
-                    let request = URLRequest(url: url)
-                    let instrumented = URLSessionLogger.processAndLogRequest(request, sessionTaskId: sessionTaskId, instrumentation: self, shouldInjectHeaders: true)
-                    task = castedIMP(session, selector, instrumented ?? request)
-                } else if let request = argument as? URLRequest {
-                    let instrumented = URLSessionLogger.processAndLogRequest(request, sessionTaskId: sessionTaskId, instrumentation: self, shouldInjectHeaders: true)
-                    task = castedIMP(session, selector, instrumented ?? request)
-                } else {
-                    task = castedIMP(session, selector, argument)
-                }
+                let bridged = self._bridgedArgumentForFactory(
+                    selector: selector,
+                    argument: argument,
+                    sessionTaskId: sessionTaskId
+                )
+
+                let task = castedIMP(session, selector, bridged)
                 instrumentation.setIdKey(value: sessionTaskId, for: task)
                 // We want to identify background tasks
                 if session.configuration.identifier == nil {
@@ -176,6 +171,96 @@ public class URLSessionInstrumentation {
             // MARK: [FIX] Guard method_setImplementation
             let swizzledIMP = imp_implementationWithBlock(block as Any)
             _ = method_setImplementation(method, swizzledIMP)
+        }
+    }
+    
+    private enum TaskFactoryOverload {
+        case urlRequest        // dataTask(with: URLRequest), downloadTask(with: URLRequest), uploadTask(withStreamedRequest:)
+        case url               // dataTask(with: URL), downloadTask(with: URL)
+        case resumeData        // downloadTask(withResumeData:)
+        case unknown
+    }
+
+    private func overloadKind(for selector: Selector) -> TaskFactoryOverload {
+        if selector == #selector(URLSession.dataTask(with:) as (URLSession) -> (URLRequest) -> URLSessionDataTask) ||
+           selector == #selector(URLSession.downloadTask(with:) as (URLSession) -> (URLRequest) -> URLSessionDownloadTask) ||
+           selector == #selector(URLSession.uploadTask(withStreamedRequest:)) {
+            return .urlRequest
+        }
+        if selector == #selector(URLSession.dataTask(with:) as (URLSession) -> (URL) -> URLSessionDataTask) ||
+           selector == #selector(URLSession.downloadTask(with:) as (URLSession) -> (URL) -> URLSessionDownloadTask) {
+            return .url
+        }
+        if selector == #selector(URLSession.downloadTask(withResumeData:)) {
+            return .resumeData
+        }
+        return .unknown
+    }
+    
+    private func _bridgedArgumentForFactory(
+        selector: Selector,
+        argument: AnyObject,
+        sessionTaskId: String
+    ) -> AnyObject {
+        switch overloadKind(for: selector) {
+
+        case .urlRequest:
+            // Expecting NSURLRequest*
+            if let req = argument as? URLRequest {
+                _ = URLSessionLogger.processAndLogRequest(
+                    req,
+                    sessionTaskId: sessionTaskId,
+                    instrumentation: self,
+                    shouldInjectHeaders: true
+                )
+                return req as NSURLRequest
+            }
+            if let reqObjc = argument as? NSURLRequest {
+                _ = URLSessionLogger.processAndLogRequest(
+                    reqObjc as URLRequest,
+                    sessionTaskId: sessionTaskId,
+                    instrumentation: self,
+                    shouldInjectHeaders: true
+                )
+                return reqObjc
+            }
+            // If a URL slipped through, construct a minimal request (doesn't mutate a caller's request)
+            if let url = argument as? URL {
+                return URLRequest(url: url) as NSURLRequest
+            }
+            if let urlObjc = argument as? NSURL {
+                return URLRequest(url: urlObjc as URL) as NSURLRequest
+            }
+            // Fallback: forward as-is
+            return argument
+
+        case .url:
+            // Expecting NSURL*
+            if let url = argument as? URL {
+                return url as NSURL
+            }
+            if let urlObjc = argument as? NSURL {
+                return urlObjc
+            }
+            // If a request was passed, extract URL safely
+            if let req = argument as? URLRequest, let url = req.url {
+                return url as NSURL
+            }
+            if let reqObjc = argument as? NSURLRequest, let url = reqObjc.url {
+                return url as NSURL
+            }
+            // Fallback: forward as-is
+            return argument
+
+        case .resumeData:
+            // Expecting NSData*
+            if let data = argument as? Data {
+                return data as NSData
+            }
+            return argument
+
+        case .unknown:
+            return argument
         }
     }
     
