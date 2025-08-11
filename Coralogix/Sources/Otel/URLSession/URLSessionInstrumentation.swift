@@ -137,13 +137,9 @@ public class URLSessionInstrumentation {
                 continue
             }
             
-            // MARK: [FIX] Guard for IMP existence
             let originalIMP = method_getImplementation(method)
-            
-            // MARK: [FIX] Safe block-based swizzling
             let instrumentation = self
             let block: @convention(block) (URLSession, AnyObject) -> URLSessionTask = { session, argument in
-                // MARK: [FIX] Reentrancy guard
                 let key = "cx.reentrancy.\(selector)"
                 if objc_getAssociatedObject(session, key) != nil {
                     return unsafeBitCast(originalIMP, to: (@convention(c) (URLSession, Selector, AnyObject) -> URLSessionTask).self)(session, selector, argument)
@@ -161,6 +157,11 @@ public class URLSessionInstrumentation {
 
                 let task = castedIMP(session, selector, bridged)
                 instrumentation.setIdKey(value: sessionTaskId, for: task)
+               
+                if (session.delegate == nil) {
+                    task.setValue(FakeDelegate(), forKey: "delegate")
+                }
+                
                 // We want to identify background tasks
                 if session.configuration.identifier != nil {
                     objc_setAssociatedObject(task, "IsBackground", true, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
@@ -168,10 +169,48 @@ public class URLSessionInstrumentation {
                 return task
             }
             
-            // MARK: [FIX] Guard method_setImplementation
             let swizzledIMP = imp_implementationWithBlock(block as Any)
             _ = method_setImplementation(method, swizzledIMP)
         }
+    }
+    
+    private func isHTTPScheme(_ url: URL?) -> Bool {
+        guard let scheme = url?.scheme?.lowercased() else { return false }
+        return scheme == "http" || scheme == "https"
+    }
+
+    private func shouldInject(for request: URLRequest) -> Bool {
+        configuration.shouldInjectTracingHeaders?(request) ?? true
+    }
+    
+    @discardableResult
+    private func instrumentRequest(
+        _ request: URLRequest,
+        sessionTaskId: String,
+        injectHeaders: Bool
+    ) -> URLRequest? {
+        URLSessionLogger.processAndLogRequest(
+            request,
+            sessionTaskId: sessionTaskId,
+            instrumentation: self,
+            shouldInjectHeaders: injectHeaders
+        )
+    }
+    
+    private func coerceToRequest(_ argument: AnyObject) -> URLRequest? {
+        if let req = argument as? URLRequest { return req }
+        if let reqObjc = argument as? NSURLRequest { return reqObjc as URLRequest }
+        if let url = argument as? URL { return URLRequest(url: url) }
+        if let urlObjc = argument as? NSURL { return URLRequest(url: urlObjc as URL) }
+        return nil
+    }
+
+    private func coerceToURL(_ argument: AnyObject) -> URL? {
+        if let url = argument as? URL { return url }
+        if let urlObjc = argument as? NSURL { return urlObjc as URL }
+        if let req = argument as? URLRequest { return req.url }
+        if let reqObjc = argument as? NSURLRequest { return reqObjc.url }
+        return nil
     }
     
     private enum TaskFactoryOverload {
@@ -205,60 +244,32 @@ public class URLSessionInstrumentation {
         switch overloadKind(for: selector) {
 
         case .urlRequest:
-            // Expecting NSURLRequest*
-            if let req = argument as? URLRequest {
-                _ = URLSessionLogger.processAndLogRequest(
-                    req,
-                    sessionTaskId: sessionTaskId,
-                    instrumentation: self,
-                    shouldInjectHeaders: true
-                )
-                return req as NSURLRequest
-            }
-            if let reqObjc = argument as? NSURLRequest {
-                _ = URLSessionLogger.processAndLogRequest(
-                    reqObjc as URLRequest,
-                    sessionTaskId: sessionTaskId,
-                    instrumentation: self,
-                    shouldInjectHeaders: true
-                )
-                return reqObjc
-            }
-            // If a URL slipped through, construct a minimal request (doesn't mutate a caller's request)
-            if let url = argument as? URL {
-                return URLRequest(url: url) as NSURLRequest
-            }
-            if let urlObjc = argument as? NSURL {
-                return URLRequest(url: urlObjc as URL) as NSURLRequest
+            // Signature expects NSURLRequest*
+            if let originalReq = coerceToRequest(argument) {
+                let inject = shouldInject(for: originalReq)
+                let instrumented = instrumentRequest(originalReq, sessionTaskId: sessionTaskId, injectHeaders: inject)
+                // Use instrumented if available, else original
+                return (instrumented ?? originalReq) as NSURLRequest
             }
             // Fallback: forward as-is
             return argument
 
         case .url:
-            // Expecting NSURL*
-            if let url = argument as? URL {
-                let req = URLRequest(url: url)
-                _ = URLSessionLogger.processAndLogRequest(req,
-                          sessionTaskId: sessionTaskId,
-                          instrumentation: self,
-                          shouldInjectHeaders: true)
-                return url as NSURL
-            }
-            if let urlObjc = argument as? NSURL {
-                return urlObjc
-            }
-            // If a request was passed, extract URL safely
-            if let req = argument as? URLRequest, let url = req.url {
-                return url as NSURL
-            }
-            if let reqObjc = argument as? NSURLRequest, let url = reqObjc.url {
-                return url as NSURL
+            // Signature expects NSURL*
+            // We cannot return a request here, so pre-log/inject via a temporary request if http(s)
+            if let url = coerceToURL(argument) {
+                if isHTTPScheme(url) {
+                    let tempReq = URLRequest(url: url)
+                    let inject = shouldInject(for: tempReq)
+                    _ = instrumentRequest(tempReq, sessionTaskId: sessionTaskId, injectHeaders: inject)
+                }
+                return (url as NSURL)
             }
             // Fallback: forward as-is
             return argument
 
         case .resumeData:
-            // Expecting NSData*
+            // Signature expects NSData*
             if let data = argument as? Data {
                 return data as NSData
             }
