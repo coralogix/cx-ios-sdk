@@ -153,7 +153,7 @@ public class URLSessionInstrumentation {
                 
                 let castedIMP = unsafeBitCast(originalIMP, to: (@convention(c) (URLSession, Selector, Any) -> URLSessionTask).self)
                 let sessionTaskId = UUID().uuidString
-                let bridged = self._bridgedArgumentForFactory(
+                let bridged = self.bridgedArgumentForFactory(
                     selector: selector,
                     argument: argument,
                     sessionTaskId: sessionTaskId
@@ -162,7 +162,7 @@ public class URLSessionInstrumentation {
                 let task = castedIMP(session, selector, bridged)
                 instrumentation.setIdKey(value: sessionTaskId, for: task)
                 // We want to identify background tasks
-                if session.configuration.identifier == nil {
+                if session.configuration.identifier != nil {
                     objc_setAssociatedObject(task, "IsBackground", true, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
                 }
                 return task
@@ -197,7 +197,7 @@ public class URLSessionInstrumentation {
         return .unknown
     }
     
-    private func _bridgedArgumentForFactory(
+    private func bridgedArgumentForFactory(
         selector: Selector,
         argument: AnyObject,
         sessionTaskId: String
@@ -237,6 +237,11 @@ public class URLSessionInstrumentation {
         case .url:
             // Expecting NSURL*
             if let url = argument as? URL {
+                let req = URLRequest(url: url)
+                _ = URLSessionLogger.processAndLogRequest(req,
+                          sessionTaskId: sessionTaskId,
+                          instrumentation: self,
+                          shouldInjectHeaders: true)
                 return url as NSURL
             }
             if let urlObjc = argument as? NSURL {
