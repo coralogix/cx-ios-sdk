@@ -55,7 +55,7 @@ extension CoralogixRum {
             span.setAttribute(key: key, value: value)
         }
         
-        if let uuid = cxMobileVitals.uuid as? String {
+        if let uuid = cxMobileVitals.uuid, !uuid.isEmpty {
             span.setAttribute(key: Keys.mobileVitalsUuid.rawValue, value: uuid)
         }
         span.end()

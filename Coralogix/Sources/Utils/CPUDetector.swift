@@ -9,7 +9,7 @@ import Foundation
 import Darwin.Mach
 
 /// CPU usage of *your app* as a % of total device CPU (all cores).
-public final class CPUDetector {
+final class CPUDetector {
     private var timer: Timer?
     
     // Time interval to check for CPU (e.g., every 1 second)
@@ -21,7 +21,7 @@ public final class CPUDetector {
     private let minInterval: TimeInterval = 0.1
     var handleANRClosure: (() -> Void)?
 
-    public init(checkInterval: TimeInterval = 60.0) {
+    init(checkInterval: TimeInterval = 60.0) {
         mach_timebase_info(&timebase)
         var interval = checkInterval
         if interval < minInterval {
@@ -30,17 +30,28 @@ public final class CPUDetector {
         self.checkInterval = interval
     }
     
-    func startMonitoring() {
-        timer = Timer.scheduledTimer(timeInterval: checkInterval,
-                                     target: self,
-                                     selector: #selector(checkForCPU),
-                                     userInfo: nil,
-                                     repeats: true)
+    public func startMonitoring() {
+        DispatchQueue.main.async {
+            
+            self.timer?.invalidate()
+            let t = Timer.scheduledTimer(timeInterval: self.checkInterval,
+                                         target: self,
+                                         selector: #selector(self.checkForCPU),
+                                         userInfo: nil,
+                                         repeats: true)
+            self.timer = t
+            RunLoop.main.add(t, forMode: .common)
+        }
     }
 
-    func stopMonitoring() {
+    public func stopMonitoring() {
         timer?.invalidate()
         timer = nil
+    }
+    
+    deinit {
+        // Defensive: ensure it’s cleaned up if the owner forgets to call stop.
+        timer?.invalidate()
     }
     
     @objc private func checkForCPU() {
@@ -135,10 +146,13 @@ public final class CPUDetector {
     func mainThreadCpuTimeMs() -> Double? {
         var info = thread_basic_info_data_t()
         var count = mach_msg_type_number_t(THREAD_INFO_MAX)
-
+        
+        let thread = mach_thread_self()
+        defer { mach_port_deallocate(mach_task_self_, thread) }
+        
         let kr = withUnsafeMutablePointer(to: &info) {
             $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
-                thread_info(mach_thread_self(),
+                thread_info(thread,
                             thread_flavor_t(THREAD_BASIC_INFO),
                             $0,
                             &count)
