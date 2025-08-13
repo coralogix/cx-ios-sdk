@@ -43,15 +43,16 @@ public final class CPUDetector {
     }
     
     @objc private func checkForCPU() {
-        if let sample = self.samplePercent() {
+        if let cpuUsageMeasurement = self.samplePercent() {
             Log.d(String(format: "[Metric] App CPU: %.3f%% | Total CPU Time: %.3f ms | Main Thread Time: %.3f ms",
-                         sample.usagePercent,
-                         sample.totalCpuTimeMs,
-                         sample.mainThreadTimeMs))
+                         cpuUsageMeasurement.usagePercent,
+                         cpuUsageMeasurement.totalCpuTimeMs,
+                         cpuUsageMeasurement.mainThreadTimeMs))
+            self.reportCpuUsage(cpu: cpuUsageMeasurement)
         }
     }
 
-    public func samplePercent() -> (usagePercent: Double, totalCpuTimeMs: Double, mainThreadTimeMs: Double)? {
+    internal func samplePercent() -> CpuUsageMeasurement? {
         guard let proc = currentProcessCPUSeconds(),
                 let mainMs = mainThreadCpuTimeMs() else { return nil }
         let wall = nowSeconds()
@@ -72,7 +73,36 @@ public final class CPUDetector {
         let totalCpuTimeMs = proc * 1000.0
 
         let usagePercent = min(max(pct, 0), 100) // clamp to [0,100]
-        return (usagePercent: usagePercent, totalCpuTimeMs: totalCpuTimeMs, mainThreadTimeMs: mainMs)
+        return CpuUsageMeasurement(usagePercent: usagePercent,
+                                   totalCpuTimeMs: totalCpuTimeMs,
+                                   mainThreadTimeMs: mainMs)
+    }
+    
+    private func reportCpuUsage(cpu: CpuUsageMeasurement) {
+        let uuid = UUID().uuidString.lowercased()
+        
+        let metrics: [(CXMobileVitalsType, Double)] = [
+            (.cpuUsagePercent, cpu.usagePercent),
+            (.totalCpuTimeMs,  cpu.totalCpuTimeMs),
+            (.mainThreadCpuTimeMs, cpu.mainThreadTimeMs)
+        ]
+        
+        func format(_ v: Double, decimals: Int = 3) -> String {
+            String(format: "%.\(decimals)f", locale: Locale(identifier: "en_US_POSIX"), v)
+        }
+        
+        let postMetric: (CXMobileVitalsType, Double) -> Void = { type, value in
+            let payload = CXMobileVitals(type: type, value: format(value), uuid: uuid)
+            if Thread.isMainThread {
+                NotificationCenter.default.post(name: .cxRumNotificationMetrics, object: payload)
+            } else {
+                DispatchQueue.main.async {
+                    NotificationCenter.default.post(name: .cxRumNotificationMetrics, object: payload)
+                }
+            }
+        }
+        
+        metrics.forEach { postMetric($0.0, $0.1) }
     }
 
     // MARK: - Internals
@@ -123,4 +153,10 @@ public final class CPUDetector {
         let totalMs = (userSec + sysSec) * 1000.0 + (userMicro + sysMicro) / 1000.0
         return totalMs
     }
+}
+
+struct CpuUsageMeasurement {
+    let usagePercent: Double
+    let totalCpuTimeMs: Double
+    let mainThreadTimeMs: Double
 }

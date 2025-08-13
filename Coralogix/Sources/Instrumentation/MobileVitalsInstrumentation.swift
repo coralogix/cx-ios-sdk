@@ -54,6 +54,10 @@ extension CoralogixRum {
         for (key, value) in cxMobileVitals.type.specificAttributes(for: cxMobileVitals.value) {
             span.setAttribute(key: key, value: value)
         }
+        
+        if let uuid = cxMobileVitals.uuid as? String {
+            span.setAttribute(key: Keys.mobileVitalsUuid.rawValue, value: uuid)
+        }
         span.end()
     }
     
