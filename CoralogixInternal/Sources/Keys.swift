@@ -150,6 +150,7 @@ public enum Keys: String {
     case fps = "fps"
     case mobileVitalsType
     case mobileVitalsValue
+    case mobileVitalsUuid = "uuid"
     case value
     case anr = "application_not_responding"
     case skipEnrichmentWithIp = "skip_enrichment_with_ip"

@@ -18,6 +18,7 @@ public class MetricsManager {
     var foregroundStartTime: CFAbsoluteTime?
     var foregroundEndTime: CFAbsoluteTime?
     var anrDetector: ANRDetector?
+    var cpuDetector: CPUDetector?
     var fpsTrigger = FPSTrigger()
     let mobileVitalsFPSSamplingRate = 300 // 5 min
     var warmMetricIsActive = false
@@ -55,6 +56,8 @@ public class MetricsManager {
     
     public func removeObservers() {
         MXMetricManager.shared.remove(MyMetricSubscriber.shared)
+        self.cpuDetector?.stopMonitoring()
+        self.anrDetector?.stopMonitoring()
     }
     
     func startFPSSamplingMonitoring(mobileVitalsFPSSamplingRate: Int) {
@@ -63,6 +66,8 @@ public class MetricsManager {
     
     @objc func appDidEnterBackgroundNotification() {
         self.fpsTrigger.stopMonitoring()
+        self.cpuDetector?.stopMonitoring()
+        self.anrDetector?.stopMonitoring()
         self.warmMetricIsActive = true
     }
     
@@ -103,6 +108,13 @@ public class MetricsManager {
     func startANRMonitoring() {
         self.anrDetector = ANRDetector()
         self.anrDetector?.startMonitoring()
+    }
+    
+    func startCPUMonitoring() {
+        guard cpuDetector == nil else { return }
+        let detector = CPUDetector()
+        detector.startMonitoring()
+        self.cpuDetector = detector
     }
     
     @objc func handleNotification(notification: Notification) {
@@ -183,6 +195,7 @@ public class MetricsManager {
         
         self.anrDetector?.stopMonitoring()
         self.fpsTrigger.stopMonitoring()
+        self.cpuDetector?.stopMonitoring()
         self.launchEndTime = 0
     }
 }

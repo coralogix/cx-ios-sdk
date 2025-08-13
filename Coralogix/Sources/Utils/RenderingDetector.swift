@@ -88,11 +88,21 @@ enum CXMobileVitalsType: String {
     case fps
     case anr
     case metricKit
+    case cpuUsagePercent
+    case totalCpuTimeMs
+    case mainThreadCpuTimeMs
 }
 
 struct CXMobileVitals {
     let type: CXMobileVitalsType
     let value: String
+    let uuid: String?
+    
+    init(type: CXMobileVitalsType, value: String, uuid: String? = nil) {
+        self.type = type
+        self.value = value
+        self.uuid = uuid
+    }
 }
 
 extension CXMobileVitalsType {
