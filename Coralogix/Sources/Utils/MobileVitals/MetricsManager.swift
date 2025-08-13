@@ -97,6 +97,12 @@ public class MetricsManager {
             NotificationCenter.default.post(name: .cxRumNotificationMetrics,
                                             object: CXMobileVitals(type: .warm, value: "\(millisecondsRounded)"))
         }
+        
+        // Resume mobile vitals monitoring
+        self.startANRMonitoring()
+        self.startCPUMonitoring()
+        self.startMemoryMonitoring()
+        self.startFPSSamplingMonitoring(mobileVitalsFPSSamplingRate: mobileVitalsFPSSamplingRate)
     }
     
     func startColdStartMonitoring() {
@@ -194,9 +200,12 @@ public class MetricsManager {
     
     private func stopAllDetectors() {
         anrDetector?.stopMonitoring()
-        fpsTrigger.stopMonitoring()
+        anrDetector = nil
         cpuDetector?.stopMonitoring()
+        cpuDetector = nil
         memoryDetector?.stopMonitoring()
+        memoryDetector = nil
+        fpsTrigger.stopMonitoring()
     }
     
     deinit {

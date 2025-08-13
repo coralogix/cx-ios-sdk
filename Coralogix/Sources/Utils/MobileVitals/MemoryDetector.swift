@@ -23,17 +23,19 @@ final class MemoryDetector {
     private let minInterval: TimeInterval = 0.1
     var handleMemoryClosure: (() -> Void)?
 
-    public init(interval: TimeInterval = 60.0) {
+    init(interval: TimeInterval = 60.0) {
         self.interval = max(interval, minInterval)
     }
 
     public func startMonitoring() {
         guard timer == nil else { return }
-        let t = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
-            self?.checkForMemory()
+        DispatchQueue.main.async {
+            let t = Timer(timeInterval: self.interval, repeats: true) { [weak self] _ in
+                self?.checkForMemory()
+            }
+            RunLoop.main.add(t, forMode: .common)
+            self.timer = t
         }
-        RunLoop.main.add(t, forMode: .common)
-        timer = t
     }
 
     public func stopMonitoring() {
@@ -55,7 +57,7 @@ final class MemoryDetector {
         reportMemory(m)
     }
 
-    public static func readMemoryMeasurement() -> MemoryMeasurement? {
+    static func readMemoryMeasurement() -> MemoryMeasurement? {
         guard let vm = taskVMInfo() else { return nil }
 
         let bytesPerMB = 1024.0 * 1024.0
