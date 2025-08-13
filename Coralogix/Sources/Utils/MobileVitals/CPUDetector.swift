@@ -19,7 +19,7 @@ final class CPUDetector {
     private let cpuCount = Double(ProcessInfo.processInfo.activeProcessorCount)
     private var timebase = mach_timebase_info_data_t()
     private let minInterval: TimeInterval = 0.1
-    var handleANRClosure: (() -> Void)?
+    var handleCpuClosure: (() -> Void)?
 
     init(checkInterval: TimeInterval = 60.0) {
         mach_timebase_info(&timebase)
@@ -49,13 +49,11 @@ final class CPUDetector {
         timer = nil
     }
     
-    deinit {
-        self.stopMonitoring()
-    }
+    deinit { self.stopMonitoring() }
     
     @objc private func checkForCPU() {
         if let cpuUsageMeasurement = self.samplePercent() {
-            self.handleANRClosure?()
+            self.handleCpuClosure?()
             Log.d(String(format: "[Metric] App CPU: %.3f%% | Total CPU Time: %.3f ms | Main Thread Time: %.3f ms",
                          cpuUsageMeasurement.usagePercent,
                          cpuUsageMeasurement.totalCpuTimeMs,

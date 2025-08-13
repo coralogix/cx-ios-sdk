@@ -91,6 +91,9 @@ enum CXMobileVitalsType: String {
     case cpuUsagePercent
     case totalCpuTimeMs
     case mainThreadCpuTimeMs
+    case residentMemoryMb
+    case memoryUtilizationPercent
+    
 }
 
 struct CXMobileVitals {
