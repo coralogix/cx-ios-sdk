@@ -21,6 +21,7 @@ final class MemoryDetector {
     private var timer: Timer?
     private let interval: TimeInterval
     private let minInterval: TimeInterval = 0.1
+    var handleMemoryClosure: (() -> Void)?
 
     public init(interval: TimeInterval = 60.0) {
         self.interval = max(interval, minInterval)
@@ -44,7 +45,7 @@ final class MemoryDetector {
 
     @objc private func checkForMemory() {
         guard let m = MemoryDetector.readMemoryMeasurement() else { return }
-
+        self.handleMemoryClosure?()
         Log.d(String(
             format: "[Metric] Memory: %.1f MB | Utilization: %.2f%%",
             m.footprintMB,

@@ -17,7 +17,7 @@ final class CPUDetectorTests: XCTestCase {
         cpuDetector = CPUDetector(checkInterval: 0.1)
         
         // Override the handleANR with a closure to test ANR detection
-        cpuDetector.handleANRClosure = { [weak self] in
+        cpuDetector.handleCpuClosure = { [weak self] in
             self?.cpuDetected = true
         }
     }
