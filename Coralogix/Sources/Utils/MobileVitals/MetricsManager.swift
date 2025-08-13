@@ -19,6 +19,7 @@ public class MetricsManager {
     var foregroundEndTime: CFAbsoluteTime?
     var anrDetector: ANRDetector?
     var cpuDetector: CPUDetector?
+    var memoryDetector: MemoryDetector?
     var fpsTrigger = FPSTrigger()
     let mobileVitalsFPSSamplingRate = 300 // 5 min
     var warmMetricIsActive = false
@@ -56,8 +57,7 @@ public class MetricsManager {
     
     public func removeObservers() {
         MXMetricManager.shared.remove(MyMetricSubscriber.shared)
-        self.cpuDetector?.stopMonitoring()
-        self.anrDetector?.stopMonitoring()
+        self.stopAllDetectors()
     }
     
     func startFPSSamplingMonitoring(mobileVitalsFPSSamplingRate: Int) {
@@ -65,9 +65,7 @@ public class MetricsManager {
     }
     
     @objc func appDidEnterBackgroundNotification() {
-        self.fpsTrigger.stopMonitoring()
-        self.cpuDetector?.stopMonitoring()
-        self.anrDetector?.stopMonitoring()
+        self.stopAllDetectors()
         self.warmMetricIsActive = true
     }
     
@@ -115,6 +113,13 @@ public class MetricsManager {
         let detector = CPUDetector()
         detector.startMonitoring()
         self.cpuDetector = detector
+    }
+    
+    func startMemoryMonitoring() {
+        guard memoryDetector == nil else { return }
+        let detector = MemoryDetector()
+        detector.startMonitoring()
+        self.memoryDetector = detector
     }
     
     @objc func handleNotification(notification: Notification) {
@@ -187,15 +192,20 @@ public class MetricsManager {
         return nil
     }
     
+    private func stopAllDetectors() {
+        anrDetector?.stopMonitoring()
+        fpsTrigger.stopMonitoring()
+        cpuDetector?.stopMonitoring()
+        memoryDetector?.stopMonitoring()
+    }
+    
     deinit {
         NotificationCenter.default.removeObserver(self, name: UIApplication.didEnterBackgroundNotification, object: nil)
         NotificationCenter.default.removeObserver(self, name: UIApplication.willEnterForegroundNotification, object: nil)
         NotificationCenter.default.removeObserver(self, name: UIApplication.didBecomeActiveNotification, object: nil)
         NotificationCenter.default.removeObserver(self, name: .cxViewDidAppear, object: nil)
         
-        self.anrDetector?.stopMonitoring()
-        self.fpsTrigger.stopMonitoring()
-        self.cpuDetector?.stopMonitoring()
+        self.stopAllDetectors()
         self.launchEndTime = 0
     }
 }

@@ -49,9 +49,7 @@ final class CPUDetector {
         timer = nil
     }
     
-    deinit {
-        self.stopMonitoring()
-    }
+    deinit { self.stopMonitoring() }
     
     @objc private func checkForCPU() {
         if let cpuUsageMeasurement = self.samplePercent() {

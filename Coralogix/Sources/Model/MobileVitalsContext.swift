@@ -22,7 +22,9 @@ struct MobileVitalsContext {
     func getMobileVitalsDictionary() -> [String: Any] {
         var result = [String: Any]()
         result[Keys.type.rawValue] = self.mobileVitalsType
-        result[Keys.value.rawValue] = self.mobileVitalsValue
+        if let doubleValue = Double(self.mobileVitalsValue) {
+            result[Keys.value.rawValue] = doubleValue
+        }
         if let uuid = self.mobileVitalsUuid, !uuid.isEmpty {
             result[Keys.mobileVitalsUuid.rawValue] = uuid
         }
