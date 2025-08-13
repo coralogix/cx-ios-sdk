@@ -50,8 +50,7 @@ final class CPUDetector {
     }
     
     deinit {
-        // Defensive: ensure it’s cleaned up if the owner forgets to call stop.
-        timer?.invalidate()
+        self.stopMonitoring()
     }
     
     @objc private func checkForCPU() {
