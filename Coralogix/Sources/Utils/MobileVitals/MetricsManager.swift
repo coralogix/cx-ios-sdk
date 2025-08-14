@@ -20,6 +20,7 @@ public class MetricsManager {
     var anrDetector: ANRDetector?
     var cpuDetector: CPUDetector?
     var memoryDetector: MemoryDetector?
+    var slowFrozenFramesDetector: SlowFrozenFramesDetector?
     var fpsTrigger = FPSTrigger()
     let mobileVitalsFPSSamplingRate = 300 // 5 min
     var warmMetricIsActive = false
@@ -102,6 +103,7 @@ public class MetricsManager {
         self.startANRMonitoring()
         self.startCPUMonitoring()
         self.startMemoryMonitoring()
+        self.startSlowFrozenFramesMonitoring()
         self.startFPSSamplingMonitoring(mobileVitalsFPSSamplingRate: mobileVitalsFPSSamplingRate)
     }
     
@@ -126,6 +128,13 @@ public class MetricsManager {
         let detector = MemoryDetector()
         detector.startMonitoring()
         self.memoryDetector = detector
+    }
+    
+    func startSlowFrozenFramesMonitoring() {
+        guard slowFrozenFramesDetector == nil else { return }
+        let detector = SlowFrozenFramesDetector()
+        detector.startMonitoring()
+        self.slowFrozenFramesDetector = detector
     }
     
     @objc func handleNotification(notification: Notification) {
@@ -205,6 +214,8 @@ public class MetricsManager {
         cpuDetector = nil
         memoryDetector?.stopMonitoring()
         memoryDetector = nil
+        slowFrozenFramesDetector?.stopMonitoring()
+        slowFrozenFramesDetector = nil
         fpsTrigger.stopMonitoring()
     }
     
