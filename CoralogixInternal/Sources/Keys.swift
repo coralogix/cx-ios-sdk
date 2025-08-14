@@ -188,6 +188,7 @@ public enum Keys: String {
     case queueMediaInput = "com.coralogix.mediainput"
     case queueSpanProcessingQueue = "com.coralogix.spanProcessingQueue"
     case queueViewManagerQueue = "com.coralogix.viewManagerQueue"
+    case queueSlowFrozenReporterQueue = "com.coralogix.vitals.slowfrozen.reporter"
     case undefined = ""
     case cxforward
     case enable
