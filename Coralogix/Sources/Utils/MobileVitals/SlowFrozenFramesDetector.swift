@@ -115,9 +115,9 @@ final class SlowFrozenFramesDetector {
             frameSamples += 1
             let allowedDeviation = slowBudgetMs * tolerancePercentage
             if dtMs >= frozenThresholdMs {
-                frozenCount &+= 1
+                frozenCount += 1
             } else if dtMs > (slowBudgetMs + allowedDeviation) {
-                slowCount &+= 1
+                slowCount += 1
                 // Log.d("slow frame detected: \(dtMs)")
             }
             statsLock.unlock()
@@ -177,6 +177,8 @@ final class SlowFrozenFramesDetector {
     @objc private func appBecameActive() {
         // Display characteristics may change (external display, ProMotion changes)
         updateRefreshRateAndBudget()
+        // Reset baseline to avoid counting one large idle gap as slow/frozen.
+        lastFrameTimestamp = 0
     }
 
     private func updateRefreshRateAndBudget() {

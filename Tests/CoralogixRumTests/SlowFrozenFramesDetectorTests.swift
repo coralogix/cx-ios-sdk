@@ -9,6 +9,7 @@ import XCTest
 @testable import Coralogix
 
 final class SlowFrozenFramesDetectorTests: XCTestCase {
+    @discardableResult
     private func addObserver(_ handler: @escaping (CXMobileVitals) -> Void) -> NSObjectProtocol {
         NotificationCenter.default.addObserver(
             forName: .cxRumNotificationMetrics,
@@ -41,6 +42,11 @@ final class SlowFrozenFramesDetectorTests: XCTestCase {
             emitted.fulfill()
         }
         
+        defer {
+            monitor.stopMonitoring()
+            NotificationCenter.default.removeObserver(obs)
+        }
+        
         monitor.startMonitoring()
         wait(for: [emitted], timeout: 3.0)
         monitor.stopMonitoring()
@@ -65,6 +71,11 @@ final class SlowFrozenFramesDetectorTests: XCTestCase {
             XCTAssertNotNil(Double(payload.value), "Value should be numeric")
             XCTAssertGreaterThan(Double(payload.value) ?? 0, 0, "Count should be > 0")
             emitted.fulfill()
+        }
+        
+        defer {
+            monitor.stopMonitoring()
+            NotificationCenter.default.removeObserver(obs)
         }
         
         monitor.startMonitoring()
@@ -114,6 +125,11 @@ final class SlowFrozenFramesDetectorTests: XCTestCase {
         // Wait for the first window to emit, then stop and ensure silence
         wait(for: [firstWindow], timeout: 3.0)
         monitor.stopMonitoring()
+        
+        defer {
+            monitor.stopMonitoring()
+            NotificationCenter.default.removeObserver(obs)
+        }
         
         // Give a small grace period to catch stray next-window posts
         wait(for: [noMore], timeout: 0.7)

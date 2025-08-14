@@ -103,7 +103,7 @@ public class MetricsManager {
         self.startANRMonitoring()
         self.startCPUMonitoring()
         self.startMemoryMonitoring()
-        self.startslowFrozenFramesMonitoring()
+        self.startSlowFrozenFramesMonitoring()
         self.startFPSSamplingMonitoring(mobileVitalsFPSSamplingRate: mobileVitalsFPSSamplingRate)
     }
     
@@ -130,7 +130,7 @@ public class MetricsManager {
         self.memoryDetector = detector
     }
     
-    func startslowFrozenFramesMonitoring() {
+    func startSlowFrozenFramesMonitoring() {
         guard slowFrozenFramesDetector == nil else { return }
         let detector = SlowFrozenFramesDetector()
         detector.startMonitoring()
