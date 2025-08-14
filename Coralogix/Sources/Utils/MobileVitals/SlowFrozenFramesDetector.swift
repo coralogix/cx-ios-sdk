@@ -106,6 +106,10 @@ final class SlowFrozenFramesDetector {
 
     // MARK: - Frame callback
     @objc private func onFrame(_ link: CADisplayLink) {
+        guard running else {
+            lastFrameTimestamp = link.timestamp
+            return
+        }
         let ts = link.timestamp // seconds
         if lastFrameTimestamp != 0 {
             let dtMs = (ts - lastFrameTimestamp) * 1000.0
