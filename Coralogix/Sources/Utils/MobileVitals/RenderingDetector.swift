@@ -64,12 +64,12 @@ class FPSTrigger {
         
         // Stop monitoring after 5 seconds and log the average FPS
         DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
-            let averageFPS = Int(self.fpsMonitor.stopMonitoring())
+            let averageFPS = Global.format(self.fpsMonitor.stopMonitoring())
             Log.d("[Metric] Average FPS over 5 seconds: \(averageFPS)")
             
             // send instrumentaion event
             NotificationCenter.default.post(name: .cxRumNotificationMetrics,
-                                            object: CXMobileVitals(type: .fps, value: "\(averageFPS)"))
+                                            object: CXMobileVitals(type: .fps, value: averageFPS))
         }
     }
     
@@ -78,23 +78,6 @@ class FPSTrigger {
         timer = nil
         isRunning = false
     }
-}
-
-enum CXMobileVitalsType: String {
-    case cold
-    case coldJS
-    case warm
-    case warmJS
-    case fps
-    case anr
-    case metricKit
-    case cpuUsagePercent
-    case totalCpuTimeMs
-    case mainThreadCpuTimeMs
-    case residentMemoryMb
-    case memoryUtilizationPercent
-    case slowFramesCount
-    case frozenFramesCount
 }
 
 struct CXMobileVitals {
@@ -106,36 +89,5 @@ struct CXMobileVitals {
         self.type = type
         self.value = value
         self.uuid = uuid
-    }
-}
-
-extension CXMobileVitalsType {
-    var spanAttributes: [String: AttributeValue] {
-        switch self {
-        case .anr:
-            return [
-                Keys.eventType.rawValue: .string(CoralogixEventType.error.rawValue),
-                Keys.source.rawValue: .string(Keys.console.rawValue),
-                Keys.severity.rawValue: .int(CoralogixLogSeverity.error.rawValue)
-            ]
-        default:
-            return [
-                Keys.eventType.rawValue: .string(CoralogixEventType.mobileVitals.rawValue),
-                Keys.severity.rawValue: .int(CoralogixLogSeverity.info.rawValue)
-            ]
-        }
-    }
-    
-    func specificAttributes(for value: String) -> [String: AttributeValue] {
-        switch self {
-        case .anr:
-            return [
-                Keys.errorMessage.rawValue: .string(Keys.anr.rawValue)
-            ]
-        default:
-            return [
-                Keys.mobileVitalsValue.rawValue: .string(value)
-            ]
-        }
     }
 }

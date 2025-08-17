@@ -45,4 +45,5 @@ enum Keys: String {
     case alamofireUploadRequest = "🔌 Upload Alamofire Request"
     case downloadSDWebImage = "🔌 Download SDWebImage"
     case schemaValidation = "Verify schema"
+    case reportMobileVitalsMeasurement = "Report Mobile Vitals Measurement" 
 }

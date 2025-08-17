@@ -23,7 +23,7 @@ struct MobileVitalsContext {
         var result = [String: Any]()
         result[Keys.type.rawValue] = self.mobileVitalsType
         if let doubleValue = Double(self.mobileVitalsValue) {
-            result[Keys.value.rawValue] = doubleValue
+            result[Keys.value.rawValue] = Global.format(doubleValue)
         }
         if let uuid = self.mobileVitalsUuid, !uuid.isEmpty {
             result[Keys.mobileVitalsUuid.rawValue] = uuid

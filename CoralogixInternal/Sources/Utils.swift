@@ -154,6 +154,10 @@ public enum Global: String {
         return false
     }
     
+    public static func format(_ v: Double) -> String {
+         String(format: "%.2f", locale: Locale(identifier: "en_US_POSIX"), v)
+    }
+    
     public static func isEmulator() -> Bool {
 #if targetEnvironment(simulator)
         // Code to execute on the Simulator

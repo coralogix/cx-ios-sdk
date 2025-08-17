@@ -271,9 +271,23 @@ public class CoralogixRum {
         self.coralogixExporter?.sendBeforeSendData(data: data)
     }
     
-    public func recordFirstFrameTime(params: [String: Any]) {
-        if let cxMobileVitals = self.metricsManager.getCXMobileVitals(params: params) {
-            NotificationCenter.default.post(name: .cxRumNotificationMetrics, object: cxMobileVitals)
+    public func reportMobileVitalsMeasurement(type: String, value: [String: Double]) {
+        if CoralogixRum.isInitialized {
+            if (CoralogixRum.mobileSDK.sdkFramework.isNative) { return }
+                
+            let uuid = (value.count > 1) ? UUID().uuidString.lowercased() : nil
+            let post: (CXMobileVitalsType, Double) -> Void = { type, value in
+                let payload = CXMobileVitals(type: type, value: Global.format(value), uuid: uuid)
+                if Thread.isMainThread {
+                    NotificationCenter.default.post(name: .cxRumNotificationMetrics, object: payload)
+                } else {
+                    DispatchQueue.main.async {
+                        NotificationCenter.default.post(name: .cxRumNotificationMetrics, object: payload)
+                    }
+                }
+            }
+            
+            value.forEach { post(CXMobileVitalsType(from: $0), $1) }
         }
     }
     
@@ -285,7 +299,7 @@ public class CoralogixRum {
         span.setAttribute(key: Keys.environment.rawValue, value: options?.environment ?? "")
     }
     
-    func displayCoralogixWord() {
+    public func displayCoralogixWord() {
         let coralogixText = "[CORALOGIX]\nVerion: \(Global.sdk.rawValue) \nSwift Verion: \(Global.swiftVersion.rawValue) \nSupport iOS, tvOS\n\n\n"
         print(coralogixText)
     }

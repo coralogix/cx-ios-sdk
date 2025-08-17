@@ -49,7 +49,7 @@ extension CoralogixRum {
     
     private func handleMobileVitals(_ cxMobileVitals: CXMobileVitals) {
         let span = self.getSpan(for: cxMobileVitals)
-        span.setAttribute(key: Keys.mobileVitalsType.rawValue, value: cxMobileVitals.type.rawValue)
+        span.setAttribute(key: Keys.mobileVitalsType.rawValue, value: cxMobileVitals.type.stringValue)
         
         for (key, value) in cxMobileVitals.type.specificAttributes(for: cxMobileVitals.value) {
             span.setAttribute(key: key, value: value)

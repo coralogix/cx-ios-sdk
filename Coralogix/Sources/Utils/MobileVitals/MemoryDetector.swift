@@ -83,13 +83,9 @@ final class MemoryDetector {
             (.residentMemoryMb, m.footprintMB),
             (.memoryUtilizationPercent, m.utilizationPercent)
         ]
-
-        func format(_ v: Double, decimals: Int = 3) -> String {
-            String(format: "%.\(decimals)f", locale: Locale(identifier: "en_US_POSIX"), v)
-        }
-
+        
         let post: (CXMobileVitalsType, Double) -> Void = { type, value in
-            let payload = CXMobileVitals(type: type, value: format(value, decimals: type == .residentMemoryMb ? 1 : 2), uuid: uuid)
+            let payload = CXMobileVitals(type: type, value: Global.format(value), uuid: uuid)
             if Thread.isMainThread {
                 NotificationCenter.default.post(name: .cxRumNotificationMetrics, object: payload)
             } else {

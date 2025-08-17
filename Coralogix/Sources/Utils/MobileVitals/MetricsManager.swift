@@ -91,12 +91,12 @@ public class MetricsManager {
             let warmStartDurationInMilliseconds = warmStartDuration * 1000
             
             // Convert to an integer if you want to remove the decimal part
-            let millisecondsRounded = Int(warmStartDurationInMilliseconds)
+            let millisecondsRounded =  Global.format(warmStartDurationInMilliseconds)
             Log.d("[Metric] Warm start duration: \(millisecondsRounded) milliseconds")
             
             // send instrumentaion event
             NotificationCenter.default.post(name: .cxRumNotificationMetrics,
-                                            object: CXMobileVitals(type: .warm, value: "\(millisecondsRounded)"))
+                                            object: CXMobileVitals(type: .warm, value: millisecondsRounded))
         }
         
         // Resume mobile vitals monitoring
@@ -140,12 +140,12 @@ public class MetricsManager {
     @objc func handleNotification(notification: Notification) {
         if let metrics = notification.object as? [String: Any] {
             if let launchStartTime = self.launchStartTime,
-               let launchEndTime = metrics[CXMobileVitalsType.cold.rawValue] as? CFAbsoluteTime,
+               let launchEndTime = metrics[CXMobileVitalsType.cold.stringValue] as? CFAbsoluteTime,
                self.launchEndTime == nil {
                 self.launchEndTime = launchEndTime
                 let epochStartTime = Helper.convertCFAbsoluteTimeToEpoch(launchStartTime)
                 let epochEndTime = Helper.convertCFAbsoluteTimeToEpoch(launchEndTime)
-                let millisecondsRounded = self.calculateTime(start: epochStartTime, stop: epochEndTime)
+                let millisecondsRounded = Global.format(self.calculateTime(start: epochStartTime, stop: epochEndTime))
 
                 NotificationCenter.default.post(name: .cxRumNotificationMetrics,
                                                 object: CXMobileVitals(type: .cold, value: "\(millisecondsRounded)"))
@@ -153,35 +153,16 @@ public class MetricsManager {
         }
     }
     
-    func calculateTime(start: Double, stop: Double) -> Int {
+    func calculateTime(start: Double, stop: Double) -> Double {
         let coldStartDurationInSeconds = stop - start
         let coldStartDurationInMilliseconds = coldStartDurationInSeconds
-        return Int(coldStartDurationInMilliseconds)
-    }
-    
-    internal func getCXMobileVitals(params: [String: Any]) -> CXMobileVitals? {
-        let handlers: [CXMobileVitalsType: ([String: Any]) -> CXMobileVitals?] = [
-            .cold: getColdTime,
-            .coldJS: getColdTime,
-            .warm: getWarmTime,
-            .warmJS: getWarmTime
-        ]
-        
-        if let match = handlers.first(where: { params.keys.contains($0.key.rawValue) }) {
-            return match.value(params)
-        }
-        return nil
+        return coldStartDurationInMilliseconds
     }
     
     internal func getWarmTime(params: [String: Any]) -> CXMobileVitals? {
-        if let warmTime = params[CXMobileVitalsType.warm.rawValue] as? Double {
-            let roundedTime = Int(warmTime)
+        if let warmTime = params[CXMobileVitalsType.warm.stringValue] as? Double {
+            let roundedTime = Global.format(warmTime)
             return CXMobileVitals(type: .warm, value: "\(roundedTime)")
-        }
-        
-        if let warmJsTime = params[CXMobileVitalsType.warmJS.rawValue] as? Double {
-            let roundedTime = Int(warmJsTime)
-            return CXMobileVitals(type: .warmJS, value: "\(roundedTime)")
         }
         
         return nil
@@ -194,14 +175,9 @@ public class MetricsManager {
         
         let launchStartTime = Helper.convertCFAbsoluteTimeToEpoch(startTime)
 
-        if let nativeLaunchEnd = params[CXMobileVitalsType.cold.rawValue] as? Double {
-            let durationMs = calculateTime(start: launchStartTime, stop: nativeLaunchEnd)
-            return CXMobileVitals(type: .cold, value: "\(durationMs)")
-        }
-        
-        if let coldJsTimestamp = params[CXMobileVitalsType.coldJS.rawValue] as? Double {
-            let durationMs = calculateTime(start: launchStartTime, stop: coldJsTimestamp)
-            return CXMobileVitals(type: .coldJS, value: "\(durationMs)")
+        if let nativeLaunchEnd = params[CXMobileVitalsType.cold.stringValue] as? Double {
+            let durationMs = Global.format(calculateTime(start: launchStartTime, stop: nativeLaunchEnd))
+            return CXMobileVitals(type: .cold, value: durationMs)
         }
         
         return nil

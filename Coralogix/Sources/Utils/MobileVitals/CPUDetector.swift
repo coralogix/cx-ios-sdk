@@ -97,12 +97,8 @@ final class CPUDetector {
             (.mainThreadCpuTimeMs, cpu.mainThreadTimeMs)
         ]
         
-        func format(_ v: Double, decimals: Int = 3) -> String {
-            String(format: "%.\(decimals)f", locale: Locale(identifier: "en_US_POSIX"), v)
-        }
-        
         let postMetric: (CXMobileVitalsType, Double) -> Void = { type, value in
-            let payload = CXMobileVitals(type: type, value: format(value), uuid: uuid)
+            let payload = CXMobileVitals(type: type, value: Global.format(value), uuid: uuid)
             if Thread.isMainThread {
                 NotificationCenter.default.post(name: .cxRumNotificationMetrics, object: payload)
             } else {

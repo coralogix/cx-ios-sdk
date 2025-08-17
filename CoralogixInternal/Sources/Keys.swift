@@ -200,6 +200,17 @@ public enum Keys: String {
     case metricKitLog = "metricKit log"
     case idle
     case active
+    case cold
+    case warm
+    case anrValue = "anr"
+    case cpuUsagePercent
+    case totalCpuTimeMs
+    case mainThreadCpuTimeMs
+    case residentMemoryMb
+    case memoryUtilizationPercent
+    case slowFramesCount
+    case frozenFramesCount
+    case metricKit
 }
 
 public enum CoralogixLogSeverity: Int {
