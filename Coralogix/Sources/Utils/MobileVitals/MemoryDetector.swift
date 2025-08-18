@@ -79,13 +79,17 @@ final class MemoryDetector {
     private func reportMemory(_ m: MemoryMeasurement) {
         let uuid = UUID().uuidString.lowercased()
 
-        let metrics: [(CXMobileVitalsType, Double)] = [
-            (.residentMemoryMb, m.footprintMB),
-            (.memoryUtilizationPercent, m.utilizationPercent)
+        let metrics: [(MobileVitalsType, Double, MeasurementUnits)] = [
+            (.residentMemory, m.footprintMB, .megaBytes),
+            (.memoryUtilization, m.utilizationPercent, .percentage)
         ]
-        
-        let post: (CXMobileVitalsType, Double) -> Void = { type, value in
-            let payload = CXMobileVitals(type: type, value: Global.format(value), uuid: uuid)
+
+        for (type, value, units) in metrics {
+            let payload = MobileVitals(type: type,
+                                       name: type.stringValue,
+                                       value: value,
+                                       units: units,
+                                       uuid: uuid)
             if Thread.isMainThread {
                 NotificationCenter.default.post(name: .cxRumNotificationMetrics, object: payload)
             } else {
@@ -94,8 +98,6 @@ final class MemoryDetector {
                 }
             }
         }
-
-        metrics.forEach { post($0.0, $0.1) }
     }
 }
 

@@ -174,7 +174,7 @@ extension UIViewController {
             updateCoralogixRum(window: self.getWindow(), state: .notifyOnAppear)
             
             NotificationCenter.default.post(name: .cxViewDidAppear,
-                                            object: [CXMobileVitalsType.cold.stringValue: CFAbsoluteTimeGetCurrent()])
+                                            object: [MobileVitalsType.cold.stringValue: CFAbsoluteTimeGetCurrent()])
             // Call the original viewDidAppear
             cx_viewDidAppear(animated)
         }

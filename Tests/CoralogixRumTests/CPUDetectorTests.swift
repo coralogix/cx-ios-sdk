@@ -37,7 +37,7 @@ final class CPUDetectorTests: XCTestCase {
         
         // Storage for first observed tick, keyed by uuid
         var firstTickUUID: String?
-        var receivedTypes = Set<CXMobileVitalsType>()
+        var receivedTypes = Set<MobileVitalsType>()
         var receivedCount = 0
         
         let obs = NotificationCenter.default.addObserver(
@@ -45,7 +45,7 @@ final class CPUDetectorTests: XCTestCase {
             object: nil,
             queue: .main
         ) { note in
-            guard let payload = note.object as? CXMobileVitals else { return }
+            guard let payload = note.object as? MobileVitals else { return }
             
             // 1) For the first tick, remember UUID; subsequent notifications must match it
             if firstTickUUID == nil {
@@ -92,7 +92,7 @@ final class CPUDetectorTests: XCTestCase {
         noFurther.isInverted = true // We expect NOT to be fulfilled
         
         var firstTickUUID: String?
-        var receivedTypes = Set<CXMobileVitalsType>()
+        var receivedTypes = Set<MobileVitalsType>()
         var totalNotificationsAfterStop = 0
         
         let obs = NotificationCenter.default.addObserver(
@@ -100,7 +100,7 @@ final class CPUDetectorTests: XCTestCase {
             object: nil,
             queue: .main
         ) { note in
-            guard let payload = note.object as? CXMobileVitals else { return }
+            guard let payload = note.object as? MobileVitals else { return }
             
             if firstTickUUID == nil {
                 firstTickUUID = payload.uuid

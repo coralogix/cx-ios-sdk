@@ -10,13 +10,13 @@ import XCTest
 
 final class SlowFrozenFramesDetectorTests: XCTestCase {
     @discardableResult
-    private func addObserver(_ handler: @escaping (CXMobileVitals) -> Void) -> NSObjectProtocol {
+    private func addObserver(_ handler: @escaping (MobileVitals) -> Void) -> NSObjectProtocol {
         NotificationCenter.default.addObserver(
             forName: .cxRumNotificationMetrics,
             object: nil,
             queue: .main
         ) { note in
-            guard let payload = note.object as? CXMobileVitals else { return }
+            guard let payload = note.object as? MobileVitals else { return }
             handler(payload)
         }
     }
@@ -98,7 +98,7 @@ final class SlowFrozenFramesDetectorTests: XCTestCase {
         )
         
         var firstUUID: String?
-        var windowTypes = Set<CXMobileVitalsType>()
+        var windowTypes = Set<MobileVitalsType>()
         var sawNewUUIDAfterStop = false
         
         let obs = addObserver { payload in

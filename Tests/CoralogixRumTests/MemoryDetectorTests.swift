@@ -46,14 +46,14 @@ final class MemoryDetectorTests: XCTestCase {
         let tickCompleted = expectation(description: "Received two memory metrics of the same tick (same UUID)")
         
         var firstTickUUID: String?
-        var receivedTypes = Set<CXMobileVitalsType>()
+        var receivedTypes = Set<MobileVitalsType>()
         
         let obs = NotificationCenter.default.addObserver(
             forName: .cxRumNotificationMetrics,
             object: nil,
             queue: .main
         ) { note in
-            guard let payload = note.object as? CXMobileVitals else { return }
+            guard let payload = note.object as? MobileVitals else { return }
             
             // Remember uuid for the first metric; subsequent metrics must match it
             if firstTickUUID == nil {
@@ -92,7 +92,7 @@ final class MemoryDetectorTests: XCTestCase {
         noFurther.isInverted = true // We expect NOT to receive more
         
         var firstTickUUID: String?
-        var receivedTypes = Set<CXMobileVitalsType>()
+        var receivedTypes = Set<MobileVitalsType>()
         var sawAnotherTick = false
         
         let obs = NotificationCenter.default.addObserver(
@@ -100,7 +100,7 @@ final class MemoryDetectorTests: XCTestCase {
             object: nil,
             queue: .main
         ) { note in
-            guard let payload = note.object as? CXMobileVitals else { return }
+            guard let payload = note.object as? MobileVitals else { return }
             
             if firstTickUUID == nil {
                 firstTickUUID = payload.uuid

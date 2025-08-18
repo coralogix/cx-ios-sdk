@@ -58,7 +58,7 @@ final class FPSTriggerTests: XCTestCase {
         // Expectation for receiving the notification
         _ = expectation(forNotification: .cxRumNotificationMetrics, object: nil, handler: { notification in
             // Validate that the notification contains the expected FPS value
-            if let vitals = notification.object as? CXMobileVitals, vitals.type == .fps {
+            if let vitals = notification.object as? MobileVitals, vitals.type == .fps {
                 XCTAssertNotNil(vitals.value, "Notification should contain FPS value")
                 XCTAssertEqual(vitals.value, "60", "Expected FPS value should be '60'")
                 return true
@@ -73,7 +73,7 @@ final class FPSTriggerTests: XCTestCase {
         // Simulate that FPS monitoring starts and posts the notification immediately, skipping the actual 5 seconds wait
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             NotificationCenter.default.post(name: .cxRumNotificationMetrics,
-                                            object: CXMobileVitals(type: .fps, value: "60"))
+                                            object: MobileVitals(type: .fps, value: "60"))
         }
         
         // Wait for expectations with a longer timeout to avoid race conditions

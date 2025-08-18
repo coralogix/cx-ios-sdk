@@ -59,6 +59,8 @@ class ANRDetector {
         Log.d("[Metric] ANR detected: Main thread unresponsive for more than \(maxBlockTime) seconds")
         // send instrumentaion event
         NotificationCenter.default.post(name: .cxRumNotificationMetrics,
-                                        object: CXMobileVitals(type: .anr, value: ""))
+                                        object: MobileVitals(type: .anr,
+                                                             value: 0.0,
+                                                             units:MeasurementUnits(from: "")))
     }
 }

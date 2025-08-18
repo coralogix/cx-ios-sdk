@@ -64,12 +64,12 @@ class FPSTrigger {
         
         // Stop monitoring after 5 seconds and log the average FPS
         DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
-            let averageFPS = Global.format(self.fpsMonitor.stopMonitoring())
+            let averageFPS = self.fpsMonitor.stopMonitoring()
             Log.d("[Metric] Average FPS over 5 seconds: \(averageFPS)")
             
             // send instrumentaion event
             NotificationCenter.default.post(name: .cxRumNotificationMetrics,
-                                            object: CXMobileVitals(type: .fps, value: averageFPS))
+                                            object: MobileVitals(type: .fps, value: averageFPS, units: .fps))
         }
     }
     
@@ -80,14 +80,22 @@ class FPSTrigger {
     }
 }
 
-struct CXMobileVitals {
-    let type: CXMobileVitalsType
-    let value: String
+struct MobileVitals {
+    let type: MobileVitalsType
+    let name: String?
+    let value: Double
     let uuid: String?
+    let units: MeasurementUnits
     
-    init(type: CXMobileVitalsType, value: String, uuid: String? = nil) {
+    init(type: MobileVitalsType,
+         name: String? = nil,
+         value: Double,
+         units: MeasurementUnits,
+         uuid: String? = nil) {
         self.type = type
+        self.name = name
         self.value = value
+        self.units = units
         self.uuid = uuid
     }
 }

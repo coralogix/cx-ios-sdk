@@ -156,10 +156,12 @@ final class SlowFrozenFramesDetector {
         let uuid = UUID().uuidString.lowercased()
 
         // Post two metrics with same UUID (mirrors Android grouped emission)
-        func post(type: CXMobileVitalsType, value: Double) {
-            let payload = CXMobileVitals(
+        func post(type: MobileVitalsType, value: Double, units: MeasurementUnits) {
+            let payload = MobileVitals(
                 type: type,
-                value: String(format: "%.0f", value), // counts are integers
+                name: type.stringValue,
+                value: value,
+                units: units,
                 uuid: uuid
             )
             if Thread.isMainThread {
@@ -171,8 +173,8 @@ final class SlowFrozenFramesDetector {
             }
         }
 
-        if slow > 0 { post(type: .slowFramesCount, value: Double(slow)) }
-        if frozen > 0 { post(type: .frozenFramesCount, value: Double(frozen)) }
+        if slow > 0 { post(type: .slowFrames, value: Double(slow), units: .count) }
+        if frozen > 0 { post(type: .frozenFrames, value: Double(frozen), units: .count) }
 
         Log.d("[Metric] avg frame: \(String(format: "%.2f", avg))ms from \(samples) samples, slow: \(slow), frozen: \(frozen), budget: \(String(format: "%.2f", slowBudgetMs))ms")
     }

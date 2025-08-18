@@ -21,7 +21,7 @@ public class CoralogixRum {
     internal var sessionManager: SessionManager?
     internal var sessionInstrumentation: URLSessionInstrumentation?
     internal var metricsManager = MetricsManager()
-
+    
     internal var tracerProvider: () -> Tracer = {
         return OpenTelemetry.instance.tracerProvider.get(
             instrumentationName: Keys.iosSdk.rawValue,
@@ -40,7 +40,7 @@ public class CoralogixRum {
         Log.isDebug = options.debug
         self.sessionManager = sessionManager
         self.displayCoralogixWord()
-
+        
         if options.sdkSampler.shouldInitialized() == false {
             Log.e("Initialization skipped due to sample rate.")
             return
@@ -62,20 +62,20 @@ public class CoralogixRum {
     
     private func removeLifeCycleNotification() {
         NotificationCenter.default.removeObserver(self,
-                                            name: UIApplication.didFinishLaunchingNotification,
-                                            object: nil)
+                                                  name: UIApplication.didFinishLaunchingNotification,
+                                                  object: nil)
         NotificationCenter.default.removeObserver(self,
-                                            name: UIApplication.didBecomeActiveNotification,
-                                            object: nil)
+                                                  name: UIApplication.didBecomeActiveNotification,
+                                                  object: nil)
         NotificationCenter.default.removeObserver(self,
-                                            name: UIApplication.didEnterBackgroundNotification,
-                                            object: nil)
+                                                  name: UIApplication.didEnterBackgroundNotification,
+                                                  object: nil)
         NotificationCenter.default.removeObserver(self,
-                                            name: UIApplication.willTerminateNotification,
-                                            object: nil)
+                                                  name: UIApplication.willTerminateNotification,
+                                                  object: nil)
         NotificationCenter.default.removeObserver(self,
-                                            name: UIApplication.didReceiveMemoryWarningNotification,
-                                            object: nil)
+                                                  name: UIApplication.didReceiveMemoryWarningNotification,
+                                                  object: nil)
     }
     
     private func startup(options: CoralogixExporterOptions) {
@@ -85,7 +85,7 @@ public class CoralogixRum {
         }
         
         Log.isDebug = options.debug
-
+        
         self.setupCoreModules(options: options)
         self.setupExporter(sessionManager: sessionManager, options: options)
         self.setupTracer(applicationName: options.application)
@@ -104,9 +104,9 @@ public class CoralogixRum {
             (.mobileVitals, self.initializeMobileVitalsInstrumentation),
             (.anr, self.initializeMobileVitalsInstrumentation)
         ]
-
+        
         for (type, initializer) in instrumentationMap
-            where options.shouldInitInstrumentation(instrumentation: type) {
+        where options.shouldInitInstrumentation(instrumentation: type) {
             initializer()
         }
     }
@@ -116,28 +116,28 @@ public class CoralogixRum {
             Log.e("Failed to setup tracer: coralogixExporter is nil")
             return
         }
-
+        
         let resource = Resource(attributes: [
             ResourceAttributes.serviceName.rawValue: .string(applicationName)
         ])
-
+        
         let spanProcessor = BatchSpanProcessor(
             spanExporter: exporter,
             scheduleDelay: Double(Global.BatchSpan.scheduleDelay.rawValue),
             maxExportBatchSize: Global.BatchSpan.maxExportBatchSize.rawValue
         )
-
+        
         let tracerProvider = TracerProviderBuilder()
             .with(resource: resource)
             .add(spanProcessor: spanProcessor)
             .build()
-
+        
         OpenTelemetry.registerTracerProvider(tracerProvider: tracerProvider)
     }
-
+    
     private func initialzeMetricsManager(options: CoralogixExporterOptions) {
         self.metricsManager.addObservers()
-
+        
         if options.shouldInitInstrumentation(instrumentation: .mobileVitals) {
             self.metricsManager.startFPSSamplingMonitoring(mobileVitalsFPSSamplingRate: options.mobileVitalsFPSSamplingRate)
             self.metricsManager.startColdStartMonitoring()
@@ -258,7 +258,7 @@ public class CoralogixRum {
     public func isInitialized() -> Bool {
         return CoralogixRum.isInitialized
     }
-
+    
     public func getSessionId() -> String? {
         return self.sessionManager?.getSessionMetadata()?.sessionId
     }
@@ -271,13 +271,17 @@ public class CoralogixRum {
         self.coralogixExporter?.sendBeforeSendData(data: data)
     }
     
-    public func reportMobileVitalsMeasurement(type: String, value: [String: Double]) {
+    public func reportMobileVitalsMeasurement(type: String, metrics: [HybridMetric]) {
         if CoralogixRum.isInitialized {
             if (CoralogixRum.mobileSDK.sdkFramework.isNative) { return }
-                
-            let uuid = (value.count > 1) ? UUID().uuidString.lowercased() : nil
-            let post: (CXMobileVitalsType, Double) -> Void = { type, value in
-                let payload = CXMobileVitals(type: type, value: Global.format(value), uuid: uuid)
+            
+            let uuid = UUID().uuidString.lowercased()
+            metrics.forEach { element in
+                let payload = MobileVitals(type: MobileVitalsType(from: type),
+                                           name: element.name,
+                                           value: element.value,
+                                           units: MeasurementUnits(from: element.units),
+                                           uuid: uuid)
                 if Thread.isMainThread {
                     NotificationCenter.default.post(name: .cxRumNotificationMetrics, object: payload)
                 } else {
@@ -286,8 +290,24 @@ public class CoralogixRum {
                     }
                 }
             }
+        }
+    }
+    
+    public func reportMobileVitalsMeasurement(type: String, value: Double, units: String) {
+        if CoralogixRum.isInitialized {
+            if (CoralogixRum.mobileSDK.sdkFramework.isNative) { return }
             
-            value.forEach { post(CXMobileVitalsType(from: $0), $1) }
+            let payload = MobileVitals(type: MobileVitalsType(from: type),
+                                       name: type,
+                                       value: value,
+                                       units: MeasurementUnits(from: units))
+            if Thread.isMainThread {
+                NotificationCenter.default.post(name: .cxRumNotificationMetrics, object: payload)
+            } else {
+                DispatchQueue.main.async {
+                    NotificationCenter.default.post(name: .cxRumNotificationMetrics, object: payload)
+                }
+            }
         }
     }
     
@@ -300,7 +320,11 @@ public class CoralogixRum {
     }
     
     public func displayCoralogixWord() {
-        let coralogixText = "[CORALOGIX]\nVerion: \(Global.sdk.rawValue) \nSwift Verion: \(Global.swiftVersion.rawValue) \nSupport iOS, tvOS\n\n\n"
+        let coralogixText = "[CORALOGIX]\nVersion: \(Global.sdk.rawValue) \nSwift Version: \(Global.swiftVersion.rawValue) \nSupport iOS, tvOS\n\n\n"
         print(coralogixText)
+        
+        if !CoralogixRum.mobileSDK.sdkFramework.isNative {
+            print("[CORALOGIX]\nHybrid Version: \(CoralogixRum.mobileSDK.sdkFramework.version)")
+        }
     }
 }

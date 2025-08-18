@@ -713,7 +713,7 @@ final class CoralogixRumTests: XCTestCase {
             XCTAssertEqual(captures.count, 1)
             let c = captures[0]
             // type resolved from key
-            XCTAssertEqual(c.type, CXMobileVitalsType(from: "residentMemoryMb"))
+            XCTAssertEqual(c.type, MobileVitalsType(from: "residentMemoryMb"))
             // value formatted the same way production does
             XCTAssertEqual(c.value, Global.format(123.456))
             // single metric → uuid should be nil
@@ -849,10 +849,10 @@ final class CoralogixRumTests: XCTestCase {
     
     private func observeMetrics(expect count: Int,
                                 fulfillOn queue: DispatchQueue = .main,
-                                handler: @escaping ([CXMobileVitals]) -> Void) -> XCTestExpectation {
+                                handler: @escaping ([MobileVitals]) -> Void) -> XCTestExpectation {
         
         let exp = expectation(description: "Expect \(count) cxRumNotificationMetrics")
-        var cxMobileVitals: [CXMobileVitals] = []
+        var mobileVitals: [MobileVitals] = []
         var fulfilled = false
         var token: NSObjectProtocol!  // declare before use
 
@@ -861,17 +861,17 @@ final class CoralogixRumTests: XCTestCase {
             object: nil,
             queue: nil // receive on poster thread; we’ll bounce to main if needed
         ) { note in
-            guard let payload = note.object as? CXMobileVitals else { return }
+            guard let payload = note.object as? MobileVitals else { return }
             
             // Capture on the caller’s chosen queue
             let enqueue = {
                 // Stop if we already fulfilled (extra notifications can still arrive later)
                 if fulfilled { return }
                 
-                cxMobileVitals.append(payload)
+                mobileVitals.append(payload)
                 
                 // Fulfill ONCE when we’ve received the amount we expected
-                if cxMobileVitals.count == count {
+                if mobileVitals.count == count {
                     fulfilled = true
                     // Remove observer immediately to prevent further calls
                     NotificationCenter.default.removeObserver(token)
@@ -879,7 +879,7 @@ final class CoralogixRumTests: XCTestCase {
                     
                     // hand off collected payloads and fulfill
                     queue.async {
-                        handler(cxMobileVitals)
+                        handler(mobileVitals)
                         exp.fulfill()
                     }
                 }

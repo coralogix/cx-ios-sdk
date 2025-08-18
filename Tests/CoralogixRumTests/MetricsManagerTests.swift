@@ -61,7 +61,7 @@ final class MetricsManagerTests: XCTestCase {
         metricsManager.launchStartTime = CFAbsoluteTimeGetCurrent() - 2.0  // Simulate 2 seconds ago
         
         // Prepare a notification with the coldEnd metric
-        let notification = Notification(name: .cxRumNotificationMetrics, object: [CXMobileVitalsType.cold.stringValue: CFAbsoluteTimeGetCurrent()])
+        let notification = Notification(name: .cxRumNotificationMetrics, object: [MobileVitalsType.cold.stringValue: CFAbsoluteTimeGetCurrent()])
         
         // Handle the notification
         metricsManager.handleNotification(notification: notification)
@@ -95,7 +95,7 @@ final class MetricsManagerTests: XCTestCase {
         let warmTimestamp: Double = 1234567890.00
         
         let params: [String: Any] = [
-            CXMobileVitalsType.warm.stringValue: warmTimestamp
+            MobileVitalsType.warm.stringValue: warmTimestamp
         ]
         
         let result = metricsManager.getWarmTime(params: params)
@@ -113,7 +113,7 @@ final class MetricsManagerTests: XCTestCase {
         let endMs = Helper.convertCFAbsoluteTimeToEpoch(endTime)
 
         let params: [String: Any] = [
-            CXMobileVitalsType.cold.stringValue: endMs
+            MobileVitalsType.cold.stringValue: endMs
         ]
         
         let result = metricsManager.getColdTime(params: params)
