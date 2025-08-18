@@ -24,7 +24,9 @@ extension CoralogixRum {
         
         switch mobileVitals.type {
         case .metricKit:
-            handleMetricKit("\(mobileVitals.value)")
+            if let metric = mobileVitals.name as? String {
+                handleMetricKit(metric)
+            }
         default:
             handleMobileVitals(mobileVitals)
         }
@@ -56,7 +58,7 @@ extension CoralogixRum {
         }
         
         if let name = mobileVitals.name, !name.isEmpty {
-            span.setAttribute(key: Keys.mobileVitalsName.rawValue, value: name)
+            span.setAttribute(key: Keys.name.rawValue, value: name)
         }
         
         span.setAttribute(key: Keys.mobileVitalsUnits.rawValue, value: mobileVitals.units.stringValue)

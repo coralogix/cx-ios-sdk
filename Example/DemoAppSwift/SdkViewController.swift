@@ -70,8 +70,7 @@ class SdkViewController: UITableViewController {
         } else if item == Keys.updateLabels.rawValue {
             CoralogixRumManager.shared.sdk.setLabels(labels: ["item3" : "playstation 4", "itemPrice" : 400])
         } else if item == Keys.reportMobileVitalsMeasurement.rawValue {
-            CoralogixRumManager.shared.sdk.reportMobileVitalsMeasurement(type: "custom metric",
-                                                                         value: ["high": 10.0, "low": 2.0])
+            CoralogixRumManager.shared.sdk.reportMobileVitalsMeasurement(type: "custom metric", value: 10.0, units: "ms")
         }
         tableView.deselectRow(at: indexPath, animated: true)
     }
