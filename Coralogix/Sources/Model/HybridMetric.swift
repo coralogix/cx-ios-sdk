@@ -8,7 +8,13 @@
 import Foundation
 
 public struct HybridMetric {
-    let name: String
-    let value: Double
-    let units: String
+    public let name: String
+    public let value: Double
+    public let units: String
+    
+    public init(name: String, value: Double, units: String) {
+        self.name = name
+        self.value = value
+        self.units = units
+    }
 }

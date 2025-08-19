@@ -158,7 +158,7 @@ public class MetricsManager {
     
     func calculateTime(start: Double, stop: Double) -> Double {
         let coldStartDurationInSeconds = stop - start
-        let coldStartDurationInMilliseconds = coldStartDurationInSeconds
+        let coldStartDurationInMilliseconds = coldStartDurationInSeconds * 1000
         return coldStartDurationInMilliseconds
     }
     
