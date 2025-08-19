@@ -79,23 +79,3 @@ class FPSTrigger {
         isRunning = false
     }
 }
-
-struct MobileVitals {
-    let type: MobileVitalsType
-    let name: String?
-    let value: Double
-    let uuid: String?
-    let units: MeasurementUnits
-    
-    init(type: MobileVitalsType,
-         name: String? = nil,
-         value: Double,
-         units: MeasurementUnits,
-         uuid: String? = nil) {
-        self.type = type
-        self.name = name
-        self.value = value
-        self.units = units
-        self.uuid = uuid
-    }
-}
