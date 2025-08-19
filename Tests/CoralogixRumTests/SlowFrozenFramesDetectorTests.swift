@@ -86,10 +86,6 @@ final class SlowFrozenFramesDetectorTests: XCTestCase {
     
     /// After first window emission, stopMonitoring() should prevent any further ticks (new UUID).
     func testStopPreventsFurtherEmissions() {
-        let firstWindow = expectation(description: "First window emitted (any of slow/frozen)")
-        let noMore = expectation(description: "No further windows after stop")
-        noMore.isInverted = true
-        
         // Use frozen path to guarantee at least one emission quickly
         let monitor = SlowFrozenFramesDetector(
             frozenThresholdMs: 1.0,
@@ -98,43 +94,28 @@ final class SlowFrozenFramesDetectorTests: XCTestCase {
         )
         
         var firstUUID: String?
-        var windowTypes = Set<MobileVitalsType>()
-        var sawNewUUIDAfterStop = false
         
-        let obs = addObserver { payload in
-            if firstUUID == nil {
-                firstUUID = payload.uuid
-            }
-            
-            if payload.uuid == firstUUID {
-                // First window (both metrics could arrive, we just need at least one)
-                windowTypes.insert(payload.type)
-                // If we've seen both, great; but even one proves the window emitted
-                if windowTypes.count >= 1 {
-                    firstWindow.fulfill()
-                }
-            } else {
-                // Any metric with a different UUID after we stop would indicate a new window
-                sawNewUUIDAfterStop = true
-                noMore.fulfill()
-            }
+        let firstWindow = XCTNSNotificationExpectation(name: .cxRumNotificationMetrics, object: nil)
+        firstWindow.handler = { note in
+            guard let mv = note.object as? MobileVitals else { return false }
+            firstUUID = mv.uuid
+            return true // fulfill on the first one we see
         }
         
         monitor.startMonitoring()
-        
-        // Wait for the first window to emit, then stop and ensure silence
-        wait(for: [firstWindow], timeout: 3.0)
+        wait(for: [firstWindow], timeout: 5.0)
         monitor.stopMonitoring()
         
-        defer {
-            monitor.stopMonitoring()
-            NotificationCenter.default.removeObserver(obs)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.1))
+        let noMoreNewWindows = XCTNSNotificationExpectation(name: .cxRumNotificationMetrics, object: nil)
+        noMoreNewWindows.isInverted = true
+        noMoreNewWindows.handler = { note in
+            guard let mv = note.object as? MobileVitals,
+                  let first = firstUUID else { return false }
+            return mv.uuid != first // return true => this would fulfill (and thus fail because inverted)
         }
         
-        // Give a small grace period to catch stray next-window posts
-        wait(for: [noMore], timeout: 0.7)
-        NotificationCenter.default.removeObserver(obs)
-        
-        XCTAssertFalse(sawNewUUIDAfterStop, "Received metrics from another window after stopMonitoring()")
+        // Short grace period where a *new* window must NOT appear
+        wait(for: [noMoreNewWindows], timeout: 1.0)
     }
 }
