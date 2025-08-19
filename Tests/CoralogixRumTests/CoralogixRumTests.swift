@@ -706,22 +706,22 @@ final class CoralogixRumTests: XCTestCase {
         let coralogixRum = CoralogixRum(options: options, sdkFramework: .reactNative(version: "1.0"))
         
         // We’ll post exactly one metric
-        let value: [String: Double] = ["residentMemoryMb": 123.456]
+        let value = 123.456
         
         // Observe exactly one notification
         let exp = observeMetrics(expect: 1) { captures in
             XCTAssertEqual(captures.count, 1)
             let c = captures[0]
             // type resolved from key
-            XCTAssertEqual(c.type, MobileVitalsType(from: "residentMemoryMb"))
+            XCTAssertEqual(c.type, MobileVitalsType(from: "residentMemory"))
             // value formatted the same way production does
-            XCTAssertEqual(c.value, Global.format(123.456))
+            XCTAssertEqual(c.value, 123.456)
             // single metric → uuid should be nil
             XCTAssertNil(c.uuid)
         }
         
         // Act
-        coralogixRum.reportMobileVitalsMeasurement(type: "ignored", value: value)
+        coralogixRum.reportMobileVitalsMeasurement(type: "residentMemory", value: value, units: "mb")
         
         // Assert
         wait(for: [exp], timeout: 2.0)
@@ -735,10 +735,8 @@ final class CoralogixRumTests: XCTestCase {
         }
         
         let coralogixRum = CoralogixRum(options: options, sdkFramework: .reactNative(version: "1.0"))
-        let value: [String: Double] = [
-            "cpuUsagePercent": 12.34,
-            "residentMemoryMb": 456.7
-        ]
+        let value = [HybridMetric(name: "cpuUsage", value: 12.34, units: "Percent"),
+                     HybridMetric(name: "resident", value: 456.7, units: "Mb")]
         
         let exp = observeMetrics(expect: 2) { captures in
             XCTAssertEqual(captures.count, 2)
@@ -748,13 +746,15 @@ final class CoralogixRumTests: XCTestCase {
             XCTAssertNotNil(captures.first?.uuid)
             
             // Validate mapping & formatting
-            let map = Dictionary(uniqueKeysWithValues: captures.map { ($0.type, $0.value) })
-            XCTAssertEqual(map[.cpuUsagePercent], Global.format(12.34))
-            XCTAssertEqual(map[.residentMemoryMb], Global.format(456.7))
+            let mobileVital = captures[0]
+            XCTAssertEqual(mobileVital.type.stringValue, "type2")
+            XCTAssertEqual(mobileVital.name, "cpuUsage")
+            XCTAssertEqual(mobileVital.value, 12.34)
+            XCTAssertEqual(mobileVital.units.stringValue, "Percent")
         }
         
         // Act
-        coralogixRum.reportMobileVitalsMeasurement(type: "ignored", value: value)
+        coralogixRum.reportMobileVitalsMeasurement(type: "type2", metrics: value)
         
         // Assert
         wait(for: [exp], timeout: 2.0)
@@ -768,7 +768,7 @@ final class CoralogixRumTests: XCTestCase {
         }
         
         let coralogixRum = CoralogixRum(options: options, sdkFramework: .reactNative(version: "1.0"))
-        let value: [String: Double] = ["fps": 58.9]
+        let value = 58.9
         
         let exp = observeMetrics(expect: 1) { captures in
             XCTAssertEqual(captures.count, 1)
@@ -778,7 +778,7 @@ final class CoralogixRumTests: XCTestCase {
         // Act on a background queue; implementation should bounce to main if needed
         let sema = DispatchSemaphore(value: 0)
         DispatchQueue.global(qos: .userInitiated).async {
-            coralogixRum.reportMobileVitalsMeasurement(type: "ignored", value: value)
+            coralogixRum.reportMobileVitalsMeasurement(type: "fps", value: value, units: "fps")
             sema.signal()
         }
         _ = sema.wait(timeout: .now() + 1.0)
@@ -797,7 +797,7 @@ final class CoralogixRumTests: XCTestCase {
         let coralogixRum = CoralogixRum(options: options)
         CoralogixRum.isInitialized = false
         
-        let value: [String: Double] = ["fps": 60]
+        let value = 60.0
         
         // We should receive nothing
         let exp = expectation(description: "No notifications")
@@ -811,7 +811,7 @@ final class CoralogixRumTests: XCTestCase {
         }
         
         // Act
-        coralogixRum.reportMobileVitalsMeasurement(type: "ignored", value: value)
+        coralogixRum.reportMobileVitalsMeasurement(type: "type4", value: value, units: "fps")
         
         // Assert
         wait(for: [exp], timeout: 1.0)
@@ -826,7 +826,7 @@ final class CoralogixRumTests: XCTestCase {
         }
         
         let coralogixRum = CoralogixRum(options: options)
-        let value: [String: Double] = ["fps": 60]
+        let value = 60.0
         
         // We should receive nothing
         let exp = expectation(description: "No notifications")
@@ -840,7 +840,7 @@ final class CoralogixRumTests: XCTestCase {
         }
         
         // Act
-        coralogixRum.reportMobileVitalsMeasurement(type: "ignored", value: value)
+        coralogixRum.reportMobileVitalsMeasurement(type: "type5", value: value, units: "fps")
         
         // Assert
         wait(for: [exp], timeout: 1.0)

@@ -57,9 +57,9 @@ final class CPUDetectorTests: XCTestCase {
             
             // 2) Validate type & value are well-formed
             XCTAssertTrue(
-                payload.type == .cpuUsagePercent ||
-                payload.type == .totalCpuTimeMs ||
-                payload.type == .mainThreadCpuTimeMs,
+                payload.type == .cpuUsage ||
+                payload.type == .totalCpuTime ||
+                payload.type == .mainThreadCpuTime,
                 "Unexpected metric type: \(payload.type)"
             )
             

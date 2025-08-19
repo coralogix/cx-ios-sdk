@@ -36,9 +36,9 @@ final class SlowFrozenFramesDetectorTests: XCTestCase {
         )
         
         let obs = addObserver { payload in
-            guard payload.type == .frozenFramesCount else { return }
+            guard payload.type == .frozenFrames else { return }
             XCTAssertNotNil(Double(payload.value), "Value should be numeric")
-            XCTAssertGreaterThan(Double(payload.value) ?? 0, 0, "Count should be > 0")
+            XCTAssertGreaterThan(payload.value, 0, "Count should be > 0")
             emitted.fulfill()
         }
         
@@ -67,9 +67,9 @@ final class SlowFrozenFramesDetectorTests: XCTestCase {
         )
         
         let obs = addObserver { payload in
-            guard payload.type == .slowFramesCount else { return }
+            guard payload.type == .slowFrames else { return }
             XCTAssertNotNil(Double(payload.value), "Value should be numeric")
-            XCTAssertGreaterThan(Double(payload.value) ?? 0, 0, "Count should be > 0")
+            XCTAssertGreaterThan(payload.value, 0, "Count should be > 0")
             emitted.fulfill()
         }
         

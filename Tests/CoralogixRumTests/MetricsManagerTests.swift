@@ -102,7 +102,7 @@ final class MetricsManagerTests: XCTestCase {
         
         XCTAssertNotNil(result)
         XCTAssertEqual(result?.type, .warm)
-        XCTAssertEqual(result?.value, Global.format(warmTimestamp))
+        XCTAssertEqual(result?.value, warmTimestamp)
     }
     
     func testColdStartVital() {
@@ -122,7 +122,10 @@ final class MetricsManagerTests: XCTestCase {
         XCTAssertEqual(result?.type, .cold)
         
         let expectedMilliseconds = (endTime - startTime) * 1000
-        XCTAssertEqual(result?.value, Global.format(expectedMilliseconds))
+        let left = Global.rounded(result?.value ?? 0, places: 2)
+        let right = Global.rounded(expectedMilliseconds, places: 2)
+
+        XCTAssertEqual(left, right)
     }
 }
 

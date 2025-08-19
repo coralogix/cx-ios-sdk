@@ -65,8 +65,8 @@ final class MemoryDetectorTests: XCTestCase {
             
             // Validate expected types and numeric values
             XCTAssertTrue(
-                payload.type == .residentMemoryMb ||
-                payload.type == .memoryUtilizationPercent,
+                payload.type == .residentMemory ||
+                payload.type == .memoryUtilization,
                 "Unexpected metric type: \(payload.type)"
             )
             XCTAssertNotNil(Double(payload.value), "Metric value should be numeric: \(payload.value)")
