@@ -800,22 +800,14 @@ final class CoralogixRumTests: XCTestCase {
         let value = 60.0
         
         // We should receive nothing
-        let exp = expectation(description: "No notifications")
+        let exp = XCTNSNotificationExpectation(name: .cxRumNotificationMetrics, object: nil)
         exp.isInverted = true
-        let token = NotificationCenter.default.addObserver(
-            forName: .cxRumNotificationMetrics,
-            object: nil,
-            queue: nil
-        ) { _ in
-            exp.fulfill()
-        }
         
         // Act
         coralogixRum.reportMobileVitalsMeasurement(type: "type4", value: value, units: "fps")
         
         // Assert
-        wait(for: [exp], timeout: 1.0)
-        NotificationCenter.default.removeObserver(token)
+        wait(for: [exp], timeout: 2.0)
     }
     
     func test_doesNothing_whenSDKIsNative() {
@@ -826,25 +818,16 @@ final class CoralogixRumTests: XCTestCase {
         }
         
         let coralogixRum = CoralogixRum(options: options)
-        let value = 60.0
         
         // We should receive nothing
-        let exp = expectation(description: "No notifications")
+        let exp = XCTNSNotificationExpectation(name: .cxRumNotificationMetrics, object: nil)
         exp.isInverted = true
-        let token = NotificationCenter.default.addObserver(
-            forName: .cxRumNotificationMetrics,
-            object: nil,
-            queue: nil
-        ) { _ in
-            exp.fulfill()
-        }
-        
+    
         // Act
-        coralogixRum.reportMobileVitalsMeasurement(type: "type5", value: value, units: "fps")
+        coralogixRum.reportMobileVitalsMeasurement(type: "type5", value: 60.0, units: "fps")
         
         // Assert
-        wait(for: [exp], timeout: 1.0)
-        NotificationCenter.default.removeObserver(token)
+        wait(for: [exp], timeout: 2.0)
     }
     
     private func observeMetrics(expect count: Int,
