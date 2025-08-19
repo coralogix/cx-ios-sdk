@@ -852,8 +852,9 @@ final class CoralogixRumTests: XCTestCase {
                                 handler: @escaping ([MobileVitals]) -> Void) -> XCTestExpectation {
         
         let exp = expectation(description: "Expect \(count) cxRumNotificationMetrics")
+        exp.expectedFulfillmentCount = count
+
         var mobileVitals: [MobileVitals] = []
-        var fulfilled = false
         var token: NSObjectProtocol!  // declare before use
 
         token = NotificationCenter.default.addObserver(
@@ -862,33 +863,12 @@ final class CoralogixRumTests: XCTestCase {
             queue: nil // receive on poster thread; we’ll bounce to main if needed
         ) { note in
             guard let payload = note.object as? MobileVitals else { return }
-            
-            // Capture on the caller’s chosen queue
-            let enqueue = {
-                // Stop if we already fulfilled (extra notifications can still arrive later)
-                if fulfilled { return }
-                
+            DispatchQueue.main.async {
                 mobileVitals.append(payload)
-                
-                // Fulfill ONCE when we’ve received the amount we expected
                 if mobileVitals.count == count {
-                    fulfilled = true
-                    // Remove observer immediately to prevent further calls
-                    NotificationCenter.default.removeObserver(token)
-                    self.notificationTokens.removeAll { $0 === token }
-                    
-                    // hand off collected payloads and fulfill
-                    queue.async {
-                        handler(mobileVitals)
-                        exp.fulfill()
-                    }
+                    handler(mobileVitals)
                 }
-            }
-            
-            if Thread.isMainThread {
-                enqueue()
-            } else {
-                DispatchQueue.main.async(execute: enqueue)
+                exp.fulfill()
             }
         }
         
