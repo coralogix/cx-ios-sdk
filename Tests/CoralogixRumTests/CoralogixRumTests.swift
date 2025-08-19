@@ -24,6 +24,12 @@ final class CoralogixRumTests: XCTestCase {
         options = nil
         notificationTokens.forEach { NotificationCenter.default.removeObserver($0) }
         notificationTokens.removeAll()
+        // Reset any globals your production code checks:
+        CoralogixRum.isInitialized = false
+        // If you introduced a "native" flag, reset it here too.
+        
+        // Drain any queued main-thread notifications between tests
+        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
     }
     
     func testInit() {
@@ -788,7 +794,6 @@ final class CoralogixRumTests: XCTestCase {
     }
     
     func test_doesNothing_whenNotInitialized() {
-        // Arrange
         guard let options = self.options else {
             XCTFail("options must be CoralogixRumOptions")
             return
@@ -796,15 +801,18 @@ final class CoralogixRumTests: XCTestCase {
         
         let coralogixRum = CoralogixRum(options: options)
         CoralogixRum.isInitialized = false
-        
-        let value = 60.0
-        
+                
+        let uniqueType = "type-\(UUID().uuidString)"
+
         // We should receive nothing
         let exp = XCTNSNotificationExpectation(name: .cxRumNotificationMetrics, object: nil)
         exp.isInverted = true
+        exp.handler = { note in
+            guard let mv = note.object as? MobileVitals else { return false }
+            return mv.name == uniqueType            // only our event would fail the test
+        }
         
-        // Act
-        coralogixRum.reportMobileVitalsMeasurement(type: "type4", value: value, units: "fps")
+        coralogixRum.reportMobileVitalsMeasurement(type: uniqueType, value: 60.0, units: "fps")
         
         // Assert
         wait(for: [exp], timeout: 2.0)
@@ -817,46 +825,43 @@ final class CoralogixRumTests: XCTestCase {
             return
         }
         
-        let coralogixRum = CoralogixRum(options: options)
-        
+        let coralogixRum = CoralogixRum(options: options, sdkFramework: .swift)
+        let uniqueType = "type5-\(UUID().uuidString)"
+
         // We should receive nothing
         let exp = XCTNSNotificationExpectation(name: .cxRumNotificationMetrics, object: nil)
         exp.isInverted = true
-    
+        exp.handler = { note in
+            guard let mv = note.object as? MobileVitals else { return false }
+            return mv.name == uniqueType
+        }
         // Act
-        coralogixRum.reportMobileVitalsMeasurement(type: "type5", value: 60.0, units: "fps")
+        coralogixRum.reportMobileVitalsMeasurement(type: uniqueType, value: 60.0, units: "fps")
         
         // Assert
         wait(for: [exp], timeout: 2.0)
     }
     
-    private func observeMetrics(expect count: Int,
-                                fulfillOn queue: DispatchQueue = .main,
-                                handler: @escaping ([MobileVitals]) -> Void) -> XCTestExpectation {
-        
-        let exp = expectation(description: "Expect \(count) cxRumNotificationMetrics")
+    @discardableResult
+    private func observeMetrics(
+        expect count: Int,
+        fulfillOn queue: DispatchQueue = .main,
+        handler: @escaping ([MobileVitals]) -> Void
+    ) -> XCTestExpectation {
+        let exp = XCTNSNotificationExpectation(name: .cxRumNotificationMetrics, object: nil)
         exp.expectedFulfillmentCount = count
 
-        var mobileVitals: [MobileVitals] = []
-        var token: NSObjectProtocol!  // declare before use
+        var collected: [MobileVitals] = []
 
-        token = NotificationCenter.default.addObserver(
-            forName: .cxRumNotificationMetrics,
-            object: nil,
-            queue: nil // receive on poster thread; we’ll bounce to main if needed
-        ) { note in
-            guard let payload = note.object as? MobileVitals else { return }
-            DispatchQueue.main.async {
-                mobileVitals.append(payload)
-                if mobileVitals.count == count {
-                    handler(mobileVitals)
-                }
-                exp.fulfill()
+        exp.handler = { note in
+            guard let mv = note.object as? MobileVitals else { return false }
+            collected.append(mv)
+            if collected.count == count {
+                queue.async { handler(collected) }
             }
+            return true
         }
-        
-        // keep token so we can remove on tearDown if test fails early
-        notificationTokens.append(token)
+
         return exp
     }
 }
