@@ -157,9 +157,7 @@ public class MetricsManager {
     }
     
     func calculateTime(start: Double, stop: Double) -> Double {
-        let coldStartDurationInSeconds = stop - start
-        let coldStartDurationInMilliseconds = coldStartDurationInSeconds * 1000
-        return coldStartDurationInMilliseconds
+        return max(0, stop - start)
     }
     
     internal func getWarmTime(params: [String: Any]) -> MobileVitals? {

@@ -110,6 +110,8 @@ final class MetricsManagerTests: XCTestCase {
         let endTime: CFAbsoluteTime = 1001.234  // duration: 1.234 seconds
         
         self.metricsManager.launchStartTime = startTime
+        
+        let startMs = Helper.convertCFAbsoluteTimeToEpoch(startTime)
         let endMs = Helper.convertCFAbsoluteTimeToEpoch(endTime)
 
         let params: [String: Any] = [
@@ -121,7 +123,7 @@ final class MetricsManagerTests: XCTestCase {
         XCTAssertNotNil(result)
         XCTAssertEqual(result?.type, .cold)
         
-        let expectedMilliseconds = (endTime - startTime) * 1000
+        let expectedMilliseconds = endMs - startMs
         let left = Global.rounded(result?.value ?? 0, places: 2)
         let right = Global.rounded(expectedMilliseconds, places: 2)
 
