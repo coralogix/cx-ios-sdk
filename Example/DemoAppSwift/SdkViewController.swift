@@ -10,7 +10,8 @@ import Coralogix
 
 class SdkViewController: UITableViewController {
     let items = [Keys.shutDownCoralogixRum.rawValue,
-                 Keys.updateLabels.rawValue]
+                 Keys.updateLabels.rawValue,
+                 Keys.reportMobileVitalsMeasurement.rawValue]
     
     var customView = CustomView(frame: .zero)
     private let customViewHeight: CGFloat = 150
@@ -68,6 +69,8 @@ class SdkViewController: UITableViewController {
             CoralogixRumManager.shared.sdk.shutdown()
         } else if item == Keys.updateLabels.rawValue {
             CoralogixRumManager.shared.sdk.setLabels(labels: ["item3" : "playstation 4", "itemPrice" : 400])
+        } else if item == Keys.reportMobileVitalsMeasurement.rawValue {
+            CoralogixRumManager.shared.sdk.reportMobileVitalsMeasurement(type: "custom metric", value: 10.0, units: "ms")
         }
         tableView.deselectRow(at: indexPath, animated: true)
     }

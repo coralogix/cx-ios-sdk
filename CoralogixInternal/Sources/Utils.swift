@@ -118,6 +118,11 @@ public enum Global: String {
         }
     }
     
+    public static func rounded(_ x: Double, places: Int) -> Double {
+        let p = pow(10.0, Double(places))
+        return (x * p).rounded() / p
+    }
+    
     public static func durationToMilliseconds(duration: [UInt64]) -> UInt64 {
         guard duration.count == 2 else { return 0 }
 
@@ -152,6 +157,10 @@ public enum Global: String {
         }
 
         return false
+    }
+    
+    public static func format(_ v: Double) -> String {
+         String(format: "%.2f", locale: Locale(identifier: "en_US_POSIX"), v)
     }
     
     public static func isEmulator() -> Bool {

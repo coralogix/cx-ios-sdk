@@ -147,12 +147,12 @@ public enum Keys: String {
     case television
     case mobileVitalsContext = "mobile_vitals_context"
     case lifeCycleContext = "life_cycle_context"
-    case fps = "fps"
     case mobileVitalsType
     case mobileVitalsValue
     case mobileVitalsUuid = "uuid"
+    case mobileVitalsUnits = "units"
     case value
-    case anr = "application_not_responding"
+    case anrString = "application_not_responding"
     case skipEnrichmentWithIp = "skip_enrichment_with_ip"
     case appDidFinishLaunching
     case appDidBecomeActiveNotification
@@ -200,6 +200,23 @@ public enum Keys: String {
     case metricKitLog = "metricKit log"
     case idle
     case active
+    case fps
+    case cold
+    case warm
+    case anr
+    case cpuUsage = "cpu_usage"
+    case totalCpuTime = "total_cpu_time"
+    case mainThreadCpuTime = "main_thread_cpu_time"
+    case residentMemory = "resident_memory"
+    case memoryUtilization = "memory_utilization"
+    case slowFrames = "slow_frames"
+    case frozenFrames = "frozen_frames"
+    case metricKit = "metric_kit"
+    case ms
+    case kb
+    case mb
+    case count
+    case percentage
 }
 
 public enum CoralogixLogSeverity: Int {

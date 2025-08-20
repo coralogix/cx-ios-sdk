@@ -30,108 +30,103 @@ final class CPUDetectorTests: XCTestCase {
     }
     
     func testEmitsThreeMetricsForSingleTick() {
-        // Expect to receive exactly 3 metrics in one sampling round:
-        // .cpuUsagePercent, .totalCpuTimeMs, .mainThreadCpuTimeMs sharing the same uuid
-        let expect = expectation(description: "Received three CPU metrics (same UUID)")
-        expect.expectedFulfillmentCount = 1
-        
-        // Storage for first observed tick, keyed by uuid
+        // State captured by the handler (must be declared before the closure)
         var firstTickUUID: String?
-        var receivedTypes = Set<CXMobileVitalsType>()
-        var receivedCount = 0
-        
-        let obs = NotificationCenter.default.addObserver(
-            forName: .cxRumNotificationMetrics,
-            object: nil,
-            queue: .main
-        ) { note in
-            guard let payload = note.object as? CXMobileVitals else { return }
-            
-            // 1) For the first tick, remember UUID; subsequent notifications must match it
+        var receivedTypes = Set<MobileVitalsType>()
+        let allowedTypes: Set<MobileVitalsType> = [.cpuUsage, .totalCpuTime, .mainThreadCpuTime]
+
+        let exp = expectation(forNotification: .cxRumNotificationMetrics, object: nil) { note in
+            guard let payload = note.object as? MobileVitals else { return false }
+
+            // Enforce same UUID for the first observed tick
             if firstTickUUID == nil {
                 firstTickUUID = payload.uuid
             } else if payload.uuid != firstTickUUID {
-                // Ignore metrics from other ticks
-                return
+                // Different tick — don't fulfill
+                return false
             }
-            
-            // 2) Validate type & value are well-formed
-            XCTAssertTrue(
-                payload.type == .cpuUsagePercent ||
-                payload.type == .totalCpuTimeMs ||
-                payload.type == .mainThreadCpuTimeMs,
-                "Unexpected metric type: \(payload.type)"
-            )
-            
-            // Value is formatted as a String — ensure it’s numeric
+
+            // Validate type
+            guard allowedTypes.contains(payload.type) else {
+                XCTFail("Unexpected metric type: \(payload.type)")
+                return false
+            }
+
+            // Validate value is numeric
             XCTAssertNotNil(Double(payload.value), "Metric value is not a number: \(payload.value)")
-            
-            // Track which types we got for this uuid
-            if receivedTypes.insert(payload.type).inserted {
-                receivedCount += 1
-            }
-            
-            if receivedCount == 3 {
-                expect.fulfill()
-            }
+
+            // Fulfill only the first time we see each expected type
+            let inserted = receivedTypes.insert(payload.type).inserted
+            return inserted
         }
-        
+
+        exp.expectedFulfillmentCount = 3
+
         // Start the monitor
         cpuDetector.startMonitoring()
-        
-        wait(for: [expect], timeout: 3.0)
-        NotificationCenter.default.removeObserver(obs)
+
+        // Wait for exactly three matching notifications
+        wait(for: [exp], timeout: 3.0)
+
+        // Final assertions for clarity
+        XCTAssertEqual(receivedTypes, allowedTypes, "Did not receive the exact set of CPU metrics")
     }
     
+    
     func testStopMonitoringPreventsFurtherEmissions() {
-        // We’ll capture the first 3 metrics (one tick), then stop, then assert we don’t get more.
-        let firstTick = expectation(description: "Got first tick (3 metrics)")
-        firstTick.expectedFulfillmentCount = 1
-        
-        let noFurther = expectation(description: "No further metrics after stop")
-        noFurther.isInverted = true // We expect NOT to be fulfilled
-        
+        // Serialize state touched by the notification handler
+        let stateQ = DispatchQueue(label: "test.state.q")
         var firstTickUUID: String?
-        var receivedTypes = Set<CXMobileVitalsType>()
-        var totalNotificationsAfterStop = 0
-        
-        let obs = NotificationCenter.default.addObserver(
-            forName: .cxRumNotificationMetrics,
-            object: nil,
-            queue: .main
-        ) { note in
-            guard let payload = note.object as? CXMobileVitals else { return }
-            
-            if firstTickUUID == nil {
-                firstTickUUID = payload.uuid
-            }
-            
-            if payload.uuid == firstTickUUID {
-                _ = receivedTypes.insert(payload.type)
-                if receivedTypes.count == 3 {
-                    // We’ve completed one tick; stop monitoring immediately.
-                    self.cpuDetector.stopMonitoring()
-                    firstTick.fulfill()
+        var receivedTypes = Set<MobileVitalsType>()
+        let allowed: Set<MobileVitalsType> = [.cpuUsage, .totalCpuTime, .mainThreadCpuTime]
+
+        // 1) Expect exactly 3 distinct metric types for the first batch
+        let firstThree = expectation(forNotification: .cxRumNotificationMetrics, object: nil) { note in
+            guard let payload = note.object as? MobileVitals else { return false }
+
+            // serialize mutations/reads
+            return stateQ.sync {
+                if firstTickUUID == nil { firstTickUUID = payload.uuid }
+                // If UUID grouping is not guaranteed, comment the next line out:
+                guard payload.uuid == firstTickUUID else { return false }
+
+                guard allowed.contains(payload.type) else {
+                    XCTFail("Unexpected metric type: \(payload.type)")
+                    return false
                 }
-                return
-            }
-            
-            // Any notifications with a different UUID would indicate another tick — should not happen after stop.
-            totalNotificationsAfterStop += 1
-            if totalNotificationsAfterStop > 0 {
-                noFurther.fulfill() // This will fail because it's inverted
+                XCTAssertNotNil(Double(payload.value), "Non-numeric value: \(payload.value)")
+
+                // count unique types
+                let inserted = receivedTypes.insert(payload.type).inserted
+                if inserted, receivedTypes.count == 3 {
+                    // do not stop here—invert expectation will be armed AFTER we drain
+                }
+                return inserted
             }
         }
-        
+        firstThree.expectedFulfillmentCount = 3
+        firstThree.assertForOverFulfill = false
+
+        // Start after expectation is armed
         cpuDetector.startMonitoring()
-        
-        // Wait for first tick to complete (3 metrics), then ensure no more arrive within a grace window
-        wait(for: [firstTick], timeout: 3.0)
-        
-        // Allow a small window to detect stray posts after stop
-        wait(for: [noFurther], timeout: 0.6)
-        
-        NotificationCenter.default.removeObserver(obs)
+
+        // Wait for the first batch (give CI some headroom)
+        wait(for: [firstThree], timeout: 5.0)
+
+        // Now stop monitoring
+        cpuDetector.stopMonitoring()
+
+        // Drain: give any in-flight posts time to land BEFORE we arm the inverted expectation
+        RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+
+        // 2) Assert no further emissions after stop within a grace window
+        let noneAfterStop = expectation(forNotification: .cxRumNotificationMetrics, object: nil) { _ in
+            // Anything now is after stop -> should not happen
+            return true
+        }
+        noneAfterStop.isInverted = true
+
+        wait(for: [noneAfterStop], timeout: 1.0)
     }
 }
 

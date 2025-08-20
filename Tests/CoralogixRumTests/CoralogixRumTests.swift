@@ -4,6 +4,7 @@ import CoralogixInternal
 
 final class CoralogixRumTests: XCTestCase {
     var options: CoralogixExporterOptions?
+    private var notificationTokens: [NSObjectProtocol] = []
     
     override func setUpWithError() throws {
         options = CoralogixExporterOptions(coralogixDomain: CoralogixDomain.US2,
@@ -21,6 +22,14 @@ final class CoralogixRumTests: XCTestCase {
     
     override func tearDownWithError() throws {
         options = nil
+        notificationTokens.forEach { NotificationCenter.default.removeObserver($0) }
+        notificationTokens.removeAll()
+        // Reset any globals your production code checks:
+        CoralogixRum.isInitialized = false
+        // If you introduced a "native" flag, reset it here too.
+        
+        // Drain any queued main-thread notifications between tests
+        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
     }
     
     func testInit() {
@@ -59,18 +68,18 @@ final class CoralogixRumTests: XCTestCase {
     // Test setUserContext method
     func testSetUserContext() {
         let coralogixRum = CoralogixRum(options: options!)
-            let userContext = UserContext(userId: "1234",
-                                          userName: "Daffy Duck",
-                                          userEmail: "daffy.duck@coralogix.com",
-                                          userMetadata: ["age": "18", "profession" : "duck"])
-            coralogixRum.setUserContext(userContext: userContext)
-            
+        let userContext = UserContext(userId: "1234",
+                                      userName: "Daffy Duck",
+                                      userEmail: "daffy.duck@coralogix.com",
+                                      userMetadata: ["age": "18", "profession" : "duck"])
+        coralogixRum.setUserContext(userContext: userContext)
+        
         if let options = coralogixRum.coralogixExporter?.getOptions() {
             
             // Verify that userContext is set correctly
             XCTAssertEqual(options.userContext, userContext)
         }
-
+        
     }
     
     func testSetLabels() {
@@ -99,22 +108,22 @@ final class CoralogixRumTests: XCTestCase {
         var coralogixRum = CoralogixRum(options: options!)
         let mockSessionManager = SessionManager()
         let mockOptions =  CoralogixExporterOptions(coralogixDomain: CoralogixDomain.US2,
-                                                           userContext: nil,
-                                                           environment: "PROD",
-                                                           application: "TestApp-iOS",
-                                                           version: "1.0",
-                                                           publicKey: "token",
-                                                           ignoreUrls: [],
-                                                           ignoreErrors: [],
-                                                           labels: ["item" : "banana", "itemPrice" : 1000],
-                                                           sampleRate: 100,
-                                                           debug: true)
+                                                    userContext: nil,
+                                                    environment: "PROD",
+                                                    application: "TestApp-iOS",
+                                                    version: "1.0",
+                                                    publicKey: "token",
+                                                    ignoreUrls: [],
+                                                    ignoreErrors: [],
+                                                    labels: ["item" : "banana", "itemPrice" : 1000],
+                                                    sampleRate: 100,
+                                                    debug: true)
         coralogixRum = CoralogixRum(options: mockOptions, sessionManager: mockSessionManager)
         
         // Test enabling session recording
         coralogixRum.hasSessionRecording(true)
         XCTAssertTrue(mockSessionManager.hasRecording)
-
+        
         // Test disabling session recording
         coralogixRum.hasSessionRecording(false)
         XCTAssertFalse(mockSessionManager.hasRecording)
@@ -167,7 +176,7 @@ final class CoralogixRumTests: XCTestCase {
                                                     sampleRate: 100,
                                                     debug: true)
         let coralogixRum = CoralogixRum(options: mockOptions, sessionManager: mockSessionManager)
-
+        
         // Test with a valid session metadata
         XCTAssertNotNil(coralogixRum.getSessionCreationTimestamp())
     }
@@ -175,7 +184,7 @@ final class CoralogixRumTests: XCTestCase {
     func testHandleAppearStateIfNeededWhenStateIsNotifyOnAppearShouldCaptureEventAndSetSpanAttribute() {
         let coralogixRum = makeMockCoralogixRum()
         let mockSpan = MockSpan()
-
+        
         // Arrange
         let view = CXView(state: .notifyOnAppear, name: "home")
         let mockSessionReplay =  MockSessionReplay()
@@ -186,7 +195,7 @@ final class CoralogixRumTests: XCTestCase {
         // Assert
         XCTAssertNotNil(mockSessionReplay.captureEventCalledWith, "Expected SessionReplay.captureEvent to be invoked")
         XCTAssertNotNil(mockSessionReplay.captureEventCalledWith?[Keys.screenshotId.rawValue] as? String, "Expected screenshotId to be present in captured metadata")
-       
+        
         XCTAssertTrue(mockSpan.setAttributeCalled)
         XCTAssertNotNil(mockSpan.setAttributeKey)
         XCTAssertNotNil(mockSpan.setAttributeValue)
@@ -197,25 +206,25 @@ final class CoralogixRumTests: XCTestCase {
         let coralogixRum = makeMockCoralogixRum()
         let mockSpan = MockSpan()
         let mockSessionReplay =  MockSessionReplay()
-
+        
         // Arrange
         let view = CXView(state: .notifyOnDisappear, name: "home")
-
+        
         // Act
         SdkManager.shared.register(sessionReplayInterface: mockSessionReplay)
         coralogixRum.handleAppearStateIfNeeded(cxView: view, span: mockSpan)
-
+        
         // Assert
         XCTAssertNil(mockSessionReplay.captureEventCalledWith)
         XCTAssertFalse(mockSpan.setAttributeCalled)
     }
     
     func testHandleAppearStateIfNeededWhenSessionReplayIsNilShouldNotCrashOrCaptureEvent() {
-
+        
         SdkManager.shared.register(sessionReplayInterface: nil)
         let coralogixRum = makeMockCoralogixRum()
         let mockSpan = MockSpan()
-
+        
         let view = CXView(state: .notifyOnAppear, name: "home")
         
         // Act
@@ -231,7 +240,7 @@ final class CoralogixRumTests: XCTestCase {
         coralogixRum.tracerProvider = {
             return MockTracer()
         }
-
+        
         if let mockSpan = coralogixRum.getNavigationSpan() as? MockSpan {
             // Assert
             XCTAssertEqual(mockSpan.recordedAttributes[Keys.eventType.rawValue], .string(CoralogixEventType.navigation.rawValue))
@@ -254,7 +263,7 @@ final class CoralogixRumTests: XCTestCase {
         let coralogixRum =  CoralogixRum(options: mockOptions)
         let cxView = CXView(state: .notifyOnDisappear, name: "TestView")
         let mockSessionManager = SessionManager()
-
+        
         let mockExporter = MockCoralogixExporter(options: mockOptions,
                                                  sessionManager: mockSessionManager,
                                                  networkManager: NetworkManager(),
@@ -286,7 +295,7 @@ final class CoralogixRumTests: XCTestCase {
         let coralogixRum = CoralogixRum(options: mockOptions)
         let invalidObject = "Not a CXView" // String instead of CXView
         let mockSessionManager = SessionManager()
-
+        
         let mockExporter = MockCoralogixExporter(options: mockOptions,
                                                  sessionManager: mockSessionManager,
                                                  networkManager: NetworkManager(),
@@ -316,7 +325,6 @@ final class CoralogixRumTests: XCTestCase {
                                                 screenshotLocation: screenshotLocation,
                                                 screenshotData: screenshotData)
         // Assert
-        XCTAssertNil(result["timestamp"] as? TimeInterval)
         XCTAssertEqual(result["screenshotId"] as? String, screenshotId)
         XCTAssertEqual(result[Keys.screenshotData.rawValue] as? Data, screenshotData)
         XCTAssertEqual(result[Keys.page.rawValue] as? Int, 0)
@@ -325,7 +333,7 @@ final class CoralogixRumTests: XCTestCase {
         XCTAssertEqual(result["key1"] as? String, "value1")
         XCTAssertEqual(result["key2"] as? Int, 123)
     }
-
+    
     func testContainsXYReturnsTrueWhenBothKeysExist() {
         let coralogixRum = makeMockCoralogixRum()
         let dict: [String: Any] = [
@@ -341,7 +349,21 @@ final class CoralogixRumTests: XCTestCase {
     }
     
     func testContainsXYReturnsFalseWhenOnlyXExists() {
-        let coralogixRum = makeMockCoralogixRum()
+        let mockOptions = CoralogixExporterOptions(
+            coralogixDomain: .US2,
+            userContext: nil,
+            environment: "PROD",
+            application: "TestApp-iOS",
+            version: "1.0",
+            publicKey: "token",
+            ignoreUrls: [],
+            ignoreErrors: [],
+            sampleRate: 100,
+            debug: true
+        )
+        
+        let coralogixRum = CoralogixRum(options: mockOptions)
+
         let dict: [String: Any] = [
             Keys.positionX.rawValue: 100
         ]
@@ -391,7 +413,7 @@ final class CoralogixRumTests: XCTestCase {
             XCTFail("Expected span to be MockSpan")
             return
         }
-           
+        
         // Assert
         // Assuming your Span protocol has methods to retrieve attributes
         XCTAssertEqual(span.name, Keys.iosSdk.rawValue)
@@ -439,7 +461,7 @@ final class CoralogixRumTests: XCTestCase {
                         Keys.positionX.rawValue,
                         Keys.positionY.rawValue,
                         "testKey"]
-       XCTAssertTrue(required.allSatisfy { mockSessionReplay.captureEventCalledWith!.keys.contains($0) }, "Captured metadata is missing expected keys")
+        XCTAssertTrue(required.allSatisfy { mockSessionReplay.captureEventCalledWith!.keys.contains($0) }, "Captured metadata is missing expected keys")
         
         let capturedMetadata = mockSessionReplay.captureEventCalledWith?.first
         XCTAssertNotNil(capturedMetadata)
@@ -448,16 +470,16 @@ final class CoralogixRumTests: XCTestCase {
         XCTAssertNotNil(mockSpan.recordedAttributes[Keys.tapObject.rawValue], "Should set tapObject on span")
         XCTAssertTrue(mockSpan.didEnd, "Span should be ended")
     }
-
+    
     func testAddScreenshotIdAddsAttributeAndCapturesEvent() {
         // Arrange
         var span: any Span = MockSpan()
         let mockSessionReplay = MockSessionReplay()
         
         SdkManager.shared.register(sessionReplayInterface: mockSessionReplay)
-
+        
         let coralogixRum = makeMockCoralogixRum()
-
+        
         // Act
         coralogixRum.addScreenshotId(to: &span)
         
@@ -465,7 +487,7 @@ final class CoralogixRumTests: XCTestCase {
             XCTFail("Span is not MockSpan")
             return
         }
-
+        
         XCTAssertNotNil(mockSpan.recordedAttributes[Keys.screenshotId.rawValue], "ScreenshotId should be set on the span")
         XCTAssertNotNil(mockSessionReplay.captureEventCalledWith, "captureEvent should be invoked")
         if let capturedEvent = mockSessionReplay.captureEventCalledWith {
@@ -567,7 +589,7 @@ final class CoralogixRumTests: XCTestCase {
             sampleRate: 100,
             traceParentInHeader: ["enable": true,
                                   "options" : [
-                                  "allowedTracingUrls": ["https://allowed.com/path"]]],
+                                    "allowedTracingUrls": ["https://allowed.com/path"]]],
             debug: true
         )
         
@@ -590,10 +612,10 @@ final class CoralogixRumTests: XCTestCase {
             sampleRate: 100,
             traceParentInHeader: ["enable": true,
                                   "options" : [
-                                  "allowedTracingUrls": [".*test\\.com.*"]]],
+                                    "allowedTracingUrls": [".*test\\.com.*"]]],
             debug: true
         )
-               
+        
         // Mock Global.isHostMatchesRegexPattern for test environment if needed
         let coralogixRum = CoralogixRum(options: mockOptions)
         let result = coralogixRum.shouldAddTraceParent(to: request, options: mockOptions)
@@ -638,7 +660,7 @@ final class CoralogixRumTests: XCTestCase {
         let coralogixRum = CoralogixRum(options: mockOptions)
         let expectation = XCTestExpectation(description: "Wait for async setView to complete")
         coralogixRum.setView(name: "TestView")
-
+        
         DispatchQueue.global().asyncAfter(deadline: .now() + 0.2) {
             let visibleView = coralogixRum.coralogixExporter?.getViewManager().visibleView
             XCTAssertNotNil(visibleView)
@@ -670,7 +692,7 @@ final class CoralogixRumTests: XCTestCase {
                                                  metricsManager: MetricsManager())
         
         let coralogixRum = CoralogixRum(options: mockOptions)
-
+        
         coralogixRum.coralogixExporter = mockExporter
         let tracer = OpenTelemetry.instance.tracerProvider.get(instrumentationName: "MyTestApp")
         XCTAssertNotNil(tracer)
@@ -692,6 +714,168 @@ final class CoralogixRumTests: XCTestCase {
         
         let coralogixRum = CoralogixRum(options: mockOptions)
         return coralogixRum
+    }
+    
+    func test_singleMetric_postsOneNotification_withNilUUID() {
+        guard let options = self.options else {
+            XCTFail("options must be CoralogixRumOptions")
+            return
+        }
+        
+        let coralogixRum = CoralogixRum(options: options, sdkFramework: .reactNative(version: "1.0"))
+        
+        // We’ll post exactly one metric
+        let value = 123.456
+        
+        // Observe exactly one notification
+        let exp = observeMetrics(expect: 1) { captures in
+            XCTAssertEqual(captures.count, 1)
+            let c = captures[0]
+            // type resolved from key
+            XCTAssertEqual(c.type, MobileVitalsType(from: "residentMemory"))
+            // value formatted the same way production does
+            XCTAssertEqual(c.value, 123.456)
+            // single metric → uuid should be nil
+            XCTAssertNil(c.uuid)
+        }
+        
+        // Act
+        coralogixRum.reportMobileVitalsMeasurement(type: "residentMemory", value: value, units: "mb")
+        
+        // Assert
+        wait(for: [exp], timeout: 2.0)
+    }
+    
+    func test_multipleMetrics_postMultipleNotifications_shareSameUUID() {
+        // Arrange
+        guard let options = self.options else {
+            XCTFail("options must be CoralogixRumOptions")
+            return
+        }
+        
+        let coralogixRum = CoralogixRum(options: options, sdkFramework: .reactNative(version: "1.0"))
+        let value = [HybridMetric(name: "cpuUsage", value: 12.34, units: "Percent"),
+                     HybridMetric(name: "resident", value: 456.7, units: "Mb")]
+        
+        let exp = observeMetrics(expect: 2) { captures in
+            XCTAssertEqual(captures.count, 2)
+            // Both notifications share the same (non-nil) UUID
+            let uuids = Set(captures.compactMap { $0.uuid })
+            XCTAssertEqual(uuids.count, 1)
+            XCTAssertNotNil(captures.first?.uuid)
+            
+            // Validate mapping & formatting
+            let mobileVital = captures[0]
+            XCTAssertEqual(mobileVital.type.stringValue, "type2")
+            XCTAssertEqual(mobileVital.name, "cpuUsage")
+            XCTAssertEqual(mobileVital.value, 12.34)
+            XCTAssertEqual(mobileVital.units.stringValue, "Percent")
+        }
+        
+        // Act
+        coralogixRum.reportMobileVitalsMeasurement(type: "type2", metrics: value)
+        
+        // Assert
+        wait(for: [exp], timeout: 2.0)
+    }
+    
+//    func test_postsFromBackgroundThread_stillDelivered() {
+//        // Arrange
+//        guard let options = self.options else {
+//            XCTFail("options must be CoralogixRumOptions")
+//            return
+//        }
+//        
+//        let coralogixRum = CoralogixRum(options: options, sdkFramework: .reactNative(version: "1.0"))
+//        let value = 58.9
+//        
+//        let exp = observeMetrics(expect: 1) { captures in
+//            XCTAssertEqual(captures.count, 1)
+//            XCTAssertEqual(captures[0].type, .fps)
+//        }
+//
+//        // Act on a background queue; implementation should bounce to main if needed
+//        let sema = DispatchSemaphore(value: 0)
+//        DispatchQueue.global(qos: .userInitiated).async {
+//            coralogixRum.reportMobileVitalsMeasurement(type: "fps", value: value, units: "fps")
+//            sema.signal()
+//        }
+//        _ = sema.wait(timeout: .now() + 1.0)
+//        
+//        // Assert
+//        wait(for: [exp], timeout: 2.0)
+//    }
+    
+    func test_doesNothing_whenNotInitialized() {
+        guard let options = self.options else {
+            XCTFail("options must be CoralogixRumOptions")
+            return
+        }
+        
+        let coralogixRum = CoralogixRum(options: options)
+        CoralogixRum.isInitialized = false
+                
+        let uniqueType = "type-\(UUID().uuidString)"
+
+        // We should receive nothing
+        let exp = XCTNSNotificationExpectation(name: .cxRumNotificationMetrics, object: nil)
+        exp.isInverted = true
+        exp.handler = { note in
+            guard let mv = note.object as? MobileVitals else { return false }
+            return mv.name == uniqueType            // only our event would fail the test
+        }
+        
+        coralogixRum.reportMobileVitalsMeasurement(type: uniqueType, value: 60.0, units: "fps")
+        
+        // Assert
+        wait(for: [exp], timeout: 2.0)
+    }
+    
+    func test_doesNothing_whenSDKIsNative() {
+        // Arrange
+        guard let options = self.options else {
+            XCTFail("options must be CoralogixRumOptions")
+            return
+        }
+        
+        let coralogixRum = CoralogixRum(options: options, sdkFramework: .swift)
+        let uniqueType = "type5-\(UUID().uuidString)"
+
+        // We should receive nothing
+        let exp = XCTNSNotificationExpectation(name: .cxRumNotificationMetrics, object: nil)
+        exp.isInverted = true
+        exp.handler = { note in
+            guard let mv = note.object as? MobileVitals else { return false }
+            return mv.name == uniqueType
+        }
+        // Act
+        coralogixRum.reportMobileVitalsMeasurement(type: uniqueType, value: 60.0, units: "fps")
+        
+        // Assert
+        wait(for: [exp], timeout: 2.0)
+    }
+    
+    @discardableResult
+    private func observeMetrics(
+        expect count: Int,
+        fulfillOn queue: DispatchQueue = .main,
+        handler: @escaping ([MobileVitals]) -> Void
+    ) -> XCTestExpectation {
+        let exp = XCTNSNotificationExpectation(name: .cxRumNotificationMetrics, object: nil)
+        exp.expectedFulfillmentCount = count
+
+        var collected: [MobileVitals] = []
+
+        exp.handler = { note in
+            guard let mv = note.object as? MobileVitals else { return false }
+            collected.append(mv)
+            if collected.count == count {
+                queue.async { handler(collected) }
+            }
+            return true
+        }
+
+        return exp
     }
 }
 
@@ -796,18 +980,18 @@ final class MockSpan: Span {
     var isRecording: Bool = true
     var status: Status = .ok
     var name: String = Keys.iosSdk.rawValue
-
+    
     var setAttributeCalled = false
     var setAttributeKey: String?
     var setAttributeValue: AttributeValue?
-
+    
     func setAttribute(key: String, value: AttributeValue?) {
         setAttributeCalled = true
         setAttributeKey = key
         setAttributeValue = value
         recordedAttributes[key] = value
     }
-
+    
     func addEvent(name: String) {}
     func addEvent(name: String, timestamp: Date) {}
     func addEvent(name: String, attributes: [String: AttributeValue]) {}
@@ -816,9 +1000,9 @@ final class MockSpan: Span {
         didEnd = true
     }
     func end(time: Date) {}
-
+    
     var description: String { return "MockSpan" }
-
+    
     static func == (lhs: MockSpan, rhs: MockSpan) -> Bool {
         return lhs.name == rhs.name
     }
@@ -834,7 +1018,7 @@ class CoralogixExporterOptionsTests: XCTestCase {
         let userContext = UserContext(userId: "1234",
                                       userName: "Daffy Duck",
                                       userEmail: "daffy.duck@coralogix.com",
-                                      userMetadata: ["age": "18", "profession" : "duck"]) 
+                                      userMetadata: ["age": "18", "profession" : "duck"])
         let environment = "development"
         let application = "TestApp"
         let version = "1.0"

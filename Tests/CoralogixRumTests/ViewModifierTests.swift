@@ -33,29 +33,25 @@ final class ViewModifierTests: XCTestCase {
     }
     
     func testViewModifierNotificationOnAppear() {
-        let exp = expectation(description: "Notification onAppear")
-        
-        let view = Text("Hello, world!")
-            .trackCXView(name: "TestView")
-        
-        let hostingController = UIHostingController(rootView: view)
-        
-        let observer = NotificationCenter.default.addObserver(
-            forName: .cxRumNotification,
-            object: nil,
-            queue: .main
-        ) { notification in
-            if let cxView = notification.object as? CXView, cxView.state == .notifyOnAppear {
-                XCTAssertEqual(cxView.name, "TestView")
-                exp.fulfill()
-            }
+        // Expect a single CXView notifyOnAppear notification for "TestView"
+        let expectedName = "TestView"
+        let exp = expectation(forNotification: .cxRumNotification, object: nil) { note in
+            guard let cxView = note.object as? CXView else { return false }
+            guard cxView.state == .notifyOnAppear else { return false }
+            XCTAssertEqual(cxView.name, expectedName)
+            return true
         }
-        
-        // Trigger viewDidAppear manually
+
+        // Build the SwiftUI view and host it
+        let view = Text("Hello, world!").trackCXView(name: expectedName)
+        let hostingController = UIHostingController(rootView: view)
+
+        // Ensure the view is loaded, then simulate appearance
+        _ = hostingController.view
         hostingController.viewWillAppear(false)
         hostingController.viewDidAppear(false)
-        
-        waitForExpectations(timeout: 1.0)
-        NotificationCenter.default.removeObserver(observer)
+
+        // Wait for the single matching notification
+        wait(for: [exp], timeout: 1.0)
     }
 }

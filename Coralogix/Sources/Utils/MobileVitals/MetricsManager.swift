@@ -88,15 +88,16 @@ public class MetricsManager {
             self.foregroundEndTime = currentTime
             let warmStartDuration = currentTime - foregroundStartTime
             
-            let warmStartDurationInMilliseconds = warmStartDuration * 1000
+            let warmStartRounded = warmStartDuration * 1000
             
             // Convert to an integer if you want to remove the decimal part
-            let millisecondsRounded = Int(warmStartDurationInMilliseconds)
-            Log.d("[Metric] Warm start duration: \(millisecondsRounded) milliseconds")
+            Log.d("[Metric] Warm start duration: \(warmStartRounded) milliseconds")
             
             // send instrumentaion event
             NotificationCenter.default.post(name: .cxRumNotificationMetrics,
-                                            object: CXMobileVitals(type: .warm, value: "\(millisecondsRounded)"))
+                                            object: MobileVitals(type: .warm,
+                                                                 value: warmStartRounded,
+                                                                 units: .milliseconds))
         }
         
         // Resume mobile vitals monitoring
@@ -140,7 +141,7 @@ public class MetricsManager {
     @objc func handleNotification(notification: Notification) {
         if let metrics = notification.object as? [String: Any] {
             if let launchStartTime = self.launchStartTime,
-               let launchEndTime = metrics[CXMobileVitalsType.cold.rawValue] as? CFAbsoluteTime,
+               let launchEndTime = metrics[MobileVitalsType.cold.stringValue] as? CFAbsoluteTime,
                self.launchEndTime == nil {
                 self.launchEndTime = launchEndTime
                 let epochStartTime = Helper.convertCFAbsoluteTimeToEpoch(launchStartTime)
@@ -148,60 +149,35 @@ public class MetricsManager {
                 let millisecondsRounded = self.calculateTime(start: epochStartTime, stop: epochEndTime)
 
                 NotificationCenter.default.post(name: .cxRumNotificationMetrics,
-                                                object: CXMobileVitals(type: .cold, value: "\(millisecondsRounded)"))
+                                                object: MobileVitals(type: .cold,
+                                                                     value: millisecondsRounded,
+                                                                     units: .milliseconds))
             }
         }
     }
     
-    func calculateTime(start: Double, stop: Double) -> Int {
-        let coldStartDurationInSeconds = stop - start
-        let coldStartDurationInMilliseconds = coldStartDurationInSeconds
-        return Int(coldStartDurationInMilliseconds)
+    func calculateTime(start: Double, stop: Double) -> Double {
+        return max(0, stop - start)
     }
     
-    internal func getCXMobileVitals(params: [String: Any]) -> CXMobileVitals? {
-        let handlers: [CXMobileVitalsType: ([String: Any]) -> CXMobileVitals?] = [
-            .cold: getColdTime,
-            .coldJS: getColdTime,
-            .warm: getWarmTime,
-            .warmJS: getWarmTime
-        ]
-        
-        if let match = handlers.first(where: { params.keys.contains($0.key.rawValue) }) {
-            return match.value(params)
-        }
-        return nil
-    }
-    
-    internal func getWarmTime(params: [String: Any]) -> CXMobileVitals? {
-        if let warmTime = params[CXMobileVitalsType.warm.rawValue] as? Double {
-            let roundedTime = Int(warmTime)
-            return CXMobileVitals(type: .warm, value: "\(roundedTime)")
-        }
-        
-        if let warmJsTime = params[CXMobileVitalsType.warmJS.rawValue] as? Double {
-            let roundedTime = Int(warmJsTime)
-            return CXMobileVitals(type: .warmJS, value: "\(roundedTime)")
+    internal func getWarmTime(params: [String: Any]) -> MobileVitals? {
+        if let warmTime = params[MobileVitalsType.warm.stringValue] as? Double {
+            return MobileVitals(type: .warm, value: warmTime, units: .milliseconds)
         }
         
         return nil
     }
     
-    internal func getColdTime(params: [String: Any]) -> CXMobileVitals? {
+    internal func getColdTime(params: [String: Any]) -> MobileVitals? {
         guard let startTime = self.launchStartTime else {
             return nil
         }
         
         let launchStartTime = Helper.convertCFAbsoluteTimeToEpoch(startTime)
 
-        if let nativeLaunchEnd = params[CXMobileVitalsType.cold.rawValue] as? Double {
-            let durationMs = calculateTime(start: launchStartTime, stop: nativeLaunchEnd)
-            return CXMobileVitals(type: .cold, value: "\(durationMs)")
-        }
-        
-        if let coldJsTimestamp = params[CXMobileVitalsType.coldJS.rawValue] as? Double {
-            let durationMs = calculateTime(start: launchStartTime, stop: coldJsTimestamp)
-            return CXMobileVitals(type: .coldJS, value: "\(durationMs)")
+        if let nativeLaunchEnd = params[MobileVitalsType.cold.stringValue] as? Double {
+            let duration = calculateTime(start: launchStartTime, stop: nativeLaunchEnd)
+            return MobileVitals(type: .cold, value: duration, units: .milliseconds)
         }
         
         return nil
@@ -240,7 +216,10 @@ class MyMetricSubscriber: NSObject, MXMetricManagerSubscriber {
                 Log.d("metricPayloadJsonString  \(metricPayloadJsonString)")
                 // send instrumentaion event
                 NotificationCenter.default.post(name: .cxRumNotificationMetrics,
-                                                object: CXMobileVitals(type: .metricKit, value: metricPayloadJsonString))
+                                                object: MobileVitals(type: .metricKit,
+                                                                     name: metricPayloadJsonString,
+                                                                     value: 0.0,
+                                                                     units: MeasurementUnits(from: "")))
             }
                     
             if let applicationLaunchMetric = payload.applicationLaunchMetrics {

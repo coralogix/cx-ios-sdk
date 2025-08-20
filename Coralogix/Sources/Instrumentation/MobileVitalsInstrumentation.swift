@@ -20,13 +20,15 @@ extension CoralogixRum {
     }
     
     @objc func handleMobileVitalsNotification(notification: Notification) {
-        guard let cxMobileVitals = notification.object as? CXMobileVitals else { return }
+        guard let mobileVitals = notification.object as? MobileVitals else { return }
         
-        switch cxMobileVitals.type {
+        switch mobileVitals.type {
         case .metricKit:
-            handleMetricKit(cxMobileVitals.value)
+            if let metric = mobileVitals.name as? String {
+                handleMetricKit(metric)
+            }
         default:
-            handleMobileVitals(cxMobileVitals)
+            handleMobileVitals(mobileVitals)
         }
     }
     
@@ -47,21 +49,27 @@ extension CoralogixRum {
         }
     }
     
-    private func handleMobileVitals(_ cxMobileVitals: CXMobileVitals) {
-        let span = self.getSpan(for: cxMobileVitals)
-        span.setAttribute(key: Keys.mobileVitalsType.rawValue, value: cxMobileVitals.type.rawValue)
+    private func handleMobileVitals(_ mobileVitals: MobileVitals) {
+        let span = self.getSpan(for: mobileVitals)
+        span.setAttribute(key: Keys.mobileVitalsType.rawValue, value: mobileVitals.type.stringValue)
         
-        for (key, value) in cxMobileVitals.type.specificAttributes(for: cxMobileVitals.value) {
+        for (key, value) in mobileVitals.type.specificAttributes(for: mobileVitals.value) {
             span.setAttribute(key: key, value: value)
         }
         
-        if let uuid = cxMobileVitals.uuid, !uuid.isEmpty {
+        if let name = mobileVitals.name, !name.isEmpty {
+            span.setAttribute(key: Keys.name.rawValue, value: name)
+        }
+        
+        span.setAttribute(key: Keys.mobileVitalsUnits.rawValue, value: mobileVitals.units.stringValue)
+        
+        if let uuid = mobileVitals.uuid, !uuid.isEmpty {
             span.setAttribute(key: Keys.mobileVitalsUuid.rawValue, value: uuid)
         }
         span.end()
     }
     
-    private func getSpan(for vitals: CXMobileVitals) -> any Span {
+    private func getSpan(for vitals: MobileVitals) -> any Span {
         var span = tracerProvider().spanBuilder(spanName: Keys.iosSdk.rawValue).startSpan()
         
         for (key, value) in vitals.type.spanAttributes {

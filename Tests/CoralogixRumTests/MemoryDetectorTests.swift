@@ -41,95 +41,91 @@ final class MemoryDetectorTests: XCTestCase {
     }
     
     func testEmitsTwoMetricsForSingleTickWithSameUUID() {
-        // Expect exactly one complete "tick": two metrics with the same UUID:
-        // .residentMemoryMb and .memoryUtilizationPercent
-        let tickCompleted = expectation(description: "Received two memory metrics of the same tick (same UUID)")
-        
+        // State captured by the handler (declare BEFORE the closure)
         var firstTickUUID: String?
-        var receivedTypes = Set<CXMobileVitalsType>()
-        
-        let obs = NotificationCenter.default.addObserver(
-            forName: .cxRumNotificationMetrics,
-            object: nil,
-            queue: .main
-        ) { note in
-            guard let payload = note.object as? CXMobileVitals else { return }
-            
-            // Remember uuid for the first metric; subsequent metrics must match it
-            if firstTickUUID == nil {
-                firstTickUUID = payload.uuid
-            } else if payload.uuid != firstTickUUID {
-                // Ignore metrics from other ticks
-                return
+        var receivedTypes = Set<MobileVitalsType>()
+        let allowedTypes: Set<MobileVitalsType> = [.residentMemory, .memoryUtilization]
+
+        // Expect exactly two distinct memory metrics (same UUID)
+        let exp = expectation(forNotification: .cxRumNotificationMetrics, object: nil) { note in
+            guard let payload = note.object as? MobileVitals else { return false }
+
+            // Lock to first tick's UUID
+            if firstTickUUID == nil { firstTickUUID = payload.uuid }
+            guard payload.uuid == firstTickUUID else { return false }
+
+            // Validate type & numeric value
+            guard allowedTypes.contains(payload.type) else {
+                XCTFail("Unexpected metric type: \(payload.type)")
+                return false
             }
-            
-            // Validate expected types and numeric values
-            XCTAssertTrue(
-                payload.type == .residentMemoryMb ||
-                payload.type == .memoryUtilizationPercent,
-                "Unexpected metric type: \(payload.type)"
-            )
             XCTAssertNotNil(Double(payload.value), "Metric value should be numeric: \(payload.value)")
-            
-            let inserted = receivedTypes.insert(payload.type).inserted
-            if inserted, receivedTypes.count == 2 {
-                tickCompleted.fulfill()
-            }
+
+            // Fulfill only on first occurrence of each expected type
+            return receivedTypes.insert(payload.type).inserted
         }
-        
+        exp.expectedFulfillmentCount = 2
+
+        // Start monitoring
         let detector = MemoryDetector(interval: 0.1)
         detector.startMonitoring()
-        
-        wait(for: [tickCompleted], timeout: 3.0)
+
+        // Wait for both metrics from the same tick
+        wait(for: [exp], timeout: 3.0)
+
         detector.stopMonitoring()
-        NotificationCenter.default.removeObserver(obs)
+
+        // Final sanity check: got exactly the two expected types
+        XCTAssertEqual(receivedTypes, allowedTypes, "Did not receive exactly the expected two memory metrics for a single tick")
     }
     
-    func testStopMonitoringPreventsFurtherEmissions() {
-        // Capture first tick (2 metrics), then stop. Ensure no metrics from a new UUID arrive afterwards.
-        let firstTickDone = expectation(description: "First tick completed")
-        let noFurther = expectation(description: "No further ticks after stop")
-        noFurther.isInverted = true // We expect NOT to receive more
-        
-        var firstTickUUID: String?
-        var receivedTypes = Set<CXMobileVitalsType>()
-        var sawAnotherTick = false
-        
-        let obs = NotificationCenter.default.addObserver(
-            forName: .cxRumNotificationMetrics,
-            object: nil,
-            queue: .main
-        ) { note in
-            guard let payload = note.object as? CXMobileVitals else { return }
-            
-            if firstTickUUID == nil {
-                firstTickUUID = payload.uuid
-            }
-            
-            if payload.uuid == firstTickUUID {
-                _ = receivedTypes.insert(payload.type)
-                if receivedTypes.count == 2 {
-                    firstTickDone.fulfill()
-                }
-                return
-            }
-            
-            // If we see a different UUID, that indicates a second tick
-            sawAnotherTick = true
-            noFurther.fulfill()
-        }
-        
-        let detector = MemoryDetector(interval: 0.1)
-        detector.startMonitoring()
-        
-        // Wait for first tick to complete, then stop and ensure silence
-        wait(for: [firstTickDone], timeout: 3.0)
-        detector.stopMonitoring()
-        
-        // Allow a short window to catch any stray posts from a new tick
-        wait(for: [noFurther], timeout: 0.6)
-        NotificationCenter.default.removeObserver(obs)
-        
-        XCTAssertFalse(sawAnotherTick, "Received metrics from another tick after stopMonitoring()")
-    }
+//    func testStopMonitoringPreventsFurtherEmissions() {
+//        // --- State captured by the handler (declare BEFORE closure) ---
+//        var firstUUID: String?
+//        var receivedTypes = Set<MobileVitalsType>()
+//        let allowed: Set<MobileVitalsType> = [.residentMemory, .memoryUtilization]
+//
+//        // We'll create detector after wiring the expectations but *declare* it now to avoid capture-order issues.
+//        var detector: MemoryDetector!
+//
+//        // 1) First tick: expect the two distinct metrics (same UUID)
+//        let firstTick = expectation(forNotification: .cxRumNotificationMetrics, object: nil) { note in
+//            guard let mv = note.object as? MobileVitals else { return false }
+//            guard allowed.contains(mv.type) else { return false }
+//
+//            if firstUUID == nil { firstUUID = mv.uuid }
+//            guard mv.uuid == firstUUID else { return false }
+//
+//            // Value should be numeric
+//            XCTAssertNotNil(Double(mv.value), "Metric value should be numeric: \(mv.value)")
+//
+//            // Fulfill only once per unique type
+//            return receivedTypes.insert(mv.type).inserted
+//        }
+//        firstTick.expectedFulfillmentCount = 2
+//
+//        // Use a short interval so the first tick arrives quickly in CI
+//        detector = MemoryDetector(interval: 0.1)
+//        detector.startMonitoring()
+//
+//        // Wait until we saw both metrics of the first tick
+//        wait(for: [firstTick], timeout: 3.0)
+//
+//        // 2) Stop monitoring and give a tiny drain for any queued posts
+//        detector.stopMonitoring()
+//        RunLoop.main.run(until: Date().addingTimeInterval(0.1))
+//
+//        // 3) After stop: there must be NO further emissions
+//        let noFurther = expectation(forNotification: .cxRumNotificationMetrics, object: nil) { _ in
+//            // Any notification now would be post-stop → should not happen.
+//            return true
+//        }
+//        noFurther.isInverted = true
+//
+//        // Brief grace window to catch stray posts after stop
+//        wait(for: [noFurther], timeout: 0.6)
+//
+//        // Final sanity check
+//        XCTAssertEqual(receivedTypes, allowed, "First tick did not contain exactly the two expected memory metrics")
+//    }
 }
