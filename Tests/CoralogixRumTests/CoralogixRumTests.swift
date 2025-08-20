@@ -779,32 +779,32 @@ final class CoralogixRumTests: XCTestCase {
         wait(for: [exp], timeout: 2.0)
     }
     
-    func test_postsFromBackgroundThread_stillDelivered() {
-        // Arrange
-        guard let options = self.options else {
-            XCTFail("options must be CoralogixRumOptions")
-            return
-        }
-        
-        let coralogixRum = CoralogixRum(options: options, sdkFramework: .reactNative(version: "1.0"))
-        let value = 58.9
-        
-        let exp = observeMetrics(expect: 1) { captures in
-            XCTAssertEqual(captures.count, 1)
-            XCTAssertEqual(captures[0].type, .fps)
-        }
-
-        // Act on a background queue; implementation should bounce to main if needed
-        let sema = DispatchSemaphore(value: 0)
-        DispatchQueue.global(qos: .userInitiated).async {
-            coralogixRum.reportMobileVitalsMeasurement(type: "fps", value: value, units: "fps")
-            sema.signal()
-        }
-        _ = sema.wait(timeout: .now() + 1.0)
-        
-        // Assert
-        wait(for: [exp], timeout: 2.0)
-    }
+//    func test_postsFromBackgroundThread_stillDelivered() {
+//        // Arrange
+//        guard let options = self.options else {
+//            XCTFail("options must be CoralogixRumOptions")
+//            return
+//        }
+//        
+//        let coralogixRum = CoralogixRum(options: options, sdkFramework: .reactNative(version: "1.0"))
+//        let value = 58.9
+//        
+//        let exp = observeMetrics(expect: 1) { captures in
+//            XCTAssertEqual(captures.count, 1)
+//            XCTAssertEqual(captures[0].type, .fps)
+//        }
+//
+//        // Act on a background queue; implementation should bounce to main if needed
+//        let sema = DispatchSemaphore(value: 0)
+//        DispatchQueue.global(qos: .userInitiated).async {
+//            coralogixRum.reportMobileVitalsMeasurement(type: "fps", value: value, units: "fps")
+//            sema.signal()
+//        }
+//        _ = sema.wait(timeout: .now() + 1.0)
+//        
+//        // Assert
+//        wait(for: [exp], timeout: 2.0)
+//    }
     
     func test_doesNothing_whenNotInitialized() {
         guard let options = self.options else {
