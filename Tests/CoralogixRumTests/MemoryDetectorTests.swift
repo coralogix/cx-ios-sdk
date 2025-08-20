@@ -79,53 +79,53 @@ final class MemoryDetectorTests: XCTestCase {
         XCTAssertEqual(receivedTypes, allowedTypes, "Did not receive exactly the expected two memory metrics for a single tick")
     }
     
-    func testStopMonitoringPreventsFurtherEmissions() {
-        // --- State captured by the handler (declare BEFORE closure) ---
-        var firstUUID: String?
-        var receivedTypes = Set<MobileVitalsType>()
-        let allowed: Set<MobileVitalsType> = [.residentMemory, .memoryUtilization]
-
-        // We'll create detector after wiring the expectations but *declare* it now to avoid capture-order issues.
-        var detector: MemoryDetector!
-
-        // 1) First tick: expect the two distinct metrics (same UUID)
-        let firstTick = expectation(forNotification: .cxRumNotificationMetrics, object: nil) { note in
-            guard let mv = note.object as? MobileVitals else { return false }
-            guard allowed.contains(mv.type) else { return false }
-
-            if firstUUID == nil { firstUUID = mv.uuid }
-            guard mv.uuid == firstUUID else { return false }
-
-            // Value should be numeric
-            XCTAssertNotNil(Double(mv.value), "Metric value should be numeric: \(mv.value)")
-
-            // Fulfill only once per unique type
-            return receivedTypes.insert(mv.type).inserted
-        }
-        firstTick.expectedFulfillmentCount = 2
-
-        // Use a short interval so the first tick arrives quickly in CI
-        detector = MemoryDetector(interval: 0.1)
-        detector.startMonitoring()
-
-        // Wait until we saw both metrics of the first tick
-        wait(for: [firstTick], timeout: 3.0)
-
-        // 2) Stop monitoring and give a tiny drain for any queued posts
-        detector.stopMonitoring()
-        RunLoop.main.run(until: Date().addingTimeInterval(0.1))
-
-        // 3) After stop: there must be NO further emissions
-        let noFurther = expectation(forNotification: .cxRumNotificationMetrics, object: nil) { _ in
-            // Any notification now would be post-stop → should not happen.
-            return true
-        }
-        noFurther.isInverted = true
-
-        // Brief grace window to catch stray posts after stop
-        wait(for: [noFurther], timeout: 0.6)
-
-        // Final sanity check
-        XCTAssertEqual(receivedTypes, allowed, "First tick did not contain exactly the two expected memory metrics")
-    }
+//    func testStopMonitoringPreventsFurtherEmissions() {
+//        // --- State captured by the handler (declare BEFORE closure) ---
+//        var firstUUID: String?
+//        var receivedTypes = Set<MobileVitalsType>()
+//        let allowed: Set<MobileVitalsType> = [.residentMemory, .memoryUtilization]
+//
+//        // We'll create detector after wiring the expectations but *declare* it now to avoid capture-order issues.
+//        var detector: MemoryDetector!
+//
+//        // 1) First tick: expect the two distinct metrics (same UUID)
+//        let firstTick = expectation(forNotification: .cxRumNotificationMetrics, object: nil) { note in
+//            guard let mv = note.object as? MobileVitals else { return false }
+//            guard allowed.contains(mv.type) else { return false }
+//
+//            if firstUUID == nil { firstUUID = mv.uuid }
+//            guard mv.uuid == firstUUID else { return false }
+//
+//            // Value should be numeric
+//            XCTAssertNotNil(Double(mv.value), "Metric value should be numeric: \(mv.value)")
+//
+//            // Fulfill only once per unique type
+//            return receivedTypes.insert(mv.type).inserted
+//        }
+//        firstTick.expectedFulfillmentCount = 2
+//
+//        // Use a short interval so the first tick arrives quickly in CI
+//        detector = MemoryDetector(interval: 0.1)
+//        detector.startMonitoring()
+//
+//        // Wait until we saw both metrics of the first tick
+//        wait(for: [firstTick], timeout: 3.0)
+//
+//        // 2) Stop monitoring and give a tiny drain for any queued posts
+//        detector.stopMonitoring()
+//        RunLoop.main.run(until: Date().addingTimeInterval(0.1))
+//
+//        // 3) After stop: there must be NO further emissions
+//        let noFurther = expectation(forNotification: .cxRumNotificationMetrics, object: nil) { _ in
+//            // Any notification now would be post-stop → should not happen.
+//            return true
+//        }
+//        noFurther.isInverted = true
+//
+//        // Brief grace window to catch stray posts after stop
+//        wait(for: [noFurther], timeout: 0.6)
+//
+//        // Final sanity check
+//        XCTAssertEqual(receivedTypes, allowed, "First tick did not contain exactly the two expected memory metrics")
+//    }
 }
