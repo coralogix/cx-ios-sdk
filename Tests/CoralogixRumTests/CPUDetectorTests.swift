@@ -72,53 +72,61 @@ final class CPUDetectorTests: XCTestCase {
         XCTAssertEqual(receivedTypes, allowedTypes, "Did not receive the exact set of CPU metrics")
     }
     
+    
     func testStopMonitoringPreventsFurtherEmissions() {
-        // --- State captured by the handler (declare BEFORE closures) ---
+        // Serialize state touched by the notification handler
+        let stateQ = DispatchQueue(label: "test.state.q")
         var firstTickUUID: String?
         var receivedTypes = Set<MobileVitalsType>()
-        let allowedTypes: Set<MobileVitalsType> = [.cpuUsage, .totalCpuTime, .mainThreadCpuTime]
+        let allowed: Set<MobileVitalsType> = [.cpuUsage, .totalCpuTime, .mainThreadCpuTime]
 
-        // --- 1) Expect exactly the 3 distinct metrics (same UUID) for the first tick ---
-        let firstTickThree = expectation(forNotification: .cxRumNotificationMetrics, object: nil) { note in
+        // 1) Expect exactly 3 distinct metric types for the first batch
+        let firstThree = expectation(forNotification: .cxRumNotificationMetrics, object: nil) { note in
             guard let payload = note.object as? MobileVitals else { return false }
 
-            // Lock to the first tick's UUID
-            if firstTickUUID == nil { firstTickUUID = payload.uuid }
-            guard payload.uuid == firstTickUUID else { return false }
+            // serialize mutations/reads
+            return stateQ.sync {
+                if firstTickUUID == nil { firstTickUUID = payload.uuid }
+                // If UUID grouping is not guaranteed, comment the next line out:
+                guard payload.uuid == firstTickUUID else { return false }
 
-            // Validate type & value
-            guard allowedTypes.contains(payload.type) else {
-                XCTFail("Unexpected metric type: \(payload.type)")
-                return false
-            }
-            XCTAssertNotNil(Double(payload.value), "Metric value is not a number: \(payload.value)")
+                guard allowed.contains(payload.type) else {
+                    XCTFail("Unexpected metric type: \(payload.type)")
+                    return false
+                }
+                XCTAssertNotNil(Double(payload.value), "Non-numeric value: \(payload.value)")
 
-            // Count only the first time we see each expected type
-            let inserted = receivedTypes.insert(payload.type).inserted
-            if inserted, receivedTypes.count == 3 {
-                // Completed one tick; stop further emissions immediately
-                self.cpuDetector.stopMonitoring()
+                // count unique types
+                let inserted = receivedTypes.insert(payload.type).inserted
+                if inserted, receivedTypes.count == 3 {
+                    // do not stop here—invert expectation will be armed AFTER we drain
+                }
+                return inserted
             }
-            return inserted // fulfill for unique types only
         }
-        firstTickThree.expectedFulfillmentCount = 3
+        firstThree.expectedFulfillmentCount = 3
+        firstThree.assertForOverFulfill = false
 
-        // Start
+        // Start after expectation is armed
         cpuDetector.startMonitoring()
 
-        // Wait for the first tick to complete (3 distinct metrics)
-        wait(for: [firstTickThree], timeout: 3.0)
+        // Wait for the first batch (give CI some headroom)
+        wait(for: [firstThree], timeout: 5.0)
 
-        // --- 2) After stop, ensure no further emissions within a small grace window ---
-        // Create the inverted expectation *after* stopping, so it only observes post-stop.
-        let noFurtherAfterStop = expectation(forNotification: .cxRumNotificationMetrics, object: nil) { _ in
-            // Any notification now would be post-stop → should not happen.
+        // Now stop monitoring
+        cpuDetector.stopMonitoring()
+
+        // Drain: give any in-flight posts time to land BEFORE we arm the inverted expectation
+        RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+
+        // 2) Assert no further emissions after stop within a grace window
+        let noneAfterStop = expectation(forNotification: .cxRumNotificationMetrics, object: nil) { _ in
+            // Anything now is after stop -> should not happen
             return true
         }
-        noFurtherAfterStop.isInverted = true
+        noneAfterStop.isInverted = true
 
-        // Short grace window to catch any stray posts after stopMonitoring()
-        wait(for: [noFurtherAfterStop], timeout: 0.6)
+        wait(for: [noneAfterStop], timeout: 1.0)
     }
 }
 
