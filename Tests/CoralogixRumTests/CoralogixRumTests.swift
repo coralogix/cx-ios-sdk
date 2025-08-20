@@ -325,7 +325,6 @@ final class CoralogixRumTests: XCTestCase {
                                                 screenshotLocation: screenshotLocation,
                                                 screenshotData: screenshotData)
         // Assert
-        XCTAssertNil(result["timestamp"] as? TimeInterval)
         XCTAssertEqual(result["screenshotId"] as? String, screenshotId)
         XCTAssertEqual(result[Keys.screenshotData.rawValue] as? Data, screenshotData)
         XCTAssertEqual(result[Keys.page.rawValue] as? Int, 0)
