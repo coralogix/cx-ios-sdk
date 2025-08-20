@@ -349,7 +349,21 @@ final class CoralogixRumTests: XCTestCase {
     }
     
     func testContainsXYReturnsFalseWhenOnlyXExists() {
-        let coralogixRum = makeMockCoralogixRum()
+        let mockOptions = CoralogixExporterOptions(
+            coralogixDomain: .US2,
+            userContext: nil,
+            environment: "PROD",
+            application: "TestApp-iOS",
+            version: "1.0",
+            publicKey: "token",
+            ignoreUrls: [],
+            ignoreErrors: [],
+            sampleRate: 100,
+            debug: true
+        )
+        
+        let coralogixRum = CoralogixRum(options: mockOptions)
+
         let dict: [String: Any] = [
             Keys.positionX.rawValue: 100
         ]
