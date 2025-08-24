@@ -9,13 +9,24 @@ import Foundation
 
 public class FingerprintManager {
     public let fingerprint: String
-    
+    private static let createLock = NSLock()
+
     init(using keychain: KeyChainProtocol) {
         self.fingerprint = FingerprintManager.resolveFingerprint(using: keychain)
     }
     
     private static func resolveFingerprint(using keychain: KeyChainProtocol) -> String {
         // 1) Try existing
+        if let existing = keychain.readStringFromKeychain(service: Keys.service.rawValue,
+                                                          key: Keys.fingerPrint.rawValue) {
+            return existing
+        }
+        
+        // Serialize creation
+        createLock.lock()
+        defer { createLock.unlock() }
+        
+        // Re-check after acquiring the lock (double-checked)
         if let existing = keychain.readStringFromKeychain(service: Keys.service.rawValue,
                                                           key: Keys.fingerPrint.rawValue) {
             return existing
