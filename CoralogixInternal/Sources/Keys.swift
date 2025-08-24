@@ -211,12 +211,15 @@ public enum Keys: String {
     case memoryUtilization = "memory_utilization"
     case slowFrames = "slow_frames"
     case frozenFrames = "frozen_frames"
+    case footprintMemory = "footprint_memory"
     case metricKit = "metric_kit"
     case ms
     case kb
     case mb
     case count
     case percentage
+    case cpu
+    case memory
 }
 
 public enum CoralogixLogSeverity: Int {

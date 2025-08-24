@@ -24,7 +24,7 @@ extension CoralogixRum {
         
         switch mobileVitals.type {
         case .metricKit:
-            if let metric = mobileVitals.name as? String {
+            if let metric = mobileVitals.name {
                 handleMetricKit(metric)
             }
         default:
@@ -51,7 +51,9 @@ extension CoralogixRum {
     
     private func handleMobileVitals(_ mobileVitals: MobileVitals) {
         let span = self.getSpan(for: mobileVitals)
-        span.setAttribute(key: Keys.mobileVitalsType.rawValue, value: mobileVitals.type.stringValue)
+        let value = self.getMobileVitalsTypeString(mobileVitals.type)
+        
+        span.setAttribute(key: Keys.mobileVitalsType.rawValue, value: value)
         
         for (key, value) in mobileVitals.type.specificAttributes(for: mobileVitals.value) {
             span.setAttribute(key: key, value: value)
@@ -67,6 +69,17 @@ extension CoralogixRum {
             span.setAttribute(key: Keys.mobileVitalsUuid.rawValue, value: uuid)
         }
         span.end()
+    }
+    
+    private func getMobileVitalsTypeString(_ type: MobileVitalsType) -> String {
+        switch type {
+        case .memoryUtilization, .residentMemory, .footprintMemory:
+            return Keys.memory.rawValue
+        case .cpuUsage, .mainThreadCpuTime, .totalCpuTime:
+            return Keys.cpu.rawValue
+        default :
+            return type.stringValue
+        }
     }
     
     private func getSpan(for vitals: MobileVitals) -> any Span {

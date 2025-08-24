@@ -37,6 +37,7 @@ public class CoralogixRum {
     public init(options: CoralogixExporterOptions,
                 sdkFramework: SdkFramework = .swift,
                 sessionManager: SessionManager? = SessionManager()) {
+        CoralogixRum.mobileSDK = MobileSDK(sdkFramework: sdkFramework)
         Log.isDebug = options.debug
         self.sessionManager = sessionManager
         self.displayCoralogixWord()
@@ -46,7 +47,6 @@ public class CoralogixRum {
             return
         }
         
-        CoralogixRum.mobileSDK = MobileSDK(sdkFramework: sdkFramework)
         self.startup(options: options)
     }
     
@@ -320,11 +320,18 @@ public class CoralogixRum {
     }
     
     public func displayCoralogixWord() {
-        let coralogixText = "[CORALOGIX]\nVersion: \(Global.sdk.rawValue) \nSwift Version: \(Global.swiftVersion.rawValue) \nSupport iOS, tvOS\n\n\n"
-        print(coralogixText)
+        var coralogixText = """
+           [CORALOGIX]
+           Version: \(Global.sdk.rawValue)
+           Swift Version: \(Global.swiftVersion.rawValue)
+           Support: iOS, tvOS\n\n
+           """
         
         if !CoralogixRum.mobileSDK.sdkFramework.isNative {
-            print("[CORALOGIX]\nHybrid Version: \(CoralogixRum.mobileSDK.sdkFramework.version)")
+            coralogixText += """
+               Hybrid Version: \(CoralogixRum.mobileSDK.sdkFramework.version)\n\n
+               """
         }
+        print(coralogixText)
     }
 }

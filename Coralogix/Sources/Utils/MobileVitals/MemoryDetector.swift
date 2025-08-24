@@ -80,7 +80,8 @@ final class MemoryDetector {
         let uuid = UUID().uuidString.lowercased()
 
         let metrics: [(MobileVitalsType, Double, MeasurementUnits)] = [
-            (.residentMemory, m.footprintMB, .megaBytes),
+            (.residentMemory, m.residentMB, .megaBytes),
+            (.footprintMemory, m.footprintMB, .megaBytes),
             (.memoryUtilization, m.utilizationPercent, .percentage)
         ]
 

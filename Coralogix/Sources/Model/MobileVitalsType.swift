@@ -17,6 +17,7 @@ enum MobileVitalsType: Equatable, Hashable {
     case totalCpuTime //Ms
     case mainThreadCpuTime //Ms
     case residentMemory //Mb
+    case footprintMemory //Mb
     case memoryUtilization //Percent
     case slowFrames //Count
     case frozenFrames //Count
@@ -36,6 +37,7 @@ enum MobileVitalsType: Equatable, Hashable {
         case Keys.memoryUtilization.rawValue: self = .memoryUtilization
         case Keys.slowFrames.rawValue: self = .slowFrames
         case Keys.frozenFrames.rawValue: self = .frozenFrames
+        case Keys.footprintMemory.rawValue: self = .footprintMemory
         default: self = .custom(string)
         }
     }
@@ -54,6 +56,7 @@ enum MobileVitalsType: Equatable, Hashable {
         case .memoryUtilization: return Keys.memoryUtilization.rawValue
         case .slowFrames: return Keys.slowFrames.rawValue
         case .frozenFrames: return Keys.frozenFrames.rawValue
+        case .footprintMemory: return Keys.footprintMemory.rawValue
         case .custom(let value): return value
         }
     }
