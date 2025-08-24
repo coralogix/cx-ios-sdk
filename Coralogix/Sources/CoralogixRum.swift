@@ -143,6 +143,7 @@ public class CoralogixRum {
             self.metricsManager.startColdStartMonitoring()
             self.metricsManager.startCPUMonitoring()
             self.metricsManager.startMemoryMonitoring()
+            self.metricsManager.startSlowFrozenFramesMonitoring()
         }
         
         if options.shouldInitInstrumentation(instrumentation: .anr) {
