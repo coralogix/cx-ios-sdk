@@ -41,8 +41,10 @@ class FPSTrigger {
     static let defaultInterval = 300 // 5 min
     
     func startMonitoring(xTimesPerHour: Int = defaultInterval) {
-        if !isRunning {
-            isRunning = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self, !self.isRunning else { return }
+            
+            self.isRunning = true
             var timesPerHour = xTimesPerHour
             if timesPerHour < FPSTrigger.defaultInterval {
                 timesPerHour = FPSTrigger.defaultInterval
@@ -50,7 +52,7 @@ class FPSTrigger {
             // Time interval between each trigger in seconds
             let interval = 3600 / timesPerHour
             
-            timer = Timer.scheduledTimer(withTimeInterval: TimeInterval(interval), repeats: true) { [weak self] _ in
+            self.timer = Timer.scheduledTimer(withTimeInterval: TimeInterval(interval), repeats: true) { [weak self] _ in
                 self?.monitorFPS()
             }
         }
