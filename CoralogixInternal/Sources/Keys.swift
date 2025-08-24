@@ -220,6 +220,7 @@ public enum Keys: String {
     case percentage
     case cpu
     case memory
+    case fingerPrint
 }
 
 public enum CoralogixLogSeverity: Int {

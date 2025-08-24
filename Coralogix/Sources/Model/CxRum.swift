@@ -33,6 +33,7 @@ struct CxRum {
     var mobileVitalsContext: MobileVitalsContext?
     var lifeCycleContext: LifeCycleContext?
     var screenShotContext: ScreenshotContext?
+    var fingerPrint: String = ""
      
     init(otel: SpanDataProtocol,
          versionMetadata: VersionMetadata,
@@ -62,6 +63,8 @@ struct CxRum {
         self.networkManager = networkManager
         self.viewManager = viewManager
         self.labels = labels
+        self.fingerPrint = FingerprintManager(using: KeychainManager()).fingerprint
+
         self.mobileSDK = CoralogixRum.mobileSDK
 
         let traceContext = Helper.getTraceAndSpanId(otel: otel)
@@ -150,6 +153,7 @@ struct CxRum {
     }
     
     private func addBasicDetails(to result: inout [String: Any]) {
+        result[Keys.fingerPrint.rawValue] = self.fingerPrint
         result[Keys.timestamp.rawValue] = self.timeStamp.milliseconds
         result[Keys.mobileSdk.rawValue] = self.mobileSDK.getDictionary()
         result[Keys.versionMetaData.rawValue] = self.versionMetadata.getDictionary()
