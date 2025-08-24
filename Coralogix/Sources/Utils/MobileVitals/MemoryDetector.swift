@@ -49,8 +49,9 @@ final class MemoryDetector {
         guard let m = MemoryDetector.readMemoryMeasurement() else { return }
         self.handleMemoryClosure?()
         Log.d(String(
-            format: "[Metric] Memory: %.1f MB | Utilization: %.2f%%",
+            format: "[Metric] Memory: %.1f MB | Resident: %.1f MB | Utilization: %.2f%%",
             m.footprintMB,
+            m.residentMB,
             m.utilizationPercent
         ))
 
@@ -80,7 +81,8 @@ final class MemoryDetector {
         let uuid = UUID().uuidString.lowercased()
 
         let metrics: [(MobileVitalsType, Double, MeasurementUnits)] = [
-            (.residentMemory, m.footprintMB, .megaBytes),
+            (.residentMemory, m.residentMB, .megaBytes),
+            (.footprintMemory, m.footprintMB, .megaBytes),
             (.memoryUtilization, m.utilizationPercent, .percentage)
         ]
 

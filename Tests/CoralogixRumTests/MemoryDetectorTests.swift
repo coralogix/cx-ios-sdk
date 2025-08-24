@@ -44,7 +44,7 @@ final class MemoryDetectorTests: XCTestCase {
         // State captured by the handler (declare BEFORE the closure)
         var firstTickUUID: String?
         var receivedTypes = Set<MobileVitalsType>()
-        let allowedTypes: Set<MobileVitalsType> = [.residentMemory, .memoryUtilization]
+        let allowedTypes: Set<MobileVitalsType> = [.residentMemory, .footprintMemory, .memoryUtilization]
 
         // Expect exactly two distinct memory metrics (same UUID)
         let exp = expectation(forNotification: .cxRumNotificationMetrics, object: nil) { note in
