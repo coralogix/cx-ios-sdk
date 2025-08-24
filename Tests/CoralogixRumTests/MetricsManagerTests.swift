@@ -77,17 +77,23 @@ final class MetricsManagerTests: XCTestCase {
     }
     
     func testFPSSamplingMonitoringStartAndStop() {
-        // Simulate starting FPS sampling monitoring
         metricsManager.startFPSSamplingMonitoring(mobileVitalsFPSSamplingRate: 30)
-        
-        // FPS monitoring should be running
-        XCTAssertTrue(metricsManager.fpsTrigger.isRunning, "FPS sampling should be running after calling startFPSSamplingMonitoring")
-        
-        // Stop FPS monitoring
+
+        // Wait until isRunning == true
+        let startedPred = NSPredicate { _, _ in
+            self.metricsManager.fpsTrigger.isRunning
+        }
+        let startedExp = expectation(for: startedPred, evaluatedWith: nil)
+        wait(for: [startedExp], timeout: 2.0)
+
         metricsManager.appDidEnterBackgroundNotification()
-        
-        // FPS monitoring should stop
-        XCTAssertFalse(metricsManager.fpsTrigger.isRunning, "FPS sampling should stop when app enters background")
+
+        // Wait until isRunning == false
+        let stoppedPred = NSPredicate { _, _ in
+            !self.metricsManager.fpsTrigger.isRunning
+        }
+        let stoppedExp = expectation(for: stoppedPred, evaluatedWith: nil)
+        wait(for: [stoppedExp], timeout: 2.0)
     }
     
     func testWarmStartVital() {
