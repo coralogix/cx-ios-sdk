@@ -27,6 +27,7 @@ public class CxSpan {
          userMetadata: [String: String]?,
          beforeSend: (([String: Any]) -> [String: Any]?)?,
          labels: [String: Any]?) {
+        
         self.applicationName = versionMetadata.appName
         self.versionMetadata = versionMetadata
         self.subsystemName = Keys.cxRum.rawValue
@@ -160,8 +161,7 @@ public struct SessionMetadata {
     mutating func loadPrevSession(keychain: KeyChainProtocol) {
         let newPid = getpid()
         
-        if let oldPid = keychain.readStringFromKeychain(service: Keys.service.rawValue,
-                                                         key: Keys.pid.rawValue),
+        if let oldPid = keychain.readStringFromKeychain(service: Keys.service.rawValue, key: Keys.pid.rawValue),
            let oldSessionId = keychain.readStringFromKeychain(service: Keys.service.rawValue,
                                                                key: Keys.keySessionId.rawValue),
            let oldSessionTimeInterval = keychain.readStringFromKeychain(service: Keys.service.rawValue,
