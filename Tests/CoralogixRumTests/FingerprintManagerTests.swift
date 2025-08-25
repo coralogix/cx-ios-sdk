@@ -101,10 +101,6 @@ final class FingerprintManagerTests: XCTestCase {
 
 
 final class FakeKeychain: KeyChainProtocol {
-    func addStringIfAbsent(service: String, key: String, value: String) -> Bool {
-        return true
-    }
-    
     private let lock = NSLock()
     private var value: String?
 
