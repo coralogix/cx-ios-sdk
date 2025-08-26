@@ -58,7 +58,7 @@ public class NetworkStatusClass {
         if Thread.isMainThread {
             fetchStatus()
         } else {
-            DispatchQueue.main.sync {
+            DispatchQueue.main.async {
                 fetchStatus()
             }
         }

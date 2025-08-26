@@ -19,10 +19,10 @@ extension CoralogixRum {
         
         if options.enableSwizzling == true {
             if Thread.isMainThread {
-                initializeInstrumentation(options: options)
+                self.initializeInstrumentation(options: options)
             } else {
-                DispatchQueue.main.sync {
-                    initializeInstrumentation(options: options)
+                DispatchQueue.main.async {
+                    self.initializeInstrumentation(options: options)
                 }
             }
         } else {
