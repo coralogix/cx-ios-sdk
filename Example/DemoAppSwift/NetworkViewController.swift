@@ -78,7 +78,7 @@ class NetworkViewController: UITableViewController {
         } else if item == Keys.succesfullNetworkRequest.rawValue {
             NetworkSim.sendSuccesfullRequest()
         } else if item == Keys.succesfullNetworkRequestFlutter.rawValue {
-            NetworkSim.setNetworkRequestContextSuccsess()
+            NetworkSim.setNetworkRequestContextFlutterSuccsess()
         } else if item == Keys.failureNetworkRequestFlutter.rawValue {
             NetworkSim.setNetworkRequestContextFailure()
         } else if item ==  Keys.succesfullAlamofire.rawValue {
