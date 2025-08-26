@@ -93,6 +93,21 @@ class NetworkSim {
         CoralogixRumManager.shared.sdk.setNetworkRequestContext(dictionary: dict)
     }
     
+    static func setNetworkRequestContextFlutterSuccsess() {
+        let dict = ["url" : "\(url)",
+                    "host" : "coralogix.com",
+                    "method" : "GET",
+                    "status_code": 200,
+                    "duration" : 5432,
+                    "http_response_body_size": 234254,
+                    "fragments": "",
+                    "schema": "https",
+                    "customTraceId":"customTraceId",
+                    "customSpanId":"customSpanId"] as [String : Any]
+        
+        CoralogixRumManager.shared.sdk.setNetworkRequestContext(dictionary: dict)
+    }
+    
     static func setNetworkRequestContextFailure() {
         let dict = ["url" : errorUrl,
                     "host" : "coralogix.com",
