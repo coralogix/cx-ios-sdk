@@ -22,16 +22,18 @@ extension CoralogixRum {
             
             if Thread.isMainThread {
                 // Run immediately, avoid async race
+                let group = readinessGroup
+                defer { group.leave() }
                 self.initializeInstrumentation(options: options)
                 self.isNetworkInstrumentationReady = true
-                readinessGroup.leave()
             } else {
                 // Schedule on main, wait until done
+                let group = readinessGroup
                 DispatchQueue.main.async { [weak self] in
                     guard let self = self else { return }
                     self.initializeInstrumentation(options: options)
                     self.isNetworkInstrumentationReady = true
-                    self.readinessGroup.leave()
+                    group.leave()
                 }
                 
                 // 🚦 Block background thread briefly to ensure swizzling is ready
