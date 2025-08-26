@@ -18,11 +18,31 @@ extension CoralogixRum {
         }
         
         if options.enableSwizzling == true {
+            self.readinessGroup.enter()
+            
             if Thread.isMainThread {
+                // Run immediately, avoid async race
                 self.initializeInstrumentation(options: options)
+                self.isNetworkInstrumentationReady = true
+                readinessGroup.leave()
             } else {
+                // Schedule on main, wait until done
                 DispatchQueue.main.async { [weak self] in
-                    self?.initializeInstrumentation(options: options)
+                    guard let self = self else { return }
+                    self.initializeInstrumentation(options: options)
+                    self.isNetworkInstrumentationReady = true
+                    self.readinessGroup.leave()
+                }
+                
+                // 🚦 Block background thread briefly to ensure swizzling is ready
+                let start = Date()
+                let result = readinessGroup.wait(timeout: .now() + 0.5)
+                let elapsed = Date().timeIntervalSince(start)
+                
+                if result == .timedOut {
+                    Log.w("[Coralogix] initializeNetworkInstrumentation() timed out after \(elapsed)s. Swizzling may be incomplete!")
+                } else if elapsed > 0 {
+                    Log.d("[Coralogix] initializeNetworkInstrumentation() waited \(elapsed)s for network swizzling.")
                 }
             }
         } else {

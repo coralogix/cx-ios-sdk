@@ -21,7 +21,9 @@ public class CoralogixRum {
     internal var sessionManager: SessionManager?
     internal var sessionInstrumentation: URLSessionInstrumentation?
     internal var metricsManager = MetricsManager()
-    
+    internal let readinessGroup = DispatchGroup()
+    internal(set) var isNetworkInstrumentationReady = false
+
     internal var tracerProvider: () -> Tracer = {
         return OpenTelemetry.instance.tracerProvider.get(
             instrumentationName: Keys.iosSdk.rawValue,
