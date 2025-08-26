@@ -21,8 +21,8 @@ extension CoralogixRum {
             if Thread.isMainThread {
                 self.initializeInstrumentation(options: options)
             } else {
-                DispatchQueue.main.async {
-                    self.initializeInstrumentation(options: options)
+                DispatchQueue.main.async { [weak self] in
+                    self?.initializeInstrumentation(options: options)
                 }
             }
         } else {
