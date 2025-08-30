@@ -85,7 +85,7 @@ public class CoralogixRum {
             Log.e("SessionManager is nil.")
             return
         }
-        
+        UserAgentManager.shared.getUserAgent()
         Log.isDebug = options.debug
         
         self.setupCoreModules(options: options)

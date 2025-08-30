@@ -47,7 +47,6 @@ struct NetworkRequestContext {
         }
         
         self.statusText = otel.getStatusText()
-        
     }
     
     func getDictionary() -> [String: Any] {
