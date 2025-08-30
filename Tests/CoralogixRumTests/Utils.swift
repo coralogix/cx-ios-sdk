@@ -20,6 +20,7 @@ class MockSpanData: SpanDataProtocol {
     var name: String?
     var resources: [String: Any] = [:]
     var kind: Int
+    var statusText: String?
     
     func getStatus() -> String? {
         return self.status
@@ -65,6 +66,10 @@ class MockSpanData: SpanDataProtocol {
     func getResources() -> [String : Any] {
         return self.resources
     }
+    
+    func getStatusText() -> String {
+        return self.statusText ?? ""
+    }
 
     // Add initializer or other methods to set up the mock data as needed
     init(attributes: [String: Any], 
@@ -75,6 +80,7 @@ class MockSpanData: SpanDataProtocol {
          traceId: String? = nil,
          name: String? = nil,
          kind: Int = 0,
+         statusText: String? = nil,
          statusCode: [String: Any]? = nil,
          resources: [String: Any]? = nil) {
         self.attributes = attributes
@@ -85,6 +91,7 @@ class MockSpanData: SpanDataProtocol {
         self.spanId = spanId
         self.kind = kind
         self.name = name
+        self.statusText = statusText
         self.traceId = traceId
         self.statusCode = statusCode ?? [:]
         self.resources = resources ?? [:]

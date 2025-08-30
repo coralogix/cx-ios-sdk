@@ -23,7 +23,7 @@ public enum Keys: String {
     case nativeVersion = "native_version"
     case sessionId = "session_id"
     case sessionCreationDate = "session_creation_date"
-    case userAgent = "user_agent"
+    case userAgent
     case browser
     case browserVersion
     case operatingSystem = "os"
@@ -189,6 +189,7 @@ public enum Keys: String {
     case queueSpanProcessingQueue = "com.coralogix.spanProcessingQueue"
     case queueViewManagerQueue = "com.coralogix.viewManagerQueue"
     case queueSlowFrozenReporterQueue = "com.coralogix.vitals.slowfrozen.reporter"
+    case queueUserAgentQueue = "com.coralogix.userAgentQueue"
     case undefined = ""
     case cxforward
     case enable
