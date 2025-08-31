@@ -77,6 +77,7 @@ extension SpanData: SpanDataProtocol {
     }
     
     func getStatusText() -> String {
-        return self.status.description
+        // open telemety bug not returning the right text
+        return Keys.undefined.rawValue //self.status.description
     }
 }

@@ -23,7 +23,7 @@ public enum Keys: String {
     case nativeVersion = "native_version"
     case sessionId = "session_id"
     case sessionCreationDate = "session_creation_date"
-    case userAgent
+    case userAgent = "user_agent"
     case browser
     case browserVersion
     case operatingSystem = "os"

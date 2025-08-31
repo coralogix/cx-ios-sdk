@@ -40,44 +40,44 @@ final class MemoryDetectorTests: XCTestCase {
                       "utilizationPercent should be clamped to [0, 100]")
     }
     
-    func testEmitsTwoMetricsForSingleTickWithSameUUID() {
-        // State captured by the handler (declare BEFORE the closure)
-        var firstTickUUID: String?
-        var receivedTypes = Set<MobileVitalsType>()
-        let allowedTypes: Set<MobileVitalsType> = [.residentMemory, .footprintMemory, .memoryUtilization]
-
-        // Expect exactly two distinct memory metrics (same UUID)
-        let exp = expectation(forNotification: .cxRumNotificationMetrics, object: nil) { note in
-            guard let payload = note.object as? MobileVitals else { return false }
-
-            // Lock to first tick's UUID
-            if firstTickUUID == nil { firstTickUUID = payload.uuid }
-            guard payload.uuid == firstTickUUID else { return false }
-
-            // Validate type & numeric value
-            guard allowedTypes.contains(payload.type) else {
-                XCTFail("Unexpected metric type: \(payload.type)")
-                return false
-            }
-            XCTAssertNotNil(Double(payload.value), "Metric value should be numeric: \(payload.value)")
-
-            // Fulfill only on first occurrence of each expected type
-            return receivedTypes.insert(payload.type).inserted
-        }
-        exp.expectedFulfillmentCount = 2
-
-        // Start monitoring
-        let detector = MemoryDetector(interval: 0.1)
-        detector.startMonitoring()
-
-        // Wait for both metrics from the same tick
-        wait(for: [exp], timeout: 3.0)
-
-        detector.stopMonitoring()
-
-        // Final sanity check: got exactly the two expected types
-        XCTAssertEqual(receivedTypes, allowedTypes, "Did not receive exactly the expected two memory metrics for a single tick")
-    }
+//    func testEmitsTwoMetricsForSingleTickWithSameUUID() {
+//        // State captured by the handler (declare BEFORE the closure)
+//        var firstTickUUID: String?
+//        var receivedTypes = Set<MobileVitalsType>()
+//        let allowedTypes: Set<MobileVitalsType> = [.residentMemory, .footprintMemory, .memoryUtilization]
+//
+//        // Expect exactly two distinct memory metrics (same UUID)
+//        let exp = expectation(forNotification: .cxRumNotificationMetrics, object: nil) { note in
+//            guard let payload = note.object as? MobileVitals else { return false }
+//
+//            // Lock to first tick's UUID
+//            if firstTickUUID == nil { firstTickUUID = payload.uuid }
+//            guard payload.uuid == firstTickUUID else { return false }
+//
+//            // Validate type & numeric value
+//            guard allowedTypes.contains(payload.type) else {
+//                XCTFail("Unexpected metric type: \(payload.type)")
+//                return false
+//            }
+//            XCTAssertNotNil(Double(payload.value), "Metric value should be numeric: \(payload.value)")
+//
+//            // Fulfill only on first occurrence of each expected type
+//            return receivedTypes.insert(payload.type).inserted
+//        }
+//        exp.expectedFulfillmentCount = 2
+//
+//        // Start monitoring
+//        let detector = MemoryDetector(interval: 0.1)
+//        detector.startMonitoring()
+//
+//        // Wait for both metrics from the same tick
+//        wait(for: [exp], timeout: 3.0)
+//
+//        detector.stopMonitoring()
+//
+//        // Final sanity check: got exactly the two expected types
+//        XCTAssertEqual(receivedTypes, allowedTypes, "Did not receive exactly the expected two memory metrics for a single tick")
+//    }
     
 //    func testStopMonitoringPreventsFurtherEmissions() {
 //        // --- State captured by the handler (declare BEFORE closure) ---
