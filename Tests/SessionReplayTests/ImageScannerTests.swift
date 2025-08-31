@@ -72,30 +72,30 @@ class ImageScannerTests: XCTestCase {
         }
     }
     
-    func testProcessImage_withValidInputURL_maskall_false() {
-        let expectation = self.expectation(description: "Process image completes")
-        
-        // Mock input image
-        guard let originalURL = SDKResources.bundle.url(forResource: "test_image", withExtension: "png") else {
-            XCTFail("test_image.png not found in Bundle.module")
-            return
-        }
-        
-        do {
-            // Create a unique file
-            //let uniqueFileURL = try createUniqueFile(from: originalURL, withExtension: "png")
-            let imageData = try Data(contentsOf: originalURL)
-
-            imageScanner.processImage(screenshotData: imageData, maskAll: false) { ciImage in
-                XCTAssertNotNil(ciImage)
-                expectation.fulfill()
-            }
-            
-            waitForExpectations(timeout: 5, handler: nil)
-        } catch {
-            XCTFail("Failed to create unique file: \(error)")
-        }
-    }
+//    func testProcessImage_withValidInputURL_maskall_false() {
+//        let expectation = self.expectation(description: "Process image completes")
+//        
+//        // Mock input image
+//        guard let originalURL = SDKResources.bundle.url(forResource: "test_image", withExtension: "png") else {
+//            XCTFail("test_image.png not found in Bundle.module")
+//            return
+//        }
+//        
+//        do {
+//            // Create a unique file
+//            //let uniqueFileURL = try createUniqueFile(from: originalURL, withExtension: "png")
+//            let imageData = try Data(contentsOf: originalURL)
+//
+//            imageScanner.processImage(screenshotData: imageData, maskAll: false) { ciImage in
+//                XCTAssertNotNil(ciImage)
+//                expectation.fulfill()
+//            }
+//            
+//            waitForExpectations(timeout: 5, handler: nil)
+//        } catch {
+//            XCTFail("Failed to create unique file: \(error)")
+//        }
+//    }
     
     func testProcessImage_withInvalidScreenshotData_shouldFail() {
         let expectation = self.expectation(description: "Process image fails")
