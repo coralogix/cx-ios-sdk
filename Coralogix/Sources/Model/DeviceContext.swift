@@ -19,6 +19,7 @@ struct DeviceContext {
     let emulator: Bool
     let deviceName: String
     let deviceModel: String
+    let userAgent: String
     
     init(otel: SpanDataProtocol) {
         self.networkConnectionType = otel.getAttribute(forKey: SemanticAttributes.networkConnectionType.rawValue) as? String ?? ""
@@ -28,6 +29,7 @@ struct DeviceContext {
         self.osVersion = Global.osVersionInfo()
         self.emulator = Global.isEmulator()
         self.deviceName = Global.getDeviceName()
+        self.userAgent = UserAgentManager.shared.getUserAgent()
     }
     
     func getDictionary() -> [String: Any] {
@@ -45,6 +47,7 @@ struct DeviceContext {
         result[Keys.emulator.rawValue] = self.emulator
         result[Keys.operatingSystem.rawValue] = self.operatingSystem
         result[Keys.osVersion.rawValue] = self.osVersion
+        result[Keys.userAgent.rawValue] = self.userAgent
         return result
     }
 }

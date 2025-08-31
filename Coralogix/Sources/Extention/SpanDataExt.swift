@@ -19,12 +19,13 @@ protocol SpanDataProtocol {
     func getName() -> String?
     func getKind() -> Int
     func getResources() -> [String: Any]
+    func getStatusText() -> String
 }
 
 // Extend the real SpanData to conform to this protocol if possible
 // This is only necessary if SpanData doesn't already have the methods you need
 extension SpanData: SpanDataProtocol {
-    
+  
     func getTraceId() -> String? {
         return self.traceId.hexString
     }
@@ -73,5 +74,9 @@ extension SpanData: SpanDataProtocol {
     
     func getResources() -> [String: Any] {
         return Helper.convertToAnyDict(self.resource.attributes) 
+    }
+    
+    func getStatusText() -> String {
+        return self.status.description
     }
 }

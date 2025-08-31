@@ -6,6 +6,7 @@
 
 import Foundation
 import CoralogixInternal
+import WebKit
 
 struct NetworkRequestContext {
     let method: String
@@ -15,7 +16,8 @@ struct NetworkRequestContext {
     let host: String
     var schema: String
     let duration: UInt64
-    let responseContentLength: String
+    var responseContentLength: Int = 0
+    let statusText: String
     
     init(otel: SpanDataProtocol) {
         self.method = otel.getAttribute(forKey: SemanticAttributes.httpMethod.rawValue) as? String ?? Keys.undefined.rawValue
@@ -40,12 +42,17 @@ struct NetworkRequestContext {
             self.duration = 0
         }
         
-        self.responseContentLength = otel.getAttribute(forKey: SemanticAttributes.httpResponseBodySize.rawValue) as? String ?? Keys.undefined.rawValue
+        if let httpResponseBodySize = otel.getAttribute(forKey: SemanticAttributes.httpResponseBodySize.rawValue) as? String {
+            self.responseContentLength = Int(httpResponseBodySize) ?? 0
+        }
+        
+        self.statusText = otel.getStatusText()
     }
     
     func getDictionary() -> [String: Any] {
         return [Keys.method.rawValue: self.method,
                 Keys.statusCode.rawValue: self.statusCode,
+                Keys.statusText.rawValue: self.statusText,
                 Keys.url.rawValue: self.url,
                 Keys.fragments.rawValue: self.fragments,
                 Keys.host.rawValue: self.host,
