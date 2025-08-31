@@ -22,7 +22,7 @@ public class CoralogixRum {
     internal var sessionInstrumentation: URLSessionInstrumentation?
     internal var metricsManager = MetricsManager()
     internal let readinessGroup = DispatchGroup()
-    internal(set) var isNetworkInstrumentationReady = false
+    internal var isNetworkInstrumentationReady = false
 
     internal var tracerProvider: () -> Tracer = {
         return OpenTelemetry.instance.tracerProvider.get(
@@ -85,7 +85,7 @@ public class CoralogixRum {
             Log.e("SessionManager is nil.")
             return
         }
-        UserAgentManager.shared.getUserAgent()
+        _ = UserAgentManager.shared.getUserAgent()
         Log.isDebug = options.debug
         
         self.setupCoreModules(options: options)
@@ -280,18 +280,12 @@ public class CoralogixRum {
             
             let uuid = UUID().uuidString.lowercased()
             metrics.forEach { element in
-                let payload = MobileVitals(type: MobileVitalsType(from: type),
+                let mobileVitals = MobileVitals(type: MobileVitalsType(from: type),
                                            name: element.name,
                                            value: element.value,
                                            units: MeasurementUnits(from: element.units),
                                            uuid: uuid)
-                if Thread.isMainThread {
-                    NotificationCenter.default.post(name: .cxRumNotificationMetrics, object: payload)
-                } else {
-                    DispatchQueue.main.async {
-                        NotificationCenter.default.post(name: .cxRumNotificationMetrics, object: payload)
-                    }
-                }
+                self.handleMobileVitals(mobileVitals)
             }
         }
     }
@@ -300,17 +294,11 @@ public class CoralogixRum {
         if CoralogixRum.isInitialized {
             if (CoralogixRum.mobileSDK.sdkFramework.isNative) { return }
             
-            let payload = MobileVitals(type: MobileVitalsType(from: type),
+            let mobileVitals = MobileVitals(type: MobileVitalsType(from: type),
                                        name: type,
                                        value: value,
                                        units: MeasurementUnits(from: units))
-            if Thread.isMainThread {
-                NotificationCenter.default.post(name: .cxRumNotificationMetrics, object: payload)
-            } else {
-                DispatchQueue.main.async {
-                    NotificationCenter.default.post(name: .cxRumNotificationMetrics, object: payload)
-                }
-            }
+            self.handleMobileVitals(mobileVitals)
         }
     }
     
@@ -322,7 +310,51 @@ public class CoralogixRum {
         span.setAttribute(key: Keys.environment.rawValue, value: options?.environment ?? "")
     }
     
-    public func displayCoralogixWord() {
+    internal func handleMobileVitals(_ mobileVitals: MobileVitals) {
+        let span = self.getSpan(for: mobileVitals)
+        let value = self.getMobileVitalsTypeString(mobileVitals.type)
+        
+        span.setAttribute(key: Keys.mobileVitalsType.rawValue, value: value)
+        
+        for (key, value) in mobileVitals.type.specificAttributes(for: mobileVitals.value) {
+            span.setAttribute(key: key, value: value)
+        }
+        
+        if let name = mobileVitals.name, !name.isEmpty {
+            span.setAttribute(key: Keys.name.rawValue, value: name)
+        }
+        
+        span.setAttribute(key: Keys.mobileVitalsUnits.rawValue, value: mobileVitals.units.stringValue)
+        
+        if let uuid = mobileVitals.uuid, !uuid.isEmpty {
+            span.setAttribute(key: Keys.mobileVitalsUuid.rawValue, value: uuid)
+        }
+        span.end()
+    }
+    
+    private func getMobileVitalsTypeString(_ type: MobileVitalsType) -> String {
+        switch type {
+        case .memoryUtilization, .residentMemory, .footprintMemory:
+            return Keys.memory.rawValue
+        case .cpuUsage, .mainThreadCpuTime, .totalCpuTime:
+            return Keys.cpu.rawValue
+        default :
+            return type.stringValue
+        }
+    }
+    
+    private func getSpan(for vitals: MobileVitals) -> any Span {
+        var span = tracerProvider().spanBuilder(spanName: Keys.iosSdk.rawValue).startSpan()
+        
+        for (key, value) in vitals.type.spanAttributes {
+            span.setAttribute(key: key, value: value)
+        }
+        
+        self.addUserMetadata(to: &span)
+        return span
+    }
+    
+    private func displayCoralogixWord() {
         var coralogixText = """
            [CORALOGIX]
            Version: \(Global.sdk.rawValue)
