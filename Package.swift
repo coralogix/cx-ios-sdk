@@ -14,7 +14,10 @@ let package = Package(
         .library(name: "SessionReplay", targets: ["SessionReplay"])
     ],
     dependencies: [
-        .package(url: "https://github.com/microsoft/plcrashreporter", exact: "1.11.1")
+        .package(
+            url: "https://github.com/microsoft/plcrashreporter",
+            .upToNextMajor(from: "1.12.0")
+        )
     ],
     targets: [
         .target(
