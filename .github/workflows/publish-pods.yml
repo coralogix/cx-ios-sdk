@@ -2,7 +2,7 @@ name: Publish CocoaPods
 
 permissions:
   contents: read
-  
+
 on:
   release:
     types: [published]
@@ -20,6 +20,7 @@ jobs:
         run: |
           set -euo pipefail
           TAG="${{ github.event.release.tag_name }}"
+          TAG="${TAG#v}"  # strip leading 'v' if present
           echo "Release tag: $TAG"
           for SPEC in CoralogixInternal.podspec SessionReplay.podspec Coralogix.podspec; do
             V="$(grep -E 's\.version\s*=' "$SPEC" | head -1 | sed -E 's/.*"([^"]+)".*/\1/')"
