@@ -26,6 +26,14 @@ if [[ "$push_internal" =~ ^[Yy]$ ]]; then
   echo "🚀 Pushing $INTERNAL..."
   pod trunk push "$INTERNAL" --allow-warnings --verbose
   echo "✅ $INTERNAL pushed!"
+  
+  # Wait for CoralogixInternal to become available
+  echo "⏳ Waiting for $INTERNAL to be available in CocoaPods Specs..."
+  until pod search CoralogixInternal | grep -q "CoralogixInternal"; do
+    echo "⏳ $INTERNAL not yet available, waiting 30 seconds..."
+    sleep 30
+  done
+  echo "✅ $INTERNAL is now available!"
 else
   echo "⏭️ Skipping $INTERNAL push."
 fi

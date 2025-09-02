@@ -1,0 +1,124 @@
+name: Publish CocoaPods
+
+permissions:
+  contents: read
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  publish-pods:
+    runs-on: macos-latest
+
+    steps:
+      # Checkout the repository
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Verify release tag matches podspec versions
+        run: |
+          set -euo pipefail
+          TAG="${{ github.event.release.tag_name }}"
+          TAG="${TAG#v}"  # strip leading 'v' if present
+          echo "Release tag: $TAG"
+          for SPEC in CoralogixInternal.podspec SessionReplay.podspec Coralogix.podspec; do
+            V="$(grep -E 's\.version\s*=' "$SPEC" | head -1 | sed -E 's/.*"([^"]+)".*/\1/')"
+            echo "$SPEC -> $V"
+            if [ "$V" != "$TAG" ]; then
+              echo "❌ $SPEC version ($V) does not match release tag ($TAG)"
+              exit 1
+            fi
+          done
+
+      # Set up Ruby (required for CocoaPods)
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2' # Specify a Ruby version compatible with CocoaPods
+          bundler-cache: true
+
+      # Install CocoaPods
+      - name: Install CocoaPods
+        run: gem install cocoapods
+
+      # Set up CocoaPods Trunk authentication
+      - name: Authenticate with CocoaPods Trunk
+        env:
+          COCOAPODS_TRUNK_TOKEN: ${{ secrets.COCOAPODS_TRUNK_TOKEN }}
+        run: |
+           set -euo pipefail
+           echo "Validating CocoaPods Trunk token..."
+           pod trunk me || { echo "Invalid or missing COCOAPODS_TRUNK_TOKEN"; exit 1; }
+
+      # Lint CoralogixInternal.podspec
+      - name: Lint CoralogixInternal.podspec
+        run: |
+          echo "🔍 Linting CoralogixInternal.podspec..."
+          pod lib lint CoralogixInternal.podspec --verbose --no-clean --allow-warnings
+          echo "✅ CoralogixInternal.podspec passed lint."
+
+      # Lint SessionReplay.podspec
+      - name: Lint SessionReplay.podspec
+        run: |
+          echo "🔍 Linting SessionReplay.podspec with dependency on CoralogixInternal..."
+          pod lib lint SessionReplay.podspec --include-podspecs=CoralogixInternal.podspec --verbose --no-clean --allow-warnings
+          echo "✅ SessionReplay.podspec passed lint."
+
+      # Lint Coralogix.podspec
+      - name: Lint Coralogix.podspec
+        run: |
+          echo "🔍 Linting Coralogix.podspec with dependency on CoralogixInternal..."
+          pod lib lint Coralogix.podspec --include-podspecs=CoralogixInternal.podspec --verbose --no-clean --allow-warnings
+          echo "✅ Coralogix.podspec passed lint."
+
+      # Push CoralogixInternal.podspec
+      - name: Push CoralogixInternal.podspec
+        run: |
+          echo "🚀 Pushing CoralogixInternal.podspec..."
+          pod trunk push CoralogixInternal.podspec --allow-warnings --verbose
+          echo "✅ CoralogixInternal.podspec pushed!"
+
+      # Clear CocoaPods cache
+      - name: Clear CocoaPods cache
+        run: |
+          echo "🧹 Clearing CocoaPods cache..."
+          pod cache clean --all
+          echo "✅ Cache cleared."
+
+      # Wait for CoralogixInternal availability
+      - name: Wait for CoralogixInternal availability
+        run: |
+          set -euo pipefail
+          VERSION="$(grep -E 's\.version\s*=' CoralogixInternal.podspec | head -1 | sed -E 's/.*"([^"]+)".*/\1/')"
+          if [ -z "${VERSION:-}" ]; then
+            echo "❌ Could not parse version from CoralogixInternal.podspec"
+            exit 1
+          fi
+          echo "⏳ Waiting for CoralogixInternal $VERSION to appear on Trunk..."
+          timeout=900
+          elapsed=0
+          until pod trunk info CoralogixInternal | grep -q " - $VERSION$"; do
+            if [ "$elapsed" -ge "$timeout" ]; then
+              echo "❌ Timeout: CoralogixInternal $VERSION not available after $timeout seconds."
+              exit 1
+            fi
+            echo "⏳ Not yet available, waiting 30 seconds..."
+            sleep 30
+            elapsed=$((elapsed + 30))
+          done
+          echo "✅ CoralogixInternal $VERSION is now available on Trunk!"
+
+      # Push SessionReplay.podspec
+      - name: Push SessionReplay.podspec
+        run: |
+          echo "🚀 Pushing SessionReplay.podspec..."
+          pod trunk push SessionReplay.podspec --allow-warnings --verbose
+          echo "✅ SessionReplay.podspec pushed!"
+
+      # Push Coralogix.podspec
+      - name: Push Coralogix.podspec
+        run: |
+          echo "🚀 Pushing Coralogix.podspec..."
+          pod trunk push Coralogix.podspec --allow-warnings --verbose
+          echo "🎉 Coralogix.podspec pushed successfully! 🎉"
