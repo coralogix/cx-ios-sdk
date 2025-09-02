@@ -1,5 +1,8 @@
 name: Publish CocoaPods
 
+permissions:
+  contents: read
+  
 on:
   release:
     types: [published]
