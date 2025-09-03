@@ -10,6 +10,8 @@ on:
 jobs:
   publish-pods:
     runs-on: macos-latest
+    env:
+      COCOAPODS_TRUNK_TOKEN: ${{ secrets.COCOAPODS_TRUNK_TOKEN }}
 
     steps:
       # Checkout the repository
@@ -41,10 +43,9 @@ jobs:
 
       # Set up CocoaPods Trunk authentication
       - name: Authenticate with CocoaPods Trunk
-        env:
-          COCOAPODS_TRUNK_TOKEN: ${{ secrets.COCOAPODS_TRUNK_TOKEN }}
         run: |
            set -euo pipefail
+           test -n "${COCOAPODS_TRUNK_TOKEN:-}" || { echo "Missing COCOAPODS_TRUNK_TOKEN"; exit 1; }
            echo "Validating CocoaPods Trunk token..."
            pod trunk me || { echo "Invalid or missing COCOAPODS_TRUNK_TOKEN"; exit 1; }
 
