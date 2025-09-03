@@ -9,7 +9,7 @@ on:
       - '**/*.podspec'
       - '.github/workflows/podspec-lint.yml'
   push:
-    branches: [ main ]
+    branches: [ master ]
     paths:
       - '**/*.podspec'
       - '.github/workflows/podspec-lint.yml'
@@ -26,7 +26,7 @@ jobs:
       - name: Select Xcode 15.3
         uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: '15.3'
+          xcode-version: '16.0.0'
 
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
