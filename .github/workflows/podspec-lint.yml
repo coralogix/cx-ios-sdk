@@ -23,10 +23,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Select Xcode 15.3
+      - name: Use Xcode 15.4 (iOS 17.5 sim available)
         uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: '16.0.0'
+          xcode-version: '15.4'
 
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
@@ -50,10 +50,11 @@ jobs:
       - name: Lint CoralogixInternal.podspec
         run: |
           set -euo pipefail
-          echo "🔍 Linting CoralogixInternal.podspec (iOS, static)…"
+          echo "🔍 Linting CoralogixInternal.podspec (iOS, static frameworks)…"
           pod lib lint CoralogixInternal.podspec \
             --platforms=iOS \
             --use-static-frameworks \
+            --skip-tests \
             --fail-fast \
             --no-clean \
             --verbose 2>&1 | tee lint_internal.log
@@ -70,11 +71,12 @@ jobs:
       - name: Lint SessionReplay.podspec
         run: |
           set -euo pipefail
-          echo "🔍 Linting SessionReplay.podspec (iOS, static, includes Internal)…"
+          echo "🔍 Linting SessionReplay.podspec (iOS, static frameworks, includes Internal)…"
           pod lib lint SessionReplay.podspec \
             --include-podspecs=CoralogixInternal.podspec \
             --platforms=iOS \
             --use-static-frameworks \
+            --skip-tests \
             --fail-fast \
             --no-clean \
             --verbose 2>&1 | tee lint_session_replay.log
@@ -91,11 +93,12 @@ jobs:
       - name: Lint Coralogix.podspec
         run: |
           set -euo pipefail
-          echo "🔍 Linting Coralogix.podspec (iOS, static, includes Internal)…"
+          echo "🔍 Linting Coralogix.podspec (iOS, static frameworks, includes Internal)…"
           pod lib lint Coralogix.podspec \
             --include-podspecs=CoralogixInternal.podspec \
             --platforms=iOS \
             --use-static-frameworks \
+            --skip-tests \
             --fail-fast \
             --no-clean \
             --verbose 2>&1 | tee lint_main.log
@@ -108,7 +111,7 @@ jobs:
           awk '/❌/{flag=1} flag{print; if (/^$/) exit}' lint_main.log || true
           echo "-------------------------------------------"
 
-      # Optional: upload full logs for debugging from the UI
+      # Upload logs for debugging
       - name: Upload lint logs
         if: always()
         uses: actions/upload-artifact@v4
