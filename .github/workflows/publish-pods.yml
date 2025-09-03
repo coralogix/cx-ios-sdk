@@ -50,9 +50,23 @@ jobs:
       # Push CoralogixInternal.podspec
       - name: Push CoralogixInternal.podspec
         run: |
-          echo "🚀 Pushing CoralogixInternal.podspec..."
-          pod trunk push CoralogixInternal.podspec --allow-warnings --verbose
-          echo "✅ CoralogixInternal.podspec pushed!"
+          set -euo pipefail
+          echo "Target version: ${TAG_RAW}"
+          if pod trunk info CoralogixInternal | grep -Eq "^[[:space:]]*-[[:space:]]*${TAG_RAW}([[:space:]]|\(|$)"; then
+            echo "ℹ️  CoralogixInternal ${TAG_RAW} already on Trunk. Skipping push."
+          else
+            echo "🚀 Pushing CoralogixInternal.podspec..."
+            if pod trunk push CoralogixInternal.podspec --allow-warnings --verbose; then
+              echo "✅  CoralogixInternal.podspec pushed!"
+            else
+              echo "⚠️  Push failed; re-checking for 409 duplicate..."
+              if pod trunk info CoralogixInternal | grep -Eq "^[[:space:]]*-[[:space:]]*${TAG_RAW}([[:space:]]|\(|$)"; then
+                echo "ℹ️  CoralogixInternal ${TAG_RAW} appears published. Continuing."
+              else
+                exit 1
+              fi
+            fi
+          fi
 
       # Clear CocoaPods cache
       - name: Clear CocoaPods cache
@@ -86,13 +100,41 @@ jobs:
       # Push SessionReplay.podspec
       - name: Push SessionReplay.podspec
         run: |
-          echo "🚀 Pushing SessionReplay.podspec..."
-          pod trunk push SessionReplay.podspec --allow-warnings --verbose
-          echo "✅ SessionReplay.podspec pushed!"
+          set -euo pipefail
+          echo "Target version: ${TAG_RAW}"
+          if pod trunk info SessionReplay | grep -Eq "^[[:space:]]*-[[:space:]]*${TAG_RAW}([[:space:]]|\(|$)"; then
+            echo "ℹ️ SessionReplay ${TAG_RAW} already on Trunk. Skipping push."
+          else
+            echo "🚀 Pushing SessionReplay.podspec..."
+            if pod trunk push SessionReplay.podspec --allow-warnings --verbose; then
+              echo "✅ SessionReplay.podspec pushed!"
+            else
+              echo "⚠️ Push failed; re-checking for 409 duplicate..."
+              if pod trunk info SessionReplay | grep -Eq "^[[:space:]]*-[[:space:]]*${TAG_RAW}([[:space:]]|\(|$)"; then
+                echo "ℹ️ SessionReplay ${TAG_RAW} appears published. Continuing."
+              else
+                exit 1
+              fi
+            fi
+          fi
 
       # Push Coralogix.podspec
       - name: Push Coralogix.podspec
         run: |
-          echo "🚀 Pushing Coralogix.podspec..."
-          pod trunk push Coralogix.podspec --allow-warnings --verbose
-          echo "🎉 Coralogix.podspec pushed successfully! 🎉"
+          set -euo pipefail
+          echo "Target version: ${TAG_RAW}"
+          if pod trunk info Coralogix | grep -Eq "^[[:space:]]*-[[:space:]]*${TAG_RAW}([[:space:]]|\(|$)"; then
+            echo "ℹ️ Coralogix ${TAG_RAW} already on Trunk. Skipping push."
+          else
+            echo "🚀 Pushing Coralogix.podspec..."
+            if pod trunk push Coralogix.podspec --allow-warnings --verbose; then
+              echo "🎉 Coralogix.podspec pushed successfully! 🎉"
+            else
+              echo "⚠️ Push failed; re-checking for 409 duplicate..."
+              if pod trunk info Coralogix | grep -Eq "^[[:space:]]*-[[:space:]]*${TAG_RAW}([[:space:]]|\(|$)"; then
+                echo "ℹ️ Coralogix ${TAG_RAW} appears published. Done."
+              else
+                exit 1
+              fi
+            fi
+          fi
