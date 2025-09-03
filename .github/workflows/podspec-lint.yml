@@ -1,0 +1,49 @@
+name: Podspec Lint
+
+on:
+  pull_request:
+    paths:
+      - '**/*.podspec'
+      - '.github/workflows/podspec-lint.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - '**/*.podspec'
+      - '.github/workflows/podspec-lint.yml'
+
+jobs:
+  lint:
+    runs-on: macos-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+          bundler-cache: true
+
+      - name: Install CocoaPods
+        run: gem install cocoapods
+
+      # Lint CoralogixInternal (base pod)
+      - name: Lint CoralogixInternal.podspec
+        run: |
+          echo "🔍 Linting CoralogixInternal.podspec..."
+          pod lib lint CoralogixInternal.podspec --verbose --no-clean --allow-warnings
+
+      # Lint SessionReplay (depends on Internal)
+      - name: Lint SessionReplay.podspec
+        run: |
+          echo "🔍 Linting SessionReplay.podspec (with Internal included)..."
+          pod lib lint SessionReplay.podspec --include-podspecs=CoralogixInternal.podspec --verbose --no-clean --allow-warnings
+
+      # Lint Coralogix (depends on Internal)
+      - name: Lint Coralogix.podspec
+        run: |
+          echo "🔍 Linting Coralogix.podspec (with Internal included)..."
+          pod lib lint Coralogix.podspec --include-podspecs=CoralogixInternal.podspec --verbose --no-clean --allow-warnings

@@ -16,20 +16,15 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Make script executable
+        run: chmod +x ./verify_podspec_versions.sh
+
       - name: Verify release tag matches podspec versions
+        env:
+          # Prefer release tag; fallback to ref_name for tag pushes
+          TAG_RAW: ${{ github.event.release.tag_name || github.ref_name }}
         run: |
-          set -euo pipefail
-          TAG="${{ github.event.release.tag_name }}"
-          TAG="${TAG#v}"  # strip leading 'v' if present
-          echo "Release tag: $TAG"
-          for SPEC in CoralogixInternal.podspec SessionReplay.podspec Coralogix.podspec; do
-            V="$(grep -E 's\.version\s*=' "$SPEC" | head -1 | sed -E 's/.*"([^"]+)".*/\1/')"
-            echo "$SPEC -> $V"
-            if [ "$V" != "$TAG" ]; then
-              echo "❌ $SPEC version ($V) does not match release tag ($TAG)"
-              exit 1
-            fi
-          done
+          ./verify_podspec_versions.sh
 
       # Set up Ruby (required for CocoaPods)
       - name: Set up Ruby
@@ -50,27 +45,6 @@ jobs:
            set -euo pipefail
            echo "Validating CocoaPods Trunk token..."
            pod trunk me || { echo "Invalid or missing COCOAPODS_TRUNK_TOKEN"; exit 1; }
-
-      # Lint CoralogixInternal.podspec
-      - name: Lint CoralogixInternal.podspec
-        run: |
-          echo "🔍 Linting CoralogixInternal.podspec..."
-          pod lib lint CoralogixInternal.podspec --verbose --no-clean --allow-warnings
-          echo "✅ CoralogixInternal.podspec passed lint."
-
-      # Lint SessionReplay.podspec
-      - name: Lint SessionReplay.podspec
-        run: |
-          echo "🔍 Linting SessionReplay.podspec with dependency on CoralogixInternal..."
-          pod lib lint SessionReplay.podspec --include-podspecs=CoralogixInternal.podspec --verbose --no-clean --allow-warnings
-          echo "✅ SessionReplay.podspec passed lint."
-
-      # Lint Coralogix.podspec
-      - name: Lint Coralogix.podspec
-        run: |
-          echo "🔍 Linting Coralogix.podspec with dependency on CoralogixInternal..."
-          pod lib lint Coralogix.podspec --include-podspecs=CoralogixInternal.podspec --verbose --no-clean --allow-warnings
-          echo "✅ Coralogix.podspec passed lint."
 
       # Push CoralogixInternal.podspec
       - name: Push CoralogixInternal.podspec
