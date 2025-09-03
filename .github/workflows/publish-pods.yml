@@ -24,7 +24,9 @@ jobs:
           # Prefer release tag; fallback to ref_name for tag pushes
           TAG_RAW: ${{ github.event.release.tag_name || github.ref_name }}
         run: |
-          ./verify_podspec_versions.sh
+          set -euo pipefail
+          echo "Using tag: ${TAG_RAW}"
+          ./verify_podspec_versions.sh "${TAG_RAW}"
 
       # Set up Ruby (required for CocoaPods)
       - name: Set up Ruby
