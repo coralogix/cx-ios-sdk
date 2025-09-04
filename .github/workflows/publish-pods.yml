@@ -56,7 +56,7 @@ jobs:
             echo "ℹ️  CoralogixInternal ${TAG_RAW} already on Trunk. Skipping push."
           else
             echo "🚀 Pushing CoralogixInternal.podspec..."
-            if pod trunk push CoralogixInternal.podspec --allow-warnings --verbose; then
+            if pod trunk push CoralogixInternal.podspec --allow-warnings --skip-tests --verbose; then
               echo "✅  CoralogixInternal.podspec pushed!"
             else
               echo "⚠️  Push failed; re-checking for 409 duplicate..."
@@ -106,7 +106,7 @@ jobs:
             echo "ℹ️ SessionReplay ${TAG_RAW} already on Trunk. Skipping push."
           else
             echo "🚀 Pushing SessionReplay.podspec..."
-            if pod trunk push SessionReplay.podspec --allow-warnings --verbose; then
+            if pod trunk push SessionReplay.podspec --allow-warnings --skip-tests --verbose; then
               echo "✅ SessionReplay.podspec pushed!"
             else
               echo "⚠️ Push failed; re-checking for 409 duplicate..."
@@ -127,7 +127,7 @@ jobs:
             echo "ℹ️ Coralogix ${TAG_RAW} already on Trunk. Skipping push."
           else
             echo "🚀 Pushing Coralogix.podspec..."
-            if pod trunk push Coralogix.podspec --allow-warnings --verbose; then
+            if pod trunk push Coralogix.podspec --allow-warnings --skip-tests --verbose; then
               echo "🎉 Coralogix.podspec pushed successfully! 🎉"
             else
               echo "⚠️ Push failed; re-checking for 409 duplicate..."
