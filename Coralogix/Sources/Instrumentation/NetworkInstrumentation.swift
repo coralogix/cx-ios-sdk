@@ -12,7 +12,7 @@ extension CoralogixRum {
     private static let exporterQueue = DispatchQueue(label: Keys.queueExporter.rawValue)
 
     public func initializeNetworkInstrumentation() {
-        guard let options = self.coralogixExporter?.getOptions() else {
+        guard let options = self.options else {
             Log.e("[Coralogix] missing coralogix options")
             return
         }
@@ -108,7 +108,7 @@ extension CoralogixRum {
         
         var options: CoralogixExporterOptions?
         CoralogixRum.exporterQueue.sync {
-            options = self.coralogixExporter?.getOptions()
+            options = self.options
         }
         
         guard let options else {

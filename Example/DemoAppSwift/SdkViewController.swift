@@ -68,7 +68,7 @@ class SdkViewController: UITableViewController {
         if item == Keys.shutDownCoralogixRum.rawValue {
             CoralogixRumManager.shared.sdk.shutdown()
         } else if item == Keys.updateLabels.rawValue {
-            CoralogixRumManager.shared.sdk.setLabels(labels: ["item3" : "playstation 4", "itemPrice" : 400])
+            CoralogixRumManager.shared.sdk.set(labels: ["item3" : "playstation 4", "itemPrice" : 400])
         } else if item == Keys.reportMobileVitalsMeasurement.rawValue {
             CoralogixRumManager.shared.sdk.reportMobileVitalsMeasurement(type: "custom metric", value: 10.0, units: "ms")
         }

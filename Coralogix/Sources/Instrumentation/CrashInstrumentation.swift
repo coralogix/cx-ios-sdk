@@ -10,7 +10,7 @@ import CrashReporter
 import CoralogixInternal
 
 extension CoralogixRum {
-    public func initializeCrashInstumentation() {
+    public func initializeCrashInstrumentation() {
         
         // It is strongly recommended that local symbolication only be enabled for non-release builds.
         // Use [] for release versions.

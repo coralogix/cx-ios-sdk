@@ -91,7 +91,7 @@ final class CoralogixRumTests: XCTestCase {
         }
         
         let newLabel = ["device": "iphone"]
-        coralogixRum.setLabels(labels: newLabel)
+        coralogixRum.set(labels: newLabel)
         if let labels = coralogixRum.coralogixExporter?.getOptions().labels {
             XCTAssertEqual(labels.count, 1)
             XCTAssertEqual(labels["device"] as? String, "iphone")
@@ -504,7 +504,7 @@ final class CoralogixRumTests: XCTestCase {
         coralogixRum.tracerProvider = {
             return MockTracer()
         }
-        let span = coralogixRum.getErrorSpan()
+        let span = coralogixRum.makeSpan(event: .error, source: .console, severity: .error)
         guard let mockSpan = span as? MockSpan else {
             XCTFail("Expected span to be MockSpan")
             return
@@ -885,9 +885,12 @@ final class CoralogixRumTests: XCTestCase {
 
 final class MockCoralogixRum: CoralogixRum {
     var capturedVitals: [MobileVitals] = []
-
-    override func handleMobileVitals(_ mobileVitals: MobileVitals) {
-        capturedVitals.append(mobileVitals)
+    
+    init(options: CoralogixExporterOptions, sdkFramework:  SdkFramework = .swift) {
+        super.init(options: options, sdkFramework: sdkFramework)
+        self.mobileVitalHandlers = { [weak self] mobileVitals in
+            self?.capturedVitals.append(mobileVitals)
+        }
     }
 }
 

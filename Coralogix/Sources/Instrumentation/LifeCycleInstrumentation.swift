@@ -35,46 +35,32 @@ extension CoralogixRum {
     }
     
     @objc private func appDidFinishLaunching(notification: Notification) {
-        let span = self.getLifeCycleSpan()
-        span.setAttribute(key: Keys.type.rawValue,
-                          value: Keys.appDidFinishLaunching.rawValue)
-        span.end()
+        self.makeSpan(type: .type, value: .appDidFinishLaunching)
     }
     
     @objc private func appDidBecomeActiveNotification(notification: Notification) {
-        let span = self.getLifeCycleSpan()
-        span.setAttribute(key: Keys.type.rawValue,
-                          value: Keys.appDidBecomeActiveNotification.rawValue)
-        span.end()
+        self.makeSpan(type: .type, value: .appDidBecomeActiveNotification)
     }
     
     @objc private func appDidEnterBackgroundNotification(notification: Notification) {
-        let span = self.getLifeCycleSpan()
-        span.setAttribute(key: Keys.type.rawValue,
-                          value: Keys.appDidEnterBackgroundNotification.rawValue)
-        span.end()
+        self.makeSpan(type: .type, value: .appDidEnterBackgroundNotification)
     }
     
     @objc private func appWillTerminateNotification(notification: Notification) {
-        let span = self.getLifeCycleSpan()
-        span.setAttribute(key: Keys.type.rawValue,
-                          value: Keys.appWillTerminateNotification.rawValue)
-        span.end()
+        self.makeSpan(type: .type, value: .appWillTerminateNotification)
     }
     
     @objc private func appDidReceiveMemoryWarningNotification(notification: Notification) {
-        let span = self.getLifeCycleSpan()
-        span.setAttribute(key: Keys.type.rawValue,
-                          value: Keys.appDidReceiveMemoryWarningNotification.rawValue)
-        span.end()
+        self.makeSpan(type: .type, value: .appDidReceiveMemoryWarningNotification)
     }
     
-    private func getLifeCycleSpan() -> any Span {
+    private func makeSpan(type: Keys, value: Keys) {
         var span = tracerProvider().spanBuilder(spanName: Keys.iosSdk.rawValue).startSpan()
-        self.addUserMetadata(to: &span)
         span.setAttribute(key: Keys.eventType.rawValue, value: CoralogixEventType.lifeCycle.rawValue)
         span.setAttribute(key: Keys.source.rawValue, value: Keys.console.rawValue)
         span.setAttribute(key: Keys.severity.rawValue, value: AttributeValue.int(CoralogixLogSeverity.info.rawValue))
-        return span
+        span.setAttribute(key: type.rawValue, value: value.rawValue)
+        self.addUserMetadata(to: &span)
+        span.end()
     }
 }

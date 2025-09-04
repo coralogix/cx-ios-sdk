@@ -48,4 +48,50 @@ extension CoralogixRum {
             Log.w("Error parsing MetricKit JSON: \(error), original value: \(value)")
         }
     }
+    
+    func handleMobileVitals(_ mobileVitals: MobileVitals) {
+        self.mobileVitalHandlers?(mobileVitals)
+
+        let span = self.getSpan(for: mobileVitals)
+        let value = self.getMobileVitalsTypeString(mobileVitals.type)
+        
+        span.setAttribute(key: Keys.mobileVitalsType.rawValue, value: value)
+        
+        for (key, value) in mobileVitals.type.specificAttributes(for: mobileVitals.value) {
+            span.setAttribute(key: key, value: value)
+        }
+        
+        if let name = mobileVitals.name, !name.isEmpty {
+            span.setAttribute(key: Keys.name.rawValue, value: name)
+        }
+        
+        span.setAttribute(key: Keys.mobileVitalsUnits.rawValue, value: mobileVitals.units.stringValue)
+        
+        if let uuid = mobileVitals.uuid, !uuid.isEmpty {
+            span.setAttribute(key: Keys.mobileVitalsUuid.rawValue, value: uuid)
+        }
+        span.end()
+    }
+    
+    func getSpan(for vitals: MobileVitals) -> any Span {
+        var span = tracerProvider().spanBuilder(spanName: Keys.iosSdk.rawValue).startSpan()
+        
+        for (key, value) in vitals.type.spanAttributes {
+            span.setAttribute(key: key, value: value)
+        }
+        
+        self.addUserMetadata(to: &span)
+        return span
+    }
+    
+    func getMobileVitalsTypeString(_ type: MobileVitalsType) -> String {
+        switch type {
+        case .memoryUtilization, .residentMemory, .footprintMemory:
+            return Keys.memory.rawValue
+        case .cpuUsage, .mainThreadCpuTime, .totalCpuTime:
+            return Keys.cpu.rawValue
+        default :
+            return type.stringValue
+        }
+    }
 }
