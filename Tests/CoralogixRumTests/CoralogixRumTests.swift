@@ -91,7 +91,7 @@ final class CoralogixRumTests: XCTestCase {
         }
         
         let newLabel = ["device": "iphone"]
-        coralogixRum.setLabels(labels: newLabel)
+        coralogixRum.set(labels: newLabel)
         if let labels = coralogixRum.coralogixExporter?.getOptions().labels {
             XCTAssertEqual(labels.count, 1)
             XCTAssertEqual(labels["device"] as? String, "iphone")

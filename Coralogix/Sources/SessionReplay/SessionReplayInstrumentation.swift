@@ -19,7 +19,7 @@ extension CoralogixRum: CoralogixInterface {
     }
     
     public func isDebug() -> Bool {
-        return self.coralogixExporter?.getOptions().debug ?? false
+        return self.options?.debug ?? false
     }
     
     public func getSessionCreationTimestamp() -> TimeInterval {
@@ -27,19 +27,19 @@ extension CoralogixRum: CoralogixInterface {
     }
     
     public func getApplication() -> String {
-        return self.coralogixExporter?.getOptions().application ?? ""
+        return self.options?.application ?? ""
     }
     
     public func getCoralogixDomain() -> String {
-        return self.coralogixExporter?.getOptions().coralogixDomain.rawValue ?? ""
+        return self.options?.coralogixDomain.rawValue ?? ""
     }
     
     public func getProxyUrl() -> String {
-        return self.coralogixExporter?.getOptions().proxyUrl ?? ""
+        return self.options?.proxyUrl ?? ""
     }
     
     public func getPublicKey() -> String {
-        return self.coralogixExporter?.getOptions().publicKey ?? ""
+        return self.options?.publicKey ?? ""
     }
     
     public func getSessionID() -> String {

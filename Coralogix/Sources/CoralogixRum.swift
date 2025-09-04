@@ -13,7 +13,7 @@ extension Notification.Name {
     static let cxViewDidAppear = Notification.Name("cxViewDidAppear")
 }
 
-public final class CoralogixRum {
+public class CoralogixRum {
     internal var coralogixExporter: CoralogixExporter?
     internal var networkManager = NetworkManager()
     internal var viewManager = ViewManager(keyChain: KeychainManager())
@@ -174,7 +174,7 @@ public final class CoralogixRum {
     
     public var userContext: UserContext? {
         guard CoralogixRum.isInitialized else { return nil }
-        return self.coralogixExporter?.getOptions().userContext
+        return self.options?.userContext
     }
     
     public func set(labels: [String: Any]) {
@@ -184,7 +184,7 @@ public final class CoralogixRum {
     
     public var labels: [String: Any]? {
         guard CoralogixRum.isInitialized else { return nil }
-        return self.coralogixExporter?.getOptions().labels
+        return self.options?.labels
     }
     
     public func reportError(exception: NSException) {
@@ -280,12 +280,14 @@ public final class CoralogixRum {
     }
     
     // MARK: - Spans & Attributes
+    internal var options: CoralogixExporterOptions? { return self.coralogixExporter?.getOptions() }
+    
     internal func addUserMetadata(to span: inout any Span) {
-        let options = self.coralogixExporter?.getOptions()
-        span.setAttribute(key: Keys.userId.rawValue, value: options?.userContext?.userId ?? "")
-        span.setAttribute(key: Keys.userName.rawValue, value: options?.userContext?.userName ?? "")
-        span.setAttribute(key: Keys.userEmail.rawValue, value: options?.userContext?.userEmail ?? "")
-        span.setAttribute(key: Keys.environment.rawValue, value: options?.environment ?? "")
+        guard let options = self.options else { return }
+        span.setAttribute(key: Keys.userId.rawValue, value: options.userContext?.userId ?? "")
+        span.setAttribute(key: Keys.userName.rawValue, value: options.userContext?.userName ?? "")
+        span.setAttribute(key: Keys.userEmail.rawValue, value: options.userContext?.userEmail ?? "")
+        span.setAttribute(key: Keys.environment.rawValue, value: options.environment)
     }
     
     internal func handleMobileVitals(_ mobileVitals: MobileVitals) {
