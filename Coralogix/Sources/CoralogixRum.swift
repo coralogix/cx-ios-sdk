@@ -23,6 +23,7 @@ public class CoralogixRum {
     internal let readinessGroup = DispatchGroup()
     internal var isNetworkInstrumentationReady = false
     private let notificationCenter = NotificationCenter.default
+    var mobileVitalHandlers: ((MobileVitals) -> Void)?
 
     internal lazy var tracerProvider: () -> Tracer = {
         return OpenTelemetry.instance.tracerProvider.get(
@@ -288,50 +289,6 @@ public class CoralogixRum {
         span.setAttribute(key: Keys.userName.rawValue, value: options.userContext?.userName ?? "")
         span.setAttribute(key: Keys.userEmail.rawValue, value: options.userContext?.userEmail ?? "")
         span.setAttribute(key: Keys.environment.rawValue, value: options.environment)
-    }
-    
-    internal func handleMobileVitals(_ mobileVitals: MobileVitals) {
-        let span = self.getSpan(for: mobileVitals)
-        let value = self.getMobileVitalsTypeString(mobileVitals.type)
-        
-        span.setAttribute(key: Keys.mobileVitalsType.rawValue, value: value)
-        
-        for (key, value) in mobileVitals.type.specificAttributes(for: mobileVitals.value) {
-            span.setAttribute(key: key, value: value)
-        }
-        
-        if let name = mobileVitals.name, !name.isEmpty {
-            span.setAttribute(key: Keys.name.rawValue, value: name)
-        }
-        
-        span.setAttribute(key: Keys.mobileVitalsUnits.rawValue, value: mobileVitals.units.stringValue)
-        
-        if let uuid = mobileVitals.uuid, !uuid.isEmpty {
-            span.setAttribute(key: Keys.mobileVitalsUuid.rawValue, value: uuid)
-        }
-        span.end()
-    }
-    
-    private func getMobileVitalsTypeString(_ type: MobileVitalsType) -> String {
-        switch type {
-        case .memoryUtilization, .residentMemory, .footprintMemory:
-            return Keys.memory.rawValue
-        case .cpuUsage, .mainThreadCpuTime, .totalCpuTime:
-            return Keys.cpu.rawValue
-        default :
-            return type.stringValue
-        }
-    }
-    
-    private func getSpan(for vitals: MobileVitals) -> any Span {
-        var span = tracerProvider().spanBuilder(spanName: Keys.iosSdk.rawValue).startSpan()
-        
-        for (key, value) in vitals.type.spanAttributes {
-            span.setAttribute(key: key, value: value)
-        }
-        
-        self.addUserMetadata(to: &span)
-        return span
     }
     
     private func displayCoralogixWord() {
