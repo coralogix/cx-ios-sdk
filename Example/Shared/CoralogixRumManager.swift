@@ -60,6 +60,6 @@ final class CoralogixRumManager {
     }
 
     func getSessionId() -> String? {
-        return _sdk?.getSessionId()
+        return _sdk?.getSessionId
     }
 }

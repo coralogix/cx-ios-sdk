@@ -63,19 +63,19 @@ public class CoralogixExporter: SpanExporter {
         }
     }
     
-    public func updade(userContext: UserContext) {
+    public func update(userContext: UserContext) {
         self.options.userContext = userContext
     }
     
-    public func updade(labels: [String: Any]) {
+    public func update(labels: [String: Any]) {
         self.options.labels = labels
     }
     
-    public func updade(view: ViewManager) {
+    public func update(view: ViewManager) {
         self.viewManager = view
     }
     
-    public func updade(application: String, version: String) {
+    public func update(application: String, version: String) {
         self.options.version = version
         self.options.application = application
     }
