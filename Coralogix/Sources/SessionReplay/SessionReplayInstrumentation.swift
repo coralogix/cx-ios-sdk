@@ -86,6 +86,7 @@ extension CoralogixRum: CoralogixInterface {
     internal func makeSpan(isManual: Bool = false) {
         var span = tracerProvider().spanBuilder(spanName: Keys.iosSdk.rawValue).startSpan()
         span.setAttribute(key: Keys.eventType.rawValue, value: CoralogixEventType.screenshot.rawValue)
+        span.setAttribute(key: Keys.source.rawValue, value: Keys.console.rawValue)
         span.setAttribute(key: Keys.severity.rawValue, value: AttributeValue.int(CoralogixLogSeverity.info.rawValue))
         self.addUserMetadata(to: &span)
         self.addScreenshotId(to: &span)

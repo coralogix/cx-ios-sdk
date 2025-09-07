@@ -54,16 +54,15 @@ public class CoralogixRum {
     }
     
     deinit {
-        // Remove observer to avoid memory leaks
+        self.removeNotification()
+    }
+    
+    private func removeNotification() {
         NotificationCenter.default.removeObserver(self, name: .cxRumNotification, object: nil)
         NotificationCenter.default.removeObserver(self, name: .cxRumNotificationUserActions, object: nil)
         NotificationCenter.default.removeObserver(self, name: .cxRumNotificationSessionEnded, object: nil)
         NotificationCenter.default.removeObserver(self, name: .cxRumNotificationMetrics, object: nil)
         NotificationCenter.default.removeObserver(self, name: .cxViewDidAppear, object: nil)
-        self.removeLifeCycleNotification()
-    }
-    
-    private func removeLifeCycleNotification() {
         NotificationCenter.default.removeObserver(self, name: UIApplication.didFinishLaunchingNotification, object: nil)
         NotificationCenter.default.removeObserver(self, name: UIApplication.didBecomeActiveNotification, object: nil)
         NotificationCenter.default.removeObserver(self, name: UIApplication.didEnterBackgroundNotification, object: nil)
@@ -168,9 +167,10 @@ public class CoralogixRum {
     }
     
     // MARK: - Public API
-    public func setUserContext(userContext: UserContext) {
-        guard CoralogixRum.isInitialized else { return }
-        self.coralogixExporter?.update(userContext: userContext)
+    
+    public var labels: [String: Any]? {
+        guard CoralogixRum.isInitialized else { return nil }
+        return self.options?.labels
     }
     
     public var userContext: UserContext? {
@@ -178,14 +178,14 @@ public class CoralogixRum {
         return self.options?.userContext
     }
     
+    public func setUserContext(userContext: UserContext) {
+        guard CoralogixRum.isInitialized else { return }
+        self.coralogixExporter?.update(userContext: userContext)
+    }
+    
     public func set(labels: [String: Any]) {
         guard CoralogixRum.isInitialized else { return }
         self.coralogixExporter?.update(labels: labels)
-    }
-    
-    public var labels: [String: Any]? {
-        guard CoralogixRum.isInitialized else { return nil }
-        return self.options?.labels
     }
     
     public func reportError(exception: NSException) {
@@ -208,7 +208,7 @@ public class CoralogixRum {
         self.reportErrorWith(message: message, data: data)
     }
     
-    @available(*, deprecated, message: "Use report(message:data:) or report(error:) instead")
+    @available(*, deprecated, message: "Currently use for Flutter only, will be removed in future")
     public func reportError(message: String, stackTrace: String?) {
         guard CoralogixRum.isInitialized else { return }
         self.reportErrorWith(message: message, stackTrace: stackTrace)
@@ -263,6 +263,7 @@ public class CoralogixRum {
     public func shutdown() {
         CoralogixRum.isInitialized = false
         self.coralogixExporter?.shutdown(explicitTimeout: nil)
+        self.removeNotification()
         self.metricsManager.removeObservers()
     }
     
