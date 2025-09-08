@@ -62,7 +62,10 @@ public class MetricsManager {
     }
     
     func startFPSSamplingMonitoring(fpsSamplingRate: TimeInterval = 300) {
-        self.fpsTrigger.startMonitoring(xTimesPerHour: fpsSamplingRate)
+        // Convert seconds between samples to times per hour
+        let seconds = max(1.0, fpsSamplingRate)
+        let timesPerHour = max(1.0, 3600.0 / seconds)
+        self.fpsTrigger.startMonitoring(xTimesPerHour: timesPerHour)
     }
     
     @objc func appDidEnterBackgroundNotification() {

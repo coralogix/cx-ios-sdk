@@ -51,13 +51,13 @@ public struct CoralogixExporterOptions {
     /// Number between 0-100 as a precentage of SDK should be init.
     var sdkSampler: SDKSampler
     
-    /// The timeinterval the SDK will run the FPS sampling in an hour. default is every 1 minute.
+    /// Seconds between FPS samples. Default: 300s (~5 minutes).
     let fpsSampleRate: TimeInterval
     
-    /// The timeinterval the SDK will run the Memory sampling in an hour. default is  60  miliseconds.
+    /// Seconds between Memory samples. Default: 60s.
     let memoryUsageSampleRate: TimeInterval
     
-    /// The timeinterval the SDK will run the CPU sampling in an hour. default is  60  miliseconds.
+    /// Seconds between CPU samples. Default: 60s.
     let cpuUsageSampleRate: TimeInterval
     
     /// A list of instruments that you wish to switch off during runtime. all instrumentations are active by default.
@@ -132,12 +132,7 @@ public struct CoralogixExporterOptions {
     }
     
     internal func shouldInitInstrumentation(instrumentation: InstrumentationType) -> Bool {
-        if let keys = self.instrumentations?.keys {
-            if keys.contains(instrumentation) {
-                return self.instrumentations?[instrumentation] ?? true
-            }
-        }
-        return true
+        return self.instrumentations?[instrumentation] ?? true
     }
     
     internal func getInitData() -> [String: Any] {
@@ -153,7 +148,7 @@ public struct CoralogixExporterOptions {
         initData[Keys.fpsSampleRate.rawValue] = self.fpsSampleRate
         initData[Keys.memoryUsageSampleRate.rawValue] = self.memoryUsageSampleRate
         initData[Keys.cpuUsageSampleRate.rawValue] = self.cpuUsageSampleRate
-        initData[Keys.instrumentations.rawValue] = self.instrumentations?.keys.map { $0.rawValue } ?? []
+        initData[Keys.instrumentations.rawValue] = self.getInstrumentationStatesAsDictionary()
         initData[Keys.collectIPData.rawValue] = self.collectIPData
         initData[Keys.beforeSend.rawValue] = self.beforeSend != nil ? Keys.exists.rawValue : nil
         initData[Keys.enableSwizzling.rawValue] = self.enableSwizzling
@@ -163,4 +158,14 @@ public struct CoralogixExporterOptions {
         initData[Keys.debug.rawValue] = self.debug
         return initData
     }
+    
+    private func getInstrumentationStatesAsDictionary() -> [String: Bool] {
+          guard let validInstrumentations = self.instrumentations else {
+              return [:]
+          }
+          
+          return validInstrumentations.reduce(into: [:]) { acc, pair in
+              acc[pair.key.rawValue] = pair.value
+          }
+      }
 }

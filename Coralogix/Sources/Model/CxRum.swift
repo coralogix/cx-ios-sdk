@@ -87,11 +87,11 @@ struct CxRum {
         self.updateSnapshotContextIfNeeded(for: eventContext)
         
         // Check for User Interaction
-        if eventContext.type.rawValue == CoralogixEventType.userInteraction.rawValue {
+        if eventContext.type == CoralogixEventType.userInteraction {
             sessionManager.incrementClickCounter()
         }
         
-        if eventContext.type.rawValue == CoralogixEventType.internalKey.rawValue {
+        if eventContext.type == CoralogixEventType.internalKey {
             self.internalContext = InternalContext(eventName: Keys.initKey.rawValue, options: options)
         }
     }
@@ -117,7 +117,7 @@ struct CxRum {
         }
         
         // Check for navigation event
-        if eventContext.type.rawValue == CoralogixEventType.navigation.rawValue {
+        if eventContext.type == CoralogixEventType.navigation {
             self.snapshotContext = buildSnapshotContext(sessionManager: sessionManager, viewManager: viewManager)
         }
     }

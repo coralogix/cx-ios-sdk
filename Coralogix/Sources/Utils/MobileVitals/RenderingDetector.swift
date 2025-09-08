@@ -52,9 +52,11 @@ class FPSTrigger {
             // Time interval between each trigger in seconds
             let interval = 3600 / timesPerHour
             
-            self.timer = Timer.scheduledTimer(withTimeInterval: TimeInterval(interval), repeats: true) { [weak self] _ in
+            let t = Timer.scheduledTimer(withTimeInterval: TimeInterval(interval), repeats: true) { [weak self] _ in
                 self?.monitorFPS()
             }
+            RunLoop.main.add(t, forMode: .common)
+            self.timer = t
         }
     }
     
