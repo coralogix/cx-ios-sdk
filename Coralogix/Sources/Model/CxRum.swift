@@ -44,6 +44,11 @@ struct CxRum {
          metricsManager: MetricsManager,
          options: CoralogixExporterOptions) {
 
+        self.versionMetadata = versionMetadata
+        self.sessionManager = sessionManager
+        self.networkManager = networkManager
+        self.viewManager = viewManager
+        self.labels = options.labels
         self.networkRequestContext = NetworkRequestContext(otel: otel)
         self.errorContext = ErrorContext(otel: otel)
         self.deviceContext = DeviceContext(otel: otel)
@@ -57,14 +62,8 @@ struct CxRum {
         
         self.timeStamp = otel.getStartTime() ?? Date().timeIntervalSince1970
         self.environment = otel.getAttribute(forKey: Keys.environment.rawValue) as? String ?? ""
-
-        self.versionMetadata = versionMetadata
-        self.sessionManager = sessionManager
-        self.networkManager = networkManager
-        self.viewManager = viewManager
-        self.labels = options.labels
+       
         self.fingerPrint = FingerprintManager(using: KeychainManager()).fingerprint
-
         self.mobileSDK = CoralogixRum.mobileSDK
 
         let traceContext = Helper.getTraceAndSpanId(otel: otel)

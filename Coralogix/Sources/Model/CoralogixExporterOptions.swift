@@ -96,10 +96,10 @@ public struct CoralogixExporterOptions {
                 ignoreUrls: [String]? = nil,
                 ignoreErrors: [String]? = nil,
                 labels: [String: Any]? = nil,
-                sessionSampleRate: Int = 100, // S
-                memoryUsageSampleRate: TimeInterval = 60, // Ms
-                cpuUsageSampleRate: TimeInterval = 60, // Ms
-                fpsSampleRate: TimeInterval = 300, // minimum every 5 minute
+                sessionSampleRate: Int = 100, // percent (0–100)
+                memoryUsageSampleRate: TimeInterval = 60, // seconds
+                cpuUsageSampleRate: TimeInterval = 60, // seconds
+                fpsSampleRate: TimeInterval = 300, // seconds (5 minutes)
                 instrumentations: [InstrumentationType: Bool]? = nil,
                 collectIPData: Bool = true,
                 beforeSend: (([String: Any]) -> [String: Any]?)? = nil,
@@ -150,12 +150,15 @@ public struct CoralogixExporterOptions {
         initData[Keys.cpuUsageSampleRate.rawValue] = self.cpuUsageSampleRate
         initData[Keys.instrumentations.rawValue] = self.getInstrumentationStatesAsDictionary()
         initData[Keys.collectIPData.rawValue] = self.collectIPData
-        initData[Keys.beforeSend.rawValue] = self.beforeSend != nil ? Keys.exists.rawValue : nil
         initData[Keys.enableSwizzling.rawValue] = self.enableSwizzling
         initData[Keys.proxyUrl.rawValue] = self.proxyUrl
         initData[Keys.traceParentInHeader.rawValue] = self.traceParentInHeader
         initData[Keys.ignoredClassPrefixes.rawValue] = self.ignoredClassPrefixes
         initData[Keys.debug.rawValue] = self.debug
+        
+        if self.beforeSend != nil {
+            initData[Keys.beforeSend.rawValue] = Keys.exists.rawValue
+        }
         return initData
     }
     
