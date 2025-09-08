@@ -20,6 +20,7 @@ final class SpanTests: XCTestCase {
     var mockCxMetricsManager: MetricsManager!
     let statTime = Date()
     let endTime = Date()
+    var options: CoralogixExporterOptions?
     
     override func setUpWithError() throws {
         mockSpanData = MockSpanData(attributes: [Keys.severity.rawValue: AttributeValue("3"),
@@ -40,6 +41,19 @@ final class SpanTests: XCTestCase {
         mockNetworkManager = NetworkManager()
         mockViewManager = ViewManager(keyChain: KeychainManager())
         mockCxMetricsManager = MetricsManager()
+//        let userContext = UserContext(userId: "12345", userName: "John Doe", userEmail: "john.doe@example.com", userMetadata: ["userId": "12345"])
+       
+        options = CoralogixExporterOptions(coralogixDomain: CoralogixDomain.US2,
+                                           userContext: nil,
+                                           environment: "PROD",
+                                           application: "TestApp-iOS",
+                                           version: "1.0",
+                                           publicKey: "token",
+                                           ignoreUrls: [], //[".*\\.il$", "https://www.coralogix.com/academy"],
+                                           ignoreErrors: [], //[".*errorcode=.*", "Im cusom Error"],
+                                           labels: ["key": "value"],
+                                           fpsSampleRate: 100,
+                                           debug: true)
     }
     
     override func tearDownWithError() throws {
@@ -50,15 +64,15 @@ final class SpanTests: XCTestCase {
     }
     
     func testInitialization() {
+        guard let options = options else { return XCTFail("Failed to load options") }
+
         let cxSpan = CxSpan(otel: mockSpanData,
                             versionMetadata: mockVersionMetadata,
                             sessionManager: mockSessionManager,
                             networkManager: mockNetworkManager,
                             viewManager: mockViewManager,
                             metricsManager: mockCxMetricsManager,
-                            userMetadata: nil,
-                            beforeSend: nil,
-                            labels: nil)
+                            options: options)
         
         XCTAssertEqual(cxSpan.applicationName, "ExampleApp")
         XCTAssertNotNil(cxSpan.versionMetadata)
@@ -69,6 +83,8 @@ final class SpanTests: XCTestCase {
     }
     
     func testInitializationWirtInstrumentationData() {
+        guard let options = options else { return XCTFail("Failed to load options") }
+
         mockSpanData = MockSpanData(attributes: [Keys.severity.rawValue: AttributeValue("3"),
                                                  Keys.eventType.rawValue: AttributeValue("network-request"),
                                                  Keys.source.rawValue: AttributeValue("console"),
@@ -89,9 +105,7 @@ final class SpanTests: XCTestCase {
                             networkManager: mockNetworkManager,
                             viewManager: mockViewManager,
                             metricsManager: mockCxMetricsManager,
-                            userMetadata: nil,
-                            beforeSend: nil,
-                            labels: nil)
+                            options: options)
         XCTAssertNotNil(cxSpan.instrumentationData)
         
         if let dict = cxSpan.getDictionary() {
@@ -100,15 +114,15 @@ final class SpanTests: XCTestCase {
     }
     
     func testGetDictionary() {
+        guard let options = options else { return XCTFail("Failed to load options") }
+
         let cxSpan = CxSpan(otel: mockSpanData,
                             versionMetadata: mockVersionMetadata,
                             sessionManager: mockSessionManager,
                             networkManager: mockNetworkManager,
                             viewManager: mockViewManager,
                             metricsManager: mockCxMetricsManager,
-                            userMetadata: nil,
-                            beforeSend: nil,
-                            labels: nil)
+                            options: options)
         
         if let dictionary = cxSpan.getDictionary() {
             
@@ -187,15 +201,15 @@ final class SpanTests: XCTestCase {
     }
     
     func testCreateSubsetOfCxRum_RemovesSpecifiedKeys() {
+        guard let options = options else { return XCTFail("Failed to load options") }
+
         let cxSpan = CxSpan(otel: mockSpanData,
                             versionMetadata: mockVersionMetadata,
                             sessionManager: mockSessionManager,
                             networkManager: mockNetworkManager,
                             viewManager: mockViewManager,
                             metricsManager: mockCxMetricsManager,
-                            userMetadata: nil,
-                            beforeSend: nil,
-                            labels: nil)
+                            options: options)
         // Given
         let originalCxRum: [String: Any] = [
             Keys.sessionContext.rawValue: [
@@ -229,15 +243,15 @@ final class SpanTests: XCTestCase {
     }
     
     func testCreateSubsetOfCxRum_NoSessionContext() {
+        guard let options = options else { return XCTFail("Failed to load options") }
+
         let cxSpan = CxSpan(otel: mockSpanData,
                             versionMetadata: mockVersionMetadata,
                             sessionManager: mockSessionManager,
                             networkManager: mockNetworkManager,
                             viewManager: mockViewManager,
                             metricsManager: mockCxMetricsManager,
-                            userMetadata: nil,
-                            beforeSend: nil,
-                            labels: nil)
+                            options: options)
         // Given
         let originalCxRum: [String: Any] = [
             Keys.timestamp.rawValue: 1234567890,
@@ -255,6 +269,8 @@ final class SpanTests: XCTestCase {
     }
     
     func testMergeDictionaries() {
+        guard let options = options else { return XCTFail("Failed to load options") }
+
         let dict1: [String: Any] = [
             "key1": "value1",
             "key2": [
@@ -274,9 +290,7 @@ final class SpanTests: XCTestCase {
                             networkManager: mockNetworkManager,
                             viewManager: mockViewManager,
                             metricsManager: mockCxMetricsManager,
-                            userMetadata: nil,
-                            beforeSend: nil,
-                            labels: nil)
+                            options: options)
         let result = cxSpan.mergeDictionaries(original: dict1, editable: dict2)
         XCTAssertEqual(result.count, 3)
         if let key2 = result["key2"] as? [String: Any] {
@@ -285,14 +299,17 @@ final class SpanTests: XCTestCase {
     }
     
     func testBeforeSend() {
-        let cxSpan = CxSpan(otel: mockSpanData,
-                            versionMetadata: mockVersionMetadata,
-                            sessionManager: mockSessionManager,
-                            networkManager: mockNetworkManager,
-                            viewManager: mockViewManager,
-                            metricsManager: mockCxMetricsManager,
-                            userMetadata: nil,
-                            beforeSend: { cxRum in
+        let options = CoralogixExporterOptions(coralogixDomain: CoralogixDomain.US2,
+                                               userContext: nil,
+                                               environment: "PROD",
+                                               application: "TestApp-iOS",
+                                               version: "1.0",
+                                               publicKey: "token",
+                                               ignoreUrls: [], //[".*\\.il$", "https://www.coralogix.com/academy"],
+                                               ignoreErrors: [], //[".*errorcode=.*", "Im cusom Error"],
+                                               labels: ["key": "value"],
+                                               fpsSampleRate: 100,
+                                               beforeSend:{ cxRum in
             var editableCxRum = cxRum
             if var sessionContext = editableCxRum["session_context"] as? [String: Any] {
                 sessionContext["user_email"] = "jone.dow@coralogix.com"
@@ -300,7 +317,15 @@ final class SpanTests: XCTestCase {
             }
             return editableCxRum
         },
-                            labels: nil)
+                                               debug: true)
+        
+        let cxSpan = CxSpan(otel: mockSpanData,
+                            versionMetadata: mockVersionMetadata,
+                            sessionManager: mockSessionManager,
+                            networkManager: mockNetworkManager,
+                            viewManager: mockViewManager,
+                            metricsManager: mockCxMetricsManager,
+                            options: options)
         
         if let dict = cxSpan.getDictionary(),
            let text = dict[Keys.text.rawValue] as? [String: Any],

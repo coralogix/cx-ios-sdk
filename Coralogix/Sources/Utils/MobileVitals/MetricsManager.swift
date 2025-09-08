@@ -22,7 +22,7 @@ public class MetricsManager {
     var memoryDetector: MemoryDetector?
     var slowFrozenFramesDetector: SlowFrozenFramesDetector?
     var fpsTrigger = FPSTrigger()
-    let mobileVitalsFPSSamplingRate = 300 // 5 min
+    let fpsSamplingRate = 300 // 5 min
     var warmMetricIsActive = false
     
     public func addObservers() {
@@ -61,8 +61,8 @@ public class MetricsManager {
         self.stopAllDetectors()
     }
     
-    func startFPSSamplingMonitoring(mobileVitalsFPSSamplingRate: Int) {
-        self.fpsTrigger.startMonitoring(xTimesPerHour: mobileVitalsFPSSamplingRate)
+    func startFPSSamplingMonitoring(fpsSamplingRate: Int) {
+        self.fpsTrigger.startMonitoring(xTimesPerHour: fpsSamplingRate)
     }
     
     @objc func appDidEnterBackgroundNotification() {
@@ -105,7 +105,7 @@ public class MetricsManager {
         self.startCPUMonitoring()
         self.startMemoryMonitoring()
         self.startSlowFrozenFramesMonitoring()
-        self.startFPSSamplingMonitoring(mobileVitalsFPSSamplingRate: mobileVitalsFPSSamplingRate)
+        self.startFPSSamplingMonitoring(fpsSamplingRate: fpsSamplingRate)
     }
     
     func startColdStartMonitoring() {

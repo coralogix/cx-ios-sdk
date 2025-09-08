@@ -140,13 +140,8 @@ public class CoralogixExporter: SpanExporter {
         spanProcessingQueue.async(flags: .barrier) { [weak self] in
             defer { group.leave() }
             guard let self = self else { return }
-            encodedSpans = spans.compactMap { span in
-                do {
-                    return try? self.spanDatatoCxSpan(otelSpan: span)
-                } catch {
-                    Log.e("❌ Failed to encode span \(span.name): \(error)")
-                    return nil
-                }
+            encodedSpans = spans.compactMap { [weak self] span in
+                return self?.spanDatatoCxSpan(otelSpan: span)
             }
         }
         group.wait()
@@ -173,9 +168,7 @@ public class CoralogixExporter: SpanExporter {
                       networkManager: self.networkManager,
                       viewManager: self.viewManager,
                       metricsManager: self.metricsManager,
-                      userMetadata: self.options.userContext?.userMetadata,
-                      beforeSend: self.options.beforeSend,
-                      labels: self.options.labels).getDictionary()
+                      options: self.options).getDictionary()
     }
     
     private func isMatchesRegexPattern(string: String, regexs: [String]) -> Bool {

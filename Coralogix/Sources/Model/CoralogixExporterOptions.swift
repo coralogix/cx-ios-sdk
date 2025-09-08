@@ -52,7 +52,13 @@ public struct CoralogixExporterOptions {
     var sdkSampler: SDKSampler
     
     /// The timeinterval the SDK will run the FPS sampling in an hour. default is every 1 minute.
-    let mobileVitalsFPSSamplingRate: Int
+    let fpsSampleRate: Int
+    
+    /// The timeinterval the SDK will run the Memory sampling in an hour. default is  60  miliseconds.
+    let memoryUsageSampleRate: Int
+    
+    /// The timeinterval the SDK will run the CPU sampling in an hour. default is  60  miliseconds.
+    let cpuUsageSampleRate: Int
     
     /// A list of instruments that you wish to switch off during runtime. all instrumentations are active by default.
     var instrumentations: [InstrumentationType: Bool]?
@@ -90,8 +96,10 @@ public struct CoralogixExporterOptions {
                 ignoreUrls: [String]? = nil,
                 ignoreErrors: [String]? = nil,
                 labels: [String: Any]? = nil,
-                sampleRate: Int = 100,
-                mobileVitalsFPSSamplingRate: Int = 300, // minimum every 5 minute
+                sessionSampleRate: Int = 100, // S
+                memoryUsageSampleRate: Int = 60, // Ms
+                cpuUsageSampleRate: Int = 60, // Ms
+                fpsSampleRate: Int = 300, // minimum every 5 minute
                 instrumentations: [InstrumentationType: Bool]? = nil,
                 collectIPData: Bool = true,
                 beforeSend: (([String: Any]) -> [String: Any]?)? = nil,
@@ -110,8 +118,10 @@ public struct CoralogixExporterOptions {
         self.application = application
         self.version = version
         self.labels = labels
-        self.sdkSampler = SDKSampler(sampleRate: sampleRate)
-        self.mobileVitalsFPSSamplingRate = mobileVitalsFPSSamplingRate
+        self.sdkSampler = SDKSampler(sampleRate: sessionSampleRate)
+        self.fpsSampleRate = fpsSampleRate
+        self.memoryUsageSampleRate = memoryUsageSampleRate
+        self.cpuUsageSampleRate = cpuUsageSampleRate
         self.instrumentations = instrumentations
         self.collectIPData = collectIPData
         self.beforeSend = beforeSend
@@ -128,5 +138,29 @@ public struct CoralogixExporterOptions {
             }
         }
         return true
+    }
+    
+    internal func getInitData() -> [String: Any] {
+        var initData: [String: Any] = [:]
+        initData[Keys.userContext.rawValue] = self.userContext?.getDictionary()
+        initData[Keys.environment.rawValue] = self.environment
+        initData[Keys.application.rawValue] = self.application
+        initData[Keys.version.rawValue] = self.version
+        initData[Keys.ignoreUrls.rawValue] = self.ignoreUrls
+        initData[Keys.ignoreErrors.rawValue] = self.ignoreErrors
+        initData[Keys.labels.rawValue] = self.labels
+        initData[Keys.sessionSampleRate.rawValue] = self.sdkSampler.sampleRate
+        initData[Keys.fpsSampleRate.rawValue] = self.fpsSampleRate
+        initData[Keys.memoryUsageSampleRate.rawValue] = self.memoryUsageSampleRate
+        initData[Keys.cpuUsageSampleRate.rawValue] = self.cpuUsageSampleRate
+        initData[Keys.instrumentations.rawValue] = self.instrumentations?.keys
+        initData[Keys.collectIPData.rawValue] = self.collectIPData
+        initData[Keys.beforeSend.rawValue] = self.beforeSend != nil ? Keys.exists.rawValue : nil
+        initData[Keys.enableSwizzling.rawValue] = self.enableSwizzling
+        initData[Keys.proxyUrl.rawValue] = self.proxyUrl
+        initData[Keys.traceParentInHeader.rawValue] = self.traceParentInHeader
+        initData[Keys.ignoredClassPrefixes.rawValue] = self.ignoredClassPrefixes
+        initData[Keys.debug.rawValue] = self.debug
+        return initData
     }
 }

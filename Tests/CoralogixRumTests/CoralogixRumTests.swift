@@ -16,7 +16,7 @@ final class CoralogixRumTests: XCTestCase {
                                            ignoreUrls: [], //[".*\\.il$", "https://www.coralogix.com/academy"],
                                            ignoreErrors: [], //[".*errorcode=.*", "Im cusom Error"],
                                            labels: ["item" : "banana", "itemPrice" : 1000],
-                                           sampleRate: 100,
+                                           sessionSampleRate: 100,
                                            debug: true)
     }
     
@@ -59,7 +59,7 @@ final class CoralogixRumTests: XCTestCase {
                                            ignoreUrls: [], //[".*\\.il$", "https://www.coralogix.com/academy"],
                                            ignoreErrors: [], //[".*errorcode=.*", "Im cusom Error"],
                                            labels: ["item" : "banana", "itemPrice" : 1000],
-                                           sampleRate: 0,
+                                           sessionSampleRate: 0,
                                            debug: true)
         _ = CoralogixRum(options: options!)
         XCTAssertFalse(CoralogixRum.isInitialized)
@@ -116,7 +116,7 @@ final class CoralogixRumTests: XCTestCase {
                                                     ignoreUrls: [],
                                                     ignoreErrors: [],
                                                     labels: ["item" : "banana", "itemPrice" : 1000],
-                                                    sampleRate: 100,
+                                                    sessionSampleRate: 100,
                                                     debug: true)
         coralogixRum = CoralogixRum(options: mockOptions, sessionManager: mockSessionManager)
         
@@ -139,7 +139,7 @@ final class CoralogixRumTests: XCTestCase {
                                                     ignoreUrls: [],
                                                     ignoreErrors: [],
                                                     labels: ["item" : "banana", "itemPrice" : 1000],
-                                                    sampleRate: 100,
+                                                    sessionSampleRate: 100,
                                                     debug: true)
         var coralogixRum = CoralogixRum(options: mockOptions)
         // Test when debug is true
@@ -156,7 +156,7 @@ final class CoralogixRumTests: XCTestCase {
                                                 ignoreUrls: [],
                                                 ignoreErrors: [],
                                                 labels: ["item" : "banana", "itemPrice" : 1000],
-                                                sampleRate: 100,
+                                                sessionSampleRate: 100,
                                                 debug: false)
         coralogixRum = CoralogixRum(options: mockOptions)
         XCTAssertFalse(coralogixRum.isDebug())
@@ -173,7 +173,7 @@ final class CoralogixRumTests: XCTestCase {
                                                     ignoreUrls: [],
                                                     ignoreErrors: [],
                                                     labels: ["item" : "banana", "itemPrice" : 1000],
-                                                    sampleRate: 100,
+                                                    sessionSampleRate: 100,
                                                     debug: true)
         let coralogixRum = CoralogixRum(options: mockOptions, sessionManager: mockSessionManager)
         
@@ -258,7 +258,7 @@ final class CoralogixRumTests: XCTestCase {
                                                     publicKey: "token",
                                                     ignoreUrls: [],
                                                     ignoreErrors: [],
-                                                    sampleRate: 100,
+                                                    sessionSampleRate: 100,
                                                     debug: true)
         let coralogixRum =  CoralogixRum(options: mockOptions)
         let cxView = CXView(state: .notifyOnDisappear, name: "TestView")
@@ -290,7 +290,7 @@ final class CoralogixRumTests: XCTestCase {
                                                     publicKey: "token",
                                                     ignoreUrls: [],
                                                     ignoreErrors: [],
-                                                    sampleRate: 100,
+                                                    sessionSampleRate: 100,
                                                     debug: true)
         let coralogixRum = CoralogixRum(options: mockOptions)
         let invalidObject = "Not a CXView" // String instead of CXView
@@ -358,7 +358,7 @@ final class CoralogixRumTests: XCTestCase {
             publicKey: "token",
             ignoreUrls: [],
             ignoreErrors: [],
-            sampleRate: 100,
+            sessionSampleRate: 100,
             debug: true
         )
         
@@ -525,7 +525,7 @@ final class CoralogixRumTests: XCTestCase {
             publicKey: "token",
             ignoreUrls: [],
             ignoreErrors: [],
-            sampleRate: 100,
+            sessionSampleRate: 100,
             debug: true
         )
         
@@ -545,7 +545,7 @@ final class CoralogixRumTests: XCTestCase {
             publicKey: "token",
             ignoreUrls: [],
             ignoreErrors: [],
-            sampleRate: 100,
+            sessionSampleRate: 100,
             debug: true
         )
         
@@ -565,7 +565,7 @@ final class CoralogixRumTests: XCTestCase {
             publicKey: "token",
             ignoreUrls: [],
             ignoreErrors: [],
-            sampleRate: 100,
+            sessionSampleRate: 100,
             traceParentInHeader: ["enable": false],
             debug: true
         )
@@ -586,7 +586,7 @@ final class CoralogixRumTests: XCTestCase {
             publicKey: "token",
             ignoreUrls: [],
             ignoreErrors: [],
-            sampleRate: 100,
+            sessionSampleRate: 100,
             traceParentInHeader: ["enable": true,
                                   "options" : [
                                     "allowedTracingUrls": ["https://allowed.com/path"]]],
@@ -609,7 +609,7 @@ final class CoralogixRumTests: XCTestCase {
             publicKey: "token",
             ignoreUrls: [],
             ignoreErrors: [],
-            sampleRate: 100,
+            sessionSampleRate: 100,
             traceParentInHeader: ["enable": true,
                                   "options" : [
                                     "allowedTracingUrls": [".*test\\.com.*"]]],
@@ -633,7 +633,7 @@ final class CoralogixRumTests: XCTestCase {
             publicKey: "token",
             ignoreUrls: [],
             ignoreErrors: [],
-            sampleRate: 100,
+            sessionSampleRate: 100,
             traceParentInHeader: ["enable": true],
             debug: true
         )
@@ -653,7 +653,7 @@ final class CoralogixRumTests: XCTestCase {
             publicKey: "token",
             ignoreUrls: [],
             ignoreErrors: [],
-            sampleRate: 100,
+            sessionSampleRate: 100,
             traceParentInHeader: ["enable": true],
             debug: true
         )
@@ -680,7 +680,7 @@ final class CoralogixRumTests: XCTestCase {
             publicKey: "token",
             ignoreUrls: [],
             ignoreErrors: [],
-            sampleRate: 100,
+            sessionSampleRate: 100,
             traceParentInHeader: ["enable": true],
             debug: true
         )
@@ -708,7 +708,7 @@ final class CoralogixRumTests: XCTestCase {
             publicKey: "token",
             ignoreUrls: [],
             ignoreErrors: [],
-            sampleRate: 100,
+            fpsSampleRate: 100,
             debug: true
         )
         

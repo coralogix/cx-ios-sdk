@@ -130,7 +130,7 @@ public class CoralogixRum {
         self.metricsManager.addObservers()
         
         if options.shouldInitInstrumentation(instrumentation: .mobileVitals) {
-            self.metricsManager.startFPSSamplingMonitoring(mobileVitalsFPSSamplingRate: options.mobileVitalsFPSSamplingRate)
+            self.metricsManager.startFPSSamplingMonitoring(fpsSamplingRate: options.fpsSampleRate)
             self.metricsManager.startColdStartMonitoring()
             self.metricsManager.startCPUMonitoring()
             self.metricsManager.startMemoryMonitoring()
