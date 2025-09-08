@@ -201,6 +201,11 @@ struct CxRum {
             result[Keys.interactionContext.rawValue] = interactionContext.getDictionary()
         }
         
+        if eventContext.type == CoralogixEventType.internalKey,
+           let internalContext = self.internalContext {
+            result[Keys.internalContext.rawValue] = internalContext.getDictionary()
+        }
+        
         if let prevSessionContext = self.prevSessionContext {
             result[Keys.prevSession.rawValue] = prevSessionContext.getPrevSessionDictionary()
         }

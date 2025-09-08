@@ -137,6 +137,7 @@ public enum Keys: String {
     case tapAttributes
     case tapObject
     case interactionContext = "interaction_context"
+    case internalContext = "internal_context"
     case elementId = "element_id"
     case eventName = "event_name"
     case elementType = "element_type"

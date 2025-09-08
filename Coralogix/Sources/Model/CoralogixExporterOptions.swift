@@ -9,7 +9,7 @@ import Foundation
 
 public struct CoralogixExporterOptions {
     
-    public enum InstrumentationType {
+    public enum InstrumentationType: String {
         case mobileVitals
         case custom
         case errors
@@ -52,13 +52,13 @@ public struct CoralogixExporterOptions {
     var sdkSampler: SDKSampler
     
     /// The timeinterval the SDK will run the FPS sampling in an hour. default is every 1 minute.
-    let fpsSampleRate: Int
+    let fpsSampleRate: TimeInterval
     
     /// The timeinterval the SDK will run the Memory sampling in an hour. default is  60  miliseconds.
-    let memoryUsageSampleRate: Int
+    let memoryUsageSampleRate: TimeInterval
     
     /// The timeinterval the SDK will run the CPU sampling in an hour. default is  60  miliseconds.
-    let cpuUsageSampleRate: Int
+    let cpuUsageSampleRate: TimeInterval
     
     /// A list of instruments that you wish to switch off during runtime. all instrumentations are active by default.
     var instrumentations: [InstrumentationType: Bool]?
@@ -97,9 +97,9 @@ public struct CoralogixExporterOptions {
                 ignoreErrors: [String]? = nil,
                 labels: [String: Any]? = nil,
                 sessionSampleRate: Int = 100, // S
-                memoryUsageSampleRate: Int = 60, // Ms
-                cpuUsageSampleRate: Int = 60, // Ms
-                fpsSampleRate: Int = 300, // minimum every 5 minute
+                memoryUsageSampleRate: TimeInterval = 60, // Ms
+                cpuUsageSampleRate: TimeInterval = 60, // Ms
+                fpsSampleRate: TimeInterval = 300, // minimum every 5 minute
                 instrumentations: [InstrumentationType: Bool]? = nil,
                 collectIPData: Bool = true,
                 beforeSend: (([String: Any]) -> [String: Any]?)? = nil,
@@ -153,7 +153,7 @@ public struct CoralogixExporterOptions {
         initData[Keys.fpsSampleRate.rawValue] = self.fpsSampleRate
         initData[Keys.memoryUsageSampleRate.rawValue] = self.memoryUsageSampleRate
         initData[Keys.cpuUsageSampleRate.rawValue] = self.cpuUsageSampleRate
-        initData[Keys.instrumentations.rawValue] = self.instrumentations?.keys
+        initData[Keys.instrumentations.rawValue] = self.instrumentations?.keys.map { $0.rawValue } ?? []
         initData[Keys.collectIPData.rawValue] = self.collectIPData
         initData[Keys.beforeSend.rawValue] = self.beforeSend != nil ? Keys.exists.rawValue : nil
         initData[Keys.enableSwizzling.rawValue] = self.enableSwizzling

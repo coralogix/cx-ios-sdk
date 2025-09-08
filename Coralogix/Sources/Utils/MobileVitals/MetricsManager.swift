@@ -22,8 +22,8 @@ public class MetricsManager {
     var memoryDetector: MemoryDetector?
     var slowFrozenFramesDetector: SlowFrozenFramesDetector?
     var fpsTrigger = FPSTrigger()
-    let fpsSamplingRate = 300 // 5 min
     var warmMetricIsActive = false
+    var options: CoralogixExporterOptions?
     
     public func addObservers() {
         MXMetricManager.shared.add(MyMetricSubscriber.shared)
@@ -61,7 +61,7 @@ public class MetricsManager {
         self.stopAllDetectors()
     }
     
-    func startFPSSamplingMonitoring(fpsSamplingRate: Int) {
+    func startFPSSamplingMonitoring(fpsSamplingRate: TimeInterval = 300) {
         self.fpsTrigger.startMonitoring(xTimesPerHour: fpsSamplingRate)
     }
     
@@ -102,10 +102,12 @@ public class MetricsManager {
         
         // Resume mobile vitals monitoring
         self.startANRMonitoring()
-        self.startCPUMonitoring()
-        self.startMemoryMonitoring()
         self.startSlowFrozenFramesMonitoring()
-        self.startFPSSamplingMonitoring(fpsSamplingRate: fpsSamplingRate)
+        
+        guard let options = options else { return }
+        self.startCPUMonitoring(cpuSamplingRate: options.cpuUsageSampleRate)
+        self.startMemoryMonitoring(memorySamplingRate: options.memoryUsageSampleRate)
+        self.startFPSSamplingMonitoring(fpsSamplingRate: options.fpsSampleRate)
     }
     
     func startColdStartMonitoring() {
@@ -117,16 +119,16 @@ public class MetricsManager {
         self.anrDetector?.startMonitoring()
     }
     
-    func startCPUMonitoring() {
+    func startCPUMonitoring(cpuSamplingRate: TimeInterval) {
         guard cpuDetector == nil else { return }
-        let detector = CPUDetector()
+        let detector = CPUDetector(checkInterval: cpuSamplingRate)
         detector.startMonitoring()
         self.cpuDetector = detector
     }
     
-    func startMemoryMonitoring() {
+    func startMemoryMonitoring(memorySamplingRate: TimeInterval) {
         guard memoryDetector == nil else { return }
-        let detector = MemoryDetector()
+        let detector = MemoryDetector(interval: memorySamplingRate)
         detector.startMonitoring()
         self.memoryDetector = detector
     }

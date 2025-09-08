@@ -11,7 +11,7 @@ struct InternalContext {
 
     func getDictionary() -> [String: Any] {
         var result: [String: Any] = [:]
-        result[Keys.event.rawValue] = Keys.initKey.rawValue
+        result[Keys.event.rawValue] = eventName
         result[Keys.data.rawValue] = options.getInitData()
         return result
     }

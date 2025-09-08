@@ -398,7 +398,7 @@ final class CxRumTests: XCTestCase {
                                                environment: "",
                                                application: "",
                                                version: "",
-                                               publicKey: "",)
+                                               publicKey: "")
         mockSessionManager = MockSessionManager()
         mockSessionManager.hasRecording = true
         mockViewerManager = MockViewManager(keyChain: MockKeyChain())

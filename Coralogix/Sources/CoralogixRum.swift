@@ -83,6 +83,7 @@ public class CoralogixRum {
         self.setupTracer(applicationName: options.application)
         self.swizzle()
         self.initializeEnabledInstrumentations(using: options)
+        self.createInitSpan()
         CoralogixRum.isInitialized = true
     }
     
@@ -126,14 +127,15 @@ public class CoralogixRum {
         OpenTelemetry.registerTracerProvider(tracerProvider: tracerProvider)
     }
     
-    private func initializeMetricsManager(options: CoralogixExporterOptions) {
+    private func initialize(options: CoralogixExporterOptions) {
+        self.metricsManager.options = options
         self.metricsManager.addObservers()
         
         if options.shouldInitInstrumentation(instrumentation: .mobileVitals) {
             self.metricsManager.startFPSSamplingMonitoring(fpsSamplingRate: options.fpsSampleRate)
             self.metricsManager.startColdStartMonitoring()
-            self.metricsManager.startCPUMonitoring()
-            self.metricsManager.startMemoryMonitoring()
+            self.metricsManager.startCPUMonitoring(cpuSamplingRate: options.cpuUsageSampleRate)
+            self.metricsManager.startMemoryMonitoring(memorySamplingRate: options.memoryUsageSampleRate)
             self.metricsManager.startSlowFrozenFramesMonitoring()
         }
         
@@ -155,7 +157,6 @@ public class CoralogixRum {
     
     private func setupCoreModules(options: CoralogixExporterOptions) {
         self.initializeSessionReplay()
-        self.initializeMetricsManager(options: options)
         self.initializeNavigationInstrumentation()
     }
     
