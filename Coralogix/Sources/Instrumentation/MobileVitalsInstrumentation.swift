@@ -74,7 +74,7 @@ extension CoralogixRum {
     }
     
     func getSpan(for vitals: MobileVitals) -> any Span {
-        var span = makeSpan(event: .mobileVitals, source: .code, severity: .info)
+        let span = makeSpan(event: .mobileVitals, source: .code, severity: .info)
         for (key, value) in vitals.type.spanAttributes {
             span.setAttribute(key: key, value: value)
         }

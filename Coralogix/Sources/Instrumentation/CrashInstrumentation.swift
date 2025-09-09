@@ -29,7 +29,7 @@ extension CoralogixRum {
                 
                 // Retrieving crash reporter data.
                 let report = try PLCrashReport(data: data)
-                var span = makeSpan(event: .error, source: .console, severity: .error)
+                let span = makeSpan(event: .error, source: .console, severity: .error)
                 span.setAttribute(key: Keys.exceptionType.rawValue, value: report.signalInfo.name)
                 if let crashTimestamp = report.systemInfo.timestamp {
                     span.setAttribute(key: Keys.crashTimestamp.rawValue, value: "\(crashTimestamp.timeIntervalSince1970.milliseconds)")
