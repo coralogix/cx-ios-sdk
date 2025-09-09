@@ -222,4 +222,13 @@ class Helper {
 
         return (traceId, spanId)
     }
+    
+    internal static func getLabels(otel: SpanDataProtocol, labels: [String: Any]?) -> [String: Any]? {
+        var mergedLabels = labels ?? [:]
+        if let jsonString = otel.getAttribute(forKey: Keys.customLabels.rawValue) as? String,
+            let customLabels = Helper.convertJsonStringToDict(jsonString: jsonString) {
+            mergedLabels.merge(customLabels, uniquingKeysWith: { (_, new) in new })
+        }
+        return mergedLabels.isEmpty ? nil : mergedLabels
+    }
 }

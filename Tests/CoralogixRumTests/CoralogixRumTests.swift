@@ -241,7 +241,7 @@ final class CoralogixRumTests: XCTestCase {
             return MockTracer()
         }
         
-        if let mockSpan = coralogixRum.getNavigationSpan() as? MockSpan {
+        if let mockSpan = coralogixRum.makeSpan(event: .navigation, source: .console, severity: .info) as? MockSpan {
             // Assert
             XCTAssertEqual(mockSpan.recordedAttributes[Keys.eventType.rawValue], .string(CoralogixEventType.navigation.rawValue))
             XCTAssertEqual(mockSpan.recordedAttributes[Keys.source.rawValue], .string(Keys.console.rawValue))
@@ -407,7 +407,7 @@ final class CoralogixRumTests: XCTestCase {
         coralogixRum.tracerProvider = {
             return MockTracer()
         }
-        let span = coralogixRum.getUserActionsSpan()
+        let span = coralogixRum.makeSpan(event: .userInteraction, source: .console, severity: .info)
         
         guard let mockSpan = span as? MockSpan else {
             XCTFail("Expected span to be MockSpan")

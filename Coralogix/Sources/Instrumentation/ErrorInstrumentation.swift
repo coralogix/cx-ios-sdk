@@ -89,10 +89,15 @@ extension CoralogixRum {
 
     func logWith(severity: CoralogixLogSeverity,
                  message: String,
-                 data: [String: Any]?) {
+                 data: [String: Any]?,
+                 labels: [String: Any]?) {
         guard isCustomOrLifecycleEnabled else { return }
         var span = self.makeSpan(event: .log, source: .code, severity: severity)
         span.setAttribute(key: Keys.message.rawValue, value: message)
+        
+        if let labels = labels {
+            span.setAttribute(key: Keys.customLabels.rawValue, value: Helper.convertDictionayToJsonString(dict: labels))
+        }
         
         if let data = data {
             span.setAttribute(key: Keys.data.rawValue, value: Helper.convertDictionayToJsonString(dict: data))

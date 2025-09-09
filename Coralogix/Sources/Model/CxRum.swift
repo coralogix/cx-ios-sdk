@@ -48,7 +48,7 @@ struct CxRum {
         self.sessionManager = sessionManager
         self.networkManager = networkManager
         self.viewManager = viewManager
-        self.labels = options.labels
+        self.labels = Helper.getLabels(otel: otel, labels: options.labels)
         self.networkRequestContext = NetworkRequestContext(otel: otel)
         self.errorContext = ErrorContext(otel: otel)
         self.deviceContext = DeviceContext(otel: otel)

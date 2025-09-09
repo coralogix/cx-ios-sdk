@@ -256,9 +256,12 @@ public class CoralogixRum {
         self.coralogixExporter?.set(cxView: cxView)
     }
     
-    public func log(severity: CoralogixLogSeverity, message: String, data: [String: Any]? = nil) {
+    public func log(severity: CoralogixLogSeverity,
+                    message: String,
+                    data: [String: Any]? = nil,
+                    labels: [String: Any]? = nil) {
         guard CoralogixRum.isInitialized else { return }
-        self.logWith(severity: severity, message: message, data: data)
+        self.logWith(severity: severity, message: message, data: data, labels: labels)
     }
     
     public func shutdown() {
