@@ -9,52 +9,53 @@ import Foundation
 import CoralogixInternal
 
 extension CoralogixRum {
-    func reportErrorWith(exception: NSException) {
-        if let options = self.coralogixExporter?.getOptions(),
-           options.shouldInitInstrumentation(instrumentation: .errors) {
-            let span = self.getErrorSpan()
-            span.setAttribute(key: Keys.domain.rawValue, value: exception.name.rawValue)
-            span.setAttribute(key: Keys.code.rawValue, value: 0)
-            span.setAttribute(key: Keys.errorMessage.rawValue, value: exception.reason ?? "")
-            if let userInfo = exception.userInfo {
-                let dict = Helper.convertDictionary(userInfo)
-                span.setAttribute(key: Keys.userInfo.rawValue, value: Helper.convertDictionayToJsonString(dict: dict))
-            }
-            span.end()
-        }
+    // MARK: - Feature flags
+    private var isErrorsEnabled: Bool {
+        self.options?.shouldInitInstrumentation(instrumentation: .errors) ?? false
     }
-
+    
+    private var isCustomOrLifecycleEnabled: Bool {
+        let opts = self.options
+        return (opts?.shouldInitInstrumentation(instrumentation: .custom) ?? false)
+        || (opts?.shouldInitInstrumentation(instrumentation: .lifeCycle) ?? false)
+    }
+    
+    func reportErrorWith(exception: NSException) {
+        guard isErrorsEnabled else { return }
+        let userInfo = Helper.convertDictionary(exception.userInfo ?? [:])
+        self.writeError(
+            domain: exception.name.rawValue,
+            code: 0,
+            message: exception.reason ?? "",
+            userInfo: userInfo
+        )
+    }
+    
     func reportErrorWith(error: NSError) {
-        if let options = self.coralogixExporter?.getOptions(),
-           options.shouldInitInstrumentation(instrumentation: .errors) {
-            let span = self.getErrorSpan()
-            span.setAttribute(key: Keys.domain.rawValue, value: error.domain)
-            span.setAttribute(key: Keys.code.rawValue, value: error.code)
-            span.setAttribute(key: Keys.errorMessage.rawValue, value: error.localizedDescription)
-            span.setAttribute(key: Keys.userInfo.rawValue, value: Helper.convertDictionayToJsonString(dict: error.userInfo))
-            span.end()
-        }
+        guard isErrorsEnabled else { return }
+        self.writeError(
+            domain: error.domain,
+            code: error.code,
+            message: error.localizedDescription,
+            userInfo: error.userInfo
+        )
     }
     
     func reportErrorWith(error: Error) {
-        if let options = self.coralogixExporter?.getOptions(),
-           options.shouldInitInstrumentation(instrumentation: .errors) {
-            let span = self.getErrorSpan()
-            span.setAttribute(key: Keys.domain.rawValue, value: String(describing: type(of: error)))
-            span.setAttribute(key: Keys.code.rawValue, value: 0)
-            span.setAttribute(key: Keys.errorMessage.rawValue, value: error.localizedDescription)
-            span.end()
-        }
+        guard isErrorsEnabled else { return }
+        self.writeError(
+            domain: String(describing: type(of: error)),
+            code: 0,
+            message: error.localizedDescription
+        )
     }
 
     func reportErrorWith(message: String, data: [String: Any]?) {
-        if let options = self.coralogixExporter?.getOptions(),
-           options.shouldInitInstrumentation(instrumentation: .errors) {
-            self.log(severity: CoralogixLogSeverity.error, message: message, data: data)
-        }
+        guard isErrorsEnabled else { return }
+        self.log(severity: CoralogixLogSeverity.error, message: message, data: data)
     }
     
-    // Use By Flutter
+    //MARK: - Used By Flutter
     func reportErrorWith(message: String, stackTrace: String?) {
         let stackTraceJson = stackTrace.flatMap {
             let stackTraceArray = Helper.parseStackTrace($0)
@@ -63,7 +64,7 @@ extension CoralogixRum {
         reportErrorInternal(message: message, stackTraceJson: stackTraceJson)
     }
     
-    // Use By React Native
+    //MARK: - Used By React Native
     func reportErrorWith(message: String,
                          stackTrace: [[String: Any]],
                          errorType: String?) {
@@ -76,57 +77,39 @@ extension CoralogixRum {
     private func reportErrorInternal(message: String,
                                      stackTraceJson: String?,
                                      errorType: String? = nil) {
-        if let options = self.coralogixExporter?.getOptions(),
-           options.shouldInitInstrumentation(instrumentation: .errors) {
-            let span = self.getErrorSpan()
-            span.setAttribute(key: Keys.domain.rawValue, value: "")
-            span.setAttribute(key: Keys.code.rawValue, value: 0)
-            span.setAttribute(key: Keys.errorMessage.rawValue, value: message)
-            
-            if let errorType = errorType {
-                span.setAttribute(key: Keys.errorType.rawValue, value: errorType)
-            }
-            
-            if let stackTraceJson = stackTraceJson {
-                span.setAttribute(key: Keys.stackTrace.rawValue, value: stackTraceJson)
-            }
-            
-            span.end()
-        }
+        guard isErrorsEnabled else { return }
+        self.writeError(
+            domain: "",
+            code: 0,
+            message: message,
+            stackTraceJson: stackTraceJson,
+            errorType: errorType
+        )
     }
 
     func logWith(severity: CoralogixLogSeverity,
                  message: String,
                  data: [String: Any]?) {
-        if let options = self.coralogixExporter?.getOptions(),
-           options.shouldInitInstrumentation(instrumentation: .custom) ||
-            options.shouldInitInstrumentation(instrumentation: .lifeCycle) {
-            var span = tracerProvider().spanBuilder(spanName: Keys.iosSdk.rawValue).startSpan()
-            span.setAttribute(key: Keys.message.rawValue, value: message)
-            span.setAttribute(key: Keys.eventType.rawValue, value: CoralogixEventType.log.rawValue)
-            span.setAttribute(key: Keys.source.rawValue, value: Keys.code.rawValue)
-            span.setAttribute(key: Keys.severity.rawValue, value: AttributeValue.int(severity.rawValue))
-            
-            if let data = data {
-                span.setAttribute(key: Keys.data.rawValue, value: Helper.convertDictionayToJsonString(dict: data))
-            }
-            
-            self.addUserMetadata(to: &span)
-            
-            if severity.rawValue == CoralogixLogSeverity.error.rawValue {
-                self.addScreenshotId(to: &span)
-            }
-            span.end()
+        guard isCustomOrLifecycleEnabled else { return }
+        var span = self.makeSpan(event: .log, source: .code, severity: severity)
+        
+        span.setAttribute(key: Keys.message.rawValue, value: message)
+        
+        if let data = data {
+            span.setAttribute(key: Keys.data.rawValue, value: Helper.convertDictionayToJsonString(dict: data))
         }
+                
+        if severity == .error { self.addScreenshotId(to: &span) }
+        span.end()
     }
     
-    internal func getErrorSpan() -> any Span {
+    // MARK: - Helpers
+    internal func makeSpan(event: CoralogixEventType, source: Keys, severity: CoralogixLogSeverity) -> any Span {
         var span = tracerProvider().spanBuilder(spanName: Keys.iosSdk.rawValue).startSpan()
-        span.setAttribute(key: Keys.eventType.rawValue, value: CoralogixEventType.error.rawValue)
-        span.setAttribute(key: Keys.source.rawValue, value: Keys.console.rawValue)
-        span.setAttribute(key: Keys.severity.rawValue, value: AttributeValue.int(CoralogixLogSeverity.error.rawValue))
+        span.setAttribute(key: Keys.eventType.rawValue, value: event.rawValue)
+        span.setAttribute(key: Keys.source.rawValue, value: source.rawValue)
+        span.setAttribute(key: Keys.severity.rawValue, value: AttributeValue.int(severity.rawValue))
         self.addUserMetadata(to: &span)
-        self.addScreenshotId(to: &span)
         return span
     }
     
@@ -138,5 +121,22 @@ extension CoralogixRum {
             span.setAttribute(key: Keys.page.rawValue, value: screenshotLocation.page)
             _ = sessionReplay.captureEvent(properties: screenshotLocation.toProperties())
         }
+    }
+    
+    private func writeError(domain: String, code: Int, message: String,
+                            userInfo: [String: Any]? = nil,
+                            stackTraceJson: String? = nil,
+                            errorType: String? = nil) {
+        var span = makeSpan(event: .error, source: .console, severity: .error)
+        span.setAttribute(key: Keys.domain.rawValue, value: domain)
+        span.setAttribute(key: Keys.code.rawValue, value: code)
+        span.setAttribute(key: Keys.errorMessage.rawValue, value: message)
+        if let errorType { span.setAttribute(key: Keys.errorType.rawValue, value: errorType) }
+        if let stackTraceJson { span.setAttribute(key: Keys.stackTrace.rawValue, value: stackTraceJson) }
+        if let userInfo, !userInfo.isEmpty {
+            span.setAttribute(key: Keys.userInfo.rawValue, value: Helper.convertDictionayToJsonString(dict: userInfo))
+        }
+        addScreenshotId(to: &span)
+        span.end()
     }
 }

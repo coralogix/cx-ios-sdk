@@ -38,9 +38,9 @@ class FPSTrigger {
     private let fpsMonitor = FPSMonitor()
     internal var timer: Timer?
     internal var isRunning = false
-    static let defaultInterval = 300 // 5 min
+    static let defaultInterval: TimeInterval = 300 // 5 min
     
-    func startMonitoring(xTimesPerHour: Int = defaultInterval) {
+    func startMonitoring(xTimesPerHour: TimeInterval = defaultInterval) {
         DispatchQueue.main.async { [weak self] in
             guard let self = self, !self.isRunning else { return }
             
@@ -52,9 +52,11 @@ class FPSTrigger {
             // Time interval between each trigger in seconds
             let interval = 3600 / timesPerHour
             
-            self.timer = Timer.scheduledTimer(withTimeInterval: TimeInterval(interval), repeats: true) { [weak self] _ in
+            let t = Timer.scheduledTimer(withTimeInterval: TimeInterval(interval), repeats: true) { [weak self] _ in
                 self?.monitorFPS()
             }
+            RunLoop.main.add(t, forMode: .common)
+            self.timer = t
         }
     }
     

@@ -24,14 +24,12 @@ public class CxSpan {
          networkManager: NetworkProtocol,
          viewManager: ViewManager,
          metricsManager: MetricsManager,
-         userMetadata: [String: String]?,
-         beforeSend: (([String: Any]) -> [String: Any]?)?,
-         labels: [String: Any]?) {
+         options: CoralogixExporterOptions) {
         
         self.applicationName = versionMetadata.appName
         self.versionMetadata = versionMetadata
         self.subsystemName = Keys.cxRum.rawValue
-        self.beforeSend = beforeSend
+        self.beforeSend = options.beforeSend
         if let severity = otel.getAttribute(forKey: Keys.severity.rawValue) as? String {
             self.severity = Int(severity) ?? 0
         }
@@ -42,11 +40,10 @@ public class CxSpan {
                            viewManager: viewManager,
                            networkManager: networkManager,
                            metricsManager: metricsManager,
-                           userMetadata: userMetadata,
-                           labels: labels)
+                           options: options)
         
         if cxRum.eventContext.type == CoralogixEventType.networkRequest {
-            self.instrumentationData = InstrumentationData(otel: otel, labels: labels)
+            self.instrumentationData = InstrumentationData(otel: otel, labels: options.labels)
         }
     }
     

@@ -77,7 +77,7 @@ final class MetricsManagerTests: XCTestCase {
     }
     
     func testFPSSamplingMonitoringStartAndStop() {
-        metricsManager.startFPSSamplingMonitoring(mobileVitalsFPSSamplingRate: 30)
+        metricsManager.startFPSSamplingMonitoring(fpsSamplingRate: 30)
 
         // Wait until isRunning == true
         let startedPred = NSPredicate { _, _ in

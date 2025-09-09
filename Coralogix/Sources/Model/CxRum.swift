@@ -33,6 +33,7 @@ struct CxRum {
     var mobileVitalsContext: MobileVitalsContext?
     var lifeCycleContext: LifeCycleContext?
     var screenShotContext: ScreenshotContext?
+    var internalContext: InternalContext?
     var fingerPrint: String = ""
      
     init(otel: SpanDataProtocol,
@@ -41,9 +42,13 @@ struct CxRum {
          viewManager: ViewManager,
          networkManager: NetworkProtocol,
          metricsManager: MetricsManager,
-         userMetadata: [String: String]?,
-         labels: [String: Any]?) {
+         options: CoralogixExporterOptions) {
 
+        self.versionMetadata = versionMetadata
+        self.sessionManager = sessionManager
+        self.networkManager = networkManager
+        self.viewManager = viewManager
+        self.labels = options.labels
         self.networkRequestContext = NetworkRequestContext(otel: otel)
         self.errorContext = ErrorContext(otel: otel)
         self.deviceContext = DeviceContext(otel: otel)
@@ -57,20 +62,14 @@ struct CxRum {
         
         self.timeStamp = otel.getStartTime() ?? Date().timeIntervalSince1970
         self.environment = otel.getAttribute(forKey: Keys.environment.rawValue) as? String ?? ""
-
-        self.versionMetadata = versionMetadata
-        self.sessionManager = sessionManager
-        self.networkManager = networkManager
-        self.viewManager = viewManager
-        self.labels = labels
+       
         self.fingerPrint = FingerprintManager(using: KeychainManager()).fingerprint
-
         self.mobileSDK = CoralogixRum.mobileSDK
 
         let traceContext = Helper.getTraceAndSpanId(otel: otel)
         self.traceId = traceContext.traceId
         self.spanId = traceContext.spanId
-        
+        let userMetadata = options.userContext?.userMetadata
         let hasRecording = sessionManager.doesSessionhasRecording()
         if let sessionMetadata = sessionManager.getSessionMetadata() {
             self.sessionContext = SessionContext(otel: otel,
@@ -87,8 +86,12 @@ struct CxRum {
         self.updateSnapshotContextIfNeeded(for: eventContext)
         
         // Check for User Interaction
-        if eventContext.type.rawValue == CoralogixEventType.userInteraction.rawValue {
+        if eventContext.type == CoralogixEventType.userInteraction {
             sessionManager.incrementClickCounter()
+        }
+        
+        if eventContext.type == CoralogixEventType.internalKey {
+            self.internalContext = InternalContext(eventName: Keys.initKey.rawValue, options: options)
         }
     }
     
@@ -113,7 +116,7 @@ struct CxRum {
         }
         
         // Check for navigation event
-        if eventContext.type.rawValue == CoralogixEventType.navigation.rawValue {
+        if eventContext.type == CoralogixEventType.navigation {
             self.snapshotContext = buildSnapshotContext(sessionManager: sessionManager, viewManager: viewManager)
         }
     }
@@ -195,6 +198,11 @@ struct CxRum {
         if eventContext.type == CoralogixEventType.userInteraction,
            let interactionContext = self.interactionContext {
             result[Keys.interactionContext.rawValue] = interactionContext.getDictionary()
+        }
+        
+        if eventContext.type == CoralogixEventType.internalKey,
+           let internalContext = self.internalContext {
+            result[Keys.internalContext.rawValue] = internalContext.getDictionary()
         }
         
         if let prevSessionContext = self.prevSessionContext {

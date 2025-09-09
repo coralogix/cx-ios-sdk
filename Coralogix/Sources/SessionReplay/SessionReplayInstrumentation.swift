@@ -10,8 +10,7 @@ import CoralogixInternal
 
 extension CoralogixRum: CoralogixInterface {
     public func periodicallyCaptureEventTriggered() {
-        let span = self.getScreenShotSpan()
-        span.end()
+        self.makeSpan()
     }
     
     public func hasSessionRecording(_ hasSessionRecording: Bool) {
@@ -19,7 +18,7 @@ extension CoralogixRum: CoralogixInterface {
     }
     
     public func isDebug() -> Bool {
-        return self.coralogixExporter?.getOptions().debug ?? false
+        return self.options?.debug ?? false
     }
     
     public func getSessionCreationTimestamp() -> TimeInterval {
@@ -27,19 +26,19 @@ extension CoralogixRum: CoralogixInterface {
     }
     
     public func getApplication() -> String {
-        return self.coralogixExporter?.getOptions().application ?? ""
+        return self.options?.application ?? ""
     }
     
     public func getCoralogixDomain() -> String {
-        return self.coralogixExporter?.getOptions().coralogixDomain.rawValue ?? ""
+        return self.options?.coralogixDomain.rawValue ?? ""
     }
     
     public func getProxyUrl() -> String {
-        return self.coralogixExporter?.getOptions().proxyUrl ?? ""
+        return self.options?.proxyUrl ?? ""
     }
     
     public func getPublicKey() -> String {
-        return self.coralogixExporter?.getOptions().publicKey ?? ""
+        return self.options?.publicKey ?? ""
     }
     
     public func getSessionID() -> String {
@@ -81,18 +80,18 @@ extension CoralogixRum: CoralogixInterface {
     }
     
     public func captureEvent() {
-        let span = self.getScreenShotSpan()
-        span.setAttribute(key: Keys.isManual.rawValue, value: AttributeValue(true))
-        span.end()
+        self.makeSpan(isManual: true)
     }
     
-    internal func getScreenShotSpan() -> any Span {
+    internal func makeSpan(isManual: Bool = false) {
         var span = tracerProvider().spanBuilder(spanName: Keys.iosSdk.rawValue).startSpan()
         span.setAttribute(key: Keys.eventType.rawValue, value: CoralogixEventType.screenshot.rawValue)
+        span.setAttribute(key: Keys.source.rawValue, value: Keys.console.rawValue)
         span.setAttribute(key: Keys.severity.rawValue, value: AttributeValue.int(CoralogixLogSeverity.info.rawValue))
         self.addUserMetadata(to: &span)
         self.addScreenshotId(to: &span)
-        return span
+        if isManual { span.setAttribute(key: Keys.isManual.rawValue, value: AttributeValue(true)) }
+        span.end()
     }
     
     public func isIdle() -> Bool {

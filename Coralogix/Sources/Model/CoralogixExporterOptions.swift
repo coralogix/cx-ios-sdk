@@ -9,7 +9,7 @@ import Foundation
 
 public struct CoralogixExporterOptions {
     
-    public enum InstrumentationType {
+    public enum InstrumentationType: String {
         case mobileVitals
         case custom
         case errors
@@ -51,8 +51,14 @@ public struct CoralogixExporterOptions {
     /// Number between 0-100 as a precentage of SDK should be init.
     var sdkSampler: SDKSampler
     
-    /// The timeinterval the SDK will run the FPS sampling in an hour. default is every 1 minute.
-    let mobileVitalsFPSSamplingRate: Int
+    /// Seconds between FPS samples. Default: 300s (~5 minutes).
+    let fpsSampleRate: TimeInterval
+    
+    /// Seconds between Memory samples. Default: 60s.
+    let memoryUsageSampleRate: TimeInterval
+    
+    /// Seconds between CPU samples. Default: 60s.
+    let cpuUsageSampleRate: TimeInterval
     
     /// A list of instruments that you wish to switch off during runtime. all instrumentations are active by default.
     var instrumentations: [InstrumentationType: Bool]?
@@ -90,8 +96,10 @@ public struct CoralogixExporterOptions {
                 ignoreUrls: [String]? = nil,
                 ignoreErrors: [String]? = nil,
                 labels: [String: Any]? = nil,
-                sampleRate: Int = 100,
-                mobileVitalsFPSSamplingRate: Int = 300, // minimum every 5 minute
+                sessionSampleRate: Int = 100, // percent (0–100)
+                memoryUsageSampleRate: TimeInterval = 60, // seconds
+                cpuUsageSampleRate: TimeInterval = 60, // seconds
+                fpsSampleRate: TimeInterval = 300, // seconds (5 minutes)
                 instrumentations: [InstrumentationType: Bool]? = nil,
                 collectIPData: Bool = true,
                 beforeSend: (([String: Any]) -> [String: Any]?)? = nil,
@@ -110,8 +118,10 @@ public struct CoralogixExporterOptions {
         self.application = application
         self.version = version
         self.labels = labels
-        self.sdkSampler = SDKSampler(sampleRate: sampleRate)
-        self.mobileVitalsFPSSamplingRate = mobileVitalsFPSSamplingRate
+        self.sdkSampler = SDKSampler(sampleRate: sessionSampleRate)
+        self.fpsSampleRate = fpsSampleRate
+        self.memoryUsageSampleRate = memoryUsageSampleRate
+        self.cpuUsageSampleRate = cpuUsageSampleRate
         self.instrumentations = instrumentations
         self.collectIPData = collectIPData
         self.beforeSend = beforeSend
@@ -122,11 +132,43 @@ public struct CoralogixExporterOptions {
     }
     
     internal func shouldInitInstrumentation(instrumentation: InstrumentationType) -> Bool {
-        if let keys = self.instrumentations?.keys {
-            if keys.contains(instrumentation) {
-                return self.instrumentations?[instrumentation] ?? true
-            }
-        }
-        return true
+        return self.instrumentations?[instrumentation] ?? true
     }
+    
+    internal func getInitData() -> [String: Any] {
+        var initData: [String: Any] = [:]
+        initData[Keys.userContext.rawValue] = self.userContext?.getDictionary()
+        initData[Keys.environment.rawValue] = self.environment
+        initData[Keys.application.rawValue] = self.application
+        initData[Keys.version.rawValue] = self.version
+        initData[Keys.ignoreUrls.rawValue] = self.ignoreUrls
+        initData[Keys.ignoreErrors.rawValue] = self.ignoreErrors
+        initData[Keys.labels.rawValue] = self.labels
+        initData[Keys.sessionSampleRate.rawValue] = self.sdkSampler.sampleRate
+        initData[Keys.fpsSampleRate.rawValue] = self.fpsSampleRate
+        initData[Keys.memoryUsageSampleRate.rawValue] = self.memoryUsageSampleRate
+        initData[Keys.cpuUsageSampleRate.rawValue] = self.cpuUsageSampleRate
+        initData[Keys.instrumentations.rawValue] = self.getInstrumentationStatesAsDictionary()
+        initData[Keys.collectIPData.rawValue] = self.collectIPData
+        initData[Keys.enableSwizzling.rawValue] = self.enableSwizzling
+        initData[Keys.proxyUrl.rawValue] = self.proxyUrl
+        initData[Keys.traceParentInHeader.rawValue] = self.traceParentInHeader
+        initData[Keys.ignoredClassPrefixes.rawValue] = self.ignoredClassPrefixes
+        initData[Keys.debug.rawValue] = self.debug
+        
+        if self.beforeSend != nil {
+            initData[Keys.beforeSend.rawValue] = Keys.exists.rawValue
+        }
+        return initData
+    }
+    
+    private func getInstrumentationStatesAsDictionary() -> [String: Bool] {
+          guard let validInstrumentations = self.instrumentations else {
+              return [:]
+          }
+          
+          return validInstrumentations.reduce(into: [:]) { acc, pair in
+              acc[pair.key.rawValue] = pair.value
+          }
+      }
 }

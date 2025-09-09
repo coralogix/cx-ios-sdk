@@ -31,7 +31,7 @@ final class CoralogixExporterTests: XCTestCase {
                                            ignoreUrls: [], //[".*\\.il$", "https://www.coralogix.com/academy"],
                                            ignoreErrors: [], //[".*errorcode=.*", "Im cusom Error"],
                                            labels: ["item" : "banana", "itemPrice" : 1000],
-                                           sampleRate: 100,
+                                           fpsSampleRate: 100,
                                            debug: true)
         let coralogixRum = CoralogixRum(options: options!)
         coralogixExporter = coralogixRum.coralogixExporter
@@ -105,7 +105,7 @@ final class CoralogixExporterTests: XCTestCase {
                                            ignoreUrls: ["https://ignore.com"],
                                            ignoreErrors: [],
                                            labels: ["item" : "banana", "itemPrice" : 1000],
-                                           sampleRate: 100,
+                                           fpsSampleRate: 100,
                                            debug: true)
         let coralogixRum = CoralogixRum(options: options!)
         coralogixExporter = coralogixRum.coralogixExporter
@@ -138,7 +138,7 @@ final class CoralogixExporterTests: XCTestCase {
                                            ignoreUrls: ["ignore\\.com"],
                                            ignoreErrors: [],
                                            labels: ["item" : "banana", "itemPrice" : 1000],
-                                           sampleRate: 100,
+                                           fpsSampleRate: 100,
                                            debug: true)
         let coralogixRum = CoralogixRum(options: options!)
         coralogixExporter = coralogixRum.coralogixExporter
@@ -170,7 +170,7 @@ final class CoralogixExporterTests: XCTestCase {
                                            ignoreUrls: ["patternthatdoesnotmatch"],
                                            ignoreErrors: [],
                                            labels: ["item" : "banana", "itemPrice" : 1000],
-                                           sampleRate: 100,
+                                           fpsSampleRate: 100,
                                            debug: true)
         let coralogixRum = CoralogixRum(options: options!)
         coralogixExporter = coralogixRum.coralogixExporter
@@ -202,7 +202,7 @@ final class CoralogixExporterTests: XCTestCase {
                                            ignoreUrls: [],
                                            ignoreErrors: [],
                                            labels: ["item" : "banana", "itemPrice" : 1000],
-                                           sampleRate: 100,
+                                           fpsSampleRate: 100,
                                            debug: true)
         let coralogixRum = CoralogixRum(options: options!)
         coralogixExporter = coralogixRum.coralogixExporter
@@ -234,7 +234,7 @@ final class CoralogixExporterTests: XCTestCase {
                                            ignoreUrls: [],
                                            ignoreErrors: [],
                                            labels: ["item" : "banana", "itemPrice" : 1000],
-                                           sampleRate: 100,
+                                           fpsSampleRate: 100,
                                            debug: true)
         let coralogixRum = CoralogixRum(options: options!)
         coralogixExporter = coralogixRum.coralogixExporter
@@ -267,7 +267,7 @@ final class CoralogixExporterTests: XCTestCase {
                                            ignoreUrls: [],
                                            ignoreErrors: ["IgnoreThisError"],
                                            labels: ["item" : "banana", "itemPrice" : 1000],
-                                           sampleRate: 100,
+                                           fpsSampleRate: 100,
                                            debug: true)
         let coralogixRum = CoralogixRum(options: options!)
         coralogixExporter = coralogixRum.coralogixExporter
@@ -301,7 +301,7 @@ final class CoralogixExporterTests: XCTestCase {
                                            ignoreUrls: [],
                                            ignoreErrors: [#"\b\w*regex\w*\b"#],
                                            labels: ["item" : "banana", "itemPrice" : 1000],
-                                           sampleRate: 100,
+                                           fpsSampleRate: 100,
                                            debug: true)
         let coralogixRum = CoralogixRum(options: options!)
         coralogixExporter = coralogixRum.coralogixExporter
@@ -335,7 +335,7 @@ final class CoralogixExporterTests: XCTestCase {
                                            ignoreUrls: [],
                                            ignoreErrors: [],
                                            labels: ["item" : "banana", "itemPrice" : 1000],
-                                           sampleRate: 100,
+                                           fpsSampleRate: 100,
                                            debug: true)
         let coralogixRum = CoralogixRum(options: options!)
         coralogixExporter = coralogixRum.coralogixExporter
@@ -371,7 +371,7 @@ final class CoralogixExporterTests: XCTestCase {
                                            ignoreUrls: [],
                                            ignoreErrors: [],
                                            labels: ["item" : "banana", "itemPrice" : 1000],
-                                           sampleRate: 100,
+                                           fpsSampleRate: 100,
                                            proxyUrl: proxyUrl,
                                            debug: true)
         let coralogixRum = CoralogixRum(options: options!)
@@ -401,7 +401,7 @@ final class CoralogixExporterTests: XCTestCase {
                                            ignoreUrls: [],
                                            ignoreErrors: [],
                                            labels: ["item" : "banana", "itemPrice" : 1000],
-                                           sampleRate: 100,
+                                           fpsSampleRate: 100,
                                            proxyUrl: nil,
                                            debug: true)
         let coralogixRum = CoralogixRum(options: options!)

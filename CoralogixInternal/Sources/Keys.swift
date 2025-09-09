@@ -137,6 +137,7 @@ public enum Keys: String {
     case tapAttributes
     case tapObject
     case interactionContext = "interaction_context"
+    case internalContext = "internal_context"
     case elementId = "element_id"
     case eventName = "event_name"
     case elementType = "element_type"
@@ -222,6 +223,24 @@ public enum Keys: String {
     case cpu
     case memory
     case fingerPrint
+    case event
+    case initKey = "init"
+    case version
+    case instrumentations
+    case ignoreUrls
+    case ignoreErrors
+    case collectIPData
+    case sessionSampleRate
+    case traceParentInHeader
+    case fpsSampleRate
+    case memoryUsageSampleRate
+    case cpuUsageSampleRate
+    case debug
+    case ignoredClassPrefixes
+    case proxyUrl
+    case enableSwizzling
+    case beforeSend
+    case exists
 }
 
 public enum CoralogixLogSeverity: Int {
