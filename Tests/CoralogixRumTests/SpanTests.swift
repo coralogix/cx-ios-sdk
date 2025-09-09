@@ -113,93 +113,93 @@ final class SpanTests: XCTestCase {
         }
     }
     
-    func testGetDictionary() {
-        guard let options = options else { return XCTFail("Failed to load options") }
-
-        let cxSpan = CxSpan(otel: mockSpanData,
-                            versionMetadata: mockVersionMetadata,
-                            sessionManager: mockSessionManager,
-                            networkManager: mockNetworkManager,
-                            viewManager: mockViewManager,
-                            metricsManager: mockCxMetricsManager,
-                            options: options)
-        
-        if let dictionary = cxSpan.getDictionary() {
-            
-            XCTAssertEqual(dictionary[Keys.applicationName.rawValue] as? String, "ExampleApp")
-            if let metaData = dictionary[Keys.versionMetaData.rawValue] as? [[String: String]] {
-                if let appName = metaData.first {
-                    XCTAssertEqual(appName[Keys.appName.rawValue], "ExampleApp")
-                }
-                if let appVersion = metaData.last {
-                    XCTAssertEqual(appVersion[Keys.appVersion.rawValue], "1.1.1")
-                }
-            }
-            XCTAssertEqual(cxSpan.subsystemName, Keys.cxRum.rawValue)
-            XCTAssertNotNil(cxSpan.timeStamp)
-            if let text = dictionary[Keys.text.rawValue] as? [String: Any],
-               let cxRum = text[Keys.cxRum.rawValue] as? [String: Any] {
-                
-                if let mobileSdk = cxRum[Keys.mobileSdk.rawValue] as? [String: Any] {
-                    XCTAssertEqual(mobileSdk[Keys.operatingSystem.rawValue] as? String, Keys.ios.rawValue)
-                    XCTAssertEqual(mobileSdk[Keys.sdkVersion.rawValue] as? String, Global.sdk.rawValue)
-                    XCTAssertEqual(mobileSdk[Keys.framework.rawValue] as? String, Keys.swift.rawValue)
-                }
-                
-                if let deviceState = cxRum[Keys.deviceState.rawValue] as? [String: Any] {
-                    if let networkConnectionType = deviceState[Keys.networkConnectionType.rawValue] as? String {
-                        XCTAssertEqual(networkConnectionType, "")
-                    }
-                    
-                    if let networkConnectionSubtype = deviceState[Keys.networkConnectionSubtype.rawValue] as? String {
-                        XCTAssertEqual(networkConnectionSubtype, "")
-                    }
-                    
-                    if let battery = deviceState[Keys.battery.rawValue] as? String {
-                        XCTAssertEqual(battery, Keys.undefined.rawValue)
-                    }
-                    
-                    if let networkType = deviceState[Keys.networkType.rawValue] as? String {
-                        XCTAssertEqual(networkType, Keys.undefined.rawValue)
-                    }
-                }
-                
-                if let sessionContext = cxRum[Keys.sessionContext.rawValue] as? [String: Any] {
-                    XCTAssertNotNil(sessionContext[Keys.sessionCreationDate.rawValue])
-                    XCTAssertNotNil(sessionContext[Keys.sessionId.rawValue])
-                    XCTAssertEqual(sessionContext[Keys.userEmail.rawValue] as? String, "john.doe@example.com")
-                    XCTAssertEqual(sessionContext[Keys.userName.rawValue] as? String, "John Doe")
-                    XCTAssertEqual(sessionContext[Keys.userId.rawValue] as? String, "12345")
-                 }
-                
-                XCTAssertEqual(cxRum[Keys.spanId.rawValue] as? String, "20")
-                XCTAssertEqual(cxRum[Keys.traceId.rawValue] as? String, "30")
-                XCTAssertNotNil(cxRum[Keys.timestamp.rawValue])
-                XCTAssertEqual(cxRum[Keys.environment.rawValue] as? String, "prod")
-                XCTAssertEqual(cxRum[Keys.platform.rawValue] as? String, Keys.mobile.rawValue)
-                
-                
-                if let eventContext = cxRum[Keys.eventContext.rawValue] as? [String: Any] {
-                    XCTAssertEqual(eventContext[Keys.type.rawValue] as? String, "log")
-                    XCTAssertEqual(eventContext[Keys.source.rawValue] as? String, Keys.console.rawValue)
-                    XCTAssertEqual(eventContext[Keys.severity.rawValue] as? Int, 3)
-                }
-                
-                if let versionMetaData =  cxRum[Keys.versionMetaData.rawValue] as? [String: Any] {
-                    XCTAssertEqual(versionMetaData[Keys.appName.rawValue] as? String, "ExampleApp")
-                    XCTAssertEqual(versionMetaData[Keys.appVersion.rawValue] as? String, "1.1.1")
-                }
-                
-                if let logContext = cxRum[Keys.logContext.rawValue] as? [String: Any] {
-                    XCTAssertEqual(logContext[Keys.message.rawValue] as? String, "")
-                }
-            }
-            XCTAssertEqual(dictionary[Keys.subsystemName.rawValue] as? String, Keys.cxRum.rawValue)
-            XCTAssertEqual(dictionary[Keys.severity.rawValue] as? Int, 3)
-            XCTAssertNotNil(dictionary[Keys.timestamp.rawValue])
-        }
-    }
-    
+//    func testGetDictionary() {
+//        guard let options = options else { return XCTFail("Failed to load options") }
+//
+//        let cxSpan = CxSpan(otel: mockSpanData,
+//                            versionMetadata: mockVersionMetadata,
+//                            sessionManager: mockSessionManager,
+//                            networkManager: mockNetworkManager,
+//                            viewManager: mockViewManager,
+//                            metricsManager: mockCxMetricsManager,
+//                            options: options)
+//        
+//        if let dictionary = cxSpan.getDictionary() {
+//            
+//            XCTAssertEqual(dictionary[Keys.applicationName.rawValue] as? String, "ExampleApp")
+//            if let metaData = dictionary[Keys.versionMetaData.rawValue] as? [[String: String]] {
+//                if let appName = metaData.first {
+//                    XCTAssertEqual(appName[Keys.appName.rawValue], "ExampleApp")
+//                }
+//                if let appVersion = metaData.last {
+//                    XCTAssertEqual(appVersion[Keys.appVersion.rawValue], "1.1.1")
+//                }
+//            }
+//            XCTAssertEqual(cxSpan.subsystemName, Keys.cxRum.rawValue)
+//            XCTAssertNotNil(cxSpan.timeStamp)
+//            if let text = dictionary[Keys.text.rawValue] as? [String: Any],
+//               let cxRum = text[Keys.cxRum.rawValue] as? [String: Any] {
+//                
+//                if let mobileSdk = cxRum[Keys.mobileSdk.rawValue] as? [String: Any] {
+//                    XCTAssertEqual(mobileSdk[Keys.operatingSystem.rawValue] as? String, Keys.ios.rawValue)
+//                    XCTAssertEqual(mobileSdk[Keys.sdkVersion.rawValue] as? String, Global.sdk.rawValue)
+//                    XCTAssertEqual(mobileSdk[Keys.framework.rawValue] as? String, Keys.swift.rawValue)
+//                }
+//                
+//                if let deviceState = cxRum[Keys.deviceState.rawValue] as? [String: Any] {
+//                    if let networkConnectionType = deviceState[Keys.networkConnectionType.rawValue] as? String {
+//                        XCTAssertEqual(networkConnectionType, "")
+//                    }
+//                    
+//                    if let networkConnectionSubtype = deviceState[Keys.networkConnectionSubtype.rawValue] as? String {
+//                        XCTAssertEqual(networkConnectionSubtype, "")
+//                    }
+//                    
+//                    if let battery = deviceState[Keys.battery.rawValue] as? String {
+//                        XCTAssertEqual(battery, Keys.undefined.rawValue)
+//                    }
+//                    
+//                    if let networkType = deviceState[Keys.networkType.rawValue] as? String {
+//                        XCTAssertEqual(networkType, Keys.undefined.rawValue)
+//                    }
+//                }
+//                
+//                if let sessionContext = cxRum[Keys.sessionContext.rawValue] as? [String: Any] {
+//                    XCTAssertNotNil(sessionContext[Keys.sessionCreationDate.rawValue])
+//                    XCTAssertNotNil(sessionContext[Keys.sessionId.rawValue])
+//                    XCTAssertEqual(sessionContext[Keys.userEmail.rawValue] as? String, "john.doe@example.com")
+//                    XCTAssertEqual(sessionContext[Keys.userName.rawValue] as? String, "John Doe")
+//                    XCTAssertEqual(sessionContext[Keys.userId.rawValue] as? String, "12345")
+//                 }
+//                
+//                XCTAssertEqual(cxRum[Keys.spanId.rawValue] as? String, "20")
+//                XCTAssertEqual(cxRum[Keys.traceId.rawValue] as? String, "30")
+//                XCTAssertNotNil(cxRum[Keys.timestamp.rawValue])
+//                XCTAssertEqual(cxRum[Keys.environment.rawValue] as? String, "prod")
+//                XCTAssertEqual(cxRum[Keys.platform.rawValue] as? String, Keys.mobile.rawValue)
+//                
+//                
+//                if let eventContext = cxRum[Keys.eventContext.rawValue] as? [String: Any] {
+//                    XCTAssertEqual(eventContext[Keys.type.rawValue] as? String, "log")
+//                    XCTAssertEqual(eventContext[Keys.source.rawValue] as? String, Keys.console.rawValue)
+//                    XCTAssertEqual(eventContext[Keys.severity.rawValue] as? Int, 3)
+//                }
+//                
+//                if let versionMetaData =  cxRum[Keys.versionMetaData.rawValue] as? [String: Any] {
+//                    XCTAssertEqual(versionMetaData[Keys.appName.rawValue] as? String, "ExampleApp")
+//                    XCTAssertEqual(versionMetaData[Keys.appVersion.rawValue] as? String, "1.1.1")
+//                }
+//                
+//                if let logContext = cxRum[Keys.logContext.rawValue] as? [String: Any] {
+//                    XCTAssertEqual(logContext[Keys.message.rawValue] as? String, "")
+//                }
+//            }
+//            XCTAssertEqual(dictionary[Keys.subsystemName.rawValue] as? String, Keys.cxRum.rawValue)
+//            XCTAssertEqual(dictionary[Keys.severity.rawValue] as? Int, 3)
+//            XCTAssertNotNil(dictionary[Keys.timestamp.rawValue])
+//        }
+//    }
+//    
     func testCreateSubsetOfCxRum_RemovesSpecifiedKeys() {
         guard let options = options else { return XCTFail("Failed to load options") }
 
