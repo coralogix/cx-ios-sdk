@@ -174,10 +174,6 @@ struct CxRum {
         if eventContext.type == CoralogixEventType.error {
             result[Keys.errorContext.rawValue] = self.errorContext.getDictionary()
         }
-                
-        if let screenShotContext = self.screenShotContext, screenShotContext.isValid() {
-            result[Keys.screenshotContext.rawValue] = screenShotContext.getDictionary()
-        }
         
         if eventContext.type == CoralogixEventType.networkRequest {
             result[Keys.networkRequestContext.rawValue] = self.networkRequestContext.getDictionary()
@@ -207,6 +203,10 @@ struct CxRum {
         
         if let prevSessionContext = self.prevSessionContext {
             result[Keys.prevSession.rawValue] = prevSessionContext.getPrevSessionDictionary()
+        }
+        
+        if let screenShotContext = self.screenShotContext, screenShotContext.isValid() {
+            result[Keys.screenshotContext.rawValue] = screenShotContext.getDictionary()
         }
         
         if isOneMinuteFromLastSnapshotPass == true, self.snapshotContext != nil {

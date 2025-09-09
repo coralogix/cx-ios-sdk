@@ -74,13 +74,10 @@ extension CoralogixRum {
     }
     
     func getSpan(for vitals: MobileVitals) -> any Span {
-        var span = tracerProvider().spanBuilder(spanName: Keys.iosSdk.rawValue).startSpan()
-        
+        var span = makeSpan(event: .mobileVitals, source: .code, severity: .info)
         for (key, value) in vitals.type.spanAttributes {
             span.setAttribute(key: key, value: value)
         }
-        
-        self.addUserMetadata(to: &span)
         return span
     }
     

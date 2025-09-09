@@ -92,7 +92,6 @@ extension CoralogixRum {
                  data: [String: Any]?) {
         guard isCustomOrLifecycleEnabled else { return }
         var span = self.makeSpan(event: .log, source: .code, severity: severity)
-        
         span.setAttribute(key: Keys.message.rawValue, value: message)
         
         if let data = data {
@@ -104,15 +103,6 @@ extension CoralogixRum {
     }
     
     // MARK: - Helpers
-    internal func makeSpan(event: CoralogixEventType, source: Keys, severity: CoralogixLogSeverity) -> any Span {
-        var span = tracerProvider().spanBuilder(spanName: Keys.iosSdk.rawValue).startSpan()
-        span.setAttribute(key: Keys.eventType.rawValue, value: event.rawValue)
-        span.setAttribute(key: Keys.source.rawValue, value: source.rawValue)
-        span.setAttribute(key: Keys.severity.rawValue, value: AttributeValue.int(severity.rawValue))
-        self.addUserMetadata(to: &span)
-        return span
-    }
-    
     internal func addScreenshotId(to span: inout any Span) {
         if let sessionReplay = SdkManager.shared.getSessionReplay(),
            let coralogixExporter = self.coralogixExporter {

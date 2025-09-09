@@ -55,12 +55,8 @@ extension CoralogixRum {
     }
     
     private func makeSpan(type: Keys, value: Keys) {
-        var span = tracerProvider().spanBuilder(spanName: Keys.iosSdk.rawValue).startSpan()
-        span.setAttribute(key: Keys.eventType.rawValue, value: CoralogixEventType.lifeCycle.rawValue)
-        span.setAttribute(key: Keys.source.rawValue, value: Keys.console.rawValue)
-        span.setAttribute(key: Keys.severity.rawValue, value: AttributeValue.int(CoralogixLogSeverity.info.rawValue))
+        var span = makeSpan(event: .lifeCycle, source: .console, severity: .info)
         span.setAttribute(key: type.rawValue, value: value.rawValue)
-        self.addUserMetadata(to: &span)
         span.end()
     }
 }

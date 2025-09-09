@@ -18,10 +18,8 @@ extension CoralogixRum {
     @objc func handleNotification(notification: Notification) {
         guard let cxView = notification.object as? CXView else { return }
         
-        let span = self.getNavigationSpan()
-        
+        let span = makeSpan(event: .navigation, source: .console, severity: .info)
         handleAppearStateIfNeeded(cxView: cxView, span: span)
-        
         span.end()
         self.coralogixExporter?.set(cxView: cxView)
     }
@@ -39,14 +37,5 @@ extension CoralogixRum {
         span.setAttribute(key: Keys.screenshotId.rawValue, value: screenshotLocation.screenshotId)
         span.setAttribute(key: Keys.page.rawValue, value: screenshotLocation.page)
         _ = sessionReplay.captureEvent(properties: screenshotLocation.toProperties())
-    }
-
-    internal func getNavigationSpan() -> any Span {
-        var span = tracerProvider().spanBuilder(spanName: Keys.iosSdk.rawValue).startSpan()
-        self.addUserMetadata(to: &span)
-        span.setAttribute(key: Keys.eventType.rawValue, value: CoralogixEventType.navigation.rawValue)
-        span.setAttribute(key: Keys.source.rawValue, value: Keys.console.rawValue)
-        span.setAttribute(key: Keys.severity.rawValue, value: AttributeValue.int(CoralogixLogSeverity.info.rawValue))
-        return span
     }
 }

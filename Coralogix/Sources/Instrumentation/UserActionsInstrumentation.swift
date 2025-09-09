@@ -30,7 +30,7 @@ extension CoralogixRum {
     // Increment the click counter and handle the tap object
     private func processTapObject(_ tapObject: [String: Any]) {
         self.sessionManager?.updateActivityTime()
-        let span = getUserActionsSpan()
+        let span = makeSpan(event: .userInteraction, source: .console, severity: .info)
         handleUserInteractionEvent(tapObject, span: span)
     }
     
@@ -82,13 +82,5 @@ extension CoralogixRum {
     // Check if the dictionary contains x and y properties
     internal func containsXY(_ dict: [String: Any]) -> Bool {
         return dict[Keys.positionX.rawValue] != nil && dict[Keys.positionY.rawValue] != nil
-    }
-    
-    internal func getUserActionsSpan() -> any Span {
-        var span = tracerProvider().spanBuilder(spanName: Keys.iosSdk.rawValue).startSpan()
-        self.addUserMetadata(to: &span)
-        span.setAttribute(key: Keys.eventType.rawValue, value: CoralogixEventType.userInteraction.rawValue)
-        span.setAttribute(key: Keys.severity.rawValue, value: AttributeValue.int(CoralogixLogSeverity.info.rawValue))
-        return span
     }
 }
