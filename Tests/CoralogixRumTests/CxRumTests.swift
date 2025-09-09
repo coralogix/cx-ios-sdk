@@ -94,6 +94,7 @@ final class CxRumTests: XCTestCase {
     
     func testGetDictionary() {
         guard let options = options else { return XCTFail("Failed to load options") }
+        print("[CI DEBUG] Options loaded: \(options)")
 
         var cxRum = CxRum(
             otel: mockSpanData,
@@ -107,7 +108,8 @@ final class CxRumTests: XCTestCase {
         
         // Invoke getDictionary
         let result = cxRum.getDictionary()
-        
+        print("[CI DEBUG] The generated dictionary is: \(result as AnyObject)")
+
         // Verify each part of the dictionary
         XCTAssertNotNil(cxRum.timeStamp)
         let mobileSdkDict = result[Keys.mobileSdk.rawValue] as? [String: String]
