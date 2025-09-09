@@ -167,36 +167,36 @@ final class SessionReplayModelTests: XCTestCase {
         wait(for: [expectation], timeout: 1.0)
     }
     
-    func testSaveScreenshotToFileSystem_savesToCorrectPathAndCallsHandleCapturedData() {
+    func testSaveScreenshotToFileSystem_savesToCorrectPathAndCallsHandleCapturedData() async {
         // Given
-        let mockModel = MockSessionReplayModel()
-        let sampleData = "dummy image".data(using: .utf8)!
-        let sampleProperties: [String: Any] = ["source": "test"]
-        let expectation = self.expectation(description: "HandleCapturedData is called with correct data and properties")
+           let mockModel = MockSessionReplayModel()
+           let sampleData = "dummy image".data(using: .utf8)!
+           let sampleProperties: [String: Any] = ["source": "test"]
 
-        // When
-        mockModel.onHandleCapturedData = { fileURL, data, properties in
-            defer {
-                expectation.fulfill()
-            }
-            
-            // Then - All assertions should be inside the callback
-            XCTAssertNotNil(fileURL, "Expected a valid file URL")
-            XCTAssertEqual(data, sampleData, "Expected the data to be passed correctly")
-            XCTAssertEqual(properties?["source"] as? String, "test", "Expected properties to be passed correctly")
-            
-            // Confirm the file path is within the SessionReplay directory
-            XCTAssertTrue(fileURL.path.contains("/SessionReplay/mock_screenshot.jpg"), "Expected file URL to contain correct subpath")
-        }
+           // When: Await the result of the asynchronous operation
+           // We use withCheckedContinuation to bridge the callback to async/await.
+           let result: (fileURL: URL?, data: Data, properties: [String: Any]?) = await withCheckedContinuation { continuation in
+               // Assign the callback. When it's called, it will "resume" the execution of our test.
+               mockModel.onHandleCapturedData = { fileURL, data, properties in
+                   continuation.resume(returning: (fileURL, data, properties))
+               }
 
-        // This call will trigger the asynchronous operation, which will eventually
-        // call the onHandleCapturedData callback
-        mockModel.saveScreenshotToFileSystem(screenshotData: sampleData, properties: sampleProperties)
-        
-        // Wait for the expectation to be fulfilled by the callback
-        waitForExpectations(timeout: 5.0, handler: nil)
+               // This call triggers the asynchronous operation that will eventually invoke the callback.
+               mockModel.saveScreenshotToFileSystem(screenshotData: sampleData, properties: sampleProperties)
+           }
+
+           // Then: All assertions are now written in a clear, sequential style after the await.
+           guard let fileURL = result.fileURL else {
+               XCTFail("Expected a valid file URL but got nil")
+               return
+           }
+
+           XCTAssertEqual(result.data, sampleData, "Expected the data to be passed correctly")
+           XCTAssertEqual(result.properties?["source"] as? String, "test", "Expected properties to be passed correctly")
+           
+           // Confirm the file path is within the SessionReplay directory
+           XCTAssertTrue(fileURL.path.contains("/SessionReplay/mock_screenshot.jpg"), "Expected file URL to contain correct subpath")
     }
-    
     func testClearSessionReplayFolder_NoDocumentsDirectory_ReturnsFailure() {
         // Given
         mockFileManager.createdPaths.removeAll()
