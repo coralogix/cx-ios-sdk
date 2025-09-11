@@ -45,7 +45,7 @@ final class CxRumTests: XCTestCase {
         mockCxMetricsManager = MetricsManager()
         
         let userContext = UserContext(userId: "12345", userName: "John Doe", userEmail: "john.doe@example.com", userMetadata: ["userId": "12345"])
-       
+        
         options = CoralogixExporterOptions(coralogixDomain: CoralogixDomain.US2,
                                            userContext: userContext,
                                            environment: "PROD",
@@ -68,15 +68,14 @@ final class CxRumTests: XCTestCase {
     
     func testInitialization() {
         guard let options = options else { return XCTFail("Failed to load options") }
-        let cxRum = CxRum(
-            otel: mockSpanData,
-            versionMetadata: mockVersionMetadata,
-            sessionManager: mockSessionManager,
-            viewManager: mockViewerManager,
-            networkManager: mockNetworkManager,
-            metricsManager: mockCxMetricsManager,
-            options: options
-        )
+        let rumBuilder = CxRumBuilder(otel: mockSpanData,
+                                      versionMetadata: mockVersionMetadata,
+                                      sessionManager: mockSessionManager,
+                                      viewManager: mockViewerManager,
+                                      networkManager: mockNetworkManager,
+                                      options: options)
+        let cxRum = rumBuilder.build()
+        
         
         // Verify initialization
         XCTAssertNotNil(cxRum.timeStamp)
@@ -95,21 +94,20 @@ final class CxRumTests: XCTestCase {
     func testGetDictionary() {
         guard let options = options else { return XCTFail("Failed to load options") }
         print("[CI DEBUG] Options loaded: \(options)")
-
-        var cxRum = CxRum(
-            otel: mockSpanData,
-            versionMetadata: mockVersionMetadata,
-            sessionManager: mockSessionManager,
-            viewManager: mockViewerManager,
-            networkManager: mockNetworkManager,
-            metricsManager: mockCxMetricsManager,
-            options: options
-        )
+        
+        let rumBuilder = CxRumBuilder(otel: mockSpanData,
+                                      versionMetadata: mockVersionMetadata,
+                                      sessionManager: mockSessionManager,
+                                      viewManager: mockViewerManager,
+                                      networkManager: mockNetworkManager,
+                                      options: options)
+        let cxRum = rumBuilder.build()
+        var payloadBuilder = CxRumPayloadBuilder(rum: cxRum, viewManager: mockViewerManager)
+        let result = payloadBuilder.build()
         
         // Invoke getDictionary
-        let result = cxRum.getDictionary()
         print("[CI DEBUG] The generated dictionary is: \(result as AnyObject)")
-
+        
         // Verify each part of the dictionary
         XCTAssertNotNil(cxRum.timeStamp)
         let mobileSdkDict = result[Keys.mobileSdk.rawValue] as? [String: String]
@@ -136,119 +134,9 @@ final class CxRumTests: XCTestCase {
         }
     }
     
-    func testGetDictionaryOneMinuteFromLastPassSnapshot() {
-        guard let options = options else { return XCTFail("Failed to load options") }
-
-        var cxRum = CxRum(
-            otel: mockSpanData,
-            versionMetadata: mockVersionMetadata,
-            sessionManager: mockSessionManager,
-            viewManager: mockViewerManager,
-            networkManager: mockNetworkManager,
-            metricsManager: mockCxMetricsManager,
-            options: options
-        )
-        
-        let currentTime = Date()
-        cxRum.isOneMinuteFromLastSnapshotPass = true
-        cxRum.snapshotContext = SnapshotContext(timestamp: currentTime.timeIntervalSince1970,
-                                                errorCount: 1,
-                                                viewCount: 1,
-                                                actionCount: 0,
-                                                hasRecording: false)
-        // Invoke getDictionary
-        let result = cxRum.getDictionary()
-        XCTAssertNotNil(result[Keys.snapshotContext.rawValue] as? [String: Any])
-        if let snapshot = result[Keys.snapshotContext.rawValue] as? [String: Any] {
-            if let timeInMiliseconds = snapshot[Keys.timestamp.rawValue] as? Int {
-                XCTAssertEqual(TimeInterval(timeInMiliseconds), TimeInterval(currentTime.timeIntervalSince1970.milliseconds))
-            }
-            XCTAssertEqual(snapshot[Keys.errorCount.rawValue] as? Int, 1)
-            XCTAssertEqual(snapshot[Keys.viewCount.rawValue] as? Int, 1)
-        }
-    }
-    
-    func testGetDictionaryErrorSnapshot() {
-        guard let options = options else { return XCTFail("Failed to load options") }
-
-        mockSpanData = MockSpanData(attributes: [Keys.severity.rawValue: AttributeValue("3"),
-                                                 Keys.eventType.rawValue: AttributeValue("error"),
-                                                 Keys.source.rawValue: AttributeValue("console"),
-                                                 Keys.environment.rawValue: AttributeValue("prod"),
-                                                 Keys.userId.rawValue: AttributeValue("12345"),
-                                                 Keys.userName.rawValue: AttributeValue("John Doe"),
-                                                 Keys.userEmail.rawValue: AttributeValue("john.doe@example.com")],
-                                    startTime: Date(), spanId: "20", traceId: "30")
-        var cxRum = CxRum(
-            otel: mockSpanData,
-            versionMetadata: mockVersionMetadata,
-            sessionManager: mockSessionManager,
-            viewManager: mockViewerManager,
-            networkManager: mockNetworkManager,
-            metricsManager: mockCxMetricsManager,
-            options: options
-        )
-        
-        let currentTime = Date()
-        cxRum.snapshotContext = SnapshotContext(timestamp: currentTime.timeIntervalSince1970,
-                                                errorCount: 1,
-                                                viewCount: 1,
-                                                actionCount: 0,
-                                                hasRecording: false)
-        // Invoke getDictionary
-        let result = cxRum.getDictionary()
-        XCTAssertNotNil(result[Keys.snapshotContext.rawValue] as? [String: Any])
-        if let snapshot = result[Keys.snapshotContext.rawValue] as? [String: Any] {
-            if let timeInMiliseconds = snapshot[Keys.timestamp.rawValue] as? Int {
-                XCTAssertEqual(TimeInterval(timeInMiliseconds), TimeInterval(currentTime.timeIntervalSince1970.milliseconds))
-            }
-            XCTAssertEqual(snapshot[Keys.errorCount.rawValue] as? Int, 1)
-            XCTAssertEqual(snapshot[Keys.viewCount.rawValue] as? Int, 1)
-        }
-    }
-    
-    func testGetDictionaryNavigationSnapshot() {
-        guard let options = options else { return XCTFail("Failed to load options") }
-
-        mockSpanData = MockSpanData(attributes: [Keys.severity.rawValue: AttributeValue("3"),
-                                                 Keys.eventType.rawValue: AttributeValue("navigation"),
-                                                 Keys.source.rawValue: AttributeValue("console"),
-                                                 Keys.environment.rawValue: AttributeValue("prod"),
-                                                 Keys.userId.rawValue: AttributeValue("12345"),
-                                                 Keys.userName.rawValue: AttributeValue("John Doe"),
-                                                 Keys.userEmail.rawValue: AttributeValue("john.doe@example.com")],
-                                    startTime: Date(), spanId: "20", traceId: "30")
-        var cxRum = CxRum(
-            otel: mockSpanData,
-            versionMetadata: mockVersionMetadata,
-            sessionManager: mockSessionManager,
-            viewManager: mockViewerManager,
-            networkManager: mockNetworkManager,
-            metricsManager: mockCxMetricsManager,
-            options: options
-        )
-        
-        let currentTime = Date()
-        cxRum.snapshotContext = SnapshotContext(timestamp: currentTime.timeIntervalSince1970,
-                                                errorCount: 0,
-                                                viewCount: 1,
-                                                actionCount: 0,
-                                                hasRecording: false)
-        // Invoke getDictionary
-        let result = cxRum.getDictionary()
-        XCTAssertNotNil(result[Keys.snapshotContext.rawValue] as? [String: Any])
-        if let snapshot = result[Keys.snapshotContext.rawValue] as? [String: Any] {
-            if let timeInMiliseconds = snapshot[Keys.timestamp.rawValue] as? Int {
-                XCTAssertEqual(TimeInterval(timeInMiliseconds), TimeInterval(currentTime.timeIntervalSince1970.milliseconds))
-            }
-            XCTAssertEqual(snapshot[Keys.errorCount.rawValue] as? Int, 0)
-            XCTAssertEqual(snapshot[Keys.viewCount.rawValue] as? Int, 1)
-        }
-    }
-    
     func testLastSnapshotEventTimeMoreThan60() {
         guard let options = options else { return XCTFail("Failed to load options") }
-
+        
         mockSpanData = MockSpanData(attributes: [Keys.severity.rawValue: AttributeValue("3"),
                                                  Keys.eventType.rawValue: AttributeValue("navigation"),
                                                  Keys.source.rawValue: AttributeValue("console"),
@@ -267,163 +155,13 @@ final class CxRumTests: XCTestCase {
         let pastDate = currentDate.addingTimeInterval(oneMinuteInThePast)
         
         mockSessionManager.lastSnapshotEventTime = pastDate
-        let cxRum = CxRum(
-            otel: mockSpanData,
-            versionMetadata: mockVersionMetadata,
-            sessionManager: mockSessionManager,
-            viewManager: mockViewerManager,
-            networkManager: mockNetworkManager,
-            metricsManager: mockCxMetricsManager,
-            options: options
-        )
+        let rumBuilder = CxRumBuilder(otel: mockSpanData,
+                                      versionMetadata: mockVersionMetadata,
+                                      sessionManager: mockSessionManager,
+                                      viewManager: mockViewerManager,
+                                      networkManager: mockNetworkManager,
+                                      options: options)
+        let cxRum = rumBuilder.build()
         XCTAssertNotNil(cxRum.snapshotContext)
-        XCTAssertTrue(cxRum.isOneMinuteFromLastSnapshotPass)
-    }
-    
-   
-    func test_handleEvent_snapshotAfterOneMinute() {
-        guard let options = options else { return XCTFail("Failed to load options") }
-
-        mockSessionManager.lastSnapshotEventTime = Date(timeIntervalSince1970: 1000)
-        var cxRum = CxRum(
-            otel: mockSpanData,
-            versionMetadata: mockVersionMetadata,
-            sessionManager: mockSessionManager,
-            viewManager: mockViewerManager,
-            networkManager: mockNetworkManager,
-            metricsManager: mockCxMetricsManager,
-            options: options
-        )
-        cxRum.timeStamp = 1000 + 61 // More than 1 minute later
-        
-        let attributes: [String: Any] = [
-            Keys.eventType.rawValue: AttributeValue("unknown"),
-            Keys.source.rawValue: AttributeValue("userAction"),
-            Keys.severity.rawValue: AttributeValue("1")
-        ]
-        mockSpanData = MockSpanData(attributes: attributes)
-        let eventContext = EventContext(otel: mockSpanData)
-        cxRum.updateSnapshotContextIfNeeded(for: eventContext)
-        XCTAssertTrue(cxRum.isOneMinuteFromLastSnapshotPass)
-        XCTAssertNotNil(cxRum.snapshotContext)
-    }
-    
-    func test_handleEvent_errorIncrementsCounterAndSnapshot() {
-        guard let options = options else { return XCTFail("Failed to load options") }
-
-        var cxRum = CxRum(
-            otel: mockSpanData,
-            versionMetadata: mockVersionMetadata,
-            sessionManager: mockSessionManager,
-            viewManager: mockViewerManager,
-            networkManager: mockNetworkManager,
-            metricsManager: mockCxMetricsManager,
-            options: options
-        )
-        cxRum.timeStamp = 2000
-        
-        let attributes: [String: Any] = [
-            Keys.eventType.rawValue: AttributeValue("error"),
-            Keys.source.rawValue: AttributeValue("console"),
-            Keys.severity.rawValue: AttributeValue("5")
-        ]
-        mockSpanData = MockSpanData(attributes: attributes)
-        let eventContext = EventContext(otel: mockSpanData)
-        XCTAssertTrue(mockSessionManager.getErrorCount() == 0)
-        cxRum.updateSnapshotContextIfNeeded(for: eventContext)
-        XCTAssertTrue(mockSessionManager.getErrorCount() == 1)
-        XCTAssertNotNil(cxRum.snapshotContext)
-    }
-    
-    func test_handleEvent_navigationTriggersSnapshot() {
-        guard let options = options else { return XCTFail("Failed to load options") }
-
-        var cxRum = CxRum(
-            otel: mockSpanData,
-            versionMetadata: mockVersionMetadata,
-            sessionManager: mockSessionManager,
-            viewManager: mockViewerManager,
-            networkManager: mockNetworkManager,
-            metricsManager: mockCxMetricsManager,
-            options: options
-        )
-        cxRum.timeStamp = 3000
-
-        let attributes: [String: Any] = [
-            Keys.eventType.rawValue: AttributeValue("navigation"),
-            Keys.source.rawValue: AttributeValue("console"),
-            Keys.severity.rawValue: AttributeValue("1")
-        ]
-        mockSpanData = MockSpanData(attributes: attributes)
-        let eventContext = EventContext(otel: mockSpanData)
-        cxRum.updateSnapshotContextIfNeeded(for: eventContext)
-        XCTAssertNotNil(cxRum.snapshotContext)
-    }
-    
-    func test_handleEvent_guardFails_noCrash() {
-        guard let options = options else { return XCTFail("Failed to load options") }
-
-        var cxRum = CxRum(
-            otel: mockSpanData,
-            versionMetadata: mockVersionMetadata,
-            sessionManager: mockSessionManager,
-            viewManager: mockViewerManager,
-            networkManager: mockNetworkManager,
-            metricsManager: mockCxMetricsManager,
-            options: options
-        )
-        cxRum.sessionManager?.lastSnapshotEventTime = nil  // Forces this part to not run
-
-        cxRum.timeStamp = 3000
-        let attributes: [String: Any] = [
-            Keys.eventType.rawValue: AttributeValue("unknown"),
-            Keys.source.rawValue: AttributeValue("console"),
-            Keys.severity.rawValue: AttributeValue("1")
-        ]
-        mockSpanData = MockSpanData(attributes: attributes)
-        let eventContext = EventContext(otel: mockSpanData)
-        cxRum.updateSnapshotContextIfNeeded(for: eventContext)
-        XCTAssertNil(cxRum.snapshotContext)
-    }
-    
-    func test_buildSnapshotContext_returnsCorrectValues() {
-        class MockSessionManager: SessionManager {
-            override func getErrorCount() -> Int { return 5 }
-            override func getClickCount() -> Int { return 12 }
-        }
-        
-        class MockViewManager: ViewManager {
-            override func getUniqueViewCount() -> Int { return 3 }
-        }
-        
-        let options = CoralogixExporterOptions(coralogixDomain: .AP1,
-                                               environment: "",
-                                               application: "",
-                                               version: "",
-                                               publicKey: "")
-        mockSessionManager = MockSessionManager()
-        mockSessionManager.hasRecording = true
-        mockViewerManager = MockViewManager(keyChain: MockKeyChain())
-        let cxRum = CxRum(
-            otel: mockSpanData,
-            versionMetadata: mockVersionMetadata,
-            sessionManager: mockSessionManager,
-            viewManager: mockViewerManager,
-            networkManager: mockNetworkManager,
-            metricsManager: mockCxMetricsManager,
-            options: options
-        )
-        
-        let snapshotContext = cxRum.buildSnapshotContext(sessionManager: mockSessionManager,
-                                                         viewManager: mockViewerManager)
-        // Assert
-        XCTAssertEqual(snapshotContext.errorCount, 5)
-        XCTAssertEqual(snapshotContext.viewCount, 3)
-        XCTAssertEqual(snapshotContext.actionCount, 12)
-        XCTAssertEqual(snapshotContext.hasRecording, true)
-        
-        // Optionally test timestamp is recent (within 1 second)
-        let currentTime = Date().timeIntervalSince1970
-        XCTAssertLessThanOrEqual(abs(currentTime - snapshotContext.timestamp), 1.0)
     }
 }

@@ -81,7 +81,7 @@ class CxRumBuilder {
         return nil
     }
     
-    private func buildSnapshotContextIfNeeded(for eventContext: EventContext) -> SnapshotContext? {
+    internal func buildSnapshotContextIfNeeded(for eventContext: EventContext) -> SnapshotContext? {
         let currentTime = otel.getStartTime() ?? Date().timeIntervalSince1970
         let isErrorSeverity = eventContext.severity == CoralogixLogSeverity.error.rawValue
         let isNavigationEvent = eventContext.type == .navigation
