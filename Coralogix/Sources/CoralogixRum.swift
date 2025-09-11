@@ -256,9 +256,12 @@ public class CoralogixRum {
         self.coralogixExporter?.set(cxView: cxView)
     }
     
-    public func log(severity: CoralogixLogSeverity, message: String, data: [String: Any]? = nil) {
+    public func log(severity: CoralogixLogSeverity,
+                    message: String,
+                    data: [String: Any]? = nil,
+                    labels: [String: Any]? = nil) {
         guard CoralogixRum.isInitialized else { return }
-        self.logWith(severity: severity, message: message, data: data)
+        self.logWith(severity: severity, message: message, data: data, labels: labels)
     }
     
     public func shutdown() {
@@ -307,5 +310,14 @@ public class CoralogixRum {
                """
         }
         print(coralogixText)
+    }
+    
+    internal func makeSpan(event: CoralogixEventType, source: Keys, severity: CoralogixLogSeverity) -> any Span {
+        var span = tracerProvider().spanBuilder(spanName: Keys.iosSdk.rawValue).startSpan()
+        span.setAttribute(key: Keys.eventType.rawValue, value: event.rawValue)
+        span.setAttribute(key: Keys.source.rawValue, value: source.rawValue)
+        span.setAttribute(key: Keys.severity.rawValue, value: AttributeValue.int(severity.rawValue))
+        self.addUserMetadata(to: &span)
+        return span
     }
 }

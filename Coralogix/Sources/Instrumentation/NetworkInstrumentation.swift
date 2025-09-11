@@ -147,10 +147,6 @@ extension CoralogixRum {
     }
     
     private func getSpan() -> any Span {
-        var span = tracerProvider().spanBuilder(spanName: Keys.iosSdk.rawValue).startSpan()
-        self.addUserMetadata(to: &span)
-        span.setAttribute(key: Keys.eventType.rawValue, value: CoralogixEventType.networkRequest.rawValue)
-        span.setAttribute(key: Keys.source.rawValue, value: Keys.fetch.rawValue)
-        return span
+        return makeSpan(event: .networkRequest, source: .fetch, severity: .info)
     }
 }

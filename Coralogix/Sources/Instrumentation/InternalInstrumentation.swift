@@ -10,10 +10,7 @@ import CoralogixInternal
 
 extension CoralogixRum {
     internal func createInitSpan() {
-        var span = tracerProvider().spanBuilder(spanName: Keys.iosSdk.rawValue).startSpan()
-        span.setAttribute(key: Keys.eventType.rawValue, value: CoralogixEventType.internalKey.rawValue)
-        span.setAttribute(key: Keys.severity.rawValue, value: AttributeValue.int(CoralogixLogSeverity.info.rawValue))
-        self.addUserMetadata(to: &span)
+        var span = makeSpan(event: .internalKey, source: .console, severity: .info)
         span.end()
     }
 }

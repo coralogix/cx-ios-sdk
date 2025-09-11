@@ -17,6 +17,7 @@ public class CxSpan {
     var cxRum: CxRum
     var instrumentationData: InstrumentationData?
     var beforeSend: (([String: Any]) -> [String: Any]?)?
+    let viewManager: ViewManager?
     
     init(otel: SpanDataProtocol,
          versionMetadata: VersionMetadata,
@@ -26,6 +27,7 @@ public class CxSpan {
          metricsManager: MetricsManager,
          options: CoralogixExporterOptions) {
         
+        self.viewManager = viewManager
         self.applicationName = versionMetadata.appName
         self.versionMetadata = versionMetadata
         self.subsystemName = Keys.cxRum.rawValue
@@ -34,13 +36,14 @@ public class CxSpan {
             self.severity = Int(severity) ?? 0
         }
         self.timeStamp = otel.getStartTime() ?? Date().timeIntervalSince1970
-        self.cxRum = CxRum(otel: otel,
-                           versionMetadata: versionMetadata,
-                           sessionManager: sessionManager,
-                           viewManager: viewManager,
-                           networkManager: networkManager,
-                           metricsManager: metricsManager,
-                           options: options)
+        let rumBuilder = CxRumBuilder(otel: otel,
+                                      versionMetadata: versionMetadata,
+                                      sessionManager: sessionManager,
+                                      viewManager: viewManager,
+                                      networkManager: networkManager,
+                                      options: options)
+        // 2. Build the immutable data object.
+        self.cxRum = rumBuilder.build()
         
         if cxRum.eventContext.type == CoralogixEventType.networkRequest {
             self.instrumentationData = InstrumentationData(otel: otel, labels: options.labels)
@@ -52,7 +55,8 @@ public class CxSpan {
         // Populate the basic metadata
         self.populateBasicMetadata(in: &result)
         
-        let originalCxRum = self.cxRum.getDictionary()
+        var payloadBuilder = CxRumPayloadBuilder(rum: self.cxRum, viewManager: self.viewManager)
+        let originalCxRum = payloadBuilder.build()
         if beforeSend != nil {
             let subsetOfCxRum = self.createSubsetOfCxRum(from: originalCxRum)
             if let editableCxRum = self.beforeSend?(subsetOfCxRum) {
