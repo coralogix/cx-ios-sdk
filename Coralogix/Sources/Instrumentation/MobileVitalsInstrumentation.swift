@@ -16,6 +16,19 @@ extension CoralogixRum {
         NotificationCenter.default.addObserver(self,
                                                selector: #selector(handleMobileVitalsNotification(notification:)),
                                                name: .cxRumNotificationMetrics, object: nil)
+        
+        self.metricsManager.options = options
+        self.metricsManager.addObservers()
+        self.metricsManager.startMonitoring()
+        
+        // self.metricsManager.startMemoryMonitoring(memorySamplingRate: options.memoryUsageSampleRate)
+
+            self.metricsManager.startColdStartMonitoring()
+            self.metricsManager.startSlowFrozenFramesMonitoring()
+        
+//        if options.shouldInitInstrumentation(instrumentation: .anr) {
+//            self.metricsManager.startANRMonitoring()
+//        }
         self.sessionManager?.hasInitializedMobileVitals = true
     }
     

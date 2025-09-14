@@ -127,23 +127,6 @@ public class CoralogixRum {
         OpenTelemetry.registerTracerProvider(tracerProvider: tracerProvider)
     }
     
-    private func initialize(options: CoralogixExporterOptions) {
-        self.metricsManager.options = options
-        self.metricsManager.addObservers()
-        
-        if options.shouldInitInstrumentation(instrumentation: .mobileVitals) {
-            self.metricsManager.startFPSSamplingMonitoring(fpsSamplingRate: options.fpsSampleRate)
-            self.metricsManager.startColdStartMonitoring()
-            self.metricsManager.startCPUMonitoring(cpuSamplingRate: options.cpuUsageSampleRate)
-            self.metricsManager.startMemoryMonitoring(memorySamplingRate: options.memoryUsageSampleRate)
-            self.metricsManager.startSlowFrozenFramesMonitoring()
-        }
-        
-        if options.shouldInitInstrumentation(instrumentation: .anr) {
-            self.metricsManager.startANRMonitoring()
-        }
-    }
-    
     private func setupExporter(sessionManager: SessionManager, options: CoralogixExporterOptions) {
         let exporter = CoralogixExporter(
             options: options,

@@ -15,18 +15,29 @@ class FPSMonitor {
     
     // Start monitoring FPS
     func startMonitoring() {
-        displayLink = CADisplayLink(target: self, selector: #selector(trackFrame))
-        displayLink?.add(to: .main, forMode: .common)
+        guard displayLink == nil else { return }
         frameCount = 0
         startTime = CACurrentMediaTime()
+        let link = CADisplayLink(target: self, selector: #selector(trackFrame))
+        // If you want exact display refresh sampling, don't set preferredFramesPerSecond.
+        link.add(to: .main, forMode: .common)
+        displayLink = link
     }
     
     // Stop monitoring FPS and return average FPS
-    func stopMonitoring() -> Double {
+    func stopMonitoring() {
         displayLink?.invalidate()
         displayLink = nil
-        let elapsedTime = CACurrentMediaTime() - startTime
-        return Double(frameCount) / elapsedTime
+    }
+    
+    /// Returns FPS since last sample and resets the counters.
+    func sampleAndReset() -> Double {
+        let now = CACurrentMediaTime()
+        let elapsed = now - startTime
+        let fps = elapsed > 0 ? Double(frameCount) / elapsed : 0
+        frameCount = 0
+        startTime = now
+        return fps
     }
     
     @objc internal func trackFrame() {
@@ -38,48 +49,76 @@ class FPSTrigger {
     private let fpsMonitor = FPSMonitor()
     internal var timer: Timer?
     internal var isRunning = false
-    static let defaultInterval: TimeInterval = 300 // 5 min
+    static let defaultInterval: TimeInterval = 1.0 // second
+    private var samples: [Double] = []
     
-    func startMonitoring(xTimesPerHour: TimeInterval = defaultInterval) {
+    // MARK: - Public stats
+    var minFPS: Double { samples.min() ?? 0 }
+    var maxFPS: Double { samples.max() ?? 0 }
+    var avgFPS: Double { samples.isEmpty ? 0 : samples.reduce(0, +) / Double(samples.count) }
+    var p95FPS: Double {
+        guard !samples.isEmpty else { return 0 }
+        let sorted = samples.sorted()
+        let rank = Int(ceil(0.95 * Double(sorted.count)))
+        return sorted[max(0, min(sorted.count - 1, rank - 1))]
+    }
+    
+    func startMonitoring() {
         DispatchQueue.main.async { [weak self] in
             guard let self = self, !self.isRunning else { return }
-            
             self.isRunning = true
-            var timesPerHour = xTimesPerHour
-            if timesPerHour < FPSTrigger.defaultInterval {
-                timesPerHour = FPSTrigger.defaultInterval
-            }
-            // Time interval between each trigger in seconds
-            let interval = 3600 / timesPerHour
+
+            // Start the continuous display link once
+            self.fpsMonitor.startMonitoring()
+            startTimer()
             
-            let t = Timer.scheduledTimer(withTimeInterval: TimeInterval(interval), repeats: true) { [weak self] _ in
-                self?.monitorFPS()
-            }
-            RunLoop.main.add(t, forMode: .common)
-            self.timer = t
+            NotificationCenter.default.addObserver(self, selector: #selector(self.appDidBecomeActive),
+                                                   name: UIApplication.didBecomeActiveNotification, object: nil)
+            NotificationCenter.default.addObserver(self, selector: #selector(self.appWillResignActive),
+                                                   name: UIApplication.willResignActiveNotification, object: nil)
         }
     }
     
-    private func monitorFPS() {
-        Log.d("[Metric] Starting FPS monitoring for 5 seconds...")
-        
-        // Start FPS monitoring
-        fpsMonitor.startMonitoring()
-        
-        // Stop monitoring after 5 seconds and log the average FPS
-        DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
-            let averageFPS = self.fpsMonitor.stopMonitoring()
-            Log.d("[Metric] Average FPS over 5 seconds: \(averageFPS)")
-            
-            // send instrumentaion event
-            NotificationCenter.default.post(name: .cxRumNotificationMetrics,
-                                            object: MobileVitals(type: .fps, value: averageFPS, units: .fps))
+    private func startTimer() {
+        stopTimer() // ensure only one timer at a time
+        let t = Timer.scheduledTimer(withTimeInterval: FPSTrigger.defaultInterval, repeats: true) { [weak self] _ in
+            guard let self = self else { return }
+            let fps = self.fpsMonitor.sampleAndReset()
+            if fps == 0 || fps.isNaN || fps.isInfinite { return }
+            self.samples.append(fps)
+//        Log.d("""
+//        [FPS DEBUG] last=\(fps),
+//        min=\(self.minFPS),
+//        max=\(self.maxFPS),
+//        avg=\(self.avgFPS),
+//        p95=\(self.p95FPS)
+//        """)
         }
+        t.tolerance = 0.1
+        RunLoop.main.add(t, forMode: .common)
+        timer = t
     }
     
-    func stopMonitoring() {
+    private func stopTimer() {
         timer?.invalidate()
         timer = nil
+    }
+
+    func stopMonitoring() {
+        NotificationCenter.default.removeObserver(self)
+        stopTimer()
+        fpsMonitor.stopMonitoring()
         isRunning = false
+        samples.removeAll()
+    }
+    
+    @objc private func appWillResignActive() {
+        stopTimer()
+    }
+    
+    @objc private func appDidBecomeActive() {
+        guard isRunning else { return }
+        _ = fpsMonitor.sampleAndReset()   // reset baseline to "now" so the first sample isn't skewed
+        startTimer()
     }
 }

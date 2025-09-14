@@ -61,11 +61,9 @@ public class MetricsManager {
         self.stopAllDetectors()
     }
     
-    func startFPSSamplingMonitoring(fpsSamplingRate: TimeInterval = 300) {
-        // Convert seconds between samples to times per hour
-        let seconds = max(1.0, fpsSamplingRate)
-        let timesPerHour = max(1.0, 3600.0 / seconds)
-        self.fpsTrigger.startMonitoring(xTimesPerHour: timesPerHour)
+    func startMonitoring() {
+        self.fpsTrigger.startMonitoring()
+        self.startCPUMonitoring()
     }
     
     @objc func appDidEnterBackgroundNotification() {
@@ -108,9 +106,8 @@ public class MetricsManager {
         self.startSlowFrozenFramesMonitoring()
         
         guard let options = options else { return }
-        self.startCPUMonitoring(cpuSamplingRate: options.cpuUsageSampleRate)
         self.startMemoryMonitoring(memorySamplingRate: options.memoryUsageSampleRate)
-        self.startFPSSamplingMonitoring(fpsSamplingRate: options.fpsSampleRate)
+        self.startMonitoring()
     }
     
     func startColdStartMonitoring() {
@@ -122,9 +119,9 @@ public class MetricsManager {
         self.anrDetector?.startMonitoring()
     }
     
-    func startCPUMonitoring(cpuSamplingRate: TimeInterval) {
+    func startCPUMonitoring() {
         guard cpuDetector == nil else { return }
-        let detector = CPUDetector(checkInterval: cpuSamplingRate)
+        let detector = CPUDetector()
         detector.startMonitoring()
         self.cpuDetector = detector
     }
