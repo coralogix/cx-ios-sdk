@@ -67,6 +67,10 @@ public class SessionManager {
                                                selector: #selector(appDidBecomeActiveNotification),
                                                name: UIApplication.didBecomeActiveNotification,
                                                object: nil)
+        NotificationCenter.default.addObserver(self,
+                                               selector: #selector(handleTapNotification(notification:)),
+                                               name: .cxRumNotificationUserActions,
+                                               object: nil)
     }
     
     public func doesSessionhasRecording() -> Bool {
@@ -120,6 +124,10 @@ public class SessionManager {
         self.updateActivityTime()
     }
     
+    @objc func handleTapNotification(notification: Notification) {
+        self.updateActivityTime()
+    }
+    
     private func hasAnHourPassed(since timeInterval: TimeInterval) -> Bool {
         // If the time is 0, treat it as invalid or "not passed"
         guard timeInterval > 0 else {
@@ -161,5 +169,9 @@ public class SessionManager {
         NotificationCenter.default.removeObserver(self,
                                             name: UIApplication.didBecomeActiveNotification,
                                             object: nil)
+        
+        NotificationCenter.default.removeObserver(self,
+                                                  name: .cxRumNotificationUserActions,
+                                                  object: nil)
     }
 }
