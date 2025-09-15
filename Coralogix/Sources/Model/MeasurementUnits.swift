@@ -14,6 +14,7 @@ public enum MeasurementUnits: Equatable, Hashable {
     case fps
     case count
     case percentage
+    case anr
     case custom(String)
     
     init(from string: String) {
@@ -24,6 +25,7 @@ public enum MeasurementUnits: Equatable, Hashable {
         case Keys.fps.rawValue: self = .fps
         case Keys.count.rawValue: self = .count
         case Keys.percentage.rawValue: self = .percentage
+        case Keys.anr.rawValue: self = .anr
         default: self = .custom(string)
         }
     }
@@ -36,6 +38,7 @@ public enum MeasurementUnits: Equatable, Hashable {
         case .fps : return Keys.fps.rawValue
         case .count : return Keys.count.rawValue
         case .percentage : return Keys.percentage.rawValue
+        case .anr : return Keys.anr.rawValue
         case .custom(let value): return value
         }
     }

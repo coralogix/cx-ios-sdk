@@ -884,7 +884,7 @@ final class CoralogixRumTests: XCTestCase {
 }
 
 final class MockCoralogixRum: CoralogixRum {
-    var capturedVitals: [MobileVitals] = []
+    var capturedVitals: [String: Any] = []
     
     init(options: CoralogixExporterOptions, sdkFramework:  SdkFramework = .swift) {
         super.init(options: options, sdkFramework: sdkFramework)

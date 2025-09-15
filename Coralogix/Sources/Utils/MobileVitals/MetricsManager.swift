@@ -20,8 +20,12 @@ public class MetricsManager {
     var memoryDetector: MemoryDetector?
     var slowFrozenFramesDetector: SlowFrozenFramesDetector?
     var fpsTrigger = FPSTrigger()
+    var metricsManagerClosure: (([String: Any]) -> Void)?
     
-    public func addObservers() {
+    public func addMatricKitObservers() {
+        MyMetricSubscriber.shared.metricKitClosure = { [weak self] dict in
+            self?.metricsManagerClosure?(dict)
+        }
         MXMetricManager.shared.add(MyMetricSubscriber.shared)
     }
     
@@ -41,6 +45,9 @@ public class MetricsManager {
     func startColdStartMonitoring() {
         guard coldDetector == nil else { return }
         let detector = ColdDetector()
+        detector.handleColdClosure = { [weak self] dict in
+            self?.metricsManagerClosure?(dict)
+        }
         detector.startMonitoring()
         self.coldDetector = detector
     }
@@ -48,12 +55,18 @@ public class MetricsManager {
     func startWarmStartMonitoring() {
         guard warmDetector == nil else { return }
         let detector = WarmDetector()
+        detector.handleWarmClosure = { [weak self] dict in
+            self?.metricsManagerClosure?(dict)
+        }
         detector.startMonitoring()
         self.warmDetector = detector
     }
     
     func startANRMonitoring() {
         self.anrDetector = ANRDetector()
+        self.anrDetector?.handleANRClosure = { [weak self] dict in
+            self?.metricsManagerClosure?(dict)
+        }
         self.anrDetector?.startMonitoring()
     }
     
@@ -97,6 +110,7 @@ public class MetricsManager {
   
 class MyMetricSubscriber: NSObject, MXMetricManagerSubscriber {
     static let shared = MyMetricSubscriber()
+    var metricKitClosure: (([String: Any]) -> Void)?
 
     // Handle received metrics
     public func didReceive(_ payloads: [MXMetricPayload]) {
@@ -104,11 +118,12 @@ class MyMetricSubscriber: NSObject, MXMetricManagerSubscriber {
             if let metricPayloadJsonString = String(data: payload.jsonRepresentation(), encoding: .utf8) {
                 Log.d("metricPayloadJsonString  \(metricPayloadJsonString)")
                 // send instrumentaion event
-                NotificationCenter.default.post(name: .cxRumNotificationMetrics,
-                                                object: MobileVitals(type: .metricKit,
-                                                                     name: metricPayloadJsonString,
-                                                                     value: 0.0,
-                                                                     units: MeasurementUnits(from: "")))
+                let vital = [
+                    Keys.metricKit.rawValue: [
+                        Keys.name.rawValue: metricPayloadJsonString
+                    ]
+                ]
+                self.metricKitClosure?(vital)
             }
                     
             if let applicationLaunchMetric = payload.applicationLaunchMetrics {

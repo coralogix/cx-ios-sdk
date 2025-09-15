@@ -12,8 +12,7 @@ import UIKit
 final class ColdDetector {
     var launchStartTime: CFAbsoluteTime?
     var launchEndTime: CFAbsoluteTime?
-
-    private var coldStartMs: Double?
+    var handleColdClosure: (([String: Any]) -> Void)?
 
     func startMonitoring() {
         self.launchStartTime = CFAbsoluteTimeGetCurrent()
@@ -33,9 +32,15 @@ final class ColdDetector {
                 let epochEndTime = Helper.convertCFAbsoluteTimeToEpoch(launchEndTime)
                 let millisecondsRounded = self.calculateTime(start: epochStartTime, stop: epochEndTime)
 
-                coldStartMs = millisecondsRounded
-
-//                Log.d("[COLD DEBUG] cold start = \(millisecondsRounded) ms")
+//              Log.d("[COLD DEBUG] cold start = \(millisecondsRounded) ms")
+                
+                let cold = [
+                    MobileVitalsType.cold.stringValue: [
+                        Keys.mobileVitalsUnits.rawValue: MeasurementUnits.milliseconds.stringValue,
+                        Keys.value.rawValue: millisecondsRounded
+                    ]
+                ]
+                self.handleColdClosure?(cold)
             }
         }
     }
@@ -43,17 +48,6 @@ final class ColdDetector {
     func calculateTime(start: Double, stop: Double) -> Double {
         return max(0, stop - start)
     }
-    
-    func statsDictionary() -> [String: Any] {
-            guard let value = coldStartMs else { return [:] }
-            return [
-                MobileVitalsType.cold.stringValue: [
-                    Keys.mobileVitalsUnits.rawValue: MeasurementUnits.milliseconds.stringValue,
-                    Keys.value.rawValue: value
-                ]
-            ]
-        }
-        
     
     deinit {
         NotificationCenter.default.removeObserver(self, name: .cxViewDidAppear, object: nil)

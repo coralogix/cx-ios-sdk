@@ -23,7 +23,6 @@ public class CoralogixRum {
     internal let readinessGroup = DispatchGroup()
     internal var isNetworkInstrumentationReady = false
     private let notificationCenter = NotificationCenter.default
-    var mobileVitalHandlers: ((MobileVitals) -> Void)?
 
     internal lazy var tracerProvider: () -> Tracer = {
         return OpenTelemetry.instance.tracerProvider.get(
@@ -61,7 +60,6 @@ public class CoralogixRum {
         NotificationCenter.default.removeObserver(self, name: .cxRumNotification, object: nil)
         NotificationCenter.default.removeObserver(self, name: .cxRumNotificationUserActions, object: nil)
         NotificationCenter.default.removeObserver(self, name: .cxRumNotificationSessionEnded, object: nil)
-        NotificationCenter.default.removeObserver(self, name: .cxRumNotificationMetrics, object: nil)
         NotificationCenter.default.removeObserver(self, name: UIApplication.didFinishLaunchingNotification, object: nil)
         NotificationCenter.default.removeObserver(self, name: UIApplication.didBecomeActiveNotification, object: nil)
         NotificationCenter.default.removeObserver(self, name: UIApplication.didEnterBackgroundNotification, object: nil)
@@ -93,7 +91,7 @@ public class CoralogixRum {
             (.network, self.initializeNetworkInstrumentation),
             (.errors, self.initializeCrashInstrumentation),
             (.mobileVitals, self.initializeMobileVitalsInstrumentation),
-            (.anr, self.initializeMobileVitalsInstrumentation)
+            (.anr, self.initializeANRInstrumentation)
         ]
         
         for (type, initializer) in instrumentationMap where options.shouldInitInstrumentation(instrumentation: type) {
@@ -140,6 +138,9 @@ public class CoralogixRum {
     private func setupCoreModules(options: CoralogixExporterOptions) {
         self.initializeSessionReplay()
         self.initializeNavigationInstrumentation()
+        self.metricsManager.metricsManagerClosure = { [weak self] dict in
+            self?.sendMobileVitals(dict)
+        }
     }
     
     private func swizzle() {
@@ -206,30 +207,31 @@ public class CoralogixRum {
         guard CoralogixRum.isInitialized else { return }
         if (CoralogixRum.mobileSDK.sdkFramework.isNative) { return }
         
-        let uuid = UUID().uuidString.lowercased()
+        var vitalArray = [[String: Any]]()
         metrics.forEach { element in
-            let mobileVitals = MobileVitals(
-                type: MobileVitalsType(from: type),
-                name: element.name,
-                value: element.value,
-                units: MeasurementUnits(from: element.units),
-                uuid: uuid
-            )
-            self.handleMobileVitals(mobileVitals)
+            let vital = [
+                element.name: [
+                    Keys.mobileVitalsUnits.rawValue: element.units,
+                    Keys.value.rawValue: element.value
+                ]
+            ]
+            vitalArray.append(vital)
         }
+        self.sendMobileVitals([type: vitalArray])
     }
     
     public func reportMobileVitalsMeasurement(type: String, value: Double, units: String) {
         guard CoralogixRum.isInitialized else { return }
         if (CoralogixRum.mobileSDK.sdkFramework.isNative) { return }
         
-        let mobileVitals = MobileVitals(
-            type: MobileVitalsType(from: type),
-            name: type,
-            value: value,
-            units: MeasurementUnits(from: units)
-        )
-        self.handleMobileVitals(mobileVitals)
+        let vital = [
+            type: [
+                Keys.mobileVitalsUnits.rawValue: units,
+                Keys.value.rawValue: value
+            ]
+        ]
+        
+        self.sendMobileVitals(vital)
     }
     
     public func setView(name: String) {

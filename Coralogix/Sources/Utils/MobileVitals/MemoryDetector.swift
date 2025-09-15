@@ -115,12 +115,12 @@ final class MemoryDetector {
         residentSamples.append(m.residentMB)
         utilizationSamples.append(m.utilizationPercent)
 
-        Log.d(String(
-            format: "[MEM DEBUG] footprint=%.1fMB (min=%.1f max=%.1f avg=%.1f p95=%.1f) | resident=%.1fMB (min=%.1f max=%.1f avg=%.1f p95=%.1f) | util=%.2f%% (min=%.2f max=%.2f avg=%.2f p95=%.2f)",
-            m.footprintMB, minFootprintMB, maxFootprintMB, avgFootprintMB, p95FootprintMB,
-            m.residentMB,   minResidentMB,  maxResidentMB,  avgResidentMB,  p95ResidentMB,
-            m.utilizationPercent, minUtilPercent, maxUtilPercent, avgUtilPercent, p95UtilPercent
-        ))
+//        Log.d(String(
+//            format: "[MEM DEBUG] footprint=%.1fMB (min=%.1f max=%.1f avg=%.1f p95=%.1f) | resident=%.1fMB (min=%.1f max=%.1f avg=%.1f p95=%.1f) | util=%.2f%% (min=%.2f max=%.2f avg=%.2f p95=%.2f)",
+//            m.footprintMB, minFootprintMB, maxFootprintMB, avgFootprintMB, p95FootprintMB,
+//            m.residentMB,   minResidentMB,  maxResidentMB,  avgResidentMB,  p95ResidentMB,
+//            m.utilizationPercent, minUtilPercent, maxUtilPercent, avgUtilPercent, p95UtilPercent
+//        ))
     }
 
     static func readMemoryMeasurement() -> MemoryMeasurement? {

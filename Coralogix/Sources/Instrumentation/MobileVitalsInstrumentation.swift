@@ -10,95 +10,17 @@ import CoralogixInternal
 
 extension CoralogixRum {
     public func initializeMobileVitalsInstrumentation() {
-        guard let sessionManager = self.sessionManager,
-              !sessionManager.hasInitializedMobileVitals else { return }
-
-        NotificationCenter.default.addObserver(self,
-                                               selector: #selector(handleMobileVitalsNotification(notification:)),
-                                               name: .cxRumNotificationMetrics, object: nil)
-        
-        self.metricsManager.addObservers()
+        self.metricsManager.addMatricKitObservers()
         self.metricsManager.startMonitoring()
-        
-
-        //TODO: need to fix that
-//        if options.shouldInitInstrumentation(instrumentation: .anr) {
-//            self.metricsManager.startANRMonitoring()
-//        }
-        self.sessionManager?.hasInitializedMobileVitals = true
     }
     
-    @objc func handleMobileVitalsNotification(notification: Notification) {
-        guard let mobileVitals = notification.object as? MobileVitals else { return }
-        
-        switch mobileVitals.type {
-        case .metricKit:
-            if let metric = mobileVitals.name {
-                handleMetricKit(metric)
-            }
-        default:
-            handleMobileVitals(mobileVitals)
-        }
+    public func initializeANRInstrumentation() {
+        self.metricsManager.startANRMonitoring()
     }
     
-    private func handleMetricKit(_ value: String) {
-        guard let jsonData = value.data(using: .utf8) else {
-            Log.w("Invalid MetricKit string, cannot convert to data: \(value)")
-            return
-        }
-        
-        do {
-            if let dictionary = try JSONSerialization.jsonObject(with: jsonData, options: []) as? [String: Any] {
-                reportError(message: Keys.metricKitLog.rawValue, data: dictionary)
-            } else {
-                Log.w("MetricKit JSON did not produce a valid dictionary")
-            }
-        } catch {
-            Log.w("Error parsing MetricKit JSON: \(error), original value: \(value)")
-        }
-    }
-    
-    //TODO: refactor this as we dont send a payload anymore
-    func handleMobileVitals(_ mobileVitals: MobileVitals) {
-        self.mobileVitalHandlers?(mobileVitals)
-
-        let span = self.getSpan(for: mobileVitals)
-        let value = self.getMobileVitalsTypeString(mobileVitals.type)
-        
-        span.setAttribute(key: Keys.mobileVitalsType.rawValue, value: value)
-        
-        for (key, value) in mobileVitals.type.specificAttributes(for: mobileVitals.value) {
-            span.setAttribute(key: key, value: value)
-        }
-        
-        if let name = mobileVitals.name, !name.isEmpty {
-            span.setAttribute(key: Keys.name.rawValue, value: name)
-        }
-        
-        span.setAttribute(key: Keys.mobileVitalsUnits.rawValue, value: mobileVitals.units.stringValue)
-        
-        if let uuid = mobileVitals.uuid, !uuid.isEmpty {
-            span.setAttribute(key: Keys.mobileVitalsUuid.rawValue, value: uuid)
-        }
-        span.end()
-    }
-    
-    func getSpan(for vitals: MobileVitals) -> any Span {
+    func sendMobileVitals(_ mobileVitals: [String: Any]) {
         let span = makeSpan(event: .mobileVitals, source: .code, severity: .info)
-        for (key, value) in vitals.type.spanAttributes {
-            span.setAttribute(key: key, value: value)
-        }
-        return span
-    }
-    
-    func getMobileVitalsTypeString(_ type: MobileVitalsType) -> String {
-        switch type {
-        case .memoryUtilization, .residentMemory, .footprintMemory:
-            return Keys.memory.rawValue
-        case .cpuUsage, .mainThreadCpuTime, .totalCpuTime:
-            return Keys.cpu.rawValue
-        default :
-            return type.stringValue
-        }
+        span.setAttribute(key: Keys.mobileVitalsType.rawValue, value: Helper.convertDictionayToJsonString(dict: mobileVitals))
+        span.end()
     }
 }

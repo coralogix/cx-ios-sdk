@@ -150,7 +150,6 @@ public enum Keys: String {
     case lifeCycleContext = "life_cycle_context"
     case mobileVitalsType
     case mobileVitalsValue
-    case mobileVitalsUuid = "uuid"
     case mobileVitalsUnits = "units"
     case value
     case anrString = "application_not_responding"

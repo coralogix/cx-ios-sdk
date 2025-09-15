@@ -12,7 +12,7 @@ final class WarmDetector {
     var foregroundStartTime: CFAbsoluteTime?
     var foregroundEndTime: CFAbsoluteTime?
     var warmMetricIsActive = false
-    var warmStartDurationsMs: Double?
+    var handleWarmClosure: (([String: Any]) -> Void)?
 
     func startMonitoring() {
         NotificationCenter.default.addObserver(self, selector: #selector(self.appDidEnterBackgroundNotification),
@@ -55,23 +55,19 @@ final class WarmDetector {
             let currentTime = CFAbsoluteTimeGetCurrent()
             self.foregroundEndTime = currentTime
             let warmStartDuration = (currentTime - foregroundStartTime) * 1000
-    
-            warmStartDurationsMs = (warmStartDuration)
 
-//            Log.d("[Metric] Warm start duration: \(warmStartRounded) milliseconds")
+//           Log.d("[Metric] Warm start duration: \(warmStartRounded) milliseconds")
+            
+            let warm =  [
+                MobileVitalsType.warm.stringValue: [
+                    Keys.mobileVitalsUnits.rawValue: MeasurementUnits.milliseconds.stringValue,
+                    Keys.value.rawValue: warmStartDuration
+                ]
+            ]
+            self.handleWarmClosure?(warm)
         }
     }
-    
-    func statsDictionary() -> [String: Any] {
-        guard let value = warmStartDurationsMs else { return [:] }
-        return [
-            MobileVitalsType.warm.stringValue: [
-                Keys.mobileVitalsUnits.rawValue: MeasurementUnits.milliseconds.stringValue,
-                Keys.value.rawValue: value
-            ]
-        ]
-    }
-    
+  
     deinit {
         NotificationCenter.default.removeObserver(self)
     }

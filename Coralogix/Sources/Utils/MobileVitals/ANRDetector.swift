@@ -21,7 +21,7 @@ class ANRDetector {
     private var lastCheckTimestamp: CFAbsoluteTime = CFAbsoluteTimeGetCurrent()
 
     // ANR handling closure (useful for testing)
-    var handleANRClosure: (() -> Void)?
+    var handleANRClosure: (([String: Any]) -> Void)?
     
     init(checkInterval: TimeInterval = 1.0, maxBlockTime: TimeInterval = 5.0) {
         self.checkInterval = checkInterval
@@ -54,13 +54,13 @@ class ANRDetector {
     }
 
     public func handleANR() {
-        // ANR detected, handle it here (e.g., log, notify, etc.)
-        handleANRClosure?()  // Call closure in test
+        let anr = [
+            Keys.anr.rawValue: [
+                Keys.mobileVitalsUnits.rawValue: MeasurementUnits.anr.stringValue
+            ]
+        ]
+        
+        handleANRClosure?(anr)  // Call closure in test
         Log.d("[Metric] ANR detected: Main thread unresponsive for more than \(maxBlockTime) seconds")
-        // send instrumentaion event
-        NotificationCenter.default.post(name: .cxRumNotificationMetrics,
-                                        object: MobileVitals(type: .anr,
-                                                             value: 0.0,
-                                                             units:MeasurementUnits(from: "")))
     }
 }

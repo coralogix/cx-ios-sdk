@@ -54,7 +54,6 @@ public class SessionManager {
     public var sessionChangedCallback: ((String) -> Void)?
     public var hasRecording: Bool = false
     
-    public var hasInitializedMobileVitals = false
     public var lastSnapshotEventTime: Date?
     public var isIdle: Bool {
         let timeSinceLastActivity = Date().timeIntervalSince(self.lastActivity)
