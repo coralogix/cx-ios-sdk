@@ -117,6 +117,12 @@ final class SlowFrozenFramesDetector {
 
         // Optional: flush remaining counts once on stop
         emitWindow()
+        reset()
+    }
+    
+    public func reset() {
+        windowSlow.removeAll()
+        windowFrozen.removeAll()
     }
 
     deinit {
@@ -182,21 +188,19 @@ final class SlowFrozenFramesDetector {
     
     func statsDictionary() -> [String: Any] {
         return [
-            Keys.slowFrozen.rawValue: [
-                MobileVitalsType.slowFrames.stringValue: [
-                    Keys.mobileVitalsUnits.rawValue: MeasurementUnits.count.stringValue,
-                    Keys.min.rawValue: minSlow,
-                    Keys.max.rawValue: maxSlow,
-                    Keys.avg.rawValue: avgSlow,
-                    Keys.p95.rawValue: p95Slow
-                ],
-                MobileVitalsType.frozenFrames.stringValue: [
-                    Keys.mobileVitalsUnits.rawValue: MeasurementUnits.count.stringValue,
-                    Keys.min.rawValue: minFrozen,
-                    Keys.max.rawValue: maxFrozen,
-                    Keys.avg.rawValue: avgFrozen,
-                    Keys.p95.rawValue: p95Frozen
-                ]
+            MobileVitalsType.slowFrames.stringValue: [
+                Keys.mobileVitalsUnits.rawValue: MeasurementUnits.count.stringValue,
+                Keys.min.rawValue: minSlow,
+                Keys.max.rawValue: maxSlow,
+                Keys.avg.rawValue: avgSlow,
+                Keys.p95.rawValue: p95Slow
+            ],
+            MobileVitalsType.frozenFrames.stringValue: [
+                Keys.mobileVitalsUnits.rawValue: MeasurementUnits.count.stringValue,
+                Keys.min.rawValue: minFrozen,
+                Keys.max.rawValue: maxFrozen,
+                Keys.avg.rawValue: avgFrozen,
+                Keys.p95.rawValue: p95Frozen
             ]
         ]
     }

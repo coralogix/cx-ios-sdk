@@ -77,7 +77,10 @@ final class CPUDetector {
         NotificationCenter.default.removeObserver(self)
         stopTimer()
         isRunning = false
-        
+        reset()
+    }
+    
+    func reset() {
         usageSamples.removeAll()
         totalCpuDeltaMsSamples.removeAll()
         mainThreadDeltaMsSamples.removeAll()
@@ -222,28 +225,26 @@ final class CPUDetector {
     
     func statsDictionary() -> [String: Any] {
         return [
-            Keys.cpu.rawValue: [
-                MobileVitalsType.cpuUsage.stringValue: [
-                    Keys.mobileVitalsUnits.rawValue: MeasurementUnits.percentage.stringValue,
-                    Keys.min.rawValue: minCPU,
-                    Keys.max.rawValue: maxCPU,
-                    Keys.avg.rawValue: avgCPU,
-                    Keys.p95.rawValue: p95CPU
-                ],
-                MobileVitalsType.totalCpuTime.stringValue: [
-                    Keys.mobileVitalsUnits.rawValue: MeasurementUnits.milliseconds.stringValue,
-                    Keys.min.rawValue: minTotalCpuMs,
-                    Keys.max.rawValue: maxTotalCpuMs,
-                    Keys.avg.rawValue: avgTotalCpuMs,
-                    Keys.p95.rawValue: p95TotalCpuMs
-                ],
-                MobileVitalsType.mainThreadCpuTime.stringValue: [
-                    Keys.mobileVitalsUnits.rawValue: MeasurementUnits.milliseconds.stringValue,
-                    Keys.min.rawValue: minMainThreadMs,
-                    Keys.max.rawValue: maxMainThreadMs,
-                    Keys.avg.rawValue: avgMainThreadMs,
-                    Keys.p95.rawValue: p95MainThreadMs
-                ]
+            MobileVitalsType.cpuUsage.stringValue: [
+                Keys.mobileVitalsUnits.rawValue: MeasurementUnits.percentage.stringValue,
+                Keys.min.rawValue: minCPU,
+                Keys.max.rawValue: maxCPU,
+                Keys.avg.rawValue: avgCPU,
+                Keys.p95.rawValue: p95CPU
+            ],
+            MobileVitalsType.totalCpuTime.stringValue: [
+                Keys.mobileVitalsUnits.rawValue: MeasurementUnits.milliseconds.stringValue,
+                Keys.min.rawValue: minTotalCpuMs,
+                Keys.max.rawValue: maxTotalCpuMs,
+                Keys.avg.rawValue: avgTotalCpuMs,
+                Keys.p95.rawValue: p95TotalCpuMs
+            ],
+            MobileVitalsType.mainThreadCpuTime.stringValue: [
+                Keys.mobileVitalsUnits.rawValue: MeasurementUnits.milliseconds.stringValue,
+                Keys.min.rawValue: minMainThreadMs,
+                Keys.max.rawValue: maxMainThreadMs,
+                Keys.avg.rawValue: avgMainThreadMs,
+                Keys.p95.rawValue: p95MainThreadMs
             ]
         ]
     }

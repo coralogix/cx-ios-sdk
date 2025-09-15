@@ -22,6 +22,12 @@ public class MetricsManager {
     var fpsTrigger = FPSTrigger()
     var metricsManagerClosure: (([String: Any]) -> Void)?
     
+    // MARK: - Internal timer for periodic send
+    private var sendTimer: Timer?
+    private let sendInterval: TimeInterval = 15.0
+    private var lastSendTime: Date?
+    private var schedulingActive = false
+    
     public func addMatricKitObservers() {
         MyMetricSubscriber.shared.metricKitClosure = { [weak self] dict in
             self?.metricsManagerClosure?(dict)
@@ -32,6 +38,40 @@ public class MetricsManager {
     public func removeObservers() {
         MXMetricManager.shared.remove(MyMetricSubscriber.shared)
         self.stopAllDetectors()
+        self.stopSendTimer()
+    }
+    
+    public func sendMobileVitals() {
+        let now = Date()
+        if let last = lastSendTime, now.timeIntervalSince(last) < sendInterval {
+            Log.d("[MetricsManager] Skipped sendMobileVitals(), only \(now.timeIntervalSince(last))s since last event")
+            return
+        }
+        
+        var vitals = [String: Any]()
+        if let cpuDetector = cpuDetector {
+            vitals[Keys.cpu.rawValue] = cpuDetector.statsDictionary()
+        }
+        
+        if let memoryDetector = memoryDetector {
+            vitals[Keys.memory.rawValue] = memoryDetector.statsDictionary()
+        }
+        
+        if let slowFrozenFramesDetector = slowFrozenFramesDetector {
+            vitals[Keys.slowFrozen.rawValue] = slowFrozenFramesDetector.statsDictionary()
+        }
+        
+        vitals[MobileVitalsType.fps.stringValue] = fpsTrigger.statsDictionary()
+        
+        // Send event
+        self.metricsManagerClosure?(vitals)
+        lastSendTime = Date()
+
+        // Reset stats after sending
+        cpuDetector?.reset()
+        memoryDetector?.reset()
+        slowFrozenFramesDetector?.reset()
+        fpsTrigger.reset()
     }
     
     func startMonitoring() {
@@ -40,6 +80,7 @@ public class MetricsManager {
         self.startCPUMonitoring()
         self.startMemoryMonitoring()
         self.startSlowFrozenFramesMonitoring()
+        startSendScheduler()   // start periodic sending
     }
     
     func startColdStartMonitoring() {
@@ -103,8 +144,54 @@ public class MetricsManager {
         fpsTrigger.stopMonitoring()
     }
     
+    private func startSendScheduler() {
+        schedulingActive = true
+        scheduleNextSendCheck()
+    }
+    
+    private func stopSendScheduler() {
+        schedulingActive = false
+        // Nothing to cancel directly (we're not using a DispatchWorkItem),
+        // but the guard in scheduleNextSendCheck() prevents further scheduling.
+    }
+    
+    private func scheduleNextSendCheck() {
+        guard schedulingActive else { return }
+        
+        DispatchQueue.main.asyncAfter(
+            deadline: .now() + sendInterval,
+            qos: .unspecified,
+            flags: [],
+            execute: { [weak self] in
+                guard let self = self, self.schedulingActive else { return }
+                
+                let now = Date()
+                if let last = self.lastSendTime {
+                    if now.timeIntervalSince(last) >= self.sendInterval {
+                        self.sendMobileVitals()
+                    } else {
+                        Log.d("[MetricsManager] Skipped send, only \(now.timeIntervalSince(last))s since last event")
+                    }
+                } else {
+                    // First time we fire the scheduler
+                    self.sendMobileVitals()
+                }
+                
+                // Re-schedule the next check
+                self.scheduleNextSendCheck()
+            }
+        )
+    }
+
+    
+    private func stopSendTimer() {
+        sendTimer?.invalidate()
+        sendTimer = nil
+    }
+
     deinit {
         self.stopAllDetectors()
+        stopSendTimer()
     }
 }
   

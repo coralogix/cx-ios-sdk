@@ -72,6 +72,10 @@ final class MemoryDetector {
         NotificationCenter.default.removeObserver(self)
         stopTimer()
         isRunning = false
+        reset()
+    }
+    
+    public func reset() {
         footprintSamples.removeAll()
         residentSamples.removeAll()
         utilizationSamples.removeAll()
@@ -151,28 +155,26 @@ final class MemoryDetector {
 
     func statsDictionary() -> [String: Any] {
         return [
-            Keys.memory.rawValue: [
-                MobileVitalsType.footprintMemory.stringValue: [
-                    Keys.mobileVitalsUnits.rawValue: MeasurementUnits.megaBytes.stringValue,
-                    Keys.min.rawValue: minFootprintMB,
-                    Keys.max.rawValue: maxFootprintMB,
-                    Keys.avg.rawValue: avgFootprintMB,
-                    Keys.p95.rawValue: p95FootprintMB
-                ],
-                MobileVitalsType.residentMemory.stringValue: [
-                    Keys.mobileVitalsUnits.rawValue: MeasurementUnits.megaBytes.stringValue,
-                    Keys.min.rawValue: minResidentMB,
-                    Keys.max.rawValue: maxResidentMB,
-                    Keys.avg.rawValue: avgResidentMB,
-                    Keys.p95.rawValue: p95ResidentMB
-                ],
-                MobileVitalsType.memoryUtilization.stringValue: [
-                    Keys.mobileVitalsUnits.rawValue: MeasurementUnits.percentage.stringValue,
-                    Keys.min.rawValue: minUtilPercent,
-                    Keys.max.rawValue: maxUtilPercent,
-                    Keys.avg.rawValue: avgUtilPercent,
-                    Keys.p95.rawValue: p95UtilPercent
-                ]
+            MobileVitalsType.footprintMemory.stringValue: [
+                Keys.mobileVitalsUnits.rawValue: MeasurementUnits.megaBytes.stringValue,
+                Keys.min.rawValue: minFootprintMB,
+                Keys.max.rawValue: maxFootprintMB,
+                Keys.avg.rawValue: avgFootprintMB,
+                Keys.p95.rawValue: p95FootprintMB
+            ],
+            MobileVitalsType.residentMemory.stringValue: [
+                Keys.mobileVitalsUnits.rawValue: MeasurementUnits.megaBytes.stringValue,
+                Keys.min.rawValue: minResidentMB,
+                Keys.max.rawValue: maxResidentMB,
+                Keys.avg.rawValue: avgResidentMB,
+                Keys.p95.rawValue: p95ResidentMB
+            ],
+            MobileVitalsType.memoryUtilization.stringValue: [
+                Keys.mobileVitalsUnits.rawValue: MeasurementUnits.percentage.stringValue,
+                Keys.min.rawValue: minUtilPercent,
+                Keys.max.rawValue: maxUtilPercent,
+                Keys.avg.rawValue: avgUtilPercent,
+                Keys.p95.rawValue: p95UtilPercent
             ]
         ]
     }
