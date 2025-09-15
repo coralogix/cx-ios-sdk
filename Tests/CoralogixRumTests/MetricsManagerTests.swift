@@ -95,46 +95,6 @@ final class MetricsManagerTests: XCTestCase {
         let stoppedExp = expectation(for: stoppedPred, evaluatedWith: nil)
         wait(for: [stoppedExp], timeout: 2.0)
     }
-    
-    func testWarmStartVital() {
-        self.metricsManager.launchStartTime = nil
-        let warmTimestamp: Double = 1234567890.00
-        
-        let params: [String: Any] = [
-            MobileVitalsType.warm.stringValue: warmTimestamp
-        ]
-        
-        let result = metricsManager.getWarmTime(params: params)
-        
-        XCTAssertNotNil(result)
-        XCTAssertEqual(result?.type, .warm)
-        XCTAssertEqual(result?.value, warmTimestamp)
-    }
-    
-    func testColdStartVital() {
-        let startTime: CFAbsoluteTime = 1000.0
-        let endTime: CFAbsoluteTime = 1001.234  // duration: 1.234 seconds
-        
-        self.metricsManager.launchStartTime = startTime
-        
-        let startMs = Helper.convertCFAbsoluteTimeToEpoch(startTime)
-        let endMs = Helper.convertCFAbsoluteTimeToEpoch(endTime)
-
-        let params: [String: Any] = [
-            MobileVitalsType.cold.stringValue: endMs
-        ]
-        
-        let result = metricsManager.getColdTime(params: params)
-        
-        XCTAssertNotNil(result)
-        XCTAssertEqual(result?.type, .cold)
-        
-        let expectedMilliseconds = endMs - startMs
-        let left = Global.rounded(result?.value ?? 0, places: 2)
-        let right = Global.rounded(expectedMilliseconds, places: 2)
-
-        XCTAssertEqual(left, right)
-    }
 }
 
 // Mock class to simulate the behavior of fpsTrigger

@@ -7,6 +7,7 @@
 
 import Foundation
 import Darwin.Mach
+import UIKit
 
 public struct MemoryMeasurement {
     /// iOS working set (in MB). Use this as “Resident Memory”.
@@ -19,43 +20,107 @@ public struct MemoryMeasurement {
 
 final class MemoryDetector {
     private var timer: Timer?
-    private let interval: TimeInterval
-    private let minInterval: TimeInterval = 0.1
+    private var isRunning = false
+    private let defaultInterval: TimeInterval = 0.1
+    
+    // MARK: - Stored samples (instantaneous per sample)
+    private var footprintSamples: [Double] = []       // MB
+    private var residentSamples: [Double] = []        // MB
+    private var utilizationSamples: [Double] = []     // %
+
+    // MARK: - Public stats
+    // Footprint (MB)
+    var minFootprintMB: Double { footprintSamples.min() ?? 0 }
+    var maxFootprintMB: Double { footprintSamples.max() ?? 0 }
+    var avgFootprintMB: Double { footprintSamples.isEmpty ? 0 : footprintSamples.reduce(0, +) / Double(footprintSamples.count) }
+    var p95FootprintMB: Double { percentile95(of: footprintSamples) }
+    
+    // Resident (MB)
+    var minResidentMB: Double { residentSamples.min() ?? 0 }
+    var maxResidentMB: Double { residentSamples.max() ?? 0 }
+    var avgResidentMB: Double { residentSamples.isEmpty ? 0 : residentSamples.reduce(0, +) / Double(residentSamples.count) }
+    var p95ResidentMB: Double { percentile95(of: residentSamples) }
+    
+    // Utilization (%)
+    var minUtilPercent: Double { utilizationSamples.min() ?? 0 }
+    var maxUtilPercent: Double { utilizationSamples.max() ?? 0 }
+    var avgUtilPercent: Double { utilizationSamples.isEmpty ? 0 : utilizationSamples.reduce(0, +) / Double(utilizationSamples.count) }
+    var p95UtilPercent: Double { percentile95(of: utilizationSamples) }
+
     var handleMemoryClosure: (() -> Void)?
 
-    init(interval: TimeInterval = 60.0) {
-        self.interval = max(interval, minInterval)
-    }
-
     public func startMonitoring() {
-        guard timer == nil else { return }
         DispatchQueue.main.async {
-            let t = Timer(timeInterval: self.interval, repeats: true) { [weak self] _ in
-                self?.checkForMemory()
-            }
-            RunLoop.main.add(t, forMode: .common)
-            self.timer = t
+            guard !self.isRunning else { return }
+            self.isRunning = true
+            
+            self.startTimer()
+            
+            // Pause/resume like your other detectors
+            NotificationCenter.default.addObserver(self,
+                                                   selector: #selector(self.appWillResignActive),
+                                                   name: UIApplication.willResignActiveNotification,
+                                                   object: nil)
+            NotificationCenter.default.addObserver(self,
+                                                   selector: #selector(self.appDidBecomeActive),
+                                                   name: UIApplication.didBecomeActiveNotification,
+                                                   object: nil)
         }
     }
 
     public func stopMonitoring() {
-        timer?.invalidate()
-        timer = nil
+        NotificationCenter.default.removeObserver(self)
+        stopTimer()
+        isRunning = false
+        footprintSamples.removeAll()
+        residentSamples.removeAll()
+        utilizationSamples.removeAll()
     }
 
     deinit { stopMonitoring() }
+    
+    // MARK: - Timer helpers
+    private func startTimer() {
+        stopTimer()
+        let t = Timer.scheduledTimer(withTimeInterval: defaultInterval, repeats: true) { [weak self] _ in
+            self?.sampleOnce()
+        }
+        t.tolerance = 1.0 // minute-level sampling can tolerate some slack
+        RunLoop.main.add(t, forMode: .common)
+        timer = t
+        
+        // Trigger an immediate first sample (optional; comment out if you want to wait a minute)
+        sampleOnce()
+    }
+    
+    private func stopTimer() {
+        timer?.invalidate()
+        timer = nil
+    }
+    
+    // MARK: - App lifecycle
+    @objc private func appWillResignActive() {
+        stopTimer()
+    }
+    
+    @objc private func appDidBecomeActive() {
+        guard isRunning else { return }
+        startTimer()
+    }
 
-    @objc private func checkForMemory() {
+    @objc private func sampleOnce() {
         guard let m = MemoryDetector.readMemoryMeasurement() else { return }
         self.handleMemoryClosure?()
-        Log.d(String(
-            format: "[Metric] Memory: %.1f MB | Resident: %.1f MB | Utilization: %.2f%%",
-            m.footprintMB,
-            m.residentMB,
-            m.utilizationPercent
-        ))
+        footprintSamples.append(m.footprintMB)
+        residentSamples.append(m.residentMB)
+        utilizationSamples.append(m.utilizationPercent)
 
-        reportMemory(m)
+        Log.d(String(
+            format: "[MEM DEBUG] footprint=%.1fMB (min=%.1f max=%.1f avg=%.1f p95=%.1f) | resident=%.1fMB (min=%.1f max=%.1f avg=%.1f p95=%.1f) | util=%.2f%% (min=%.2f max=%.2f avg=%.2f p95=%.2f)",
+            m.footprintMB, minFootprintMB, maxFootprintMB, avgFootprintMB, p95FootprintMB,
+            m.residentMB,   minResidentMB,  maxResidentMB,  avgResidentMB,  p95ResidentMB,
+            m.utilizationPercent, minUtilPercent, maxUtilPercent, avgUtilPercent, p95UtilPercent
+        ))
     }
 
     static func readMemoryMeasurement() -> MemoryMeasurement? {
@@ -76,30 +141,40 @@ final class MemoryDetector {
             utilizationPercent: min(max(util, 0), 100)
         )
     }
+    
+    private func percentile95(of values: [Double]) -> Double {
+        guard !values.isEmpty else { return 0 }
+        let sorted = values.sorted()
+        let rank = Int(ceil(0.95 * Double(sorted.count)))
+        return sorted[max(0, min(sorted.count - 1, rank - 1))]
+    }
 
-    private func reportMemory(_ m: MemoryMeasurement) {
-        let uuid = UUID().uuidString.lowercased()
-
-        let metrics: [(MobileVitalsType, Double, MeasurementUnits)] = [
-            (.residentMemory, m.residentMB, .megaBytes),
-            (.footprintMemory, m.footprintMB, .megaBytes),
-            (.memoryUtilization, m.utilizationPercent, .percentage)
+    func statsDictionary() -> [String: Any] {
+        return [
+            Keys.memory.rawValue: [
+                MobileVitalsType.footprintMemory.stringValue: [
+                    Keys.mobileVitalsUnits.rawValue: MeasurementUnits.megaBytes.stringValue,
+                    Keys.min.rawValue: minFootprintMB,
+                    Keys.max.rawValue: maxFootprintMB,
+                    Keys.avg.rawValue: avgFootprintMB,
+                    Keys.p95.rawValue: p95FootprintMB
+                ],
+                MobileVitalsType.residentMemory.stringValue: [
+                    Keys.mobileVitalsUnits.rawValue: MeasurementUnits.megaBytes.stringValue,
+                    Keys.min.rawValue: minResidentMB,
+                    Keys.max.rawValue: maxResidentMB,
+                    Keys.avg.rawValue: avgResidentMB,
+                    Keys.p95.rawValue: p95ResidentMB
+                ],
+                MobileVitalsType.memoryUtilization.stringValue: [
+                    Keys.mobileVitalsUnits.rawValue: MeasurementUnits.percentage.stringValue,
+                    Keys.min.rawValue: minUtilPercent,
+                    Keys.max.rawValue: maxUtilPercent,
+                    Keys.avg.rawValue: avgUtilPercent,
+                    Keys.p95.rawValue: p95UtilPercent
+                ]
+            ]
         ]
-
-        for (type, value, units) in metrics {
-            let payload = MobileVitals(type: type,
-                                       name: type.stringValue,
-                                       value: value,
-                                       units: units,
-                                       uuid: uuid)
-            if Thread.isMainThread {
-                NotificationCenter.default.post(name: .cxRumNotificationMetrics, object: payload)
-            } else {
-                DispatchQueue.main.async {
-                    NotificationCenter.default.post(name: .cxRumNotificationMetrics, object: payload)
-                }
-            }
-        }
     }
 }
 

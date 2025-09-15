@@ -241,6 +241,11 @@ public enum Keys: String {
     case enableSwizzling
     case beforeSend
     case exists
+    case min
+    case max
+    case avg
+    case p95
+    case slowFrozen
 }
 
 public enum CoralogixLogSeverity: Int {

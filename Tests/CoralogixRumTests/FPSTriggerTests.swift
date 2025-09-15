@@ -53,30 +53,4 @@ final class FPSTriggerTests: XCTestCase {
         XCTAssertNil(fpsTrigger.timer, "Timer should be nil after stopping monitoring")
         XCTAssertFalse(fpsTrigger.isRunning, "Monitoring should not be running after stopMonitoring() is called")
     }
-
-//    func testMonitorFPSAndNotification() {
-//        // Expectation for receiving the notification
-//        _ = expectation(forNotification: .cxRumNotificationMetrics, object: nil, handler: { notification in
-//            // Validate that the notification contains the expected FPS value
-//            if let vitals = notification.object as? MobileVitals, vitals.type == .fps {
-//                XCTAssertNotNil(vitals.value, "Notification should contain FPS value")
-//                XCTAssertEqual(vitals.value, 60, "Expected FPS value should be '60'")
-//                return true
-//            }
-//            return false
-//        })
-//        
-//        
-//        // Start the monitoring process
-//        fpsTrigger.startMonitoring(xTimesPerHour: 60)
-//        
-//        // Simulate that FPS monitoring starts and posts the notification immediately, skipping the actual 5 seconds wait
-//        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-//            NotificationCenter.default.post(name: .cxRumNotificationMetrics,
-//                                            object: MobileVitals(type: .fps, value: 60.0, units: .fps))
-//        }
-//        
-//        // Wait for expectations with a longer timeout to avoid race conditions
-//        waitForExpectations(timeout: 10.0, handler: nil)
-//    }
 }

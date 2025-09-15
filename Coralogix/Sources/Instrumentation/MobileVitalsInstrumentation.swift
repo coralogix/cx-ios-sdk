@@ -17,15 +17,11 @@ extension CoralogixRum {
                                                selector: #selector(handleMobileVitalsNotification(notification:)),
                                                name: .cxRumNotificationMetrics, object: nil)
         
-        self.metricsManager.options = options
         self.metricsManager.addObservers()
         self.metricsManager.startMonitoring()
         
-        // self.metricsManager.startMemoryMonitoring(memorySamplingRate: options.memoryUsageSampleRate)
 
-            self.metricsManager.startColdStartMonitoring()
-            self.metricsManager.startSlowFrozenFramesMonitoring()
-        
+        //TODO: need to fix that
 //        if options.shouldInitInstrumentation(instrumentation: .anr) {
 //            self.metricsManager.startANRMonitoring()
 //        }
@@ -62,6 +58,7 @@ extension CoralogixRum {
         }
     }
     
+    //TODO: refactor this as we dont send a payload anymore
     func handleMobileVitals(_ mobileVitals: MobileVitals) {
         self.mobileVitalHandlers?(mobileVitals)
 

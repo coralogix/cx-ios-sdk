@@ -121,4 +121,16 @@ class FPSTrigger {
         _ = fpsMonitor.sampleAndReset()   // reset baseline to "now" so the first sample isn't skewed
         startTimer()
     }
+    
+    func statsDictionary() -> [String: Any] {
+        return [
+            MobileVitalsType.fps.stringValue: [
+                Keys.mobileVitalsUnits.rawValue: MeasurementUnits.fps.stringValue,
+                Keys.min.rawValue: minFPS,
+                Keys.max.rawValue: maxFPS,
+                Keys.avg.rawValue: avgFPS,
+                Keys.p95.rawValue: p95FPS
+            ]
+        ]
+    }
 }

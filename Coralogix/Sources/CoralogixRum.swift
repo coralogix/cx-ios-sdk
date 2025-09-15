@@ -62,7 +62,6 @@ public class CoralogixRum {
         NotificationCenter.default.removeObserver(self, name: .cxRumNotificationUserActions, object: nil)
         NotificationCenter.default.removeObserver(self, name: .cxRumNotificationSessionEnded, object: nil)
         NotificationCenter.default.removeObserver(self, name: .cxRumNotificationMetrics, object: nil)
-        NotificationCenter.default.removeObserver(self, name: .cxViewDidAppear, object: nil)
         NotificationCenter.default.removeObserver(self, name: UIApplication.didFinishLaunchingNotification, object: nil)
         NotificationCenter.default.removeObserver(self, name: UIApplication.didBecomeActiveNotification, object: nil)
         NotificationCenter.default.removeObserver(self, name: UIApplication.didEnterBackgroundNotification, object: nil)

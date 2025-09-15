@@ -23,6 +23,7 @@ struct MobileVitalsContext {
         self.mobileVitalsUnits = otel.getAttribute(forKey: Keys.mobileVitalsUnits.rawValue) as? String ?? Keys.undefined.rawValue
     }
     
+    //TODO: refactore this also 
     func getMobileVitalsDictionary() -> [String: Any] {
         var result = [String: Any]()
         result[Keys.type.rawValue] = self.mobileVitalsType
