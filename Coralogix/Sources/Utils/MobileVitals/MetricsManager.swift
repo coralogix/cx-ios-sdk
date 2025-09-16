@@ -26,8 +26,8 @@ public class MetricsManager {
     private let sendInterval: TimeInterval = 15.0
     private var lastSendTime: Date?
     private var schedulingActive = false
-    
-    public func addMatricKitObservers() {
+                
+    public func addMetricKitObservers() {
         MyMetricSubscriber.shared.metricKitClosure = { [weak self] dict in
             self?.metricsManagerClosure?(dict)
         }
@@ -41,12 +41,6 @@ public class MetricsManager {
     }
     
     public func sendMobileVitals() {
-        let now = Date()
-        if let last = lastSendTime, now.timeIntervalSince(last) < sendInterval {
-            Log.d("[MetricsManager] Skipped sendMobileVitals(), only \(now.timeIntervalSince(last))s since last event")
-            return
-        }
-        
         var vitals = [String: Any]()
         if let cpuDetector = cpuDetector {
             vitals[Keys.cpu.rawValue] = cpuDetector.statsDictionary()
@@ -75,6 +69,7 @@ public class MetricsManager {
     
     func startMonitoring() {
         self.startColdStartMonitoring()
+        self.startWarmStartMonitoring()
         self.fpsTrigger.startMonitoring()
         self.startCPUMonitoring()
         self.startMemoryMonitoring()

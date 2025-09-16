@@ -100,8 +100,8 @@ public class SessionManager {
         if let sessionCreationDate = self.sessionMetadata?.sessionCreationDate,
            self.isIdle == false,
             self.hasAnHourPassed(since: sessionCreationDate) == true {
-            self.setupSessionMetadata()
             NotificationCenter.default.post(name: .cxRumNotificationSessionEnded, object: nil)
+            self.setupSessionMetadata()
         }
         return self.sessionMetadata
     }

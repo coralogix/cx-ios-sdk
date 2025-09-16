@@ -8,15 +8,15 @@
 import Foundation
 import CoralogixInternal
 
-class ANRDetector {
+internal class ANRDetector {
     internal var timer: Timer?
     private var isMainThreadResponsive = true
 
     // Time interval to check for ANR (e.g., every 1 second)
-    private let checkInterval: TimeInterval
+    let checkInterval: TimeInterval
 
     // Maximum allowed main thread block time (e.g., 5 seconds)
-    private let maxBlockTime: TimeInterval
+    let maxBlockTime: TimeInterval
 
     private var lastCheckTimestamp: CFAbsoluteTime = CFAbsoluteTimeGetCurrent()
 
