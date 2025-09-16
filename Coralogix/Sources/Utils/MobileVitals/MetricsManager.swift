@@ -23,7 +23,6 @@ public class MetricsManager {
     var metricsManagerClosure: (([String: Any]) -> Void)?
     
     // MARK: - Internal timer for periodic send
-    private var sendTimer: Timer?
     private let sendInterval: TimeInterval = 15.0
     private var lastSendTime: Date?
     private var schedulingActive = false
@@ -38,7 +37,7 @@ public class MetricsManager {
     public func removeObservers() {
         MXMetricManager.shared.remove(MyMetricSubscriber.shared)
         self.stopAllDetectors()
-        self.stopSendTimer()
+        self.stopSendScheduler()
     }
     
     public func sendMobileVitals() {
@@ -181,17 +180,6 @@ public class MetricsManager {
                 self.scheduleNextSendCheck()
             }
         )
-    }
-
-    
-    private func stopSendTimer() {
-        sendTimer?.invalidate()
-        sendTimer = nil
-    }
-
-    deinit {
-        self.stopAllDetectors()
-        stopSendTimer()
     }
 }
   

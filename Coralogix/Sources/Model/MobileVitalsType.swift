@@ -61,34 +61,3 @@ enum MobileVitalsType: Equatable, Hashable {
         }
     }
 }
-
-extension MobileVitalsType {
-    var spanAttributes: [String: AttributeValue] {
-        switch self {
-        case .anr:
-            return [
-                Keys.eventType.rawValue: .string(CoralogixEventType.error.rawValue),
-                Keys.source.rawValue: .string(Keys.console.rawValue),
-                Keys.severity.rawValue: .int(CoralogixLogSeverity.error.rawValue)
-            ]
-        default:
-            return [
-                Keys.eventType.rawValue: .string(CoralogixEventType.mobileVitals.rawValue),
-                Keys.severity.rawValue: .int(CoralogixLogSeverity.info.rawValue)
-            ]
-        }
-    }
-    
-    func specificAttributes(for value: Double) -> [String: AttributeValue] {
-        switch self {
-        case .anr:
-            return [
-                Keys.errorMessage.rawValue: .string(Keys.anrString.rawValue)
-            ]
-        default:
-            return [
-                Keys.mobileVitalsValue.rawValue: .double(value)
-            ]
-        }
-    }
-}

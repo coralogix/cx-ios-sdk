@@ -27,7 +27,7 @@ final class FPSTriggerTests: XCTestCase {
         let expectation = self.expectation(description: "Timer starts and triggers FPS monitoring")
         
         // Start the monitoring with a specific number of triggers per hour
-        fpsTrigger.startMonitoring(xTimesPerHour: 60)
+        fpsTrigger.startMonitoring()
         
         // Wait for 1 second to allow the timer to fire
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
@@ -44,7 +44,7 @@ final class FPSTriggerTests: XCTestCase {
     
     func testStopMonitoring() {
         // Start monitoring first
-        fpsTrigger.startMonitoring(xTimesPerHour: 60)
+        fpsTrigger.startMonitoring()
         
         // Stop monitoring
         fpsTrigger.stopMonitoring()

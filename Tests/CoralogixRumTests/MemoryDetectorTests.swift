@@ -15,7 +15,7 @@ final class MemoryDetectorTests: XCTestCase {
     
     override func setUp() {
         super.setUp()
-        memoryDetector = MemoryDetector(interval: 0.1)
+        memoryDetector = MemoryDetector()
         
         memoryDetector.handleMemoryClosure = { [weak self] in
             self?.memoryDetected = true

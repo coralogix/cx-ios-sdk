@@ -19,7 +19,7 @@ final class ANRDetectorTests: XCTestCase {
         anrDetector = ANRDetector(checkInterval: 0.1, maxBlockTime: 0.2)
         
         // Override the handleANR with a closure to test ANR detection
-        anrDetector.handleANRClosure = { [weak self] in
+        anrDetector.handleANRClosure = { [weak self] dict in
             self?.anrDetected = true
         }
     }

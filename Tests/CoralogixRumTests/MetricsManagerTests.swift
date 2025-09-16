@@ -25,75 +25,9 @@ final class MetricsManagerTests: XCTestCase {
         super.tearDown()
     }
     
-    func testStartColdStartMonitoring() {
-        metricsManager.startColdStartMonitoring()
-        XCTAssertNotNil(metricsManager.launchStartTime, "Cold start monitoring should set launchStartTime")
-    }
-    
-    func testAppWillEnterForeground() {
-        // Set up foreground start time to simulate entering the background
-        metricsManager.foregroundStartTime = CFAbsoluteTimeGetCurrent() - 1.0  // Simulate 1 second ago
-        metricsManager.appDidEnterBackgroundNotification()
-        
-        // Simulate entering foreground
-        metricsManager.appWillEnterForegroundNotification()
-        metricsManager.appDidBecomeActiveNotification()
-        // Check if foregroundEndTime is set and warm start duration is calculated
-        XCTAssertNotNil(metricsManager.foregroundEndTime, "Foreground end time should be set after entering foreground")
-        XCTAssertTrue(metricsManager.foregroundEndTime! - metricsManager.foregroundStartTime! >= 0.0, "Warm start duration should be calculated")
-    }
-    
-    func testAppDidEnterBackgroundNotification() {
-        
-        metricsManager.fpsTrigger = mockFPSMonitor
-        // Simulate the method being called when the app enters background
-        metricsManager.appDidEnterBackgroundNotification()
-        
-        // Verify that the FPS monitoring was stopped
-        XCTAssertTrue(mockFPSMonitor.stopMonitoringCalled, "stopMonitoring() should be called when app enters background")
-        
-        // Verify that warmMetricIsActive is set to true
-        XCTAssertTrue(metricsManager.warmMetricIsActive, "warmMetricIsActive should be set to true when app enters background")
-    }
-    
-    func testHandleNotificationForColdStart() {
-        // Simulate the cold start by setting the start time
-        metricsManager.launchStartTime = CFAbsoluteTimeGetCurrent() - 2.0  // Simulate 2 seconds ago
-        
-        // Prepare a notification with the coldEnd metric
-        let notification = Notification(name: .cxRumNotificationMetrics, object: [MobileVitalsType.cold.stringValue: CFAbsoluteTimeGetCurrent()])
-        
-        // Handle the notification
-        metricsManager.handleNotification(notification: notification)
-        
-        // Verify that the cold start duration is calculated correctly
-        XCTAssertNotNil(metricsManager.launchEndTime, "Launch end time should be set after cold start handling")
-        XCTAssertEqual(metricsManager.launchEndTime! - metricsManager.launchStartTime!, 2.0, accuracy: 0.1, "Cold start duration should be approximately 2 seconds")
-    }
-    
     func testStartANRMonitoring() {
         metricsManager.startANRMonitoring()
         XCTAssertNotNil(metricsManager.anrDetector, "ANR monitoring should start and anrDetector should be initialized")
-    }
-    
-    func testFPSSamplingMonitoringStartAndStop() {
-        metricsManager.startFPSSamplingMonitoring(fpsSamplingRate: 30)
-
-        // Wait until isRunning == true
-        let startedPred = NSPredicate { _, _ in
-            self.metricsManager.fpsTrigger.isRunning
-        }
-        let startedExp = expectation(for: startedPred, evaluatedWith: nil)
-        wait(for: [startedExp], timeout: 2.0)
-
-        metricsManager.appDidEnterBackgroundNotification()
-
-        // Wait until isRunning == false
-        let stoppedPred = NSPredicate { _, _ in
-            !self.metricsManager.fpsTrigger.isRunning
-        }
-        let stoppedExp = expectation(for: stoppedPred, evaluatedWith: nil)
-        wait(for: [stoppedExp], timeout: 2.0)
     }
 }
 

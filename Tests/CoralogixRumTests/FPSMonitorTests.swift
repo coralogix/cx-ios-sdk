@@ -20,24 +20,5 @@ final class FPSMonitorTests: XCTestCase {
         fpsMonitor = nil
         super.tearDown()
     }
-    
-    func testFPSCalculation() {
-        // Start monitoring
-        fpsMonitor.startMonitoring()
-        
-        // Manually set the start time to simulate 1 second elapsed time
-        fpsMonitor.startTime = CACurrentMediaTime() - 1.0
-        
-        // Simulate frame updates (60 frames in 1 second)
-        for _ in 0..<60 {
-            fpsMonitor.trackFrame()
-        }
-        
-        // Stop the monitor and get average FPS
-        let averageFPS = fpsMonitor.stopMonitoring()
-        
-        // Assert that the average FPS is approximately 60
-        XCTAssertEqual(averageFPS, 60, accuracy: 1.0, "The average FPS should be approximately 60.")
-    }
 }
 

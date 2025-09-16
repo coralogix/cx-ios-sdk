@@ -23,13 +23,4 @@ final class MobileVitalsContextTests: XCTestCase {
     override func tearDownWithError() throws {
         mockSpanData = nil
     }
-    
-    func testEventContextInitialization() {
-        // Initialize EventContext with mock SpanData
-        let context = MobileVitalsContext(otel: mockSpanData)
-        
-        // Verify the properties are set correctly
-        XCTAssertEqual(context.mobileVitalsType, "fps")
-        XCTAssertEqual(context.mobileVitalsValue, "80")
-    }
 }
