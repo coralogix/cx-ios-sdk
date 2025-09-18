@@ -23,7 +23,6 @@ import UIKit
  *    ```swift
  *    if timeSinceLastActivity > idleInterval {
  *        self.setupSessionMetadata()
- *        NotificationCenter.default.post(name: .cxRumNotificationSessionEnded, object: nil)
  *        Log.d("Function has been idle for 15 minutes.")
  *    }
  *    ```
@@ -52,6 +51,7 @@ public class SessionManager {
     private var errorCount: Int = 0
     private var clickCount: Int = 0
     public var sessionChangedCallback: ((String) -> Void)?
+    public var sessionEndedCallback: (() -> Void)?
     public var hasRecording: Bool = false
     
     public var lastSnapshotEventTime: Date?
@@ -100,7 +100,7 @@ public class SessionManager {
         if let sessionCreationDate = self.sessionMetadata?.sessionCreationDate,
            self.isIdle == false,
             self.hasAnHourPassed(since: sessionCreationDate) == true {
-            NotificationCenter.default.post(name: .cxRumNotificationSessionEnded, object: nil)
+            self.sessionEndedCallback?()
             self.setupSessionMetadata()
         }
         return self.sessionMetadata
@@ -158,8 +158,8 @@ public class SessionManager {
     internal func updateActivityTime() {
         if isIdle {
             Log.d("[SDK] transitioning from idle to active state")
+            self.sessionEndedCallback?()
             setupSessionMetadata()
-            NotificationCenter.default.post(name: .cxRumNotificationSessionEnded, object: nil)
         }
         lastActivity = Date()
     }

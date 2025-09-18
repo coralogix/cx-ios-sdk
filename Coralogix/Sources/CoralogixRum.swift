@@ -7,9 +7,7 @@ import UIKit
 
 extension Notification.Name {
     static let cxRumNotification = Notification.Name("cxRumNotification")
-    static let cxRumNotificationSessionEnded = Notification.Name("cxRumNotificationSessionEnded")
     static let cxRumNotificationUserActions = Notification.Name("cxRumNotificationUserActions")
-    static let cxRumNotificationMetrics = Notification.Name("cxRumNotificationMetrics")
     static let cxViewDidAppear = Notification.Name("cxViewDidAppear")
 }
 
@@ -59,7 +57,6 @@ public class CoralogixRum {
     private func removeNotification() {
         NotificationCenter.default.removeObserver(self, name: .cxRumNotification, object: nil)
         NotificationCenter.default.removeObserver(self, name: .cxRumNotificationUserActions, object: nil)
-        NotificationCenter.default.removeObserver(self, name: .cxRumNotificationSessionEnded, object: nil)
         NotificationCenter.default.removeObserver(self, name: UIApplication.didFinishLaunchingNotification, object: nil)
         NotificationCenter.default.removeObserver(self, name: UIApplication.didBecomeActiveNotification, object: nil)
         NotificationCenter.default.removeObserver(self, name: UIApplication.didEnterBackgroundNotification, object: nil)

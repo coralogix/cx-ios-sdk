@@ -29,9 +29,11 @@ public class CoralogixExporter: SpanExporter {
         self.viewManager = viewManager
         self.metricsManager = metricsManager
         
-        NotificationCenter.default.addObserver(self,
-                                               selector: #selector(handleNotification(notification:)),
-                                               name: .cxRumNotificationSessionEnded, object: nil)
+        self.sessionManager.sessionEndedCallback = { [weak self] in
+            self?.viewManager.reset()
+            self?.sessionManager.reset()
+            self?.screenshotManager.reset()
+        }
     }
     
     var pendingSpans: [SpanData] = []
@@ -147,13 +149,7 @@ public class CoralogixExporter: SpanExporter {
         group.wait()
         return encodedSpans
     }
-    
-    @objc func handleNotification(notification: Notification) {
-        self.viewManager.reset()
-        self.sessionManager.reset()
-        self.screenshotManager.reset()
-    }
-    
+ 
     private func spanDatatoCxSpan(otelSpan: SpanData) -> [String: Any]? {
         guard otelSpan.spanId.isValid, !otelSpan.attributes.isEmpty else {
             Log.e("Invalid otelSpan: \(otelSpan)")
