@@ -25,7 +25,7 @@ Starts monitoring the FPS periodically. The method calculates the time interval 
 
 ### `private func monitorFPS()`
 
-Logs a message and starts monitoring the FPS for 5 seconds. Once the monitoring period is over, the average FPS is logged and sent via `NotificationCenter` as a `cxRumNotificationMetrics` event.
+Logs a message and starts monitoring the FPS for 5 seconds. Once the monitoring period is over, the average FPS post Mobile vital event.
 
 ### `func stopMonitoring()`
 
