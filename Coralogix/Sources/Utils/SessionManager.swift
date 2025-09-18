@@ -54,7 +54,6 @@ public class SessionManager {
     public var sessionChangedCallback: ((String) -> Void)?
     public var hasRecording: Bool = false
     
-    public var hasInitializedMobileVitals = false
     public var lastSnapshotEventTime: Date?
     public var isIdle: Bool {
         let timeSinceLastActivity = Date().timeIntervalSince(self.lastActivity)
@@ -101,8 +100,8 @@ public class SessionManager {
         if let sessionCreationDate = self.sessionMetadata?.sessionCreationDate,
            self.isIdle == false,
             self.hasAnHourPassed(since: sessionCreationDate) == true {
-            self.setupSessionMetadata()
             NotificationCenter.default.post(name: .cxRumNotificationSessionEnded, object: nil)
+            self.setupSessionMetadata()
         }
         return self.sessionMetadata
     }

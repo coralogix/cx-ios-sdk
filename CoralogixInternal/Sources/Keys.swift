@@ -150,7 +150,6 @@ public enum Keys: String {
     case lifeCycleContext = "life_cycle_context"
     case mobileVitalsType
     case mobileVitalsValue
-    case mobileVitalsUuid = "uuid"
     case mobileVitalsUnits = "units"
     case value
     case anrString = "application_not_responding"
@@ -241,6 +240,11 @@ public enum Keys: String {
     case enableSwizzling
     case beforeSend
     case exists
+    case min
+    case max
+    case avg
+    case p95
+    case slowFrozen = "slow_frozen"
 }
 
 public enum CoralogixLogSeverity: Int {

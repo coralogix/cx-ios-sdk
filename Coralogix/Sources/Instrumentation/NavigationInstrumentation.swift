@@ -18,6 +18,8 @@ extension CoralogixRum {
     @objc func handleNotification(notification: Notification) {
         guard let cxView = notification.object as? CXView else { return }
         
+        self.metricsManager.sendMobileVitals()
+        
         let span = makeSpan(event: .navigation, source: .console, severity: .info)
         handleAppearStateIfNeeded(cxView: cxView, span: span)
         span.end()

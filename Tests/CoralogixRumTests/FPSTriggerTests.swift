@@ -9,16 +9,16 @@ import XCTest
 @testable import Coralogix
 
 final class FPSTriggerTests: XCTestCase {
-    var fpsTrigger: FPSTrigger!
+    var fpsDetector: FPSDetector!
     
     override func setUp() {
         super.setUp()
-        fpsTrigger = FPSTrigger()
+        fpsDetector = FPSDetector()
     }
 
     override func tearDown() {
-        fpsTrigger.stopMonitoring()
-        fpsTrigger = nil
+        fpsDetector.stopMonitoring()
+        fpsDetector = nil
         super.tearDown()
     }
     
@@ -27,13 +27,13 @@ final class FPSTriggerTests: XCTestCase {
         let expectation = self.expectation(description: "Timer starts and triggers FPS monitoring")
         
         // Start the monitoring with a specific number of triggers per hour
-        fpsTrigger.startMonitoring(xTimesPerHour: 60)
+        fpsDetector.startMonitoring()
         
         // Wait for 1 second to allow the timer to fire
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
             // Since we can't directly test the timer, we check if the timer was set and is running
-            XCTAssertNotNil(self.fpsTrigger.timer, "Timer should be initialized")
-            XCTAssertTrue(self.fpsTrigger.isRunning, "Monitoring should be running")
+            XCTAssertNotNil(self.fpsDetector.timer, "Timer should be initialized")
+            XCTAssertTrue(self.fpsDetector.isRunning, "Monitoring should be running")
             
             // Fulfill the expectation
             expectation.fulfill()
@@ -44,39 +44,13 @@ final class FPSTriggerTests: XCTestCase {
     
     func testStopMonitoring() {
         // Start monitoring first
-        fpsTrigger.startMonitoring(xTimesPerHour: 60)
+        fpsDetector.startMonitoring()
         
         // Stop monitoring
-        fpsTrigger.stopMonitoring()
+        fpsDetector.stopMonitoring()
         
         // Assert that the timer is invalidated and monitoring has stopped
-        XCTAssertNil(fpsTrigger.timer, "Timer should be nil after stopping monitoring")
-        XCTAssertFalse(fpsTrigger.isRunning, "Monitoring should not be running after stopMonitoring() is called")
+        XCTAssertNil(fpsDetector.timer, "Timer should be nil after stopping monitoring")
+        XCTAssertFalse(fpsDetector.isRunning, "Monitoring should not be running after stopMonitoring() is called")
     }
-
-//    func testMonitorFPSAndNotification() {
-//        // Expectation for receiving the notification
-//        _ = expectation(forNotification: .cxRumNotificationMetrics, object: nil, handler: { notification in
-//            // Validate that the notification contains the expected FPS value
-//            if let vitals = notification.object as? MobileVitals, vitals.type == .fps {
-//                XCTAssertNotNil(vitals.value, "Notification should contain FPS value")
-//                XCTAssertEqual(vitals.value, 60, "Expected FPS value should be '60'")
-//                return true
-//            }
-//            return false
-//        })
-//        
-//        
-//        // Start the monitoring process
-//        fpsTrigger.startMonitoring(xTimesPerHour: 60)
-//        
-//        // Simulate that FPS monitoring starts and posts the notification immediately, skipping the actual 5 seconds wait
-//        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-//            NotificationCenter.default.post(name: .cxRumNotificationMetrics,
-//                                            object: MobileVitals(type: .fps, value: 60.0, units: .fps))
-//        }
-//        
-//        // Wait for expectations with a longer timeout to avoid race conditions
-//        waitForExpectations(timeout: 10.0, handler: nil)
-//    }
 }

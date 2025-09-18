@@ -716,140 +716,6 @@ final class CoralogixRumTests: XCTestCase {
         return coralogixRum
     }
     
-    func test_doesNothing_whenNotInitialized() {
-        guard let options = self.options else {
-            XCTFail("options must be CoralogixRumOptions")
-            return
-        }
-        
-        let coralogixRum = CoralogixRum(options: options)
-        CoralogixRum.isInitialized = false
-                
-        let uniqueType = "type-\(UUID().uuidString)"
-
-        // We should receive nothing
-        let exp = XCTNSNotificationExpectation(name: .cxRumNotificationMetrics, object: nil)
-        exp.isInverted = true
-        exp.handler = { note in
-            guard let mv = note.object as? MobileVitals else { return false }
-            return mv.name == uniqueType            // only our event would fail the test
-        }
-        
-        coralogixRum.reportMobileVitalsMeasurement(type: uniqueType, value: 60.0, units: "fps")
-        
-        // Assert
-        wait(for: [exp], timeout: 2.0)
-    }
-    
-    func test_doesNothing_whenSDKIsNative() {
-        // Arrange
-        guard let options = self.options else {
-            XCTFail("options must be CoralogixRumOptions")
-            return
-        }
-        
-        let coralogixRum = CoralogixRum(options: options, sdkFramework: .swift)
-        let uniqueType = "type5-\(UUID().uuidString)"
-
-        // We should receive nothing
-        let exp = XCTNSNotificationExpectation(name: .cxRumNotificationMetrics, object: nil)
-        exp.isInverted = true
-        exp.handler = { note in
-            guard let mv = note.object as? MobileVitals else { return false }
-            return mv.name == uniqueType
-        }
-        // Act
-        coralogixRum.reportMobileVitalsMeasurement(type: uniqueType, value: 60.0, units: "fps")
-        
-        // Assert
-        wait(for: [exp], timeout: 2.0)
-    }
-    
-    @discardableResult
-    private func observeMetrics(
-        expect count: Int,
-        fulfillOn queue: DispatchQueue = .main,
-        handler: @escaping ([MobileVitals]) -> Void
-    ) -> XCTestExpectation {
-        let exp = XCTNSNotificationExpectation(name: .cxRumNotificationMetrics, object: nil)
-        exp.expectedFulfillmentCount = count
-
-        var collected: [MobileVitals] = []
-
-        exp.handler = { note in
-            guard let mv = note.object as? MobileVitals else { return false }
-            collected.append(mv)
-            if collected.count == count {
-                queue.async { handler(collected) }
-            }
-            return true
-        }
-
-        return exp
-    }
-    
-    func test_reportMobileVitalsMeasurement_withHybridMetrics_shouldCallHandleMobileVitals() {
-        // Given
-        guard let options = self.options else {
-            XCTFail("options must be CoralogixRumOptions")
-            return
-        }
-        
-        CoralogixRum.isInitialized = true
-        CoralogixRum.mobileSDK = MobileSDK(sdkFramework: .reactNative(version: "1.0")) // isNative = false
-
-        let mock = MockCoralogixRum(options: options,
-                                    sdkFramework: .reactNative(version: "1.0"))
-
-        let metrics = [
-            HybridMetric(name: "frameRate", value: 58.9, units: "fps"),
-            HybridMetric(name: "cpu", value: 21.3, units: "%")
-        ]
-
-        // When
-        mock.reportMobileVitalsMeasurement(type: "fps", metrics: metrics)
-
-        // Then
-        XCTAssertEqual(mock.capturedVitals.count, 2)
-
-        let first = mock.capturedVitals[0]
-        XCTAssertEqual(first.type, MobileVitalsType.fps)
-        XCTAssertEqual(first.name, "frameRate")
-        XCTAssertEqual(first.value, 58.9)
-        XCTAssertEqual(first.units.stringValue, MobileVitalsType.fps.stringValue)
-
-        let second = mock.capturedVitals[1]
-        XCTAssertEqual(second.type, MobileVitalsType.fps)
-        XCTAssertEqual(second.name, "cpu")
-        XCTAssertEqual(second.value, 21.3)
-        XCTAssertEqual(second.units.stringValue, "%")
-    }
-
-    func test_reportMobileVitalsMeasurement_withSingleValue_shouldCallHandleMobileVitals() {
-        guard let options = self.options else {
-            XCTFail("options must be CoralogixRumOptions")
-            return
-        }
-        // Given
-        CoralogixRum.isInitialized = true
-        CoralogixRum.mobileSDK = MobileSDK(sdkFramework: .reactNative(version: "1.0"))
-
-        let mock = MockCoralogixRum(options: options,
-                                    sdkFramework: .reactNative(version: "1.0"))
-
-        // When
-        mock.reportMobileVitalsMeasurement(type: "fps", value: 58.9, units: "fps")
-
-        // Then
-        XCTAssertEqual(mock.capturedVitals.count, 1)
-
-        let captured = mock.capturedVitals.first
-        XCTAssertEqual(captured?.type, .fps)
-        XCTAssertEqual(captured?.name, "fps") // uses `type` as name
-        XCTAssertEqual(captured?.value, 58.9)
-        XCTAssertEqual(captured?.units, .fps)
-    }
-    
     func test_reportMobileVitalsMeasurement_whenNotInitialized_shouldNotCallHandle() {
         guard let options = self.options else {
             XCTFail("options must be CoralogixRumOptions")
@@ -884,13 +750,11 @@ final class CoralogixRumTests: XCTestCase {
 }
 
 final class MockCoralogixRum: CoralogixRum {
-    var capturedVitals: [MobileVitals] = []
+    var capturedVitals: [String: Any] = [:]
     
     init(options: CoralogixExporterOptions, sdkFramework:  SdkFramework = .swift) {
         super.init(options: options, sdkFramework: sdkFramework)
-        self.mobileVitalHandlers = { [weak self] mobileVitals in
-            self?.capturedVitals.append(mobileVitals)
-        }
+        
     }
 }
 

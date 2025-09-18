@@ -13,125 +13,108 @@ import MetricKit
 import CoralogixInternal
 
 public class MetricsManager {
-    var launchStartTime: CFAbsoluteTime?
-    var launchEndTime: CFAbsoluteTime?
-    var foregroundStartTime: CFAbsoluteTime?
-    var foregroundEndTime: CFAbsoluteTime?
+    var coldDetector: ColdDetector?
+    var warmDetector: WarmDetector?
     var anrDetector: ANRDetector?
     var cpuDetector: CPUDetector?
     var memoryDetector: MemoryDetector?
     var slowFrozenFramesDetector: SlowFrozenFramesDetector?
-    var fpsTrigger = FPSTrigger()
-    var warmMetricIsActive = false
-    var options: CoralogixExporterOptions?
+    var fpsDetector = FPSDetector()
+    var metricsManagerClosure: (([String: Any]) -> Void)?
     
-    public func addObservers() {
-        MXMetricManager.shared.add(MyMetricSubscriber.shared)
-        
-        NotificationCenter.default.addObserver(self,
-                                               selector: #selector(self.handleNotification(notification:)),
-                                               name: .cxViewDidAppear,
-                                               object: nil)
-        
-        NotificationCenter.default.addObserver(self, selector: #selector(self.appDidEnterBackgroundNotification),
-                                               name: UIApplication.didEnterBackgroundNotification,
-                                               object: nil)
-        let sdk = CoralogixRum.mobileSDK.sdkFramework
-
-        // Warm
-        switch sdk {
-        case .flutter, .reactNative:
-            // it's flutter or react-native
-            break
-        case .swift:
-            // it's not flutter or react-native
-            NotificationCenter.default.addObserver(self,
-                                                   selector: #selector(self.appWillEnterForegroundNotification),
-                                                   name: UIApplication.willEnterForegroundNotification,
-                                                   object: nil)
-            
-            NotificationCenter.default.addObserver(self, selector: #selector(self.appDidBecomeActiveNotification),
-                                                   name: UIApplication.didBecomeActiveNotification,
-                                                   object: nil)
+    // MARK: - Internal timer for periodic send
+    private let sendInterval: TimeInterval = 15.0
+    private var lastSendTime: Date?
+    private var schedulingActive = false
+                
+    public func addMetricKitObservers() {
+        MyMetricSubscriber.shared.metricKitClosure = { [weak self] dict in
+            self?.metricsManagerClosure?(dict)
         }
+        MXMetricManager.shared.add(MyMetricSubscriber.shared)
     }
     
     public func removeObservers() {
         MXMetricManager.shared.remove(MyMetricSubscriber.shared)
         self.stopAllDetectors()
+        self.stopSendScheduler()
     }
     
-    func startFPSSamplingMonitoring(fpsSamplingRate: TimeInterval = 300) {
-        // Convert seconds between samples to times per hour
-        let seconds = max(1.0, fpsSamplingRate)
-        let timesPerHour = max(1.0, 3600.0 / seconds)
-        self.fpsTrigger.startMonitoring(xTimesPerHour: timesPerHour)
-    }
-    
-    @objc func appDidEnterBackgroundNotification() {
-        self.stopAllDetectors()
-        self.warmMetricIsActive = true
-    }
-    
-    // Warm
-    @objc internal func appWillEnterForegroundNotification() {
-        Log.d("App Will Enter Foreground")
-        if warmMetricIsActive == true {
-            self.foregroundStartTime = CFAbsoluteTimeGetCurrent()
-            self.foregroundEndTime = nil
-            self.warmMetricIsActive = false
-        }
-    }
-    
-    @objc internal func appDidBecomeActiveNotification() {
-        Log.d("App did Become Active")
-        if let foregroundStartTime = self.foregroundStartTime,
-           self.foregroundEndTime == nil {
-            let currentTime = CFAbsoluteTimeGetCurrent()
-            self.foregroundEndTime = currentTime
-            let warmStartDuration = currentTime - foregroundStartTime
-            
-            let warmStartRounded = warmStartDuration * 1000
-            
-            // Convert to an integer if you want to remove the decimal part
-            Log.d("[Metric] Warm start duration: \(warmStartRounded) milliseconds")
-            
-            // send instrumentaion event
-            NotificationCenter.default.post(name: .cxRumNotificationMetrics,
-                                            object: MobileVitals(type: .warm,
-                                                                 value: warmStartRounded,
-                                                                 units: .milliseconds))
+    public func sendMobileVitals() {
+        var vitals = [String: Any]()
+        if let cpuDetector = cpuDetector {
+            vitals[Keys.cpu.rawValue] = cpuDetector.statsDictionary()
         }
         
-        // Resume mobile vitals monitoring
-        self.startANRMonitoring()
+        if let memoryDetector = memoryDetector {
+            vitals[Keys.memory.rawValue] = memoryDetector.statsDictionary()
+        }
+        
+        if let slowFrozenFramesDetector = slowFrozenFramesDetector {
+            vitals[Keys.slowFrozen.rawValue] = slowFrozenFramesDetector.statsDictionary()
+        }
+        
+        vitals[MobileVitalsType.fps.stringValue] = fpsDetector.statsDictionary()
+        
+        // Send event
+        self.metricsManagerClosure?(vitals)
+        lastSendTime = Date()
+
+        // Reset stats after sending
+        cpuDetector?.reset()
+        memoryDetector?.reset()
+        slowFrozenFramesDetector?.reset()
+        fpsDetector.reset()
+    }
+    
+    func startMonitoring() {
+        self.startColdStartMonitoring()
+        self.startWarmStartMonitoring()
+        self.fpsDetector.startMonitoring()
+        self.startCPUMonitoring()
+        self.startMemoryMonitoring()
         self.startSlowFrozenFramesMonitoring()
-        
-        guard let options = options else { return }
-        self.startCPUMonitoring(cpuSamplingRate: options.cpuUsageSampleRate)
-        self.startMemoryMonitoring(memorySamplingRate: options.memoryUsageSampleRate)
-        self.startFPSSamplingMonitoring(fpsSamplingRate: options.fpsSampleRate)
+        startSendScheduler()   // start periodic sending
     }
     
     func startColdStartMonitoring() {
-        self.launchStartTime = CFAbsoluteTimeGetCurrent()
+        guard coldDetector == nil else { return }
+        let detector = ColdDetector()
+        detector.handleColdClosure = { [weak self] dict in
+            self?.metricsManagerClosure?(dict)
+        }
+        detector.startMonitoring()
+        self.coldDetector = detector
+    }
+    
+    func startWarmStartMonitoring() {
+        guard warmDetector == nil else { return }
+        let detector = WarmDetector()
+        detector.handleWarmClosure = { [weak self] dict in
+            self?.metricsManagerClosure?(dict)
+        }
+        detector.startMonitoring()
+        self.warmDetector = detector
     }
     
     func startANRMonitoring() {
         self.anrDetector = ANRDetector()
+        self.anrDetector?.handleANRClosure = { [weak self] dict in
+            self?.metricsManagerClosure?(dict)
+        }
         self.anrDetector?.startMonitoring()
     }
     
-    func startCPUMonitoring(cpuSamplingRate: TimeInterval) {
+    func startCPUMonitoring() {
         guard cpuDetector == nil else { return }
-        let detector = CPUDetector(checkInterval: cpuSamplingRate)
+        let detector = CPUDetector()
         detector.startMonitoring()
         self.cpuDetector = detector
     }
     
-    func startMemoryMonitoring(memorySamplingRate: TimeInterval) {
+    func startMemoryMonitoring() {
         guard memoryDetector == nil else { return }
-        let detector = MemoryDetector(interval: memorySamplingRate)
+        let detector = MemoryDetector()
         detector.startMonitoring()
         self.memoryDetector = detector
     }
@@ -143,51 +126,6 @@ public class MetricsManager {
         self.slowFrozenFramesDetector = detector
     }
     
-    @objc func handleNotification(notification: Notification) {
-        if let metrics = notification.object as? [String: Any] {
-            if let launchStartTime = self.launchStartTime,
-               let launchEndTime = metrics[MobileVitalsType.cold.stringValue] as? CFAbsoluteTime,
-               self.launchEndTime == nil {
-                self.launchEndTime = launchEndTime
-                let epochStartTime = Helper.convertCFAbsoluteTimeToEpoch(launchStartTime)
-                let epochEndTime = Helper.convertCFAbsoluteTimeToEpoch(launchEndTime)
-                let millisecondsRounded = self.calculateTime(start: epochStartTime, stop: epochEndTime)
-
-                NotificationCenter.default.post(name: .cxRumNotificationMetrics,
-                                                object: MobileVitals(type: .cold,
-                                                                     value: millisecondsRounded,
-                                                                     units: .milliseconds))
-            }
-        }
-    }
-    
-    func calculateTime(start: Double, stop: Double) -> Double {
-        return max(0, stop - start)
-    }
-    
-    internal func getWarmTime(params: [String: Any]) -> MobileVitals? {
-        if let warmTime = params[MobileVitalsType.warm.stringValue] as? Double {
-            return MobileVitals(type: .warm, value: warmTime, units: .milliseconds)
-        }
-        
-        return nil
-    }
-    
-    internal func getColdTime(params: [String: Any]) -> MobileVitals? {
-        guard let startTime = self.launchStartTime else {
-            return nil
-        }
-        
-        let launchStartTime = Helper.convertCFAbsoluteTimeToEpoch(startTime)
-
-        if let nativeLaunchEnd = params[MobileVitalsType.cold.stringValue] as? Double {
-            let duration = calculateTime(start: launchStartTime, stop: nativeLaunchEnd)
-            return MobileVitals(type: .cold, value: duration, units: .milliseconds)
-        }
-        
-        return nil
-    }
-    
     private func stopAllDetectors() {
         anrDetector?.stopMonitoring()
         anrDetector = nil
@@ -197,22 +135,52 @@ public class MetricsManager {
         memoryDetector = nil
         slowFrozenFramesDetector?.stopMonitoring()
         slowFrozenFramesDetector = nil
-        fpsTrigger.stopMonitoring()
+        fpsDetector.stopMonitoring()
     }
     
-    deinit {
-        NotificationCenter.default.removeObserver(self, name: UIApplication.didEnterBackgroundNotification, object: nil)
-        NotificationCenter.default.removeObserver(self, name: UIApplication.willEnterForegroundNotification, object: nil)
-        NotificationCenter.default.removeObserver(self, name: UIApplication.didBecomeActiveNotification, object: nil)
-        NotificationCenter.default.removeObserver(self, name: .cxViewDidAppear, object: nil)
+    private func startSendScheduler() {
+        schedulingActive = true
+        scheduleNextSendCheck()
+    }
+    
+    private func stopSendScheduler() {
+        schedulingActive = false
+        // Nothing to cancel directly (we're not using a DispatchWorkItem),
+        // but the guard in scheduleNextSendCheck() prevents further scheduling.
+    }
+    
+    private func scheduleNextSendCheck() {
+        guard schedulingActive else { return }
         
-        self.stopAllDetectors()
-        self.launchEndTime = 0
+        DispatchQueue.main.asyncAfter(
+            deadline: .now() + sendInterval,
+            qos: .unspecified,
+            flags: [],
+            execute: { [weak self] in
+                guard let self = self, self.schedulingActive else { return }
+                
+                let now = Date()
+                if let last = self.lastSendTime {
+                    if now.timeIntervalSince(last) >= self.sendInterval {
+                        self.sendMobileVitals()
+                    } else {
+                        Log.d("[MetricsManager] Skipped send, only \(now.timeIntervalSince(last))s since last event")
+                    }
+                } else {
+                    // First time we fire the scheduler
+                    self.sendMobileVitals()
+                }
+                
+                // Re-schedule the next check
+                self.scheduleNextSendCheck()
+            }
+        )
     }
 }
   
 class MyMetricSubscriber: NSObject, MXMetricManagerSubscriber {
     static let shared = MyMetricSubscriber()
+    var metricKitClosure: (([String: Any]) -> Void)?
 
     // Handle received metrics
     public func didReceive(_ payloads: [MXMetricPayload]) {
@@ -220,11 +188,12 @@ class MyMetricSubscriber: NSObject, MXMetricManagerSubscriber {
             if let metricPayloadJsonString = String(data: payload.jsonRepresentation(), encoding: .utf8) {
                 Log.d("metricPayloadJsonString  \(metricPayloadJsonString)")
                 // send instrumentaion event
-                NotificationCenter.default.post(name: .cxRumNotificationMetrics,
-                                                object: MobileVitals(type: .metricKit,
-                                                                     name: metricPayloadJsonString,
-                                                                     value: 0.0,
-                                                                     units: MeasurementUnits(from: "")))
+                let vital = [
+                    Keys.metricKit.rawValue: [
+                        Keys.name.rawValue: metricPayloadJsonString
+                    ]
+                ]
+                self.metricKitClosure?(vital)
             }
                     
             if let applicationLaunchMetric = payload.applicationLaunchMetrics {

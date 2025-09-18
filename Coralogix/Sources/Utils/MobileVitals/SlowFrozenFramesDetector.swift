@@ -32,6 +32,25 @@ final class SlowFrozenFramesDetector {
     private var running = false
     private let lifecycleCenter = NotificationCenter.default
     
+    // MARK: - Stored window results (one entry per report window)
+    internal var windowSlow: [Int] = []      // number of slow frames in a window
+    internal var windowFrozen: [Int] = []    // number of frozen frames in a window
+    
+    // MARK: - Public stats (computed over stored windows)
+    // Slow
+    var minSlow: Double { Double(windowSlow.min() ?? 0) }
+    var maxSlow: Double { Double(windowSlow.max() ?? 0) }
+    var avgSlow: Double { windowSlow.isEmpty ? 0 : Double(windowSlow.reduce(0, +)) / Double(windowSlow.count) }
+    var p95Slow: Double { percentile95D(of: windowSlow.map(Double.init)) }
+    
+    // Frozen
+    var minFrozen: Double { Double(windowFrozen.min() ?? 0) }
+    var maxFrozen: Double { Double(windowFrozen.max() ?? 0) }
+    var avgFrozen: Double { windowFrozen.isEmpty ? 0 : Double(windowFrozen.reduce(0, +)) / Double(windowFrozen.count) }
+    var p95Frozen: Double { percentile95D(of: windowFrozen.map(Double.init)) }
+    
+    
+    
     // MARK: - Init
     init(
         frozenThresholdMs: Double = 700.0,
@@ -98,6 +117,12 @@ final class SlowFrozenFramesDetector {
 
         // Optional: flush remaining counts once on stop
         emitWindow()
+        reset()
+    }
+    
+    public func reset() {
+        windowSlow.removeAll()
+        windowFrozen.removeAll()
     }
 
     deinit {
@@ -134,49 +159,45 @@ final class SlowFrozenFramesDetector {
     private func emitWindow() {
         var slow = 0
         var frozen = 0
-        var avg: Double = 0
-        var samples = 0
 
         statsLock.lock()
         slow = slowCount
         frozen = frozenCount
-        if frameSamples > 0 {
-            avg = sumFrameMs / Double(frameSamples)
-        }
+       
         // reset window
         slowCount = 0
         frozenCount = 0
         sumFrameMs = 0
-        samples = frameSamples
         frameSamples = 0
         statsLock.unlock()
 
         if slow == 0 && frozen == 0 { return }
 
-        let uuid = UUID().uuidString.lowercased()
+        
+        // Store this window’s counts (independently; skip zeros for each metric)
+        if slow > 0 { windowSlow.append(slow) }
+        if frozen > 0 { windowFrozen.append(frozen) }
 
-        // Post two metrics with same UUID (mirrors Android grouped emission)
-        func post(type: MobileVitalsType, value: Double, units: MeasurementUnits) {
-            let payload = MobileVitals(
-                type: type,
-                name: type.stringValue,
-                value: value,
-                units: units,
-                uuid: uuid
-            )
-            if Thread.isMainThread {
-                NotificationCenter.default.post(name: .cxRumNotificationMetrics, object: payload)
-            } else {
-                DispatchQueue.main.async {
-                    NotificationCenter.default.post(name: .cxRumNotificationMetrics, object: payload)
-                }
-            }
-        }
-
-        if slow > 0 { post(type: .slowFrames, value: Double(slow), units: .count) }
-        if frozen > 0 { post(type: .frozenFrames, value: Double(frozen), units: .count) }
-
-        Log.d("[Metric] avg frame: \(String(format: "%.2f", avg))ms from \(samples) samples, slow: \(slow), frozen: \(frozen), budget: \(String(format: "%.2f", slowBudgetMs))ms")
+//        Log.d("[Metric] slow: \(slow), frozen: \(frozen)")
+    }
+    
+    func statsDictionary() -> [String: Any] {
+        return [
+            MobileVitalsType.slowFrames.stringValue: [
+                Keys.mobileVitalsUnits.rawValue: MeasurementUnits.count.stringValue,
+                Keys.min.rawValue: minSlow,
+                Keys.max.rawValue: maxSlow,
+                Keys.avg.rawValue: avgSlow,
+                Keys.p95.rawValue: p95Slow
+            ],
+            MobileVitalsType.frozenFrames.stringValue: [
+                Keys.mobileVitalsUnits.rawValue: MeasurementUnits.count.stringValue,
+                Keys.min.rawValue: minFrozen,
+                Keys.max.rawValue: maxFrozen,
+                Keys.avg.rawValue: avgFrozen,
+                Keys.p95.rawValue: p95Frozen
+            ]
+        ]
     }
 
     // MARK: - Refresh rate
@@ -197,6 +218,13 @@ final class SlowFrozenFramesDetector {
         }
         refreshRateHz = Double(hz)
         slowBudgetMs = 1000.0 / refreshRateHz
+    }
+    
+    private func percentile95D(of values: [Double]) -> Double {
+        guard !values.isEmpty else { return 0 }
+        let sorted = values.sorted()
+        let rank = Int(ceil(0.95 * Double(sorted.count)))
+        return sorted[max(0, min(sorted.count - 1, rank - 1))]
     }
 }
 

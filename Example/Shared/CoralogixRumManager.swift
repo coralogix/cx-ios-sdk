@@ -32,7 +32,7 @@ final class CoralogixRumManager {
                                                application: "DemoApp-iOS-swift",
                                                version: "1",
                                                publicKey: Envs.PUBLIC_KEY.rawValue,
-                                               instrumentations: [.mobileVitals: false,
+                                               instrumentations: [.mobileVitals: true,
                                                                   .custom: true,
                                                                   .errors: true,
                                                                   .userActions: true,

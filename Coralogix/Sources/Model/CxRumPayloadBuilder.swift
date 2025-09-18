@@ -45,7 +45,7 @@ struct CxRumPayloadBuilder {
     private mutating func addConditionalContexts(to result: inout [String: Any]) {
         addErrorContext(to: &result)
         addNetworkRequestContext(to: &result)
-        addMobileVitals(to: &result)
+        addMobileVitalsContext(to: &result)
         addLifeCycleContext(to: &result)
         addLogContext(to: &result)
         addInteractionContext(to: &result)
@@ -133,7 +133,7 @@ struct CxRumPayloadBuilder {
         }
     }
     
-    private func addMobileVitals(to result: inout [String: Any]) {
+    private func addMobileVitalsContext(to result: inout [String: Any]) {
         if rum.eventContext.type == .mobileVitals, let mobileVitalsContext = rum.mobileVitalsContext {
             result[Keys.mobileVitalsContext.rawValue] = mobileVitalsContext.getMobileVitalsDictionary()
         }
