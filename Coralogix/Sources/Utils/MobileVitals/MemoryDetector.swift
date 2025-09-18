@@ -24,9 +24,9 @@ final class MemoryDetector {
     private let defaultInterval: TimeInterval = 0.1
     
     // MARK: - Stored samples (instantaneous per sample)
-    private var footprintSamples: [Double] = []       // MB
-    private var residentSamples: [Double] = []        // MB
-    private var utilizationSamples: [Double] = []     // %
+    internal var footprintSamples: [Double] = []       // MB
+    internal var residentSamples: [Double] = []        // MB
+    internal var utilizationSamples: [Double] = []     // %
 
     // MARK: - Public stats
     // Footprint (MB)

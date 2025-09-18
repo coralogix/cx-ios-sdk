@@ -45,12 +45,12 @@ class FPSMonitor {
     }
 }
 
-class FPSTrigger {
+class FPSDetector {
     private let fpsMonitor = FPSMonitor()
     internal var timer: Timer?
     internal var isRunning = false
     static let defaultInterval: TimeInterval = 1.0 // second
-    private var samples: [Double] = []
+    internal var samples: [Double] = []
     
     // MARK: - Public stats
     var minFPS: Double { samples.min() ?? 0 }
@@ -81,7 +81,7 @@ class FPSTrigger {
     
     private func startTimer() {
         stopTimer() // ensure only one timer at a time
-        let t = Timer.scheduledTimer(withTimeInterval: FPSTrigger.defaultInterval, repeats: true) { [weak self] _ in
+        let t = Timer.scheduledTimer(withTimeInterval: FPSDetector.defaultInterval, repeats: true) { [weak self] _ in
             guard let self = self else { return }
             let fps = self.fpsMonitor.sampleAndReset()
             if fps == 0 || fps.isNaN || fps.isInfinite { return }

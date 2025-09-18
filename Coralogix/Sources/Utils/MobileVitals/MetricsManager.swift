@@ -19,7 +19,7 @@ public class MetricsManager {
     var cpuDetector: CPUDetector?
     var memoryDetector: MemoryDetector?
     var slowFrozenFramesDetector: SlowFrozenFramesDetector?
-    var fpsTrigger = FPSTrigger()
+    var fpsDetector = FPSDetector()
     var metricsManagerClosure: (([String: Any]) -> Void)?
     
     // MARK: - Internal timer for periodic send
@@ -54,7 +54,7 @@ public class MetricsManager {
             vitals[Keys.slowFrozen.rawValue] = slowFrozenFramesDetector.statsDictionary()
         }
         
-        vitals[MobileVitalsType.fps.stringValue] = fpsTrigger.statsDictionary()
+        vitals[MobileVitalsType.fps.stringValue] = fpsDetector.statsDictionary()
         
         // Send event
         self.metricsManagerClosure?(vitals)
@@ -64,13 +64,13 @@ public class MetricsManager {
         cpuDetector?.reset()
         memoryDetector?.reset()
         slowFrozenFramesDetector?.reset()
-        fpsTrigger.reset()
+        fpsDetector.reset()
     }
     
     func startMonitoring() {
         self.startColdStartMonitoring()
         self.startWarmStartMonitoring()
-        self.fpsTrigger.startMonitoring()
+        self.fpsDetector.startMonitoring()
         self.startCPUMonitoring()
         self.startMemoryMonitoring()
         self.startSlowFrozenFramesMonitoring()
@@ -135,7 +135,7 @@ public class MetricsManager {
         memoryDetector = nil
         slowFrozenFramesDetector?.stopMonitoring()
         slowFrozenFramesDetector = nil
-        fpsTrigger.stopMonitoring()
+        fpsDetector.stopMonitoring()
     }
     
     private func startSendScheduler() {

@@ -12,11 +12,11 @@ import UIKit
 /// CPU usage of *your app* as a % of total device CPU (all cores).
 final class CPUDetector {
     private var timer: Timer?
-    private var isRunning = false
+    internal var isRunning = false
     private var timebase = mach_timebase_info_data_t()
 
     // Time interval to check for CPU (e.g., every 1 second)
-    private let checkInterval: TimeInterval
+    internal let checkInterval: TimeInterval
     private let minInterval: TimeInterval = 0.1
 
     private var lastProcSeconds: Double?
@@ -27,9 +27,9 @@ final class CPUDetector {
     var handleCpuClosure: (() -> Void)?
     
     // MARK: - Stored samples (per-interval)
-    private var usageSamples: [Double] = []          // percent 0...100
-    private var totalCpuDeltaMsSamples: [Double] = [] // process CPU delta ms in interval
-    private var mainThreadDeltaMsSamples: [Double] = [] // main-thread CPU delta ms in interval
+    internal var usageSamples: [Double] = []          // percent 0...100
+    internal var totalCpuDeltaMsSamples: [Double] = [] // process CPU delta ms in interval
+    internal var mainThreadDeltaMsSamples: [Double] = [] // main-thread CPU delta ms in interval
 
     // MARK: - Public stats (computed over stored samples)
     // Usage %
@@ -172,7 +172,7 @@ final class CPUDetector {
         return Double(nanos) / 1_000_000_000.0
     }
 
-    private func currentProcessCPUSeconds() -> Double? {
+    internal func currentProcessCPUSeconds() -> Double? {
         var count = mach_msg_type_number_t(MemoryLayout<task_basic_info_data_t>.size / MemoryLayout<integer_t>.size)
         var info = task_basic_info_data_t()
 

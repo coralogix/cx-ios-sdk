@@ -1,7 +1,7 @@
 
-# FPSTrigger
+# FPSDetector
 
-`FPSTrigger` is a class that uses the `FPSMonitor` class to periodically monitor the average FPS over a set duration, typically 5 seconds, and sends the result through a notification.
+`FPSDetector` is a class that uses the `FPSMonitor` class to periodically monitor the average FPS over a set duration, typically 5 seconds, and sends the result through a notification.
 
 ## Properties
 
@@ -34,8 +34,8 @@ Stops the monitoring process by invalidating the `Timer` and resetting the `isRu
 ## Usage Example
 
 ```swift
-let fpsTrigger = FPSTrigger()
-fpsTrigger.startMonitoring(xTimesPerHour: 12) // Triggers every 5 minutes
+let fpsDetector = FPSDetector()
+fpsDetector.startMonitoring(xTimesPerHour: 12) // Triggers every 5 minutes
 
 // To stop monitoring
-fpsTrigger.stopMonitoring()
+fpsDetector.stopMonitoring()

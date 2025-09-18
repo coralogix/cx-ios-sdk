@@ -33,8 +33,8 @@ final class SlowFrozenFramesDetector {
     private let lifecycleCenter = NotificationCenter.default
     
     // MARK: - Stored window results (one entry per report window)
-    private var windowSlow: [Int] = []      // number of slow frames in a window
-    private var windowFrozen: [Int] = []    // number of frozen frames in a window
+    internal var windowSlow: [Int] = []      // number of slow frames in a window
+    internal var windowFrozen: [Int] = []    // number of frozen frames in a window
     
     // MARK: - Public stats (computed over stored windows)
     // Slow
@@ -159,20 +159,15 @@ final class SlowFrozenFramesDetector {
     private func emitWindow() {
         var slow = 0
         var frozen = 0
-        var avg: Double = 0
-        var samples = 0
 
         statsLock.lock()
         slow = slowCount
         frozen = frozenCount
-        if frameSamples > 0 {
-            avg = sumFrameMs / Double(frameSamples)
-        }
+       
         // reset window
         slowCount = 0
         frozenCount = 0
         sumFrameMs = 0
-        samples = frameSamples
         frameSamples = 0
         statsLock.unlock()
 
@@ -183,7 +178,7 @@ final class SlowFrozenFramesDetector {
         if slow > 0 { windowSlow.append(slow) }
         if frozen > 0 { windowFrozen.append(frozen) }
 
-//        Log.d("[Metric] avg frame: \(String(format: "%.2f", avg))ms from \(samples) samples, slow: \(slow), frozen: \(frozen), budget: \(String(format: "%.2f", slowBudgetMs))ms")
+//        Log.d("[Metric] slow: \(slow), frozen: \(frozen)")
     }
     
     func statsDictionary() -> [String: Any] {

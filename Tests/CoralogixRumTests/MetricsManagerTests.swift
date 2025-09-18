@@ -31,8 +31,8 @@ final class MetricsManagerTests: XCTestCase {
     }
 }
 
-// Mock class to simulate the behavior of fpsTrigger
-class MockFPSTrigger: FPSTrigger {
+// Mock class to simulate the behavior of fpsDetector
+class MockFPSTrigger: FPSDetector {
     var stopMonitoringCalled = false
     
     override func stopMonitoring() {
