@@ -244,7 +244,7 @@ public enum Keys: String {
     case max
     case avg
     case p95
-    case slowFrozen
+    case slowFrozen = "slow_frozen"
 }
 
 public enum CoralogixLogSeverity: Int {
