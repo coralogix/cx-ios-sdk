@@ -53,6 +53,7 @@ struct CxRumPayloadBuilder {
         addScreenshotContext(to: &result)
         addPrevSession(to: &result)
         addSnapshotContext(to: &result)
+        addMeasurementContext(to: &result)
     }
     
     private func addViewManagerContext(to result: inout [String: Any]) {
@@ -181,6 +182,12 @@ struct CxRumPayloadBuilder {
         if let snapshotContext = rum.snapshotContext {
             result[Keys.isSnapshotEvent.rawValue] = true
             result[Keys.snapshotContext.rawValue] = snapshotContext.getDictionary()
+        }
+    }
+    
+    private func addMeasurementContext(to result: inout [String: Any]) {
+        if let measurementContext = rum.measurementContext, measurementContext.isValid()  {
+            result[Keys.measurementContext.rawValue] = measurementContext.getDictionary()
         }
     }
 }

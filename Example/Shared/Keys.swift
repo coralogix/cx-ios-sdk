@@ -47,4 +47,5 @@ enum Keys: String {
     case schemaValidation = "Verify schema"
     case reportMobileVitalsMeasurement = "Report Mobile Vitals Measurement"
     case customLabels = "Log with Custom Labels"
+    case sendCustomMeasurement = "Send Custom Measurement"
 }
