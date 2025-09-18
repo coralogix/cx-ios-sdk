@@ -266,6 +266,14 @@ public class CoralogixRum {
         self.coralogixExporter?.sendBeforeSendData(data: data)
     }
     
+    public func sendCustomMeasurement(name: String, value: Double) {
+        guard CoralogixRum.isInitialized else { return }
+        var span = self.makeSpan(event: .customMeasuremet, source: .code, severity: .info)
+        span.setAttribute(key: Keys.name.rawValue, value: name)
+        span.setAttribute(key: Keys.value.rawValue, value: value)
+        span.end()
+    }
+    
     // MARK: - Spans & Attributes
     internal var options: CoralogixExporterOptions? { return self.coralogixExporter?.getOptions() }
     
