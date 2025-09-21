@@ -270,6 +270,6 @@ public enum CoralogixEventType: String {
     case mobileVitals = "mobile-vitals"
     case lifeCycle = "life-cycle"
     case screenshot
-    case customMeasuremet = "custom-measurement"
+    case customMeasurement = "custom-measurement"
     case unknown
 }
