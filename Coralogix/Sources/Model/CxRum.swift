@@ -29,5 +29,6 @@ struct CxRum {
     let lifeCycleContext: LifeCycleContext?
     let screenShotContext: ScreenshotContext?
     let internalContext: InternalContext?
+    let measurementContext: MeasurementContext?
     let fingerPrint: String
 }

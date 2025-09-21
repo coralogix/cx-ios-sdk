@@ -12,7 +12,8 @@ class SdkViewController: UITableViewController {
     let items = [Keys.shutDownCoralogixRum.rawValue,
                  Keys.updateLabels.rawValue,
                  Keys.reportMobileVitalsMeasurement.rawValue,
-                 Keys.customLabels.rawValue]
+                 Keys.customLabels.rawValue,
+                 Keys.sendCustomMeasurement.rawValue]
     
     var customView = CustomView(frame: .zero)
     private let customViewHeight: CGFloat = 150
@@ -74,6 +75,8 @@ class SdkViewController: UITableViewController {
             CoralogixRumManager.shared.sdk.reportMobileVitalsMeasurement(type: "custom metric", value: 10.0, units: "ms")
         } else if item == Keys.customLabels.rawValue {
             CoralogixRumManager.shared.sdk.log(severity: .info, message: "Custom labels", labels: ["im custom label" : "label value", "thats wrong" : 0000])
+        } else if item == Keys.sendCustomMeasurement.rawValue {
+            CoralogixRumManager.shared.sdk.sendCustomMeasurement(name: "LSD", value: 43.0)
         }
         tableView.deselectRow(at: indexPath, animated: true)
     }

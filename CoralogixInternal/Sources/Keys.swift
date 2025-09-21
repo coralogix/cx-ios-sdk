@@ -245,6 +245,7 @@ public enum Keys: String {
     case avg
     case p95
     case slowFrozen = "slow_frozen"
+    case measurementContext = "measurement_context"
 }
 
 public enum CoralogixLogSeverity: Int {
@@ -269,5 +270,6 @@ public enum CoralogixEventType: String {
     case mobileVitals = "mobile-vitals"
     case lifeCycle = "life-cycle"
     case screenshot
+    case customMeasurement = "custom-measurement"
     case unknown
 }
