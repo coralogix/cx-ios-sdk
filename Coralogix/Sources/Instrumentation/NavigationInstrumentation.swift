@@ -17,13 +17,17 @@ extension CoralogixRum {
     
     @objc func handleNotification(notification: Notification) {
         guard let cxView = notification.object as? CXView else { return }
-        
-        self.metricsManager.sendMobileVitals()
+        self.trackNavigation(for: cxView)
+    }
+    
+    internal func trackNavigation(for cxView: CXView) {
+        metricsManager.sendMobileVitals()
         
         let span = makeSpan(event: .navigation, source: .console, severity: .info)
         handleAppearStateIfNeeded(cxView: cxView, span: span)
         span.end()
-        self.coralogixExporter?.set(cxView: cxView)
+        
+        coralogixExporter?.set(cxView: cxView)
     }
     
     internal func handleAppearStateIfNeeded(cxView: CXView, span: any Span) {
