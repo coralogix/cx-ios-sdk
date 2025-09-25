@@ -234,7 +234,7 @@ public class CoralogixRum {
     public func setView(name: String) {
         guard CoralogixRum.isInitialized else { return }
         let cxView = CXView(state: .notifyOnAppear, name: name)
-        self.coralogixExporter?.set(cxView: cxView)
+        self.trackNavigation(for: cxView)
     }
     
     public func log(severity: CoralogixLogSeverity,

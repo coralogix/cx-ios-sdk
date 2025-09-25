@@ -261,7 +261,7 @@ final class CoralogixRumTests: XCTestCase {
                                                     sessionSampleRate: 100,
                                                     debug: true)
         let coralogixRum =  CoralogixRum(options: mockOptions)
-        let cxView = CXView(state: .notifyOnDisappear, name: "TestView")
+        let cxView = CXView(state: .notifyOnAppear, name: "TestView")
         let mockSessionManager = SessionManager()
         
         let mockExporter = MockCoralogixExporter(options: mockOptions,
