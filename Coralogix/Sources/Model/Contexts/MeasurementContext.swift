@@ -15,7 +15,7 @@ struct MeasurementContext {
     init(otel: SpanDataProtocol) {
         self.name = otel.getAttribute(forKey: Keys.name.rawValue) as? String ?? ""
         let raw = otel.getAttribute(forKey: Keys.value.rawValue) as? String ?? ""
-        if let d = raw as? Double {
+        if let d = Double(raw) {
             self.value = d
         } else {
             self.value = nil
