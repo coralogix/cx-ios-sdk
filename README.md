@@ -1,15 +1,15 @@
 # Official Coralogix SDK for iOS.
 
-## The Coralogix RUM Mobile SDK is library (Swift package) for iOS
+## The Coralogix RUM Mobile SDK is a library (Swift package) for iOS
 
 The SDK provides mobile Telemetry instrumentation that captures:
 
 1. HTTP requests, using URLSession instrumentation
 2. Unhandled exceptions (NSException, NSError, Error)
-3. Custom Log ()
+3. Custom Logs ()
 4. Crashes - using PLCrashReporter
-5. Page navigation (Swift use swizzeling / SwiftUI use modifier)
-6. User Actions (Clicks - UI elemenets)
+5. Page navigation (Swift use swizzling / SwiftUI use modifier)
+6. User Actions (Clicks - UI elements)
 7. Mobile Vitals (FPS, Application not responding, Cold Start, Warm Start)
 
 ## Requirements
@@ -21,10 +21,10 @@ Coralogix RUM agent for iOS supports iOS 13 and higher.
 The integration requires minimal effort with a few lines of code.
 To install this package,
 
-import `git@github.com:coralogix/cx-ios-sdk` in spm.
+import `git@github.com:coralogix/cx-ios-sdk` in SPM.
 
 Remember to call this as early in your application life cycle as possible.
-Ideally in ```applicationDidFinishLaunching in AppDelegate```
+Ideally in ```applicationDidFinishLaunching in your AppDelegate```
 
   
 
@@ -82,8 +82,8 @@ struct DemoAppApp: App {
     }
 }
 ```
-### Instrumentation's
-Turn on/off specific instrumentation, default to all trues. Each instrumentation is responsible for which data the SDK will track and collect for you.
+### Instrumentations
+Turn on/off specific instrumentation, default to true. Each instrumentation is responsible for which data the SDK will track and collect for you.
 ```
  let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
                                            environment: "ENVIRONMENT",
@@ -101,7 +101,7 @@ Turn on/off specific instrumentation, default to all trues. Each instrumentation
 ```
 
 ### Ignore Errors
-The ignoreErrors option allows you to exclude errors that meet specific criteria. This options accepts a set of strings and regular expressions to match against the event's error message. Use regular expressions for exact matching as strings remove partial matches.
+The ignoreErrors option allows you to exclude errors that meet specific criteria. This option accepts a set of strings and regular expressions to match against the event's error message. Use regular expressions for exact matching as strings remove partial matches.
 ```
  let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
                                         environment: "ENVIRONMENT",
@@ -146,7 +146,7 @@ let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
 ```
 
 ### Sample Rate
-Number between 0-100 as a precentage of SDK should be init.
+Number between 0-100 as a percentage of SDK sessions should be initialized.
 ```
 let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
                                         environment: "ENVIRONMENT",
@@ -157,7 +157,7 @@ let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
 ```
 
 ### Mobile Vitals FPS Sample Rate
-The timeinterval the SDK will run the FPS sampling in an hour. default is every 1 minute.
+The time interval the SDK will run the FPS sampling in an hour. Default is every 1 minute.
 ```
 let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
                                         environment: "ENVIRONMENT",
@@ -178,7 +178,7 @@ let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
                                         beforeSend: { cxRum in
             var editableCxRum = cxRum
             if var sessionContext = editableCxRum["session_context"] as? [String: Any] {
-                sessionContext["user_email"] = "jone.dow@coralogix.com"
+                sessionContext["user_email"] = "john.doe@coralogix.com"
                 editableCxRum["session_context"] = sessionContext
             }
             return editableCxRum
@@ -214,7 +214,7 @@ Turn on/off specific Mobile Vitals, default to all trues. Each Mobile Vitals is 
                                                           .warmDetector: true,
                                                           .coldDetector: true,
                                                           .slowFrozenFramesDetector: true,
-                                                          .memoryDetector: true
+                                                          .memoryDetector: true,
                                                           .renderingDetector: true])
 ```
 
