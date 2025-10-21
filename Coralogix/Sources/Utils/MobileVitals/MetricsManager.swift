@@ -67,14 +67,25 @@ public class MetricsManager {
         fpsDetector.reset()
     }
     
-    func startMonitoring() {
-        self.startColdStartMonitoring()
-        self.startWarmStartMonitoring()
-        self.fpsDetector.startMonitoring()
-        self.startCPUMonitoring()
-        self.startMemoryMonitoring()
-        self.startSlowFrozenFramesMonitoring()
+    func startMonitoring(using options: CoralogixExporterOptions?) {
+        guard let options = options else { return }
+        self.initializeEnabledMobileVitals(using: options)
         startSendScheduler()   // start periodic sending
+    }
+    
+    private func initializeEnabledMobileVitals(using options: CoralogixExporterOptions) {
+        let mobileVitalsMap: [(CoralogixExporterOptions.MobileVitalsType, () -> Void)] = [
+            (.coldDetector, self.startColdStartMonitoring),
+            (.warmDetector, self.startWarmStartMonitoring),
+            (.renderingDetector, self.fpsDetector.startMonitoring),
+            (.cpuDetector, self.startCPUMonitoring),
+            (.memoryDetector, self.startMemoryMonitoring),
+            (.slowFrozenFramesDetector, self.startSlowFrozenFramesMonitoring)
+        ]
+        
+        for (type, initializer) in mobileVitalsMap where options.shouldInitMobileVitals(mobileVital: type) {
+            initializer()
+        }
     }
     
     func startColdStartMonitoring() {

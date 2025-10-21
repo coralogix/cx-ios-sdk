@@ -201,6 +201,23 @@ let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
             }
         })
 ```
+### Mobile Vitals
+Turn on/off specific Mobile Vitals, default to all trues. Each Mobile Vitals is responsible for which data the SDK will track and collect for you.
+```
+ let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
+                                           environment: "ENVIRONMENT",
+                                           application: "APP-NAME",
+                                           version: "APP-VERSION",
+                                           publicKey: "API-KEY",
+                                           mobileVitals: [.anrDetector: true,
+                                                          .cpuDetector: true,
+                                                          .warmDetector: true,
+                                                          .coldDetector: true,
+                                                          .slowFrozenFramesDetector: true,
+                                                          .memoryDetector: true
+                                                          .renderingDetector: true])
+```
+
 ### Session Recording
 See the [Session Recording Guide](SessionReplay/Sources/Docs/README.md) for installation steps and examples.
 

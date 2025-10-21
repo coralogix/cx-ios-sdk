@@ -11,7 +11,7 @@ import CoralogixInternal
 extension CoralogixRum {
     public func initializeMobileVitalsInstrumentation() {
         self.metricsManager.addMetricKitObservers()
-        self.metricsManager.startMonitoring()
+        self.metricsManager.startMonitoring(using: self.options )
     }
     
     public func initializeANRInstrumentation() {

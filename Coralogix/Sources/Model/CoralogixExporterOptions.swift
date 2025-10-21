@@ -9,6 +9,15 @@ import Foundation
 
 public struct CoralogixExporterOptions {
     
+    public enum MobileVitalsType: String {
+        case warmDetector
+        case coldDetector
+        case cpuDetector
+        case memoryDetector
+        case renderingDetector
+        case slowFrozenFramesDetector
+    }
+    
     public enum InstrumentationType: String {
         case mobileVitals
         case custom
@@ -87,6 +96,9 @@ public struct CoralogixExporterOptions {
     /// The Array of Prefixes you can avoid in swizzle process (Network)
     public let ignoredClassPrefixes: [String]?
     
+    /// A list of mobile vitals that you wish to switch off during runtime. all mobile vitals are active by default.
+    var mobileVitals: [MobileVitalsType: Bool]?
+    
     public init(coralogixDomain: CoralogixDomain,
                 userContext: UserContext? = nil,
                 environment: String,
@@ -107,6 +119,7 @@ public struct CoralogixExporterOptions {
                 proxyUrl: String? = nil,
                 traceParentInHeader: [String: Any]? = nil,
                 ignoredClassPrefixes: [String]? = nil,
+                mobileVitals: [MobileVitalsType: Bool]? = nil,
                 debug: Bool = false) {
         self.coralogixDomain = coralogixDomain
         self.userContext = userContext
@@ -129,10 +142,15 @@ public struct CoralogixExporterOptions {
         self.proxyUrl = proxyUrl
         self.traceParentInHeader = traceParentInHeader
         self.ignoredClassPrefixes = ignoredClassPrefixes
+        self.mobileVitals = mobileVitals
     }
     
     internal func shouldInitInstrumentation(instrumentation: InstrumentationType) -> Bool {
         return self.instrumentations?[instrumentation] ?? true
+    }
+    
+    internal func shouldInitMobileVitals(mobileVital: MobileVitalsType) -> Bool {
+        return self.mobileVitals?[mobileVital] ?? true
     }
     
     internal func getInitData() -> [String: Any] {
@@ -148,12 +166,13 @@ public struct CoralogixExporterOptions {
         initData[Keys.fpsSampleRate.rawValue] = self.fpsSampleRate
         initData[Keys.memoryUsageSampleRate.rawValue] = self.memoryUsageSampleRate
         initData[Keys.cpuUsageSampleRate.rawValue] = self.cpuUsageSampleRate
-        initData[Keys.instrumentations.rawValue] = self.getInstrumentationStatesAsDictionary()
+        initData[Keys.instrumentations.rawValue] = self.getStatesAsDictionary(from: self.instrumentations)
         initData[Keys.collectIPData.rawValue] = self.collectIPData
         initData[Keys.enableSwizzling.rawValue] = self.enableSwizzling
         initData[Keys.proxyUrl.rawValue] = self.proxyUrl
         initData[Keys.traceParentInHeader.rawValue] = self.traceParentInHeader
         initData[Keys.ignoredClassPrefixes.rawValue] = self.ignoredClassPrefixes
+        initData[Keys.mobileVitals.rawValue] = self.getStatesAsDictionary(from: self.mobileVitals)
         initData[Keys.debug.rawValue] = self.debug
         
         if self.beforeSend != nil {
@@ -162,13 +181,13 @@ public struct CoralogixExporterOptions {
         return initData
     }
     
-    private func getInstrumentationStatesAsDictionary() -> [String: Bool] {
-          guard let validInstrumentations = self.instrumentations else {
-              return [:]
-          }
-          
-          return validInstrumentations.reduce(into: [:]) { acc, pair in
-              acc[pair.key.rawValue] = pair.value
-          }
-      }
+    private func getStatesAsDictionary<Key: RawRepresentable>(
+        from items: [Key: Bool]?
+    ) -> [String: Bool] where Key.RawValue == String {
+        guard let items else { return [:] }
+
+        return items.reduce(into: [String: Bool]()) { acc, pair in
+            acc[pair.key.rawValue] = pair.value
+        }
+    }
 }
