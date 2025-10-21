@@ -246,6 +246,7 @@ public enum Keys: String {
     case p95
     case slowFrozen = "slow_frozen"
     case measurementContext = "measurement_context"
+    case mobileVitals
 }
 
 public enum CoralogixLogSeverity: Int {

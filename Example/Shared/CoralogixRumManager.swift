@@ -50,6 +50,12 @@ final class CoralogixRumManager {
 //        },
                                                enableSwizzling: true,
                                                //proxyUrl: Envs.PROXY_URL.rawValue, // remove if not need to use proxy
+                                               mobileVitals:[.cpuDetector: true,
+                                                             .warmDetector: true,
+                                                             .coldDetector: true,
+                                                             .slowFrozenFramesDetector: true,
+                                                             .memoryDetector: true,
+                                                             .renderingDetector: true],
                                                debug: true
         )
 //        let log = OSLog(subsystem: "test.CoralogixTest", category: .pointsOfInterest)

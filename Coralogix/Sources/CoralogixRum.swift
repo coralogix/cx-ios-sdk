@@ -72,7 +72,7 @@ public class CoralogixRum {
         _ = UserAgentManager.shared.getUserAgent()
         Log.isDebug = options.debug
         
-        self.setupCoreModules(options: options)
+        self.setupCoreModules()
         self.setupExporter(sessionManager: sessionManager, options: options)
         self.setupTracer(applicationName: options.application)
         self.swizzle()
@@ -132,7 +132,7 @@ public class CoralogixRum {
         self.coralogixExporter = exporter
     }
     
-    private func setupCoreModules(options: CoralogixExporterOptions) {
+    private func setupCoreModules() {
         self.initializeSessionReplay()
         self.initializeNavigationInstrumentation()
         self.metricsManager.metricsManagerClosure = { [weak self] dict in
