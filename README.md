@@ -201,7 +201,7 @@ let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
             }
         })
 ```
-### Mobile Vitals's
+### Mobile Vitals
 Turn on/off specific Mobile Vitals, default to all trues. Each Mobile Vitals is responsible for which data the SDK will track and collect for you.
 ```
  let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
