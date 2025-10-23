@@ -7,6 +7,7 @@
 
 import UIKit
 import CoralogixInternal
+import CoreImage
 
 /// The possible results for the export method.
 public enum SessionReplayResultCode {
@@ -26,6 +27,7 @@ class SessionReplayModel {
     var sessionReplayOptions: SessionReplayOptions?
     var isRecording = false  // Custom flag to track recording state
     private let srNetworkManager: SRNetworkManager?
+    private var prvScreenshotData: Data? = nil
     internal var getKeyWindow: () -> UIWindow? = {
         Global.getKeyWindow()
     }
@@ -54,18 +56,18 @@ class SessionReplayModel {
             }
             return nil
         }
-
+        
         guard let window = getKeyWindow() else {
             Log.e("No key window found")
             return nil
         }
-
+        
         guard let options = self.sessionReplayOptions,
               self.isValidSessionReplayOptions(options) else {
             Log.e("Invalid sessionReplayOptions")
             return nil
         }
-
+        
         return window.captureScreenshot(
             scale: options.captureScale,
             compressionQuality: options.captureCompressionQuality
@@ -98,23 +100,36 @@ class SessionReplayModel {
             }
         }
     }
-
+    
     internal func captureImage(properties: [String: Any]? = nil) {
         guard !sessionId.isEmpty else {
             Log.e("Invalid sessionId")
             return
         }
         
-        var screenshotData: Data? = properties?[Keys.screenshotData.rawValue] as? Data
+        let screenshotData: Data? = properties?[Keys.screenshotData.rawValue] as? Data
         if screenshotData == nil {
-            screenshotData = prepareScreenshotIfNeeded(properties: properties)
+            self.captureAutomatic(properties: properties)
+        } else {
+            if let screenshotData = screenshotData {
+                self.captureManual(properties: properties, screenshotData: screenshotData)
+            }
         }
-        
-        guard let screenshotData else {
-            Log.e("Failed to capture screenshot")
-            return
+    }
+    
+    internal func captureAutomatic(properties: [String: Any]?) {
+        if let screenshotData = prepareScreenshotIfNeeded(properties: properties) {
+            if let prvScreenshotData = prvScreenshotData, !self.imagesAreDifferent(screenshotData, prvScreenshotData) {
+                Log.d("Same screenshot, skipping...")
+                return
+            }
+            
+            prvScreenshotData = screenshotData
+            saveScreenshotToFileSystem(screenshotData: screenshotData, properties: properties)
         }
-        
+    }
+    
+    internal func captureManual(properties: [String: Any]?, screenshotData: Data) {
         saveScreenshotToFileSystem(screenshotData: screenshotData, properties: properties)
     }
     
@@ -208,7 +223,7 @@ class SessionReplayModel {
     
     internal func getPage(from properties: [String: Any]?) -> String {
         guard let properties = properties,
-                let page = properties[Keys.page.rawValue] as? Int else {
+              let page = properties[Keys.page.rawValue] as? Int else {
             return "Unknown"
         }
         return "\(page)"
@@ -285,16 +300,16 @@ class SessionReplayModel {
     internal func compressAndSendData(
         data: Data,
         urlEntry: URLEntry?) -> SessionReplayResultCode {
-//            let sizeInBytes = data.count
-//            let sizeInMB = Double(sizeInBytes) / (1024.0 * 1024.0)
-//            Log.d("Data size: \(String(format: "%.2f", sizeInMB)) MB")
+            //            let sizeInBytes = data.count
+            //            let sizeInMB = Double(sizeInBytes) / (1024.0 * 1024.0)
+            //            Log.d("Data size: \(String(format: "%.2f", sizeInMB)) MB")
             
             if let compressedChunks = data.gzipCompressed(), compressedChunks.count > 0 {
                 //Log.d("Compression succeeded! Number of chunks: \(compressedChunks.count)")
                 for (index, chunk) in compressedChunks.enumerated() {
                     // Log.d("Chunk \(index): \(chunk.count) bytes")
                     let subIndex = calculateSubIndex(chunkCount: compressedChunks.count, currentIndex: index)
-
+                    
                     // Send Data
                     self.srNetworkManager?.send(chunk,
                                                 urlEntry: urlEntry,
@@ -313,5 +328,52 @@ class SessionReplayModel {
                 return .failure
             }
         }
+    
+    /// This function compares two images (from Data) by computing how different their pixels are on average.
+    /// It doesn’t care about where the difference is — just how much overall.
+    /// If the total difference is larger than a chosen threshold (like 1%), it says “yes, they’re different”.
+    func imagesAreDifferent(_ data1: Data, _ data2: Data, threshold: Double = 0.01) -> Bool {
+        guard
+            let image1 = CIImage(data: data1),
+            let image2 = CIImage(data: data2),
+            image1.extent == image2.extent
+        else {
+            return true // invalid or different sizes → considered different
+        }
+        
+        // Compute pixel-wise difference
+        let diffFilter = CIFilter(name: "CIDifferenceBlendMode")!
+        diffFilter.setValue(image1, forKey: kCIInputImageKey)
+        diffFilter.setValue(image2, forKey: kCIInputBackgroundImageKey)
+        guard let diffImage = diffFilter.outputImage else { return true }
+        
+        // Get average difference color (aggregate diff intensity)
+        let extentVector = CIVector(x: diffImage.extent.origin.x,
+                                    y: diffImage.extent.origin.y,
+                                    z: diffImage.extent.size.width,
+                                    w: diffImage.extent.size.height)
+        
+        guard let avgFilter = CIFilter(name: "CIAreaAverage",
+                                       parameters: [kCIInputImageKey: diffImage,
+                                                   kCIInputExtentKey: extentVector]),
+              let outputImage = avgFilter.outputImage else {
+            return true
+        }
+        
+        // Render 1×1 pixel average into RGBA buffer
+        var bitmap = [UInt8](repeating: 0, count: 4)
+        let context = CIContext(options: [.workingColorSpace: NSNull()])
+        context.render(outputImage,
+                       toBitmap: &bitmap,
+                       rowBytes: 4,
+                       bounds: CGRect(x: 0, y: 0, width: 1, height: 1),
+                       format: .RGBA8,
+                       colorSpace: nil)
+        
+        // Calculate normalized RGB difference [0–1]
+        let avgDiff = (Double(bitmap[0]) + Double(bitmap[1]) + Double(bitmap[2])) / (3.0 * 255.0)
+        
+        return avgDiff > threshold
+    }
 }
 
