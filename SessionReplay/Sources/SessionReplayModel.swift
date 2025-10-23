@@ -28,6 +28,8 @@ class SessionReplayModel {
     var isRecording = false  // Custom flag to track recording state
     private let srNetworkManager: SRNetworkManager?
     private var prvScreenshotData: Data? = nil
+    private lazy var comparisonContext = CIContext(options: [.workingColorSpace: NSNull()])
+
     internal var getKeyWindow: () -> UIWindow? = {
         Global.getKeyWindow()
     }
@@ -136,6 +138,7 @@ class SessionReplayModel {
     internal func updateSessionId(with sessionId: String) {
         if sessionId != self.sessionId {
             self.sessionId = sessionId
+            self.prvScreenshotData = nil
             _ = self.clearSessionReplayFolder()
             SRUtils.deleteURLsFromDisk()
         }
@@ -362,8 +365,7 @@ class SessionReplayModel {
         
         // Render 1×1 pixel average into RGBA buffer
         var bitmap = [UInt8](repeating: 0, count: 4)
-        let context = CIContext(options: [.workingColorSpace: NSNull()])
-        context.render(outputImage,
+        comparisonContext.render(outputImage,
                        toBitmap: &bitmap,
                        rowBytes: 4,
                        bounds: CGRect(x: 0, y: 0, width: 1, height: 1),
