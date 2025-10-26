@@ -1,7 +1,7 @@
 Pod::Spec.new do |spec|
 
   spec.name         = "SessionReplay"
-  spec.version      = "1.2.6"
+  spec.version      = "1.3.0"
   spec.summary      = "Coralogix Session-Replay pod for iOS."
 
   spec.description  = <<-DESC
@@ -23,7 +23,7 @@ Pod::Spec.new do |spec|
   spec.static_framework = true
 
   spec.source_files  = 'SessionReplay/Sources/**/*.swift'
-  spec.dependency 'CoralogixInternal', '1.2.6'
+  spec.dependency 'CoralogixInternal', '1.3.0'
   
     spec.test_spec 'Tests' do |test|
         test.source_files = 'Tests/SessionReplayTests/**/*.swift'
