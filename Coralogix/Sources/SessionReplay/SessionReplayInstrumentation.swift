@@ -85,7 +85,7 @@ extension CoralogixRum: CoralogixInterface {
     
     internal func makeSpan(isManual: Bool = false) {
         var span = makeSpan(event: .screenshot, source: .console, severity: .info)
-        self.addScreenshotId(to: &span)
+        self.recordScreenshotForSpan(to: &span)
         if isManual { span.setAttribute(key: Keys.isManual.rawValue, value: AttributeValue(true)) }
         span.end()
     }

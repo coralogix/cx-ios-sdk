@@ -103,18 +103,32 @@ extension CoralogixRum {
             span.setAttribute(key: Keys.data.rawValue, value: Helper.convertDictionayToJsonString(dict: data))
         }
                 
-        if severity == .error { self.addScreenshotId(to: &span) }
+        if severity == .error { self.recordScreenshotForSpan(to: &span) }
         span.end()
     }
     
     // MARK: - Helpers
-    internal func addScreenshotId(to span: inout any Span) {
+    internal func recordScreenshotForSpan(to span: inout any Span) {
         if let sessionReplay = SdkManager.shared.getSessionReplay(),
            let coralogixExporter = self.coralogixExporter {
             let screenshotLocation = coralogixExporter.getScreenshotManager().nextScreenshotLocation
-            span.setAttribute(key: Keys.screenshotId.rawValue, value: screenshotLocation.screenshotId)
-            span.setAttribute(key: Keys.page.rawValue, value: screenshotLocation.page)
-            _ = sessionReplay.captureEvent(properties: screenshotLocation.toProperties())
+            
+            let result = recordSessionReplayEvent(for: screenshotLocation, via: sessionReplay)
+            result ? applyScreenshotAttributes(screenshotLocation, to: &span) : coralogixExporter.getScreenshotManager().revertScreenshotCounter()
+        }
+    }
+    
+    internal func applyScreenshotAttributes(_ location: ScreenshotLocation, to span: inout any Span) {
+        span.setAttribute(key: Keys.screenshotId.rawValue, value: location.screenshotId)
+        span.setAttribute(key: Keys.page.rawValue,         value: location.page)
+    }
+    
+    internal func recordSessionReplayEvent(for location: ScreenshotLocation, via sessionReplay: SessionReplayInterface) -> Bool {
+        let result = sessionReplay.captureEvent(properties: location.toProperties())
+        switch result {
+        case .success: return true
+        case .failure(let error):
+            return false
         }
     }
     
@@ -131,7 +145,7 @@ extension CoralogixRum {
         if let userInfo, !userInfo.isEmpty {
             span.setAttribute(key: Keys.userInfo.rawValue, value: Helper.convertDictionayToJsonString(dict: userInfo))
         }
-        addScreenshotId(to: &span)
+        recordScreenshotForSpan(to: &span)
         span.end()
     }
 }

@@ -255,7 +255,12 @@ public class SessionReplay: SessionReplayInterface {
                 Log.e("[SessionReplay] Session Replay not recording ...")
                 return .failure(.notRecording)
             }
-            sessionReplayModel.captureImage(properties: updatedProperties)
+            let result = sessionReplayModel.captureImage(properties: updatedProperties)
+            if result == true {
+                return .success(())
+            } else {
+                return .failure(.skippingEvent)
+            }
         }
         return .success(())
     }

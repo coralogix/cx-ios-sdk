@@ -51,6 +51,23 @@ public class ScreenshotManager {
             )
         }
     }
+    
+    public func revertScreenshotCounter() {
+        queue.sync(flags: .barrier) {
+            screenshotCount -= 1
+            
+            if screenshotCount < 1 {
+                // Go back one page, but don't go below page 1
+                if page > 1 {
+                    page -= 1
+                    screenshotCount = maxScreenshotsPerPage
+                    Log.d("Page reverted to: \(page)")
+                } else {
+                    screenshotCount = 0
+                }
+            }
+        }
+    }
 
     public func reset() {
         queue.sync(flags: .barrier) {

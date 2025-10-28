@@ -48,4 +48,5 @@ enum Keys: String {
     case reportMobileVitalsMeasurement = "Report Mobile Vitals Measurement"
     case customLabels = "Log with Custom Labels"
     case sendCustomMeasurement = "Send Custom Measurement"
+    case alertView = "Show Alert View"
 }
