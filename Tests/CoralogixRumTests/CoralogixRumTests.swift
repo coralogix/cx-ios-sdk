@@ -481,7 +481,7 @@ final class CoralogixRumTests: XCTestCase {
         let coralogixRum = makeMockCoralogixRum()
         
         // Act
-        coralogixRum.addScreenshotId(to: &span)
+        coralogixRum.recordScreenshotForSpan(to: &span)
         
         guard let mockSpan = span as? MockSpan else {
             XCTFail("Span is not MockSpan")

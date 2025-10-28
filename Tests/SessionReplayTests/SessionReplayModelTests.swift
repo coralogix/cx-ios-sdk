@@ -662,13 +662,14 @@ class MockSessionReplayModel: SessionReplayModel {
         return .success
     }
     
-    override func captureImage(properties: [String : Any]? = nil) {
+    override func captureImage(properties: [String : Any]? = nil) -> Bool {
         captureImageCallCount += 1
 
         captureCalled = true
         capturedData = "mock image".data(using: .utf8)
         XCTAssertTrue(Thread.isMainThread, "captureImage should be called on the main thread")
         expectation?.fulfill()
+        return true
     }
     
     override func handleCapturedData(
