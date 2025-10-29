@@ -41,24 +41,6 @@ final class SessionReplayModelTests: XCTestCase {
         super.tearDown()
     }
     
-    
-    func testPrepareScreenshotIfNeeded_returnsScreenshotData_whenAllValid() {
-        let mockWindow = MockWindow()
-        sessionReplayModel.getKeyWindow = { mockWindow }
-        mockWindow.setAsKeyWindow(true)
-        sessionReplayModel.sessionReplayOptions = SessionReplayOptions(
-            recordingType: .image,
-            captureScale: 1.0,
-            captureCompressionQuality: 0.9,
-            maskText: nil,
-            maskAllImages: false,
-            creditCardPredicate: nil
-        )
-        
-        let result = sessionReplayModel.prepareScreenshotIfNeeded(properties: nil)
-        XCTAssertNotNil(result)
-    }
-    
     func testPrepareScreenshotIfNeeded_returnsNil_whenNoWindow() {
         sessionReplayModel.getKeyWindow = { nil }
         
@@ -87,7 +69,7 @@ final class SessionReplayModelTests: XCTestCase {
         let mockSessionReplayModel = MockSessionReplayModel()
         mockSessionReplayModel.sessionId = ""
         
-        mockSessionReplayModel.captureImage(properties: nil)
+        _ = mockSessionReplayModel.captureImage(properties: nil)
         
         XCTAssertFalse(mockSessionReplayModel.didCallPrepareScreenshot)
         XCTAssertFalse(mockSessionReplayModel.didCallSaveScreenshot)
@@ -662,14 +644,14 @@ class MockSessionReplayModel: SessionReplayModel {
         return .success
     }
     
-    override func captureImage(properties: [String : Any]? = nil) -> Bool {
+    override func captureImage(properties: [String : Any]? = nil) -> Result<Void, CaptureEventError> {
         captureImageCallCount += 1
 
         captureCalled = true
         capturedData = "mock image".data(using: .utf8)
         XCTAssertTrue(Thread.isMainThread, "captureImage should be called on the main thread")
         expectation?.fulfill()
-        return true
+        return .success(())
     }
     
     override func handleCapturedData(

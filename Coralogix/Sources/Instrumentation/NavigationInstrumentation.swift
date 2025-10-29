@@ -30,8 +30,8 @@ extension CoralogixRum {
                 handleAppearStateIfNeeded(cxView: cxView, span: &span)
                 span.end()
             }
-            coralogixExporter?.set(cxView: cxView)
         }
+        coralogixExporter?.set(cxView: cxView)
     }
     
     internal func handleAppearStateIfNeeded(cxView: CXView, span: inout any Span) {

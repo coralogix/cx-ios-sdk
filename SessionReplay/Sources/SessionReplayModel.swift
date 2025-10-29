@@ -109,16 +109,12 @@ class SessionReplayModel {
             return .failure(.invalidSessionId)
         }
         
-        let screenshotData: Data? = properties?[Keys.screenshotData.rawValue] as? Data
-        if screenshotData == nil {
+        guard let screenshotData = properties?[Keys.screenshotData.rawValue] as? Data else {
             return self.captureAutomatic(properties: properties)
-        } else {
-            if let screenshotData = screenshotData {
-                self.captureManual(properties: properties, screenshotData: screenshotData)
-                return .success(())
-            }
         }
-        return .failure(.captureFailed)
+       
+        self.captureManual(properties: properties, screenshotData: screenshotData)
+        return .success(())
     }
     
     internal func captureAutomatic(properties: [String: Any]?) -> Result<Void, CaptureEventError> {

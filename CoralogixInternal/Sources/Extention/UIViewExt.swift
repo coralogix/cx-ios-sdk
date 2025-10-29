@@ -18,7 +18,10 @@ public extension UIView {
         scale: CGFloat = UIScreen.main.scale,
         compressionQuality: CGFloat = 0.8
     ) -> Data? {
-        precondition(Thread.isMainThread)
+        guard Thread.isMainThread else {
+            Log.e("captureScreenshot must be called on the main thread")
+            return nil
+        }
 
         guard let scene = activeForegroundWindowScene() else { return nil }
 
