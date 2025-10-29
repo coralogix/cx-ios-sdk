@@ -103,10 +103,10 @@ class SessionReplayModel {
         }
     }
     
-    internal func captureImage(properties: [String: Any]? = nil) -> Bool {
+    internal func captureImage(properties: [String: Any]? = nil) -> Result<Void, CaptureEventError> {
         guard !sessionId.isEmpty else {
-            Log.e("Invalid sessionId")
-            return false
+            Log.e("[SessionReplayModel] Invalid sessionId")
+            return .failure(.invalidSessionId)
         }
         
         let screenshotData: Data? = properties?[Keys.screenshotData.rawValue] as? Data
@@ -115,24 +115,24 @@ class SessionReplayModel {
         } else {
             if let screenshotData = screenshotData {
                 self.captureManual(properties: properties, screenshotData: screenshotData)
-                return true
+                return .success(())
             }
         }
-        return false
+        return .failure(.captureFailed)
     }
     
-    internal func captureAutomatic(properties: [String: Any]?) -> Bool {
+    internal func captureAutomatic(properties: [String: Any]?) -> Result<Void, CaptureEventError> {
         if let screenshotData = prepareScreenshotIfNeeded(properties: properties) {
             if let prvScreenshotData = prvScreenshotData, !self.imagesAreDifferent(screenshotData, prvScreenshotData) {
-                Log.d("Same screenshot, skipping...")
-                return false
+                Log.d("[SessionReplayModel] Same screenshot, skipping...")
+                return .failure(.skippingEvent)
             }
             
             prvScreenshotData = screenshotData
             saveScreenshotToFileSystem(screenshotData: screenshotData, properties: properties)
-            return  true
+            return .success(())
         }
-        return false
+        return .failure(.captureFailed)
     }
     
     internal func captureManual(properties: [String: Any]?, screenshotData: Data) {

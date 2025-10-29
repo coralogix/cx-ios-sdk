@@ -13,6 +13,8 @@ public enum CaptureEventError: Error {
     case missingSessionReplayOptions
     case notRecording
     case skippingEvent
+    case invalidSessionId
+    case captureFailed
 }
 
 public protocol CoralogixInterface {

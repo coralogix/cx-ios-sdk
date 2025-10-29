@@ -231,7 +231,7 @@ public class SessionReplay: SessionReplayInterface {
     /// Captures a specific event during the session.
     public func captureEvent(properties: [String : Any]?) -> Result<Void, CaptureEventError> {
         if isDummyInstance {
-            Log.d("SessionReplay.captureEvent() called on inactive instance (skipped by sampling)")
+            Log.d("[SessionReplay] captureEvent() called on inactive instance (skipped by sampling)")
             return .failure(.dummyInstance)
         }
         
@@ -255,12 +255,7 @@ public class SessionReplay: SessionReplayInterface {
                 Log.e("[SessionReplay] Session Replay not recording ...")
                 return .failure(.notRecording)
             }
-            let result = sessionReplayModel.captureImage(properties: updatedProperties)
-            if result == true {
-                return .success(())
-            } else {
-                return .failure(.skippingEvent)
-            }
+            return sessionReplayModel.captureImage(properties: updatedProperties)
         }
         return .success(())
     }

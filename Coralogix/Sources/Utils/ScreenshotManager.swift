@@ -68,6 +68,10 @@ public class ScreenshotManager {
             }
         }
     }
+    
+    public func printDebugInfo() {
+        Log.d("ScreenshotManager: page: \(page), screenshotCount: \(screenshotCount)")
+    }
 
     public func reset() {
         queue.sync(flags: .barrier) {

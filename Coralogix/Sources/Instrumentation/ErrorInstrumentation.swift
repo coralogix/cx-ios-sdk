@@ -112,24 +112,25 @@ extension CoralogixRum {
         if let sessionReplay = SdkManager.shared.getSessionReplay(),
            let coralogixExporter = self.coralogixExporter {
             let screenshotLocation = coralogixExporter.getScreenshotManager().nextScreenshotLocation
-            
             let result = recordSessionReplayEvent(for: screenshotLocation, via: sessionReplay)
-            result ? applyScreenshotAttributes(screenshotLocation, to: &span) : coralogixExporter.getScreenshotManager().revertScreenshotCounter()
+            switch result {
+            case .failure(let error):
+                if error == .skippingEvent {
+                    coralogixExporter.getScreenshotManager().revertScreenshotCounter()
+                }
+            case .success():
+                applyScreenshotAttributes(screenshotLocation, to: &span)
+            }
         }
     }
     
-    internal func applyScreenshotAttributes(_ location: ScreenshotLocation, to span: inout any Span) {
+    public func applyScreenshotAttributes(_ location: ScreenshotLocation, to span: inout any Span) {
         span.setAttribute(key: Keys.screenshotId.rawValue, value: location.screenshotId)
         span.setAttribute(key: Keys.page.rawValue,         value: location.page)
     }
     
-    internal func recordSessionReplayEvent(for location: ScreenshotLocation, via sessionReplay: SessionReplayInterface) -> Bool {
-        let result = sessionReplay.captureEvent(properties: location.toProperties())
-        switch result {
-        case .success: return true
-        case .failure(let error):
-            return false
-        }
+    internal func recordSessionReplayEvent(for location: ScreenshotLocation, via sessionReplay: SessionReplayInterface) -> Result<Void, CaptureEventError> {
+        return sessionReplay.captureEvent(properties: location.toProperties())
     }
     
     private func writeError(domain: String, code: Int, message: String,
