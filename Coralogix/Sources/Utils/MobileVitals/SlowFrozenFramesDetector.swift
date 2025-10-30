@@ -185,17 +185,17 @@ final class SlowFrozenFramesDetector {
         return [
             MobileVitalsType.slowFrames.stringValue: [
                 Keys.mobileVitalsUnits.rawValue: MeasurementUnits.count.stringValue,
-                Keys.min.rawValue: minSlow,
-                Keys.max.rawValue: maxSlow,
-                Keys.avg.rawValue: avgSlow,
-                Keys.p95.rawValue: p95Slow
+                Keys.min.rawValue: minSlow.roundedTo(),
+                Keys.max.rawValue: maxSlow.roundedTo(),
+                Keys.avg.rawValue: avgSlow.roundedTo(),
+                Keys.p95.rawValue: p95Slow.roundedTo()
             ],
             MobileVitalsType.frozenFrames.stringValue: [
                 Keys.mobileVitalsUnits.rawValue: MeasurementUnits.count.stringValue,
-                Keys.min.rawValue: minFrozen,
-                Keys.max.rawValue: maxFrozen,
-                Keys.avg.rawValue: avgFrozen,
-                Keys.p95.rawValue: p95Frozen
+                Keys.min.rawValue: minFrozen.roundedTo(),
+                Keys.max.rawValue: maxFrozen.roundedTo(),
+                Keys.avg.rawValue: avgFrozen.roundedTo(),
+                Keys.p95.rawValue: p95Frozen.roundedTo()
             ]
         ]
     }

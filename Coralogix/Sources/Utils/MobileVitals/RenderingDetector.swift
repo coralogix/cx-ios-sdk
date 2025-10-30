@@ -129,10 +129,10 @@ class FPSDetector {
     func statsDictionary() -> [String: Any] {
         return [
             Keys.mobileVitalsUnits.rawValue: MeasurementUnits.fps.stringValue,
-            Keys.min.rawValue: minFPS,
-            Keys.max.rawValue: maxFPS,
-            Keys.avg.rawValue: avgFPS,
-            Keys.p95.rawValue: p95FPS
+            Keys.min.rawValue: minFPS.roundedTo(),
+            Keys.max.rawValue: maxFPS.roundedTo(),
+            Keys.avg.rawValue: avgFPS.roundedTo(),
+            Keys.p95.rawValue: p95FPS.roundedTo()
         ]
     }
 }
