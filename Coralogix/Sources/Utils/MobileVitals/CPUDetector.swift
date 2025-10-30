@@ -8,6 +8,7 @@
 import Foundation
 import Darwin.Mach
 import UIKit
+import CoralogixInternal
 
 /// CPU usage of *your app* as a % of total device CPU (all cores).
 final class CPUDetector {
@@ -227,24 +228,24 @@ final class CPUDetector {
         return [
             MobileVitalsType.cpuUsage.stringValue: [
                 Keys.mobileVitalsUnits.rawValue: MeasurementUnits.percentage.stringValue,
-                Keys.min.rawValue: minCPU,
-                Keys.max.rawValue: maxCPU,
-                Keys.avg.rawValue: avgCPU,
-                Keys.p95.rawValue: p95CPU
+                Keys.min.rawValue: minCPU.roundedTo(),
+                Keys.max.rawValue: maxCPU.roundedTo(),
+                Keys.avg.rawValue: avgCPU.roundedTo(),
+                Keys.p95.rawValue: p95CPU.roundedTo()
             ],
             MobileVitalsType.totalCpuTime.stringValue: [
                 Keys.mobileVitalsUnits.rawValue: MeasurementUnits.milliseconds.stringValue,
-                Keys.min.rawValue: minTotalCpuMs,
-                Keys.max.rawValue: maxTotalCpuMs,
-                Keys.avg.rawValue: avgTotalCpuMs,
-                Keys.p95.rawValue: p95TotalCpuMs
+                Keys.min.rawValue: minTotalCpuMs.roundedTo(),
+                Keys.max.rawValue: maxTotalCpuMs.roundedTo(),
+                Keys.avg.rawValue: avgTotalCpuMs.roundedTo(),
+                Keys.p95.rawValue: p95TotalCpuMs.roundedTo()
             ],
             MobileVitalsType.mainThreadCpuTime.stringValue: [
                 Keys.mobileVitalsUnits.rawValue: MeasurementUnits.milliseconds.stringValue,
-                Keys.min.rawValue: minMainThreadMs,
-                Keys.max.rawValue: maxMainThreadMs,
-                Keys.avg.rawValue: avgMainThreadMs,
-                Keys.p95.rawValue: p95MainThreadMs
+                Keys.min.rawValue: minMainThreadMs.roundedTo(),
+                Keys.max.rawValue: maxMainThreadMs.roundedTo(),
+                Keys.avg.rawValue: avgMainThreadMs.roundedTo(),
+                Keys.p95.rawValue: p95MainThreadMs.roundedTo()
             ]
         ]
     }

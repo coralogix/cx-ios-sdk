@@ -103,32 +103,32 @@ class SessionReplayModel {
         }
     }
     
-    internal func captureImage(properties: [String: Any]? = nil) {
+    internal func captureImage(properties: [String: Any]? = nil) -> Result<Void, CaptureEventError> {
         guard !sessionId.isEmpty else {
-            Log.e("Invalid sessionId")
-            return
+            Log.e("[SessionReplayModel] Invalid sessionId")
+            return .failure(.invalidSessionId)
         }
         
-        let screenshotData: Data? = properties?[Keys.screenshotData.rawValue] as? Data
-        if screenshotData == nil {
-            self.captureAutomatic(properties: properties)
-        } else {
-            if let screenshotData = screenshotData {
-                self.captureManual(properties: properties, screenshotData: screenshotData)
-            }
+        guard let screenshotData = properties?[Keys.screenshotData.rawValue] as? Data else {
+            return self.captureAutomatic(properties: properties)
         }
+       
+        self.captureManual(properties: properties, screenshotData: screenshotData)
+        return .success(())
     }
     
-    internal func captureAutomatic(properties: [String: Any]?) {
+    internal func captureAutomatic(properties: [String: Any]?) -> Result<Void, CaptureEventError> {
         if let screenshotData = prepareScreenshotIfNeeded(properties: properties) {
             if let prvScreenshotData = prvScreenshotData, !self.imagesAreDifferent(screenshotData, prvScreenshotData) {
-                Log.d("Same screenshot, skipping...")
-                return
+                Log.d("[SessionReplayModel] Same screenshot, skipping...")
+                return .failure(.skippingEvent)
             }
             
             prvScreenshotData = screenshotData
             saveScreenshotToFileSystem(screenshotData: screenshotData, properties: properties)
+            return .success(())
         }
+        return .failure(.captureFailed)
     }
     
     internal func captureManual(properties: [String: Any]?, screenshotData: Data) {

@@ -34,7 +34,7 @@ class RenderingDetectorTests:  XCTestCase {
         XCTAssertEqual(stats[Keys.max.rawValue] as? Double, expectedMaxFPS)
         XCTAssertEqual(stats[Keys.p95.rawValue] as? Double, expectedP95FPS)
         if let actualAvgFPS = stats[Keys.avg.rawValue] as? Double {
-            XCTAssertEqual(actualAvgFPS, expectedAvgFPS, accuracy: 0.0001)
+            XCTAssertEqual(actualAvgFPS.roundedTo(to: 2), expectedAvgFPS.roundedTo(to: 2), accuracy: 0.0001)
         }
     }
 }

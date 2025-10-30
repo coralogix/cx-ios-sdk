@@ -10,7 +10,9 @@ import UIKit
 class UserActionsViewController: UITableViewController {
     let items = [Keys.modalPresentation.rawValue,
                  Keys.segmentedCollectionView.rawValue,
-                 Keys.pageController.rawValue]
+                 Keys.pageController.rawValue,
+                 Keys.alertView.rawValue
+    ]
     
     var customView = CustomView(frame: .zero)
     private let customViewHeight: CGFloat = 150
@@ -74,6 +76,10 @@ class UserActionsViewController: UITableViewController {
         } else if item == Keys.pageController.rawValue {
             let pageController = PageController()
             self.navigationController?.pushViewController(pageController, animated: true)
+        } else if item == Keys.alertView.rawValue {
+            let alert = UIAlertController(title: "Alert", message: "I'm an alert", preferredStyle: .alert)
+            alert.addAction(UIAlertAction(title: "OK", style: .default))
+            self.present(alert, animated: true)
         }
         tableView.deselectRow(at: indexPath, animated: true)
     }

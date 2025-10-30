@@ -157,24 +157,24 @@ final class MemoryDetector {
         return [
             MobileVitalsType.footprintMemory.stringValue: [
                 Keys.mobileVitalsUnits.rawValue: MeasurementUnits.megaBytes.stringValue,
-                Keys.min.rawValue: minFootprintMB,
-                Keys.max.rawValue: maxFootprintMB,
-                Keys.avg.rawValue: avgFootprintMB,
-                Keys.p95.rawValue: p95FootprintMB
+                Keys.min.rawValue: minFootprintMB.roundedTo(),
+                Keys.max.rawValue: maxFootprintMB.roundedTo(),
+                Keys.avg.rawValue: avgFootprintMB.roundedTo(),
+                Keys.p95.rawValue: p95FootprintMB.roundedTo()
             ],
             MobileVitalsType.residentMemory.stringValue: [
                 Keys.mobileVitalsUnits.rawValue: MeasurementUnits.megaBytes.stringValue,
-                Keys.min.rawValue: minResidentMB,
-                Keys.max.rawValue: maxResidentMB,
-                Keys.avg.rawValue: avgResidentMB,
-                Keys.p95.rawValue: p95ResidentMB
+                Keys.min.rawValue: minResidentMB.roundedTo(),
+                Keys.max.rawValue: maxResidentMB.roundedTo(),
+                Keys.avg.rawValue: avgResidentMB.roundedTo(),
+                Keys.p95.rawValue: p95ResidentMB.roundedTo()
             ],
             MobileVitalsType.memoryUtilization.stringValue: [
                 Keys.mobileVitalsUnits.rawValue: MeasurementUnits.percentage.stringValue,
-                Keys.min.rawValue: minUtilPercent,
-                Keys.max.rawValue: maxUtilPercent,
-                Keys.avg.rawValue: avgUtilPercent,
-                Keys.p95.rawValue: p95UtilPercent
+                Keys.min.rawValue: minUtilPercent.roundedTo(),
+                Keys.max.rawValue: maxUtilPercent.roundedTo(),
+                Keys.avg.rawValue: avgUtilPercent.roundedTo(),
+                Keys.p95.rawValue: p95UtilPercent.roundedTo()
             ]
         ]
     }

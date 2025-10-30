@@ -29,13 +29,13 @@ extension CoralogixRum {
     
     // Increment the click counter and handle the tap object
     private func processTapObject(_ tapObject: [String: Any]) {
-        let span = makeSpan(event: .userInteraction, source: .console, severity: .info)
-        handleUserInteractionEvent(tapObject, span: span)
+        var span = makeSpan(event: .userInteraction, source: .console, severity: .info)
+        handleUserInteractionEvent(tapObject, span: &span)
     }
     
     // Handle the case where x and y coordinates are present
     internal func handleUserInteractionEvent(_ properties: [String: Any],
-                                             span: any Span,
+                                             span: inout any Span,
                                              window: UIWindow? = Global.getKeyWindow()) {
        
         if let sessionReplay = SdkManager.shared.getSessionReplay(),
@@ -53,9 +53,15 @@ extension CoralogixRum {
             let metadata = buildMetadata(properties: properties,
                                          screenshotLocation: screenshotLocation,
                                          screenshotData: screenshotData)
-            span.setAttribute(key: Keys.screenshotId.rawValue, value: screenshotLocation.screenshotId)
-            span.setAttribute(key: Keys.page.rawValue, value: screenshotLocation.page)
-            _ = sessionReplay.captureEvent(properties: metadata)
+            let result = sessionReplay.captureEvent(properties: metadata)
+            switch result {
+            case .success:
+                self.applyScreenshotAttributes(screenshotLocation, to: &span)
+            case .failure(let error):
+                if error == .skippingEvent {
+                    self.coralogixExporter?.getScreenshotManager().revertScreenshotCounter()
+                }
+            }
         }
         
         span.setAttribute(

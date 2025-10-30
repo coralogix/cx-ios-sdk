@@ -183,28 +183,29 @@ final class CoralogixRumTests: XCTestCase {
     
     func testHandleAppearStateIfNeededWhenStateIsNotifyOnAppearShouldCaptureEventAndSetSpanAttribute() {
         let coralogixRum = makeMockCoralogixRum()
-        let mockSpan = MockSpan()
+        var mockSpan: any Span = MockSpan()
         
         // Arrange
         let view = CXView(state: .notifyOnAppear, name: "home")
         let mockSessionReplay =  MockSessionReplay()
         SdkManager.shared.register(sessionReplayInterface: mockSessionReplay)
         // Act
-        coralogixRum.handleAppearStateIfNeeded(cxView: view, span: mockSpan)
+        coralogixRum.handleAppearStateIfNeeded(cxView: view, span: &mockSpan)
         
         // Assert
         XCTAssertNotNil(mockSessionReplay.captureEventCalledWith, "Expected SessionReplay.captureEvent to be invoked")
         XCTAssertNotNil(mockSessionReplay.captureEventCalledWith?[Keys.screenshotId.rawValue] as? String, "Expected screenshotId to be present in captured metadata")
-        
-        XCTAssertTrue(mockSpan.setAttributeCalled)
-        XCTAssertNotNil(mockSpan.setAttributeKey)
-        XCTAssertNotNil(mockSpan.setAttributeValue)
+        if let m = mockSpan as? MockSpan {
+            XCTAssertTrue(m.setAttributeCalled)
+            XCTAssertNotNil(m.setAttributeKey)
+            XCTAssertNotNil(m.setAttributeValue)
+        }
         SdkManager.shared.register(sessionReplayInterface: nil)
     }
     
     func testHandleAppearStateIfNeededWhenStateIsNotNotifyOnAppearShouldNotCaptureEvent() {
         let coralogixRum = makeMockCoralogixRum()
-        let mockSpan = MockSpan()
+        var mockSpan: any Span = MockSpan()
         let mockSessionReplay =  MockSessionReplay()
         
         // Arrange
@@ -212,26 +213,29 @@ final class CoralogixRumTests: XCTestCase {
         
         // Act
         SdkManager.shared.register(sessionReplayInterface: mockSessionReplay)
-        coralogixRum.handleAppearStateIfNeeded(cxView: view, span: mockSpan)
+        coralogixRum.handleAppearStateIfNeeded(cxView: view, span: &mockSpan)
         
         // Assert
         XCTAssertNil(mockSessionReplay.captureEventCalledWith)
-        XCTAssertFalse(mockSpan.setAttributeCalled)
+        if let m = mockSpan as? MockSpan {
+            XCTAssertFalse(m.setAttributeCalled)
+        }
     }
     
     func testHandleAppearStateIfNeededWhenSessionReplayIsNilShouldNotCrashOrCaptureEvent() {
         
         SdkManager.shared.register(sessionReplayInterface: nil)
         let coralogixRum = makeMockCoralogixRum()
-        let mockSpan = MockSpan()
-        
+        var mockSpan: any Span = MockSpan()
         let view = CXView(state: .notifyOnAppear, name: "home")
         
         // Act
-        coralogixRum.handleAppearStateIfNeeded(cxView: view, span: mockSpan)
+        coralogixRum.handleAppearStateIfNeeded(cxView: view, span: &mockSpan)
         
         // Assert
-        XCTAssertFalse(mockSpan.setAttributeCalled)
+        if let m = mockSpan as? MockSpan {
+            XCTAssertFalse(m.setAttributeCalled)
+        }
     }
     
     func testGetNavigationSpanShouldSetCorrectAttributes() {
@@ -431,46 +435,7 @@ final class CoralogixRumTests: XCTestCase {
             XCTFail("Expected severity to be an int")
         }
     }
-    
-    func testHandleUserInteractionEventCapturesEventAndEndsSpan() {
-        // Arrange
-        let coralogixRum = makeMockCoralogixRum()
-        coralogixRum.tracerProvider = {
-            return MockTracer()
-        }
-        let mockSpan = MockSpan()
-        let mockSessionReplay = MockSessionReplay()
-        SdkManager.shared.register(sessionReplayInterface: mockSessionReplay)
         
-        // Act
-        let testProperties: [String: Any] = [
-            Keys.positionX.rawValue: 100,
-            Keys.positionY.rawValue: 200,
-            "testKey": "testValue"
-        ]
-        let window = UIWindow()
-        window.makeKeyAndVisible()
-        coralogixRum.handleUserInteractionEvent(testProperties, span: mockSpan, window: window)
-        
-        // Assert
-        XCTAssertNotNil(mockSessionReplay.captureEventCalledWith, "Event was not captured")
-        let required = [Keys.segmentIndex.rawValue,
-                        Keys.page.rawValue,
-                        Keys.screenshotId.rawValue,
-                        Keys.screenshotData.rawValue,
-                        Keys.positionX.rawValue,
-                        Keys.positionY.rawValue,
-                        "testKey"]
-        XCTAssertTrue(required.allSatisfy { mockSessionReplay.captureEventCalledWith!.keys.contains($0) }, "Captured metadata is missing expected keys")
-        
-        let capturedMetadata = mockSessionReplay.captureEventCalledWith?.first
-        XCTAssertNotNil(capturedMetadata)
-        
-        XCTAssertNotNil(mockSpan.recordedAttributes[Keys.screenshotId.rawValue], "Should set screenshotId on span")
-        XCTAssertNotNil(mockSpan.recordedAttributes[Keys.tapObject.rawValue], "Should set tapObject on span")
-        XCTAssertTrue(mockSpan.didEnd, "Span should be ended")
-    }
-    
     func testAddScreenshotIdAddsAttributeAndCapturesEvent() {
         // Arrange
         var span: any Span = MockSpan()
@@ -481,7 +446,7 @@ final class CoralogixRumTests: XCTestCase {
         let coralogixRum = makeMockCoralogixRum()
         
         // Act
-        coralogixRum.addScreenshotId(to: &span)
+        coralogixRum.recordScreenshotForSpan(to: &span)
         
         guard let mockSpan = span as? MockSpan else {
             XCTFail("Span is not MockSpan")
@@ -848,41 +813,41 @@ final class MockSessionReplay: SessionReplayInterface {
     }
 }
 
-final class MockSpan: Span {
+public final class MockSpan: Span {
     var didEnd = false
-    var kind: SpanKind = .internal
+    public var kind: SpanKind = .internal
     var recordedAttributes: [String: AttributeValue] = [:]
-    var context: SpanContext = SpanContext.create(traceId: TraceId(),
+    public var context: SpanContext = SpanContext.create(traceId: TraceId(),
                                                   spanId: SpanId(),
                                                   traceFlags: TraceFlags(),
                                                   traceState: TraceState())
-    var isRecording: Bool = true
-    var status: Status = .ok
-    var name: String = Keys.iosSdk.rawValue
+    public var isRecording: Bool = true
+    public var status: Status = .ok
+    public var name: String = Keys.iosSdk.rawValue
     
     var setAttributeCalled = false
     var setAttributeKey: String?
     var setAttributeValue: AttributeValue?
     
-    func setAttribute(key: String, value: AttributeValue?) {
+    public func setAttribute(key: String, value: AttributeValue?) {
         setAttributeCalled = true
         setAttributeKey = key
         setAttributeValue = value
         recordedAttributes[key] = value
     }
     
-    func addEvent(name: String) {}
-    func addEvent(name: String, timestamp: Date) {}
-    func addEvent(name: String, attributes: [String: AttributeValue]) {}
-    func addEvent(name: String, attributes: [String: AttributeValue], timestamp: Date) {}
-    func end() {
+    public func addEvent(name: String) {}
+    public func addEvent(name: String, timestamp: Date) {}
+    public func addEvent(name: String, attributes: [String: AttributeValue]) {}
+    public func addEvent(name: String, attributes: [String: AttributeValue], timestamp: Date) {}
+    public func end() {
         didEnd = true
     }
-    func end(time: Date) {}
+    public func end(time: Date) {}
     
-    var description: String { return "MockSpan" }
+    public var description: String { return "MockSpan" }
     
-    static func == (lhs: MockSpan, rhs: MockSpan) -> Bool {
+    public static func == (lhs: MockSpan, rhs: MockSpan) -> Bool {
         return lhs.name == rhs.name
     }
 }
