@@ -53,7 +53,7 @@ final class SlowFrozenFramesDetectorTests: XCTestCase {
         }
         XCTAssertEqual(slowFramesStats[Keys.min.rawValue] as? Double, expectedMinSlow)
         XCTAssertEqual(slowFramesStats[Keys.max.rawValue] as? Double, expectedMaxSlow)
-        XCTAssertEqual(slowFramesStats[Keys.avg.rawValue] as? Double, expectedAvgSlow)
+        XCTAssertEqual(slowFramesStats[Keys.avg.rawValue] as? Double, expectedAvgSlow.roundedTo(to: 2))
         XCTAssertEqual(slowFramesStats[Keys.p95.rawValue] as? Double, expectedP95SlowCorrected)
         
         // Expected values for Frozen Frames
