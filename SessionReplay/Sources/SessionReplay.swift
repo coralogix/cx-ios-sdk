@@ -280,11 +280,6 @@ public class SessionReplay: SessionReplayInterface {
             Log.d("SessionReplay.isInitialized() called on inactive instance (skipped by sampling)")
             return false
         }
-        
-        guard let sessionReplayModel else {
-            Log.e("[SessionReplay] missing SessionReplayModel")
-            return false
-        }
         return SessionReplay.initializationAttempted
     }
     
