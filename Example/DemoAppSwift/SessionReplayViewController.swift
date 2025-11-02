@@ -12,6 +12,8 @@ class SessionReplayViewController: UITableViewController {
     let items = [Keys.startRecoding.rawValue,
                  Keys.stopRecoding.rawValue,
                  Keys.captureEvent.rawValue,
+                 Keys.isRecording.rawValue,
+                 Keys.isInitialized.rawValue,
                  Keys.updateSessionId.rawValue,
                  Keys.creditCardElement.rawValue,
                  Keys.creditCardImgElement.rawValue,
@@ -111,11 +113,12 @@ class SessionReplayViewController: UITableViewController {
         } else if item == Keys.captureEvent.rawValue {
             CoralogixRumManager.shared.sdk.captureEvent()
         } else if item == Keys.updateSessionId.rawValue {
-            if let sessionReplay = SdkManager.shared.getSessionReplay() {
-                sessionReplay.update(sessionId: UUID().uuidString.lowercased())
-           }
+            CoralogixRumManager.shared.sdk.update(sessionId: UUID().uuidString.lowercased())
+        } else if item == Keys.isRecording.rawValue {
+            self.showAlertView(message: "isRecording: \(CoralogixRumManager.shared.sdk.isSRRecording())")
+        } else if item == Keys.isInitialized.rawValue {
+            self.showAlertView(message: "isInitialized: \(CoralogixRumManager.shared.sdk.isSRInitialized())")
         }
-
         tableView.deselectRow(at: indexPath, animated: true)
     }
     
@@ -125,5 +128,11 @@ class SessionReplayViewController: UITableViewController {
             return 150
         }
         return UITableView.automaticDimension
+    }
+    
+    public func showAlertView(message: String) {
+        let alert = UIAlertController(title: "Alert", message: message, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "OK", style: .default))
+        self.present(alert, animated: true)
     }
 }

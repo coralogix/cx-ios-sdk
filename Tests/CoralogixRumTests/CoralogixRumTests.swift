@@ -811,6 +811,14 @@ final class MockSessionReplay: SessionReplayInterface {
     func update(sessionId: String) {
         
     }
+    
+    func isRecording() -> Bool {
+        return true
+    }
+    
+    func isInitialized() -> Bool {
+        return true
+    }
 }
 
 public final class MockSpan: Span {

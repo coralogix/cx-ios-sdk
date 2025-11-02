@@ -36,6 +36,8 @@ public protocol SessionReplayInterface {
     func stopRecording()
     func captureEvent(properties: [String: Any]?) -> Result<Void, CaptureEventError>
     func update(sessionId: String)
+    func isRecording() -> Bool
+    func isInitialized() -> Bool
 }
 
 public class SdkManager {
