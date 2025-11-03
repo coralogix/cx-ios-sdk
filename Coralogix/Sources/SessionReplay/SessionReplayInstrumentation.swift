@@ -83,6 +83,28 @@ extension CoralogixRum: CoralogixInterface {
         self.makeSpan(isManual: true)
     }
     
+    public func isSRRecording() -> Bool {
+        if let sessionReplay = SdkManager.shared.getSessionReplay() {
+            return sessionReplay.isRecording()
+        }
+        return false
+    }
+    
+    public func isSRInitialized() -> Bool {
+        if let sessionReplay = SdkManager.shared.getSessionReplay() {
+            return sessionReplay.isInitialized()
+        }
+        return false
+    }
+    
+    public func update(sessionId: String) {
+        guard let sessionReplay = SdkManager.shared.getSessionReplay() else {
+            Log.e("Failed to get Session Recording ")
+            return
+        }
+        sessionReplay.update(sessionId: sessionId)
+    }
+    
     internal func makeSpan(isManual: Bool = false) {
         var span = makeSpan(event: .screenshot, source: .console, severity: .info)
         self.recordScreenshotForSpan(to: &span)

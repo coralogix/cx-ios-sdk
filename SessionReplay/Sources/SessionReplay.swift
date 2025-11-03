@@ -107,7 +107,7 @@ public class SessionReplay: SessionReplayInterface {
         get {
             guard _shared != nil else {
                 Log.e("SessionReplay.shared accessed before initialization. Call SessionReplay.initializeWithOptions first.")
-                fatalError("SessionReplay.shared accessed before initialization. Call SessionReplay.initializeWithOptions first.")
+                return createDummyInstance()
             }
             return _shared
         }
@@ -258,6 +258,29 @@ public class SessionReplay: SessionReplayInterface {
             return sessionReplayModel.captureImage(properties: updatedProperties)
         }
         return .success(())
+    }
+    
+    /// Check is the Session replay is currently recording.
+    public func isRecording() -> Bool {
+        if isDummyInstance {
+            Log.d("SessionReplay.isRecording() called on inactive instance (skipped by sampling)")
+            return false
+        }
+        
+        guard let sessionReplayModel = self.sessionReplayModel else {
+            Log.e("[SessionReplay] missing SessionReplayModel")
+            return false
+        }
+        return sessionReplayModel.isRecording
+    }
+    
+    /// Check is the Session replay is Initialized.
+    public func isInitialized() -> Bool {
+        if isDummyInstance {
+            Log.d("SessionReplay.isInitialized() called on inactive instance (skipped by sampling)")
+            return false
+        }
+        return SessionReplay.initializationAttempted
     }
     
     public func update(sessionId: String) {
