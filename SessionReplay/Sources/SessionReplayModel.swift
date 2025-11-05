@@ -69,7 +69,7 @@ class SessionReplayModel {
             Log.e("Invalid sessionReplayOptions")
             return nil
         }
-        
+
         return window.captureScreenshot(
             scale: options.captureScale,
             compressionQuality: options.captureCompressionQuality

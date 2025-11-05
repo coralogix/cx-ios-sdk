@@ -21,8 +21,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
                                                         captureTimeInterval: 10.0,
                                                         captureScale: 2.0,
                                                         captureCompressionQuality: 0.8,
-                                                        maskText: ["Stop"],
-                                                        maskImages: false ,
+                                                        maskText: [],
+                                                        maskCreditCard: false,
+                                                        maskAllImages: false,
                                                         autoStartSessionRecording: true)
         SessionReplay.initializeWithOptions(sessionReplayOptions:sessionReplayOptions)
         return true

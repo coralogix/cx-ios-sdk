@@ -35,10 +35,10 @@ public struct SessionReplayOptions {
     /// An array of text patterns to mask in the captured content. can be string or regex
     public var maskText: [String]?
     
-    /// Whether  images should be masked in the captured content. On / Off
-    public var maskImages: Bool
+    /// Whether  Credit card images should be masked in the captured content. On / Off
+    public var maskCreditCard: Bool
     
-    /// Whether all images should be masked in the captured content. if set to false only Credit Card Images will be masked
+    /// Whether all images should be masked in the captured content. 
     public var maskAllImages: Bool
     
     /// Whether faces should be masked in the captured content.
@@ -76,7 +76,7 @@ public struct SessionReplayOptions {
                 captureCompressionQuality: CGFloat = 1.0,
                 sessionRecordingSampleRate: Int = 100,
                 maskText: [String]? = nil,
-                maskImages: Bool = false,
+                maskCreditCard: Bool = false,
                 maskAllImages: Bool = true,
                 maskFaces: Bool = false,
                 creditCardPredicate: [String]? = nil,
@@ -86,7 +86,7 @@ public struct SessionReplayOptions {
         self.captureScale = captureScale
         self.captureCompressionQuality = captureCompressionQuality
         self.maskText = maskText
-        self.maskImages = maskImages
+        self.maskCreditCard = maskCreditCard
         self.maskFaces = maskFaces
         self.maskAllImages = maskAllImages
         self.creditCardPredicate = creditCardPredicate

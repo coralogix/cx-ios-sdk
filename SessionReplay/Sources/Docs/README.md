@@ -20,8 +20,8 @@ Holds the configuration used to initialize SessionReplay. This includes capture 
 - `captureCompressionQuality`: Compression level for image quality (0.0–1.0).
 - `sessionRecordingSampleRate`: Sampling percentage (0–100) to determine whether the session is recorded.
 - `maskText`: Text patterns (strings or regex) to redact from captured content.
-- `maskImages`: Whether specific images should be masked (default: `false`).
-- `maskAllImages`: Whether all images should be masked. If `false`, only credit card images will be masked (default: `true`).
+- `maskCreditCard`: Only credit card images will be masked.
+- `maskAllImages`: Whether all images should be masked.
 - `maskFaces`: Whether faces should be masked (default: `false`).
 - `creditCardPredicate`: Custom text patterns to identify images that may contain credit card content.
 

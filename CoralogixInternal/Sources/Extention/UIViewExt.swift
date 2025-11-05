@@ -6,8 +6,17 @@
 //
 
 import UIKit
+import ObjectiveC
+
+private var kCxMaskKey: UInt8 = 0
 
 public extension UIView {
+    /// When true, this view will be masked (redacted) in captured session frames.
+    var cxMask: Bool {
+        get { (objc_getAssociatedObject(self, &kCxMaskKey) as? Bool) ?? false }
+        set { objc_setAssociatedObject(self, &kCxMaskKey, newValue, .OBJC_ASSOCIATION_RETAIN_NONATOMIC) }
+    }
+    
     func activeForegroundWindowScene() -> UIWindowScene? {
         return UIApplication.shared.connectedScenes
             .compactMap { $0 as? UIWindowScene }
@@ -45,6 +54,47 @@ public extension UIView {
             }
         }
 
+        if let window = windows.first {
+            let maskRects = collectCxMaskRects(in: window)
+            let redacted = applyCxMaskRects(maskRects, on: image, scale: scale)
+            return redacted.jpegData(compressionQuality: compressionQuality)
+        }
         return image.jpegData(compressionQuality: compressionQuality)
+    }
+    
+    func collectCxMaskRects(in rootView: UIView) -> [CGRect] {
+        var rects: [CGRect] = []
+        
+        func traverse(_ view: UIView) {
+            guard !view.isHidden, view.alpha > 0 else { return }
+            
+            if view.cxMask {
+                var rect = view.convert(view.bounds, to: rootView)
+                rect = rect.intersection(rootView.bounds)
+                if !rect.isNull && !rect.isEmpty {
+                    rects.append(rect)
+                }
+            }
+            for subview in view.subviews {
+                traverse(subview)
+            }
+        }
+        
+        traverse(rootView)
+        return rects
+    }
+    
+    func applyCxMaskRects(_ rects: [CGRect], on image: UIImage, scale: CGFloat) -> UIImage {
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = scale
+        
+        let renderer = UIGraphicsImageRenderer(size: image.size, format: format)
+        return renderer.image { ctx in
+            image.draw(at: .zero)
+            ctx.cgContext.setFillColor(UIColor.black.cgColor)
+            for rect in rects {
+                ctx.cgContext.fill(rect)
+            }
+        }
     }
 }
