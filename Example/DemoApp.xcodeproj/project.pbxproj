@@ -60,6 +60,7 @@
 		E6D4BBF82DE336310096B46D /* CoralogixRumManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6D4BBF62DE336310096B46D /* CoralogixRumManager.swift */; };
 		E6D4BBF92DE336310096B46D /* CoralogixRumManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6D4BBF62DE336310096B46D /* CoralogixRumManager.swift */; };
 		E6E515FE2EBB8644008EC19A /* MaskViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6E515FD2EBB8644008EC19A /* MaskViewController.swift */; };
+		E6E516002EBC957D008EC19A /* MaskViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6E515FF2EBC957D008EC19A /* MaskViewController.swift */; };
 		E6FD68F82D01D5570066BDE8 /* CreditCardInputCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6FD68F72D01D5570066BDE8 /* CreditCardInputCell.swift */; };
 		E6FD68FA2D01D97B0066BDE8 /* FullImageCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6FD68F92D01D97B0066BDE8 /* FullImageCell.swift */; };
 		E6FDDA2D2DF176DC0005F274 /* ClockViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6FDDA2C2DF176DC0005F274 /* ClockViewController.swift */; };
@@ -150,6 +151,7 @@
 		E6B60A052DB4EAAC003AD35D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		E6D4BBF62DE336310096B46D /* CoralogixRumManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoralogixRumManager.swift; sourceTree = "<group>"; };
 		E6E515FD2EBB8644008EC19A /* MaskViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MaskViewController.swift; sourceTree = "<group>"; };
+		E6E515FF2EBC957D008EC19A /* MaskViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MaskViewController.swift; sourceTree = "<group>"; };
 		E6FD68F72D01D5570066BDE8 /* CreditCardInputCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreditCardInputCell.swift; sourceTree = "<group>"; };
 		E6FD68F92D01D97B0066BDE8 /* FullImageCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FullImageCell.swift; sourceTree = "<group>"; };
 		E6FDDA2C2DF176DC0005F274 /* ClockViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClockViewController.swift; sourceTree = "<group>"; };
@@ -202,6 +204,7 @@
 			isa = PBXGroup;
 			children = (
 				E622115A2BFDEB8B00052682 /* DemoAppSwiftUIApp.swift */,
+				E6E515FF2EBC957D008EC19A /* MaskViewController.swift */,
 				E622115C2BFDEB8B00052682 /* ContentView.swift */,
 				E622115E2BFDEB8C00052682 /* Assets.xcassets */,
 				E62211602BFDEB8C00052682 /* Preview Content */,
@@ -520,6 +523,7 @@
 				E622116A2BFDF4B400052682 /* NetworkSim.swift in Sources */,
 				E6D4BBF72DE336310096B46D /* CoralogixRumManager.swift in Sources */,
 				E622115D2BFDEB8B00052682 /* ContentView.swift in Sources */,
+				E6E516002EBC957D008EC19A /* MaskViewController.swift in Sources */,
 				E622115B2BFDEB8B00052682 /* DemoAppSwiftUIApp.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
