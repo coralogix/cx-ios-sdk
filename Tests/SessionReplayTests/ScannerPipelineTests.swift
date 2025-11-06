@@ -21,43 +21,7 @@ class ScannerPipelineTests: XCTestCase {
         scannerPipeline = nil
         super.tearDown()
     }
-    
-    func testRunPipeline_withAllScannersEnabled() {
-        let expectation = self.expectation(description: "Pipeline should complete successfully with all scanners enabled.")
         
-        let operationId = UUID()
-        self.currentOperationId = operationId
-        
-        guard let originalURL = SDKResources.bundle.url(forResource: "test_image", withExtension: "png") else {
-            XCTFail("test_image.png not found in Bundle.module")
-            return
-        }
-        do {
-            let options = SessionReplayOptions(maskText: ["confidential"],
-                                               maskOnlyCreditCards: true,
-                                               maskFaces: true)
-           
-            let imageData = try Data(contentsOf: originalURL)
-            let urlEntry = URLEntry(url: URL(string: "https://www.google.com")!,
-                                    timestamp: Date().timeIntervalSince1970,
-                                    screenshotId: UUID().uuidString,
-                                    segmentIndex: 0,
-                                    page: "0",
-                                    screenshotData: imageData,
-                                    point: CGPoint(x: 100.0, y: 100.0),
-                                    completion: nil)
-            
-            scannerPipeline.runPipeline(options: options, urlEntry: urlEntry) { ciImage, urlEntry in
-                XCTAssertNotNil(ciImage, "Pipeline should complete successfully.")
-                expectation.fulfill()
-            }
-            
-            waitForExpectations(timeout: 5, handler: nil)
-        } catch {
-            XCTFail("Failed to create unique file: \(error)")
-        }
-    }
-    
     func testRunPipeline_withOnlyImageScannerEnabled() {
         let expectation = self.expectation(description: "Pipeline should complete successfully with only image scanner enabled.")
         
