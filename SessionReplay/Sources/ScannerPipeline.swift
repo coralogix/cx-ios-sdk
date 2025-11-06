@@ -49,7 +49,7 @@ class ScannerPipeline {
 
             imageScanner.processImage(
                 screenshotData: urlEntry.screenshotData,
-                maskAll: !options.maskCreditCard,
+                maskAll: !options.maskOnlyCreditCards,
                 creditCardPredicate: options.creditCardPredicate
             ) { outputImage in
                 completion(outputImage ?? input)

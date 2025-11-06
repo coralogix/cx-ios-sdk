@@ -54,9 +54,13 @@ public extension UIView {
             }
         }
 
-        if let window = windows.first {
-            let maskRects = collectCxMaskRects(in: window)
-            let redacted = applyCxMaskRects(maskRects, on: image, scale: scale)
+        var allMaskRects: [CGRect] = []
+        for window in windows {
+            let rects = collectCxMaskRects(in: window)
+            allMaskRects.append(contentsOf: rects)
+        }
+        if !allMaskRects.isEmpty {
+            let redacted = applyCxMaskRects(allMaskRects, on: image, scale: scale)
             return redacted.jpegData(compressionQuality: compressionQuality)
         }
         return image.jpegData(compressionQuality: compressionQuality)

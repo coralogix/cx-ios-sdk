@@ -22,7 +22,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
                                                         captureScale: 2.0,
                                                         captureCompressionQuality: 0.8,
                                                         maskText: [],
-                                                        maskCreditCard: false,
+                                                        maskOnlyCreditCards: false,
                                                         maskAllImages: false,
                                                         autoStartSessionRecording: true)
         SessionReplay.initializeWithOptions(sessionReplayOptions:sessionReplayOptions)

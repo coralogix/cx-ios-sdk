@@ -76,8 +76,9 @@ class SessionReplayViewController: UITableViewController {
                 return UITableViewCell()
             }
             cell.backgroundColor = .white
-            let randomFloat = Double.random(in: 0...5)
-            cell.configure(with: images[Int(randomFloat)])
+            if let randomImage = images.randomElement() {
+                cell.configure(with: randomImage)                
+            }
             return cell
         } else {
             // Dequeue a cell from the table view

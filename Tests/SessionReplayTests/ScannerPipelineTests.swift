@@ -34,7 +34,7 @@ class ScannerPipelineTests: XCTestCase {
         }
         do {
             let options = SessionReplayOptions(maskText: ["confidential"],
-                                               maskImages: true,
+                                               maskOnlyCreditCards: true,
                                                maskFaces: true)
            
             let imageData = try Data(contentsOf: originalURL)
@@ -68,7 +68,7 @@ class ScannerPipelineTests: XCTestCase {
         
         do {
             let options = SessionReplayOptions(maskText: nil,
-                                               maskImages: true,
+                                               maskOnlyCreditCards: true,
                                                maskAllImages: true,
                                                maskFaces: false)
            
@@ -104,7 +104,7 @@ class ScannerPipelineTests: XCTestCase {
         
         do {
             let options = SessionReplayOptions(maskText: nil,
-                                               maskImages: false,
+                                               maskOnlyCreditCards: false,
                                                maskAllImages: false,
                                                maskFaces: false)
                        let operationId = UUID()
@@ -140,7 +140,7 @@ class ScannerPipelineTests: XCTestCase {
         }
         do {
             let options = SessionReplayOptions(maskText: nil,
-                                               maskImages: false,
+                                               maskOnlyCreditCards: false,
                                                maskAllImages: false,
                                                maskFaces: false)
             let operationId = UUID()
@@ -178,7 +178,7 @@ class ScannerPipelineTests: XCTestCase {
         }
         do {
             let options = SessionReplayOptions(maskText: nil,
-                                               maskImages: true,
+                                               maskOnlyCreditCards: true,
                                                maskAllImages: true,
                                                maskFaces: false)
             let operationId = UUID()
