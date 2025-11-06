@@ -56,7 +56,9 @@ public extension UIView {
 
         var allMaskRects: [CGRect] = []
         for window in windows {
-            let rects = collectCxMaskRects(in: window)
+            let rects = collectCxMaskRects(in: window).map {
+                $0.offsetBy(dx: window.frame.origin.x, dy: window.frame.origin.y)
+            }
             allMaskRects.append(contentsOf: rects)
         }
         if !allMaskRects.isEmpty {
