@@ -66,21 +66,19 @@ public class URLSessionInstrumentation {
             #selector(URLSessionDataDelegate.urlSession(_:dataTask:didBecome:) as (URLSessionDataDelegate) -> ((URLSession, URLSessionDataTask, URLSessionStreamTask) -> Void)?),
         ]
         
-        let classes = configuration.delegateClassesToInstrument ?? InstrumentationUtils.objc_getClassList()
+        let classes: [AnyClass] = {
+            if let explicit =  configuration.delegateClassesToInstrument {
+                if explicit.isEmpty { return [] }
+            }
+            return InstrumentationUtils.objc_getSafeClassList(
+                ignoredPrefixes: configuration.ignoredClassPrefixes
+            )
+        }()
         
         for theClass in classes {
+            guard class_getSuperclass(theClass) != nil else { continue }
+            guard !class_isMetaClass(theClass) else { continue }
             guard theClass != Self.self else { continue }
-            
-            // MARK: [FIX] Validate Objective-C class (prevents crash in class_copyMethodList)
-            guard class_getSuperclass(theClass) != nil else {
-                //Log.d("Skipping non-ObjC class: \(theClass)")
-                continue
-            }
-            
-            guard !class_isMetaClass(theClass) else {
-                //Log.d("Skipping metaclass: \(theClass)")
-                continue
-            }
             
             var methodCount: UInt32 = 0
             guard let methodListPointer = class_copyMethodList(theClass, &methodCount) else { continue }
