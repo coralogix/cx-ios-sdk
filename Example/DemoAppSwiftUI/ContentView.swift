@@ -21,7 +21,8 @@ struct ContentView: View {
                  Keys.sendLogWithData.rawValue,
                  Keys.sendCrash.rawValue,
                  Keys.shutDownCoralogixRum.rawValue,
-                 Keys.updateLabels.rawValue]
+                 Keys.updateLabels.rawValue,
+                 Keys.maskUI.rawValue]
     
     var body: some View {
         NavigationView {
@@ -44,6 +45,11 @@ struct ContentView: View {
                                 .navigationTitle("Main View")
                                 .trackCXView(name: "Main View")
                                 .trackCXTapAction(name: "second View")
+                
+                NavigationLink(destination: MaskDemoView()) {
+                    Text("UI Mask Demo")
+                }
+                .navigationTitle("UI Mask Demo")
                 
                 List(items, id: \.self) { item in
                     CustomButton(item: item, coralogixRum: $coralogixRum)
@@ -104,7 +110,7 @@ struct CustomButton: View {
             } else if item == Keys.sendLogWithData.rawValue {
                 ErrorSim.sendLog()
             } else if item == Keys.updateLabels.rawValue {
-                coralogixRum.setLabels(labels: ["item3" : "playstation 4", "itemPrice" : 400])
+                coralogixRum.set(labels: ["item3" : "playstation 4", "itemPrice" : 400])
             } else if item == Keys.succesfullNetworkRequestFlutter.rawValue {
                 NetworkSim.setNetworkRequestContextSuccsess()
             } else if item == Keys.failureNetworkRequestFlutter.rawValue {

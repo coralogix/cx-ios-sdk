@@ -24,10 +24,25 @@ public struct CXViewModifier: SwiftUI.ViewModifier {
     }
 }
 
+public struct CxMaskView: UIViewRepresentable {
+    public func makeUIView(context: Context) -> UIView {
+        let view = UIView()
+        view.cxMask = true // from your existing UIKit extension
+        view.backgroundColor = .clear
+        return view
+    }
+    
+    public func updateUIView(_ uiView: UIView, context: Context) {}
+}
+
 @available(iOS 13, tvOS 13, *)
 public extension SwiftUI.View {
     func trackCXView(name: String) -> some View {
         return modifier(CXViewModifier(name: name))
+    }
+    
+    func cxMask() -> some View {
+        self.overlay(CxMaskView().allowsHitTesting(false))
     }
 }
 

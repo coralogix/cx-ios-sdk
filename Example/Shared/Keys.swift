@@ -51,4 +51,5 @@ enum Keys: String {
     case alertView = "Show Alert View"
     case isInitialized = "Is Initialized"
     case isRecording = "Is Recording"
+    case maskUI = "Mask UI"
 }

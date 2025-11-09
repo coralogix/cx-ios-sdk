@@ -34,7 +34,7 @@ class ScannerPipeline {
         
         isTextScannerEnabled = !(options.maskText?.isEmpty ?? true)
         isFaceScannerEnabled = options.maskFaces
-        isImageScannerEnabled = options.maskImages
+        isImageScannerEnabled = options.maskAllImages
 
         let imageScanner = ImageScanner()
         let textScanner = TextScanner()
@@ -49,7 +49,7 @@ class ScannerPipeline {
 
             imageScanner.processImage(
                 screenshotData: urlEntry.screenshotData,
-                maskAll: options.maskAllImages,
+                maskAll: !options.maskOnlyCreditCards,
                 creditCardPredicate: options.creditCardPredicate
             ) { outputImage in
                 completion(outputImage ?? input)

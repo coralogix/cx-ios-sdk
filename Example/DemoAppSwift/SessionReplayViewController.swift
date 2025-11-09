@@ -22,6 +22,7 @@ class SessionReplayViewController: UITableViewController {
                  Keys.creditCardImgElement.rawValue,
                  Keys.creditCardImgElement.rawValue]
     
+    let images = ["master.png", "testImg2.png", "american.png", "visa.png", "testImg.png"]
     var customView = CustomView(frame: .zero)
     private let customViewHeight: CGFloat = 150
 
@@ -75,21 +76,8 @@ class SessionReplayViewController: UITableViewController {
                 return UITableViewCell()
             }
             cell.backgroundColor = .white
-
-            switch indexPath.row {
-            case 4:
-                cell.configure(with: "master.png")
-            case 5:
-                cell.configure(with: "testImg2.png")
-                cell.backgroundColor = .black
-            case 6:
-                cell.configure(with: "american.png")
-            case 7:
-                cell.configure(with: "visa.png")
-            case 8:
-                cell.configure(with: "testImg.png")
-            default:
-                print("bad index")
+            if let randomImage = images.randomElement() {
+                cell.configure(with: randomImage)                
             }
             return cell
         } else {

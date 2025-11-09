@@ -16,7 +16,8 @@ class MainViewController: UITableViewController {
                  Keys.userActionsInstumentation.rawValue,
                  Keys.sessionReplay.rawValue,
                  Keys.clock.rawValue,
-                 Keys.schemaValidation.rawValue]
+                 Keys.schemaValidation.rawValue,
+                 Keys.maskUI.rawValue]
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -106,7 +107,10 @@ class MainViewController: UITableViewController {
         } else if item == Keys.schemaValidation.rawValue {
             let schemaValidationViewController = SchemaValidationViewController()
             self.navigationController?.pushViewController(schemaValidationViewController, animated: true)
+        } else if item == Keys.maskUI.rawValue {
+            self.navigationController?.pushViewController(MaskViewController(), animated: true)
         }
+        
 
         tableView.deselectRow(at: indexPath, animated: true)
     }
