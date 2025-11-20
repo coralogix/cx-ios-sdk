@@ -189,12 +189,6 @@ public class CoralogixRum {
         self.reportErrorWith(message: message, data: data)
     }
     
-    @available(*, deprecated, message: "Currently use for Flutter only, will be removed in future")
-    public func reportError(message: String, stackTrace: String?) {
-        guard CoralogixRum.isInitialized else { return }
-        self.reportErrorWith(message: message, stackTrace: stackTrace)
-    }
-    
     public func reportError(message: String, stackTrace: [[String: Any]], errorType: String?) {
         guard CoralogixRum.isInitialized else { return }
         self.reportErrorWith(message: message, stackTrace: stackTrace, errorType: errorType)

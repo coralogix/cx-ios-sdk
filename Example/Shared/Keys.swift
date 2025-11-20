@@ -13,7 +13,6 @@ enum Keys: String {
     case sendNSException = "NSException"
     case sendNSError = "NSError"
     case sendErrorString = "Error String"
-    case sendErrorStacktraceString = "Error Stacktrace (Flutter)"
     case sendLogWithData = "Custom Log"
     case sendCrash = "Crash"
     case shutDownCoralogixRum = "SDK Shutdown"

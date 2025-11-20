@@ -18,7 +18,7 @@ public enum SessionReplayResultCode {
     case failure
 }
 
-class SessionReplayModel {
+public class SessionReplayModel {
     internal var urlManager = URLManager()
     private var urlObserver: URLObserver?
     internal var sessionId: String = ""
@@ -29,6 +29,7 @@ class SessionReplayModel {
     private let srNetworkManager: SRNetworkManager?
     private var prvScreenshotData: Data? = nil
     private lazy var comparisonContext = CIContext(options: [.workingColorSpace: NSNull()])
+    var regions = [[String: Any]]()
 
     internal var getKeyWindow: () -> UIWindow? = {
         Global.getKeyWindow()

@@ -38,24 +38,6 @@ class ErrorSim {
         sleep(10)
     }
     
-    static func sendStringStacktraceError() {
-        let stackTrace = """
-#0      throwExceptionInDart (package:coralogix_sdk/main.dart:134:5)
-#1      _MyAppState.build.<anonymous closure> (package:coralogix_sdk/main.dart:121:32)
-#2      _InkResponseState.handleTap (package:flutter/src/material/ink_well.dart:1171:21)
-#3      GestureRecognizer.invokeCallback (package:flutter/src/gestures/recognizer.dart:344:24)
-#4      TapGestureRecognizer.handleTapUp (package:flutter/src/gestures/tap.dart:652:11)
-#5      BaseTapGestureRecognizer._checkUp (package:flutter/src/gestures/tap.dart:309:5)
-#6      BaseTapGestureRecognizer.acceptGesture (package:flutter/src/gestures/tap.dart:279:7)
-#7      GestureArenaManager.sweep (package:flutter/src/gestures/arena.dart:167:27)
-#8      GestureBinding.handleEvent (package:flutter/src/gestures/binding.dart:499:20)
-#9      GestureBinding.dispatchEvent (package:flutter/src/gestures/binding.dart:475:22)
-#10     RendererBinding.dispatchEvent (package:flutter/src/rendering/binding.dart:425:11)
-#11     GestureBinding.<…>
-"""
-        CoralogixRumManager.shared.sdk.reportError(message: "flutter error", stackTrace: stackTrace)
-    }
-    
     static func sendLog() {
         CoralogixRumManager.shared.sdk.log(severity: CoralogixLogSeverity.warn, message: "Im cusom log", data: ["gender": "male", "height": "1.78"])
     }

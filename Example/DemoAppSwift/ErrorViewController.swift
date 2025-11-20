@@ -12,7 +12,6 @@ class ErrorViewController: UITableViewController {
                  Keys.sendNSError.rawValue,
                  Keys.sendErrorString.rawValue,
                  Keys.sendCrash.rawValue,
-                 Keys.sendErrorStacktraceString.rawValue,
                  Keys.sendLogWithData.rawValue,
                  Keys.simulateANR.rawValue]
     
@@ -78,8 +77,6 @@ class ErrorViewController: UITableViewController {
             CrashSim.simulateRandomCrash()
         } else if item == Keys.sendLogWithData.rawValue {
             ErrorSim.sendLog()
-        } else if item == Keys.sendErrorStacktraceString.rawValue {
-            ErrorSim.sendStringStacktraceError()
         } else if item == Keys.simulateANR.rawValue {
             ErrorSim.simulateANR()
         }
