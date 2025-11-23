@@ -97,6 +97,18 @@ extension CoralogixRum: CoralogixInterface {
         return false
     }
     
+    public func registerMaskRegion(region: [String: Any]) {
+        if let sessionReplay = SdkManager.shared.getSessionReplay() {
+            sessionReplay.registerMaskRegion(region: region)
+        }
+    }
+    
+    public func unregisterMaskRegion(id: String) {
+        if let sessionReplay = SdkManager.shared.getSessionReplay() {
+            sessionReplay.unregisterMaskRegion(id: id)
+        }
+    }
+        
     public func update(sessionId: String) {
         guard let sessionReplay = SdkManager.shared.getSessionReplay() else {
             Log.e("Failed to get Session Recording ")

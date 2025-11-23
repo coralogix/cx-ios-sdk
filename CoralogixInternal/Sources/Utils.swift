@@ -138,6 +138,35 @@ public enum Global: String {
         tapData[Keys.positionY.rawValue] = locationInScreen.y
     }
     
+    public static func rects(from regions: [[String: Any]]) -> [CGRect] {
+        var results: [CGRect] = []
+        
+        for region in regions {
+            let x = (region["x"] as? CGFloat)
+                ?? (region["x"] as? Double).map { CGFloat($0) }
+                ?? (region["x"] as? Int).map { CGFloat($0) }
+            
+            let y = (region["y"] as? CGFloat)
+                ?? (region["y"] as? Double).map { CGFloat($0) }
+                ?? (region["y"] as? Int).map { CGFloat($0) }
+            
+            let width = (region["width"] as? CGFloat)
+                ?? (region["width"] as? Double).map { CGFloat($0) }
+                ?? (region["width"] as? Int).map { CGFloat($0) }
+            
+            let height = (region["height"] as? CGFloat)
+                ?? (region["height"] as? Double).map { CGFloat($0) }
+                ?? (region["height"] as? Int).map { CGFloat($0) }
+
+            // Only append if valid
+            if let x = x, let y = y, let width = width, let height = height {
+                results.append(CGRect(x: x, y: y, width: width, height: height))
+            }
+        }
+        
+        return results
+    }
+
     public static func isURLMatchesRegexPattern(string: String, regexs: [String]) -> Bool {
         guard URL(string: string) != nil else {
             return false

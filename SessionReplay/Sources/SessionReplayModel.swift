@@ -71,9 +71,12 @@ public class SessionReplayModel {
             return nil
         }
 
+        let regionsRect: [CGRect] = Global.rects(from: regions)
+            
         return window.captureScreenshot(
             scale: options.captureScale,
-            compressionQuality: options.captureCompressionQuality
+            compressionQuality: options.captureCompressionQuality,
+            regions: regionsRect
         )
     }
     
@@ -196,14 +199,14 @@ public class SessionReplayModel {
         if !fileManager.fileExists(atPath: sessionReplayURL.path) {
             do {
                 try fileManager.createDirectory(at: sessionReplayURL, withIntermediateDirectories: true, attributes: nil)
-                Log.d("SessionReplay folder created successfully at \(sessionReplayURL.path)")
+                Log.d("[SessionReplayModel] folder created successfully at \(sessionReplayURL.path)")
                 return .success
             } catch {
                 Log.e("Failed to create SessionReplay folder: \(error.localizedDescription)")
                 return .failure
             }
         } else {
-            Log.d("SessionReplay folder already exists at \(sessionReplayURL.path)")
+            Log.d("[SessionReplayModel] folder already exists at \(sessionReplayURL.path)")
             return .failure
         }
     }

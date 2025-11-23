@@ -16,6 +16,8 @@ class SessionReplayViewController: UITableViewController {
                  Keys.isInitialized.rawValue,
                  Keys.updateSessionId.rawValue,
                  Keys.creditCardElement.rawValue,
+                 Keys.registerMaskRegion.rawValue,
+                 Keys.unregisterMaskRegion.rawValue,
                  Keys.creditCardImgElement.rawValue,
                  Keys.creditCardImgElement.rawValue,
                  Keys.creditCardImgElement.rawValue,
@@ -106,7 +108,27 @@ class SessionReplayViewController: UITableViewController {
             self.showAlertView(message: "isRecording: \(CoralogixRumManager.shared.sdk.isSRRecording())")
         } else if item == Keys.isInitialized.rawValue {
             self.showAlertView(message: "isInitialized: \(CoralogixRumManager.shared.sdk.isSRInitialized())")
+        } else if item == Keys.registerMaskRegion.rawValue {
+            // Simulate registering a region
+            let maskRegionId = "demoMaskRegion"
+
+            let region: [String: Any] = [
+                "id": maskRegionId,
+                "x": 100,
+                "y": 100,
+                "width": 100,
+                "height": 100,
+            ]
+
+            CoralogixRumManager.shared.sdk.registerMaskRegion(region: region)
+            self.showAlertView(message: "Registered mask region with id: \(maskRegionId)")
+
+        } else if item == Keys.unregisterMaskRegion.rawValue {
+            let maskRegionId = "demoMaskRegion"
+            CoralogixRumManager.shared.sdk.unregisterMaskRegion(id: maskRegionId)
+            self.showAlertView(message: "Unregistered mask region with id: \(maskRegionId)")
         }
+
         tableView.deselectRow(at: indexPath, animated: true)
     }
     

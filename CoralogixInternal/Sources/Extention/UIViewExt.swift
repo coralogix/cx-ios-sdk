@@ -25,7 +25,8 @@ public extension UIView {
 
     func captureScreenshot(
         scale: CGFloat = UIScreen.main.scale,
-        compressionQuality: CGFloat = 0.8
+        compressionQuality: CGFloat = 0.8,
+        regions: [CGRect]? = nil
     ) -> Data? {
         guard Thread.isMainThread else {
             Log.e("captureScreenshot must be called on the main thread")
@@ -61,6 +62,11 @@ public extension UIView {
             }
             allMaskRects.append(contentsOf: rects)
         }
+        
+        if let regions = regions, !regions.isEmpty {
+            allMaskRects.append(contentsOf: regions)
+        }
+        
         if !allMaskRects.isEmpty {
             let redacted = applyCxMaskRects(allMaskRects, on: image, scale: scale)
             return redacted.jpegData(compressionQuality: compressionQuality)
