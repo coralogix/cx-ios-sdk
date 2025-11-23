@@ -18,6 +18,7 @@
 		E622116A2BFDF4B400052682 /* NetworkSim.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6320FB42BE7CE6800A4547E /* NetworkSim.swift */; };
 		E622116C2BFF2A7B00052682 /* Keys.swift in Sources */ = {isa = PBXBuildFile; fileRef = E622116B2BFF2A7B00052682 /* Keys.swift */; };
 		E622116D2BFF2D5300052682 /* Keys.swift in Sources */ = {isa = PBXBuildFile; fileRef = E622116B2BFF2A7B00052682 /* Keys.swift */; };
+		E648914C2ED35B2600624978 /* FullImageCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = E648914B2ED35B2600624978 /* FullImageCell.swift */; };
 		E6525B5B2E38BE3C006DB4AA /* envs.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6525B5A2E38BE3A006DB4AA /* envs.swift */; };
 		E6525B602E38C548006DB4AA /* envs.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6525B5A2E38BE3A006DB4AA /* envs.swift */; };
 		E6525B612E38C548006DB4AA /* envs.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6525B5A2E38BE3A006DB4AA /* envs.swift */; };
@@ -62,7 +63,6 @@
 		E6E515FE2EBB8644008EC19A /* MaskViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6E515FD2EBB8644008EC19A /* MaskViewController.swift */; };
 		E6E516002EBC957D008EC19A /* MaskViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6E515FF2EBC957D008EC19A /* MaskViewController.swift */; };
 		E6FD68F82D01D5570066BDE8 /* CreditCardInputCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6FD68F72D01D5570066BDE8 /* CreditCardInputCell.swift */; };
-		E6FD68FA2D01D97B0066BDE8 /* FullImageCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6FD68F92D01D97B0066BDE8 /* FullImageCell.swift */; };
 		E6FDDA2D2DF176DC0005F274 /* ClockViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6FDDA2C2DF176DC0005F274 /* ClockViewController.swift */; };
 		E6FDDA2E2DF176DC0005F275 /* SchemaValidationViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6FDDA312DF176DC0005F275 /* SchemaValidationViewController.swift */; };
 		E6FDDA2F2DF176DC0005F274 /* ClockViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6FDDA2C2DF176DC0005F274 /* ClockViewController.swift */; };
@@ -126,6 +126,7 @@
 		E6320FB22BE7CE6800A4547E /* CrashSim.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = CrashSim.swift; sourceTree = "<group>"; };
 		E6320FB32BE7CE6800A4547E /* ErrorSim.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ErrorSim.swift; sourceTree = "<group>"; };
 		E6320FB42BE7CE6800A4547E /* NetworkSim.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = NetworkSim.swift; sourceTree = "<group>"; };
+		E648914B2ED35B2600624978 /* FullImageCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FullImageCell.swift; sourceTree = "<group>"; };
 		E6525B5A2E38BE3A006DB4AA /* envs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = envs.swift; sourceTree = "<group>"; };
 		E66938272C722EE60002335F /* DemoAppTvOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DemoAppTvOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		E66938292C722EE60002335F /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
@@ -153,7 +154,6 @@
 		E6E515FD2EBB8644008EC19A /* MaskViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MaskViewController.swift; sourceTree = "<group>"; };
 		E6E515FF2EBC957D008EC19A /* MaskViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MaskViewController.swift; sourceTree = "<group>"; };
 		E6FD68F72D01D5570066BDE8 /* CreditCardInputCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreditCardInputCell.swift; sourceTree = "<group>"; };
-		E6FD68F92D01D97B0066BDE8 /* FullImageCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FullImageCell.swift; sourceTree = "<group>"; };
 		E6FDDA2C2DF176DC0005F274 /* ClockViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClockViewController.swift; sourceTree = "<group>"; };
 		E6FDDA312DF176DC0005F275 /* SchemaValidationViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SchemaValidationViewController.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -274,8 +274,8 @@
 				E68681D92BFC739C00B127E7 /* ModalViewController.swift */,
 				E603F6CD2C56792D007C55DA /* PageController.swift */,
 				E603F6CB2C5631CF007C55DA /* CollectionViewController.swift */,
+				E648914B2ED35B2600624978 /* FullImageCell.swift */,
 				E6FD68F72D01D5570066BDE8 /* CreditCardInputCell.swift */,
-				E6FD68F92D01D97B0066BDE8 /* FullImageCell.swift */,
 			);
 			path = UIElements;
 			sourceTree = "<group>";
@@ -551,7 +551,6 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				E6FD68FA2D01D97B0066BDE8 /* FullImageCell.swift in Sources */,
 				E603F6CC2C5631CF007C55DA /* CollectionViewController.swift in Sources */,
 				E66938532C7489050002335F /* SdkViewController.swift in Sources */,
 				E6FDDA2D2DF176DC0005F274 /* ClockViewController.swift in Sources */,
@@ -563,6 +562,7 @@
 				E66938512C74842D0002335F /* ErrorViewController.swift in Sources */,
 				E68681A92BFA279500B127E7 /* MainViewController.swift in Sources */,
 				E6FD68F82D01D5570066BDE8 /* CreditCardInputCell.swift in Sources */,
+				E648914C2ED35B2600624978 /* FullImageCell.swift in Sources */,
 				E669384D2C74769C0002335F /* NetworkViewController.swift in Sources */,
 				E622116C2BFF2A7B00052682 /* Keys.swift in Sources */,
 				E6525B602E38C548006DB4AA /* envs.swift in Sources */,
