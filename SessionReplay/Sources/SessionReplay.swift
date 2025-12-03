@@ -305,7 +305,7 @@ public class SessionReplay: SessionReplayInterface {
         }
         
         guard var regions = self.sessionReplayModel?.regions else { return }
-        regions.removeAll { $0["id"] as? String == id }
+        self.sessionReplayModel?.regions.removeAll { $0["id"] as? String == id }
     }
     
     public func update(sessionId: String) {

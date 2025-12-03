@@ -78,7 +78,7 @@ class ErrorViewController: UITableViewController {
         } else if item == Keys.sendMessageDataError.rawValue {
             ErrorSim.sendMessageDataError()
         } else if item == Keys.sendMessageStackTraceTypeIsCarshError.rawValue {
-            ErrorSim.sendMessageStackTraceTyoeIsCarshError()
+            ErrorSim.sendMessageStackTraceTypeIsCarshError()
         } else if item == Keys.sendCrash.rawValue {
             CrashSim.simulateRandomCrash()
         } else if item == Keys.sendLogError.rawValue {

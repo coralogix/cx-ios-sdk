@@ -36,7 +36,7 @@ class ErrorSim {
             data: ["gender": "female", "height": "1.30"])
     }
     
-   static func sendMessageStackTraceTyoeIsCarshError() {
+   static func sendMessageStackTraceTypeIsCarshError() {
         CoralogixRumManager.shared.sdk.reportError(
             message: "im custom error",
             stackTrace: [["func1": "line1" , "func2": "line2"]],
