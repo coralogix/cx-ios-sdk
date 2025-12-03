@@ -67,23 +67,27 @@ extension CoralogixRum {
     //MARK: - Used By React Native
     func reportErrorWith(message: String,
                          stackTrace: [[String: Any]],
-                         errorType: String?) {
+                         errorType: String?,
+                         isCrash: Bool = false) {
         let stackTraceJson = Helper.convertArrayToJsonString(array: stackTrace)
         reportErrorInternal(message: message,
                             stackTraceJson: stackTraceJson,
-                            errorType: errorType)
+                            errorType: errorType,
+                            isCrash: isCrash)
     }
     
     private func reportErrorInternal(message: String,
                                      stackTraceJson: String?,
-                                     errorType: String? = nil) {
+                                     errorType: String? = nil,
+                                     isCrash: Bool = false) {
         guard isErrorsEnabled else { return }
         self.writeError(
             domain: "",
             code: 0,
             message: message,
             stackTraceJson: stackTraceJson,
-            errorType: errorType
+            errorType: errorType,
+            isCrash: isCrash
         )
     }
 
@@ -136,11 +140,13 @@ extension CoralogixRum {
     private func writeError(domain: String, code: Int, message: String,
                             userInfo: [String: Any]? = nil,
                             stackTraceJson: String? = nil,
-                            errorType: String? = nil) {
+                            errorType: String? = nil,
+                            isCrash: Bool = false) {
         var span = makeSpan(event: .error, source: .console, severity: .error)
         span.setAttribute(key: Keys.domain.rawValue, value: domain)
         span.setAttribute(key: Keys.code.rawValue, value: code)
         span.setAttribute(key: Keys.errorMessage.rawValue, value: message)
+        span.setAttribute(key: Keys.isCrash.rawValue, value: isCrash)
         if let errorType { span.setAttribute(key: Keys.errorType.rawValue, value: errorType) }
         if let stackTraceJson { span.setAttribute(key: Keys.stackTrace.rawValue, value: stackTraceJson) }
         if let userInfo, !userInfo.isEmpty {

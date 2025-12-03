@@ -10,9 +10,11 @@ import Coralogix
 class ErrorViewController: UITableViewController {
     let items = [Keys.sendNSException.rawValue,
                  Keys.sendNSError.rawValue,
-                 Keys.sendErrorString.rawValue,
+                 Keys.sendError.rawValue,
+                 Keys.sendMessageDataError.rawValue,
+                 Keys.sendMessageStackTraceTypeIsCarshError.rawValue,
+                 Keys.sendLogError.rawValue,
                  Keys.sendCrash.rawValue,
-                 Keys.sendLogWithData.rawValue,
                  Keys.simulateANR.rawValue]
     
     var customView = CustomView(frame: .zero)
@@ -71,12 +73,16 @@ class ErrorViewController: UITableViewController {
             ErrorSim.sendNSException()
         } else if item == Keys.sendNSError.rawValue {
             ErrorSim.sendNSError()
-        } else if item == Keys.sendErrorString.rawValue {
-            ErrorSim.sendStringError()
+        } else if item == Keys.sendError.rawValue {
+            ErrorSim.sendError()
+        } else if item == Keys.sendMessageDataError.rawValue {
+            ErrorSim.sendMessageDataError()
+        } else if item == Keys.sendMessageStackTraceTypeIsCarshError.rawValue {
+            ErrorSim.sendMessageStackTraceTyoeIsCarshError()
         } else if item == Keys.sendCrash.rawValue {
             CrashSim.simulateRandomCrash()
-        } else if item == Keys.sendLogWithData.rawValue {
-            ErrorSim.sendLog()
+        } else if item == Keys.sendLogError.rawValue {
+            ErrorSim.sendErrorLog()
         } else if item == Keys.simulateANR.rawValue {
             ErrorSim.simulateANR()
         }

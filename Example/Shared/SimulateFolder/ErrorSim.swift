@@ -25,21 +25,31 @@ class ErrorSim {
         CoralogixRumManager.shared.sdk.reportError(error: error)
     }
     
-    static func sendCustomError() {
+    static func sendError() {
         let filename = "file.txt"
         CoralogixRumManager.shared.sdk.reportError(error: CustomError.fileNotFound("File not found: \(filename)"))
     }
     
-    static func sendStringError() {
-        CoralogixRumManager.shared.sdk.reportError(message: "errorcode=500 Im cusom Error", data: ["gender": "female", "height": "1.30"])
+    static func sendMessageDataError() {
+        CoralogixRumManager.shared.sdk.reportError(
+            message: "errorcode=500 Im cusom Error",
+            data: ["gender": "female", "height": "1.30"])
+    }
+    
+   static func sendMessageStackTraceTyoeIsCarshError() {
+        CoralogixRumManager.shared.sdk.reportError(
+            message: "im custom error",
+            stackTrace: [["func1": "line1" , "func2": "line2"]],
+            errorType: "5",
+            isCrash: Bool.random())
+    }
+    
+    static func sendErrorLog() {
+        CoralogixRumManager.shared.sdk.log(severity: CoralogixLogSeverity.error, message: "Im error log", data: ["gender": "male", "height": "1.78"])
     }
     
     static func simulateANR() {
         sleep(10)
-    }
-    
-    static func sendLog() {
-        CoralogixRumManager.shared.sdk.log(severity: CoralogixLogSeverity.warn, message: "Im cusom log", data: ["gender": "male", "height": "1.78"])
     }
     
     enum CustomError: Error {

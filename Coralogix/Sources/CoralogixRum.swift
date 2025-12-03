@@ -189,9 +189,15 @@ public class CoralogixRum {
         self.reportErrorWith(message: message, data: data)
     }
     
-    public func reportError(message: String, stackTrace: [[String: Any]], errorType: String?) {
+    public func reportError(message: String,
+                            stackTrace: [[String: Any]],
+                            errorType: String?,
+                            isCrash: Bool = false) {
         guard CoralogixRum.isInitialized else { return }
-        self.reportErrorWith(message: message, stackTrace: stackTrace, errorType: errorType)
+        self.reportErrorWith(message: message,
+                             stackTrace: stackTrace,
+                             errorType: errorType,
+                             isCrash: isCrash)
     }
     
     public func reportMobileVitalsMeasurement(type: String, metrics: [HybridMetric]) {
