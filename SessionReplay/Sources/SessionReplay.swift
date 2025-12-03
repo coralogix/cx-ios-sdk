@@ -283,6 +283,31 @@ public class SessionReplay: SessionReplayInterface {
         return SessionReplay.initializationAttempted
     }
     
+    /// Register area to be masked on capture
+    public func registerMaskRegion(region: [String: Any]) {
+        if isDummyInstance {
+            Log.d("SessionReplay.registerMaskRegion() called on inactive instance (skipped by sampling)")
+            return
+        }
+        
+        guard let sessionReplayModel = self.sessionReplayModel,
+                let id = region["id"] as? String else { return }
+
+        sessionReplayModel.regions.removeAll { $0["id"] as? String == id }
+        sessionReplayModel.regions.append(region)
+    }
+    
+    /// Remove mask area from view
+    public func unregisterMaskRegion(id: String) {
+        if isDummyInstance {
+            Log.d("SessionReplay.unregisterMaskRegion() called on inactive instance (skipped by sampling)")
+            return
+        }
+        
+        guard var regions = self.sessionReplayModel?.regions else { return }
+        self.sessionReplayModel?.regions.removeAll { $0["id"] as? String == id }
+    }
+    
     public func update(sessionId: String) {
         if isDummyInstance {
             Log.d("SessionReplay.update() called on inactive instance (skipped by sampling)")

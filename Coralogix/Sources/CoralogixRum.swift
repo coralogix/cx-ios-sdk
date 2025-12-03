@@ -189,15 +189,15 @@ public class CoralogixRum {
         self.reportErrorWith(message: message, data: data)
     }
     
-    @available(*, deprecated, message: "Currently use for Flutter only, will be removed in future")
-    public func reportError(message: String, stackTrace: String?) {
+    public func reportError(message: String,
+                            stackTrace: [[String: Any]],
+                            errorType: String?,
+                            isCrash: Bool = false) {
         guard CoralogixRum.isInitialized else { return }
-        self.reportErrorWith(message: message, stackTrace: stackTrace)
-    }
-    
-    public func reportError(message: String, stackTrace: [[String: Any]], errorType: String?) {
-        guard CoralogixRum.isInitialized else { return }
-        self.reportErrorWith(message: message, stackTrace: stackTrace, errorType: errorType)
+        self.reportErrorWith(message: message,
+                             stackTrace: stackTrace,
+                             errorType: errorType,
+                             isCrash: isCrash)
     }
     
     public func reportMobileVitalsMeasurement(type: String, metrics: [HybridMetric]) {

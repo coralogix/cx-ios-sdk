@@ -16,16 +16,16 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         
         CoralogixRumManager.shared.initialize()
 
-        // Must be initialized after CoralogixRum
-        let sessionReplayOptions = SessionReplayOptions(recordingType: .image,
-                                                        captureTimeInterval: 10.0,
-                                                        captureScale: 2.0,
-                                                        captureCompressionQuality: 0.8,
-                                                        maskText: [],
-                                                        maskOnlyCreditCards: false,
-                                                        maskAllImages: false,
-                                                        autoStartSessionRecording: true)
-        SessionReplay.initializeWithOptions(sessionReplayOptions:sessionReplayOptions)
+//        // Must be initialized after CoralogixRum
+//        let sessionReplayOptions = SessionReplayOptions(recordingType: .image,
+//                                                        captureTimeInterval: 10.0,
+//                                                        captureScale: 2.0,
+//                                                        captureCompressionQuality: 0.8,
+//                                                        maskText: [],
+//                                                        maskOnlyCreditCards: false,
+//                                                        maskAllImages: false,
+//                                                        autoStartSessionRecording: true)
+//        SessionReplay.initializeWithOptions(sessionReplayOptions:sessionReplayOptions)
         return true
     }
     

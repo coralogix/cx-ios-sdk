@@ -17,7 +17,6 @@ struct ContentView: View {
                  Keys.sendNSException.rawValue,
                  Keys.sendNSError.rawValue,
                  Keys.sendErrorString.rawValue,
-                 Keys.sendErrorStacktraceString.rawValue,
                  Keys.sendLogWithData.rawValue,
                  Keys.sendCrash.rawValue,
                  Keys.shutDownCoralogixRum.rawValue,
@@ -115,9 +114,7 @@ struct CustomButton: View {
                 NetworkSim.setNetworkRequestContextSuccsess()
             } else if item == Keys.failureNetworkRequestFlutter.rawValue {
                 NetworkSim.setNetworkRequestContextFailure()
-            } else if item == Keys.sendErrorStacktraceString.rawValue {
-                ErrorSim.sendStringStacktraceError()
-            }
+            } 
         }, label: {
             Text(item)
         }).trackCXTapAction(name: "\(item)")

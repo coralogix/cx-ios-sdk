@@ -793,6 +793,14 @@ final class MockSpanBuilder: SpanBuilder {
 }
 
 final class MockSessionReplay: SessionReplayInterface {
+    func registerMaskRegion(region: [String : Any]) {
+        
+    }
+    
+    func unregisterMaskRegion(id: String) {
+        
+    }
+    
     func captureEvent(properties: [String : Any]?) -> Result<Void, CoralogixInternal.CaptureEventError> {
         captureEventCalledWith = properties
         return .success(())

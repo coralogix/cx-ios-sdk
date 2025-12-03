@@ -23,6 +23,7 @@ struct ErrorContext {
     var stackTrace: [[String: Any]]?
     let baseAddress: String
     let arch: String
+    var isCrash: Bool = false
     
     init(otel: SpanDataProtocol) {
         self.domain = otel.getAttribute(forKey: Keys.domain.rawValue) as? String ?? ""
@@ -62,6 +63,9 @@ struct ErrorContext {
         self.errorType = otel.getAttribute(forKey: Keys.errorType.rawValue) as? String ?? ""
         if let anr = otel.getAttribute(forKey: Keys.mobileVitalsType.rawValue) as? String {
             self.errorType = anr
+        }
+        if let isCrashString = otel.getAttribute(forKey:Keys.isCrash.rawValue) as? String {
+            self.isCrash = Bool(isCrashString) ?? false
         }
     }
     
@@ -106,7 +110,7 @@ struct ErrorContext {
                 errorContext[Keys.errorType.rawValue] = errorType
             }
             
-            errorContext[Keys.isCrash.rawValue] = false
+            errorContext[Keys.isCrash.rawValue] = self.isCrash
         }
         return errorContext
     }

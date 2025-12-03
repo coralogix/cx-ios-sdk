@@ -18,7 +18,7 @@ public enum SessionReplayResultCode {
     case failure
 }
 
-class SessionReplayModel {
+public class SessionReplayModel {
     internal var urlManager = URLManager()
     private var urlObserver: URLObserver?
     internal var sessionId: String = ""
@@ -29,6 +29,7 @@ class SessionReplayModel {
     private let srNetworkManager: SRNetworkManager?
     private var prvScreenshotData: Data? = nil
     private lazy var comparisonContext = CIContext(options: [.workingColorSpace: NSNull()])
+    var regions = [[String: Any]]()
 
     internal var getKeyWindow: () -> UIWindow? = {
         Global.getKeyWindow()
@@ -70,9 +71,12 @@ class SessionReplayModel {
             return nil
         }
 
+        let regionsRect: [CGRect] = Global.rects(from: regions)
+            
         return window.captureScreenshot(
             scale: options.captureScale,
-            compressionQuality: options.captureCompressionQuality
+            compressionQuality: options.captureCompressionQuality,
+            regions: regionsRect
         )
     }
     
@@ -195,14 +199,14 @@ class SessionReplayModel {
         if !fileManager.fileExists(atPath: sessionReplayURL.path) {
             do {
                 try fileManager.createDirectory(at: sessionReplayURL, withIntermediateDirectories: true, attributes: nil)
-                Log.d("SessionReplay folder created successfully at \(sessionReplayURL.path)")
+                Log.d("[SessionReplayModel] folder created successfully at \(sessionReplayURL.path)")
                 return .success
             } catch {
                 Log.e("Failed to create SessionReplay folder: \(error.localizedDescription)")
                 return .failure
             }
         } else {
-            Log.d("SessionReplay folder already exists at \(sessionReplayURL.path)")
+            Log.d("[SessionReplayModel] folder already exists at \(sessionReplayURL.path)")
             return .failure
         }
     }
