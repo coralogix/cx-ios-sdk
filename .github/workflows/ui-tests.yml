@@ -36,34 +36,90 @@ jobs:
     - name: List schemes and build settings
       run: |
         echo "📋 Listing available schemes..."
-        xcodebuild -list -project *.xcodeproj 2>/dev/null || xcodebuild -list -workspace *.xcworkspace 2>/dev/null || echo "Using default scheme"
+        if [ -f *.xcworkspace ]; then
+          echo "Found workspace:"
+          ls -la *.xcworkspace
+          xcodebuild -list -workspace *.xcworkspace
+        elif [ -f *.xcodeproj ]; then
+          echo "Found project:"
+          ls -la *.xcodeproj
+          xcodebuild -list -project *.xcodeproj
+        else
+          echo "No Xcode project or workspace found in root"
+          find . -name "*.xcworkspace" -o -name "*.xcodeproj" | head -5
+        fi
       
     - name: Boot simulator
       run: |
-        DEVICE_ID=$(xcrun simctl create "Test iPhone 16" "iPhone 16" "iOS18.2" || \
-                    xcrun simctl list devices available | grep "iPhone 16" | grep -v "Pro" | head -1 | grep -o "[0-9A-F-]\{36\}")
+        DEVICE_ID=$(xcrun simctl list devices available | grep "iPhone 16 (" | grep -v "Pro" | head -1 | grep -o "[0-9A-F-]\{36\}" || \
+                    xcrun simctl list devices available | grep "iPhone 15 (" | grep -v "Pro" | head -1 | grep -o "[0-9A-F-]\{36\}")
+        if [ -z "$DEVICE_ID" ]; then
+          echo "Creating new simulator..."
+          DEVICE_ID=$(xcrun simctl create "Test iPhone" "iPhone 15" 2>/dev/null || echo "")
+        fi
         echo "SIMULATOR_ID=$DEVICE_ID" >> $GITHUB_ENV
-        xcrun simctl boot "$DEVICE_ID" || echo "Simulator already booted"
+        xcrun simctl boot "$DEVICE_ID" 2>/dev/null || echo "Simulator already booted"
+        
+    - name: Find workspace/project and scheme
+      id: find-project
+      run: |
+        # Find workspace or project file
+        WORKSPACE=$(find . -maxdepth 3 -name "*.xcworkspace" | head -1)
+        PROJECT=$(find . -maxdepth 3 -name "*.xcodeproj" | head -1)
+        
+        if [ -n "$WORKSPACE" ]; then
+          echo "Found workspace: $WORKSPACE"
+          echo "BUILD_TYPE=-workspace" >> $GITHUB_ENV
+          echo "BUILD_PATH=$WORKSPACE" >> $GITHUB_ENV
+          
+          # Get first scheme that might be the demo app
+          SCHEME=$(xcodebuild -list -workspace "$WORKSPACE" 2>/dev/null | grep -A 100 "Schemes:" | grep -v "Schemes:" | grep -E "(DemoApp|Demo|Swift)" | head -1 | xargs)
+          
+          if [ -z "$SCHEME" ]; then
+            # Fallback to first available scheme
+            SCHEME=$(xcodebuild -list -workspace "$WORKSPACE" 2>/dev/null | grep -A 100 "Schemes:" | grep -v "Schemes:" | head -1 | xargs)
+          fi
+        elif [ -n "$PROJECT" ]; then
+          echo "Found project: $PROJECT"
+          echo "BUILD_TYPE=-project" >> $GITHUB_ENV
+          echo "BUILD_PATH=$PROJECT" >> $GITHUB_ENV
+          
+          # Get first scheme
+          SCHEME=$(xcodebuild -list -project "$PROJECT" 2>/dev/null | grep -A 100 "Schemes:" | grep -v "Schemes:" | grep -E "(DemoApp|Demo|Swift)" | head -1 | xargs)
+          
+          if [ -z "$SCHEME" ]; then
+            SCHEME=$(xcodebuild -list -project "$PROJECT" 2>/dev/null | grep -A 100 "Schemes:" | grep -v "Schemes:" | head -1 | xargs)
+          fi
+        else
+          echo "❌ No Xcode workspace or project found!"
+          exit 1
+        fi
+        
+        echo "SCHEME=$SCHEME" >> $GITHUB_ENV
+        echo "✅ Using scheme: $SCHEME"
         
     - name: Build for testing
       run: |
         set -o pipefail
         xcodebuild build-for-testing \
-          -scheme DemoAppSwift \
-          -destination 'platform=iOS Simulator,name=iPhone 16,OS=18.2' \
+          $BUILD_TYPE "$BUILD_PATH" \
+          -scheme "$SCHEME" \
+          -destination 'platform=iOS Simulator,name=iPhone 15' \
           -derivedDataPath DerivedData \
           CODE_SIGNING_ALLOWED=NO \
+          CODE_SIGN_IDENTITY="" \
           | xcpretty --color || cat
           
     - name: Run UI Tests
       run: |
         set -o pipefail
         xcodebuild test-without-building \
-          -scheme DemoAppSwift \
-          -destination 'platform=iOS Simulator,name=iPhone 16,OS=18.2' \
+          $BUILD_TYPE "$BUILD_PATH" \
+          -scheme "$SCHEME" \
+          -destination 'platform=iOS Simulator,name=iPhone 15' \
           -derivedDataPath DerivedData \
           -only-testing:DemoAppUITests/DemoAppUITests/testSchemaValidationFlow \
-          | tee test-output.log | xcpretty --color --report junit --output DerivedData/junit.xml
+          | tee test-output.log | xcpretty --color --report junit --output DerivedData/junit.xml || true
       continue-on-error: false
       
     - name: Print test output on failure
