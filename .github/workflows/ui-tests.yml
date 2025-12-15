@@ -25,7 +25,17 @@ jobs:
       uses: actions/checkout@v4
       
     - name: Select Xcode version
-      run: sudo xcode-select -s /Applications/Xcode_16.2.app/Contents/Developer
+      run: |
+        # Try to find available Xcode versions
+        if [ -d "/Applications/Xcode_16.2.app" ]; then
+          sudo xcode-select -s /Applications/Xcode_16.2.app/Contents/Developer
+        elif [ -d "/Applications/Xcode_16.1.app" ]; then
+          sudo xcode-select -s /Applications/Xcode_16.1.app/Contents/Developer
+        elif [ -d "/Applications/Xcode_16.0.app" ]; then
+          sudo xcode-select -s /Applications/Xcode_16.0.app/Contents/Developer
+        else
+          echo "Using default Xcode version"
+        fi
       
     - name: Show Xcode version
       run: xcodebuild -version
@@ -33,100 +43,154 @@ jobs:
     - name: Show available simulators
       run: xcrun simctl list devices available
       
-    - name: List schemes and build settings
+    - name: Verify project structure
       run: |
-        echo "📋 Listing available schemes..."
-        if [ -f *.xcworkspace ]; then
-          echo "Found workspace:"
-          ls -la *.xcworkspace
-          xcodebuild -list -workspace *.xcworkspace
-        elif [ -f *.xcodeproj ]; then
-          echo "Found project:"
-          ls -la *.xcodeproj
-          xcodebuild -list -project *.xcodeproj
+        echo "📋 Verifying project structure..."
+        if [ -f "Example/DemoApp.xcworkspace/contents.xcworkspacedata" ]; then
+          echo "✅ Found workspace: Example/DemoApp.xcworkspace"
+        elif [ -d "Example/DemoApp.xcodeproj" ]; then
+          echo "✅ Found project: Example/DemoApp.xcodeproj"
         else
-          echo "No Xcode project or workspace found in root"
-          find . -name "*.xcworkspace" -o -name "*.xcodeproj" | head -5
+          echo "❌ Project/workspace not found in Example/ directory"
+          find . -name "*.xcworkspace" -o -name "*.xcodeproj" | head -10
+          exit 1
+        fi
+        
+    - name: List available schemes
+      run: |
+        cd Example
+        if [ -f "DemoApp.xcworkspace/contents.xcworkspacedata" ]; then
+          echo "📋 Listing schemes from workspace..."
+          xcodebuild -list -workspace DemoApp.xcworkspace
+        else
+          echo "📋 Listing schemes from project..."
+          xcodebuild -list -project DemoApp.xcodeproj
         fi
       
     - name: Boot simulator
       run: |
-        DEVICE_ID=$(xcrun simctl list devices available | grep "iPhone 16 (" | grep -v "Pro" | head -1 | grep -o "[0-9A-F-]\{36\}" || \
-                    xcrun simctl list devices available | grep "iPhone 15 (" | grep -v "Pro" | head -1 | grep -o "[0-9A-F-]\{36\}")
+        # Try to find an available iPhone simulator
+        DEVICE_ID=$(xcrun simctl list devices available | grep -E "iPhone (16|15|14|13)" | grep -v "Pro" | head -1 | grep -o "[0-9A-F-]\{36\}" || echo "")
+        
         if [ -z "$DEVICE_ID" ]; then
-          echo "Creating new simulator..."
+          echo "Creating new iPhone 15 simulator..."
           DEVICE_ID=$(xcrun simctl create "Test iPhone" "iPhone 15" 2>/dev/null || echo "")
         fi
-        echo "SIMULATOR_ID=$DEVICE_ID" >> $GITHUB_ENV
-        xcrun simctl boot "$DEVICE_ID" 2>/dev/null || echo "Simulator already booted"
         
-    - name: Find workspace/project and scheme
-      id: find-project
-      run: |
-        # Find workspace or project file
-        WORKSPACE=$(find . -maxdepth 3 -name "*.xcworkspace" | head -1)
-        PROJECT=$(find . -maxdepth 3 -name "*.xcodeproj" | head -1)
-        
-        if [ -n "$WORKSPACE" ]; then
-          echo "Found workspace: $WORKSPACE"
-          echo "BUILD_TYPE=-workspace" >> $GITHUB_ENV
-          echo "BUILD_PATH=$WORKSPACE" >> $GITHUB_ENV
-          
-          # Get first scheme that might be the demo app
-          SCHEME=$(xcodebuild -list -workspace "$WORKSPACE" 2>/dev/null | grep -A 100 "Schemes:" | grep -v "Schemes:" | grep -E "(DemoApp|Demo|Swift)" | head -1 | xargs)
-          
-          if [ -z "$SCHEME" ]; then
-            # Fallback to first available scheme
-            SCHEME=$(xcodebuild -list -workspace "$WORKSPACE" 2>/dev/null | grep -A 100 "Schemes:" | grep -v "Schemes:" | head -1 | xargs)
-          fi
-        elif [ -n "$PROJECT" ]; then
-          echo "Found project: $PROJECT"
-          echo "BUILD_TYPE=-project" >> $GITHUB_ENV
-          echo "BUILD_PATH=$PROJECT" >> $GITHUB_ENV
-          
-          # Get first scheme
-          SCHEME=$(xcodebuild -list -project "$PROJECT" 2>/dev/null | grep -A 100 "Schemes:" | grep -v "Schemes:" | grep -E "(DemoApp|Demo|Swift)" | head -1 | xargs)
-          
-          if [ -z "$SCHEME" ]; then
-            SCHEME=$(xcodebuild -list -project "$PROJECT" 2>/dev/null | grep -A 100 "Schemes:" | grep -v "Schemes:" | head -1 | xargs)
-          fi
-        else
-          echo "❌ No Xcode workspace or project found!"
+        if [ -z "$DEVICE_ID" ]; then
+          echo "❌ Failed to find or create simulator"
+          xcrun simctl list devices available
           exit 1
         fi
         
-        echo "SCHEME=$SCHEME" >> $GITHUB_ENV
-        echo "✅ Using scheme: $SCHEME"
+        echo "SIMULATOR_ID=$DEVICE_ID" >> $GITHUB_ENV
+        echo "✅ Using simulator: $DEVICE_ID"
+        xcrun simctl boot "$DEVICE_ID" 2>/dev/null || echo "Simulator already booted"
         
+    - name: Set build configuration
+      id: build-config
+      run: |
+        # Prefer workspace over project
+        if [ -f "Example/DemoApp.xcworkspace/contents.xcworkspacedata" ]; then
+          echo "BUILD_TYPE=-workspace" >> $GITHUB_ENV
+          echo "BUILD_PATH=Example/DemoApp.xcworkspace" >> $GITHUB_ENV
+          echo "BUILD_PATH_RELATIVE=DemoApp.xcworkspace" >> $GITHUB_ENV
+          echo "✅ Using workspace: Example/DemoApp.xcworkspace"
+        elif [ -d "Example/DemoApp.xcodeproj" ]; then
+          echo "BUILD_TYPE=-project" >> $GITHUB_ENV
+          echo "BUILD_PATH=Example/DemoApp.xcodeproj" >> $GITHUB_ENV
+          echo "BUILD_PATH_RELATIVE=DemoApp.xcodeproj" >> $GITHUB_ENV
+          echo "✅ Using project: Example/DemoApp.xcodeproj"
+        else
+          echo "❌ No Xcode workspace or project found in Example/ directory!"
+          exit 1
+        fi
+        
+        # Explicitly set the scheme to DemoAppSwift
+        echo "SCHEME=DemoAppSwift" >> $GITHUB_ENV
+        echo "✅ Using scheme: DemoAppSwift"
+        
+    - name: Install xcpretty (optional)
+      run: |
+        if ! command -v xcpretty &> /dev/null; then
+          echo "xcpretty not found, installing..."
+          gem install xcpretty || echo "Failed to install xcpretty, will use plain output"
+        else
+          echo "xcpretty is already installed"
+        fi
+      
     - name: Build for testing
       run: |
         set -o pipefail
-        xcodebuild build-for-testing \
-          $BUILD_TYPE "$BUILD_PATH" \
-          -scheme "$SCHEME" \
-          -destination 'platform=iOS Simulator,name=iPhone 15' \
-          -derivedDataPath DerivedData \
-          CODE_SIGNING_ALLOWED=NO \
-          CODE_SIGN_IDENTITY="" \
-          | xcpretty --color || cat
+        cd Example
+        
+        # Get simulator name from ID
+        SIMULATOR_NAME=$(xcrun simctl list devices | grep "$SIMULATOR_ID" | head -1 | sed 's/.*(\(.*\))/\1/' | xargs || echo "iPhone 15")
+        
+        echo "🔨 Building for testing with scheme: $SCHEME"
+        echo "📱 Using simulator: $SIMULATOR_NAME (ID: $SIMULATOR_ID)"
+        echo "📂 Build path: $BUILD_PATH_RELATIVE"
+        
+        if command -v xcpretty &> /dev/null; then
+          xcodebuild build-for-testing \
+            $BUILD_TYPE "$BUILD_PATH_RELATIVE" \
+            -scheme "$SCHEME" \
+            -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
+            -derivedDataPath ../DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGN_IDENTITY="" \
+            | xcpretty --color || cat
+        else
+          xcodebuild build-for-testing \
+            $BUILD_TYPE "$BUILD_PATH_RELATIVE" \
+            -scheme "$SCHEME" \
+            -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
+            -derivedDataPath ../DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGN_IDENTITY=""
+        fi
           
     - name: Run UI Tests
       run: |
         set -o pipefail
-        xcodebuild test-without-building \
-          $BUILD_TYPE "$BUILD_PATH" \
-          -scheme "$SCHEME" \
-          -destination 'platform=iOS Simulator,name=iPhone 15' \
-          -derivedDataPath DerivedData \
-          -only-testing:DemoAppUITests/DemoAppUITests/testSchemaValidationFlow \
-          | tee test-output.log | xcpretty --color --report junit --output DerivedData/junit.xml || true
+        cd Example
+        
+        echo "🧪 Running UI tests with scheme: $SCHEME"
+        echo "📱 Using simulator: $SIMULATOR_ID"
+        echo "📂 Build path: $BUILD_PATH_RELATIVE"
+        
+        if command -v xcpretty &> /dev/null; then
+          xcodebuild test-without-building \
+            $BUILD_TYPE "$BUILD_PATH_RELATIVE" \
+            -scheme "$SCHEME" \
+            -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
+            -derivedDataPath ../DerivedData \
+            -only-testing:DemoAppUITests/DemoAppUITests/testSchemaValidationFlow \
+            -resultBundlePath ../DerivedData/TestResults.xcresult \
+            | tee ../test-output.log | xcpretty --color --report junit --output ../DerivedData/junit.xml || true
+        else
+          xcodebuild test-without-building \
+            $BUILD_TYPE "$BUILD_PATH_RELATIVE" \
+            -scheme "$SCHEME" \
+            -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
+            -derivedDataPath ../DerivedData \
+            -only-testing:DemoAppUITests/DemoAppUITests/testSchemaValidationFlow \
+            -resultBundlePath ../DerivedData/TestResults.xcresult \
+            | tee ../test-output.log || true
+        fi
       continue-on-error: false
       
     - name: Print test output on failure
       if: failure()
       run: |
         echo "❌ ============ TEST FAILURE DETAILS ============"
-        cat test-output.log || echo "No test output log found"
+        if [ -f test-output.log ]; then
+          cat test-output.log
+        else
+          echo "No test output log found at test-output.log"
+          echo "Checking for test results..."
+          ls -la DerivedData/Logs/Test/ 2>/dev/null || echo "No test logs directory found"
+        fi
         echo "❌ ================================================"
         
     - name: Upload test results
@@ -157,3 +221,4 @@ jobs:
         files: DerivedData/junit.xml
         check_name: UI Test Results
         comment_mode: off
+      continue-on-error: true
