@@ -1,0 +1,96 @@
+name: UI Tests
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch: # Allow manual triggering
+
+jobs:
+  ui-tests:
+    name: Run DemoApp UI Tests
+    runs-on: macos-15 # macOS 15 (Sequoia) with Xcode 16+
+    timeout-minutes: 30
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Select Xcode version
+      run: sudo xcode-select -s /Applications/Xcode_16.2.app/Contents/Developer
+      
+    - name: Show Xcode version
+      run: xcodebuild -version
+      
+    - name: Show available simulators
+      run: xcrun simctl list devices available
+      
+    - name: List schemes and build settings
+      run: |
+        echo "📋 Listing available schemes..."
+        xcodebuild -list -project *.xcodeproj 2>/dev/null || xcodebuild -list -workspace *.xcworkspace 2>/dev/null || echo "Using default scheme"
+      
+    - name: Boot simulator
+      run: |
+        DEVICE_ID=$(xcrun simctl create "Test iPhone 16" "iPhone 16" "iOS18.2" || \
+                    xcrun simctl list devices available | grep "iPhone 16" | grep -v "Pro" | head -1 | grep -o "[0-9A-F-]\{36\}")
+        echo "SIMULATOR_ID=$DEVICE_ID" >> $GITHUB_ENV
+        xcrun simctl boot "$DEVICE_ID" || echo "Simulator already booted"
+        
+    - name: Build for testing
+      run: |
+        set -o pipefail
+        xcodebuild build-for-testing \
+          -scheme DemoAppSwift \
+          -destination 'platform=iOS Simulator,name=iPhone 16,OS=18.2' \
+          -derivedDataPath DerivedData \
+          CODE_SIGNING_ALLOWED=NO \
+          | xcpretty --color || cat
+          
+    - name: Run UI Tests
+      run: |
+        set -o pipefail
+        xcodebuild test-without-building \
+          -scheme DemoAppSwift \
+          -destination 'platform=iOS Simulator,name=iPhone 16,OS=18.2' \
+          -derivedDataPath DerivedData \
+          -only-testing:DemoAppUITests/DemoAppUITests/testSchemaValidationFlow \
+          | tee test-output.log | xcpretty --color --report junit --output DerivedData/junit.xml
+      continue-on-error: false
+      
+    - name: Print test output on failure
+      if: failure()
+      run: |
+        echo "❌ ============ TEST FAILURE DETAILS ============"
+        cat test-output.log || echo "No test output log found"
+        echo "❌ ================================================"
+        
+    - name: Upload test results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-results
+        path: |
+          DerivedData/Logs/Test/*.xcresult
+          DerivedData/junit.xml
+          test-output.log
+        retention-days: 30
+          
+    - name: Upload test logs on failure
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-logs
+        path: |
+          DerivedData/Logs/Test/**/*.log
+          ~/Library/Logs/DiagnosticReports/
+        retention-days: 7
+        
+    - name: Publish test results
+      if: always()
+      uses: EnricoMi/publish-unit-test-result-action/macos@v2
+      with:
+        files: DerivedData/junit.xml
+        check_name: UI Test Results
+        comment_mode: off
