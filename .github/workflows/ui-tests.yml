@@ -176,56 +176,80 @@ jobs:
       run: |
         cd Example
         echo "📋 Finding available destinations for scheme: $SCHEME"
+        echo "📱 Booted simulator: $SIMULATOR_NAME (ID: $SIMULATOR_ID)"
         
         # Get available destinations from xcodebuild
         DESTINATIONS_OUTPUT=$(xcodebuild -showdestinations \
           $BUILD_TYPE "$BUILD_PATH_RELATIVE" \
           -scheme "$SCHEME" 2>&1)
         
-        echo "Raw destinations output:"
-        echo "$DESTINATIONS_OUTPUT" | head -30
-        
         # Filter for iOS Simulator destinations
         DESTINATIONS=$(echo "$DESTINATIONS_OUTPUT" | grep "iOS Simulator" || echo "")
         
         if [ -z "$DESTINATIONS" ]; then
           echo "⚠️ No iOS Simulator destinations found in xcodebuild output"
-          echo "Using fallback: platform=iOS Simulator,name=$SIMULATOR_NAME"
+          echo "Using booted simulator: platform=iOS Simulator,name=$SIMULATOR_NAME"
           echo "DESTINATION_SPEC=platform=iOS Simulator,name=$SIMULATOR_NAME" >> $GITHUB_ENV
         else
-          echo "Found iOS Simulator destinations:"
-          echo "$DESTINATIONS"
+          echo "Found iOS Simulator destinations (showing first 5):"
+          echo "$DESTINATIONS" | head -5
           
-          # Find first iPhone simulator destination (prefer non-Pro, prefer iPhone 15/16)
-          DEST_LINE=$(echo "$DESTINATIONS" | grep -E "iPhone (16|15)" | grep -v "Pro" | head -1 || \
-                     echo "$DESTINATIONS" | grep -E "iPhone (14|13)" | grep -v "Pro" | head -1 || \
-                     echo "$DESTINATIONS" | head -1)
+          # Try to find a destination that matches our booted simulator by ID first
+          DEST_LINE_BY_ID=$(echo "$DESTINATIONS" | grep "$SIMULATOR_ID" | head -1 || echo "")
+          
+          if [ -n "$DEST_LINE_BY_ID" ]; then
+            echo "✅ Found destination matching booted simulator ID"
+            DEST_LINE="$DEST_LINE_BY_ID"
+          else
+            # Try to find by name
+            DEST_LINE_BY_NAME=$(echo "$DESTINATIONS" | grep -i "$SIMULATOR_NAME" | head -1 || echo "")
+            
+            if [ -n "$DEST_LINE_BY_NAME" ]; then
+              echo "✅ Found destination matching simulator name"
+              DEST_LINE="$DEST_LINE_BY_NAME"
+            else
+              # Fallback: find first iPhone simulator destination (prefer non-Pro, prefer iPhone 15/16)
+              DEST_LINE=$(echo "$DESTINATIONS" | grep -E "iPhone (16|15)" | grep -v "Pro" | head -1 || \
+                         echo "$DESTINATIONS" | grep -E "iPhone (14|13)" | grep -v "Pro" | head -1 || \
+                         echo "$DESTINATIONS" | head -1)
+            fi
+          fi
           
           if [ -n "$DEST_LINE" ]; then
             echo "Selected destination line: $DEST_LINE"
             
-            # Extract destination specifier
-            # Format: "id=73B2B261-..., name=iPhone 15, OS=18.2"
-            DEST_NAME=$(echo "$DEST_LINE" | sed -n 's/.*name=\([^,]*\).*/\1/p' | xargs)
-            DEST_OS=$(echo "$DEST_LINE" | sed -n 's/.*OS=\([0-9.]*\).*/\1/p' | xargs)
+            # Extract destination specifier - be more careful with parsing
+            # Format examples:
+            # "id=73B2B261-..., name=iPhone 15, OS=18.2"
+            # "id=73B2B261-..., name=iPhone 16, OS=18.2"
+            
+            # Extract name - match "name=" followed by text until comma or end
+            DEST_NAME=$(echo "$DEST_LINE" | sed -E 's/.*name=([^,]+).*/\1/' | xargs)
+            
+            # Extract OS - match "OS=" followed by version number
+            DEST_OS=$(echo "$DEST_LINE" | sed -E 's/.*OS=([0-9.]+).*/\1/' | xargs)
+            
+            # Clean up name - remove any trailing characters that aren't part of the name
+            DEST_NAME=$(echo "$DEST_NAME" | sed 's/[^a-zA-Z0-9 ].*$//' | xargs)
             
             echo "Extracted - Name: '$DEST_NAME', OS: '$DEST_OS'"
             
-            if [ -n "$DEST_NAME" ]; then
-              if [ -n "$DEST_OS" ]; then
+            # Validate name looks reasonable (starts with iPhone and has a number)
+            if [[ "$DEST_NAME" =~ ^iPhone[[:space:]]+[0-9]+ ]]; then
+              if [ -n "$DEST_OS" ] && [[ "$DEST_OS" =~ ^[0-9]+\.[0-9]+ ]]; then
                 DEST_SPEC="platform=iOS Simulator,name=$DEST_NAME,OS=$DEST_OS"
               else
                 DEST_SPEC="platform=iOS Simulator,name=$DEST_NAME"
               fi
               echo "DESTINATION_SPEC=$DEST_SPEC" >> $GITHUB_ENV
-              echo "✅ Using destination: $DEST_NAME (OS: ${DEST_OS:-unknown})"
+              echo "✅ Using destination: $DEST_NAME (OS: ${DEST_OS:-not specified})"
             else
-              # Fallback to name-based
-              echo "⚠️ Could not extract destination name, using fallback"
+              # Name extraction failed, use booted simulator name
+              echo "⚠️ Extracted name '$DEST_NAME' doesn't look valid, using booted simulator name"
               echo "DESTINATION_SPEC=platform=iOS Simulator,name=$SIMULATOR_NAME" >> $GITHUB_ENV
             fi
           else
-            echo "⚠️ Could not select destination line, using fallback"
+            echo "⚠️ Could not select destination line, using booted simulator"
             echo "DESTINATION_SPEC=platform=iOS Simulator,name=$SIMULATOR_NAME" >> $GITHUB_ENV
           fi
         fi
