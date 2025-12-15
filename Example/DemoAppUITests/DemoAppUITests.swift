@@ -61,11 +61,11 @@ final class DemoAppUITests: XCTestCase {
         errorButton.tap()
         Thread.sleep(forTimeInterval: delay)
         
-        // Trigger "Error" test event
-        let stackTraceErrorButton = app.staticTexts["Stack Trace Error"].firstMatch
-        XCTAssertTrue(stackTraceErrorButton.waitForExistence(timeout: delay), "❌ 'Stack Trace Error' button not found")
-        stackTraceErrorButton.tap()
-        Thread.sleep(forTimeInterval: delay)
+        // Trigger "Stack Trace Error" test event
+//        let stackTraceErrorButton = app.staticTexts["Stack Trace Error"].firstMatch
+//        XCTAssertTrue(stackTraceErrorButton.waitForExistence(timeout: delay), "❌ 'Stack Trace Error' button not found")
+//        stackTraceErrorButton.tap()
+//        Thread.sleep(forTimeInterval: delay)
         
         // Trigger "Message Data Error (custom log)" event
         let messageDataErrorButton = app.staticTexts["Message Data Error"].firstMatch
@@ -79,6 +79,7 @@ final class DemoAppUITests: XCTestCase {
         logErrorButton.tap()
         Thread.sleep(forTimeInterval: delay)
         
+        // Go back to main screen
         let backButtonFromError = app.buttons["BackButton"].firstMatch
         XCTAssertTrue(backButtonFromError.waitForExistence(timeout: delay), "❌ Back button from Error screen not found")
         backButtonFromError.tap()

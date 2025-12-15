@@ -27,6 +27,6 @@ This comprehensive end-to-end test validates that the Coralogix SDK correctly ca
 2. **Successful Network Request** - Validates schema for successful network calls
 3. **Error (Swift Error Type)** - Validates schema for Swift Error objects
 4. **Error (Custom Log)** - Validates schema for custom error logs
-5. **Log Error** - Validates schema for error logging
-6. **Send Custom Measurement** - Validates schema for custom performance metrics
-7. **Log with Custom Labels** - Validates schema for logs with custom label metadata
+5. **Stack Trace Error** - RN / Flutter 
+7. **Send Custom Measurement** - Validates schema for custom performance metrics
+8. **Log with Custom Labels** - Validates schema for logs with custom label metadata
