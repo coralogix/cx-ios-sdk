@@ -15,15 +15,12 @@ final class DemoAppUITests: XCTestCase {
 
     override func setUpWithError() throws {
         continueAfterFailure = false
-        
-        
         // Initialize the app
         app = XCUIApplication()
         app.launch()
     }
     
     func testSchemaValidationFlow() throws {
-        let app = XCUIApplication()
         app.activate()
         
         // Navigate to Network Instrumentation screen
