@@ -29,7 +29,7 @@ final class DemoAppUITests: XCTestCase {
         networkInstrumentationButton.tap()
         Thread.sleep(forTimeInterval: delay)
 
-        // Send failiure network
+        // Send failure network
         let failingNetworkButton = app.staticTexts["Failing network request"].firstMatch
         XCTAssertTrue(failingNetworkButton.waitForExistence(timeout: delay), "❌ 'Failing network request' button not found")
         failingNetworkButton.tap()

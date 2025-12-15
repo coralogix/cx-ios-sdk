@@ -69,23 +69,76 @@ jobs:
       
     - name: Boot simulator
       run: |
-        # Try to find an available iPhone simulator
-        DEVICE_ID=$(xcrun simctl list devices available | grep -E "iPhone (16|15|14|13)" | grep -v "Pro" | head -1 | grep -o "[0-9A-F-]\{36\}" || echo "")
+        echo "📱 Finding available iPhone simulator..."
         
+        # Try to get device info using JSON format for more reliable parsing
+        if command -v jq &> /dev/null; then
+          DEVICE_JSON=$(xcrun simctl list devices available --json 2>/dev/null || echo "")
+          if [ -n "$DEVICE_JSON" ]; then
+            # Find first iPhone that's not Pro
+            DEVICE_ID=$(echo "$DEVICE_JSON" | jq -r '.devices | to_entries[] | .value[] | select(.name | test("iPhone (16|15|14|13)") and (test("Pro") | not)) | .udid' | head -1 || echo "")
+            if [ -n "$DEVICE_ID" ]; then
+              DEVICE_NAME=$(echo "$DEVICE_JSON" | jq -r --arg id "$DEVICE_ID" '.devices | to_entries[] | .value[] | select(.udid == $id) | .name' | head -1 || echo "")
+              DEVICE_OS=$(echo "$DEVICE_JSON" | jq -r --arg id "$DEVICE_ID" '.devices | to_entries[] | .value[] | select(.udid == $id) | .runtime' | sed 's/.*iOS-\([0-9.]*\).*/iOS \1/' | head -1 || echo "")
+            fi
+          fi
+        fi
+        
+        # Fallback to text parsing if JSON didn't work
         if [ -z "$DEVICE_ID" ]; then
-          echo "Creating new iPhone 15 simulator..."
-          DEVICE_ID=$(xcrun simctl create "Test iPhone" "iPhone 15" 2>/dev/null || echo "")
+          echo "Using text-based device detection..."
+          DEVICE_INFO=$(xcrun simctl list devices available | grep -E "iPhone (16|15|14|13)" | grep -v "Pro" | head -1 || echo "")
+          
+          if [ -z "$DEVICE_INFO" ]; then
+            echo "No available iPhone found, creating iPhone 15..."
+            # Get available runtimes
+            RUNTIME=$(xcrun simctl list runtimes available | grep "iOS" | head -1 | awk '{print $NF}' | tr -d '()' || echo "")
+            if [ -n "$RUNTIME" ]; then
+              DEVICE_ID=$(xcrun simctl create "Test iPhone" "iPhone 15" "$RUNTIME" 2>/dev/null || echo "")
+              DEVICE_INFO=$(xcrun simctl list devices | grep "$DEVICE_ID" | head -1 || echo "")
+            fi
+          fi
+          
+          if [ -n "$DEVICE_INFO" ]; then
+            DEVICE_ID=$(echo "$DEVICE_INFO" | grep -o "[0-9A-F-]\{36\}" | head -1)
+            DEVICE_NAME=$(echo "$DEVICE_INFO" | sed -E 's/^[[:space:]]*([^(]+).*/\1/' | xargs)
+            DEVICE_OS=$(echo "$DEVICE_INFO" | grep -oE "iOS [0-9.]+" | head -1 || echo "")
+          fi
         fi
         
         if [ -z "$DEVICE_ID" ]; then
           echo "❌ Failed to find or create simulator"
-          xcrun simctl list devices available
+          echo "Available devices:"
+          xcrun simctl list devices available | head -20
           exit 1
         fi
         
+        # Ensure we have a device name
+        if [ -z "$DEVICE_NAME" ]; then
+          DEVICE_NAME="iPhone 15"
+        fi
+        
         echo "SIMULATOR_ID=$DEVICE_ID" >> $GITHUB_ENV
-        echo "✅ Using simulator: $DEVICE_ID"
-        xcrun simctl boot "$DEVICE_ID" 2>/dev/null || echo "Simulator already booted"
+        echo "SIMULATOR_NAME=$DEVICE_NAME" >> $GITHUB_ENV
+        if [ -n "$DEVICE_OS" ]; then
+          echo "SIMULATOR_OS=$DEVICE_OS" >> $GITHUB_ENV
+        fi
+        
+        echo "✅ Found simulator: $DEVICE_NAME (ID: $DEVICE_ID)"
+        if [ -n "$DEVICE_OS" ]; then
+          echo "   OS Version: $DEVICE_OS"
+        fi
+        
+        # Boot the simulator
+        echo "🚀 Booting simulator..."
+        xcrun simctl boot "$DEVICE_ID" 2>/dev/null || echo "Simulator already booted or booting..."
+        
+        # Wait a moment for simulator to be ready
+        sleep 5
+        
+        # Verify simulator is available and get its exact name from xcodebuild
+        echo "✅ Verifying simulator is available..."
+        xcrun simctl list devices | grep "$DEVICE_ID" || echo "⚠️ Warning: Simulator may not be fully ready"
         
     - name: Set build configuration
       id: build-config
@@ -119,23 +172,62 @@ jobs:
           echo "xcpretty is already installed"
         fi
       
+    - name: Find and set destination
+      run: |
+        cd Example
+        echo "📋 Finding available destinations for scheme: $SCHEME"
+        
+        # Get available destinations from xcodebuild
+        DESTINATIONS=$(xcodebuild -showdestinations \
+          $BUILD_TYPE "$BUILD_PATH_RELATIVE" \
+          -scheme "$SCHEME" 2>&1 | grep "iOS Simulator" || echo "")
+        
+        if [ -z "$DESTINATIONS" ]; then
+          echo "⚠️ No iOS Simulator destinations found, will use name-based destination"
+          echo "DESTINATION_SPEC=\"platform=iOS Simulator,name=$SIMULATOR_NAME\"" >> $GITHUB_ENV
+        else
+          # Find first iPhone simulator destination (prefer non-Pro)
+          DEST_LINE=$(echo "$DESTINATIONS" | grep -E "iPhone (16|15|14|13)" | grep -v "Pro" | head -1 || echo "$DESTINATIONS" | head -1)
+          
+          if [ -n "$DEST_LINE" ]; then
+            # Extract destination specifier
+            # Format: "id=..., name=iPhone 15, OS=18.2"
+            DEST_NAME=$(echo "$DEST_LINE" | grep -oE "name=[^,]+" | cut -d= -f2 | xargs)
+            DEST_OS=$(echo "$DEST_LINE" | grep -oE "OS=[0-9.]+" | cut -d= -f2 || echo "")
+            DEST_ID=$(echo "$DEST_LINE" | grep -oE "id=[0-9A-F-]+" | cut -d= -f2 || echo "")
+            
+            if [ -n "$DEST_NAME" ]; then
+              if [ -n "$DEST_OS" ]; then
+                echo "DESTINATION_SPEC=\"platform=iOS Simulator,name=$DEST_NAME,OS=$DEST_OS\"" >> $GITHUB_ENV
+              else
+                echo "DESTINATION_SPEC=\"platform=iOS Simulator,name=$DEST_NAME\"" >> $GITHUB_ENV
+              fi
+              echo "✅ Using destination: $DEST_NAME (OS: ${DEST_OS:-unknown})"
+            else
+              # Fallback to name-based
+              echo "DESTINATION_SPEC=\"platform=iOS Simulator,name=$SIMULATOR_NAME\"" >> $GITHUB_ENV
+            fi
+          else
+            echo "DESTINATION_SPEC=\"platform=iOS Simulator,name=$SIMULATOR_NAME\"" >> $GITHUB_ENV
+          fi
+        fi
+        
+        echo "🎯 Destination spec: $DESTINATION_SPEC"
+      
     - name: Build for testing
       run: |
         set -o pipefail
         cd Example
         
-        # Get simulator name from ID
-        SIMULATOR_NAME=$(xcrun simctl list devices | grep "$SIMULATOR_ID" | head -1 | sed 's/.*(\(.*\))/\1/' | xargs || echo "iPhone 15")
-        
         echo "🔨 Building for testing with scheme: $SCHEME"
-        echo "📱 Using simulator: $SIMULATOR_NAME (ID: $SIMULATOR_ID)"
         echo "📂 Build path: $BUILD_PATH_RELATIVE"
+        echo "🎯 Destination: $DESTINATION_SPEC"
         
         if command -v xcpretty &> /dev/null; then
           xcodebuild build-for-testing \
             $BUILD_TYPE "$BUILD_PATH_RELATIVE" \
             -scheme "$SCHEME" \
-            -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
+            -destination $DESTINATION_SPEC \
             -derivedDataPath ../DerivedData \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGN_IDENTITY="" \
@@ -144,7 +236,7 @@ jobs:
           xcodebuild build-for-testing \
             $BUILD_TYPE "$BUILD_PATH_RELATIVE" \
             -scheme "$SCHEME" \
-            -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
+            -destination $DESTINATION_SPEC \
             -derivedDataPath ../DerivedData \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGN_IDENTITY=""
@@ -156,14 +248,14 @@ jobs:
         cd Example
         
         echo "🧪 Running UI tests with scheme: $SCHEME"
-        echo "📱 Using simulator: $SIMULATOR_ID"
         echo "📂 Build path: $BUILD_PATH_RELATIVE"
+        echo "🎯 Destination: $DESTINATION_SPEC"
         
         if command -v xcpretty &> /dev/null; then
           xcodebuild test-without-building \
             $BUILD_TYPE "$BUILD_PATH_RELATIVE" \
             -scheme "$SCHEME" \
-            -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
+            -destination $DESTINATION_SPEC \
             -derivedDataPath ../DerivedData \
             -only-testing:DemoAppUITests/DemoAppUITests/testSchemaValidationFlow \
             -resultBundlePath ../DerivedData/TestResults.xcresult \
@@ -172,7 +264,7 @@ jobs:
           xcodebuild test-without-building \
             $BUILD_TYPE "$BUILD_PATH_RELATIVE" \
             -scheme "$SCHEME" \
-            -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
+            -destination $DESTINATION_SPEC \
             -derivedDataPath ../DerivedData \
             -only-testing:DemoAppUITests/DemoAppUITests/testSchemaValidationFlow \
             -resultBundlePath ../DerivedData/TestResults.xcresult \
