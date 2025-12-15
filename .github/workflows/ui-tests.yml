@@ -2,9 +2,9 @@ name: UI Tests
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main, master ]
   pull_request:
-    branches: [ main, develop ]
+    branches: [ main, master ]
   workflow_dispatch: # Allow manual triggering
 
 jobs:
@@ -12,6 +12,10 @@ jobs:
     name: Run DemoApp UI Tests
     runs-on: macos-15 # macOS 15 (Sequoia) with Xcode 16+
     timeout-minutes: 30
+    permissions:
+    contents: read
+    actions: read
+    checks: write 
     
     steps:
     - name: Checkout code
