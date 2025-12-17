@@ -52,6 +52,7 @@ enum Keys: String {
     case customLabels = "Log with Custom Labels"
     case sendCustomMeasurement = "Send Custom Measurement"
     case alertView = "Show Alert View"
+    case simulateCrash = "Simulate Crash"
     case isInitialized = "Is Initialized"
     case isRecording = "Is Recording"
     case maskUI = "Mask UI"

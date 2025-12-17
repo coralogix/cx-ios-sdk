@@ -8,13 +8,17 @@
 import UIKit
 import Coralogix
 import SessionReplay
+import Firebase
 @main
 
 class AppDelegate: UIResponder, UIApplicationDelegate {
     
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        
+
         CoralogixRumManager.shared.initialize()
+
+        FirebaseApp.configure()
+
 
 //        // Must be initialized after CoralogixRum
 //        let sessionReplayOptions = SessionReplayOptions(recordingType: .image,
