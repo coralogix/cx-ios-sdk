@@ -13,7 +13,7 @@ on:
 jobs:
   ui-tests:
     name: Run DemoApp UI Tests
-    runs-on: macos-15
+    runs-on: macos-14
     timeout-minutes: 30
     permissions:
       contents: read
@@ -24,27 +24,69 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Select Xcode 16.2 if available
+      - name: Select Xcode (via DEVELOPER_DIR)
         run: |
           if [ -d "/Applications/Xcode_16.2.app" ]; then
             echo "DEVELOPER_DIR=/Applications/Xcode_16.2.app/Contents/Developer" >> $GITHUB_ENV
-            sudo xcode-select -s /Applications/Xcode_16.2.app/Contents/Developer
           elif [ -d "/Applications/Xcode_16.1.app" ]; then
             echo "DEVELOPER_DIR=/Applications/Xcode_16.1.app/Contents/Developer" >> $GITHUB_ENV
-            sudo xcode-select -s /Applications/Xcode_16.1.app/Contents/Developer
           elif [ -d "/Applications/Xcode_16.0.app" ]; then
             echo "DEVELOPER_DIR=/Applications/Xcode_16.0.app/Contents/Developer" >> $GITHUB_ENV
-            sudo xcode-select -s /Applications/Xcode_16.0.app/Contents/Developer
           else
-            echo "Using default Xcode"
+            echo "No pinned Xcode found; using default Xcode"
           fi
 
+      - name: Make root use the same Xcode
+        run: |
+          set -euo pipefail
+          if [ -n "${DEVELOPER_DIR:-}" ]; then
+            echo "Switching root xcode-select to: $DEVELOPER_DIR"
+            sudo xcode-select -s "$DEVELOPER_DIR"
+          else
+            echo "DEVELOPER_DIR not set; using system default Xcode"
+          fi
+          sudo xcodebuild -version
+          sudo xcodebuild -license accept || true
+
       - name: Show Xcode version
-        run: xcodebuild -version
+        run: |
+          echo "Using DEVELOPER_DIR=${DEVELOPER_DIR:-"(not set)"}"
+          xcodebuild -version
+
+      - name: Xcode first launch setup
+        run: |
+          sudo env DEVELOPER_DIR="${DEVELOPER_DIR:-}" xcodebuild -runFirstLaunch || sudo xcodebuild -runFirstLaunch
+
+      - name: 🔎 Xcode & Simulator Diagnostics
+        run: |
+          echo "===== XCODE SELECT ====="
+          xcode-select -p
+          echo
+
+          echo "===== XCODE VERSION ====="
+          xcodebuild -version
+          echo
+
+          echo "===== INSTALLED SDKs ====="
+          xcodebuild -showsdks || true
+          echo
+
+          echo "===== INSTALLED SIMULATOR RUNTIMES ====="
+          xcrun simctl list runtimes || true
+          echo
+
+      - name: Verify iOS Simulator SDK exists (fail fast)
+        run: |
+          set -euo pipefail
+          if ! xcodebuild -showsdks | grep -q "iOS Simulator"; then
+            echo "❌ iOS Simulator SDK is missing in this Xcode. Can't run UI tests on this runner."
+            exit 1
+          fi
+          echo "✅ iOS Simulator SDK is present."
 
       - name: Verify project structure
         run: |
-          set -euo pipefail
+          echo "📋 Verifying project structure..."
           if [ -f "Example/DemoApp.xcworkspace/contents.xcworkspacedata" ]; then
             echo "✅ Found workspace: Example/DemoApp.xcworkspace"
           elif [ -d "Example/DemoApp.xcodeproj" ]; then
@@ -55,74 +97,36 @@ jobs:
             exit 1
           fi
 
-      - name: Set build configuration
+      - name: List available schemes
+        run: |
+          cd Example
+          if [ -f "DemoApp.xcworkspace/contents.xcworkspacedata" ]; then
+            xcodebuild -list -workspace DemoApp.xcworkspace
+          else
+            xcodebuild -list -project DemoApp.xcodeproj
+          fi
+
+      - name: Boot simulator (simple)
         run: |
           set -euo pipefail
+          echo "Booting a simulator (best-effort)..."
+          xcrun simctl boot "iPhone 15" 2>/dev/null || true
+          sleep 5
+          xcrun simctl list devices booted || true
+
+      - name: Set build configuration
+        run: |
           if [ -f "Example/DemoApp.xcworkspace/contents.xcworkspacedata" ]; then
             echo "BUILD_TYPE=-workspace" >> $GITHUB_ENV
             echo "BUILD_PATH_RELATIVE=DemoApp.xcworkspace" >> $GITHUB_ENV
-            echo "✅ Using workspace"
-          else
+          elif [ -d "Example/DemoApp.xcodeproj" ]; then
             echo "BUILD_TYPE=-project" >> $GITHUB_ENV
             echo "BUILD_PATH_RELATIVE=DemoApp.xcodeproj" >> $GITHUB_ENV
-            echo "✅ Using project"
+          else
+            echo "❌ No Xcode workspace or project found in Example/ directory!"
+            exit 1
           fi
           echo "SCHEME=DemoAppSwift" >> $GITHUB_ENV
-
-      - name: Resolve Swift Package dependencies (retry)
-        run: |
-          set -euo pipefail
-          cd Example
-          for i in 1 2 3 4 5; do
-            echo "Attempt $i: Resolving packages"
-            if xcodebuild -resolvePackageDependencies \
-              $BUILD_TYPE "$BUILD_PATH_RELATIVE" \
-              -scheme "$SCHEME"; then
-              exit 0
-            fi
-            sleep $((i*10))
-          done
-          exit 1
-
-      - name: Create + Boot iPhone 16 (iOS 18.2) simulator
-        run: |
-          set -euo pipefail
-
-          RUNTIME_ID="com.apple.CoreSimulator.SimRuntime.iOS-18-2"
-          DEVICE_TYPE="com.apple.CoreSimulator.SimDeviceType.iPhone-16"
-
-          # Find an existing iPhone 16 on iOS 18.2
-          EXISTING_UDID=$(xcrun simctl list devices --json | python3 - <<'PY'
-import json,sys
-data=json.load(sys.stdin)
-target_runtime="com.apple.CoreSimulator.SimRuntime.iOS-18-2"
-for rt, devices in data.get("devices", {}).items():
-    if rt != target_runtime:
-        continue
-    for d in devices:
-        if d.get("name") == "iPhone 16":
-            print(d.get("udid",""))
-            sys.exit(0)
-print("")
-PY
-)
-
-          if [ -z "${EXISTING_UDID:-}" ]; then
-            echo "No iPhone 16 (iOS 18.2) found, creating one..."
-            UDID=$(xcrun simctl create "iPhone 16" "$DEVICE_TYPE" "$RUNTIME_ID")
-          else
-            echo "Found existing iPhone 16 (iOS 18.2): $EXISTING_UDID"
-            UDID="$EXISTING_UDID"
-          fi
-
-          echo "SIMULATOR_ID=$UDID" >> $GITHUB_ENV
-          echo "DESTINATION_SPEC=platform=iOS Simulator,id=$UDID" >> $GITHUB_ENV
-
-          echo "Booting simulator $UDID..."
-          xcrun simctl boot "$UDID" || true
-          xcrun simctl bootstatus "$UDID" -b || true
-
-          echo "🎯 Destination: platform=iOS Simulator,id=$UDID"
 
       - name: Install xcpretty (optional)
         run: |
@@ -130,41 +134,86 @@ PY
             gem install xcpretty || true
           fi
 
+      - name: Set destination (auto from xcodebuild)
+        run: |
+          set -euo pipefail
+          cd Example
+
+          OUT=$(xcodebuild -showdestinations -workspace DemoApp.xcworkspace -scheme DemoAppSwift)
+          echo "$OUT"
+
+          # Pick first iPhone simulator destination from xcodebuild output
+          LINE=$(echo "$OUT" | grep -E "platform:iOS Simulator, id:.*name:iPhone" | head -1 || true)
+          if [ -z "$LINE" ]; then
+            echo "❌ No iPhone simulator destination found"
+            exit 1
+          fi
+
+          NAME=$(echo "$LINE" | sed -n 's/.*name:\([^,}]*\).*/\1/p' | xargs)
+          OS=$(echo "$LINE" | sed -n 's/.*OS:\([^,}]*\).*/\1/p' | xargs)
+
+          if [ -z "$NAME" ] || [ -z "$OS" ]; then
+            echo "❌ Failed to parse destination from line: $LINE"
+            exit 1
+          fi
+
+          echo "DESTINATION_SPEC=platform=iOS Simulator,name=$NAME,OS=$OS" >> $GITHUB_ENV
+          echo "🎯 Final destination spec: platform=iOS Simulator,name=$NAME,OS=$OS"
+
       - name: Build for testing
         run: |
           set -o pipefail
           cd Example
 
-          echo "🔨 Building for testing: $SCHEME"
+          echo "🔨 Building for testing with scheme: $SCHEME"
           echo "🎯 Destination: $DESTINATION_SPEC"
 
-          xcodebuild build-for-testing \
-            $BUILD_TYPE "$BUILD_PATH_RELATIVE" \
-            -scheme "$SCHEME" \
-            -destination "$DESTINATION_SPEC" \
-            -derivedDataPath ../DerivedData \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGN_IDENTITY="" \
-            IPHONEOS_DEPLOYMENT_TARGET=18.2 \
-            | (command -v xcpretty &> /dev/null && xcpretty --color || cat)
+          if command -v xcpretty &> /dev/null; then
+            xcodebuild build-for-testing \
+              $BUILD_TYPE "$BUILD_PATH_RELATIVE" \
+              -scheme "$SCHEME" \
+              -destination "$DESTINATION_SPEC" \
+              -derivedDataPath ../DerivedData \
+              CODE_SIGNING_ALLOWED=NO \
+              CODE_SIGN_IDENTITY="" \
+              | xcpretty --color || cat
+          else
+            xcodebuild build-for-testing \
+              $BUILD_TYPE "$BUILD_PATH_RELATIVE" \
+              -scheme "$SCHEME" \
+              -destination "$DESTINATION_SPEC" \
+              -derivedDataPath ../DerivedData \
+              CODE_SIGNING_ALLOWED=NO \
+              CODE_SIGN_IDENTITY=""
+          fi
 
       - name: Run UI Tests
         run: |
           set -o pipefail
           cd Example
 
-          echo "🧪 Running UI tests: $SCHEME"
+          echo "🧪 Running UI tests with scheme: $SCHEME"
           echo "🎯 Destination: $DESTINATION_SPEC"
 
-          xcodebuild test-without-building \
-            $BUILD_TYPE "$BUILD_PATH_RELATIVE" \
-            -scheme "$SCHEME" \
-            -destination "$DESTINATION_SPEC" \
-            -derivedDataPath ../DerivedData \
-            -only-testing:DemoAppUITests/DemoAppUITests/testSchemaValidationFlow \
-            -resultBundlePath ../DerivedData/TestResults.xcresult \
-            IPHONEOS_DEPLOYMENT_TARGET=18.2 \
-            | tee ../test-output.log | (command -v xcpretty &> /dev/null && xcpretty --color --report junit --output ../DerivedData/junit.xml || cat)
+          if command -v xcpretty &> /dev/null; then
+            xcodebuild test-without-building \
+              $BUILD_TYPE "$BUILD_PATH_RELATIVE" \
+              -scheme "$SCHEME" \
+              -destination "$DESTINATION_SPEC" \
+              -derivedDataPath ../DerivedData \
+              -only-testing:DemoAppUITests/DemoAppUITests/testSchemaValidationFlow \
+              -resultBundlePath ../DerivedData/TestResults.xcresult \
+              | tee ../test-output.log | xcpretty --color --report junit --output ../DerivedData/junit.xml
+          else
+            xcodebuild test-without-building \
+              $BUILD_TYPE "$BUILD_PATH_RELATIVE" \
+              -scheme "$SCHEME" \
+              -destination "$DESTINATION_SPEC" \
+              -derivedDataPath ../DerivedData \
+              -only-testing:DemoAppUITests/DemoAppUITests/testSchemaValidationFlow \
+              -resultBundlePath ../DerivedData/TestResults.xcresult \
+              | tee ../test-output.log
+          fi
 
       - name: Print test output on failure
         if: failure()
@@ -196,4 +245,5 @@ PY
           check_name: UI Test Results
           comment_mode: off
         continue-on-error: true
+
 
