@@ -160,6 +160,21 @@ jobs:
           echo "DESTINATION_SPEC=platform=iOS Simulator,name=$NAME,OS=$OS" >> $GITHUB_ENV
           echo "🎯 Final destination spec: platform=iOS Simulator,name=$NAME,OS=$OS"
 
+     - name: Generate envs.swift (CI)
+        run: |
+          set -euo pipefail
+          cat > Example/envs.swift <<'EOF'
+          import Foundation
+
+          enum Envs {
+            static let apiKey = "${{ secrets.DEMOAPP_API_KEY || 'CI_DUMMY' }}"
+            static let endpoint = "${{ secrets.DEMOAPP_ENDPOINT || 'https://example.invalid' }}"
+          }
+          EOF
+
+          echo "✅ Generated Example/envs.swift"
+          ls -la Example/envs.swift
+
       - name: Build for testing
         run: |
           set -o pipefail
