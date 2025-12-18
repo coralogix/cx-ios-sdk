@@ -1,269 +1,226 @@
 name: UI Tests
 
 permissions:
-    contents: read
+  contents: read
 
 on:
-    push:
+  push:
     branches: [ main, master ]
-    pull_request:
+  pull_request:
     branches: [ main, master ]
-    workflow_dispatch:
+  workflow_dispatch:
 
 jobs:
-    ui-tests:
+  ui-tests:
     name: Run DemoApp UI Tests
-    runs-on: macos-15
+    runs-on: macos-14
     timeout-minutes: 30
     permissions:
-        contents: read
-        actions: read
-        checks: write
-    
+      contents: read
+      actions: read
+      checks: write
+
     steps:
-    - name: Checkout code
+      - name: Checkout code
         uses: actions/checkout@v4
-    
-    - name: Select Xcode (via DEVELOPER_DIR)
+
+      - name: Select Xcode (via DEVELOPER_DIR)
         run: |
-        if [ -d "/Applications/Xcode_16.2.app" ]; then
+          if [ -d "/Applications/Xcode_16.2.app" ]; then
             echo "DEVELOPER_DIR=/Applications/Xcode_16.2.app/Contents/Developer" >> $GITHUB_ENV
-        elif [ -d "/Applications/Xcode_16.1.app" ]; then
+          elif [ -d "/Applications/Xcode_16.1.app" ]; then
             echo "DEVELOPER_DIR=/Applications/Xcode_16.1.app/Contents/Developer" >> $GITHUB_ENV
-        elif [ -d "/Applications/Xcode_16.0.app" ]; then
+          elif [ -d "/Applications/Xcode_16.0.app" ]; then
             echo "DEVELOPER_DIR=/Applications/Xcode_16.0.app/Contents/Developer" >> $GITHUB_ENV
-        else
+          else
             echo "No pinned Xcode found; using default Xcode"
-        fi
-    - name: 🔎 Xcode & Simulator Diagnostics
+          fi
+
+      - name: Make root use the same Xcode
         run: |
-        echo "===== XCODE SELECT ====="
-        xcode-select -p
-        echo
-    
-        echo "===== XCODE VERSION ====="
-        xcodebuild -version
-        echo
-    
-        echo "===== INSTALLED SDKs ====="
-        xcodebuild -showsdks || true
-        echo
-    
-        echo "===== INSTALLED SIMULATOR RUNTIMES ====="
-        xcrun simctl list runtimes || true
-        echo
-    
-        echo "===== AVAILABLE DESTINATIONS (DemoAppSwift) ====="
-        cd Example
-        xcodebuild -showdestinations \
-            -workspace DemoApp.xcworkspace \
-            -scheme DemoAppSwift || true
-    
-    - name: Make root use the same Xcode (IMPORTANT)
+          echo "Switching root xcode-select to: $DEVELOPER_DIR"
+          sudo xcode-select -s "$DEVELOPER_DIR"
+          sudo xcodebuild -version
+          sudo xcodebuild -license accept || true
+
+      - name: Show Xcode version
         run: |
-        echo "Switching root xcode-select to: $DEVELOPER_DIR"
-        sudo xcode-select -s "$DEVELOPER_DIR"
-        sudo xcodebuild -version
-        sudo xcodebuild -license accept || true
-    
-    - name: Show Xcode version (user)
+          echo "Using DEVELOPER_DIR=${DEVELOPER_DIR:-"(not set)"}"
+          xcodebuild -version
+
+      - name: Xcode first launch setup
         run: |
-        echo "Using DEVELOPER_DIR=${DEVELOPER_DIR:-"(not set)"}"
-        xcodebuild -version
-    
-    - name: Xcode first launch setup (same Xcode)
+          sudo env DEVELOPER_DIR="$DEVELOPER_DIR" xcodebuild -runFirstLaunch
+
+      - name: 🔎 Xcode & Simulator Diagnostics
         run: |
-        sudo env DEVELOPER_DIR="$DEVELOPER_DIR" xcodebuild -runFirstLaunch
-    
-    - name: Ensure iOS Simulator SDK exists (same Xcode)
+          echo "===== XCODE SELECT ====="
+          xcode-select -p
+          echo
+
+          echo "===== XCODE VERSION ====="
+          xcodebuild -version
+          echo
+
+          echo "===== INSTALLED SDKs ====="
+          xcodebuild -showsdks || true
+          echo
+
+          echo "===== INSTALLED SIMULATOR RUNTIMES ====="
+          xcrun simctl list runtimes || true
+          echo
+
+      # Fail fast if the simulator SDK isn't installed (this is your current failure mode)
+      - name: Verify iOS Simulator SDK exists (fail fast)
         run: |
-        set -euo pipefail
-        
-        echo "---- SDKs BEFORE ----"
-        xcodebuild -showsdks || true
-        
-        if ! xcodebuild -showsdks | grep -q "iOS Simulator"; then
-            echo "iOS Simulator SDK missing — downloading iOS platform..."
-            sudo env DEVELOPER_DIR="$DEVELOPER_DIR" xcodebuild -downloadPlatform iOS
-        else
-            echo "iOS Simulator SDK present."
-        fi
-        
-        echo "---- SDKs AFTER ----"
-        xcodebuild -showsdks || true
-    
-    - name: Show available simulators
-        run: xcrun simctl list devices available
-    
-    - name: Verify project structure
+          set -euo pipefail
+          if ! xcodebuild -showsdks | grep -q "iOS Simulator"; then
+            echo "❌ iOS Simulator SDK is missing in this Xcode. Can't run UI tests on this runner."
+            echo "Tip: try runs-on: macos-14 or use an Xcode that includes iOS Simulator SDK."
+            exit 1
+          fi
+          echo "✅ iOS Simulator SDK is present."
+
+      - name: Verify project structure
         run: |
-        echo "📋 Verifying project structure..."
-        if [ -f "Example/DemoApp.xcworkspace/contents.xcworkspacedata" ]; then
+          echo "📋 Verifying project structure..."
+          if [ -f "Example/DemoApp.xcworkspace/contents.xcworkspacedata" ]; then
             echo "✅ Found workspace: Example/DemoApp.xcworkspace"
-        elif [ -d "Example/DemoApp.xcodeproj" ]; then
+          elif [ -d "Example/DemoApp.xcodeproj" ]; then
             echo "✅ Found project: Example/DemoApp.xcodeproj"
-        else
+          else
             echo "❌ Project/workspace not found in Example/ directory"
             find . -name "*.xcworkspace" -o -name "*.xcodeproj" | head -10
             exit 1
-        fi
-    
-    - name: List available schemes
+          fi
+
+      - name: List available schemes
         run: |
-        cd Example
-        if [ -f "DemoApp.xcworkspace/contents.xcworkspacedata" ]; then
+          cd Example
+          if [ -f "DemoApp.xcworkspace/contents.xcworkspacedata" ]; then
             xcodebuild -list -workspace DemoApp.xcworkspace
-        else
+          else
             xcodebuild -list -project DemoApp.xcodeproj
-        fi
-    
-    - name: Boot simulator
+          fi
+
+      - name: Boot simulator (simple)
         run: |
-        echo "📱 Finding available iPhone simulator..."
-        if command -v jq &> /dev/null; then
-            DEVICE_JSON=$(xcrun simctl list devices available --json 2>/dev/null || echo "")
-            if [ -n "$DEVICE_JSON" ]; then
-            DEVICE_ID=$(echo "$DEVICE_JSON" | jq -r '.devices | to_entries[] | .value[] | select(.name | test("iPhone (16|15|14|13)") and (test("Pro") | not)) | .udid' | head -1 || echo "")
-            if [ -n "$DEVICE_ID" ]; then
-                DEVICE_NAME=$(echo "$DEVICE_JSON" | jq -r --arg id "$DEVICE_ID" '.devices | to_entries[] | .value[] | select(.udid == $id) | .name' | head -1 || echo "")
-                DEVICE_OS=$(echo "$DEVICE_JSON" | jq -r --arg id "$DEVICE_ID" '.devices | to_entries[] | .value[] | select(.udid == $id) | .runtime' | sed 's/.*iOS-\([0-9.]*\).*/iOS \1/' | head -1 || echo "")
-            fi
-            fi
-        fi
-        
-        if [ -z "${DEVICE_ID:-}" ]; then
-            DEVICE_INFO=$(xcrun simctl list devices available | grep -E "iPhone (16|15|14|13)" | grep -v "Pro" | head -1 || echo "")
-            if [ -n "$DEVICE_INFO" ]; then
-            DEVICE_ID=$(echo "$DEVICE_INFO" | grep -o "[0-9A-F-]\{36\}" | head -1)
-            DEVICE_NAME=$(echo "$DEVICE_INFO" | sed -E 's/^[[:space:]]*([^(]+).*/\1/' | xargs)
-            DEVICE_OS=$(echo "$DEVICE_INFO" | grep -oE "iOS [0-9.]+" | head -1 || echo "")
-            fi
-        fi
-        
-        if [ -z "${DEVICE_ID:-}" ]; then
-            echo "❌ Failed to find simulator"
-            xcrun simctl list devices available | head -40
-            exit 1
-        fi
-        
-        echo "SIMULATOR_ID=$DEVICE_ID" >> $GITHUB_ENV
-        echo "SIMULATOR_NAME=$DEVICE_NAME" >> $GITHUB_ENV
-        echo "SIMULATOR_OS=$DEVICE_OS" >> $GITHUB_ENV
-        
-        echo "✅ Found simulator: $DEVICE_NAME (ID: $DEVICE_ID)"
-        xcrun simctl boot "$DEVICE_ID" 2>/dev/null || true
-        sleep 5
-        xcrun simctl list devices | grep "$DEVICE_ID" || true
-    
-    - name: Set build configuration
+          set -euo pipefail
+          echo "Booting a simulator (best-effort)..."
+          # Try booting any available iPhone runtime/device
+          xcrun simctl boot "iPhone 15" 2>/dev/null || true
+          sleep 5
+          xcrun simctl list devices booted || true
+
+      - name: Set build configuration
         run: |
-        if [ -f "Example/DemoApp.xcworkspace/contents.xcworkspacedata" ]; then
+          if [ -f "Example/DemoApp.xcworkspace/contents.xcworkspacedata" ]; then
             echo "BUILD_TYPE=-workspace" >> $GITHUB_ENV
             echo "BUILD_PATH_RELATIVE=DemoApp.xcworkspace" >> $GITHUB_ENV
-        elif [ -d "Example/DemoApp.xcodeproj" ]; then
+          elif [ -d "Example/DemoApp.xcodeproj" ]; then
             echo "BUILD_TYPE=-project" >> $GITHUB_ENV
             echo "BUILD_PATH_RELATIVE=DemoApp.xcodeproj" >> $GITHUB_ENV
-        else
+          else
             echo "❌ No Xcode workspace or project found in Example/ directory!"
             exit 1
-        fi
-        echo "SCHEME=DemoAppSwift" >> $GITHUB_ENV
-    
-    - name: Install xcpretty (optional)
+          fi
+          echo "SCHEME=DemoAppSwift" >> $GITHUB_ENV
+
+      - name: Install xcpretty (optional)
         run: |
-        if ! command -v xcpretty &> /dev/null; then
+          if ! command -v xcpretty &> /dev/null; then
             gem install xcpretty || true
-        fi
-    
-    - name: Set destination (by UDID)
+          fi
+
+      # Use a stable destination spec that doesn't depend on a specific UDID/model
+      - name: Set destination (stable)
         run: |
-        echo "DESTINATION_SPEC=platform=iOS Simulator,id=$SIMULATOR_ID" >> $GITHUB_ENV
-        echo "🎯 Final destination spec: platform=iOS Simulator,id=$SIMULATOR_ID"
-    
-    - name: Build for testing
+          echo "DESTINATION_SPEC=platform=iOS Simulator,name=iPhone 15,OS=latest" >> $GITHUB_ENV
+          echo "🎯 Final destination spec: platform=iOS Simulator,name=iPhone 15,OS=latest"
+
+      - name: Build for testing
         run: |
-        set -o pipefail
-        cd Example
-        
-        echo "🔨 Building for testing with scheme: $SCHEME"
-        echo "🎯 Destination: $DESTINATION_SPEC"
-        
-        if command -v xcpretty &> /dev/null; then
+          set -o pipefail
+          cd Example
+
+          echo "🔨 Building for testing with scheme: $SCHEME"
+          echo "🎯 Destination: $DESTINATION_SPEC"
+
+          if command -v xcpretty &> /dev/null; then
             xcodebuild build-for-testing \
-            $BUILD_TYPE "$BUILD_PATH_RELATIVE" \
-            -scheme "$SCHEME" \
-            -destination "$DESTINATION_SPEC" \
-            -derivedDataPath ../DerivedData \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGN_IDENTITY="" \
-            | xcpretty --color || cat
-        else
+              $BUILD_TYPE "$BUILD_PATH_RELATIVE" \
+              -scheme "$SCHEME" \
+              -destination "$DESTINATION_SPEC" \
+              -derivedDataPath ../DerivedData \
+              CODE_SIGNING_ALLOWED=NO \
+              CODE_SIGN_IDENTITY="" \
+              | xcpretty --color || cat
+          else
             xcodebuild build-for-testing \
-            $BUILD_TYPE "$BUILD_PATH_RELATIVE" \
-            -scheme "$SCHEME" \
-            -destination "$DESTINATION_SPEC" \
-            -derivedDataPath ../DerivedData \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGN_IDENTITY=""
-        fi
-    
-    - name: Run UI Tests
+              $BUILD_TYPE "$BUILD_PATH_RELATIVE" \
+              -scheme "$SCHEME" \
+              -destination "$DESTINATION_SPEC" \
+              -derivedDataPath ../DerivedData \
+              CODE_SIGNING_ALLOWED=NO \
+              CODE_SIGN_IDENTITY=""
+          fi
+
+      - name: Run UI Tests
         run: |
-        set -o pipefail
-        cd Example
-        
-        echo "🧪 Running UI tests with scheme: $SCHEME"
-        echo "🎯 Destination: $DESTINATION_SPEC"
-        
-        if command -v xcpretty &> /dev/null; then
+          set -o pipefail
+          cd Example
+
+          echo "🧪 Running UI tests with scheme: $SCHEME"
+          echo "🎯 Destination: $DESTINATION_SPEC"
+
+          if command -v xcpretty &> /dev/null; then
             xcodebuild test-without-building \
-            $BUILD_TYPE "$BUILD_PATH_RELATIVE" \
-            -scheme "$SCHEME" \
-            -destination "$DESTINATION_SPEC" \
-            -derivedDataPath ../DerivedData \
-            -only-testing:DemoAppUITests/DemoAppUITests/testSchemaValidationFlow \
-            -resultBundlePath ../DerivedData/TestResults.xcresult \
-            | tee ../test-output.log | xcpretty --color --report junit --output ../DerivedData/junit.xml
-        else
+              $BUILD_TYPE "$BUILD_PATH_RELATIVE" \
+              -scheme "$SCHEME" \
+              -destination "$DESTINATION_SPEC" \
+              -derivedDataPath ../DerivedData \
+              -only-testing:DemoAppUITests/DemoAppUITests/testSchemaValidationFlow \
+              -resultBundlePath ../DerivedData/TestResults.xcresult \
+              | tee ../test-output.log | xcpretty --color --report junit --output ../DerivedData/junit.xml
+          else
             xcodebuild test-without-building \
-            $BUILD_TYPE "$BUILD_PATH_RELATIVE" \
-            -scheme "$SCHEME" \
-            -destination "$DESTINATION_SPEC" \
-            -derivedDataPath ../DerivedData \
-            -only-testing:DemoAppUITests/DemoAppUITests/testSchemaValidationFlow \
-            -resultBundlePath ../DerivedData/TestResults.xcresult \
-            | tee ../test-output.log
-        fi
-        continue-on-error: false
-    
-    - name: Print test output on failure
+              $BUILD_TYPE "$BUILD_PATH_RELATIVE" \
+              -scheme "$SCHEME" \
+              -destination "$DESTINATION_SPEC" \
+              -derivedDataPath ../DerivedData \
+              -only-testing:DemoAppUITests/DemoAppUITests/testSchemaValidationFlow \
+              -resultBundlePath ../DerivedData/TestResults.xcresult \
+              | tee ../test-output.log
+          fi
+
+      - name: Print test output on failure
         if: failure()
         run: |
-        echo "❌ ============ TEST FAILURE DETAILS ============"
-        if [ -f test-output.log ]; then
+          echo "❌ ============ TEST FAILURE DETAILS ============"
+          if [ -f test-output.log ]; then
             cat test-output.log
-        else
+          else
             echo "No test-output.log found"
-        fi
-        echo "❌ ================================================"
-    
-    - name: Upload test results
+          fi
+          echo "❌ ================================================"
+
+      - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-        name: test-results
-        path: |
-          DerivedData/Logs/Test/*.xcresult
-          DerivedData/junit.xml
-          test-output.log
-        retention-days: 30
-    
-    - name: Publish test results
+          name: test-results
+          path: |
+            DerivedData/Logs/Test/*.xcresult
+            DerivedData/junit.xml
+            test-output.log
+          retention-days: 30
+
+      - name: Publish test results
         if: always()
         uses: EnricoMi/publish-unit-test-result-action/macos@v2
         with:
-        files: DerivedData/junit.xml
-        check_name: UI Test Results
-        comment_mode: off
+          files: DerivedData/junit.xml
+          check_name: UI Test Results
+          comment_mode: off
         continue-on-error: true
 
