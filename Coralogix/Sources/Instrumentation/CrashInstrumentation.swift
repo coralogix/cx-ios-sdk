@@ -20,21 +20,23 @@ extension CoralogixRum {
             return
         }
         
+        switch FirebaseRuntimeDetector.presence() {
+        case .configured:
+            Log.d("host app called FirebaseApp.configure() before your Coralogix SDK init, some crash reports may be dropped")
+        case .linkedButNotConfigured:
+            Log.d("Firebase exists, but not configured yet (or you checked too early)")
+        case .notLinked:
+            Log.d("host app didn't include Firebase at all")
+        }
+        
+        crashReporter.enable()
+        
         // Try loading the crash report.
         if crashReporter.hasPendingCrashReport() {
             self.processPendingCrashReport(using: crashReporter)
+            // Purge the report.
+            crashReporter.purgePendingCrashReport()
         }
-        
-        do {
-            try crashReporter.enableAndReturnError()
-        } catch {
-            Log.w("""
-                [Coralogix Crash Instrumentation] Failed to enable PLCrashReporter: \(error.localizedDescription).\nIf Crashlytics (or another crash SDK) is also used, make sure Coralogix init() is called BEFORE FirebaseApp.configure() / Crashlytics initialization.
-                """)
-            return
-        }
-        
-        Log.d("[CrashInstrumentation] PLCrashReporter successfully enabled")
     }
     
     private func processPendingCrashReport(using crashReporter: PLCrashReporter) {
@@ -75,9 +77,6 @@ extension CoralogixRum {
         } catch let error {
             Log.e("CrashReporter failed to load and parse with error: \(error)")
         }
-        
-        // Purge the report.
-        crashReporter.purgePendingCrashReport()
     }
     
     private func createStackTrace(report: PLCrashReport, span: any Span) {
@@ -184,3 +183,45 @@ extension CoralogixRum {
     }
 }
 
+public enum FirebasePresence: Equatable {
+    /// FirebaseCore isn't linked into the host app binary.
+    case notLinked
+    /// FirebaseCore is present, but `FirebaseApp.configure()` hasn't been called yet.
+    case linkedButNotConfigured
+    /// `FirebaseApp.configure()` was called (default app exists).
+    case configured
+}
+
+public struct FirebaseRuntimeDetector {
+
+    /// Extra-safe detection: no Firebase dependency, no IMP casting.
+    public static func presence() -> FirebasePresence {
+        // FIRApp is the Obj-C class exposed by FirebaseCore
+        guard let firAppClassAny = NSClassFromString("FIRApp") else {
+            return .notLinked
+        }
+
+        // Make sure it behaves like an Obj-C NSObject class (so we can safely call `perform`)
+        guard let firAppClass = firAppClassAny as? NSObject.Type else {
+            // Unlikely, but safest fallback
+            return .notLinked
+        }
+
+        let defaultAppSel = NSSelectorFromString("defaultApp")
+        guard firAppClass.responds(to: defaultAppSel) else {
+            // Firebase linked, but API shape not as expected (or very old/new)
+            return .linkedButNotConfigured
+        }
+
+        // Call +[FIRApp defaultApp] safely (returns nil if not configured)
+        let unmanaged = firAppClass.perform(defaultAppSel)
+        let obj = unmanaged?.takeUnretainedValue()
+
+        return (obj != nil) ? .configured : .linkedButNotConfigured
+    }
+
+    /// Convenience
+    public static func isConfigured() -> Bool {
+        presence() == .configured
+    }
+}
