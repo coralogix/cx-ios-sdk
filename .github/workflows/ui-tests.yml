@@ -38,8 +38,13 @@ jobs:
 
       - name: Make root use the same Xcode
         run: |
-          echo "Switching root xcode-select to: $DEVELOPER_DIR"
-          sudo xcode-select -s "$DEVELOPER_DIR"
+          set -euo pipefail
+          if [ -n "${DEVELOPER_DIR:-}" ]; then
+            echo "Switching root xcode-select to: $DEVELOPER_DIR"
+            sudo xcode-select -s "$DEVELOPER_DIR"
+          else
+            echo "DEVELOPER_DIR not set; using system default Xcode"
+          fi
           sudo xcodebuild -version
           sudo xcodebuild -license accept || true
 
@@ -50,7 +55,7 @@ jobs:
 
       - name: Xcode first launch setup
         run: |
-          sudo env DEVELOPER_DIR="$DEVELOPER_DIR" xcodebuild -runFirstLaunch
+          sudo env DEVELOPER_DIR="${DEVELOPER_DIR:-}" xcodebuild -runFirstLaunch || sudo xcodebuild -runFirstLaunch
 
       - name: 🔎 Xcode & Simulator Diagnostics
         run: |
@@ -70,13 +75,11 @@ jobs:
           xcrun simctl list runtimes || true
           echo
 
-      # Fail fast if the simulator SDK isn't installed (this is your current failure mode)
       - name: Verify iOS Simulator SDK exists (fail fast)
         run: |
           set -euo pipefail
           if ! xcodebuild -showsdks | grep -q "iOS Simulator"; then
             echo "❌ iOS Simulator SDK is missing in this Xcode. Can't run UI tests on this runner."
-            echo "Tip: try runs-on: macos-14 or use an Xcode that includes iOS Simulator SDK."
             exit 1
           fi
           echo "✅ iOS Simulator SDK is present."
@@ -107,7 +110,6 @@ jobs:
         run: |
           set -euo pipefail
           echo "Booting a simulator (best-effort)..."
-          # Try booting any available iPhone runtime/device
           xcrun simctl boot "iPhone 15" 2>/dev/null || true
           sleep 5
           xcrun simctl list devices booted || true
@@ -132,11 +134,31 @@ jobs:
             gem install xcpretty || true
           fi
 
-      # Use a stable destination spec that doesn't depend on a specific UDID/model
-      - name: Set destination (stable)
+      - name: Set destination (auto from xcodebuild)
         run: |
-          echo "DESTINATION_SPEC=platform=iOS Simulator,name=iPhone 15,OS=latest" >> $GITHUB_ENV
-          echo "🎯 Final destination spec: platform=iOS Simulator,name=iPhone 15,OS=latest"
+          set -euo pipefail
+          cd Example
+
+          OUT=$(xcodebuild -showdestinations -workspace DemoApp.xcworkspace -scheme DemoAppSwift)
+          echo "$OUT"
+
+          # Pick first iPhone simulator destination from xcodebuild output
+          LINE=$(echo "$OUT" | grep -E "platform:iOS Simulator, id:.*name:iPhone" | head -1 || true)
+          if [ -z "$LINE" ]; then
+            echo "❌ No iPhone simulator destination found"
+            exit 1
+          fi
+
+          NAME=$(echo "$LINE" | sed -n 's/.*name:\([^,}]*\).*/\1/p' | xargs)
+          OS=$(echo "$LINE" | sed -n 's/.*OS:\([^,}]*\).*/\1/p' | xargs)
+
+          if [ -z "$NAME" ] || [ -z "$OS" ]; then
+            echo "❌ Failed to parse destination from line: $LINE"
+            exit 1
+          fi
+
+          echo "DESTINATION_SPEC=platform=iOS Simulator,name=$NAME,OS=$OS" >> $GITHUB_ENV
+          echo "🎯 Final destination spec: platform=iOS Simulator,name=$NAME,OS=$OS"
 
       - name: Build for testing
         run: |
