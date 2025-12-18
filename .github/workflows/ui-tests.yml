@@ -97,19 +97,29 @@ jobs:
             exit 1
           fi
 
+      - name: Resolve Swift Package dependencies (retry)
+        run: |
+          set -euo pipefail
+          cd Example
+          for i in 1 2 3 4 5; do
+            echo "Attempt $i: Resolving packages"
+            if xcodebuild -resolvePackageDependencies \
+                -workspace DemoApp.xcworkspace \
+                -scheme DemoAppSwift; then
+              exit 0
+            fi
+            sleep $((i*10))
+          done
+          exit 1
+
       - name: List available schemes
         run: |
           cd Example
-          if [ -f "DemoApp.xcworkspace/contents.xcworkspacedata" ]; then
-            xcodebuild -list -workspace DemoApp.xcworkspace
-          else
-            xcodebuild -list -project DemoApp.xcodeproj
-          fi
+          xcodebuild -list -workspace DemoApp.xcworkspace
 
-      - name: Boot simulator (simple)
+      - name: Boot simulator (best-effort)
         run: |
           set -euo pipefail
-          echo "Booting a simulator (best-effort)..."
           xcrun simctl boot "iPhone 15" 2>/dev/null || true
           sleep 5
           xcrun simctl list devices booted || true
@@ -134,7 +144,11 @@ jobs:
             gem install xcpretty || true
           fi
 
-      - name: Set destination (auto from xcodebuild)
+      # Pick a destination that exists AND is compatible with your test target.
+      # Since DemoAppUITests requires iOS Simulator 18.5+ in your log, we:
+      # 1) prefer an iPhone simulator with OS >= 18.5 if available
+      # 2) otherwise we fall back to "highest available iPhone OS" but ALSO override deployment target to 17.0 in CI
+      - name: Set destination (pick newest iPhone simulator)
         run: |
           set -euo pipefail
           cd Example
@@ -142,20 +156,47 @@ jobs:
           OUT=$(xcodebuild -showdestinations -workspace DemoApp.xcworkspace -scheme DemoAppSwift)
           echo "$OUT"
 
-          # Pick first iPhone simulator destination from xcodebuild output
-          LINE=$(echo "$OUT" | grep -E "platform:iOS Simulator, id:.*name:iPhone" | head -1 || true)
-          if [ -z "$LINE" ]; then
-            echo "❌ No iPhone simulator destination found"
+          CANDIDATES=$(echo "$OUT" | grep -E "platform:iOS Simulator, id:.*name:iPhone" || true)
+          if [ -z "$CANDIDATES" ]; then
+            echo "❌ No iPhone simulator destinations found"
             exit 1
           fi
 
-          NAME=$(echo "$LINE" | sed -n 's/.*name:\([^,}]*\).*/\1/p' | xargs)
-          OS=$(echo "$LINE" | sed -n 's/.*OS:\([^,}]*\).*/\1/p' | xargs)
+          BEST=$(python3 - <<'PY'
+import re, sys
+lines = sys.stdin.read().splitlines()
 
-          if [ -z "$NAME" ] || [ -z "$OS" ]; then
-            echo "❌ Failed to parse destination from line: $LINE"
-            exit 1
-          fi
+def vt(s):
+    return tuple(int(x) for x in s.strip().split("."))
+
+parsed = []
+for line in lines:
+    m_os = re.search(r'OS:([^,}]+)', line)
+    m_name = re.search(r'name:([^,}]+)', line)
+    if not (m_os and m_name):
+        continue
+    os_ver = m_os.group(1).strip()
+    name = m_name.group(1).strip()
+    try:
+        ver = vt(os_ver)
+    except Exception:
+        continue
+    parsed.append((ver, name, os_ver))
+
+if not parsed:
+    raise SystemExit(1)
+
+# Prefer OS >= 18.5 if present
+min_ok = (18, 5)
+eligible = [p for p in parsed if p[0] >= min_ok]
+pick = max(eligible, key=lambda x: x[0]) if eligible else max(parsed, key=lambda x: x[0])
+
+print(f"{pick[1]}|{pick[2]}")
+PY
+<<< "$CANDIDATES")
+
+          NAME="${BEST%%|*}"
+          OS="${BEST##*|}"
 
           echo "DESTINATION_SPEC=platform=iOS Simulator,name=$NAME,OS=$OS" >> $GITHUB_ENV
           echo "🎯 Final destination spec: platform=iOS Simulator,name=$NAME,OS=$OS"
@@ -168,6 +209,7 @@ jobs:
           echo "🔨 Building for testing with scheme: $SCHEME"
           echo "🎯 Destination: $DESTINATION_SPEC"
 
+          # Override deployment target so CI can run on available simulators even if the UITest target is set too high.
           if command -v xcpretty &> /dev/null; then
             xcodebuild build-for-testing \
               $BUILD_TYPE "$BUILD_PATH_RELATIVE" \
@@ -176,6 +218,7 @@ jobs:
               -derivedDataPath ../DerivedData \
               CODE_SIGNING_ALLOWED=NO \
               CODE_SIGN_IDENTITY="" \
+              IPHONEOS_DEPLOYMENT_TARGET=17.0 \
               | xcpretty --color || cat
           else
             xcodebuild build-for-testing \
@@ -184,7 +227,8 @@ jobs:
               -destination "$DESTINATION_SPEC" \
               -derivedDataPath ../DerivedData \
               CODE_SIGNING_ALLOWED=NO \
-              CODE_SIGN_IDENTITY=""
+              CODE_SIGN_IDENTITY="" \
+              IPHONEOS_DEPLOYMENT_TARGET=17.0
           fi
 
       - name: Run UI Tests
@@ -195,6 +239,7 @@ jobs:
           echo "🧪 Running UI tests with scheme: $SCHEME"
           echo "🎯 Destination: $DESTINATION_SPEC"
 
+          # Same override here
           if command -v xcpretty &> /dev/null; then
             xcodebuild test-without-building \
               $BUILD_TYPE "$BUILD_PATH_RELATIVE" \
@@ -203,6 +248,7 @@ jobs:
               -derivedDataPath ../DerivedData \
               -only-testing:DemoAppUITests/DemoAppUITests/testSchemaValidationFlow \
               -resultBundlePath ../DerivedData/TestResults.xcresult \
+              IPHONEOS_DEPLOYMENT_TARGET=17.0 \
               | tee ../test-output.log | xcpretty --color --report junit --output ../DerivedData/junit.xml
           else
             xcodebuild test-without-building \
@@ -212,6 +258,7 @@ jobs:
               -derivedDataPath ../DerivedData \
               -only-testing:DemoAppUITests/DemoAppUITests/testSchemaValidationFlow \
               -resultBundlePath ../DerivedData/TestResults.xcresult \
+              IPHONEOS_DEPLOYMENT_TARGET=17.0 \
               | tee ../test-output.log
           fi
 
@@ -244,5 +291,5 @@ jobs:
           files: DerivedData/junit.xml
           check_name: UI Test Results
           comment_mode: off
-        continue-on-error: true
+        continue-on-error: false
 
