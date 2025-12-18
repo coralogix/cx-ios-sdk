@@ -24,7 +24,6 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    # Prefer DEVELOPER_DIR for deterministic Xcode selection
     - name: Select Xcode (via DEVELOPER_DIR)
       run: |
         if [ -d "/Applications/Xcode_16.2.app" ]; then
@@ -37,27 +36,32 @@ jobs:
           echo "No pinned Xcode found; using default Xcode"
         fi
 
-    - name: Show Xcode version
+    - name: Make root use the same Xcode (IMPORTANT)
+      run: |
+        echo "Switching root xcode-select to: $DEVELOPER_DIR"
+        sudo xcode-select -s "$DEVELOPER_DIR"
+        sudo xcodebuild -version
+        sudo xcodebuild -license accept || true
+
+    - name: Show Xcode version (user)
       run: |
         echo "Using DEVELOPER_DIR=${DEVELOPER_DIR:-"(not set)"}"
         xcodebuild -version
 
-    # IMPORTANT: Ensure Xcode installs required components and simctl support
-    - name: Xcode first launch setup
+    - name: Xcode first launch setup (same Xcode)
       run: |
-        sudo xcodebuild -runFirstLaunch
+        sudo env DEVELOPER_DIR="$DEVELOPER_DIR" xcodebuild -runFirstLaunch
 
-    # If SDK/platform is missing on the runner image, download it (this is the key fix)
-    - name: Ensure iOS platform/SDK is installed
+    - name: Ensure iOS Simulator SDK exists (same Xcode)
       run: |
         set -euo pipefail
+
         echo "---- SDKs BEFORE ----"
         xcodebuild -showsdks || true
 
         if ! xcodebuild -showsdks | grep -q "iOS Simulator"; then
           echo "iOS Simulator SDK missing — downloading iOS platform..."
-          # This typically installs iOS (iphoneos + iphonesimulator runtimes/SDKs as needed)
-          sudo xcodebuild -downloadPlatform iOS
+          sudo env DEVELOPER_DIR="$DEVELOPER_DIR" xcodebuild -downloadPlatform iOS
         else
           echo "iOS Simulator SDK present."
         fi
@@ -85,17 +89,14 @@ jobs:
       run: |
         cd Example
         if [ -f "DemoApp.xcworkspace/contents.xcworkspacedata" ]; then
-          echo "📋 Listing schemes from workspace..."
           xcodebuild -list -workspace DemoApp.xcworkspace
         else
-          echo "📋 Listing schemes from project..."
           xcodebuild -list -project DemoApp.xcodeproj
         fi
 
     - name: Boot simulator
       run: |
         echo "📱 Finding available iPhone simulator..."
-
         if command -v jq &> /dev/null; then
           DEVICE_JSON=$(xcrun simctl list devices available --json 2>/dev/null || echo "")
           if [ -n "$DEVICE_JSON" ]; then
@@ -108,7 +109,6 @@ jobs:
         fi
 
         if [ -z "${DEVICE_ID:-}" ]; then
-          echo "Using text-based device detection..."
           DEVICE_INFO=$(xcrun simctl list devices available | grep -E "iPhone (16|15|14|13)" | grep -v "Pro" | head -1 || echo "")
           if [ -n "$DEVICE_INFO" ]; then
             DEVICE_ID=$(echo "$DEVICE_INFO" | grep -o "[0-9A-F-]\{36\}" | head -1)
@@ -128,8 +128,7 @@ jobs:
         echo "SIMULATOR_OS=$DEVICE_OS" >> $GITHUB_ENV
 
         echo "✅ Found simulator: $DEVICE_NAME (ID: $DEVICE_ID)"
-        echo "🚀 Booting simulator..."
-        xcrun simctl boot "$DEVICE_ID" 2>/dev/null || echo "Simulator already booted or booting..."
+        xcrun simctl boot "$DEVICE_ID" 2>/dev/null || true
         sleep 5
         xcrun simctl list devices | grep "$DEVICE_ID" || true
 
@@ -138,28 +137,21 @@ jobs:
         if [ -f "Example/DemoApp.xcworkspace/contents.xcworkspacedata" ]; then
           echo "BUILD_TYPE=-workspace" >> $GITHUB_ENV
           echo "BUILD_PATH_RELATIVE=DemoApp.xcworkspace" >> $GITHUB_ENV
-          echo "✅ Using workspace: Example/DemoApp.xcworkspace"
         elif [ -d "Example/DemoApp.xcodeproj" ]; then
           echo "BUILD_TYPE=-project" >> $GITHUB_ENV
           echo "BUILD_PATH_RELATIVE=DemoApp.xcodeproj" >> $GITHUB_ENV
-          echo "✅ Using project: Example/DemoApp.xcodeproj"
         else
           echo "❌ No Xcode workspace or project found in Example/ directory!"
           exit 1
         fi
-
         echo "SCHEME=DemoAppSwift" >> $GITHUB_ENV
-        echo "✅ Using scheme: DemoAppSwift"
 
     - name: Install xcpretty (optional)
       run: |
         if ! command -v xcpretty &> /dev/null; then
-          gem install xcpretty || echo "Failed to install xcpretty, will use plain output"
-        else
-          echo "xcpretty is already installed"
+          gem install xcpretty || true
         fi
 
-    # Key: use UDID destination (once SDK/platform exists, this will work reliably)
     - name: Set destination (by UDID)
       run: |
         echo "DESTINATION_SPEC=platform=iOS Simulator,id=$SIMULATOR_ID" >> $GITHUB_ENV
@@ -171,7 +163,6 @@ jobs:
         cd Example
 
         echo "🔨 Building for testing with scheme: $SCHEME"
-        echo "📂 Build path: $BUILD_PATH_RELATIVE"
         echo "🎯 Destination: $DESTINATION_SPEC"
 
         if command -v xcpretty &> /dev/null; then
@@ -229,8 +220,7 @@ jobs:
         if [ -f test-output.log ]; then
           cat test-output.log
         else
-          echo "No test output log found at test-output.log"
-          ls -la DerivedData/Logs/Test/ 2>/dev/null || echo "No test logs directory found"
+          echo "No test-output.log found"
         fi
         echo "❌ ================================================"
 
@@ -244,16 +234,6 @@ jobs:
           DerivedData/junit.xml
           test-output.log
         retention-days: 30
-
-    - name: Upload test logs on failure
-      if: failure()
-      uses: actions/upload-artifact@v4
-      with:
-        name: test-logs
-        path: |
-          DerivedData/Logs/Test/**/*.log
-          ~/Library/Logs/DiagnosticReports/
-        retention-days: 7
 
     - name: Publish test results
       if: always()
