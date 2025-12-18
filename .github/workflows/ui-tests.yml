@@ -8,41 +8,66 @@ on:
     branches: [ main, master ]
   pull_request:
     branches: [ main, master ]
-  workflow_dispatch: # Allow manual triggering
+  workflow_dispatch:
 
 jobs:
   ui-tests:
     name: Run DemoApp UI Tests
-    runs-on: macos-15 # macOS 15 (Sequoia) with Xcode 16+
+    runs-on: macos-15
     timeout-minutes: 30
     permissions:
       contents: read
       actions: read
-      checks: write 
-    
+      checks: write
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-      
-    - name: Select Xcode version
+
+    # Prefer setting DEVELOPER_DIR over xcode-select for reliability on GH runners
+    - name: Select Xcode (via DEVELOPER_DIR)
       run: |
-        # Try to find available Xcode versions
         if [ -d "/Applications/Xcode_16.2.app" ]; then
-          sudo xcode-select -s /Applications/Xcode_16.2.app/Contents/Developer
+          echo "DEVELOPER_DIR=/Applications/Xcode_16.2.app/Contents/Developer" >> $GITHUB_ENV
         elif [ -d "/Applications/Xcode_16.1.app" ]; then
-          sudo xcode-select -s /Applications/Xcode_16.1.app/Contents/Developer
+          echo "DEVELOPER_DIR=/Applications/Xcode_16.1.app/Contents/Developer" >> $GITHUB_ENV
         elif [ -d "/Applications/Xcode_16.0.app" ]; then
-          sudo xcode-select -s /Applications/Xcode_16.0.app/Contents/Developer
+          echo "DEVELOPER_DIR=/Applications/Xcode_16.0.app/Contents/Developer" >> $GITHUB_ENV
         else
-          echo "Using default Xcode version"
+          echo "No pinned Xcode found; using default Xcode"
         fi
-      
+
     - name: Show Xcode version
-      run: xcodebuild -version
-      
+      run: |
+        echo "Using DEVELOPER_DIR=${DEVELOPER_DIR:-"(not set)"}"
+        xcodebuild -version
+
+    # Helpful diagnostics to quickly see if the iOS / iOS Simulator SDK is missing
+    - name: Debug Xcode + SDKs
+      run: |
+        echo "DEVELOPER_DIR: ${DEVELOPER_DIR:-"(not set)"}"
+        xcode-select -p
+        echo "---- Xcodes in /Applications ----"
+        ls -la /Applications | grep Xcode || true
+        echo "---- SDKs ----"
+        xcodebuild -showsdks || true
+        echo "---- Platforms ----"
+        ls -la "$(xcode-select -p)/Platforms" || true
+
+    # If the selected Xcode is missing the iOS platform/SDK, attempt to download it
+    - name: Install iOS platform (if missing)
+      run: |
+        set -e
+        if ! xcodebuild -showsdks | grep -q "iOS Simulator"; then
+          echo "iOS Simulator SDK missing — downloading iOS platform..."
+          xcodebuild -downloadPlatform iOS
+        else
+          echo "iOS Simulator SDK present."
+        fi
+
     - name: Show available simulators
       run: xcrun simctl list devices available
-      
+
     - name: Verify project structure
       run: |
         echo "📋 Verifying project structure..."
@@ -55,7 +80,7 @@ jobs:
           find . -name "*.xcworkspace" -o -name "*.xcodeproj" | head -10
           exit 1
         fi
-        
+
     - name: List available schemes
       run: |
         cd Example
@@ -66,16 +91,14 @@ jobs:
           echo "📋 Listing schemes from project..."
           xcodebuild -list -project DemoApp.xcodeproj
         fi
-      
+
     - name: Boot simulator
       run: |
         echo "📱 Finding available iPhone simulator..."
-        
-        # Try to get device info using JSON format for more reliable parsing
+
         if command -v jq &> /dev/null; then
           DEVICE_JSON=$(xcrun simctl list devices available --json 2>/dev/null || echo "")
           if [ -n "$DEVICE_JSON" ]; then
-            # Find first iPhone that's not Pro
             DEVICE_ID=$(echo "$DEVICE_JSON" | jq -r '.devices | to_entries[] | .value[] | select(.name | test("iPhone (16|15|14|13)") and (test("Pro") | not)) | .udid' | head -1 || echo "")
             if [ -n "$DEVICE_ID" ]; then
               DEVICE_NAME=$(echo "$DEVICE_JSON" | jq -r --arg id "$DEVICE_ID" '.devices | to_entries[] | .value[] | select(.udid == $id) | .name' | head -1 || echo "")
@@ -83,67 +106,60 @@ jobs:
             fi
           fi
         fi
-        
-        # Fallback to text parsing if JSON didn't work
+
         if [ -z "$DEVICE_ID" ]; then
           echo "Using text-based device detection..."
           DEVICE_INFO=$(xcrun simctl list devices available | grep -E "iPhone (16|15|14|13)" | grep -v "Pro" | head -1 || echo "")
-          
+
           if [ -z "$DEVICE_INFO" ]; then
             echo "No available iPhone found, creating iPhone 15..."
-            # Get available runtimes
             RUNTIME=$(xcrun simctl list runtimes available | grep "iOS" | head -1 | awk '{print $NF}' | tr -d '()' || echo "")
             if [ -n "$RUNTIME" ]; then
               DEVICE_ID=$(xcrun simctl create "Test iPhone" "iPhone 15" "$RUNTIME" 2>/dev/null || echo "")
               DEVICE_INFO=$(xcrun simctl list devices | grep "$DEVICE_ID" | head -1 || echo "")
             fi
           fi
-          
+
           if [ -n "$DEVICE_INFO" ]; then
             DEVICE_ID=$(echo "$DEVICE_INFO" | grep -o "[0-9A-F-]\{36\}" | head -1)
             DEVICE_NAME=$(echo "$DEVICE_INFO" | sed -E 's/^[[:space:]]*([^(]+).*/\1/' | xargs)
             DEVICE_OS=$(echo "$DEVICE_INFO" | grep -oE "iOS [0-9.]+" | head -1 || echo "")
           fi
         fi
-        
+
         if [ -z "$DEVICE_ID" ]; then
           echo "❌ Failed to find or create simulator"
           echo "Available devices:"
           xcrun simctl list devices available | head -20
           exit 1
         fi
-        
-        # Ensure we have a device name
+
         if [ -z "$DEVICE_NAME" ]; then
           DEVICE_NAME="iPhone 15"
         fi
-        
+
         echo "SIMULATOR_ID=$DEVICE_ID" >> $GITHUB_ENV
         echo "SIMULATOR_NAME=$DEVICE_NAME" >> $GITHUB_ENV
         if [ -n "$DEVICE_OS" ]; then
           echo "SIMULATOR_OS=$DEVICE_OS" >> $GITHUB_ENV
         fi
-        
+
         echo "✅ Found simulator: $DEVICE_NAME (ID: $DEVICE_ID)"
         if [ -n "$DEVICE_OS" ]; then
           echo "   OS Version: $DEVICE_OS"
         fi
-        
-        # Boot the simulator
+
         echo "🚀 Booting simulator..."
         xcrun simctl boot "$DEVICE_ID" 2>/dev/null || echo "Simulator already booted or booting..."
-        
-        # Wait a moment for simulator to be ready
+
         sleep 5
-        
-        # Verify simulator is available and get its exact name from xcodebuild
+
         echo "✅ Verifying simulator is available..."
         xcrun simctl list devices | grep "$DEVICE_ID" || echo "⚠️ Warning: Simulator may not be fully ready"
-        
+
     - name: Set build configuration
       id: build-config
       run: |
-        # Prefer workspace over project
         if [ -f "Example/DemoApp.xcworkspace/contents.xcworkspacedata" ]; then
           echo "BUILD_TYPE=-workspace" >> $GITHUB_ENV
           echo "BUILD_PATH=Example/DemoApp.xcworkspace" >> $GITHUB_ENV
@@ -158,11 +174,10 @@ jobs:
           echo "❌ No Xcode workspace or project found in Example/ directory!"
           exit 1
         fi
-        
-        # Explicitly set the scheme to DemoAppSwift
+
         echo "SCHEME=DemoAppSwift" >> $GITHUB_ENV
         echo "✅ Using scheme: DemoAppSwift"
-        
+
     - name: Install xcpretty (optional)
       run: |
         if ! command -v xcpretty &> /dev/null; then
@@ -171,100 +186,22 @@ jobs:
         else
           echo "xcpretty is already installed"
         fi
-      
-    - name: Find and set destination
+
+    # Key change: use destination by UDID (most reliable); no xcodebuild showdestinations parsing needed
+    - name: Set destination (by UDID)
       run: |
-        cd Example
-        echo "📋 Finding available destinations for scheme: $SCHEME"
-        echo "📱 Booted simulator: $SIMULATOR_NAME (ID: $SIMULATOR_ID)"
-        
-        # Get available destinations from xcodebuild
-        DESTINATIONS_OUTPUT=$(xcodebuild -showdestinations \
-          $BUILD_TYPE "$BUILD_PATH_RELATIVE" \
-          -scheme "$SCHEME" 2>&1)
-        
-        # Filter for iOS Simulator destinations
-        DESTINATIONS=$(echo "$DESTINATIONS_OUTPUT" | grep "iOS Simulator" || echo "")
-        
-        if [ -z "$DESTINATIONS" ]; then
-          echo "⚠️ No iOS Simulator destinations found in xcodebuild output"
-          echo "Using booted simulator: platform=iOS Simulator,name=$SIMULATOR_NAME"
-          echo "DESTINATION_SPEC=platform=iOS Simulator,name=$SIMULATOR_NAME" >> $GITHUB_ENV
-        else
-          echo "Found iOS Simulator destinations (showing first 5):"
-          echo "$DESTINATIONS" | head -5
-          
-          # Try to find a destination that matches our booted simulator by ID first
-          DEST_LINE_BY_ID=$(echo "$DESTINATIONS" | grep "$SIMULATOR_ID" | head -1 || echo "")
-          
-          if [ -n "$DEST_LINE_BY_ID" ]; then
-            echo "✅ Found destination matching booted simulator ID"
-            DEST_LINE="$DEST_LINE_BY_ID"
-          else
-            # Try to find by name
-            DEST_LINE_BY_NAME=$(echo "$DESTINATIONS" | grep -i "$SIMULATOR_NAME" | head -1 || echo "")
-            
-            if [ -n "$DEST_LINE_BY_NAME" ]; then
-              echo "✅ Found destination matching simulator name"
-              DEST_LINE="$DEST_LINE_BY_NAME"
-            else
-              # Fallback: find first iPhone simulator destination (prefer non-Pro, prefer iPhone 15/16)
-              DEST_LINE=$(echo "$DESTINATIONS" | grep -E "iPhone (16|15)" | grep -v "Pro" | head -1 || \
-                         echo "$DESTINATIONS" | grep -E "iPhone (14|13)" | grep -v "Pro" | head -1 || \
-                         echo "$DESTINATIONS" | head -1)
-            fi
-          fi
-          
-          if [ -n "$DEST_LINE" ]; then
-            echo "Selected destination line: $DEST_LINE"
-            
-            # Extract destination specifier - be more careful with parsing
-            # Format examples:
-            # "id=73B2B261-..., name=iPhone 15, OS=18.2"
-            # "id=73B2B261-..., name=iPhone 16, OS=18.2"
-            
-            # Extract name - match "name=" followed by text until comma or end
-            DEST_NAME=$(echo "$DEST_LINE" | sed -E 's/.*name=([^,]+).*/\1/' | xargs)
-            
-            # Extract OS - match "OS=" followed by version number
-            DEST_OS=$(echo "$DEST_LINE" | sed -E 's/.*OS=([0-9.]+).*/\1/' | xargs)
-            
-            # Clean up name - remove any trailing characters that aren't part of the name
-            DEST_NAME=$(echo "$DEST_NAME" | sed 's/[^a-zA-Z0-9 ].*$//' | xargs)
-            
-            echo "Extracted - Name: '$DEST_NAME', OS: '$DEST_OS'"
-            
-            # Validate name looks reasonable (starts with iPhone and has a number)
-            if [[ "$DEST_NAME" =~ ^iPhone[[:space:]]+[0-9]+ ]]; then
-              if [ -n "$DEST_OS" ] && [[ "$DEST_OS" =~ ^[0-9]+\.[0-9]+ ]]; then
-                DEST_SPEC="platform=iOS Simulator,name=$DEST_NAME,OS=$DEST_OS"
-              else
-                DEST_SPEC="platform=iOS Simulator,name=$DEST_NAME"
-              fi
-              echo "DESTINATION_SPEC=$DEST_SPEC" >> $GITHUB_ENV
-              echo "✅ Using destination: $DEST_NAME (OS: ${DEST_OS:-not specified})"
-            else
-              # Name extraction failed, use booted simulator name
-              echo "⚠️ Extracted name '$DEST_NAME' doesn't look valid, using booted simulator name"
-              echo "DESTINATION_SPEC=platform=iOS Simulator,name=$SIMULATOR_NAME" >> $GITHUB_ENV
-            fi
-          else
-            echo "⚠️ Could not select destination line, using booted simulator"
-            echo "DESTINATION_SPEC=platform=iOS Simulator,name=$SIMULATOR_NAME" >> $GITHUB_ENV
-          fi
-        fi
-        
-        echo "🎯 Final destination spec: $DESTINATION_SPEC"
-      
+        echo "DESTINATION_SPEC=platform=iOS Simulator,id=$SIMULATOR_ID" >> $GITHUB_ENV
+        echo "🎯 Final destination spec: platform=iOS Simulator,id=$SIMULATOR_ID"
+
     - name: Build for testing
       run: |
         set -o pipefail
         cd Example
-        
+
         echo "🔨 Building for testing with scheme: $SCHEME"
         echo "📂 Build path: $BUILD_PATH_RELATIVE"
         echo "🎯 Destination: $DESTINATION_SPEC"
-        
+
         if command -v xcpretty &> /dev/null; then
           xcodebuild build-for-testing \
             $BUILD_TYPE "$BUILD_PATH_RELATIVE" \
@@ -283,16 +220,16 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGN_IDENTITY=""
         fi
-          
+
     - name: Run UI Tests
       run: |
         set -o pipefail
         cd Example
-        
+
         echo "🧪 Running UI tests with scheme: $SCHEME"
         echo "📂 Build path: $BUILD_PATH_RELATIVE"
         echo "🎯 Destination: $DESTINATION_SPEC"
-        
+
         if command -v xcpretty &> /dev/null; then
           xcodebuild test-without-building \
             $BUILD_TYPE "$BUILD_PATH_RELATIVE" \
@@ -301,7 +238,7 @@ jobs:
             -derivedDataPath ../DerivedData \
             -only-testing:DemoAppUITests/DemoAppUITests/testSchemaValidationFlow \
             -resultBundlePath ../DerivedData/TestResults.xcresult \
-            | tee ../test-output.log | xcpretty --color --report junit --output ../DerivedData/junit.xml || true
+            | tee ../test-output.log | xcpretty --color --report junit --output ../DerivedData/junit.xml
         else
           xcodebuild test-without-building \
             $BUILD_TYPE "$BUILD_PATH_RELATIVE" \
@@ -310,10 +247,10 @@ jobs:
             -derivedDataPath ../DerivedData \
             -only-testing:DemoAppUITests/DemoAppUITests/testSchemaValidationFlow \
             -resultBundlePath ../DerivedData/TestResults.xcresult \
-            | tee ../test-output.log || true
+            | tee ../test-output.log
         fi
       continue-on-error: false
-      
+
     - name: Print test output on failure
       if: failure()
       run: |
@@ -326,7 +263,7 @@ jobs:
           ls -la DerivedData/Logs/Test/ 2>/dev/null || echo "No test logs directory found"
         fi
         echo "❌ ================================================"
-        
+
     - name: Upload test results
       if: always()
       uses: actions/upload-artifact@v4
@@ -337,7 +274,7 @@ jobs:
           DerivedData/junit.xml
           test-output.log
         retention-days: 30
-          
+
     - name: Upload test logs on failure
       if: failure()
       uses: actions/upload-artifact@v4
@@ -347,7 +284,7 @@ jobs:
           DerivedData/Logs/Test/**/*.log
           ~/Library/Logs/DiagnosticReports/
         retention-days: 7
-        
+
     - name: Publish test results
       if: always()
       uses: EnricoMi/publish-unit-test-result-action/macos@v2
@@ -356,3 +293,4 @@ jobs:
         check_name: UI Test Results
         comment_mode: off
       continue-on-error: true
+
