@@ -24,7 +24,7 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    # Prefer setting DEVELOPER_DIR over xcode-select for reliability on GH runners
+    # Prefer DEVELOPER_DIR for deterministic Xcode selection
     - name: Select Xcode (via DEVELOPER_DIR)
       run: |
         if [ -d "/Applications/Xcode_16.2.app" ]; then
@@ -42,28 +42,28 @@ jobs:
         echo "Using DEVELOPER_DIR=${DEVELOPER_DIR:-"(not set)"}"
         xcodebuild -version
 
-    # Helpful diagnostics to quickly see if the iOS / iOS Simulator SDK is missing
-    - name: Debug Xcode + SDKs
+    # IMPORTANT: Ensure Xcode installs required components and simctl support
+    - name: Xcode first launch setup
       run: |
-        echo "DEVELOPER_DIR: ${DEVELOPER_DIR:-"(not set)"}"
-        xcode-select -p
-        echo "---- Xcodes in /Applications ----"
-        ls -la /Applications | grep Xcode || true
-        echo "---- SDKs ----"
-        xcodebuild -showsdks || true
-        echo "---- Platforms ----"
-        ls -la "$(xcode-select -p)/Platforms" || true
+        sudo xcodebuild -runFirstLaunch
 
-    # If the selected Xcode is missing the iOS platform/SDK, attempt to download it
-    - name: Install iOS platform (if missing)
+    # If SDK/platform is missing on the runner image, download it (this is the key fix)
+    - name: Ensure iOS platform/SDK is installed
       run: |
-        set -e
+        set -euo pipefail
+        echo "---- SDKs BEFORE ----"
+        xcodebuild -showsdks || true
+
         if ! xcodebuild -showsdks | grep -q "iOS Simulator"; then
           echo "iOS Simulator SDK missing — downloading iOS platform..."
-          xcodebuild -downloadPlatform iOS
+          # This typically installs iOS (iphoneos + iphonesimulator runtimes/SDKs as needed)
+          sudo xcodebuild -downloadPlatform iOS
         else
           echo "iOS Simulator SDK present."
         fi
+
+        echo "---- SDKs AFTER ----"
+        xcodebuild -showsdks || true
 
     - name: Show available simulators
       run: xcrun simctl list devices available
@@ -107,19 +107,9 @@ jobs:
           fi
         fi
 
-        if [ -z "$DEVICE_ID" ]; then
+        if [ -z "${DEVICE_ID:-}" ]; then
           echo "Using text-based device detection..."
           DEVICE_INFO=$(xcrun simctl list devices available | grep -E "iPhone (16|15|14|13)" | grep -v "Pro" | head -1 || echo "")
-
-          if [ -z "$DEVICE_INFO" ]; then
-            echo "No available iPhone found, creating iPhone 15..."
-            RUNTIME=$(xcrun simctl list runtimes available | grep "iOS" | head -1 | awk '{print $NF}' | tr -d '()' || echo "")
-            if [ -n "$RUNTIME" ]; then
-              DEVICE_ID=$(xcrun simctl create "Test iPhone" "iPhone 15" "$RUNTIME" 2>/dev/null || echo "")
-              DEVICE_INFO=$(xcrun simctl list devices | grep "$DEVICE_ID" | head -1 || echo "")
-            fi
-          fi
-
           if [ -n "$DEVICE_INFO" ]; then
             DEVICE_ID=$(echo "$DEVICE_INFO" | grep -o "[0-9A-F-]\{36\}" | head -1)
             DEVICE_NAME=$(echo "$DEVICE_INFO" | sed -E 's/^[[:space:]]*([^(]+).*/\1/' | xargs)
@@ -127,47 +117,30 @@ jobs:
           fi
         fi
 
-        if [ -z "$DEVICE_ID" ]; then
-          echo "❌ Failed to find or create simulator"
-          echo "Available devices:"
-          xcrun simctl list devices available | head -20
+        if [ -z "${DEVICE_ID:-}" ]; then
+          echo "❌ Failed to find simulator"
+          xcrun simctl list devices available | head -40
           exit 1
-        fi
-
-        if [ -z "$DEVICE_NAME" ]; then
-          DEVICE_NAME="iPhone 15"
         fi
 
         echo "SIMULATOR_ID=$DEVICE_ID" >> $GITHUB_ENV
         echo "SIMULATOR_NAME=$DEVICE_NAME" >> $GITHUB_ENV
-        if [ -n "$DEVICE_OS" ]; then
-          echo "SIMULATOR_OS=$DEVICE_OS" >> $GITHUB_ENV
-        fi
+        echo "SIMULATOR_OS=$DEVICE_OS" >> $GITHUB_ENV
 
         echo "✅ Found simulator: $DEVICE_NAME (ID: $DEVICE_ID)"
-        if [ -n "$DEVICE_OS" ]; then
-          echo "   OS Version: $DEVICE_OS"
-        fi
-
         echo "🚀 Booting simulator..."
         xcrun simctl boot "$DEVICE_ID" 2>/dev/null || echo "Simulator already booted or booting..."
-
         sleep 5
-
-        echo "✅ Verifying simulator is available..."
-        xcrun simctl list devices | grep "$DEVICE_ID" || echo "⚠️ Warning: Simulator may not be fully ready"
+        xcrun simctl list devices | grep "$DEVICE_ID" || true
 
     - name: Set build configuration
-      id: build-config
       run: |
         if [ -f "Example/DemoApp.xcworkspace/contents.xcworkspacedata" ]; then
           echo "BUILD_TYPE=-workspace" >> $GITHUB_ENV
-          echo "BUILD_PATH=Example/DemoApp.xcworkspace" >> $GITHUB_ENV
           echo "BUILD_PATH_RELATIVE=DemoApp.xcworkspace" >> $GITHUB_ENV
           echo "✅ Using workspace: Example/DemoApp.xcworkspace"
         elif [ -d "Example/DemoApp.xcodeproj" ]; then
           echo "BUILD_TYPE=-project" >> $GITHUB_ENV
-          echo "BUILD_PATH=Example/DemoApp.xcodeproj" >> $GITHUB_ENV
           echo "BUILD_PATH_RELATIVE=DemoApp.xcodeproj" >> $GITHUB_ENV
           echo "✅ Using project: Example/DemoApp.xcodeproj"
         else
@@ -181,13 +154,12 @@ jobs:
     - name: Install xcpretty (optional)
       run: |
         if ! command -v xcpretty &> /dev/null; then
-          echo "xcpretty not found, installing..."
           gem install xcpretty || echo "Failed to install xcpretty, will use plain output"
         else
           echo "xcpretty is already installed"
         fi
 
-    # Key change: use destination by UDID (most reliable); no xcodebuild showdestinations parsing needed
+    # Key: use UDID destination (once SDK/platform exists, this will work reliably)
     - name: Set destination (by UDID)
       run: |
         echo "DESTINATION_SPEC=platform=iOS Simulator,id=$SIMULATOR_ID" >> $GITHUB_ENV
@@ -227,7 +199,6 @@ jobs:
         cd Example
 
         echo "🧪 Running UI tests with scheme: $SCHEME"
-        echo "📂 Build path: $BUILD_PATH_RELATIVE"
         echo "🎯 Destination: $DESTINATION_SPEC"
 
         if command -v xcpretty &> /dev/null; then
@@ -259,7 +230,6 @@ jobs:
           cat test-output.log
         else
           echo "No test output log found at test-output.log"
-          echo "Checking for test results..."
           ls -la DerivedData/Logs/Test/ 2>/dev/null || echo "No test logs directory found"
         fi
         echo "❌ ================================================"
