@@ -85,7 +85,11 @@ final class NetworkViewController: UITableViewController {
             subtitle: "Fetch data from server",
             systemImageName: "arrow.down.circle",
             key: .getRequestToServer
-        )
+        ),
+        .init(title: "Async/Await example",
+              subtitle: "async await in action",
+              systemImageName: "photo.on.rectangle",
+              key: .signingWithAsyncAwait)
     ]
 
     // MARK: - Init
@@ -194,6 +198,8 @@ final class NetworkViewController: UITableViewController {
         case .downloadSDWebImage:
             NetworkSim.downloadImage()
 
+        case .signingWithAsyncAwait:
+            NetworkSim.signIn()
         default:
             break
         }

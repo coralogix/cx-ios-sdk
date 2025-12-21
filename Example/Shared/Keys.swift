@@ -47,6 +47,7 @@ enum Keys: String {
     case clock = "Clock"
     case alamofireUploadRequest = "🔌 Upload Alamofire Request"
     case downloadSDWebImage = "🔌 Download SDWebImage"
+    case signingWithAsyncAwait = "Signing with async/await"
     case schemaValidation = "Verify schema"
     case reportMobileVitalsMeasurement = "Report Mobile Vitals Measurement"
     case customLabels = "Log with Custom Labels"

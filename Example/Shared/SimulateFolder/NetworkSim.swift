@@ -297,4 +297,79 @@ class NetworkSim {
 //            }
 //        }
     }
+    
+    static func signIn() {
+        Task {
+            do {
+                let response = try await AuthServiceAsync.shared.signIn(
+                    email: "abc@gmail.com",
+                    password: "a"
+                )
+                Log.d("Success: \(response.token ?? "No token")")
+            } catch {
+                Log.e("Error: \(error.localizedDescription)")
+            }
+        }
+    }
+    
+    struct SignInRequest: Codable {
+        let email: String
+        let password: String
+    }
+    
+    struct SignInResponse: Codable {
+        let token: String?
+        let userId: String?
+    }
+    
+    final class AuthServiceAsync {
+        static let shared = AuthServiceAsync()
+        private init() {}
+
+        enum APIError: Error, LocalizedError {
+            case http(status: Int, body: String)
+
+            var errorDescription: String? {
+                switch self {
+                case .http(let status, let body):
+                    return "HTTP \(status): \(body)"
+                }
+            }
+        }
+
+        func signIn(email: String, password: String) async throws -> SignInResponse {
+            guard let url = URL(string: "https://jsonplaceholder.typicode.com/posts") else {
+                throw URLError(.badURL)
+            }
+            
+            let requestBody: [String: Any] = [
+                "title": "Swift Request",
+                "body": "This is a simulated POST request.",
+                "userId": 1
+            ]
+
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.setValue("application/json", forHTTPHeaderField: "Accept")
+            request.timeoutInterval = 30
+            request.httpBody =  try? JSONSerialization.data(withJSONObject: requestBody, options: [])
+    
+            let (data, response) = try await URLSession.shared.data(for: request)
+            
+            
+            if let httpResponse = response as? HTTPURLResponse {
+                print("POST Response Code:", httpResponse.statusCode)
+            }
+            
+            if let jsonString = String(data: data, encoding: .utf8) {
+                print("POST Response Data:\n", jsonString)
+            }
+        
+            let decoder = JSONDecoder()
+            decoder.keyDecodingStrategy = .convertFromSnakeCase
+            return try decoder.decode(SignInResponse.self, from: data)
+        }
+    }
+
 }
