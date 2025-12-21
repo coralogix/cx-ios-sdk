@@ -305,23 +305,20 @@ class NetworkSim {
                     email: "abc@gmail.com",
                     password: "a"
                 )
-                Log.d("Success: \(response.token ?? "No token")")
+                Log.d("Success: \(response.title)")
             } catch {
                 Log.e("Error: \(error.localizedDescription)")
             }
         }
     }
     
-    struct SignInRequest: Codable {
-        let email: String
-        let password: String
+    struct DataResponse: Codable {
+        let id: Int
+        let title: String
+        let body: String
+        let userId: Int
     }
-    
-    struct SignInResponse: Codable {
-        let token: String?
-        let userId: String?
-    }
-    
+
     final class AuthServiceAsync {
         static let shared = AuthServiceAsync()
         private init() {}
@@ -337,7 +334,7 @@ class NetworkSim {
             }
         }
 
-        func signIn(email: String, password: String) async throws -> SignInResponse {
+        func signIn(email: String, password: String) async throws -> DataResponse {
             guard let url = URL(string: "https://jsonplaceholder.typicode.com/posts") else {
                 throw URLError(.badURL)
             }
@@ -368,8 +365,7 @@ class NetworkSim {
         
             let decoder = JSONDecoder()
             decoder.keyDecodingStrategy = .convertFromSnakeCase
-            return try decoder.decode(SignInResponse.self, from: data)
+            return try decoder.decode(DataResponse.self, from: data)
         }
     }
-
 }
