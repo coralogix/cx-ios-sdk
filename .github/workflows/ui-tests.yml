@@ -164,9 +164,8 @@ jobs:
         run: |
           set -euo pipefail
           cd Example
-          API_KEY="${{ secrets.DEMOAPP_API_KEY || 'CI_DUMMY' }}"
-          ENDPOINT="${{ secrets.DEMOAPP_ENDPOINT || 'https://example.invalid' }}"
-          printf 'import Foundation\n\nenum Envs {\n  static let apiKey = "%s"\n  static let endpoint = "%s"\n}\n' "$API_KEY" "$ENDPOINT" > envs.swift
+          PUBLIC_KEY="${{ secrets.DEMOAPP_API_KEY || 'CI_DUMMY' }}"
+          printf 'import Foundation\n\npublic enum Envs: String {\n    case PUBLIC_KEY = "%s"\n    case PROXY_URL = "https://schema-validator-latest.onrender.com/logs"\n}\n' "$PUBLIC_KEY" > envs.swift
 
           echo "✅ Generated envs.swift"
           ls -la envs.swift
