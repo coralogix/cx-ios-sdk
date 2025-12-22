@@ -284,10 +284,19 @@ jobs:
         if: failure()
         run: |
           echo "❌ ============ TEST FAILURE DETAILS ============"
-          if [ -f test-output.log ]; then
-            cat test-output.log
+          if [ -f ../test-output.log ]; then
+            echo "--- Full test output ---"
+            cat ../test-output.log
           else
             echo "No test-output.log found"
+          fi
+          echo ""
+          echo "--- Test results summary ---"
+          if [ -d ../DerivedData/TestResults.xcresult ]; then
+            xcrun xcresulttool get --format json --path ../DerivedData/TestResults.xcresult 2>/dev/null | \
+              python3 -m json.tool 2>/dev/null | \
+              grep -A 10 -B 5 "failure\|error\|testStatus" | head -50 || \
+              echo "Could not parse test results"
           fi
           echo "❌ ================================================"
 
