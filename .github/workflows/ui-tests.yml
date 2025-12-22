@@ -106,10 +106,21 @@ jobs:
             xcodebuild -list -project DemoApp.xcodeproj
           fi
 
+      - name: List available iOS simulators
+        run: |
+          set -euo pipefail
+          echo "📱 Available iOS Simulators:"
+          xcrun simctl list devices available | grep -E "iPhone|iPad" | head -20 || true
+          echo ""
+          echo "📱 iOS 18.5+ Simulators:"
+          xcrun simctl list devices available | grep -E "iPhone|iPad" | grep -E "18\.[5-9]|19\." || echo "No iOS 18.5+ simulators found"
+
       - name: Boot simulator (simple)
         run: |
           set -euo pipefail
           echo "Booting a simulator (best-effort)..."
+          # Try to boot iPhone 16 or newer first
+          xcrun simctl boot "iPhone 16" 2>/dev/null || \
           xcrun simctl boot "iPhone 15" 2>/dev/null || true
           sleep 5
           xcrun simctl list devices booted || true
@@ -142,8 +153,24 @@ jobs:
           OUT=$(xcodebuild -showdestinations -workspace DemoApp.xcworkspace -scheme DemoAppSwift)
           echo "$OUT"
 
-          # Pick first iPhone simulator destination from xcodebuild output
-          LINE=$(echo "$OUT" | grep -E "platform:iOS Simulator, id:.*name:iPhone" | head -1 || true)
+          # Try to find iPhone 16 or newer with iOS 18.5+ first (matches deployment target)
+          LINE=$(echo "$OUT" | grep -E "platform:iOS Simulator, id:.*name:iPhone (1[6-9]|[2-9][0-9])" | grep -E "OS:1[89]\.[0-9]" | head -1 || true)
+          
+          # If not found, try any iPhone with iOS 18.5+
+          if [ -z "$LINE" ]; then
+            LINE=$(echo "$OUT" | grep -E "platform:iOS Simulator, id:.*name:iPhone" | grep -E "OS:1[89]\.[0-9]" | head -1 || true)
+          fi
+          
+          # If still not found, try any iPhone with iOS 18.0+
+          if [ -z "$LINE" ]; then
+            LINE=$(echo "$OUT" | grep -E "platform:iOS Simulator, id:.*name:iPhone" | grep -E "OS:18\.[0-9]" | head -1 || true)
+          fi
+          
+          # Last resort: any iPhone simulator
+          if [ -z "$LINE" ]; then
+            LINE=$(echo "$OUT" | grep -E "platform:iOS Simulator, id:.*name:iPhone" | head -1 || true)
+          fi
+          
           if [ -z "$LINE" ]; then
             echo "❌ No iPhone simulator destination found"
             exit 1
@@ -155,6 +182,15 @@ jobs:
           if [ -z "$NAME" ] || [ -z "$OS" ]; then
             echo "❌ Failed to parse destination from line: $LINE"
             exit 1
+          fi
+
+          # Verify OS version meets minimum requirement (18.5+)
+          OS_MAJOR=$(echo "$OS" | cut -d. -f1)
+          OS_MINOR=$(echo "$OS" | cut -d. -f2)
+          if [ "$OS_MAJOR" -lt 18 ] || ([ "$OS_MAJOR" -eq 18 ] && [ "$OS_MINOR" -lt 5 ]); then
+            echo "⚠️ Warning: Selected simulator $NAME ($OS) may not meet iOS 18.5+ requirement"
+            echo "Available simulators:"
+            echo "$OUT" | grep -E "platform:iOS Simulator, id:.*name:iPhone" | grep -E "OS:1[89]\.[0-9]" || echo "No iOS 18+ simulators found"
           fi
 
           echo "DESTINATION_SPEC=platform=iOS Simulator,name=$NAME,OS=$OS" >> $GITHUB_ENV

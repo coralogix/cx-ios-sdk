@@ -301,10 +301,7 @@ class NetworkSim {
     static func callAsyncAwait() {
         Task {
             do {
-                let response = try await AuthServiceAsync.shared.signIn(
-                    email: "abc@gmail.com",
-                    password: "a"
-                )
+                let response = try await AuthServiceAsync.shared.simulateAsyncAwaitCall()
                 Log.d("Success: \(response.title)")
             } catch {
                 Log.e("Error: \(error.localizedDescription)")
@@ -334,7 +331,7 @@ class NetworkSim {
             }
         }
 
-        func signIn(email: String, password: String) async throws -> DataResponse {
+        func simulateAsyncAwaitCall() async throws -> DataResponse {
             guard let url = URL(string: "https://jsonplaceholder.typicode.com/posts") else {
                 throw URLError(.badURL)
             }
