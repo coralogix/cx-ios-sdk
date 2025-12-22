@@ -164,14 +164,9 @@ jobs:
         run: |
           set -euo pipefail
           cd Example
-          {
-            echo 'import Foundation'
-            echo ''
-            echo 'enum Envs {'
-            echo '  static let apiKey = "${{ secrets.DEMOAPP_API_KEY || '"'"'CI_DUMMY'"'"' }}"'
-            echo '  static let endpoint = "${{ secrets.DEMOAPP_ENDPOINT || '"'"'https://example.invalid'"'"' }}"'
-            echo '}'
-          } > envs.swift
+          API_KEY="${{ secrets.DEMOAPP_API_KEY || 'CI_DUMMY' }}"
+          ENDPOINT="${{ secrets.DEMOAPP_ENDPOINT || 'https://example.invalid' }}"
+          printf 'import Foundation\n\nenum Envs {\n  static let apiKey = "%s"\n  static let endpoint = "%s"\n}\n' "$API_KEY" "$ENDPOINT" > envs.swift
 
           echo "✅ Generated envs.swift"
           ls -la envs.swift
