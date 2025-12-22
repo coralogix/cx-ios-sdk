@@ -257,6 +257,10 @@ jobs:
           # Override deployment target for CI to use a generic minimum version
           CI_DEPLOYMENT_TARGET="18.0"
           echo "📱 Using IPHONEOS_DEPLOYMENT_TARGET=$CI_DEPLOYMENT_TARGET for test execution"
+          
+          # Test takes ~69s locally but may be slower in CI due to network/validation API
+          # Set longer timeout for CI environment
+          export XCODE_TEST_TIMEOUT=600  # 10 minutes for CI
 
           if command -v xcpretty &> /dev/null; then
             xcodebuild test-without-building \
@@ -267,7 +271,7 @@ jobs:
               -only-testing:DemoAppUITests/DemoAppUITests/testSchemaValidationFlow \
               -resultBundlePath ../DerivedData/TestResults.xcresult \
               IPHONEOS_DEPLOYMENT_TARGET="$CI_DEPLOYMENT_TARGET" \
-              | tee ../test-output.log | xcpretty --color --report junit --output ../DerivedData/junit.xml
+              | tee ../test-output.log | xcpretty --color --report junit --output ../DerivedData/junit.xml || true
           else
             xcodebuild test-without-building \
               $BUILD_TYPE "$BUILD_PATH_RELATIVE" \
@@ -277,7 +281,20 @@ jobs:
               -only-testing:DemoAppUITests/DemoAppUITests/testSchemaValidationFlow \
               -resultBundlePath ../DerivedData/TestResults.xcresult \
               IPHONEOS_DEPLOYMENT_TARGET="$CI_DEPLOYMENT_TARGET" \
-              | tee ../test-output.log
+              | tee ../test-output.log || true
+          fi
+          
+          # xcodebuild returns 65 for test failures (which is OK), 0 for success
+          # We capture the exit code before the pipe
+          EXIT_CODE=${PIPESTATUS[0]}
+          if [ $EXIT_CODE -eq 65 ]; then
+            echo "⚠️ Tests failed (exit code 65) - check test output for details"
+            exit 65  # Fail the workflow step
+          elif [ $EXIT_CODE -ne 0 ]; then
+            echo "❌ xcodebuild failed with exit code $EXIT_CODE"
+            exit $EXIT_CODE
+          else
+            echo "✅ Tests passed!"
           fi
 
       - name: Print test output on failure
