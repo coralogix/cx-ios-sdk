@@ -298,7 +298,7 @@ class NetworkSim {
 //        }
     }
     
-    static func signIn() {
+    static func callAsyncAwait() {
         Task {
             do {
                 let response = try await AuthServiceAsync.shared.signIn(

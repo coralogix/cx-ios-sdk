@@ -199,7 +199,7 @@ final class NetworkViewController: UITableViewController {
             NetworkSim.downloadImage()
 
         case .signingWithAsyncAwait:
-            NetworkSim.signIn()
+            NetworkSim.callAsyncAwait()
         default:
             break
         }
