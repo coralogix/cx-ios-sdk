@@ -17,7 +17,14 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
         CoralogixRumManager.shared.initialize()
 
-        FirebaseApp.configure()
+        // Only configure Firebase if GoogleService-Info.plist exists and is valid
+        // This allows the app to run in CI without Firebase
+        if let path = Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist"),
+           FileManager.default.fileExists(atPath: path) {
+            FirebaseApp.configure()
+        } else {
+            print("⚠️ Firebase not configured: GoogleService-Info.plist not found (this is expected in CI)")
+        }
 
 
 //        // Must be initialized after CoralogixRum
