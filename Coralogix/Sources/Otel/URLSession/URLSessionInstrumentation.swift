@@ -508,7 +508,6 @@ public class URLSessionInstrumentation {
             Log.d("[URLSessionInstrumentation] AFNetworking not detected, skipping swizzling")
         }
         
-        
         for (cls, selector, method) in methodsToSwizzle {
             
             // ✅ Safety check: ensure method signature is void-return, no args
@@ -793,21 +792,6 @@ public class URLSessionInstrumentation {
                 self.requestMap[taskId] = NetworkRequestState()
           }
             self.requestMap[taskId]?.setRequest(request)
-        }
-
-        // For iOS 15+/macOS 12+, handle async/await methods differently
-        if #available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, *) {
-          // Check if this is an async/await call
-          // First, check if we detected it at task creation time (most reliable)
-        
-          if #available(OSX 13.0, iOS 16.0, watchOS 9.0, tvOS 16.0, *) {
-            // Fallback: check Task.basePriority at resume time (less reliable)
-            if let basePriority = Task.basePriority {
-              Log.d("[URLSessionInstrumentation] iOS 16+ - Task.basePriority: \(basePriority), isAsyncContext: true")
-            } else {
-              Log.d("[URLSessionInstrumentation] iOS 16+ - Task.basePriority: nil, isAsyncContext: false")
-            }
-          }
         }
 
         if #available(OSX 13.0, iOS 16.0, watchOS 9.0, tvOS 16.0, *) {
