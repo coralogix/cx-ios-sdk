@@ -284,6 +284,7 @@ jobs:
               -scheme "$SCHEME" \
               -destination "$DESTINATION_SPEC" \
               -derivedDataPath ../DerivedData \
+
               -only-testing:DemoAppUITests/DemoAppUITests/testSchemaValidationFlow \
               -resultBundlePath ../DerivedData/TestResults.xcresult \
               IPHONEOS_DEPLOYMENT_TARGET="$CI_DEPLOYMENT_TARGET" \
@@ -305,71 +306,36 @@ jobs:
             echo "✅ Tests passed!"
           fi
 
-      - name: Show test output summary
-        if: always()
-        run: |
-          set +e  # Don't fail on errors in this step
-          echo "📋 ============ TEST OUTPUT SUMMARY ============"
-          
-          # Show last 100 lines of test output log
-          if [ -f ../test-output.log ]; then
-            echo ""
-            echo "--- Last 100 lines of test output ---"
-            tail -100 ../test-output.log
-          else
-            echo "⚠️ No test-output.log found"
-          fi
-          
-          # Show test execution summary
-          if [ -f ../test-output.log ]; then
-            echo ""
-            echo "--- Test Execution Summary ---"
-            if grep -q "Failing tests:" ../test-output.log; then
-              echo "❌ Test failures detected:"
-              grep -A 10 "Failing tests:" ../test-output.log | head -20
-            fi
-            if grep -q "Test Suite.*passed\|Test Suite.*failed" ../test-output.log; then
-              echo ""
-              echo "Test suite results:"
-              grep "Test Suite" ../test-output.log | tail -5
-            fi
-            if grep -q "Executed.*test" ../test-output.log; then
-              echo ""
-              echo "Test execution summary:"
-              grep "Executed.*test" ../test-output.log | tail -3
-            fi
-          fi
-
       - name: Print test output on failure
         if: failure()
         run: |
           set +e  # Don't fail on errors in this step
-          echo "❌ ============ DETAILED TEST FAILURE ANALYSIS ============"
+          echo "❌ ============ TEST FAILURE DETAILS ============"
           
-          # Show full test output log
-          if [ -f ../test-output.log ]; then
+          # Show test output log
+          if [ -f test-output.log ]; then
             echo ""
             echo "--- Full test output log ---"
-            cat ../test-output.log
+            cat test-output.log
           else
             echo "⚠️ No test-output.log found"
           fi
           
           # Extract and show failure details from xcresult
-          if [ -d ../DerivedData/TestResults.xcresult ]; then
+          if [ -d DerivedData/TestResults.xcresult ]; then
             echo ""
             echo "--- Test Results from xcresult bundle ---"
             
             # Get test summary (simplified - just show JSON output)
             echo "📊 Test Results JSON (key sections):"
-            xcrun xcresulttool get --format json --path ../DerivedData/TestResults.xcresult 2>/dev/null | \
+            xcrun xcresulttool get --format json --path DerivedData/TestResults.xcresult 2>/dev/null | \
               grep -E '"testFailureSummaries"|"errorSummaries"|"testCaseName"|"message"|"value"' | \
               head -50 || echo "Could not extract test results"
             
             # Export test results as HTML for easier viewing
             echo ""
             echo "--- Exporting test results as HTML (if available) ---"
-            xcrun xcresulttool export --type html --path ../DerivedData/TestResults.xcresult --output-path ../DerivedData/TestResults.html 2>/dev/null && \
+            xcrun xcresulttool export --type html --path DerivedData/TestResults.xcresult --output-path DerivedData/TestResults.html 2>/dev/null && \
               echo "✅ Test results HTML exported to DerivedData/TestResults.html" || \
               echo "⚠️ Could not export HTML results"
           else
@@ -379,18 +345,18 @@ jobs:
           # Check for common failure patterns in the log
           echo ""
           echo "--- Common Failure Patterns ---"
-          if [ -f ../test-output.log ]; then
-            if grep -q "Validation Failed" ../test-output.log; then
+          if [ -f test-output.log ]; then
+            if grep -q "Validation Failed" test-output.log; then
               echo "❌ Found 'Validation Failed' in output - schema validation failed"
-              grep -A 5 -B 5 "Validation Failed" ../test-output.log | head -20
+              grep -A 5 -B 5 "Validation Failed" test-output.log | head -20
             fi
-            if grep -q "timeout\|timed out" ../test-output.log; then
+            if grep -q "timeout\|timed out" test-output.log; then
               echo "⏱️ Found timeout in output - test may have timed out"
-              grep -A 3 -B 3 "timeout\|timed out" ../test-output.log | head -20
+              grep -A 3 -B 3 "timeout\|timed out" test-output.log | head -20
             fi
-            if grep -q "Assertion failed\|XCTAssert" ../test-output.log; then
+            if grep -q "Assertion failed\|XCTAssert" test-output.log; then
               echo "❌ Found assertion failures in output"
-              grep -A 3 -B 3 "Assertion failed\|XCTAssert" ../test-output.log | head -20
+              grep -A 3 -B 3 "Assertion failed\|XCTAssert" test-output.log | head -20
             fi
           fi
           
