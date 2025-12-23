@@ -331,14 +331,16 @@ jobs:
           if [ -d DerivedData/TestResults.xcresult ]; then
             echo ""
             echo "--- Test Results from xcresult bundle ---"
+            echo "📂 xcresult bundle found at: DerivedData/TestResults.xcresult"
             
             # Extract failure details using xcresulttool
             echo "📊 Extracting test failure details..."
-            XCRESULT_JSON=$(xcrun xcresulttool get --format json --path DerivedData/TestResults.xcresult 2>/dev/null)
+            XCRESULT_ERROR=$(xcrun xcresulttool get --format json --path DerivedData/TestResults.xcresult 2>&1 > /tmp/xcresult.json)
+            XCRESULT_EXIT=$?
             
-            if [ -n "$XCRESULT_JSON" ]; then
-              # Save full JSON to file for inspection
-              echo "$XCRESULT_JSON" > DerivedData/TestResults.json
+            if [ $XCRESULT_EXIT -eq 0 ] && [ -f /tmp/xcresult.json ]; then
+              # Move the JSON file to the expected location
+              mv /tmp/xcresult.json DerivedData/TestResults.json
               echo "✅ Full test results JSON saved to DerivedData/TestResults.json"
               
               # Try to extract failure messages using jq (if available) or grep
@@ -346,15 +348,34 @@ jobs:
               echo "--- Test Failure Details ---"
               if command -v jq &> /dev/null; then
                 echo "Using jq to extract failure details..."
-                jq -r '.actions._values[0].actionResult.testsRef.id._value // empty' DerivedData/TestResults.json 2>/dev/null | head -1 | \
-                  xargs -I {} jq -r '.actions._values[0].actionResult.testsRef.id._value as $testId | .. | select(.testFailureSummaries? != null) | .testFailureSummaries[] | "❌ Failure: \(.message._value // .message.value // .message // "No message")\n   File: \(.fileName._value // .fileName.value // .fileName // "Unknown"):\(.lineNumber._value // .lineNumber.value // .lineNumber // "Unknown")"' DerivedData/TestResults.json 2>/dev/null || \
-                  echo "⚠️ Could not extract with jq, showing raw JSON excerpt"
+                # Try multiple approaches to find failures
+                FAILURES=$(jq -r '.. | select(.testFailureSummaries? != null) | .testFailureSummaries[]? | "❌ \(.message._value // .message.value // .message // "No message")\n   File: \(.fileName._value // .fileName.value // .fileName // "Unknown"):\(.lineNumber._value // .lineNumber.value // .lineNumber // "Unknown")"' DerivedData/TestResults.json 2>/dev/null)
+                if [ -n "$FAILURES" ]; then
+                  echo "$FAILURES"
+                else
+                  echo "⚠️ No failure summaries found with jq"
+                  echo "   Showing JSON structure with 'testFailure' or 'failure' keywords:"
+                  jq -r '.. | select(type == "string" and (test("(?i)(fail|error|assert)"))) | .' DerivedData/TestResults.json 2>/dev/null | head -20 || echo "   No failure-related strings found"
+                fi
               else
-                echo "jq not available, showing JSON structure..."
-                echo "$XCRESULT_JSON" | grep -A 20 "testFailureSummaries" | head -30 || echo "⚠️ Could not find failure details"
+                echo "jq not available, using grep to find failure details..."
+                if grep -q "testFailureSummaries" DerivedData/TestResults.json; then
+                  echo "Found testFailureSummaries section:"
+                  grep -A 30 "testFailureSummaries" DerivedData/TestResults.json | head -40
+                else
+                  echo "⚠️ Could not find testFailureSummaries in JSON"
+                  echo "   Searching for failure-related content:"
+                  grep -i -E "(fail|error|assert)" DerivedData/TestResults.json | head -20 || echo "   No failure-related content found"
+                fi
               fi
             else
               echo "⚠️ Could not extract test results JSON"
+              echo "   xcresulttool exit code: $XCRESULT_EXIT"
+              if [ -n "$XCRESULT_ERROR" ]; then
+                echo "   Error output: $XCRESULT_ERROR"
+              fi
+              echo "   Trying alternative extraction method..."
+              xcrun xcresulttool get --format json --path DerivedData/TestResults.xcresult > DerivedData/TestResults.json 2>&1 || echo "   Alternative method also failed"
             fi
             
             # Export test results as HTML for easier viewing
