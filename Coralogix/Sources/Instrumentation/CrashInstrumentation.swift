@@ -20,52 +20,63 @@ extension CoralogixRum {
             return
         }
         
+        switch FirebaseRuntimeDetector.presence() {
+        case .configured:
+            Log.d("host app called FirebaseApp.configure() before your Coralogix SDK init, some crash reports may be dropped")
+        case .linkedButNotConfigured:
+            Log.d("Firebase exists, but not configured yet (or you checked too early)")
+        case .notLinked:
+            Log.d("host app didn't include Firebase at all")
+        }
+        
         crashReporter.enable()
         
         // Try loading the crash report.
         if crashReporter.hasPendingCrashReport() {
-            do {
-                let data = try crashReporter.loadPendingCrashReportDataAndReturnError()
-                
-                // Retrieving crash reporter data.
-                let report = try PLCrashReport(data: data)
-                let span = makeSpan(event: .error, source: .console, severity: .error)
-                span.setAttribute(key: Keys.exceptionType.rawValue, value: report.signalInfo.name)
-                if let crashTimestamp = report.systemInfo.timestamp {
-                    span.setAttribute(key: Keys.crashTimestamp.rawValue, value: "\(crashTimestamp.timeIntervalSince1970.milliseconds)")
-                }
-                span.setAttribute(key: Keys.processName.rawValue, value: report.processInfo.processName)
-                span.setAttribute(key: Keys.applicationIdentifier.rawValue, value: report.applicationInfo.applicationIdentifier)
-                span.setAttribute(key: Keys.pid.rawValue, value: "\(report.processInfo.processID)")
-                
-                self.createStackTrace(report: report, span: span)
-                
-                if let text = PLCrashReportTextFormatter.stringValue(for: report, with: PLCrashReportTextFormatiOS) {
-                    let substrings = text.components(separatedBy: "\n")
-                    for value in substrings {
-                        if let processName = report.processInfo.processName,
-                           value.contains("+\(processName)") {
-                            let details = extractMemoryAddressAndArchitecture(input: value)
-                            if details.count == 7 {
-                                let baseAddress = details[0]  // Extracting the base memory address
-                                span.setAttribute(key: Keys.baseAddress.rawValue, value: "\(baseAddress)")
-                                let arch = details[4]     // Extracting the architecture
-                                span.setAttribute(key: Keys.arch.rawValue, value: "\(arch)")
-                            }
+            self.processPendingCrashReport(using: crashReporter)
+            // Purge the report.
+            crashReporter.purgePendingCrashReport()
+        }
+    }
+    
+    private func processPendingCrashReport(using crashReporter: PLCrashReporter) {
+        do {
+            let data = try crashReporter.loadPendingCrashReportDataAndReturnError()
+            
+            // Retrieving crash reporter data.
+            let report = try PLCrashReport(data: data)
+            let span = makeSpan(event: .error, source: .console, severity: .error)
+            span.setAttribute(key: Keys.exceptionType.rawValue, value: report.signalInfo.name)
+            if let crashTimestamp = report.systemInfo.timestamp {
+                span.setAttribute(key: Keys.crashTimestamp.rawValue, value: "\(crashTimestamp.timeIntervalSince1970.milliseconds)")
+            }
+            span.setAttribute(key: Keys.processName.rawValue, value: report.processInfo.processName)
+            span.setAttribute(key: Keys.applicationIdentifier.rawValue, value: report.applicationInfo.applicationIdentifier)
+            span.setAttribute(key: Keys.pid.rawValue, value: "\(report.processInfo.processID)")
+            
+            self.createStackTrace(report: report, span: span)
+            
+            if let text = PLCrashReportTextFormatter.stringValue(for: report, with: PLCrashReportTextFormatiOS) {
+                let substrings = text.components(separatedBy: "\n")
+                for value in substrings {
+                    if let processName = report.processInfo.processName,
+                       value.contains("+\(processName)") {
+                        let details = extractMemoryAddressAndArchitecture(input: value)
+                        if details.count == 7 {
+                            let baseAddress = details[0]  // Extracting the base memory address
+                            span.setAttribute(key: Keys.baseAddress.rawValue, value: "\(baseAddress)")
+                            let arch = details[4]     // Extracting the architecture
+                            span.setAttribute(key: Keys.arch.rawValue, value: "\(arch)")
                         }
                     }
-                } else {
-                    Log.e("CrashReporter: can't convert report to text")
                 }
-                span.end()
-            } catch let error {
-                Log.e("CrashReporter failed to load and parse with error: \(error)")
+            } else {
+                Log.e("CrashReporter: can't convert report to text")
             }
+            span.end()
+        } catch let error {
+            Log.e("CrashReporter failed to load and parse with error: \(error)")
         }
-        
-        // Purge the report.
-        crashReporter.purgePendingCrashReport()
-        
     }
     
     private func createStackTrace(report: PLCrashReport, span: any Span) {
@@ -169,5 +180,48 @@ extension CoralogixRum {
         let pattern = #"[^\s]+"#
         let matches = input.matches(for: pattern)
         return matches
+    }
+}
+
+public enum FirebasePresence: Equatable {
+    /// FirebaseCore isn't linked into the host app binary.
+    case notLinked
+    /// FirebaseCore is present, but `FirebaseApp.configure()` hasn't been called yet.
+    case linkedButNotConfigured
+    /// `FirebaseApp.configure()` was called (default app exists).
+    case configured
+}
+
+public struct FirebaseRuntimeDetector {
+
+    /// Extra-safe detection: no Firebase dependency, no IMP casting.
+    public static func presence() -> FirebasePresence {
+        // FIRApp is the Obj-C class exposed by FirebaseCore
+        guard let firAppClassAny = NSClassFromString("FIRApp") else {
+            return .notLinked
+        }
+
+        // Make sure it behaves like an Obj-C NSObject class (so we can safely call `perform`)
+        guard let firAppClass = firAppClassAny as? NSObject.Type else {
+            // Unlikely, but safest fallback
+            return .notLinked
+        }
+
+        let defaultAppSel = NSSelectorFromString("defaultApp")
+        guard firAppClass.responds(to: defaultAppSel) else {
+            // Firebase linked, but API shape not as expected (or very old/new)
+            return .linkedButNotConfigured
+        }
+
+        // Call +[FIRApp defaultApp] safely (returns nil if not configured)
+        let unmanaged = firAppClass.perform(defaultAppSel)
+        let obj = unmanaged?.takeUnretainedValue()
+
+        return (obj != nil) ? .configured : .linkedButNotConfigured
+    }
+
+    /// Convenience
+    public static func isConfigured() -> Bool {
+        presence() == .configured
     }
 }

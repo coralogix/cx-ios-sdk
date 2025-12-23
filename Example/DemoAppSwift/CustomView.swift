@@ -63,4 +63,52 @@ class CustomView: UIView {
     func updateText(_ text: String) {
         label.text =  (label.text ?? "") + "\n\(text)"
     }
+    
+    /// Message type for visual feedback
+    enum MessageType {
+        case success
+        case error
+        case info
+        case warning
+        
+        var color: UIColor {
+            switch self {
+            case .success: return .systemGreen
+            case .error: return .systemRed
+            case .info: return .systemBlue
+            case .warning: return .systemOrange
+            }
+        }
+        
+        var icon: String {
+            switch self {
+            case .success: return "✅"
+            case .error: return "❌"
+            case .info: return "ℹ️"
+            case .warning: return "⚠️"
+            }
+        }
+    }
+    
+    /// Update text with visual feedback and animation
+    func updateText(_ text: String, type: MessageType) {
+        let message = "\(type.icon) \(text)"
+        label.text = (label.text ?? "") + "\n\(message)"
+        
+        // Flash the background color for visual feedback
+        let originalColor = self.backgroundColor
+        UIView.animate(withDuration: 0.2, animations: {
+            self.backgroundColor = type.color.withAlphaComponent(0.2)
+        }) { _ in
+            UIView.animate(withDuration: 0.3, delay: 0.5, options: .curveEaseOut, animations: {
+                self.backgroundColor = originalColor
+            })
+        }
+        
+        // Scroll to bottom to show new message
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            let bottomOffset = CGPoint(x: 0, y: max(0, self.scrollView.contentSize.height - self.scrollView.bounds.height))
+            self.scrollView.setContentOffset(bottomOffset, animated: true)
+        }
+    }
 }

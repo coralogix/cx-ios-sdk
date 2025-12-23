@@ -508,15 +508,22 @@ public class URLSessionInstrumentation {
             Log.d("[URLSessionInstrumentation] AFNetworking not detected, skipping swizzling")
         }
         
-        
         for (cls, selector, method) in methodsToSwizzle {
             
             // ✅ Safety check: ensure method signature is void-return, no args
-            guard let typeEncoding = method_getTypeEncoding(method),
-                  String(cString: typeEncoding) == "v@:" else {
-                Log.d("[URLSessionInstrumentation] Skipping method \(selector) on \(cls) due to invalid signature")
-                continue // Skip this method – wrong signature
+            // Accept variations like "v@:" or "v16@0:8" (with frame size info)
+            guard let typeEncoding = method_getTypeEncoding(method) else {
+                Log.d("[URLSessionInstrumentation] Skipping method \(selector) on \(cls) - no type encoding")
+                continue
             }
+            let encoding = String(cString: typeEncoding)
+            // Check if it's a void return method with no arguments (may include frame size info)
+            guard encoding.starts(with: "v") && encoding.contains("@") && encoding.contains(":") else {
+                Log.d("[URLSessionInstrumentation] Skipping method \(selector) on \(cls) due to invalid signature: \(encoding)")
+                continue
+            }
+            
+            Log.d("[URLSessionInstrumentation] ✅ Successfully swizzled \(selector) on class: \(cls)")
             
             let originalIMP = method_getImplementation(method)
             
@@ -525,6 +532,7 @@ public class URLSessionInstrumentation {
                 
                 // Call hook
                 if let urlSessionTask = task as? URLSessionTask {
+                    Log.d("[URLSessionInstrumentation] 🔵 resume() called - task: \(urlSessionTask), URL: \(urlSessionTask.currentRequest?.url?.absoluteString ?? "nil")")
                     self.urlSessionTaskWillResume(urlSessionTask)
                 }
                 
@@ -539,6 +547,8 @@ public class URLSessionInstrumentation {
             let swizzledIMP = imp_implementationWithBlock(block as Any)
             method_setImplementation(method, swizzledIMP)
         }
+        
+        Log.d("[URLSessionInstrumentation] Total methods swizzled for resume: \(methodsToSwizzle.count)")
     }
     
     // Delegate methods
@@ -707,10 +717,11 @@ public class URLSessionInstrumentation {
         }
     }
     
-    private func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
         guard let taskId = objc_getAssociatedObject(task, &idKey) as? String else {
             return
         }
+    
         var requestState: NetworkRequestState?
         queue.sync(flags: .barrier) {
             requestState = requestMap[taskId]
@@ -783,45 +794,6 @@ public class URLSessionInstrumentation {
             self.requestMap[taskId]?.setRequest(request)
         }
 
-        // For iOS 15+/macOS 12+, handle async/await methods differently
-        if #available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, *) {
-          // Check if we can determine if this is an async/await call
-          // For iOS 15/macOS 12, we can't use Task.basePriority, so we check other indicators
-          var isAsyncContext = false
-          
-          if #available(OSX 13.0, iOS 16.0, watchOS 9.0, tvOS 16.0, *) {
-            isAsyncContext = Task.basePriority != nil
-          } else {
-            // For iOS 15/macOS 12, check if the task has no delegate and no session delegate
-            // This is a heuristic that works for async/await methods
-            isAsyncContext = task.delegate == nil &&
-                            (task.value(forKey: "session") as? URLSession)?.delegate == nil &&
-                            task.state != .running
-          }
-          
-          if isAsyncContext {
-            // This is likely an async/await call
-            let instrumentedRequest = URLSessionLogger.processAndLogRequest(request,
-                                                                          sessionTaskId: taskId,
-                                                                          instrumentation: self,
-                                                                          shouldInjectHeaders: true)
-            if let instrumentedRequest {
-              task.setValue(instrumentedRequest, forKey: "currentRequest")
-            }
-            self.setIdKey(value: taskId, for: task)
-            
-            // For async/await methods, we need to ensure the delegate is set
-            // to capture the completion, but only if there's no existing delegate
-            // AND no session delegate (session delegates are called for async/await too)
-            if task.delegate == nil,
-               task.state != .running,
-               (task.value(forKey: "session") as? URLSession)?.delegate == nil {
-              task.delegate = AsyncTaskDelegate(instrumentation: self, sessionTaskId: taskId)
-            }
-            return
-          }
-        }
-
         if #available(OSX 13.0, iOS 16.0, watchOS 9.0, tvOS 16.0, *) {
           guard Task.basePriority != nil else {
             // If not inside a Task basePriority is nil
@@ -884,18 +856,12 @@ class AsyncTaskDelegate: NSObject, URLSessionTaskDelegate {
     
     func urlSession(_ session: URLSession, task: URLSessionTask,
                     didCompleteWithError error: Error?) {
-        guard let instrumentation = instrumentation else { return }
-        
-        // Get the task ID that was set when the task was created
-        let taskId = sessionTaskId
-        
-        if let error = error {
-            let status = (task.response as? HTTPURLResponse)?.statusCode ?? 0
-            URLSessionLogger.logError(error, dataOrFile: nil, statusCode: status,
-                                      instrumentation: instrumentation, sessionTaskId: taskId)
-        } else if let response = task.response {
-            URLSessionLogger.logResponse(response, dataOrFile: nil,
-                                         instrumentation: instrumentation, sessionTaskId: taskId)
+        guard let instrumentation = instrumentation else {
+            return
         }
+        
+        // Call the instrumentation's method to handle the completion
+        // This ensures we go through the same logging path as other requests
+        instrumentation.urlSession(session, task: task, didCompleteWithError: error)
     }
 }

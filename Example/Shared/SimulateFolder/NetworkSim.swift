@@ -297,4 +297,72 @@ class NetworkSim {
 //            }
 //        }
     }
+    
+    static func callAsyncAwait() {
+        Task {
+            do {
+                let response = try await AuthServiceAsync.shared.simulateAsyncAwaitCall()
+                Log.d("Success: \(response.title)")
+            } catch {
+                Log.e("Error: \(error.localizedDescription)")
+            }
+        }
+    }
+    
+    struct DataResponse: Codable {
+        let id: Int
+        let title: String
+        let body: String
+        let userId: Int
+    }
+
+    final class AuthServiceAsync {
+        static let shared = AuthServiceAsync()
+        private init() {}
+
+        enum APIError: Error, LocalizedError {
+            case http(status: Int, body: String)
+
+            var errorDescription: String? {
+                switch self {
+                case .http(let status, let body):
+                    return "HTTP \(status): \(body)"
+                }
+            }
+        }
+
+        func simulateAsyncAwaitCall() async throws -> DataResponse {
+            guard let url = URL(string: "https://jsonplaceholder.typicode.com/posts") else {
+                throw URLError(.badURL)
+            }
+            
+            let requestBody: [String: Any] = [
+                "title": "Swift Request",
+                "body": "This is a simulated POST request.",
+                "userId": 1
+            ]
+
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.setValue("application/json", forHTTPHeaderField: "Accept")
+            request.timeoutInterval = 30
+            request.httpBody =  try? JSONSerialization.data(withJSONObject: requestBody, options: [])
+    
+            let (data, response) = try await URLSession.shared.data(for: request)
+            
+            
+            if let httpResponse = response as? HTTPURLResponse {
+                print("POST Response Code:", httpResponse.statusCode)
+            }
+            
+            if let jsonString = String(data: data, encoding: .utf8) {
+                print("POST Response Data:\n", jsonString)
+            }
+        
+            let decoder = JSONDecoder()
+            decoder.keyDecodingStrategy = .convertFromSnakeCase
+            return try decoder.decode(DataResponse.self, from: data)
+        }
+    }
 }

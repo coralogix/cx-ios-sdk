@@ -8,13 +8,24 @@
 import UIKit
 import Coralogix
 import SessionReplay
+import Firebase
 @main
 
 class AppDelegate: UIResponder, UIApplicationDelegate {
     
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        
+
         CoralogixRumManager.shared.initialize()
+
+        // Only configure Firebase if GoogleService-Info.plist exists and is valid
+        // This allows the app to run in CI without Firebase
+        if let path = Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist"),
+           FileManager.default.fileExists(atPath: path) {
+            FirebaseApp.configure()
+        } else {
+            print("⚠️ Firebase not configured: GoogleService-Info.plist not found (this is expected in CI)")
+        }
+
 
 //        // Must be initialized after CoralogixRum
 //        let sessionReplayOptions = SessionReplayOptions(recordingType: .image,
@@ -43,4 +54,3 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         // Use this method to release any resources that were specific to the discarded scenes, as they will not return.
     }
 }
-

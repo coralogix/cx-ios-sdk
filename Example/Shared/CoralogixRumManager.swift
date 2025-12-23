@@ -26,13 +26,14 @@ final class CoralogixRumManager {
                                       userName: "?",
                                       userEmail: "a@a.com",
                                       userMetadata: ["d":"d"])
-        let options = CoralogixExporterOptions(coralogixDomain: CoralogixDomain.STG,
+        let options = CoralogixExporterOptions(coralogixDomain: CoralogixDomain.EU2,
                                                userContext: userContext,
                                                environment: "PROD",
                                                application: "DemoApp-iOS-swift",
                                                version: "1",
                                                publicKey: Envs.PUBLIC_KEY.rawValue,
-                                               instrumentations: [.mobileVitals: true,
+                                               instrumentations: [
+                                                .mobileVitals: true,
                                                                   .custom: true,
                                                                   .errors: true,
                                                                   .userActions: true,
@@ -49,7 +50,7 @@ final class CoralogixRumManager {
 //            return editableCxRum
 //        },
                                                enableSwizzling: true,
-                                               //proxyUrl: Envs.PROXY_URL.rawValue, // remove if not need to use proxy
+                                               proxyUrl: Envs.PROXY_URL.rawValue, // remove if not need to use proxy
                                                mobileVitals:[.cpuDetector: true,
                                                              .warmDetector: true,
                                                              .coldDetector: true,
@@ -63,6 +64,7 @@ final class CoralogixRumManager {
 //        os_signpost(.begin, log: log, name: "Init Coralogix", signpostID: signpostID)
         self._sdk = CoralogixRum(options: options)
 //        os_signpost(.end, log: log, name: "Init Coralogix", signpostID: signpostID)
+        print("SDK initialized:\(self._sdk?.isInitialized.description ?? "not initialized")")
     }
 
     func getSessionId() -> String? {

@@ -8,96 +8,249 @@
 import UIKit
 import Coralogix
 
-class NetworkViewController: UITableViewController {
-    let items = [Keys.failureNetworkRequest.rawValue,
-                 Keys.succesfullNetworkRequest.rawValue,
-                 Keys.failureNetworkRequestFlutter.rawValue,
-                 Keys.succesfullNetworkRequestFlutter.rawValue,
-                 Keys.failureAlamofire.rawValue,
-                 Keys.succesfullAlamofire.rawValue,
-                 Keys.alamofireUploadRequest.rawValue,
-                 Keys.afnetworkingRequest.rawValue,
-                 Keys.downloadSDWebImage.rawValue,
-                 Keys.postRequestToServer.rawValue,
-                 Keys.getRequestToServer.rawValue]
-    
-    var customView = CustomView(frame: .zero)
-    private let customViewHeight: CGFloat = 150
-    
+final class NetworkViewController: UITableViewController {
+
+    private struct NetworkItem {
+        let title: String
+        let subtitle: String
+        let systemImageName: String
+        let key: Keys
+    }
+
+    // MARK: - Data
+
+    private lazy var items: [NetworkItem] = [
+        .init(
+            title: "Failing network request",
+            subtitle: "Simulate a client/server error",
+            systemImageName: "xmark.octagon",
+            key: .failureNetworkRequest
+        ),
+        .init(
+            title: "Successful network request",
+            subtitle: "Standard URLSession request",
+            systemImageName: "checkmark.circle",
+            key: .succesfullNetworkRequest
+        ),
+        .init(
+            title: "Flutter success request",
+            subtitle: "Simulate successful Flutter network",
+            systemImageName: "bolt.horizontal.circle",
+            key: .succesfullNetworkRequestFlutter
+        ),
+        .init(
+            title: "Flutter failure request",
+            subtitle: "Simulate failed Flutter network",
+            systemImageName: "bolt.horizontal.circle.fill",
+            key: .failureNetworkRequestFlutter
+        ),
+        .init(
+            title: "Alamofire success",
+            subtitle: "Successful Alamofire request",
+            systemImageName: "bolt.circle",
+            key: .succesfullAlamofire
+        ),
+        .init(
+            title: "Alamofire failure",
+            subtitle: "Failing Alamofire request",
+            systemImageName: "bolt.slash",
+            key: .failureAlamofire
+        ),
+        .init(
+            title: "Alamofire upload",
+            subtitle: "Upload a 10MB sample file",
+            systemImageName: "arrow.up.doc",
+            key: .alamofireUploadRequest
+        ),
+        .init(
+            title: "AFNetworking request",
+            subtitle: "Legacy AFNetworking example",
+            systemImageName: "antenna.radiowaves.left.and.right",
+            key: .afnetworkingRequest
+        ),
+        .init(
+            title: "Download image (SDWebImage)",
+            subtitle: "Image download & caching",
+            systemImageName: "photo.on.rectangle",
+            key: .downloadSDWebImage
+        ),
+        .init(
+            title: "POST request",
+            subtitle: "Send JSON data to server",
+            systemImageName: "arrow.up.circle",
+            key: .postRequestToServer
+        ),
+        .init(
+            title: "GET request",
+            subtitle: "Fetch data from server",
+            systemImageName: "arrow.down.circle",
+            key: .getRequestToServer
+        ),
+        .init(title: "Async/Await example",
+              subtitle: "async await in action",
+              systemImageName: "photo.on.rectangle",
+              key: .signingWithAsyncAwait)
+    ]
+
+    // MARK: - Init
+
+    init() {
+        super.init(style: .insetGrouped)
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+    }
+
+    // MARK: - Lifecycle
+
     override func viewDidLoad() {
         super.viewDidLoad()
-        
+
+        setupNavigationBar()
+        setupTableView()
+    }
+
+    // MARK: - UI Setup
+
+    private func setupNavigationBar() {
+        title = "Network instrumentation"
+        navigationController?.navigationBar.prefersLargeTitles = true
+    }
+
+    private func setupTableView() {
         tableView.register(UITableViewCell.self, forCellReuseIdentifier: "network_cell")
-        tableView.dataSource = self
-        tableView.delegate = self
-        self.title = "Network Instrumentation"
-        
-        // Create the custom view
-        self.customView.translatesAutoresizingMaskIntoConstraints = false
-        
-        // Add the custom view to the table view's parent view
-        view.addSubview(self.customView)
-        
-        // Set up constraints for the custom view
-        NSLayoutConstraint.activate([
-            customView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            customView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            customView.heightAnchor.constraint(equalToConstant: customViewHeight),
-            customView.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor)
-        ])
-        
-        // Adjust the table view's content inset to account for the custom view's height
-        tableView.contentInset = UIEdgeInsets(top: 0, left: 0, bottom: customViewHeight, right: 0)
-        tableView.scrollIndicatorInsets = tableView.contentInset
+        tableView.backgroundColor = .systemGroupedBackground
+        tableView.separatorInset = UIEdgeInsets(top: 0, left: 56, bottom: 0, right: 16)
     }
-    
+
     // MARK: - Table view data source
+
     override func numberOfSections(in tableView: UITableView) -> Int {
-        return 1
+        1
     }
-    
-    override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        return items.count
+
+    override func tableView(_ tableView: UITableView,
+                            numberOfRowsInSection section: Int) -> Int {
+        items.count
     }
-    
-    override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-        // Dequeue a cell from the table view
+
+    override func tableView(_ tableView: UITableView,
+                            cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+        let item = items[indexPath.row]
         let cell = tableView.dequeueReusableCell(withIdentifier: "network_cell", for: indexPath)
-        cell.textLabel?.text = items[indexPath.row]
+
+        var config = UIListContentConfiguration.subtitleCell()
+        config.text = item.title
+        config.secondaryText = item.subtitle
+        config.image = UIImage(systemName: item.systemImageName)
+        config.imageProperties.preferredSymbolConfiguration =
+            UIImage.SymbolConfiguration(pointSize: 20, weight: .medium)
+        config.textProperties.font = UIFont.preferredFont(forTextStyle: .body)
+        config.secondaryTextProperties.color = .secondaryLabel
+
+        cell.contentConfiguration = config
+        cell.accessoryType = .none
+        cell.selectionStyle = .default
+
         return cell
     }
-    
+
     // MARK: - Table view delegate
-    
-    override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+
+    override func tableView(_ tableView: UITableView,
+                            didSelectRowAt indexPath: IndexPath) {
         let item = items[indexPath.row]
-        self.customView.updateText("Selected item: \(item)")
-        
-        if item == Keys.failureNetworkRequest.rawValue {
+        showToast("Selected: \(item.title)")
+
+        switch item.key {
+        case .failureNetworkRequest:
             NetworkSim.failureNetworkRequest()
-        } else if item == Keys.succesfullNetworkRequest.rawValue {
+
+        case .succesfullNetworkRequest:
             NetworkSim.sendSuccesfullRequest()
-        } else if item == Keys.succesfullNetworkRequestFlutter.rawValue {
+
+        case .succesfullNetworkRequestFlutter:
             NetworkSim.setNetworkRequestContextFlutterSuccsess()
-        } else if item == Keys.failureNetworkRequestFlutter.rawValue {
+
+        case .failureNetworkRequestFlutter:
             NetworkSim.setNetworkRequestContextFailure()
-        } else if item ==  Keys.succesfullAlamofire.rawValue {
+
+        case .succesfullAlamofire:
             NetworkSim.succesfullAlamofire()
-        } else if item == Keys.failureAlamofire.rawValue {
+
+        case .failureAlamofire:
             NetworkSim.failureAlamofire()
-        } else if item == Keys.alamofireUploadRequest.rawValue {
+
+        case .alamofireUploadRequest:
             let fileUrl = NetworkSim.createSampleFile(sizeInMB: 10)
             NetworkSim.uploadFile(fileURL: fileUrl)
-        } else if item == Keys.afnetworkingRequest.rawValue {
+
+        case .afnetworkingRequest:
             NetworkSim.sendAFNetworkingRequest()
-        } else if item == Keys.postRequestToServer.rawValue {
+
+        case .postRequestToServer:
             NetworkSim.performPostRequest()
-        } else if item == Keys.getRequestToServer.rawValue {
+
+        case .getRequestToServer:
             NetworkSim.performGetRequest()
-        } else if item == Keys.downloadSDWebImage.rawValue {
+
+        case .downloadSDWebImage:
             NetworkSim.downloadImage()
+
+        case .signingWithAsyncAwait:
+            NetworkSim.callAsyncAwait()
+        default:
+            break
         }
+
         tableView.deselectRow(at: indexPath, animated: true)
+    }
+
+    // MARK: - Toast
+
+    private func showToast(_ message: String) {
+        let toastLabel = UILabel()
+        toastLabel.text = message
+        toastLabel.textColor = .white
+        toastLabel.backgroundColor = UIColor.black.withAlphaComponent(0.8)
+        toastLabel.textAlignment = .center
+        toastLabel.font = .preferredFont(forTextStyle: .subheadline)
+        toastLabel.numberOfLines = 0
+        toastLabel.alpha = 0.0
+        toastLabel.layer.cornerRadius = 12
+        toastLabel.layer.masksToBounds = true
+
+        let horizontalScreenMargin: CGFloat = 24
+        let horizontalTextPadding: CGFloat = 32
+        let verticalTextPadding: CGFloat = 24
+        let bottomMargin: CGFloat = 16
+        let maxToastHeight: CGFloat = 100
+
+        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+           let keyWindow = windowScene.windows.first(where: { $0.isKeyWindow }) {
+
+            let maxWidth = keyWindow.bounds.width - 2 * horizontalScreenMargin
+            let expectedSize = toastLabel.sizeThatFits(CGSize(width: maxWidth, height: maxToastHeight))
+            let width = min(maxWidth, expectedSize.width + horizontalTextPadding)
+            let height = expectedSize.height + verticalTextPadding
+
+            toastLabel.frame = CGRect(
+                x: (keyWindow.bounds.width - width) / 2,
+                y: keyWindow.bounds.height - keyWindow.safeAreaInsets.bottom - height - bottomMargin,
+                width: width,
+                height: height
+            )
+
+            keyWindow.addSubview(toastLabel)
+            UIView.animate(withDuration: 0.3, animations: { toastLabel.alpha = 1.0 })
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                UIView.animate(withDuration: 0.3, animations: { toastLabel.alpha = 0.0 }) { _ in
+                    toastLabel.removeFromSuperview()
+                }
+            }
+        }
     }
 }
 
