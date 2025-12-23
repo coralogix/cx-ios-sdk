@@ -305,13 +305,48 @@ jobs:
             echo "✅ Tests passed!"
           fi
 
+      - name: Show test output summary
+        if: always()
+        run: |
+          set +e  # Don't fail on errors in this step
+          echo "📋 ============ TEST OUTPUT SUMMARY ============"
+          
+          # Show last 100 lines of test output log
+          if [ -f ../test-output.log ]; then
+            echo ""
+            echo "--- Last 100 lines of test output ---"
+            tail -100 ../test-output.log
+          else
+            echo "⚠️ No test-output.log found"
+          fi
+          
+          # Show test execution summary
+          if [ -f ../test-output.log ]; then
+            echo ""
+            echo "--- Test Execution Summary ---"
+            if grep -q "Failing tests:" ../test-output.log; then
+              echo "❌ Test failures detected:"
+              grep -A 10 "Failing tests:" ../test-output.log | head -20
+            fi
+            if grep -q "Test Suite.*passed\|Test Suite.*failed" ../test-output.log; then
+              echo ""
+              echo "Test suite results:"
+              grep "Test Suite" ../test-output.log | tail -5
+            fi
+            if grep -q "Executed.*test" ../test-output.log; then
+              echo ""
+              echo "Test execution summary:"
+              grep "Executed.*test" ../test-output.log | tail -3
+            fi
+          fi
+
       - name: Print test output on failure
         if: failure()
         run: |
           set +e  # Don't fail on errors in this step
-          echo "❌ ============ TEST FAILURE DETAILS ============"
+          echo "❌ ============ DETAILED TEST FAILURE ANALYSIS ============"
           
-          # Show test output log
+          # Show full test output log
           if [ -f ../test-output.log ]; then
             echo ""
             echo "--- Full test output log ---"
