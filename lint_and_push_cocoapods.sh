@@ -24,16 +24,18 @@ echo "✅ $MAIN passed lint."
 read -p "🟡 Do you want to push $INTERNAL to CocoaPods trunk? (y/n): " push_internal
 if [[ "$push_internal" =~ ^[Yy]$ ]]; then
   echo "🚀 Pushing $INTERNAL..."
-  pod trunk push "$INTERNAL" --allow-warnings --verbose
+  pod trunk push "$INTERNAL" --allow-warnings --verbose --synchronous
   echo "✅ $INTERNAL pushed!"
   
   # Wait for CoralogixInternal to become available
-  echo "⏳ Waiting for $INTERNAL to be available in CocoaPods Specs..."
-  until pod search CoralogixInternal | grep -q "CoralogixInternal"; do
-    echo "⏳ $INTERNAL not yet available, waiting 30 seconds..."
+  echo "⏳ Waiting for CoralogixInternal ${TAG_RAW} to be available on Specs CDN..."
+  until spec cat CoralogixInternal "${TAG_RAW}" >/dev/null 2>&1; do
+    echo "⏳ Not yet on CDN, sleeping 30s..."
+    rm -rf ~/.cocoapods/repos/trunk 2>/dev/null || true
+    pod repo update >/dev/null 2>&1 || true
     sleep 30
   done
-  echo "✅ $INTERNAL is now available!"
+  echo "✅ CoralogixInternal ${TAG_RAW} is available on CDN!"
 else
   echo "⏭️ Skipping $INTERNAL push."
 fi
