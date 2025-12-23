@@ -268,6 +268,7 @@ jobs:
           EXIT_CODE=0
           
           if command -v xcpretty &> /dev/null; then
+            echo "✅ xcpretty found - using formatted output"
             xcodebuild test-without-building \
               $BUILD_TYPE "$BUILD_PATH_RELATIVE" \
               -scheme "$SCHEME" \
@@ -279,12 +280,12 @@ jobs:
               2>&1 | tee ../test-output.log | xcpretty --color --report junit --output ../DerivedData/junit.xml
             EXIT_CODE=${PIPESTATUS[0]}
           else
+            echo "⚠️ xcpretty not found - using raw xcodebuild output"
             xcodebuild test-without-building \
               $BUILD_TYPE "$BUILD_PATH_RELATIVE" \
               -scheme "$SCHEME" \
               -destination "$DESTINATION_SPEC" \
               -derivedDataPath ../DerivedData \
-
               -only-testing:DemoAppUITests/DemoAppUITests/testSchemaValidationFlow \
               -resultBundlePath ../DerivedData/TestResults.xcresult \
               IPHONEOS_DEPLOYMENT_TARGET="$CI_DEPLOYMENT_TARGET" \
@@ -292,17 +293,22 @@ jobs:
             EXIT_CODE=${PIPESTATUS[0]}
           fi
           
+          echo "📊 xcodebuild exit code: $EXIT_CODE"
+          
           # Re-enable exit on error
           set -e
           
           # xcodebuild returns 65 for test failures, 0 for success
           if [ $EXIT_CODE -eq 65 ]; then
+            echo "❌ Branch: EXIT_CODE == 65 (test failures detected)"
             echo "❌ Tests failed (exit code 65) - check test output for details"
             exit 65  # Fail the workflow step
           elif [ $EXIT_CODE -ne 0 ]; then
+            echo "❌ Branch: EXIT_CODE != 0 (other xcodebuild error)"
             echo "❌ xcodebuild failed with exit code $EXIT_CODE"
             exit $EXIT_CODE
           else
+            echo "✅ Branch: EXIT_CODE == 0 (tests passed)"
             echo "✅ Tests passed!"
           fi
 
@@ -371,6 +377,7 @@ jobs:
           path: |
             DerivedData/Logs/Test/*.xcresult
             DerivedData/junit.xml
+            DerivedData/TestResults.xcresult
             test-output.log
           retention-days: 30
 
