@@ -332,11 +332,30 @@ jobs:
             echo ""
             echo "--- Test Results from xcresult bundle ---"
             
-            # Get test summary (simplified - just show JSON output)
-            echo "📊 Test Results JSON (key sections):"
-            xcrun xcresulttool get --format json --path DerivedData/TestResults.xcresult 2>/dev/null | \
-              grep -E '"testFailureSummaries"|"errorSummaries"|"testCaseName"|"message"|"value"' | \
-              head -50 || echo "Could not extract test results"
+            # Extract failure details using xcresulttool
+            echo "📊 Extracting test failure details..."
+            XCRESULT_JSON=$(xcrun xcresulttool get --format json --path DerivedData/TestResults.xcresult 2>/dev/null)
+            
+            if [ -n "$XCRESULT_JSON" ]; then
+              # Save full JSON to file for inspection
+              echo "$XCRESULT_JSON" > DerivedData/TestResults.json
+              echo "✅ Full test results JSON saved to DerivedData/TestResults.json"
+              
+              # Try to extract failure messages using jq (if available) or grep
+              echo ""
+              echo "--- Test Failure Details ---"
+              if command -v jq &> /dev/null; then
+                echo "Using jq to extract failure details..."
+                jq -r '.actions._values[0].actionResult.testsRef.id._value // empty' DerivedData/TestResults.json 2>/dev/null | head -1 | \
+                  xargs -I {} jq -r '.actions._values[0].actionResult.testsRef.id._value as $testId | .. | select(.testFailureSummaries? != null) | .testFailureSummaries[] | "❌ Failure: \(.message._value // .message.value // .message // "No message")\n   File: \(.fileName._value // .fileName.value // .fileName // "Unknown"):\(.lineNumber._value // .lineNumber.value // .lineNumber // "Unknown")"' DerivedData/TestResults.json 2>/dev/null || \
+                  echo "⚠️ Could not extract with jq, showing raw JSON excerpt"
+              else
+                echo "jq not available, showing JSON structure..."
+                echo "$XCRESULT_JSON" | grep -A 20 "testFailureSummaries" | head -30 || echo "⚠️ Could not find failure details"
+              fi
+            else
+              echo "⚠️ Could not extract test results JSON"
+            fi
             
             # Export test results as HTML for easier viewing
             echo ""
@@ -378,6 +397,8 @@ jobs:
             DerivedData/Logs/Test/*.xcresult
             DerivedData/junit.xml
             DerivedData/TestResults.xcresult
+            DerivedData/TestResults.json
+            DerivedData/TestResults.html
             test-output.log
           retention-days: 30
 
