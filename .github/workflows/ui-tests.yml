@@ -312,8 +312,29 @@ jobs:
 
             if [ -d ../DerivedData/TestResults.xcresult ]; then
               echo "🔎 xcresult exists: ../DerivedData/TestResults.xcresult"
-              echo "🔎 xcresulttool summary (truncated):"
-              xcrun xcresulttool get --path ../DerivedData/TestResults.xcresult --format json 2>/dev/null | head -n 200 || true
+              
+              # Extract JSON to temp file for parsing
+              TEMP_JSON=$(mktemp)
+              if xcrun xcresulttool get object --format json --path ../DerivedData/TestResults.xcresult > "$TEMP_JSON" 2>/dev/null || \
+                 xcrun xcresulttool get --legacy --format json --path ../DerivedData/TestResults.xcresult > "$TEMP_JSON" 2>/dev/null; then
+                
+                echo "🔎 Test failure details:"
+                # Try to extract failure messages using jq if available
+                if command -v jq &> /dev/null; then
+                  FAILURES=$(jq -r '.. | select(.testFailureSummaries? != null) | .testFailureSummaries[]? | "   ❌ \(.message._value // .message.value // .message // "No message")\n   📄 File: \(.fileName._value // .fileName.value // .fileName // "Unknown"):\(.lineNumber._value // .lineNumber.value // .lineNumber // "Unknown")"' "$TEMP_JSON" 2>/dev/null)
+                  if [ -n "$FAILURES" ]; then
+                    echo "$FAILURES"
+                  else
+                    echo "   ⚠️ No failure summaries found in JSON structure"
+                  fi
+                fi
+                
+                echo "🔎 xcresulttool summary (first 200 lines):"
+                head -n 200 "$TEMP_JSON" || true
+                rm -f "$TEMP_JSON"
+              else
+                echo "   ⚠️ Could not extract xcresult JSON"
+              fi
             else
               echo "⚠️ xcresult not found at ../DerivedData/TestResults.xcresult"
             fi
