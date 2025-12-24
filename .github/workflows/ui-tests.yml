@@ -355,4 +355,16 @@ jobs:
             echo "✅ Tests passed!"
           fi
 
+      - name: Upload test artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-artifacts
+          path: |
+            test-output.log
+            DerivedData/TestResults.xcresult
+            DerivedData/junit.xml
+          retention-days: 30
+          if-no-files-found: ignore
+
     
