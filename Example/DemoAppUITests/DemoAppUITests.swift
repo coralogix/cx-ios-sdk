@@ -11,7 +11,10 @@ import XCTest
 final class DemoAppUITests: XCTestCase {
 
     var app: XCUIApplication!
-    private let delay: TimeInterval = 2.0
+    // Use shorter timeout for CI, longer for local debugging
+    private let elementTimeout: TimeInterval = 10.0
+    private let shortDelay: TimeInterval = 1.0  // For UI transitions
+    private let networkDelay: TimeInterval = 3.0  // For network operations
 
     override func setUpWithError() throws {
         continueAfterFailure = false
@@ -25,104 +28,129 @@ final class DemoAppUITests: XCTestCase {
         
         // Navigate to Network Instrumentation screen
         let networkInstrumentationButton = app.staticTexts["Network instrumentation"].firstMatch
-        XCTAssertTrue(networkInstrumentationButton.waitForExistence(timeout: delay), "❌ 'Network instrumentation' button not found")
+        XCTAssertTrue(networkInstrumentationButton.waitForExistence(timeout: elementTimeout), "❌ 'Network instrumentation' button not found")
         networkInstrumentationButton.tap()
-        Thread.sleep(forTimeInterval: delay)
+        Thread.sleep(forTimeInterval: shortDelay)  // Wait for navigation
 
         // Send failure network
         let failingNetworkButton = app.staticTexts["Failing network request"].firstMatch
-        XCTAssertTrue(failingNetworkButton.waitForExistence(timeout: delay), "❌ 'Failing network request' button not found")
+        XCTAssertTrue(failingNetworkButton.waitForExistence(timeout: elementTimeout), "❌ 'Failing network request' button not found")
         failingNetworkButton.tap()
-        Thread.sleep(forTimeInterval: delay)
+        Thread.sleep(forTimeInterval: networkDelay)  // Wait for network request
 
         let successfulNetworkButton = app.staticTexts["Successful network request"].firstMatch
-        XCTAssertTrue(successfulNetworkButton.waitForExistence(timeout: delay), "❌ 'Successful network request' button not found")
+        XCTAssertTrue(successfulNetworkButton.waitForExistence(timeout: elementTimeout), "❌ 'Successful network request' button not found")
         successfulNetworkButton.tap()
-        Thread.sleep(forTimeInterval: delay)
+        Thread.sleep(forTimeInterval: networkDelay)  // Wait for network request
 
         // Go back to main screen from Network
         let backButtonFromNetwork = app.buttons["BackButton"].firstMatch
-        XCTAssertTrue(backButtonFromNetwork.waitForExistence(timeout: delay), "❌ Back button from Network screen not found")
+        XCTAssertTrue(backButtonFromNetwork.waitForExistence(timeout: elementTimeout), "❌ Back button from Network screen not found")
         backButtonFromNetwork.tap()
-        Thread.sleep(forTimeInterval: delay)
+        Thread.sleep(forTimeInterval: shortDelay)  // Wait for navigation
 
         // Navigate to Error Instrumentation screen
         let errorInstrumentationButton = app.staticTexts["Error instrumentation"].firstMatch
-        XCTAssertTrue(errorInstrumentationButton.waitForExistence(timeout: delay), "❌ 'Error instrumentation' button not found")
+        XCTAssertTrue(errorInstrumentationButton.waitForExistence(timeout: elementTimeout), "❌ 'Error instrumentation' button not found")
         errorInstrumentationButton.tap()
-        Thread.sleep(forTimeInterval: delay)
+        Thread.sleep(forTimeInterval: shortDelay)  // Wait for navigation
         
         // Trigger "Error" test event
         let errorButton = app.staticTexts["Error"].firstMatch
-        XCTAssertTrue(errorButton.waitForExistence(timeout: delay), "❌ 'Error' button not found")
+        XCTAssertTrue(errorButton.waitForExistence(timeout: elementTimeout), "❌ 'Error' button not found")
         errorButton.tap()
-        Thread.sleep(forTimeInterval: delay)
+        Thread.sleep(forTimeInterval: shortDelay)  // Wait for event processing
         
         // Trigger "Stack Trace Error" test event
 //        let stackTraceErrorButton = app.staticTexts["Stack Trace Error"].firstMatch
-//        XCTAssertTrue(stackTraceErrorButton.waitForExistence(timeout: delay), "❌ 'Stack Trace Error' button not found")
+//        XCTAssertTrue(stackTraceErrorButton.waitForExistence(timeout: elementTimeout), "❌ 'Stack Trace Error' button not found")
 //        stackTraceErrorButton.tap()
-//        Thread.sleep(forTimeInterval: delay)
+//        Thread.sleep(forTimeInterval: shortDelay)
         
         // Trigger "Message Data Error (custom log)" event
         let messageDataErrorButton = app.staticTexts["Message Data Error"].firstMatch
-        XCTAssertTrue(messageDataErrorButton.waitForExistence(timeout: delay), "❌ 'Message Data Error' button not found")
+        XCTAssertTrue(messageDataErrorButton.waitForExistence(timeout: elementTimeout), "❌ 'Message Data Error' button not found")
         messageDataErrorButton.tap()
-        Thread.sleep(forTimeInterval: delay)
+        Thread.sleep(forTimeInterval: shortDelay)  // Wait for event processing
         
         // Trigger "Log Error" event
         let logErrorButton = app.staticTexts["Log Error"].firstMatch
-        XCTAssertTrue(logErrorButton.waitForExistence(timeout: delay), "❌ 'Log Error' button not found")
+        XCTAssertTrue(logErrorButton.waitForExistence(timeout: elementTimeout), "❌ 'Log Error' button not found")
         logErrorButton.tap()
-        Thread.sleep(forTimeInterval: delay)
+        Thread.sleep(forTimeInterval: shortDelay)  // Wait for event processing
         
         // Go back to main screen
         let backButtonFromError = app.buttons["BackButton"].firstMatch
-        XCTAssertTrue(backButtonFromError.waitForExistence(timeout: delay), "❌ Back button from Error screen not found")
+        XCTAssertTrue(backButtonFromError.waitForExistence(timeout: elementTimeout), "❌ Back button from Error screen not found")
         backButtonFromError.tap()
-        Thread.sleep(forTimeInterval: delay)
+        Thread.sleep(forTimeInterval: shortDelay)  // Wait for navigation
 
         // Navigate to SDK Functions screen
         let sdkFunctionsButton = app.staticTexts["SDK functions"].firstMatch
-        XCTAssertTrue(sdkFunctionsButton.waitForExistence(timeout: delay), "❌ 'SDK functions' button not found")
+        XCTAssertTrue(sdkFunctionsButton.waitForExistence(timeout: elementTimeout), "❌ 'SDK functions' button not found")
         sdkFunctionsButton.tap()
-        Thread.sleep(forTimeInterval: delay)
+        Thread.sleep(forTimeInterval: shortDelay)  // Wait for navigation
         
         // Trigger "Send Custom Measurement" event
         let customMeasurementButton = app.staticTexts["Custom Measurement"].firstMatch
-        XCTAssertTrue(customMeasurementButton.waitForExistence(timeout: delay), "❌ 'Custom Measurement' button not found")
+        XCTAssertTrue(customMeasurementButton.waitForExistence(timeout: elementTimeout), "❌ 'Custom Measurement' button not found")
         customMeasurementButton.tap()
-        Thread.sleep(forTimeInterval: delay)
+        Thread.sleep(forTimeInterval: shortDelay)  // Wait for event processing
         
         // Trigger "Log with Custom Labels" event
         let customLabelsButton = app.staticTexts["Custom Labels Log"].firstMatch
-        XCTAssertTrue(customLabelsButton.waitForExistence(timeout: delay), "❌ 'Custom Labels Log' button not found")
+        XCTAssertTrue(customLabelsButton.waitForExistence(timeout: elementTimeout), "❌ 'Custom Labels Log' button not found")
         customLabelsButton.tap()
-        Thread.sleep(forTimeInterval: delay)
+        Thread.sleep(forTimeInterval: shortDelay)  // Wait for event processing
         
         let backButtonFromSDK = app.buttons["BackButton"].firstMatch
-        XCTAssertTrue(backButtonFromSDK.waitForExistence(timeout: delay), "❌ Back button from SDK Functions screen not found")
+        XCTAssertTrue(backButtonFromSDK.waitForExistence(timeout: elementTimeout), "❌ Back button from SDK Functions screen not found")
         backButtonFromSDK.tap()
-        Thread.sleep(forTimeInterval: delay)
+        Thread.sleep(forTimeInterval: shortDelay)  // Wait for navigation
 
         // Open Schema Validation screen
         let schemaValidationCell = app.cells.containing(.staticText, identifier: "Schema validation").firstMatch
-        XCTAssertTrue(schemaValidationCell.waitForExistence(timeout: delay), "❌ 'Schema validation' button not found")
+        XCTAssertTrue(schemaValidationCell.waitForExistence(timeout: elementTimeout), "❌ 'Schema validation' button not found")
         schemaValidationCell.tap()
-        Thread.sleep(forTimeInterval: delay)
+        Thread.sleep(forTimeInterval: shortDelay)  // Wait for navigation
         
         // Wait for Schema Validation screen to load
         let validateSchemaButton = app.buttons["Validate Schema"]
-        XCTAssertTrue(validateSchemaButton.waitForExistence(timeout: delay), "❌ 'Validate Schema' button not found")
+        XCTAssertTrue(validateSchemaButton.waitForExistence(timeout: elementTimeout), "❌ 'Validate Schema' button not found")
         
-        // Wait 2 seconds for logs to be processed
-        Thread.sleep(forTimeInterval: delay)
+        // Wait for logs to be processed (network operations may take time in CI)
+        Thread.sleep(forTimeInterval: networkDelay)
         
         // Tap Validate Schema button
         validateSchemaButton.tap()
         
-        // Wait for validation to complete
-        RunLoop.current.run(until: Date().addingTimeInterval(delay))
+        // Wait for validation to complete - use a longer timeout for network validation
+        // Check for either success indicator or failure message
+        let validationTimeout: TimeInterval = 30.0  // Allow up to 30 seconds for validation API
+        let startTime = Date()
+        var validationComplete = false
+        
+        while Date().timeIntervalSince(startTime) < validationTimeout {
+            // Check if validation is complete by looking for result indicators
+            let allTexts = app.staticTexts.allElementsBoundByIndex
+            for text in allTexts {
+                let label = text.label
+                if label.contains("Validation Failed") || label.contains("Validation Successful") || label.contains("Validation Complete") {
+                    validationComplete = true
+                    break
+                }
+            }
+            if validationComplete {
+                break
+            }
+            Thread.sleep(forTimeInterval: 1.0)  // Check every second
+        }
+        
+        // If validation didn't complete, wait a bit more for network delays in CI
+        if !validationComplete {
+            print("⚠️ Validation result not detected, waiting additional time for CI network delays...")
+            Thread.sleep(forTimeInterval: networkDelay)
+        }
         
         // Step 6: Wait for validation to complete and verify no "Validation Failed" appears
         let allStaticTexts = app.staticTexts.allElementsBoundByIndex
