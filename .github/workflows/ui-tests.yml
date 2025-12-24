@@ -262,11 +262,9 @@ jobs:
           # Set longer timeout for CI environment
           export XCODE_TEST_TIMEOUT=600  # 10 minutes for CI
 
-          # Run tests and capture exit code properly
-          # Temporarily disable exit on error to capture exit code from pipeline
           set +e
           EXIT_CODE=0
-          
+
           if command -v xcpretty &> /dev/null; then
             echo "✅ xcpretty found - using formatted output"
             xcodebuild test-without-building \
@@ -292,144 +290,48 @@ jobs:
               2>&1 | tee ../test-output.log
             EXIT_CODE=${PIPESTATUS[0]}
           fi
-          
+
           echo "📊 xcodebuild exit code: $EXIT_CODE"
-          
-          # Re-enable exit on error
+
+          # Re-enable exit on error for the rest
           set -e
-          
-          # xcodebuild returns 65 for test failures, 0 for success
-          if [ $EXIT_CODE -eq 65 ]; then
-            echo "❌ Branch: EXIT_CODE == 65 (test failures detected)"
-            echo "❌ Tests failed (exit code 65) - check test output for details"
-            exit 65  # Fail the workflow step
-          elif [ $EXIT_CODE -ne 0 ]; then
+
+          print_failure_context() {
+            echo "==================== 🔥 Failure context ===================="
+
+            if [ -f ../test-output.log ]; then
+              echo "🔎 Last 250 lines of raw xcodebuild output (../test-output.log):"
+              tail -n 250 ../test-output.log || true
+
+              echo "🔎 Key failure lines (if any):"
+              grep -E "Testing failed|Failing tests|\*\* TEST FAILED \*\*|xcodebuild: error:|Assertion Failure|Fatal error|Timed out|UI Test Failure|unable to|No devices are available|Ineligible destinations|Simulator.*failed|Exited with|SIG" \
+                -n ../test-output.log | tail -n 80 || true
+            else
+              echo "⚠️ ../test-output.log not found"
+            fi
+
+            if [ -d ../DerivedData/TestResults.xcresult ]; then
+              echo "🔎 xcresult exists: ../DerivedData/TestResults.xcresult"
+              echo "🔎 xcresulttool summary (truncated):"
+              xcrun xcresulttool get --path ../DerivedData/TestResults.xcresult --format json 2>/dev/null | head -n 200 || true
+            else
+              echo "⚠️ xcresult not found at ../DerivedData/TestResults.xcresult"
+            fi
+
+            echo "============================================================="
+          }
+
+          if [ "$EXIT_CODE" -eq 65 ]; then
+            echo "❌ Branch: EXIT_CODE == 65 (test failures or test invocation failure)"
+            print_failure_context
+            exit 65
+          elif [ "$EXIT_CODE" -ne 0 ]; then
             echo "❌ Branch: EXIT_CODE != 0 (other xcodebuild error)"
-            echo "❌ xcodebuild failed with exit code $EXIT_CODE"
-            exit $EXIT_CODE
+            print_failure_context
+            exit "$EXIT_CODE"
           else
             echo "✅ Branch: EXIT_CODE == 0 (tests passed)"
             echo "✅ Tests passed!"
           fi
 
-      - name: Print test output on failure
-        if: failure()
-        run: |
-          set +e  # Don't fail on errors in this step
-          echo "❌ ============ TEST FAILURE DETAILS ============"
-          
-          # Show test output log
-          if [ -f test-output.log ]; then
-            echo ""
-            echo "--- Full test output log ---"
-            cat test-output.log
-          else
-            echo "⚠️ No test-output.log found"
-          fi
-          
-          # Extract and show failure details from xcresult
-          if [ -d DerivedData/TestResults.xcresult ]; then
-            echo ""
-            echo "--- Test Results from xcresult bundle ---"
-            echo "📂 xcresult bundle found at: DerivedData/TestResults.xcresult"
-            
-            # Extract failure details using xcresulttool
-            echo "📊 Extracting test failure details..."
-            XCRESULT_ERROR=$(xcrun xcresulttool get --format json --path DerivedData/TestResults.xcresult 2>&1 > /tmp/xcresult.json)
-            XCRESULT_EXIT=$?
-            
-            if [ $XCRESULT_EXIT -eq 0 ] && [ -f /tmp/xcresult.json ]; then
-              # Move the JSON file to the expected location
-              mv /tmp/xcresult.json DerivedData/TestResults.json
-              echo "✅ Full test results JSON saved to DerivedData/TestResults.json"
-              
-              # Try to extract failure messages using jq (if available) or grep
-              echo ""
-              echo "--- Test Failure Details ---"
-              if command -v jq &> /dev/null; then
-                echo "Using jq to extract failure details..."
-                # Try multiple approaches to find failures
-                FAILURES=$(jq -r '.. | select(.testFailureSummaries? != null) | .testFailureSummaries[]? | "❌ \(.message._value // .message.value // .message // "No message")\n   File: \(.fileName._value // .fileName.value // .fileName // "Unknown"):\(.lineNumber._value // .lineNumber.value // .lineNumber // "Unknown")"' DerivedData/TestResults.json 2>/dev/null)
-                if [ -n "$FAILURES" ]; then
-                  echo "$FAILURES"
-                else
-                  echo "⚠️ No failure summaries found with jq"
-                  echo "   Showing JSON structure with 'testFailure' or 'failure' keywords:"
-                  jq -r '.. | select(type == "string" and (test("(?i)(fail|error|assert)"))) | .' DerivedData/TestResults.json 2>/dev/null | head -20 || echo "   No failure-related strings found"
-                fi
-              else
-                echo "jq not available, using grep to find failure details..."
-                if grep -q "testFailureSummaries" DerivedData/TestResults.json; then
-                  echo "Found testFailureSummaries section:"
-                  grep -A 30 "testFailureSummaries" DerivedData/TestResults.json | head -40
-                else
-                  echo "⚠️ Could not find testFailureSummaries in JSON"
-                  echo "   Searching for failure-related content:"
-                  grep -i -E "(fail|error|assert)" DerivedData/TestResults.json | head -20 || echo "   No failure-related content found"
-                fi
-              fi
-            else
-              echo "⚠️ Could not extract test results JSON"
-              echo "   xcresulttool exit code: $XCRESULT_EXIT"
-              if [ -n "$XCRESULT_ERROR" ]; then
-                echo "   Error output: $XCRESULT_ERROR"
-              fi
-              echo "   Trying alternative extraction method..."
-              xcrun xcresulttool get --format json --path DerivedData/TestResults.xcresult > DerivedData/TestResults.json 2>&1 || echo "   Alternative method also failed"
-            fi
-            
-            # Export test results as HTML for easier viewing
-            echo ""
-            echo "--- Exporting test results as HTML (if available) ---"
-            xcrun xcresulttool export --type html --path DerivedData/TestResults.xcresult --output-path DerivedData/TestResults.html 2>/dev/null && \
-              echo "✅ Test results HTML exported to DerivedData/TestResults.html" || \
-              echo "⚠️ Could not export HTML results"
-          else
-            echo "⚠️ No TestResults.xcresult found"
-          fi
-          
-          # Check for common failure patterns in the log
-          echo ""
-          echo "--- Common Failure Patterns ---"
-          if [ -f test-output.log ]; then
-            if grep -q "Validation Failed" test-output.log; then
-              echo "❌ Found 'Validation Failed' in output - schema validation failed"
-              grep -A 5 -B 5 "Validation Failed" test-output.log | head -20
-            fi
-            if grep -q "timeout\|timed out" test-output.log; then
-              echo "⏱️ Found timeout in output - test may have timed out"
-              grep -A 3 -B 3 "timeout\|timed out" test-output.log | head -20
-            fi
-            if grep -q "Assertion failed\|XCTAssert" test-output.log; then
-              echo "❌ Found assertion failures in output"
-              grep -A 3 -B 3 "Assertion failed\|XCTAssert" test-output.log | head -20
-            fi
-          fi
-          
-          echo ""
-          echo "❌ ================================================"
-
-      - name: Upload test results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-results
-          path: |
-            DerivedData/Logs/Test/*.xcresult
-            DerivedData/junit.xml
-            DerivedData/TestResults.xcresult
-            DerivedData/TestResults.json
-            DerivedData/TestResults.html
-            test-output.log
-          retention-days: 30
-
-      - name: Publish test results
-        if: always()
-        uses: EnricoMi/publish-unit-test-result-action/macos@v2
-        with:
-          files: DerivedData/junit.xml
-          check_name: UI Test Results
-          comment_mode: off
-        continue-on-error: true
-
-
+    
