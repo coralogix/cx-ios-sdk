@@ -11,15 +11,40 @@ import XCTest
 final class DemoAppUITests: XCTestCase {
 
     var app: XCUIApplication!
-    // Use shorter timeout for CI, longer for local debugging
-    private let elementTimeout: TimeInterval = 10.0
-    private let shortDelay: TimeInterval = 1.0  // For UI transitions
-    private let networkDelay: TimeInterval = 3.0  // For network operations
+    // Detect CI environment and adjust timeouts accordingly
+    private var isCI: Bool {
+        ProcessInfo.processInfo.environment["CI"] == "true" || 
+        ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] == "true"
+    }
+    // Use longer timeouts for CI, shorter for local debugging
+    private var elementTimeout: TimeInterval {
+        isCI ? 15.0 : 10.0
+    }
+    private var shortDelay: TimeInterval {
+        isCI ? 2.0 : 1.0  // For UI transitions - longer in CI
+    }
+    private var networkDelay: TimeInterval {
+        isCI ? 5.0 : 3.0  // For network operations - longer in CI
+    }
     
     /// Wait for the app to be fully ready - main screen loaded
     private func waitForAppToBeReady() throws {
-        // First, ensure app is in foreground and running
-        XCTAssertTrue(app.state == .runningForeground, "App is not in foreground state")
+        // In CI, give the app more time to launch
+        if isCI {
+            print("   🔄 CI environment detected - using extended timeouts")
+            Thread.sleep(forTimeInterval: 2.0)  // Extra wait for CI
+        }
+        
+        // Wait for app to be in foreground (with longer timeout in CI)
+        let appStateTimeout: TimeInterval = isCI ? 20.0 : 10.0
+        let startTime = Date()
+        while Date().timeIntervalSince(startTime) < appStateTimeout {
+            if app.state == .runningForeground {
+                break
+            }
+            Thread.sleep(forTimeInterval: 0.5)
+        }
+        XCTAssertTrue(app.state == .runningForeground, "App is not in foreground state after \(appStateTimeout)s")
         
         // Wait for navigation bar to appear (indicates main view controller is loaded)
         // Try multiple possible titles in case of localization or different states
@@ -27,9 +52,10 @@ final class DemoAppUITests: XCTestCase {
         var navBarExists = false
         var foundTitle = ""
         
+        let navBarTimeout: TimeInterval = isCI ? 15.0 : 10.0
         for title in possibleTitles {
             let navigationBar = app.navigationBars[title]
-            if navigationBar.waitForExistence(timeout: 5.0) {
+            if navigationBar.waitForExistence(timeout: navBarTimeout) {
                 navBarExists = true
                 foundTitle = title
                 break
@@ -41,22 +67,24 @@ final class DemoAppUITests: XCTestCase {
         // Wait for at least one table view cell to appear (menu items)
         // Try waiting for the table view first
         let tableView = app.tables.firstMatch
-        let tableViewExists = tableView.waitForExistence(timeout: 10.0)
+        let tableViewTimeout: TimeInterval = isCI ? 15.0 : 10.0
+        let tableViewExists = tableView.waitForExistence(timeout: tableViewTimeout)
         XCTAssertTrue(tableViewExists, "Table view not found - main menu may not have loaded")
         
         // Wait for cells to populate
+        let cellTimeout: TimeInterval = isCI ? 15.0 : 10.0
         let firstCell = app.cells.firstMatch
-        let cellExists = firstCell.waitForExistence(timeout: 10.0)
+        let cellExists = firstCell.waitForExistence(timeout: cellTimeout)
         XCTAssertTrue(cellExists, "No table view cells found - main menu may not have loaded")
         
         // Scroll to top to ensure first items are visible (in case table view scrolled)
         if tableViewExists {
             tableView.swipeDown()  // Scroll to top
-            Thread.sleep(forTimeInterval: 0.5)  // Wait for scroll animation
+            Thread.sleep(forTimeInterval: isCI ? 1.0 : 0.5)  // Wait for scroll animation
         }
         
-        // Additional delay to ensure UI is fully rendered and stable
-        Thread.sleep(forTimeInterval: 1.0)
+        // Additional delay to ensure UI is fully rendered and stable (longer in CI)
+        Thread.sleep(forTimeInterval: isCI ? 2.0 : 1.0)
     }
 
     override func setUpWithError() throws {
@@ -446,7 +474,7 @@ final class DemoAppUITests: XCTestCase {
         
         // Wait for validation to complete - use a longer timeout for network validation
         print("📱 Phase 4.6: Waiting for validation to complete...")
-        let validationTimeout: TimeInterval = 30.0  // Allow up to 30 seconds for validation API
+        let validationTimeout: TimeInterval = isCI ? 60.0 : 30.0  // Allow up to 60 seconds in CI, 30 locally
         let startTime = Date()
         var validationComplete = false
         

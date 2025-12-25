@@ -115,16 +115,6 @@ jobs:
           echo "📱 iOS 18.5+ Simulators:"
           xcrun simctl list devices available | grep -E "iPhone|iPad" | grep -E "18\.[5-9]|19\." || echo "No iOS 18.5+ simulators found"
 
-      - name: Boot simulator (simple)
-        run: |
-          set -euo pipefail
-          echo "Booting a simulator (best-effort)..."
-          # Try to boot iPhone 16 or newer first
-          xcrun simctl boot "iPhone 16" 2>/dev/null || \
-          xcrun simctl boot "iPhone 15" 2>/dev/null || true
-          sleep 5
-          xcrun simctl list devices booted || true
-
       - name: Set build configuration
         run: |
           if [ -f "Example/DemoApp.xcworkspace/contents.xcworkspacedata" ]; then
@@ -187,7 +177,42 @@ jobs:
           echo "✅ Selected simulator: $NAME ($OS) - deployment target will be overridden to 18.0 for CI"
 
           echo "DESTINATION_SPEC=platform=iOS Simulator,name=$NAME,OS=$OS" >> $GITHUB_ENV
+          echo "SIMULATOR_NAME=$NAME" >> $GITHUB_ENV
           echo "🎯 Final destination spec: platform=iOS Simulator,name=$NAME,OS=$OS"
+
+      - name: Boot simulator (ensure ready)
+        run: |
+          set -euo pipefail
+          echo "📱 Ensuring simulator is booted and ready..."
+          
+          # Use the simulator name from destination selection
+          if [ -n "${SIMULATOR_NAME:-}" ]; then
+            echo "   Attempting to boot: $SIMULATOR_NAME"
+            xcrun simctl boot "$SIMULATOR_NAME" 2>/dev/null || echo "   Simulator already booted or booting..."
+          else
+            # Fallback: try common device names
+            echo "   Attempting to boot iPhone 16..."
+            xcrun simctl boot "iPhone 16" 2>/dev/null || \
+            xcrun simctl boot "iPhone 15" 2>/dev/null || echo "   Could not boot simulator by name"
+          fi
+          
+          # Wait for simulator to be fully booted
+          echo "   Waiting for simulator to be ready..."
+          sleep 5
+          
+          # Verify simulator is booted
+          BOOTED=$(xcrun simctl list devices booted | grep -i "iPhone" | head -1 || echo "")
+          if [ -z "$BOOTED" ]; then
+            echo "   ⚠️ No booted iPhone simulator found, but continuing..."
+          else
+            echo "   ✅ Booted simulator: $BOOTED"
+          fi
+          
+          # Additional wait to ensure simulator UI is ready
+          echo "   Waiting additional time for simulator UI to be ready..."
+          sleep 3
+          
+          xcrun simctl list devices booted || true
 
       - name: Generate envs.swift (CI)
         run: |
