@@ -29,31 +29,82 @@ final class DemoAppUITests: XCTestCase {
     }
     
     func testSchemaValidationFlow() throws {
+        print("🚀 Starting testSchemaValidationFlow")
         app.activate()
+        print("✅ App activated")
         
         // ========== PHASE 1: Network Instrumentation ==========
-        // Navigate to Network Instrumentation screen
+        print("📱 Phase 1.1: Looking for 'Network instrumentation' button...")
         let networkInstrumentationButton = app.staticTexts["Network instrumentation"].firstMatch
-        XCTAssertTrue(networkInstrumentationButton.waitForExistence(timeout: elementTimeout), "❌ 'Network instrumentation' button not found")
+        let networkButtonExists = networkInstrumentationButton.waitForExistence(timeout: elementTimeout)
+        print("   Network instrumentation button exists: \(networkButtonExists)")
+        if !networkButtonExists {
+            print("   ❌ Available static texts on screen:")
+            for text in app.staticTexts.allElementsBoundByIndex.prefix(20) {
+                if text.exists {
+                    print("      - '\(text.label)'")
+                }
+            }
+        }
+        XCTAssertTrue(networkButtonExists, "❌ 'Network instrumentation' button not found")
+        print("✅ Phase 1.1: Found Network instrumentation button")
+        
+        print("📱 Phase 1.2: Tapping Network instrumentation button...")
         networkInstrumentationButton.tap()
         Thread.sleep(forTimeInterval: shortDelay)  // Wait for navigation
+        print("✅ Phase 1.2: Tapped Network instrumentation button")
 
-        // Send failure network
+        print("📱 Phase 1.3: Looking for 'Failing network request' button...")
         let failingNetworkButton = app.staticTexts["Failing network request"].firstMatch
-        XCTAssertTrue(failingNetworkButton.waitForExistence(timeout: elementTimeout), "❌ 'Failing network request' button not found")
+        let failingButtonExists = failingNetworkButton.waitForExistence(timeout: elementTimeout)
+        print("   Failing network request button exists: \(failingButtonExists)")
+        if !failingButtonExists {
+            print("   ❌ Available static texts on Network screen:")
+            for text in app.staticTexts.allElementsBoundByIndex.prefix(20) {
+                if text.exists {
+                    print("      - '\(text.label)'")
+                }
+            }
+        }
+        XCTAssertTrue(failingButtonExists, "❌ 'Failing network request' button not found")
+        print("✅ Phase 1.3: Found Failing network request button")
+        
+        print("📱 Phase 1.4: Tapping Failing network request button...")
         failingNetworkButton.tap()
         Thread.sleep(forTimeInterval: networkDelay)  // Wait for network request
+        print("✅ Phase 1.4: Tapped Failing network request button")
 
+        print("📱 Phase 1.5: Looking for 'Successful network request' button...")
         let successfulNetworkButton = app.staticTexts["Successful network request"].firstMatch
-        XCTAssertTrue(successfulNetworkButton.waitForExistence(timeout: elementTimeout), "❌ 'Successful network request' button not found")
+        let successfulButtonExists = successfulNetworkButton.waitForExistence(timeout: elementTimeout)
+        print("   Successful network request button exists: \(successfulButtonExists)")
+        XCTAssertTrue(successfulButtonExists, "❌ 'Successful network request' button not found")
+        print("✅ Phase 1.5: Found Successful network request button")
+        
+        print("📱 Phase 1.6: Tapping Successful network request button...")
         successfulNetworkButton.tap()
         Thread.sleep(forTimeInterval: networkDelay)  // Wait for network request
+        print("✅ Phase 1.6: Tapped Successful network request button")
 
-        // Go back to main screen from Network
+        print("📱 Phase 1.7: Looking for Back button...")
         let backButtonFromNetwork = app.buttons["BackButton"].firstMatch
-        XCTAssertTrue(backButtonFromNetwork.waitForExistence(timeout: elementTimeout), "❌ Back button from Network screen not found")
+        let backButtonExists = backButtonFromNetwork.waitForExistence(timeout: elementTimeout)
+        print("   Back button exists: \(backButtonExists)")
+        if !backButtonExists {
+            print("   ❌ Available buttons on Network screen:")
+            for button in app.buttons.allElementsBoundByIndex.prefix(20) {
+                if button.exists {
+                    print("      - '\(button.label)'")
+                }
+            }
+        }
+        XCTAssertTrue(backButtonExists, "❌ Back button from Network screen not found")
+        print("✅ Phase 1.7: Found Back button")
+        
+        print("📱 Phase 1.8: Tapping Back button...")
         backButtonFromNetwork.tap()
         Thread.sleep(forTimeInterval: shortDelay)  // Wait for navigation
+        print("✅ Phase 1.8: Tapped Back button")
         
         // Phase 1 complete - test passes here
         print("✅ Phase 1 (Network Instrumentation) completed successfully")
