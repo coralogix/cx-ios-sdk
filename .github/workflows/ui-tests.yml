@@ -272,7 +272,7 @@ jobs:
               -scheme "$SCHEME" \
               -destination "$DESTINATION_SPEC" \
               -derivedDataPath ../DerivedData \
-              -only-testing:DemoAppUITests/DemoAppUITests/testSimple \
+              -only-testing:DemoAppUITests/DemoAppUITests/testSchemaValidationFlow \
               -resultBundlePath ../DerivedData/TestResults.xcresult \
               IPHONEOS_DEPLOYMENT_TARGET="$CI_DEPLOYMENT_TARGET" \
               2>&1 | tee ../test-output.log | xcpretty --color --report junit --output ../DerivedData/junit.xml
@@ -284,7 +284,7 @@ jobs:
               -scheme "$SCHEME" \
               -destination "$DESTINATION_SPEC" \
               -derivedDataPath ../DerivedData \
-              -only-testing:DemoAppUITests/DemoAppUITests/testSimple \
+              -only-testing:DemoAppUITests/DemoAppUITests/testSchemaValidationFlow \
               -resultBundlePath ../DerivedData/TestResults.xcresult \
               IPHONEOS_DEPLOYMENT_TARGET="$CI_DEPLOYMENT_TARGET" \
               2>&1 | tee ../test-output.log

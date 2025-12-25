@@ -28,10 +28,10 @@ final class DemoAppUITests: XCTestCase {
         XCTAssertTrue(true, "Simple test passed")
     }
     
-    /*
     func testSchemaValidationFlow() throws {
         app.activate()
         
+        // ========== PHASE 1: Network Instrumentation ==========
         // Navigate to Network Instrumentation screen
         let networkInstrumentationButton = app.staticTexts["Network instrumentation"].firstMatch
         XCTAssertTrue(networkInstrumentationButton.waitForExistence(timeout: elementTimeout), "❌ 'Network instrumentation' button not found")
@@ -54,7 +54,16 @@ final class DemoAppUITests: XCTestCase {
         XCTAssertTrue(backButtonFromNetwork.waitForExistence(timeout: elementTimeout), "❌ Back button from Network screen not found")
         backButtonFromNetwork.tap()
         Thread.sleep(forTimeInterval: shortDelay)  // Wait for navigation
-
+        
+        // Phase 1 complete - test passes here
+        print("✅ Phase 1 (Network Instrumentation) completed successfully")
+    }
+    
+    /*
+    func testSchemaValidationFlow_Phase2() throws {
+        app.activate()
+        
+        // ========== PHASE 2: Error Instrumentation ==========
         // Navigate to Error Instrumentation screen
         let errorInstrumentationButton = app.staticTexts["Error instrumentation"].firstMatch
         XCTAssertTrue(errorInstrumentationButton.waitForExistence(timeout: elementTimeout), "❌ 'Error instrumentation' button not found")
@@ -91,6 +100,7 @@ final class DemoAppUITests: XCTestCase {
         backButtonFromError.tap()
         Thread.sleep(forTimeInterval: shortDelay)  // Wait for navigation
 
+        // ========== PHASE 3: SDK Functions ==========
         // Navigate to SDK Functions screen
         let sdkFunctionsButton = app.staticTexts["SDK functions"].firstMatch
         XCTAssertTrue(sdkFunctionsButton.waitForExistence(timeout: elementTimeout), "❌ 'SDK functions' button not found")
@@ -114,6 +124,7 @@ final class DemoAppUITests: XCTestCase {
         backButtonFromSDK.tap()
         Thread.sleep(forTimeInterval: shortDelay)  // Wait for navigation
 
+        // ========== PHASE 4: Schema Validation ==========
         // Open Schema Validation screen
         let schemaValidationCell = app.cells.containing(.staticText, identifier: "Schema validation").firstMatch
         XCTAssertTrue(schemaValidationCell.waitForExistence(timeout: elementTimeout), "❌ 'Schema validation' button not found")
