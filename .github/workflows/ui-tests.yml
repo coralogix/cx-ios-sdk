@@ -249,17 +249,9 @@ jobs:
           set -euo pipefail
           cd Example
 
-          echo "🔨 Building for testing with scheme: $SCHEME"
-          echo "🎯 Destination: $DESTINATION_SPEC"
-          
-          # Override deployment target for CI to use a generic minimum version
           CI_DEPLOYMENT_TARGET="18.0"
-          echo "📱 Overriding IPHONEOS_DEPLOYMENT_TARGET to $CI_DEPLOYMENT_TARGET for CI compatibility"
-
-          # If DerivedData with a previous build exists, print a log
-          if [ -d ../DerivedData ]; then
-            echo "⚡️ Using cached DerivedData for faster build"
-          fi
+          echo "🔨 Building for testing..."
+          BUILD_START=$(date +%s)
 
           if command -v xcpretty &> /dev/null; then
             xcodebuild build-for-testing \
@@ -270,6 +262,7 @@ jobs:
               CODE_SIGNING_ALLOWED=NO \
               CODE_SIGN_IDENTITY="" \
               IPHONEOS_DEPLOYMENT_TARGET="$CI_DEPLOYMENT_TARGET" \
+              -jobs $(sysctl -n hw.ncpu) \
               | xcpretty --color || cat
           else
             xcodebuild build-for-testing \
@@ -279,8 +272,13 @@ jobs:
               -derivedDataPath ../DerivedData \
               CODE_SIGNING_ALLOWED=NO \
               CODE_SIGN_IDENTITY="" \
-              IPHONEOS_DEPLOYMENT_TARGET="$CI_DEPLOYMENT_TARGET"
+              IPHONEOS_DEPLOYMENT_TARGET="$CI_DEPLOYMENT_TARGET" \
+              -jobs $(sysctl -n hw.ncpu)
           fi
+
+          BUILD_END=$(date +%s)
+          BUILD_DURATION=$((BUILD_END - BUILD_START))
+          echo "✅ Build completed in ${BUILD_DURATION}s ($(($BUILD_DURATION / 60))m $(($BUILD_DURATION % 60))s)"
 
       - name: Run UI Tests
         run: |
