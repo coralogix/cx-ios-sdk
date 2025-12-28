@@ -237,6 +237,17 @@ jobs:
           echo "✅ Created placeholder GoogleService-Info.plist (app will skip Firebase init)"
           ls -la GoogleService-Info.plist
 
+      - name: Build for testing (with cache)
+        uses: actions/cache@v4
+        id: xcode-cache
+        with:
+          path: |
+            ~/Library/Developer/Xcode/DerivedData
+          key: xcode-${{ runner.os }}-${{ hashFiles('**/Podfile.lock', '**/Package.resolved', '**/*.xcodeproj/project.pbxproj', '**/*.xcworkspace/contents.xcworkspacedata') }}
+          restore-keys: |
+            xcode-${{ runner.os }}-
+            xcode-
+
       - name: Build for testing
         run: |
           set -euo pipefail
@@ -246,9 +257,13 @@ jobs:
           echo "🎯 Destination: $DESTINATION_SPEC"
           
           # Override deployment target for CI to use a generic minimum version
-          # This ensures compatibility with available simulators regardless of device type
           CI_DEPLOYMENT_TARGET="18.0"
           echo "📱 Overriding IPHONEOS_DEPLOYMENT_TARGET to $CI_DEPLOYMENT_TARGET for CI compatibility"
+
+          # If DerivedData with a previous build exists, print a log
+          if [ -d ../DerivedData ]; then
+            echo "⚡️ Using cached DerivedData for faster build"
+          fi
 
           if command -v xcpretty &> /dev/null; then
             xcodebuild build-for-testing \
