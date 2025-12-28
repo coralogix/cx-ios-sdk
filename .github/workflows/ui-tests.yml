@@ -298,7 +298,7 @@ jobs:
               -scheme "$SCHEME" \
               -destination "$DESTINATION_SPEC" \
               -derivedDataPath ../DerivedData \
-              -only-testing:DemoAppUITests/DemoAppUITests/testSchemaValidationFlow \
+              -only-testing:DemoAppUITests/DemoAppUITests/testAppSanity_mainViewAppearsOnLaunch \
               -resultBundlePath ../DerivedData/TestResults.xcresult \
               IPHONEOS_DEPLOYMENT_TARGET="$CI_DEPLOYMENT_TARGET" \
               2>&1 | tee ../test-output.log | xcpretty --color --report junit --output ../DerivedData/junit.xml
@@ -309,7 +309,7 @@ jobs:
               -scheme "$SCHEME" \
               -destination "$DESTINATION_SPEC" \
               -derivedDataPath ../DerivedData \
-              -only-testing:DemoAppUITests/DemoAppUITests/testSchemaValidationFlow \
+              -only-testing:DemoAppUITests/DemoAppUITests/testAppSanity_mainViewAppearsOnLaunch \
               -resultBundlePath ../DerivedData/TestResults.xcresult \
               IPHONEOS_DEPLOYMENT_TARGET="$CI_DEPLOYMENT_TARGET" \
               2>&1 | tee ../test-output.log
@@ -367,16 +367,4 @@ jobs:
           echo "✅ Tests passed!"
           echo "⏱️  End time: $(date)"
 
-      - name: Upload test artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-artifacts
-          path: |
-            test-output.log
-            DerivedData/TestResults.xcresult
-            DerivedData/junit.xml
-          retention-days: 30
-          if-no-files-found: ignore
-
-    
+     
