@@ -11,10 +11,24 @@ import XCTest
 final class DemoAppUITests: XCTestCase {
     
     var app: XCUIApplication!
-    // Use shorter timeout for CI, longer for local debugging
-    private let elementTimeout: TimeInterval = 10.0
-    private let shortDelay: TimeInterval = 1.0  // For UI transitions
-    private let networkDelay: TimeInterval = 3.0  // For network operations
+    
+    // Detect CI environment (GitHub Actions, Jenkins, etc.)
+    private var isCI: Bool {
+        ProcessInfo.processInfo.environment["CI"] == "true" ||
+        ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] == "true" ||
+        ProcessInfo.processInfo.environment["CONTINUOUS_INTEGRATION"] == "true"
+    }
+    
+    // Use longer timeouts in CI due to slower network/API calls
+    private var elementTimeout: TimeInterval {
+        isCI ? 30.0 : 10.0  // 30s in CI, 10s locally
+    }
+    private var shortDelay: TimeInterval {
+        isCI ? 2.0 : 1.0  // 2s in CI, 1s locally
+    }
+    private var networkDelay: TimeInterval {
+        isCI ? 10.0 : 3.0  // 10s in CI for network operations, 3s locally
+    }
     
     override func setUpWithError() throws {
         continueAfterFailure = false
