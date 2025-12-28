@@ -72,7 +72,7 @@ final class DemoAppUITests: XCTestCase {
         
         // Trigger "Log Error" event
         let logErrorButton = app.staticTexts["Log Error"].firstMatch
-        let logErrorButtonExists = messageDataErrorButton.waitForExistence(timeout: elementTimeout)
+        let logErrorButtonExists = logErrorButton.waitForExistence(timeout: elementTimeout)
         XCTAssertTrue(logErrorButtonExists, "❌ 'Log Error' button not found")
         logErrorButton.tap()
         Thread.sleep(forTimeInterval: shortDelay)  // Wait for event processing
