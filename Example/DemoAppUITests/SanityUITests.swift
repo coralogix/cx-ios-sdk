@@ -31,7 +31,7 @@ final class SanityUITests: XCTestCase {
         XCTAssertTrue(exists, "❌ 'Main View' navigation bar should appear on launch")
         log(exists ? "✅ Found 'Main View' navigation bar" : "❌ Did NOT find 'Main View' navigation bar")
         
-        let networkInstrumentationButton = app.staticTexts["Network instrumentation"].firstMatch
+        let networkInstrumentationButton = app.staticTexts["Network instrumentations"].firstMatch
         exists = networkInstrumentationButton.waitForExistence(timeout: elementTimeout)
         XCTAssertTrue(exists, "❌ 'Network instrumentation' button not found")
         networkInstrumentationButton.tap()
