@@ -27,8 +27,14 @@ final class SanityUITests: XCTestCase {
     func testAppSanity_mainViewAppearsOnLaunch() throws {
         log("🔎 Waiting for 'Main View' navigation bar…")
         let mainNavBar = app.navigationBars["Coralogix Demo"]
-        let exists = mainNavBar.waitForExistence(timeout: elementTimeout)
+        var exists = mainNavBar.waitForExistence(timeout: elementTimeout)
         XCTAssertTrue(exists, "❌ 'Main View' navigation bar should appear on launch")
         log(exists ? "✅ Found 'Main View' navigation bar" : "❌ Did NOT find 'Main View' navigation bar")
+        
+        let networkInstrumentationButton = app.staticTexts["Network instrumentation"].firstMatch
+        exists = networkInstrumentationButton.waitForExistence(timeout: elementTimeout)
+        XCTAssertTrue(exists, "❌ 'Network instrumentation' button not found")
+        networkInstrumentationButton.tap()
+        
     }
 }
