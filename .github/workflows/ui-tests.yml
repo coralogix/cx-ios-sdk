@@ -196,9 +196,9 @@ jobs:
             xcrun simctl boot "iPhone 15" 2>/dev/null || echo "   Could not boot simulator by name"
           fi
           
-          # Wait for simulator to be fully booted
+          # Wait for simulator to be fully booted (reduced from 5s + 3s)
           echo "   Waiting for simulator to be ready..."
-          sleep 5
+          sleep 3
           
           # Verify simulator is booted
           BOOTED=$(xcrun simctl list devices booted | grep -i "iPhone" | head -1 || echo "")
@@ -207,10 +207,6 @@ jobs:
           else
             echo "   ✅ Booted simulator: $BOOTED"
           fi
-          
-          # Additional wait to ensure simulator UI is ready
-          echo "   Waiting additional time for simulator UI to be ready..."
-          sleep 3
           
           xcrun simctl list devices booted || true
 
@@ -291,22 +287,14 @@ jobs:
           set -euo pipefail
           cd Example
 
-          echo "🧪 Running UI tests with scheme: $SCHEME"
-          echo "🎯 Destination: $DESTINATION_SPEC"
-          
-          # Override deployment target for CI to use a generic minimum version
           CI_DEPLOYMENT_TARGET="18.0"
-          echo "📱 Using IPHONEOS_DEPLOYMENT_TARGET=$CI_DEPLOYMENT_TARGET for test execution"
-          
-          # Test takes ~69s locally but may be slower in CI due to network/validation API
-          # Set longer timeout for CI environment
-          export XCODE_TEST_TIMEOUT=600  # 10 minutes for CI
+          echo "🧪 Running UI tests (deployment target: $CI_DEPLOYMENT_TARGET)"
+          echo "⏱️  Start time: $(date)"
 
           set +e
-          EXIT_CODE=0
-
+          TEST_START=$(date +%s)
+          
           if command -v xcpretty &> /dev/null; then
-            echo "✅ xcpretty found - using formatted output"
             xcodebuild test-without-building \
               $BUILD_TYPE "$BUILD_PATH_RELATIVE" \
               -scheme "$SCHEME" \
@@ -318,7 +306,6 @@ jobs:
               2>&1 | tee ../test-output.log | xcpretty --color --report junit --output ../DerivedData/junit.xml
             EXIT_CODE=${PIPESTATUS[0]}
           else
-            echo "⚠️ xcpretty not found - using raw xcodebuild output"
             xcodebuild test-without-building \
               $BUILD_TYPE "$BUILD_PATH_RELATIVE" \
               -scheme "$SCHEME" \
@@ -330,70 +317,57 @@ jobs:
               2>&1 | tee ../test-output.log
             EXIT_CODE=${PIPESTATUS[0]}
           fi
+          
+          TEST_END=$(date +%s)
+          TEST_DURATION=$((TEST_END - TEST_START))
+          echo "⏱️  Test duration: ${TEST_DURATION}s ($(($TEST_DURATION / 60))m $(($TEST_DURATION % 60))s)"
 
-          echo "📊 xcodebuild exit code: $EXIT_CODE"
-
-          # Re-enable exit on error for the rest
-          set -e
-
-          print_failure_context() {
-            echo "==================== 🔥 Failure context ===================="
-
+          if [ "$EXIT_CODE" -ne 0 ]; then
+            echo ""
+            echo "==================== ❌ TEST FAILURE DETAILS ===================="
+            echo "Exit code: $EXIT_CODE"
+            echo ""
+            
+            # Extract test logs (print statements from test)
             if [ -f ../test-output.log ]; then
-              echo "🔎 Last 250 lines of raw xcodebuild output (../test-output.log):"
-              tail -n 250 ../test-output.log || true
-
-              echo "🔎 Key failure lines (if any):"
-              grep -E "Testing failed|Failing tests|\*\* TEST FAILED \*\*|xcodebuild: error:|Assertion Failure|Fatal error|Timed out|UI Test Failure|unable to|No devices are available|Ineligible destinations|Simulator.*failed|Exited with|SIG" \
-                -n ../test-output.log | tail -n 80 || true
-            else
-              echo "⚠️ ../test-output.log not found"
-            fi
-
-            if [ -d ../DerivedData/TestResults.xcresult ]; then
-              echo "🔎 xcresult exists: ../DerivedData/TestResults.xcresult"
+              echo "📋 Test Logs (print statements from test):"
+              grep -E "🕐|📱|🔍|✅|❌|👆|⏳|📄|🚀" ../test-output.log | tail -50 || echo "   No test logs found"
+              echo ""
               
-              # Extract JSON to temp file for parsing
-              TEMP_JSON=$(mktemp)
-              if xcrun xcresulttool get object --format json --path ../DerivedData/TestResults.xcresult > "$TEMP_JSON" 2>/dev/null || \
-                 xcrun xcresulttool get --legacy --format json --path ../DerivedData/TestResults.xcresult > "$TEMP_JSON" 2>/dev/null; then
-                
-                echo "🔎 Test failure details:"
-                # Try to extract failure messages using jq if available
-                if command -v jq &> /dev/null; then
-                  FAILURES=$(jq -r '.. | select(.testFailureSummaries? != null) | .testFailureSummaries[]? | "   ❌ \(.message._value // .message.value // .message // "No message")\n   📄 File: \(.fileName._value // .fileName.value // .fileName // "Unknown"):\(.lineNumber._value // .lineNumber.value // .lineNumber // "Unknown")"' "$TEMP_JSON" 2>/dev/null)
-                  if [ -n "$FAILURES" ]; then
-                    echo "$FAILURES"
-                  else
-                    echo "   ⚠️ No failure summaries found in JSON structure"
-                  fi
-                fi
-                
-                echo "🔎 xcresulttool summary (first 200 lines):"
-                head -n 200 "$TEMP_JSON" || true
-                rm -f "$TEMP_JSON"
-              else
-                echo "   ⚠️ Could not extract xcresult JSON"
-              fi
-            else
-              echo "⚠️ xcresult not found at ../DerivedData/TestResults.xcresult"
+              echo "🔎 Last 150 lines of xcodebuild output:"
+              tail -n 150 ../test-output.log
+              echo ""
+              
+              echo "🔎 Key error patterns:"
+              grep -iE "error|fail|timeout|assert|unable|not found|did not appear" ../test-output.log | tail -30 || echo "   No error patterns found"
             fi
-
+            
+            # Extract from xcresult if available
+            if [ -d ../DerivedData/TestResults.xcresult ]; then
+              echo ""
+              echo "📦 Extracting test failure details from xcresult..."
+              TEMP_JSON=$(mktemp)
+              if xcrun xcresulttool get --format json --path ../DerivedData/TestResults.xcresult > "$TEMP_JSON" 2>/dev/null; then
+                if command -v jq &> /dev/null; then
+                  echo "   Test failures:"
+                  jq -r '
+                    .. | select(.testFailureSummaries? != null) | 
+                    .testFailureSummaries[]? | 
+                    "   ❌ \(.message._value // .message.value // .message // "Unknown error")\n   📄 \(.fileName._value // .fileName.value // "Unknown"):\(.lineNumber._value // .lineNumber.value // "?")"
+                  ' "$TEMP_JSON" 2>/dev/null || echo "   Could not parse failures"
+                else
+                  echo "   (jq not available, skipping JSON parsing)"
+                fi
+              fi
+              rm -f "$TEMP_JSON"
+            fi
+            
             echo "============================================================="
-          }
-
-          if [ "$EXIT_CODE" -eq 65 ]; then
-            echo "❌ Branch: EXIT_CODE == 65 (test failures or test invocation failure)"
-            print_failure_context
-            exit 65
-          elif [ "$EXIT_CODE" -ne 0 ]; then
-            echo "❌ Branch: EXIT_CODE != 0 (other xcodebuild error)"
-            print_failure_context
             exit "$EXIT_CODE"
-          else
-            echo "✅ Branch: EXIT_CODE == 0 (tests passed)"
-            echo "✅ Tests passed!"
           fi
+          
+          echo "✅ Tests passed!"
+          echo "⏱️  End time: $(date)"
 
       - name: Upload test artifacts
         if: always()

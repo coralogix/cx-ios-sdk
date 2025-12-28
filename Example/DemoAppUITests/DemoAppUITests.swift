@@ -21,48 +21,120 @@ final class DemoAppUITests: XCTestCase {
     
     // Use longer timeouts in CI due to slower network/API calls
     private var elementTimeout: TimeInterval {
-        isCI ? 30.0 : 10.0  // 30s in CI, 10s locally
+        isCI ? 15.0 : 10.0  // 15s in CI (reduced from 30s), 10s locally
     }
     private var shortDelay: TimeInterval {
-        isCI ? 2.0 : 1.0  // 2s in CI, 1s locally
+        isCI ? 1.5 : 1.0  // 1.5s in CI, 1s locally
     }
     private var networkDelay: TimeInterval {
-        isCI ? 10.0 : 3.0  // 10s in CI for network operations, 3s locally
+        isCI ? 8.0 : 3.0  // 8s in CI for network operations, 3s locally
+    }
+    
+    // Helper to log with timestamp
+    private func log(_ message: String) {
+        let timestamp = String(format: "%.2f", Date().timeIntervalSince1970)
+        print("🕐 [\(timestamp)] \(message)")
+    }
+    
+    // Helper to dump UI state for debugging
+    private func dumpUIState(context: String) {
+        log("📱 UI State Dump - \(context):")
+        log("   Visible static texts:")
+        let texts = app.staticTexts.allElementsBoundByIndex.prefix(20)
+        for (index, text) in texts.enumerated() {
+            if text.exists {
+                log("     [\(index)]: '\(text.label)'")
+            }
+        }
+        log("   Visible buttons:")
+        let buttons = app.buttons.allElementsBoundByIndex.prefix(10)
+        for (index, button) in buttons.enumerated() {
+            if button.exists {
+                log("     [\(index)]: '\(button.label)'")
+            }
+        }
     }
     
     override func setUpWithError() throws {
         continueAfterFailure = false
-        // Initialize the app
+        log("🚀 Starting test setup")
+        log("   CI Environment: \(isCI)")
+        log("   Element timeout: \(elementTimeout)s")
+        log("   Network delay: \(networkDelay)s")
+        
         app = XCUIApplication()
+        log("📱 Launching app...")
+        let startTime = Date()
         app.launch()
+        let launchTime = Date().timeIntervalSince(startTime)
+        log("✅ App launched in \(String(format: "%.2f", launchTime))s")
     }
     
     func testSchemaValidationFlow() throws {
-    app.activate()
-    
-    let networkInstrumentationButton = app.staticTexts["Network instrumentation"].firstMatch
-    let networkButtonExists = networkInstrumentationButton.waitForExistence(timeout: elementTimeout)
-    XCTAssertTrue(networkButtonExists, "❌ 'Network instrumentation' button not found")
-    networkInstrumentationButton.tap()
-    Thread.sleep(forTimeInterval: shortDelay)
-    
-    // --- Test failing network request with UI hook ---
-    let failingNetworkButton = app.staticTexts["Failing network request"].firstMatch
-    let failingButtonExists = failingNetworkButton.waitForExistence(timeout: elementTimeout)
-    XCTAssertTrue(failingButtonExists, "❌ 'Failing network request' button not found")
-    failingNetworkButton.tap()
-    
-    // Wait for status label to update
-    let statusLabel = app.staticTexts["NetworkStatusLabel"]
-    let exists = statusLabel.waitForExistence(timeout: networkDelay)
-    XCTAssertTrue(exists, "❌ Network status label did not appear")
-    
-    let labelText = statusLabel.label
-    XCTAssertTrue(labelText.contains("error") || labelText.contains("fail") || labelText.contains("HTTP Error"),
-                  "❌ Expected failure message, got: \(labelText)")
-    
-    // ... continue with your other steps ...
-}
+        let testStartTime = Date()
+        log("🧪 Starting testSchemaValidationFlow")
+        
+        log("📱 Activating app...")
+        app.activate()
+        Thread.sleep(forTimeInterval: 1.0) // Give app time to become active
+        
+        log("🔍 Looking for 'Network instrumentation' button...")
+        let networkInstrumentationButton = app.staticTexts["Network instrumentation"].firstMatch
+        let waitStart = Date()
+        let networkButtonExists = networkInstrumentationButton.waitForExistence(timeout: elementTimeout)
+        let waitTime = Date().timeIntervalSince(waitStart)
+        
+        if !networkButtonExists {
+            log("❌ 'Network instrumentation' button NOT found after \(String(format: "%.2f", waitTime))s")
+            dumpUIState(context: "After waiting for Network instrumentation button")
+        } else {
+            log("✅ Found 'Network instrumentation' button after \(String(format: "%.2f", waitTime))s")
+        }
+        XCTAssertTrue(networkButtonExists, "❌ 'Network instrumentation' button not found")
+        
+        log("👆 Tapping 'Network instrumentation' button...")
+        networkInstrumentationButton.tap()
+        Thread.sleep(forTimeInterval: shortDelay)
+        
+        log("🔍 Looking for 'Failing network request' button...")
+        let failingNetworkButton = app.staticTexts["Failing network request"].firstMatch
+        let failingWaitStart = Date()
+        let failingButtonExists = failingNetworkButton.waitForExistence(timeout: elementTimeout)
+        let failingWaitTime = Date().timeIntervalSince(failingWaitStart)
+        
+        if !failingButtonExists {
+            log("❌ 'Failing network request' button NOT found after \(String(format: "%.2f", failingWaitTime))s")
+            dumpUIState(context: "After waiting for Failing network request button")
+        } else {
+            log("✅ Found 'Failing network request' button after \(String(format: "%.2f", failingWaitTime))s")
+        }
+        XCTAssertTrue(failingButtonExists, "❌ 'Failing network request' button not found")
+        
+        log("👆 Tapping 'Failing network request' button...")
+        failingNetworkButton.tap()
+        
+        log("⏳ Waiting for network status label (timeout: \(networkDelay)s)...")
+        let statusLabel = app.staticTexts["NetworkStatusLabel"]
+        let statusWaitStart = Date()
+        let exists = statusLabel.waitForExistence(timeout: networkDelay)
+        let statusWaitTime = Date().timeIntervalSince(statusWaitStart)
+        
+        if !exists {
+            log("❌ Network status label did NOT appear after \(String(format: "%.2f", statusWaitTime))s")
+            dumpUIState(context: "After waiting for NetworkStatusLabel")
+        } else {
+            log("✅ Network status label appeared after \(String(format: "%.2f", statusWaitTime))s")
+        }
+        XCTAssertTrue(exists, "❌ Network status label did not appear")
+        
+        let labelText = statusLabel.label
+        log("📄 Status label text: '\(labelText)'")
+        let hasError = labelText.contains("error") || labelText.contains("fail") || labelText.contains("HTTP Error")
+        XCTAssertTrue(hasError, "❌ Expected failure message, got: \(labelText)")
+        
+        let totalTime = Date().timeIntervalSince(testStartTime)
+        log("✅ Test completed successfully in \(String(format: "%.2f", totalTime))s")
+    }
     // // ========== PHASE 4: Schema Validation ==========
     // print("📱 Phase 4: Starting Schema Validation...")
     
