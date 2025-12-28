@@ -29,128 +29,68 @@ final class DemoAppUITests: XCTestCase {
     }
     
     func testSchemaValidationFlow() throws {
-        print("🚀 Starting testSchemaValidationFlow")
         app.activate()
-        print("✅ App activated")
         
-        // ========== PHASE 1: Network Instrumentation ==========
-        print("📱 Phase 1.1: Looking for 'Network instrumentation' button...")
         let networkInstrumentationButton = app.staticTexts["Network instrumentation"].firstMatch
         let networkButtonExists = networkInstrumentationButton.waitForExistence(timeout: elementTimeout)
-        print("   Network instrumentation button exists: \(networkButtonExists)")
-        if !networkButtonExists {
-            print("   ❌ Available static texts on screen:")
-            for text in app.staticTexts.allElementsBoundByIndex.prefix(20) {
-                if text.exists {
-                    print("      - '\(text.label)'")
-                }
-            }
-        }
         XCTAssertTrue(networkButtonExists, "❌ 'Network instrumentation' button not found")
-        print("✅ Phase 1.1: Found Network instrumentation button")
-        
-        print("📱 Phase 1.2: Tapping Network instrumentation button...")
         networkInstrumentationButton.tap()
         Thread.sleep(forTimeInterval: shortDelay)  // Wait for navigation
-        print("✅ Phase 1.2: Tapped Network instrumentation button")
-
-        print("📱 Phase 1.3: Looking for 'Failing network request' button...")
+        
         let failingNetworkButton = app.staticTexts["Failing network request"].firstMatch
         let failingButtonExists = failingNetworkButton.waitForExistence(timeout: elementTimeout)
-        print("   Failing network request button exists: \(failingButtonExists)")
-        if !failingButtonExists {
-            print("   ❌ Available static texts on Network screen:")
-            for text in app.staticTexts.allElementsBoundByIndex.prefix(20) {
-                if text.exists {
-                    print("      - '\(text.label)'")
-                }
-            }
-        }
         XCTAssertTrue(failingButtonExists, "❌ 'Failing network request' button not found")
-        print("✅ Phase 1.3: Found Failing network request button")
-        
-        print("📱 Phase 1.4: Tapping Failing network request button...")
         failingNetworkButton.tap()
         Thread.sleep(forTimeInterval: networkDelay)  // Wait for network request
-        print("✅ Phase 1.4: Tapped Failing network request button")
-
-        print("📱 Phase 1.5: Looking for 'Successful network request' button...")
+        
         let successfulNetworkButton = app.staticTexts["Successful network request"].firstMatch
         let successfulButtonExists = successfulNetworkButton.waitForExistence(timeout: elementTimeout)
-        print("   Successful network request button exists: \(successfulButtonExists)")
         XCTAssertTrue(successfulButtonExists, "❌ 'Successful network request' button not found")
-        print("✅ Phase 1.5: Found Successful network request button")
-        
-        print("📱 Phase 1.6: Tapping Successful network request button...")
         successfulNetworkButton.tap()
         Thread.sleep(forTimeInterval: networkDelay)  // Wait for network request
-        print("✅ Phase 1.6: Tapped Successful network request button")
-
-        print("📱 Phase 1.7: Looking for Back button...")
+        
         let backButtonFromNetwork = app.buttons["BackButton"].firstMatch
         let backButtonExists = backButtonFromNetwork.waitForExistence(timeout: elementTimeout)
-        print("   Back button exists: \(backButtonExists)")
-        if !backButtonExists {
-            print("   ❌ Available buttons on Network screen:")
-            for button in app.buttons.allElementsBoundByIndex.prefix(20) {
-                if button.exists {
-                    print("      - '\(button.label)'")
-                }
-            }
-        }
         XCTAssertTrue(backButtonExists, "❌ Back button from Network screen not found")
-        print("✅ Phase 1.7: Found Back button")
-        
-        print("📱 Phase 1.8: Tapping Back button...")
         backButtonFromNetwork.tap()
         Thread.sleep(forTimeInterval: shortDelay)  // Wait for navigation
-        print("✅ Phase 1.8: Tapped Back button")
         
-        // Phase 1 complete - test passes here
-        print("✅ Phase 1 (Network Instrumentation) completed successfully")
-    }
-    
-    /*
-    func testSchemaValidationFlow_Phase2() throws {
-        app.activate()
-        
+
         // ========== PHASE 2: Error Instrumentation ==========
-        // Navigate to Error Instrumentation screen
         let errorInstrumentationButton = app.staticTexts["Error instrumentation"].firstMatch
-        XCTAssertTrue(errorInstrumentationButton.waitForExistence(timeout: elementTimeout), "❌ 'Error instrumentation' button not found")
+        let errorInstrumentationExists = errorInstrumentationButton.waitForExistence(timeout: elementTimeout)
+        XCTAssertTrue(errorInstrumentationExists, "❌ 'Error instrumentation' button not found")
         errorInstrumentationButton.tap()
         Thread.sleep(forTimeInterval: shortDelay)  // Wait for navigation
         
         // Trigger "Error" test event
         let errorButton = app.staticTexts["Error"].firstMatch
-        XCTAssertTrue(errorButton.waitForExistence(timeout: elementTimeout), "❌ 'Error' button not found")
+        let errorButtonExists = errorButton.waitForExistence(timeout: elementTimeout)
+        XCTAssertTrue(errorButtonExists, "❌ 'Error' button not found")
         errorButton.tap()
         Thread.sleep(forTimeInterval: shortDelay)  // Wait for event processing
         
-        // Trigger "Stack Trace Error" test event
-//        let stackTraceErrorButton = app.staticTexts["Stack Trace Error"].firstMatch
-//        XCTAssertTrue(stackTraceErrorButton.waitForExistence(timeout: elementTimeout), "❌ 'Stack Trace Error' button not found")
-//        stackTraceErrorButton.tap()
-//        Thread.sleep(forTimeInterval: shortDelay)
-        
         // Trigger "Message Data Error (custom log)" event
         let messageDataErrorButton = app.staticTexts["Message Data Error"].firstMatch
-        XCTAssertTrue(messageDataErrorButton.waitForExistence(timeout: elementTimeout), "❌ 'Message Data Error' button not found")
+        let messageDataErrorButtonExists = messageDataErrorButton.waitForExistence(timeout: elementTimeout)
+        XCTAssertTrue(messageDataErrorButtonExists, "❌ 'Message Data Error' button not found")
         messageDataErrorButton.tap()
         Thread.sleep(forTimeInterval: shortDelay)  // Wait for event processing
         
         // Trigger "Log Error" event
         let logErrorButton = app.staticTexts["Log Error"].firstMatch
-        XCTAssertTrue(logErrorButton.waitForExistence(timeout: elementTimeout), "❌ 'Log Error' button not found")
+        let logErrorButtonExists = messageDataErrorButton.waitForExistence(timeout: elementTimeout)
+        XCTAssertTrue(logErrorButtonExists, "❌ 'Log Error' button not found")
         logErrorButton.tap()
         Thread.sleep(forTimeInterval: shortDelay)  // Wait for event processing
         
         // Go back to main screen
         let backButtonFromError = app.buttons["BackButton"].firstMatch
-        XCTAssertTrue(backButtonFromError.waitForExistence(timeout: elementTimeout), "❌ Back button from Error screen not found")
+        let backButtonFromErrorExists = backButtonFromError.waitForExistence(timeout: elementTimeout)
+        XCTAssertTrue(backButtonFromErrorExists, "❌ Back button from Error screen not found")
         backButtonFromError.tap()
         Thread.sleep(forTimeInterval: shortDelay)  // Wait for navigation
-
+    }
         // // ========== PHASE 3: SDK Functions ==========
         // print("📱 Phase 3: Starting SDK Functions...")
         
@@ -323,6 +263,6 @@ final class DemoAppUITests: XCTestCase {
         // }
         // print("✅ Phase 4 (Schema Validation) completed successfully")
         // print("🎉 All phases completed successfully - test passed!")
-    }
+    
 }
 
