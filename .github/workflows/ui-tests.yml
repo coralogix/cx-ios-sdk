@@ -135,10 +135,14 @@ jobs:
             gem install xcpretty || true
           fi
 
-      - name: Install Fastlane
+      - name: Install/Update Fastlane
         run: |
-          if ! command -v fastlane &> /dev/null; then
-            gem install fastlane || true
+          if command -v fastlane &> /dev/null; then
+            echo "Fastlane is installed, updating to latest version..."
+            gem update fastlane || gem install fastlane
+          else
+            echo "Fastlane not found, installing latest version..."
+            gem install fastlane
           fi
           fastlane --version
 
@@ -390,10 +394,12 @@ jobs:
                     } | "❌ " + .msg + "\n📄 " + .file + ":" + .line'
                     JQ_OUTPUT=$(jq -r "$JQ_QUERY1" "$TEMP_JSON" 2>/dev/null || echo "")
                     
-                    # Clean up the message - remove "XCTAssertTrue failed - " prefix if present
+                    # Clean up the message - remove XCTest assertion prefixes
                     if [ -n "$JQ_OUTPUT" ] && [ "$JQ_OUTPUT" != "null" ] && [ "$JQ_OUTPUT" != "" ]; then
-                      # Remove the "XCTAssertTrue failed - " prefix to show just the actual error message
-                      CLEANED_OUTPUT=$(echo "$JQ_OUTPUT" | sed 's/XCTAssertTrue failed - //g' | sed 's/XCTAssert.*failed - //g')
+                      # Remove common XCTest prefixes to show just the actual error message
+                      # Pattern: "XCTAssertTrue failed - " or "XCTAssert failed: " etc.
+                      # Use simpler pattern: remove everything up to and including "failed - " or "failed: "
+                      CLEANED_OUTPUT=$(echo "$JQ_OUTPUT" | sed -E 's/.*failed[[:space:]]*-[[:space:]]*//g' | sed -E 's/.*failed:[[:space:]]*//g' | sed -E 's/^❌[[:space:]]*❌[[:space:]]*/❌ /g')
                       FAILURE_COUNT=$(echo "$CLEANED_OUTPUT" | grep -c "❌" || echo "0")
                       if [ "$FAILURE_COUNT" -gt 1 ]; then
                         echo "   Found $FAILURE_COUNT failure(s):"
