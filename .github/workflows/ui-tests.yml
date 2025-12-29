@@ -325,157 +325,24 @@ jobs:
             echo "Exit code: $EXIT_CODE"
             echo ""
             
-            # Extract test logs (print statements from test)
-            if [ -f test-output.log ]; then
-              echo "📋 Test Logs (print statements from test):"
-              grep -E "🕐|📱|🔍|✅|❌|👆|⏳|📄|🚀" test-output.log | tail -50 || echo "   No test logs found"
+            # Use parse-test-results.sh to extract and display failure details
+            if [ -f parse-test-results.sh ]; then
+              echo "📊 Parsing test results using parse-test-results.sh..."
               echo ""
-              
-              echo "🔎 Last 150 lines of test output:"
-              tail -n 150 test-output.log
+              bash parse-test-results.sh DerivedData/TestResults.xcresult test-output.log || true
               echo ""
-              
-              echo "🔎 Key error patterns:"
-              grep -iE "error|fail|timeout|assert|unable|not found|did not appear" test-output.log | tail -30 || echo "   No error patterns found"
-            fi
-            
-            # Extract assertion failures from log
-            if [ -f test-output.log ]; then
-              echo ""
-              echo "🔍 Searching for assertion failures in test output log..."
-              
-              # Look for XCTest assertion messages (they often appear in the log)
-              ASSERTION_FAILURES=$(grep -iE "XCTAssert|assertion failed|button not found|not found|did not appear|failed.*assertion" test-output.log 2>/dev/null | head -10 || echo "")
-              if [ -n "$ASSERTION_FAILURES" ]; then
-                echo "   Found assertion-related messages:"
-                echo "$ASSERTION_FAILURES" | sed 's/^/   /'
-              fi
-              
-              # Also look for the actual test print statements (from the test code)
-              TEST_LOGS=$(grep -E "🕐|🔎|✅|❌" test-output.log 2>/dev/null | tail -20 || echo "")
-              if [ -n "$TEST_LOGS" ]; then
-                echo ""
-                echo "   Test execution logs:"
-                echo "$TEST_LOGS" | sed 's/^/   /'
-              fi
-              
-              # Look for specific error patterns that might indicate the failure
-              ERROR_PATTERNS=$(grep -iE "Network instrumentation|button.*not found|element.*not found|waitForExistence.*timeout" test-output.log 2>/dev/null | head -5 || echo "")
-              if [ -n "$ERROR_PATTERNS" ]; then
-                echo ""
-                echo "   Potential error indicators:"
-                echo "$ERROR_PATTERNS" | sed 's/^/   /'
-              fi
-            fi
-            
-            # Extract from xcresult if available
-            if [ -d DerivedData/TestResults.xcresult ]; then
-              echo ""
-              echo "📦 Extracting test failure details from xcresult bundle..."
-              
-              # First, try to get a summary using xcresulttool (more reliable)
-              SUMMARY_OUTPUT=$(xcrun xcresulttool get --format json --path DerivedData/TestResults.xcresult 2>/dev/null | jq -r '.actions._values[0].actionResult.testsRef.id._value // .actions._values[0].actionResult.testsRef.id.value // empty' 2>/dev/null || echo "")
-              
-              TEMP_JSON=$(mktemp)
-              EXTRACTED_ERROR=false
-              
-              # Try legacy API first (required in newer Xcode versions)
-              if xcrun xcresulttool get object --legacy --path DerivedData/TestResults.xcresult --format json > "$TEMP_JSON" 2>/dev/null || \
-                 xcrun xcresulttool get --format json --path DerivedData/TestResults.xcresult > "$TEMP_JSON" 2>/dev/null; then
-                if [ -s "$TEMP_JSON" ]; then
-                  # Try to extract failure details using jq with multiple fallback strategies
-                  if command -v jq &> /dev/null; then
-                    # Strategy 1: Look for testFailureSummaries in the standard location
-                    # Extract ALL failures with proper message parsing
-                    JQ_QUERY1='.. | select(.testFailureSummaries? != null) | .testFailureSummaries[]? | select(.message != null or .messageText != null) | {
-                      msg: (if .messageText != null then (if .messageText | type == "object" then (.messageText._value // .messageText.value // .messageText | tostring) else (.messageText | tostring) end) elif .message != null then (if .message | type == "object" then (.message._value // .message.value // .message | tostring) else (.message | tostring) end) else "Unknown error" end),
-                      file: (if .fileName | type == "object" then (.fileName._value // .fileName.value // "Unknown" | tostring) else (.fileName // "Unknown" | tostring) end),
-                      line: (if .lineNumber | type == "object" then (.lineNumber._value // .lineNumber.value // "?" | tostring) else (.lineNumber // "?" | tostring) end)
-                    } | "❌ " + .msg + "\n📄 " + .file + ":" + .line'
-                    JQ_OUTPUT=$(jq -r "$JQ_QUERY1" "$TEMP_JSON" 2>/dev/null || echo "")
-                    
-                    # Clean up the message - remove XCTest assertion prefixes
-                    if [ -n "$JQ_OUTPUT" ] && [ "$JQ_OUTPUT" != "null" ] && [ "$JQ_OUTPUT" != "" ]; then
-                      # Remove common XCTest prefixes to show just the actual error message
-                      # Pattern: "XCTAssertTrue failed - " or "XCTAssert failed: " etc.
-                      # Use simpler pattern: remove everything up to and including "failed - " or "failed: "
-                      CLEANED_OUTPUT=$(echo "$JQ_OUTPUT" | sed -E 's/.*failed[[:space:]]*-[[:space:]]*//g' | sed -E 's/.*failed:[[:space:]]*//g' | sed -E 's/^❌[[:space:]]*❌[[:space:]]*/❌ /g')
-                      FAILURE_COUNT=$(echo "$CLEANED_OUTPUT" | grep -c "❌" || echo "0")
-                      if [ "$FAILURE_COUNT" -gt 1 ]; then
-                        echo "   Found $FAILURE_COUNT failure(s):"
-                      fi
-                      JQ_OUTPUT="$CLEANED_OUTPUT"
-                    fi
-                    
-                    # Strategy 2: If Strategy 1 didn't work, try looking for issues.testFailureSummaries
-                    if [ -z "$JQ_OUTPUT" ] || [ "$JQ_OUTPUT" = "null" ]; then
-                      JQ_QUERY2='.issues[]? | select(.testFailureSummaries != null) | .testFailureSummaries[]? | select(.message != null) | "❌ " + (if .message | type == "object" then (.message._value // .message.value // .message | tostring) else (.message | tostring) end) + "\n📄 " + (if .fileName | type == "object" then (.fileName._value // .fileName.value // "Unknown" | tostring) else (.fileName // "Unknown" | tostring) end) + ":" + (if .lineNumber | type == "object" then (.lineNumber._value // .lineNumber.value // "?" | tostring) else (.lineNumber // "?" | tostring) end)'
-                      JQ_OUTPUT=$(jq -r "$JQ_QUERY2" "$TEMP_JSON" 2>/dev/null || echo "")
-                    fi
-                    
-                    # Strategy 3: Look for any failure message in the structure
-                    if [ -z "$JQ_OUTPUT" ] || [ "$JQ_OUTPUT" = "null" ]; then
-                      JQ_QUERY3='.. | select(type == "object" and (.message != null or .failureMessage != null)) | "❌ " + (if .message != null then (if .message | type == "object" then (.message._value // .message.value // .message | tostring) else (.message | tostring) end) elif .failureMessage != null then (if .failureMessage | type == "object" then (.failureMessage._value // .failureMessage.value // .failureMessage | tostring) else (.failureMessage | tostring) end) else "Unknown error" end) + "\n📄 " + (if .fileName != null then (if .fileName | type == "object" then (.fileName._value // .fileName.value // "Unknown" | tostring) else (.fileName | tostring) end) else "Unknown" end) + ":" + (if .lineNumber != null then (if .lineNumber | type == "object" then (.lineNumber._value // .lineNumber.value // "?" | tostring) else (.lineNumber | tostring) end) else "?" end)'
-                      JQ_OUTPUT=$(jq -r "$JQ_QUERY3" "$TEMP_JSON" 2>/dev/null | head -3 || echo "")
-                    fi
-                    
-                    # Check if we got output but it's just "Unknown error" - try to get more details
-                    if [ -n "$JQ_OUTPUT" ] && [ "$JQ_OUTPUT" != "null" ] && [ "$JQ_OUTPUT" != "" ]; then
-                      # If the message is "Unknown error", try to extract the raw structure
-                      if echo "$JQ_OUTPUT" | grep -q "Unknown error"; then
-                        echo "   ⚠️  Found failure but message field is empty/null"
-                        echo "   🔍 Attempting to extract raw failure structure..."
-                        RAW_FAILURE=$(jq '.. | select(.testFailureSummaries? != null) | .testFailureSummaries[0]' "$TEMP_JSON" 2>/dev/null || echo "")
-                        if [ -n "$RAW_FAILURE" ] && [ "$RAW_FAILURE" != "null" ]; then
-                          echo "      Raw failure structure:"
-                          echo "$RAW_FAILURE" | jq '.' 2>/dev/null | head -40 | sed 's/^/      /' || echo "$RAW_FAILURE" | head -40 | sed 's/^/      /'
-                        fi
-                        # Still show what we found
-                        echo ""
-                        echo "   Extracted (message may be incomplete):"
-                        echo "$JQ_OUTPUT" | sed 's/^/   /'
-                        EXTRACTED_ERROR=true
-                      else
-                        echo "   ✅ Extracted failure details:"
-                        echo "$JQ_OUTPUT" | sed 's/^/   /'
-                        EXTRACTED_ERROR=true
-                      fi
-                    else
-                      # Debug: Try to find what's actually in the JSON
-                      echo "   🔍 Debug: Inspecting xcresult structure..."
-                      # Check if we can find testFailureSummaries at all
-                      HAS_SUMMARIES=$(jq '.. | select(.testFailureSummaries? != null) | .testFailureSummaries | length' "$TEMP_JSON" 2>/dev/null | head -1 || echo "0")
-                      if [ "$HAS_SUMMARIES" != "0" ] && [ "$HAS_SUMMARIES" != "null" ]; then
-                        echo "      Found $HAS_SUMMARIES test failure summary(ies)"
-                        # Try to extract raw structure to see what fields are available
-                        jq '.. | select(.testFailureSummaries? != null) | .testFailureSummaries[0] | keys' "$TEMP_JSON" 2>/dev/null | sed 's/^/      /' || echo "      (Could not extract structure)"
-                        # Show the actual failure object
-                        echo "      Failure object:"
-                        jq '.. | select(.testFailureSummaries? != null) | .testFailureSummaries[0]' "$TEMP_JSON" 2>/dev/null | head -50 | sed 's/^/      /' || echo "      (Could not extract)"
-                      else
-                        echo "      No testFailureSummaries found in expected location"
-                        echo "      Top-level keys:"
-                        jq 'keys' "$TEMP_JSON" 2>/dev/null | head -10 | sed 's/^/      /' || echo "      (Could not inspect)"
-                      fi
-                    fi
-                  fi
-                fi
-              fi
-              
-              if [ "$EXTRACTED_ERROR" = false ]; then
-                echo "   ⚠️  Could not extract detailed error from xcresult bundle"
-                echo "   (The detailed assertion message is stored in the bundle but requires Xcode to view)"
-                echo ""
-                echo "   To view the full error details:"
-                echo "   1. Download the xcresult bundle from the workflow artifacts"
-                echo "   2. Open it in Xcode: open DerivedData/TestResults.xcresult"
-                echo "   3. Or check the test code for the assertion message"
-              fi
-              
-              rm -f "$TEMP_JSON"
             else
-              echo ""
-              echo "   ⚠️  xcresult bundle not found at DerivedData/TestResults.xcresult"
+              # Fallback if script doesn't exist (shouldn't happen, but just in case)
+              echo "⚠️  parse-test-results.sh not found, showing basic failure info..."
+              if [ -f test-output.log ]; then
+                echo "📋 Last 50 lines of test output:"
+                tail -n 50 test-output.log
+              fi
+              if [ -d DerivedData/TestResults.xcresult ]; then
+                echo ""
+                echo "📦 xcresult bundle available at: DerivedData/TestResults.xcresult"
+                echo "   Download and open in Xcode to view detailed failure information"
+              fi
             fi
             
             echo "============================================================="

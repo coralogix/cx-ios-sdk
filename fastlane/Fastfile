@@ -56,10 +56,45 @@ platform :ios do
       # Run tests with xcodebuild
       # Note: We use sh() instead of scan action to maintain exact compatibility with existing workflow
       # Use bash with pipefail to properly capture xcodebuild exit code (not just tee's exit code)
-      result = sh("bash -c 'set -o pipefail; xcodebuild test-without-building #{build_type} \"#{workspace_file}\" -scheme \"#{scheme}\" -destination \"#{destination}\" -derivedDataPath \"../#{derived_data_path}\" -only-testing:#{test_class} -resultBundlePath \"#{result_bundle_path}\" IPHONEOS_DEPLOYMENT_TARGET=\"#{deployment_target}\" 2>&1 | tee #{test_output_log}; exit ${PIPESTATUS[0]}'")
+      # Catch exceptions to show test output instead of Ruby stack trace
+      begin
+        # Run the command and capture output
+        result = sh("bash -c 'set -o pipefail; xcodebuild test-without-building #{build_type} \"#{workspace_file}\" -scheme \"#{scheme}\" -destination \"#{destination}\" -derivedDataPath \"../#{derived_data_path}\" -only-testing:#{test_class} -resultBundlePath \"#{result_bundle_path}\" IPHONEOS_DEPLOYMENT_TARGET=\"#{deployment_target}\" 2>&1 | tee #{test_output_log}; exit ${PIPESTATUS[0]}'", log: true)
+      rescue => e
+        # Test failed - use parse-test-results.sh to show detailed failure information
+        UI.header("❌ TEST EXECUTION FAILED")
+        
+        # Call the parse-test-results.sh script to extract and display failure details
+        parse_script = File.join(project_root, "parse-test-results.sh")
+        if File.exist?(parse_script)
+          UI.important("Extracting test failure details...")
+          puts ""
+          # Run the parse script with the correct paths (relative to project root)
+          system("bash #{parse_script} #{result_bundle_path} #{test_output_log}")
+          puts ""
+        else
+          # Fallback if script doesn't exist
+          UI.important("Failed Test:")
+          if File.exist?(test_output_log)
+            log_content = File.read(test_output_log)
+            if log_content.match(/Test case '([^']+)' failed/)
+              puts "   #{$1}"
+            end
+            UI.message("Last 20 lines of output:")
+            system("tail -n 20 #{test_output_log}")
+          end
+        end
+        
+        UI.user_error!("Tests failed - see #{test_output_log} for full details")
+      end
       
-      # Check if test failed by looking for "TEST EXECUTE FAILED" in output
-      if result.include?("** TEST EXECUTE FAILED **")
+      # Check if test failed by looking for "TEST EXECUTE FAILED" in output (shouldn't reach here if exception was raised)
+      if result && result.include?("** TEST EXECUTE FAILED **")
+        UI.header("TEST EXECUTION FAILED")
+        if File.exist?(test_output_log)
+          UI.message("Last 30 lines of output:")
+          system("tail -n 30 #{test_output_log}")
+        end
         UI.user_error!("Tests failed - see #{test_output_log} for details")
       end
     end

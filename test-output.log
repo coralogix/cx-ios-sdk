@@ -4,31 +4,31 @@ Command line invocation:
 Build settings from command line:
     IPHONEOS_DEPLOYMENT_TARGET = 18.0
 
-2025-12-29 13:21:44.048 xcodebuild[2717:15902702]  DVTDeviceOperation: Encountered a build number "" that is incompatible with DVTBuildVersion.
-2025-12-29 13:21:44.199 xcodebuild[2717:15902498] [MT] DVTDeviceOperation: Encountered a build number "" that is incompatible with DVTBuildVersion.
-2025-12-29 13:21:44.226 xcodebuild[2717:15902498] [MT] IDERunDestination: Supported platforms for the buildables in the current scheme is empty.
+2025-12-29 15:44:13.536 xcodebuild[25681:16148617]  DVTDeviceOperation: Encountered a build number "" that is incompatible with DVTBuildVersion.
+2025-12-29 15:44:13.595 xcodebuild[25681:16148562] [MT] DVTDeviceOperation: Encountered a build number "" that is incompatible with DVTBuildVersion.
+2025-12-29 15:44:13.610 xcodebuild[25681:16148562] [MT] IDERunDestination: Supported platforms for the buildables in the current scheme is empty.
 Resolve Package Graph
-2025-12-29 13:21:44.705 xcodebuild[2717:15902498] [MT] IDERunDestination: Supported platforms for the buildables in the current scheme is empty.
-2025-12-29 13:21:44.822 xcodebuild[2717:15902498] [MT] IDERunDestination: Supported platforms for the buildables in the current scheme is empty.
+2025-12-29 15:44:13.741 xcodebuild[25681:16148562] [MT] IDERunDestination: Supported platforms for the buildables in the current scheme is empty.
+2025-12-29 15:44:13.850 xcodebuild[25681:16148562] [MT] IDERunDestination: Supported platforms for the buildables in the current scheme is empty.
 
 
 Resolved source packages:
-  AppCheck: https://github.com/google/app-check.git @ 11.2.0
-  gRPC: https://github.com/google/grpc-binary.git @ 1.69.1
   Firebase: https://github.com/firebase/firebase-ios-sdk.git @ 12.7.0
-  PLCrashReporter: https://github.com/microsoft/plcrashreporter @ 1.12.0
-  GoogleAdsOnDeviceConversion: https://github.com/googleads/google-ads-on-device-conversion-ios-sdk @ 3.2.0
-  InteropForGoogle: https://github.com/google/interop-ios-for-google-sdks.git @ 101.0.0
-  GTMSessionFetcher: https://github.com/google/gtm-session-fetcher.git @ 5.0.0
-  GoogleUtilities: https://github.com/google/GoogleUtilities.git @ 8.1.0
   Coralogix: /Users/tomer.haryoffi/Development/cx-ios-sdk @ local
-  nanopb: https://github.com/firebase/nanopb.git @ 2.30910.0
-  leveldb: https://github.com/firebase/leveldb.git @ 1.22.5
-  SwiftProtobuf: https://github.com/apple/swift-protobuf.git @ 1.33.3
+  InteropForGoogle: https://github.com/google/interop-ios-for-google-sdks.git @ 101.0.0
+  GoogleUtilities: https://github.com/google/GoogleUtilities.git @ 8.1.0
   abseil: https://github.com/google/abseil-cpp-binary.git @ 1.2024072200.0
-  GoogleDataTransport: https://github.com/google/GoogleDataTransport.git @ 10.1.0
-  GoogleAppMeasurement: https://github.com/google/GoogleAppMeasurement.git @ 12.5.0
+  gRPC: https://github.com/google/grpc-binary.git @ 1.69.1
   Promises: https://github.com/google/promises.git @ 2.4.0
+  SwiftProtobuf: https://github.com/apple/swift-protobuf.git @ 1.33.3
+  PLCrashReporter: https://github.com/microsoft/plcrashreporter @ 1.12.0
+  AppCheck: https://github.com/google/app-check.git @ 11.2.0
+  GTMSessionFetcher: https://github.com/google/gtm-session-fetcher.git @ 5.0.0
+  GoogleDataTransport: https://github.com/google/GoogleDataTransport.git @ 10.1.0
+  nanopb: https://github.com/firebase/nanopb.git @ 2.30910.0
+  GoogleAdsOnDeviceConversion: https://github.com/googleads/google-ads-on-device-conversion-ios-sdk @ 3.2.0
+  GoogleAppMeasurement: https://github.com/google/GoogleAppMeasurement.git @ 12.5.0
+  leveldb: https://github.com/firebase/leveldb.git @ 1.22.5
 
 Writing result bundle at path:
 	/Users/tomer.haryoffi/Development/cx-ios-sdk/DerivedData/TestResults.xcresult
@@ -36,50 +36,10 @@ Writing result bundle at path:
 --- xcodebuild: WARNING: Using the first of multiple matching destinations:
 { platform:iOS Simulator, arch:arm64, id:07474CEF-748F-453E-BBB8-25964CE26EA6, OS:18.5, name:iPhone 16 }
 { platform:iOS Simulator, arch:x86_64, id:07474CEF-748F-453E-BBB8-25964CE26EA6, OS:18.5, name:iPhone 16 }
-2025-12-29 13:22:21.902 xcodebuild[2717:15902498] [MT] IDERunDestination: Supported platforms for the buildables in the current scheme is empty.
-2025-12-29 13:23:42.726 xcodebuild[2717:15919097]  iOSSimulator: 91E0D20E-81E0-44CF-857D-CB08CDD3188B: Failed to launch app with identifier: com.coralogix.DemoAppUITests.xctrunner and options: {
-    "activate_suspended" = 1;
-    arguments =     (
-    );
-    environment =     {
-        "APP_DISTRIBUTOR_ID_OVERRIDE" = "com.apple.AppStore";
-        "CA_ASSERT_MAIN_THREAD_TRANSACTIONS" = 0;
-        "CA_DEBUG_TRANSACTIONS" = 0;
-        "DYLD_FRAMEWORK_PATH" = "/Users/tomer.haryoffi/Development/cx-ios-sdk/DerivedData/Build/Products/Debug-iphonesimulator:/Users/tomer.haryoffi/Development/cx-ios-sdk/DerivedData/Build/Products/Debug-iphonesimulator/PackageFrameworks:/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks";
-        "DYLD_INSERT_LIBRARIES" = "/usr/lib/libRPAC.dylib:/Library/Developer/CoreSimulator/Volumes/iOS_22F77/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 18.5.simruntime/Contents/Resources/RuntimeRoot/usr/lib/libMainThreadChecker.dylib";
-        "DYLD_LIBRARY_PATH" = "/Users/tomer.haryoffi/Development/cx-ios-sdk/DerivedData/Build/Products/Debug-iphonesimulator:/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib";
-        "LLVM_PROFILE_FILE" = "/var/folders/cc/5ljchrmd7k3c3v_j40s3kclr0000gp/T/com.coralogix.DemoAppUITests.xctrunner/BAB3CD09-DFE2-4E34-9A8C-92D8A411F0E0-2717-00000C6E529B4987/49768E7B-55AF-4355-807D-EF2D70C84E26-%p%c.profraw";
-        NSApplicationQuitWithoutSuddenTermination = YES;
-        NSUnbufferedIO = YES;
-        "OS_ACTIVITY_DT_MODE" = YES;
-        "PERFC_ENABLE_EXTENDED_DIAGNOSTIC_FORMAT" = 1;
-        "PERFC_ENABLE_PROFILE_MODE" = 1;
-        "PERFC_RESET_INSERT_LIBRARIES" = 1;
-        "PERFC_SUPPRESS_SYSTEM_REPORTS" = 1;
-        "RUN_DESTINATION_DEVICE_NAME" = "Clone 2 of iPhone 16";
-        "RUN_DESTINATION_DEVICE_PLATFORM_IDENTIFIER" = "com.apple.platform.iphonesimulator";
-        "RUN_DESTINATION_DEVICE_UDID" = "91E0D20E-81E0-44CF-857D-CB08CDD3188B";
-        "SQLITE_ENABLE_THREAD_ASSERTIONS" = 1;
-        TERM = dumb;
-        "XCODE_SCHEME_NAME" = DemoAppSwift;
-        "XCODE_TEST_PLAN_NAME" = DemoAppSwift;
-        XCTestBundleInjectPath = "/usr/lib/libRPAC.dylib:/Library/Developer/CoreSimulator/Volumes/iOS_22F77/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 18.5.simruntime/Contents/Resources/RuntimeRoot/usr/lib/libMainThreadChecker.dylib";
-        XCTestBundlePath = "PlugIns/DemoAppUITests.xctest";
-        XCTestConfigurationFilePath = "";
-        XCTestSessionIdentifier = "32B87429-6368-4333-992A-5651995A37EA";
-        "__XCODE_BUILT_PRODUCTS_DIR_PATHS" = "/Users/tomer.haryoffi/Development/cx-ios-sdk/DerivedData/Build/Products/Debug-iphonesimulator";
-        "__XPC_DYLD_FRAMEWORK_PATH" = "/Users/tomer.haryoffi/Development/cx-ios-sdk/DerivedData/Build/Products/Debug-iphonesimulator";
-        "__XPC_DYLD_LIBRARY_PATH" = "/Users/tomer.haryoffi/Development/cx-ios-sdk/DerivedData/Build/Products/Debug-iphonesimulator";
-        "__XPC_LLVM_PROFILE_FILE" = "/var/folders/cc/5ljchrmd7k3c3v_j40s3kclr0000gp/T/com.coralogix.DemoAppUITests.xctrunner/BAB3CD09-DFE2-4E34-9A8C-92D8A411F0E0-2717-00000C6E529B4987/49768E7B-55AF-4355-807D-EF2D70C84E26-%p%c.profraw";
-    };
-    stderr = "/dev/ttys011";
-    stdout = "/dev/ttys011";
-    "terminate_running_process" = 1;
-    "wait_for_debugger" = 1;
-} (error = Error Domain=FBSOpenApplicationServiceErrorDomain Code=1 "Simulator device failed to launch com.coralogix.DemoAppUITests.xctrunner." UserInfo={NSLocalizedDescription=Simulator device failed to launch com.coralogix.DemoAppUITests.xctrunner., NSUnderlyingError=0xa669b8a20 {Error Domain=FBSOpenApplicationServiceErrorDomain Code=1 "The request to open "com.coralogix.DemoAppUITests.xctrunner" failed." UserInfo={BSErrorCodeDescription=RequestDenied, NSLocalizedDescription=The request to open "com.coralogix.DemoAppUITests.xctrunner" failed., NSUnderlyingError=0xa669b8ae0 {Error Domain=FBProcessExit Code=64 "The process failed to launch." UserInfo={NSUnderlyingError=0xa669b88d0 {Error Domain=RBSRequestErrorDomain Code=5 "Launch failed." UserInfo=0xa5d858c80 (not displayed)}, BSErrorCodeDescription=launch-failed, NSLocalizedFailureReason=The process failed to launch.}}, FBSOpenApplicationRequestID=0x5faf, NSLocalizedFailureReason=The request was denied by service delegate (SBMainWorkspace).}}, NSLocalizedFailureReason=The request was denied by service delegate (SBMainWorkspace)., FBSOpenApplicationRequestID=0x5faf, SimCallingSelector=launchApplicationWithID:options:pid:error:, BSErrorCodeDescription=RequestDenied})
-2025-12-29 13:23:56.732 xcodebuild[2717:15902498] [MT] IDETestOperationsObserverDebug: 94.825 elapsed -- Testing started completed.
-2025-12-29 13:23:56.732 xcodebuild[2717:15902498] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
-2025-12-29 13:23:56.732 xcodebuild[2717:15902498] [MT] IDETestOperationsObserverDebug: 94.825 sec, +94.825 sec -- end
+2025-12-29 15:44:30.583 xcodebuild[25681:16148562] [MT] IDERunDestination: Supported platforms for the buildables in the current scheme is empty.
+2025-12-29 15:45:38.799 xcodebuild[25681:16148562] [MT] IDETestOperationsObserverDebug: 68.211 elapsed -- Testing started completed.
+2025-12-29 15:45:38.799 xcodebuild[25681:16148562] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2025-12-29 15:45:38.799 xcodebuild[25681:16148562] [MT] IDETestOperationsObserverDebug: 68.211 sec, +68.211 sec -- end
 
 Test session results, code coverage, and logs:
 	/Users/tomer.haryoffi/Development/cx-ios-sdk/DerivedData/TestResults.xcresult
@@ -87,7 +47,5 @@ Test session results, code coverage, and logs:
 ** TEST EXECUTE FAILED **
 
 Testing started
-Test suite 'SanityUITests' started on 'Clone 1 of iPhone 16 - DemoAppUITests-Runner (3625)'
-Test case 'SanityUITests.testAppSanity_mainViewAppearsOnLaunch()' failed on 'Clone 1 of iPhone 16 - DemoAppUITests-Runner (3625)' (16.191 seconds)
-ed on 'Clone 1 of iPhone 16 - DemoAppUITests-Runner (2066)'
-Test case 'SanityUITests.testAppSanity_mainViewAppearsOnLaunch()' failed on 'Clone 1 of iPhone 16 - DemoAppUITests-Runner (2066)' (17.095 seconds)
+Test suite 'SanityUITests' started on 'Clone 1 of iPhone 16 - DemoAppUITests-Runner (26139)'
+Test case 'SanityUITests.testAppSanity_mainViewAppearsOnLaunch()' failed on 'Clone 1 of iPhone 16 - DemoAppUITests-Runner (26139)' (14.780 seconds)
