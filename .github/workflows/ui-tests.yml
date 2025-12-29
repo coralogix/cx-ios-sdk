@@ -382,9 +382,24 @@ jobs:
                   # Try to extract failure details using jq with multiple fallback strategies
                   if command -v jq &> /dev/null; then
                     # Strategy 1: Look for testFailureSummaries in the standard location
-                    # Try multiple ways to access the message field
-                    JQ_QUERY1='.. | select(.testFailureSummaries? != null) | .testFailureSummaries[]? | select(.message != null or .messageText != null) | "❌ " + (if .messageText != null then (if .messageText | type == "object" then (.messageText._value // .messageText.value // .messageText | tostring) else (.messageText | tostring) end) elif .message != null then (if .message | type == "object" then (.message._value // .message.value // .message | tostring) else (.message | tostring) end) else "Unknown error" end) + "\n📄 " + (if .fileName | type == "object" then (.fileName._value // .fileName.value // "Unknown" | tostring) else (.fileName // "Unknown" | tostring) end) + ":" + (if .lineNumber | type == "object" then (.lineNumber._value // .lineNumber.value // "?" | tostring) else (.lineNumber // "?" | tostring) end)'
+                    # Extract ALL failures with proper message parsing
+                    JQ_QUERY1='.. | select(.testFailureSummaries? != null) | .testFailureSummaries[]? | select(.message != null or .messageText != null) | {
+                      msg: (if .messageText != null then (if .messageText | type == "object" then (.messageText._value // .messageText.value // .messageText | tostring) else (.messageText | tostring) end) elif .message != null then (if .message | type == "object" then (.message._value // .message.value // .message | tostring) else (.message | tostring) end) else "Unknown error" end),
+                      file: (if .fileName | type == "object" then (.fileName._value // .fileName.value // "Unknown" | tostring) else (.fileName // "Unknown" | tostring) end),
+                      line: (if .lineNumber | type == "object" then (.lineNumber._value // .lineNumber.value // "?" | tostring) else (.lineNumber // "?" | tostring) end)
+                    } | "❌ " + .msg + "\n📄 " + .file + ":" + .line'
                     JQ_OUTPUT=$(jq -r "$JQ_QUERY1" "$TEMP_JSON" 2>/dev/null || echo "")
+                    
+                    # Clean up the message - remove "XCTAssertTrue failed - " prefix if present
+                    if [ -n "$JQ_OUTPUT" ] && [ "$JQ_OUTPUT" != "null" ] && [ "$JQ_OUTPUT" != "" ]; then
+                      # Remove the "XCTAssertTrue failed - " prefix to show just the actual error message
+                      CLEANED_OUTPUT=$(echo "$JQ_OUTPUT" | sed 's/XCTAssertTrue failed - //g' | sed 's/XCTAssert.*failed - //g')
+                      FAILURE_COUNT=$(echo "$CLEANED_OUTPUT" | grep -c "❌" || echo "0")
+                      if [ "$FAILURE_COUNT" -gt 1 ]; then
+                        echo "   Found $FAILURE_COUNT failure(s):"
+                      fi
+                      JQ_OUTPUT="$CLEANED_OUTPUT"
+                    fi
                     
                     # Strategy 2: If Strategy 1 didn't work, try looking for issues.testFailureSummaries
                     if [ -z "$JQ_OUTPUT" ] || [ "$JQ_OUTPUT" = "null" ]; then
