@@ -335,24 +335,59 @@ jobs:
               grep -iE "error|fail|timeout|assert|unable|not found|did not appear" test-output.log | tail -30 || echo "   No error patterns found"
             fi
             
+            # Extract assertion failures from log
+            if [ -f test-output.log ]; then
+              echo ""
+              echo "🔍 Assertion Failures Found:"
+              ASSERTION_FAILURES=$(grep -iE "XCTAssert|assertion failed|button not found|not found|did not appear" test-output.log 2>/dev/null | head -5 || echo "")
+              if [ -n "$ASSERTION_FAILURES" ]; then
+                echo "$ASSERTION_FAILURES" | sed 's/^/   /'
+              else
+                echo "   (No assertion patterns found in log)"
+              fi
+            fi
+            
             # Extract from xcresult if available
             if [ -d DerivedData/TestResults.xcresult ]; then
               echo ""
-              echo "📦 Extracting test failure details from xcresult..."
+              echo "📦 Extracting test failure details from xcresult bundle..."
               TEMP_JSON=$(mktemp)
-              if xcrun xcresulttool get --format json --path DerivedData/TestResults.xcresult > "$TEMP_JSON" 2>/dev/null; then
-                if command -v jq &> /dev/null; then
-                  echo "   Test failures:"
-                  jq -r '
-                    .. | select(.testFailureSummaries? != null) | 
-                    .testFailureSummaries[]? | 
-                    "   ❌ \(.message._value // .message.value // .message // "Unknown error")\n   📄 \(.fileName._value // .fileName.value // "Unknown"):\(.lineNumber._value // .lineNumber.value // "?")"
-                  ' "$TEMP_JSON" 2>/dev/null || echo "   Could not parse failures"
-                else
-                  echo "   (jq not available, skipping JSON parsing)"
+              EXTRACTED_ERROR=false
+              
+              # Try legacy API first (required in newer Xcode versions)
+              if xcrun xcresulttool get object --legacy --path DerivedData/TestResults.xcresult --format json > "$TEMP_JSON" 2>/dev/null || \
+                 xcrun xcresulttool get --format json --path DerivedData/TestResults.xcresult > "$TEMP_JSON" 2>/dev/null; then
+                if [ -s "$TEMP_JSON" ]; then
+                  # Try to extract failure details using jq
+                  if command -v jq &> /dev/null; then
+                    JQ_OUTPUT=$(jq -r '
+                      .. | select(.testFailureSummaries? != null) | 
+                      .testFailureSummaries[]? | 
+                      "❌ \(.message._value // .message.value // .message // "Unknown error")\n📄 \(.fileName._value // .fileName.value // "Unknown"):\(.lineNumber._value // .lineNumber.value // "?")"
+                    ' "$TEMP_JSON" 2>/dev/null || echo "")
+                    if [ -n "$JQ_OUTPUT" ] && [ "$JQ_OUTPUT" != "null" ]; then
+                      echo "   ✅ Extracted failure details:"
+                      echo "$JQ_OUTPUT" | sed 's/^/   /'
+                      EXTRACTED_ERROR=true
+                    fi
+                  fi
                 fi
               fi
+              
+              if [ "$EXTRACTED_ERROR" = false ]; then
+                echo "   ⚠️  Could not extract detailed error from xcresult bundle"
+                echo "   (The detailed assertion message is stored in the bundle but requires Xcode to view)"
+                echo ""
+                echo "   To view the full error details:"
+                echo "   1. Download the xcresult bundle from the workflow artifacts"
+                echo "   2. Open it in Xcode: open DerivedData/TestResults.xcresult"
+                echo "   3. Or check the test code for the assertion message"
+              fi
+              
               rm -f "$TEMP_JSON"
+            else
+              echo ""
+              echo "   ⚠️  xcresult bundle not found at DerivedData/TestResults.xcresult"
             fi
             
             echo "============================================================="
