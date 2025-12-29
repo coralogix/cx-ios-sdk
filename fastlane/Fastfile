@@ -1,0 +1,68 @@
+# This file contains the fastlane.tools configuration
+# You can find the documentation at https://docs.fastlane.tools
+#
+# For a list of all available actions, check out
+#
+#     https://docs.fastlane.tools/actions
+#
+# For a list of all available plugins, check out
+#
+#     https://docs.fastlane.tools/plugins/available-plugins
+#
+
+require 'fileutils'
+
+default_platform(:ios)
+
+platform :ios do
+  desc "Run UI tests"
+  lane :ui_tests do |options|
+    # Get parameters from environment variables or options
+    workspace = options[:workspace] || ENV["BUILD_PATH_RELATIVE"] || "Example/DemoApp.xcworkspace"
+    scheme = options[:scheme] || ENV["SCHEME"] || "DemoAppSwift"
+    destination = options[:destination] || ENV["DESTINATION_SPEC"]
+    derived_data_path = options[:derived_data_path] || "DerivedData"
+    test_class = options[:test_class] || "DemoAppUITests/SanityUITests/testAppSanity_mainViewAppearsOnLaunch"
+    deployment_target = options[:deployment_target] || ENV["CI_DEPLOYMENT_TARGET"] || "18.0"
+    working_directory = options[:working_directory] || "Example"
+    
+    # Determine if we're using workspace or project
+    build_type = workspace.end_with?(".xcworkspace") ? "-workspace" : "-project"
+    
+    # Extract workspace filename (remove Example/ prefix if present)
+    workspace_file = workspace.include?("/") ? File.basename(workspace) : workspace
+    
+    # Get absolute path to working directory (Fastlane runs from fastlane/ directory)
+    fastfile_dir = File.dirname(File.expand_path(__FILE__))
+    project_root = File.dirname(fastfile_dir)
+    working_dir_path = File.expand_path(working_directory, project_root)
+    
+    # Change to working directory if specified
+    Dir.chdir(working_dir_path) do
+      # Build for testing first (if not already built)
+      unless options[:skip_build]
+        sh("xcodebuild build-for-testing #{build_type} \"#{workspace_file}\" -scheme \"#{scheme}\" -destination \"#{destination}\" -derivedDataPath \"../#{derived_data_path}\" CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY=\"\" IPHONEOS_DEPLOYMENT_TARGET=\"#{deployment_target}\" -jobs $(sysctl -n hw.ncpu)")
+      end
+      
+      # Run tests
+      result_bundle_path = "../#{derived_data_path}/TestResults.xcresult"
+      test_output_log = "../test-output.log"  # Relative to Example/ directory, creates file in root
+      
+      # Remove existing result bundle if it exists
+      if File.exist?(result_bundle_path)
+        FileUtils.rm_rf(result_bundle_path)
+      end
+      
+      # Run tests with xcodebuild
+      # Note: We use sh() instead of scan action to maintain exact compatibility with existing workflow
+      # Use bash with pipefail to properly capture xcodebuild exit code (not just tee's exit code)
+      result = sh("bash -c 'set -o pipefail; xcodebuild test-without-building #{build_type} \"#{workspace_file}\" -scheme \"#{scheme}\" -destination \"#{destination}\" -derivedDataPath \"../#{derived_data_path}\" -only-testing:#{test_class} -resultBundlePath \"#{result_bundle_path}\" IPHONEOS_DEPLOYMENT_TARGET=\"#{deployment_target}\" 2>&1 | tee #{test_output_log}; exit ${PIPESTATUS[0]}'")
+      
+      # Check if test failed by looking for "TEST EXECUTE FAILED" in output
+      if result.include?("** TEST EXECUTE FAILED **")
+        UI.user_error!("Tests failed - see #{test_output_log} for details")
+      end
+    end
+  end
+end
+

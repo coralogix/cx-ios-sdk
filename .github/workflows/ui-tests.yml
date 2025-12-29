@@ -135,6 +135,13 @@ jobs:
             gem install xcpretty || true
           fi
 
+      - name: Install Fastlane
+        run: |
+          if ! command -v fastlane &> /dev/null; then
+            gem install fastlane || true
+          fi
+          fastlane --version
+
       - name: Set destination (auto from xcodebuild)
         run: |
           set -euo pipefail
@@ -283,38 +290,26 @@ jobs:
       - name: Run UI Tests
         run: |
           set -euo pipefail
-          cd Example
 
           CI_DEPLOYMENT_TARGET="18.0"
-          echo "🧪 Running UI tests (deployment target: $CI_DEPLOYMENT_TARGET)"
+          echo "🧪 Running UI tests via Fastlane (deployment target: $CI_DEPLOYMENT_TARGET)"
           echo "⏱️  Start time: $(date)"
 
           set +e
           TEST_START=$(date +%s)
           
-          if command -v xcpretty &> /dev/null; then
-            xcodebuild test-without-building \
-              $BUILD_TYPE "$BUILD_PATH_RELATIVE" \
-              -scheme "$SCHEME" \
-              -destination "$DESTINATION_SPEC" \
-              -derivedDataPath ../DerivedData \
-              -only-testing:DemoAppUITests/DemoAppUITests/testAppSanity_mainViewAppearsOnLaunch \
-              -resultBundlePath ../DerivedData/TestResults.xcresult \
-              IPHONEOS_DEPLOYMENT_TARGET="$CI_DEPLOYMENT_TARGET" \
-              2>&1 | tee ../test-output.log | xcpretty --color --report junit --output ../DerivedData/junit.xml
-            EXIT_CODE=${PIPESTATUS[0]}
-          else
-            xcodebuild test-without-building \
-              $BUILD_TYPE "$BUILD_PATH_RELATIVE" \
-              -scheme "$SCHEME" \
-              -destination "$DESTINATION_SPEC" \
-              -derivedDataPath ../DerivedData \
-              -only-testing:DemoAppUITests/DemoAppUITests/testAppSanity_mainViewAppearsOnLaunch \
-              -resultBundlePath ../DerivedData/TestResults.xcresult \
-              IPHONEOS_DEPLOYMENT_TARGET="$CI_DEPLOYMENT_TARGET" \
-              2>&1 | tee ../test-output.log
-            EXIT_CODE=${PIPESTATUS[0]}
-          fi
+          # Run Fastlane UI tests lane from root (Fastfile is in fastlane/ directory)
+          # Pass workspace path relative to root
+          fastlane ui_tests \
+            workspace:"Example/$BUILD_PATH_RELATIVE" \
+            scheme:"$SCHEME" \
+            destination:"$DESTINATION_SPEC" \
+            derived_data_path:"DerivedData" \
+            test_class:"DemoAppUITests/SanityUITests/testAppSanity_mainViewAppearsOnLaunch" \
+            deployment_target:"$CI_DEPLOYMENT_TARGET" \
+            skip_build:true \
+            working_directory:"Example"
+          EXIT_CODE=$?
           
           TEST_END=$(date +%s)
           TEST_DURATION=$((TEST_END - TEST_START))
@@ -327,25 +322,25 @@ jobs:
             echo ""
             
             # Extract test logs (print statements from test)
-            if [ -f ../test-output.log ]; then
+            if [ -f test-output.log ]; then
               echo "📋 Test Logs (print statements from test):"
-              grep -E "🕐|📱|🔍|✅|❌|👆|⏳|📄|🚀" ../test-output.log | tail -50 || echo "   No test logs found"
+              grep -E "🕐|📱|🔍|✅|❌|👆|⏳|📄|🚀" test-output.log | tail -50 || echo "   No test logs found"
               echo ""
               
-              echo "🔎 Last 150 lines of xcodebuild output:"
-              tail -n 150 ../test-output.log
+              echo "🔎 Last 150 lines of test output:"
+              tail -n 150 test-output.log
               echo ""
               
               echo "🔎 Key error patterns:"
-              grep -iE "error|fail|timeout|assert|unable|not found|did not appear" ../test-output.log | tail -30 || echo "   No error patterns found"
+              grep -iE "error|fail|timeout|assert|unable|not found|did not appear" test-output.log | tail -30 || echo "   No error patterns found"
             fi
             
             # Extract from xcresult if available
-            if [ -d ../DerivedData/TestResults.xcresult ]; then
+            if [ -d DerivedData/TestResults.xcresult ]; then
               echo ""
               echo "📦 Extracting test failure details from xcresult..."
               TEMP_JSON=$(mktemp)
-              if xcrun xcresulttool get --format json --path ../DerivedData/TestResults.xcresult > "$TEMP_JSON" 2>/dev/null; then
+              if xcrun xcresulttool get --format json --path DerivedData/TestResults.xcresult > "$TEMP_JSON" 2>/dev/null; then
                 if command -v jq &> /dev/null; then
                   echo "   Test failures:"
                   jq -r '
