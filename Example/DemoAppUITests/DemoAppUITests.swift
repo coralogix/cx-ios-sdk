@@ -202,7 +202,7 @@ final class DemoAppUITests: XCTestCase {
         for label in allStaticTexts {
             let labelText = label.label
             allLabels.append(labelText)
-            if labelText.contains("All logs are valid - WRONG TEXT!") {
+            if labelText.contains("All logs are valid!") {
                 validationSuccessful = true
             }
         }
