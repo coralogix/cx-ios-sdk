@@ -233,15 +233,6 @@ jobs:
           set +e
           TEST_START=$(date +%s)
 
-          echo "🔎 Available runtimes:"
-          xcrun simctl list runtimes || true
-
-          echo "🔎 Available devices:"
-          xcrun simctl list devices available | head -200 || true
-
-          echo "🔎 Booting simulator (if needed):"
-          xcrun simctl bootstatus "iPhone 16" -b || true  
-          
           xcodebuild test \
             $BUILD_TYPE "$BUILD_PATH_RELATIVE" \
             -scheme "$SCHEME" \
