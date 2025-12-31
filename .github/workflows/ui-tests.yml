@@ -262,21 +262,31 @@ jobs:
             $BUILD_TYPE "$BUILD_PATH_RELATIVE" \
             -scheme "$SCHEME" \
             -destination "$DESTINATION_SPEC" \
+            -sdk iphonesimulator \
             -derivedDataPath ../DerivedData \
             -resultBundlePath ../DerivedData/TestResults.xcresult \
             2>&1 | tee ../test-output.log | xcpretty 
 
           EXIT_CODE=${PIPESTATUS[0]}
+          PIPESTAT=("${PIPESTATUS[@]}")
+
+          echo "PIPESTATUS: ${PIPESTAT[*]}"
           echo "EXIT_CODE: $EXIT_CODE"
 
           echo "🔎 Checking how many tests were executed..."
-          
+
           grep -E "Executed [0-9]+ tests" ../test-output.log || true
 
           if grep -q "Executed 0 tests" ../test-output.log; then
              echo "❌ No tests were executed → failing CI"
              exit 1
           fi
+
+          echo "🔎 Last 120 lines of xcodebuild output:"
+          tail -n 120 ../test-output.log
+
+          echo "🔎 Key error lines:"
+          grep -iE "error:|failed|unable|No devices|destination|Simulator|xctest|not found|timed out" ../test-output.log | tail -50 || true
 
           if [ "$EXIT_CODE" -ne 0 ]; then
              echo "❌ Tests failed"
