@@ -243,12 +243,19 @@ jobs:
             -maximum-concurrent-test-simulator-destinations 1 \
             -resultBundlePath ../DerivedData/TestResults.xcresult \
             2>&1 | tee ../test-output.log | xcpretty 
-
+          
+        
           EXIT_CODE=${PIPESTATUS[0]}
           PIPESTAT=("${PIPESTATUS[@]}")
 
           echo "PIPESTATUS: ${PIPESTAT[*]}"
           echo "EXIT_CODE: $EXIT_CODE"
+
+          echo "🔎 Last simulator crash logs:"
+          ls -lt ~/Library/Logs/DiagnosticReports | head -20 || true
+
+          echo "🔎 App / Runner crash logs (if any):"
+          ls -lt ~/Library/Logs/DiagnosticReports | grep -E "DemoApp|DemoAppUITests|XCTRunner|SpringBoard|backboardd" | head -50 || true
 
           echo "🔎 Checking how many tests were executed..."
 

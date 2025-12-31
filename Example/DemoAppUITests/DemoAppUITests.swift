@@ -54,7 +54,7 @@ final class DemoAppUITests: XCTestCase {
     func testSchemaValidationFlow() throws {
         app.activate()
         
-        let networkInstrumentationButton = app.staticTexts["Network instrumentation"].firstMatch
+        let networkInstrumentationButton = app.staticTexts["Network instrumentation6546345"].firstMatch
         let networkButtonExists = networkInstrumentationButton.waitForExistence(timeout: elementTimeout)
         XCTAssertTrue(networkButtonExists, "❌ 'Network instrumentation' button not found")
         networkInstrumentationButton.tap()
