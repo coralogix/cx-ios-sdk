@@ -112,9 +112,7 @@ jobs:
           echo "📱 Available iOS Simulators:"
           xcrun simctl list devices available | grep -E "iPhone|iPad" | head -20 || true
           echo ""
-          echo "📱 iOS 18.5+ Simulators:"
-          xcrun simctl list devices available | grep -E "iPhone|iPad" | grep -E "18\.[5-9]|19\." || echo "No iOS 18.5+ simulators found"
-
+     
       - name: Set build configuration
         run: |
           if [ -f "Example/DemoApp.xcworkspace/contents.xcworkspacedata" ]; then
@@ -233,48 +231,26 @@ jobs:
           echo "✅ Created placeholder GoogleService-Info.plist (app will skip Firebase init)"
           ls -la GoogleService-Info.plist
 
-      - name: Build for testing (with cache)
-        uses: actions/cache@v4
-        id: xcode-cache
-        with:
-          path: |
-            ~/Library/Developer/Xcode/DerivedData
-          key: xcode-${{ runner.os }}-${{ hashFiles('**/Podfile.lock', '**/Package.resolved', '**/*.xcodeproj/project.pbxproj', '**/*.xcworkspace/contents.xcworkspacedata') }}
-          restore-keys: |
-            xcode-${{ runner.os }}-
-            xcode-
-
       - name: Build for testing
         run: |
           set -euo pipefail
           cd Example
 
           CI_DEPLOYMENT_TARGET="18.0"
-          echo "🔨 Building for testing..."
+          echo "🔨 Building for testing (simulator only)..."
           BUILD_START=$(date +%s)
 
-          if command -v xcpretty &> /dev/null; then
-            xcodebuild build-for-testing \
-              $BUILD_TYPE "$BUILD_PATH_RELATIVE" \
-              -scheme "$SCHEME" \
-              -destination "$DESTINATION_SPEC" \
-              -derivedDataPath ../DerivedData \
-              CODE_SIGNING_ALLOWED=NO \
-              CODE_SIGN_IDENTITY="" \
-              IPHONEOS_DEPLOYMENT_TARGET="$CI_DEPLOYMENT_TARGET" \
-              -jobs $(sysctl -n hw.ncpu) \
-              | xcpretty --color || cat
-          else
-            xcodebuild build-for-testing \
-              $BUILD_TYPE "$BUILD_PATH_RELATIVE" \
-              -scheme "$SCHEME" \
-              -destination "$DESTINATION_SPEC" \
-              -derivedDataPath ../DerivedData \
-              CODE_SIGNING_ALLOWED=NO \
-              CODE_SIGN_IDENTITY="" \
-              IPHONEOS_DEPLOYMENT_TARGET="$CI_DEPLOYMENT_TARGET" \
-              -jobs $(sysctl -n hw.ncpu)
-          fi
+          xcodebuild build-for-testing \
+            $BUILD_TYPE "$BUILD_PATH_RELATIVE" \
+            -scheme "$SCHEME" \
+            -sdk iphonesimulator \
+            -destination "$DESTINATION_SPEC" \
+            -derivedDataPath ../DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGN_IDENTITY="" \
+            IPHONEOS_DEPLOYMENT_TARGET="$CI_DEPLOYMENT_TARGET" \
+            -jobs $(sysctl -n hw.ncpu) \
+            | xcpretty --color || cat
 
           BUILD_END=$(date +%s)
           BUILD_DURATION=$((BUILD_END - BUILD_START))
@@ -292,29 +268,16 @@ jobs:
           set +e
           TEST_START=$(date +%s)
           
-          if command -v xcpretty &> /dev/null; then
-            xcodebuild test-without-building \
-              $BUILD_TYPE "$BUILD_PATH_RELATIVE" \
-              -scheme "$SCHEME" \
-              -destination "$DESTINATION_SPEC" \
-              -derivedDataPath ../DerivedData \
-              -only-testing:DemoAppUITests/DemoAppUITests/testAppSanity_mainViewAppearsOnLaunch \
-              -resultBundlePath ../DerivedData/TestResults.xcresult \
-              IPHONEOS_DEPLOYMENT_TARGET="$CI_DEPLOYMENT_TARGET" \
-              2>&1 | tee ../test-output.log | xcpretty --color --report junit --output ../DerivedData/junit.xml
-            EXIT_CODE=${PIPESTATUS[0]}
-          else
-            xcodebuild test-without-building \
-              $BUILD_TYPE "$BUILD_PATH_RELATIVE" \
-              -scheme "$SCHEME" \
-              -destination "$DESTINATION_SPEC" \
-              -derivedDataPath ../DerivedData \
-              -only-testing:DemoAppUITests/DemoAppUITests/testAppSanity_mainViewAppearsOnLaunch \
-              -resultBundlePath ../DerivedData/TestResults.xcresult \
-              IPHONEOS_DEPLOYMENT_TARGET="$CI_DEPLOYMENT_TARGET" \
-              2>&1 | tee ../test-output.log
-            EXIT_CODE=${PIPESTATUS[0]}
-          fi
+          xcodebuild test-without-building \
+            $BUILD_TYPE "$BUILD_PATH_RELATIVE" \
+            -scheme "$SCHEME" \
+            -destination "$DESTINATION_SPEC" \
+            -derivedDataPath ../DerivedData \
+            -only-testing:DemoAppUITests/DemoAppUITests/testAppSanity_mainViewAppearsOnLaunch \
+            -resultBundlePath ../DerivedData/TestResults.xcresult \
+            IPHONEOS_DEPLOYMENT_TARGET="$CI_DEPLOYMENT_TARGET" \
+            2>&1 | tee ../test-output.log | xcpretty --color --report junit --output ../DerivedData/junit.xml
+          EXIT_CODE=${PIPESTATUS[0]}
           
           TEST_END=$(date +%s)
           TEST_DURATION=$((TEST_END - TEST_START))
