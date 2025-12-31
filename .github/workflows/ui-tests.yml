@@ -252,8 +252,7 @@ jobs:
           set -euo pipefail
           cd Example
 
-          CI_DEPLOYMENT_TARGET="18.0"
-          echo "🧪 Running UI tests (deployment target: $CI_DEPLOYMENT_TARGET)"
+          echo "🧪 Running UI tests" 
           echo "⏱️  Start time: $(date)"
 
           set +e
@@ -264,29 +263,24 @@ jobs:
             -scheme "$SCHEME" \
             -destination "$DESTINATION_SPEC" \
             -derivedDataPath ../DerivedData \
-            -only-testing:DemoAppUITests/DemoAppUITests/testAppSanity_mainViewAppearsOnLaunch \
             -resultBundlePath ../DerivedData/TestResults.xcresult \
-            -verbose \
-            IPHONEOS_DEPLOYMENT_TARGET="$CI_DEPLOYMENT_TARGET" \
-            2>&1 | tee ../test-output.log | xcpretty --color --report junit --output ../DerivedData/junit.xml
+            2>&1 | tee ../test-output.log | xcpretty 
 
           EXIT_CODE=${PIPESTATUS[0]}
-          PIPESTAT=("${PIPESTATUS[@]}")
-
-          TEST_END=$(date +%s)
-          TEST_DURATION=$((TEST_END - TEST_START))
-          echo "⏱️  Test duration: ${TEST_DURATION}s ($(($TEST_DURATION / 60))m $(($TEST_DURATION % 60))s)"
-
-          echo "PIPESTATUS: ${PIPESTAT[*]}"
           echo "EXIT_CODE: $EXIT_CODE"
-          grep -E "Test Suite 'All tests'|Executed [0-9]+ tests|\\*\\* TEST " -n ../test-output.log | tail -50 || true
+
+          echo "🔎 Checking how many tests were executed..."
+          
+          grep -E "Executed [0-9]+ tests" ../test-output.log || true
+
+          if grep -q "Executed 0 tests" ../test-output.log; then
+             echo "❌ No tests were executed → failing CI"
+             exit 1
+          fi
 
           if [ "$EXIT_CODE" -ne 0 ]; then
-            echo ""
-            echo "==================== ❌ TEST FAILURE DETAILS ===================="
-            echo "Exit code: $EXIT_CODE"
-            echo "============================================================="
-            exit "$EXIT_CODE"
+             echo "❌ Tests failed"
+             exit "$EXIT_CODE"
           fi
 
           echo "✅ Tests passed!"
