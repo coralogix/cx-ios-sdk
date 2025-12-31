@@ -266,6 +266,7 @@ jobs:
             -derivedDataPath ../DerivedData \
             -only-testing:DemoAppUITests/DemoAppUITests/testAppSanity_mainViewAppearsOnLaunch \
             -resultBundlePath ../DerivedData/TestResults.xcresult \
+            -verbose \
             IPHONEOS_DEPLOYMENT_TARGET="$CI_DEPLOYMENT_TARGET" \
             2>&1 | tee ../test-output.log | xcpretty --color --report junit --output ../DerivedData/junit.xml
           EXIT_CODE=${PIPESTATUS[0]}
@@ -274,31 +275,7 @@ jobs:
           TEST_DURATION=$((TEST_END - TEST_START))
           echo "⏱️  Test duration: ${TEST_DURATION}s ($(($TEST_DURATION / 60))m $(($TEST_DURATION % 60))s)"
 
-          # Show detailed xcodebuild test logs with timing information
-          if [ -f ../test-output.log ]; then
-            echo ""
-            echo "==================== 📋 DETAILED TEST EXECUTION LOGS ===================="
-            echo "Showing xcodebuild test execution logs with timing information:"
-            echo ""
-            # Extract test execution section - show from "Interface orientation" or "Test Suite" 
-            # through the end of test execution (contains all "t = " timing lines)
-            if grep -q "Interface orientation\|Test Suite.*started" ../test-output.log; then
-              # Find the start line and show everything from there
-              START_LINE=$(grep -n "Interface orientation\|Test Suite.*started" ../test-output.log | head -1 | cut -d: -f1)
-              if [ -n "$START_LINE" ]; then
-                # Show from start line to end (or last 1000 lines if file is huge)
-                tail -n +"$START_LINE" ../test-output.log | head -n 1000
-              else
-                # Fallback: show lines with timing patterns
-                grep -E "^    t =|^Test Suite|^Test Case|^Executed|^📱|^🕐" ../test-output.log
-              fi
-            else
-              # Show last 1000 lines which should contain test execution
-              tail -n 1000 ../test-output.log
-            fi
-            echo ""
-            echo "============================================================="
-          fi
+          
 
           if [ "$EXIT_CODE" -ne 0 ]; then
             echo ""
