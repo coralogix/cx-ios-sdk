@@ -222,31 +222,6 @@ jobs:
           echo "✅ Created placeholder GoogleService-Info.plist (app will skip Firebase init)"
           ls -la GoogleService-Info.plist
 
-      - name: Build for testing
-        run: |
-          set -euo pipefail
-          cd Example
-
-          CI_DEPLOYMENT_TARGET="18.0"
-          echo "🔨 Building for testing (simulator only)..."
-          BUILD_START=$(date +%s)
-
-          xcodebuild build-for-testing \
-            $BUILD_TYPE "$BUILD_PATH_RELATIVE" \
-            -scheme "$SCHEME" \
-            -sdk iphonesimulator \
-            -destination "$DESTINATION_SPEC" \
-            -derivedDataPath ../DerivedData \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGN_IDENTITY="" \
-            IPHONEOS_DEPLOYMENT_TARGET="$CI_DEPLOYMENT_TARGET" \
-            -jobs $(sysctl -n hw.ncpu) \
-            | xcpretty --color || cat
-
-          BUILD_END=$(date +%s)
-          BUILD_DURATION=$((BUILD_END - BUILD_START))
-          echo "✅ Build completed in ${BUILD_DURATION}s ($(($BUILD_DURATION / 60))m $(($BUILD_DURATION % 60))s)"
-
       - name: Run UI Tests
         run: |
           set -euo pipefail
@@ -258,12 +233,23 @@ jobs:
           set +e
           TEST_START=$(date +%s)
 
+          echo "🔎 Available runtimes:"
+          xcrun simctl list runtimes || true
+
+          echo "🔎 Available devices:"
+          xcrun simctl list devices available | head -200 || true
+
+          echo "🔎 Booting simulator (if needed):"
+          xcrun simctl bootstatus "iPhone 16" -b || true  
+          
           xcodebuild test \
             $BUILD_TYPE "$BUILD_PATH_RELATIVE" \
             -scheme "$SCHEME" \
             -destination "$DESTINATION_SPEC" \
             -sdk iphonesimulator \
             -derivedDataPath ../DerivedData \
+            -parallel-testing-enabled NO \
+            -maximum-concurrent-test-simulator-destinations 1 \
             -resultBundlePath ../DerivedData/TestResults.xcresult \
             2>&1 | tee ../test-output.log | xcpretty 
 
