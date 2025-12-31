@@ -54,7 +54,7 @@ final class DemoAppUITests: XCTestCase {
     func testSchemaValidationFlow() throws {
         app.activate()
         
-        let networkInstrumentationButton = app.staticTexts["Network "].firstMatch
+        let networkInstrumentationButton = app.staticTexts["Network instrumentation"].firstMatch
         let networkButtonExists = networkInstrumentationButton.waitForExistence(timeout: elementTimeout)
         XCTAssertTrue(networkButtonExists, "❌ 'Network instrumentation' button not found")
         networkInstrumentationButton.tap()
@@ -175,7 +175,7 @@ final class DemoAppUITests: XCTestCase {
             let allTexts = app.staticTexts.allElementsBoundByIndex
             for text in allTexts {
                 let label = text.label
-                if label.contains("Validation Failed") || label.contains("Validation Successful") || label.contains("Validation Complete") {
+                if label.contains("Validation Failed") || label.contains("All logs are valid!") || label.contains("Validation Complete") {
                     validationComplete = true
                     print("   Found validation result indicator: \(label)")
                     break
@@ -193,42 +193,38 @@ final class DemoAppUITests: XCTestCase {
         }
         
         let allStaticTexts = app.staticTexts.allElementsBoundByIndex
-        var validationFailed = false
-        var failureDetails: [String] = []
-        
+        var validationSuccessful = false
+        var allLabels: [String] = []
+
         for label in allStaticTexts {
             let labelText = label.label
-            if labelText.contains("Validation Failed") {
-                validationFailed = true
-                failureDetails.append(labelText)
+            allLabels.append(labelText)
+            if labelText.contains("All logs are valid!") {
+                validationSuccessful = true
             }
         }
-        
-        if validationFailed {
-            for detail in failureDetails {
-                print("   - \(detail)")
-            }
-            
+
+        if !validationSuccessful {
+            print("❌ 'All logs are valid!' not found. All visible labels:")
+
             // Print all visible text views and text fields that might contain response data
             for textView in app.textViews.allElementsBoundByIndex {
                 if textView.exists {
                     print("   TextView: \(textView.value as? String ?? "(empty)")")
                 }
             }
-            
+
             for textField in app.textFields.allElementsBoundByIndex {
                 if textField.exists {
                     print("   TextField: \(textField.value as? String ?? "(empty)")")
                 }
             }
-            
-            for (index, label) in allStaticTexts.enumerated() {
-                if label.exists {
-                    print("   [\(index)]: \(label.label)")
-                }
+
+            for (index, labelText) in allLabels.enumerated() {
+                print("   [\(index)]: \(labelText)")
             }
-            
-            XCTFail("❌ Validation Failed appeared in the UI - see console log for details")
+
+            XCTFail("❌ Expected 'All logs are valid!' but it was not found - see console log for details")
         }
     }
 }
