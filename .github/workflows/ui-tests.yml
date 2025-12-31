@@ -258,11 +258,10 @@ jobs:
           set +e
           TEST_START=$(date +%s)
 
-          xcodebuild test \
+          xcodebuild test-without-building \
             $BUILD_TYPE "$BUILD_PATH_RELATIVE" \
             -scheme "$SCHEME" \
             -destination "$DESTINATION_SPEC" \
-            -sdk iphonesimulator \
             -derivedDataPath ../DerivedData \
             -resultBundlePath ../DerivedData/TestResults.xcresult \
             2>&1 | tee ../test-output.log | xcpretty 
