@@ -264,6 +264,7 @@ jobs:
             -destination "$DESTINATION_SPEC" \
             -derivedDataPath ../DerivedData \
             -resultBundlePath ../DerivedData/TestResults.xcresult \
+            -parallel-testing-enabled NO \
             2>&1 | tee ../test-output.log | xcpretty 
 
           EXIT_CODE=${PIPESTATUS[0]}
