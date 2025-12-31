@@ -97,34 +97,13 @@ jobs:
             exit 1
           fi
 
-      - name: List available schemes
-        run: |
-          cd Example
-          if [ -f "DemoApp.xcworkspace/contents.xcworkspacedata" ]; then
-            xcodebuild -list -workspace DemoApp.xcworkspace
-          else
-            xcodebuild -list -project DemoApp.xcodeproj
-          fi
-
       - name: List available iOS simulators
         run: |
           set -euo pipefail
           echo "📱 Available iOS Simulators:"
           xcrun simctl list devices available | grep -E "iPhone|iPad" | head -20 || true
           echo ""
-          echo "📱 iOS 18.5+ Simulators:"
-          xcrun simctl list devices available | grep -E "iPhone|iPad" | grep -E "18\.[5-9]|19\." || echo "No iOS 18.5+ simulators found"
-
-      - name: Boot simulator (simple)
-        run: |
-          set -euo pipefail
-          echo "Booting a simulator (best-effort)..."
-          # Try to boot iPhone 16 or newer first
-          xcrun simctl boot "iPhone 16" 2>/dev/null || \
-          xcrun simctl boot "iPhone 15" 2>/dev/null || true
-          sleep 5
-          xcrun simctl list devices booted || true
-
+     
       - name: Set build configuration
         run: |
           if [ -f "Example/DemoApp.xcworkspace/contents.xcworkspacedata" ]; then
@@ -139,7 +118,7 @@ jobs:
           fi
           echo "SCHEME=DemoAppSwift" >> $GITHUB_ENV
 
-      - name: Install xcpretty (optional)
+      - name: Install xcpretty 
         run: |
           if ! command -v xcpretty &> /dev/null; then
             gem install xcpretty || true
@@ -187,7 +166,38 @@ jobs:
           echo "✅ Selected simulator: $NAME ($OS) - deployment target will be overridden to 18.0 for CI"
 
           echo "DESTINATION_SPEC=platform=iOS Simulator,name=$NAME,OS=$OS" >> $GITHUB_ENV
+          echo "SIMULATOR_NAME=$NAME" >> $GITHUB_ENV
           echo "🎯 Final destination spec: platform=iOS Simulator,name=$NAME,OS=$OS"
+
+      - name: Boot simulator (ensure ready)
+        run: |
+          set -euo pipefail
+          echo "📱 Ensuring simulator is booted and ready..."
+          
+          # Use the simulator name from destination selection
+          if [ -n "${SIMULATOR_NAME:-}" ]; then
+            echo "   Attempting to boot: $SIMULATOR_NAME"
+            xcrun simctl boot "$SIMULATOR_NAME" 2>/dev/null || echo "   Simulator already booted or booting..."
+          else
+            # Fallback: try common device names
+            echo "   Attempting to boot iPhone 16..."
+            xcrun simctl boot "iPhone 16" 2>/dev/null || \
+            xcrun simctl boot "iPhone 15" 2>/dev/null || echo "   Could not boot simulator by name"
+          fi
+          
+          # Wait for simulator to be fully booted (reduced from 5s + 3s)
+          echo "   Waiting for simulator to be ready..."
+          sleep 3
+          
+          # Verify simulator is booted
+          BOOTED=$(xcrun simctl list devices booted | grep -i "iPhone" | head -1 || echo "")
+          if [ -z "$BOOTED" ]; then
+            echo "   ⚠️ No booted iPhone simulator found, but continuing..."
+          else
+            echo "   ✅ Booted simulator: $BOOTED"
+          fi
+          
+          xcrun simctl list devices booted || true
 
       - name: Generate envs.swift (CI)
         run: |
@@ -208,7 +218,7 @@ jobs:
           # The app will detect it's missing and skip Firebase initialization
           # Alternative: Store a real test Firebase project plist as a secret and use:
           # echo "${{ secrets.FIREBASE_TEST_PLIST }}" > GoogleService-Info.plist
-          printf '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0">\n<dict>\n  <key>CLIENT_ID</key>\n  <string>CI_DUMMY_CLIENT_ID</string>\n  <key>REVERSED_CLIENT_ID</key>\n  <string>CI_DUMMY_REVERSED_CLIENT_ID</string>\n  <key>API_KEY</key>\n  <string>CI_DUMMY_API_KEY</string>\n  <key>GCM_SENDER_ID</key>\n  <string>123456789</string>\n  <key>PLIST_VERSION</key>\n  <string>1</string>\n  <key>BUNDLE_ID</key>\n  <string>com.coralogix.DemoAppSwift</string>\n  <key>PROJECT_ID</key>\n  <string>ci-dummy-project</string>\n  <key>STORAGE_BUCKET</key>\n  <string>ci-dummy-project.appspot.com</string>\n  <key>IS_ADS_ENABLED</key>\n  <false/>\n  <key>IS_ANALYTICS_ENABLED</key>\n  <false/>\n  <key>IS_APPINVITE_ENABLED</key>\n  <true/>\n  <key>IS_GCM_ENABLED</key>\n  <true/>\n  <key>IS_SIGNIN_ENABLED</key>\n  <true/>\n  <key>GOOGLE_APP_ID</key>\n  <string>1:123456789:ios:abcdef123456</string>\n</dict>\n</plist>\n' > GoogleService-Info.plist
+          printf '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0">\n<dict>\n  <key>API_KEY</key>\n  <string>AIzaSyAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA</string>\n  <key>GCM_SENDER_ID</key>\n  <string>000000000000</string>\n  <key>PLIST_VERSION</key>\n  <string>1</string>\n  <key>BUNDLE_ID</key>\n  <string>com.coralogix.DemoAppSwift</string>\n  <key>PROJECT_ID</key>\n  <string>placeholder-project</string>\n  <key>STORAGE_BUCKET</key>\n  <string>placeholder-project.appspot.com</string>\n  <key>IS_ADS_ENABLED</key>\n  <false/>\n  <key>IS_ANALYTICS_ENABLED</key>\n  <false/>\n  <key>IS_APPINVITE_ENABLED</key>\n  <false/>\n  <key>IS_GCM_ENABLED</key>\n  <false/>\n  <key>IS_SIGNIN_ENABLED</key>\n  <false/>\n  <key>GOOGLE_APP_ID</key>\n  <string>1:000000000000:ios:0000000000000000000000</string>\n</dict>\n</plist>\n' > GoogleService-Info.plist
           echo "✅ Created placeholder GoogleService-Info.plist (app will skip Firebase init)"
           ls -la GoogleService-Info.plist
 
@@ -217,204 +227,71 @@ jobs:
           set -euo pipefail
           cd Example
 
-          echo "🔨 Building for testing with scheme: $SCHEME"
-          echo "🎯 Destination: $DESTINATION_SPEC"
-          
-          # Override deployment target for CI to use a generic minimum version
-          # This ensures compatibility with available simulators regardless of device type
           CI_DEPLOYMENT_TARGET="18.0"
-          echo "📱 Overriding IPHONEOS_DEPLOYMENT_TARGET to $CI_DEPLOYMENT_TARGET for CI compatibility"
+          echo "🔨 Building for testing (simulator only)..."
+          BUILD_START=$(date +%s)
 
-          if command -v xcpretty &> /dev/null; then
-            xcodebuild build-for-testing \
-              $BUILD_TYPE "$BUILD_PATH_RELATIVE" \
-              -scheme "$SCHEME" \
-              -destination "$DESTINATION_SPEC" \
-              -derivedDataPath ../DerivedData \
-              CODE_SIGNING_ALLOWED=NO \
-              CODE_SIGN_IDENTITY="" \
-              IPHONEOS_DEPLOYMENT_TARGET="$CI_DEPLOYMENT_TARGET" \
-              | xcpretty --color || cat
-          else
-            xcodebuild build-for-testing \
-              $BUILD_TYPE "$BUILD_PATH_RELATIVE" \
-              -scheme "$SCHEME" \
-              -destination "$DESTINATION_SPEC" \
-              -derivedDataPath ../DerivedData \
-              CODE_SIGNING_ALLOWED=NO \
-              CODE_SIGN_IDENTITY="" \
-              IPHONEOS_DEPLOYMENT_TARGET="$CI_DEPLOYMENT_TARGET"
-          fi
+          xcodebuild build-for-testing \
+            $BUILD_TYPE "$BUILD_PATH_RELATIVE" \
+            -scheme "$SCHEME" \
+            -sdk iphonesimulator \
+            -destination "$DESTINATION_SPEC" \
+            -derivedDataPath ../DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGN_IDENTITY="" \
+            IPHONEOS_DEPLOYMENT_TARGET="$CI_DEPLOYMENT_TARGET" \
+            -jobs $(sysctl -n hw.ncpu) \
+            | xcpretty --color || cat
+
+          BUILD_END=$(date +%s)
+          BUILD_DURATION=$((BUILD_END - BUILD_START))
+          echo "✅ Build completed in ${BUILD_DURATION}s ($(($BUILD_DURATION / 60))m $(($BUILD_DURATION % 60))s)"
 
       - name: Run UI Tests
         run: |
           set -euo pipefail
           cd Example
 
-          echo "🧪 Running UI tests with scheme: $SCHEME"
-          echo "🎯 Destination: $DESTINATION_SPEC"
-          
-          # Override deployment target for CI to use a generic minimum version
-          CI_DEPLOYMENT_TARGET="18.0"
-          echo "📱 Using IPHONEOS_DEPLOYMENT_TARGET=$CI_DEPLOYMENT_TARGET for test execution"
-          
-          # Test takes ~69s locally but may be slower in CI due to network/validation API
-          # Set longer timeout for CI environment
-          export XCODE_TEST_TIMEOUT=600  # 10 minutes for CI
+          echo "🧪 Running UI tests" 
+          echo "⏱️  Start time: $(date)"
 
-          # Run tests and capture exit code properly
-          # Temporarily disable exit on error to capture exit code from pipeline
           set +e
-          EXIT_CODE=0
-          
-          if command -v xcpretty &> /dev/null; then
-            xcodebuild test-without-building \
-              $BUILD_TYPE "$BUILD_PATH_RELATIVE" \
-              -scheme "$SCHEME" \
-              -destination "$DESTINATION_SPEC" \
-              -derivedDataPath ../DerivedData \
-              -only-testing:DemoAppUITests/DemoAppUITests/testSchemaValidationFlow \
-              -resultBundlePath ../DerivedData/TestResults.xcresult \
-              IPHONEOS_DEPLOYMENT_TARGET="$CI_DEPLOYMENT_TARGET" \
-              2>&1 | tee ../test-output.log | xcpretty --color --report junit --output ../DerivedData/junit.xml
-            EXIT_CODE=${PIPESTATUS[0]}
-          else
-            xcodebuild test-without-building \
-              $BUILD_TYPE "$BUILD_PATH_RELATIVE" \
-              -scheme "$SCHEME" \
-              -destination "$DESTINATION_SPEC" \
-              -derivedDataPath ../DerivedData \
-              -only-testing:DemoAppUITests/DemoAppUITests/testSchemaValidationFlow \
-              -resultBundlePath ../DerivedData/TestResults.xcresult \
-              IPHONEOS_DEPLOYMENT_TARGET="$CI_DEPLOYMENT_TARGET" \
-              2>&1 | tee ../test-output.log
-            EXIT_CODE=${PIPESTATUS[0]}
-          fi
-          
-          # Re-enable exit on error
-          set -e
-          
-          # xcodebuild returns 65 for test failures, 0 for success
-          if [ $EXIT_CODE -eq 65 ]; then
-            echo "❌ Tests failed (exit code 65) - check test output for details"
-            exit 65  # Fail the workflow step
-          elif [ $EXIT_CODE -ne 0 ]; then
-            echo "❌ xcodebuild failed with exit code $EXIT_CODE"
-            exit $EXIT_CODE
-          else
-            echo "✅ Tests passed!"
+          TEST_START=$(date +%s)
+
+          xcodebuild test-without-building \
+            $BUILD_TYPE "$BUILD_PATH_RELATIVE" \
+            -scheme "$SCHEME" \
+            -destination "$DESTINATION_SPEC" \
+            -derivedDataPath ../DerivedData \
+            -resultBundlePath ../DerivedData/TestResults.xcresult \
+            -parallel-testing-enabled NO \
+            2>&1 | tee ../test-output.log | xcpretty 
+
+          EXIT_CODE=${PIPESTATUS[0]}
+          PIPESTAT=("${PIPESTATUS[@]}")
+
+          echo "PIPESTATUS: ${PIPESTAT[*]}"
+          echo "EXIT_CODE: $EXIT_CODE"
+
+          echo "🔎 Checking how many tests were executed..."
+
+          grep -E "Executed [0-9]+ tests" ../test-output.log || true
+
+          if grep -q "Executed 0 tests" ../test-output.log; then
+             echo "❌ No tests were executed → failing CI"
+             exit 1
           fi
 
-      - name: Show test output summary
-        if: always()
-        run: |
-          set +e  # Don't fail on errors in this step
-          echo "📋 ============ TEST OUTPUT SUMMARY ============"
-          
-          # Show last 100 lines of test output log
-          if [ -f ../test-output.log ]; then
-            echo ""
-            echo "--- Last 100 lines of test output ---"
-            tail -100 ../test-output.log
-          else
-            echo "⚠️ No test-output.log found"
-          fi
-          
-          # Show test execution summary
-          if [ -f ../test-output.log ]; then
-            echo ""
-            echo "--- Test Execution Summary ---"
-            if grep -q "Failing tests:" ../test-output.log; then
-              echo "❌ Test failures detected:"
-              grep -A 10 "Failing tests:" ../test-output.log | head -20
-            fi
-            if grep -q "Test Suite.*passed\|Test Suite.*failed" ../test-output.log; then
-              echo ""
-              echo "Test suite results:"
-              grep "Test Suite" ../test-output.log | tail -5
-            fi
-            if grep -q "Executed.*test" ../test-output.log; then
-              echo ""
-              echo "Test execution summary:"
-              grep "Executed.*test" ../test-output.log | tail -3
-            fi
+          echo "🔎 Last 120 lines of xcodebuild output:"
+          tail -n 120 ../test-output.log
+
+          echo "🔎 Key error lines:"
+          grep -iE "error:|failed|unable|No devices|destination|Simulator|xctest|not found|timed out" ../test-output.log | tail -50 || true
+
+          if [ "$EXIT_CODE" -ne 0 ]; then
+             echo "❌ Tests failed"
+             exit "$EXIT_CODE"
           fi
 
-      - name: Print test output on failure
-        if: failure()
-        run: |
-          set +e  # Don't fail on errors in this step
-          echo "❌ ============ DETAILED TEST FAILURE ANALYSIS ============"
-          
-          # Show full test output log
-          if [ -f ../test-output.log ]; then
-            echo ""
-            echo "--- Full test output log ---"
-            cat ../test-output.log
-          else
-            echo "⚠️ No test-output.log found"
-          fi
-          
-          # Extract and show failure details from xcresult
-          if [ -d ../DerivedData/TestResults.xcresult ]; then
-            echo ""
-            echo "--- Test Results from xcresult bundle ---"
-            
-            # Get test summary (simplified - just show JSON output)
-            echo "📊 Test Results JSON (key sections):"
-            xcrun xcresulttool get --format json --path ../DerivedData/TestResults.xcresult 2>/dev/null | \
-              grep -E '"testFailureSummaries"|"errorSummaries"|"testCaseName"|"message"|"value"' | \
-              head -50 || echo "Could not extract test results"
-            
-            # Export test results as HTML for easier viewing
-            echo ""
-            echo "--- Exporting test results as HTML (if available) ---"
-            xcrun xcresulttool export --type html --path ../DerivedData/TestResults.xcresult --output-path ../DerivedData/TestResults.html 2>/dev/null && \
-              echo "✅ Test results HTML exported to DerivedData/TestResults.html" || \
-              echo "⚠️ Could not export HTML results"
-          else
-            echo "⚠️ No TestResults.xcresult found"
-          fi
-          
-          # Check for common failure patterns in the log
-          echo ""
-          echo "--- Common Failure Patterns ---"
-          if [ -f ../test-output.log ]; then
-            if grep -q "Validation Failed" ../test-output.log; then
-              echo "❌ Found 'Validation Failed' in output - schema validation failed"
-              grep -A 5 -B 5 "Validation Failed" ../test-output.log | head -20
-            fi
-            if grep -q "timeout\|timed out" ../test-output.log; then
-              echo "⏱️ Found timeout in output - test may have timed out"
-              grep -A 3 -B 3 "timeout\|timed out" ../test-output.log | head -20
-            fi
-            if grep -q "Assertion failed\|XCTAssert" ../test-output.log; then
-              echo "❌ Found assertion failures in output"
-              grep -A 3 -B 3 "Assertion failed\|XCTAssert" ../test-output.log | head -20
-            fi
-          fi
-          
-          echo ""
-          echo "❌ ================================================"
-
-      - name: Upload test results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-results
-          path: |
-            DerivedData/Logs/Test/*.xcresult
-            DerivedData/junit.xml
-            test-output.log
-          retention-days: 30
-
-      - name: Publish test results
-        if: always()
-        uses: EnricoMi/publish-unit-test-result-action/macos@v2
-        with:
-          files: DerivedData/junit.xml
-          check_name: UI Test Results
-          comment_mode: off
-        continue-on-error: true
-
-
+          echo "✅ Tests passed!"
+          echo "⏱️  End time: $(date)"
