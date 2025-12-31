@@ -72,10 +72,12 @@ final class DemoAppUITests: XCTestCase {
         successfulNetworkButton.tap()
         Thread.sleep(forTimeInterval: networkDelay)  // Wait for network request
         
-        let backButtonFromNetwork = app.buttons["BackButton"].firstMatch
-        let backButtonExists = backButtonFromNetwork.waitForExistence(timeout: elementTimeout)
+        // Navigate back using navigation bar back button
+        let navBar = app.navigationBars.firstMatch
+        let backButton = navBar.buttons.firstMatch
+        let backButtonExists = backButton.waitForExistence(timeout: elementTimeout)
         XCTAssertTrue(backButtonExists, "❌ Back button from Network screen not found")
-        backButtonFromNetwork.tap()
+        backButton.tap()
         Thread.sleep(forTimeInterval: shortDelay)  // Wait for navigation
         
         let errorInstrumentationButton = app.staticTexts["Error instrumentation"].firstMatch
@@ -103,7 +105,8 @@ final class DemoAppUITests: XCTestCase {
         Thread.sleep(forTimeInterval: shortDelay)  // Wait for event processing
         
         // Go back to main screen
-        let backButtonFromError = app.buttons["BackButton"].firstMatch
+        let navBarFromError = app.navigationBars.firstMatch
+        let backButtonFromError = navBarFromError.buttons.firstMatch
         let backButtonFromErrorExists = backButtonFromError.waitForExistence(timeout: elementTimeout)
         XCTAssertTrue(backButtonFromErrorExists, "❌ Back button from Error screen not found")
         backButtonFromError.tap()
