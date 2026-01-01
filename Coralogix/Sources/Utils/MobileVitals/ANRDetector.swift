@@ -55,9 +55,7 @@ internal class ANRDetector {
 
     public func handleANR() {
         let anr = [
-            Keys.anr.rawValue: [
-                Keys.mobileVitalsUnits.rawValue: MeasurementUnits.anr.stringValue
-            ]
+            Keys.anr.rawValue: true
         ]
         
         handleANRClosure?(anr)  // Call closure in test
