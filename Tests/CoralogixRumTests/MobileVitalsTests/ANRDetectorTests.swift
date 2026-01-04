@@ -142,9 +142,8 @@ final class ANRDetectorTests: XCTestCase {
         
         XCTAssertNotNil(receivedPayload, "The ANR handler closure should have been called")
         XCTAssertTrue(receivedPayload!.keys.contains(Keys.anr.rawValue), "Payload should contain ANR key")
-        if let anrData = receivedPayload?[Keys.anr.rawValue] as? [String: Any] {
-            XCTAssertTrue(anrData.keys.contains(Keys.mobileVitalsUnits.rawValue), "ANR data should contain mobileVitalsUnits key")
-            XCTAssertEqual(anrData[Keys.mobileVitalsUnits.rawValue] as? String, MeasurementUnits.anr.stringValue, "Mobile vitals units should be correct")
+        if let anrData = receivedPayload?[Keys.anr.rawValue] as? Bool {
+            XCTAssertEqual(anrData, true, "Mobile vitals units should be correct")
         } else {
             XCTFail("ANR data structure is incorrect")
         }
