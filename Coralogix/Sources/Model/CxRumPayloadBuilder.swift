@@ -187,7 +187,7 @@ struct CxRumPayloadBuilder {
     
     private func addMeasurementContext(to result: inout [String: Any]) {
         if let measurementContext = rum.measurementContext, measurementContext.isValid()  {
-            result[Keys.measurementContext.rawValue] = measurementContext.getDictionary()
+            result[Keys.customMmeasurementContext.rawValue] = measurementContext.getDictionary()
         }
     }
 }
