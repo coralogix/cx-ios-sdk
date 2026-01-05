@@ -245,7 +245,7 @@ public enum Keys: String {
     case avg
     case p95
     case slowFrozen = "slow_frozen"
-    case measurementContext = "measurement_context"
+    case customMeasurementContext = "custom_measurement_context"
     case mobileVitals
 }
 
