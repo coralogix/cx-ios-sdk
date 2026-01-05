@@ -56,13 +56,34 @@ jobs:
             echo "ℹ️  CoralogixInternal ${TAG_RAW} already on Trunk. Skipping push."
           else
             echo "🚀 Pushing CoralogixInternal.podspec..."
-            if pod trunk push CoralogixInternal.podspec --allow-warnings --skip-tests --verbose; then
-              echo "✅  CoralogixInternal.podspec pushed!"
+            set +e
+            push_output=$(pod trunk push CoralogixInternal.podspec --allow-warnings --skip-tests --verbose 2>&1)
+            push_exit_code=$?
+            set -e
+            
+            if [ $push_exit_code -eq 0 ]; then
+              echo "✅ CoralogixInternal.podspec pushed!"
+              
+              # Wait for CoralogixInternal to become available
+              echo "⏳ Waiting for CoralogixInternal to be available in CocoaPods Specs..."
+              timeout=900
+              elapsed=0
+              until pod search CoralogixInternal | grep -q "CoralogixInternal"; do
+                if [ "$elapsed" -ge "$timeout" ]; then
+                  echo "❌ Timeout: CoralogixInternal not available after $timeout seconds."
+                  exit 1
+                fi
+                echo "⏳ CoralogixInternal not yet available, waiting 30 seconds..."
+                sleep 30
+                elapsed=$((elapsed + 30))
+              done
+              echo "✅ CoralogixInternal is now available!"
             else
-              echo "⚠️  Push failed; re-checking for 409 duplicate..."
-              if pod trunk info CoralogixInternal | grep -Eq "^[[:space:]]*-[[:space:]]*${TAG_RAW}([[:space:]]|\(|$)"; then
-                echo "ℹ️  CoralogixInternal ${TAG_RAW} appears published. Continuing."
+              if echo "$push_output" | grep -q "Unable to accept duplicate entry"; then
+                echo "⚠️ Duplicate entry detected for CoralogixInternal, skipping to next phase..."
               else
+                echo "❌ Error pushing CoralogixInternal.podspec:"
+                echo "$push_output"
                 exit 1
               fi
             fi
@@ -74,28 +95,6 @@ jobs:
           echo "🧹 Clearing CocoaPods cache..."
           pod cache clean --all
           echo "✅ Cache cleared."
-
-      # Wait for CoralogixInternal availability
-      - name: Wait for CoralogixInternal availability
-        run: |
-          set -euo pipefail
-          if [ -z "${TAG_RAW}" ]; then
-            echo "❌ Could not parse version from CoralogixInternal.podspec"
-            exit 1
-          fi
-          echo "⏳ Waiting for CoralogixInternal "${TAG_RAW}" to appear on Trunk..."
-          timeout=900
-          elapsed=0
-          until pod trunk info CoralogixInternal | grep -q " - ${TAG_RAW}"; do
-            if [ "$elapsed" -ge "$timeout" ]; then
-              echo "❌ Timeout: CoralogixInternal ${TAG_RAW} not available after $timeout seconds."
-              exit 1
-            fi
-            echo "⏳ Not yet available, waiting 30 seconds..."
-            sleep 30
-            elapsed=$((elapsed + 30))
-          done
-          echo "✅ CoralogixInternal ${TAG_RAW} is now available on Trunk!"
           
       # Push SessionReplay.podspec
       - name: Push SessionReplay.podspec
@@ -106,13 +105,19 @@ jobs:
             echo "ℹ️ SessionReplay ${TAG_RAW} already on Trunk. Skipping push."
           else
             echo "🚀 Pushing SessionReplay.podspec..."
-            if pod trunk push SessionReplay.podspec --allow-warnings --skip-tests --verbose; then
+            set +e
+            push_output=$(pod trunk push SessionReplay.podspec --allow-warnings --skip-tests --verbose 2>&1)
+            push_exit_code=$?
+            set -e
+            
+            if [ $push_exit_code -eq 0 ]; then
               echo "✅ SessionReplay.podspec pushed!"
             else
-              echo "⚠️ Push failed; re-checking for 409 duplicate..."
-              if pod trunk info SessionReplay | grep -Eq "^[[:space:]]*-[[:space:]]*${TAG_RAW}([[:space:]]|\(|$)"; then
-                echo "ℹ️ SessionReplay ${TAG_RAW} appears published. Continuing."
+              if echo "$push_output" | grep -q "Unable to accept duplicate entry"; then
+                echo "⚠️ Duplicate entry detected for SessionReplay, skipping to next phase..."
               else
+                echo "❌ Error pushing SessionReplay.podspec:"
+                echo "$push_output"
                 exit 1
               fi
             fi
@@ -127,13 +132,19 @@ jobs:
             echo "ℹ️ Coralogix ${TAG_RAW} already on Trunk. Skipping push."
           else
             echo "🚀 Pushing Coralogix.podspec..."
-            if pod trunk push Coralogix.podspec --allow-warnings --skip-tests --verbose; then
+            set +e
+            push_output=$(pod trunk push Coralogix.podspec --allow-warnings --skip-tests --verbose 2>&1)
+            push_exit_code=$?
+            set -e
+            
+            if [ $push_exit_code -eq 0 ]; then
               echo "🎉 Coralogix.podspec pushed successfully! 🎉"
             else
-              echo "⚠️ Push failed; re-checking for 409 duplicate..."
-              if pod trunk info Coralogix | grep -Eq "^[[:space:]]*-[[:space:]]*${TAG_RAW}([[:space:]]|\(|$)"; then
-                echo "ℹ️ Coralogix ${TAG_RAW} appears published. Done."
+              if echo "$push_output" | grep -q "Unable to accept duplicate entry"; then
+                echo "⚠️ Duplicate entry detected for Coralogix, skipping..."
               else
+                echo "❌ Error pushing Coralogix.podspec:"
+                echo "$push_output"
                 exit 1
               fi
             fi
