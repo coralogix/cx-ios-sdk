@@ -72,7 +72,7 @@ public class SessionManager {
                                                object: nil)
     }
     
-    public func doesSessionhasRecording() -> Bool {
+    public func doesSessionHasRecording() -> Bool {
         return self.hasRecording
     }
     

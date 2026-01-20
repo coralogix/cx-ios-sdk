@@ -13,7 +13,6 @@ public class CxSpan {
     let subsystemName: String
     let isErrorWithStacktrace: Bool = false
     var severity: Int = 0
-    var timeStamp: TimeInterval = 0
     var cxRum: CxRum
     var instrumentationData: InstrumentationData?
     var beforeSend: (([String: Any]) -> [String: Any]?)?
@@ -35,7 +34,7 @@ public class CxSpan {
         if let severity = otel.getAttribute(forKey: Keys.severity.rawValue) as? String {
             self.severity = Int(severity) ?? 0
         }
-        self.timeStamp = otel.getStartTime() ?? Date().timeIntervalSince1970
+
         let rumBuilder = CxRumBuilder(otel: otel,
                                       versionMetadata: versionMetadata,
                                       sessionManager: sessionManager,
@@ -79,7 +78,7 @@ public class CxSpan {
         result[Keys.applicationName.rawValue] = self.applicationName
         result[Keys.subsystemName.rawValue] = self.subsystemName
         result[Keys.severity.rawValue] = self.severity
-        result[Keys.timestamp.rawValue] = self.timeStamp.milliseconds
+        result[Keys.timestamp.rawValue] = self.cxRum.timeStamp.milliseconds
     }
     
     private func addInstrumentationData(to result: inout [String: Any]) {

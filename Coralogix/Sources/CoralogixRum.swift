@@ -306,6 +306,24 @@ public class CoralogixRum {
         span.setAttribute(key: Keys.eventType.rawValue, value: event.rawValue)
         span.setAttribute(key: Keys.source.rawValue, value: source.rawValue)
         span.setAttribute(key: Keys.severity.rawValue, value: AttributeValue.int(severity.rawValue))
+        
+        if let sessionMetadata = self.coralogixExporter?.getSessionManager().sessionMetadata {
+            span.setAttribute(key: Keys.sessionCreationDate.rawValue, value: String(Int(sessionMetadata.sessionCreationDate)))
+            span.setAttribute(key: Keys.sessionId.rawValue, value: sessionMetadata.sessionId)
+        }
+        
+        if let prevSessionMetadata = self.coralogixExporter?.getSessionManager().getPrevSessionMetadata() {
+            if let prevPid = prevSessionMetadata.oldPid {
+                span.setAttribute(key: Keys.prevPid.rawValue, value: prevPid)
+            }
+            if let prevSessionId = prevSessionMetadata.oldSessionId {
+                span.setAttribute(key: Keys.prevSessionId.rawValue, value: prevSessionId)
+            }
+            if let prevSessionCreationDate = prevSessionMetadata.oldSessionTimeInterval {
+                span.setAttribute(key: Keys.prevSessionCreationDate.rawValue, value: String(Int(prevSessionCreationDate)))
+            }
+        }
+        
         self.addUserMetadata(to: &span)
         return span
     }

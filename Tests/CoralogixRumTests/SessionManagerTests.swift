@@ -110,11 +110,11 @@ class SessionManagerTests: XCTestCase {
     
     func testDoesSessionHasRecording() {
         // Initially, should be false
-        XCTAssertFalse(sessionManager.doesSessionhasRecording())
+        XCTAssertFalse(sessionManager.doesSessionHasRecording())
 
         // After setting, should be true
         sessionManager.hasRecording = true
-        XCTAssertTrue(sessionManager.doesSessionhasRecording())
+        XCTAssertTrue(sessionManager.doesSessionHasRecording())
     }
     
     func testGetPrevSessionMetadata() {

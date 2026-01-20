@@ -8,8 +8,8 @@ import Foundation
 import CoralogixInternal
 
 struct SessionContext {
-    let sessionId: String
-    let sessionCreationDate: TimeInterval
+    var sessionId: String
+    var sessionCreationDate: TimeInterval
     let userId: String
     let userName: String
     let userEmail: String
@@ -18,26 +18,40 @@ struct SessionContext {
     var hasRecording: Bool = false
     
     init(otel: SpanDataProtocol,
-         sessionMetadata: SessionMetadata,
          userMetadata: [String: String]?,
          hasRecording: Bool = false) {
-      if let pid = otel.getAttribute(forKey: Keys.pid.rawValue) as? String,
-           let oldPid = sessionMetadata.oldPid,
-           pid == oldPid,
-           let oldSessionId = sessionMetadata.oldSessionId,
-           let oldSessionCreationDate = sessionMetadata.oldSessionTimeInterval {
-            self.sessionId = oldSessionId
-            self.sessionCreationDate = oldSessionCreationDate
-            self.isPidEqualToOldPid = true
-        } else {
-            self.sessionId = sessionMetadata.sessionId
-            self.sessionCreationDate = sessionMetadata.sessionCreationDate
-        }
-        self.userId = otel.getAttribute(forKey: Keys.userId.rawValue) as? String ?? ""
-        self.userName = otel.getAttribute(forKey: Keys.userName.rawValue) as? String ?? ""
-        self.userEmail = otel.getAttribute(forKey: Keys.userEmail.rawValue) as? String ?? ""
+        (self.sessionId, self.sessionCreationDate, self.isPidEqualToOldPid) = SessionContext.resolveSession(from: otel)
+
+        self.userId = otel.getString(forKey: .userId) ?? ""
+        self.userName = otel.getString(forKey: .userName) ?? ""
+        self.userEmail = otel.getString(forKey: .userEmail) ?? ""
         self.userMetadata = userMetadata
         self.hasRecording = hasRecording
+    }
+    
+    private static func resolveSession(from otel: SpanDataProtocol) -> (id: String, creationDate: TimeInterval, isPidEqual: Bool) {
+        if shouldRestorePreviousSession(from: otel),
+           let oldSessionId = otel.getString(forKey: .prevSessionId),
+           let oldCreationDateString = otel.getString(forKey: .prevSessionCreationDate),
+            let oldCreationDate = TimeInterval(oldCreationDateString) {
+            return (oldSessionId, oldCreationDate, true)
+        }
+        
+        let sessionId = otel.getString(forKey: .sessionId) ?? UUID().uuidString.lowercased()
+        var creationDate: TimeInterval = Date().timeIntervalSince1970
+        if let timeIntervalString = otel.getString(forKey: .sessionCreationDate),
+           let timeInterval = TimeInterval(timeIntervalString) {
+            creationDate = timeInterval
+        }
+        return (sessionId, creationDate, false)
+    }
+    
+    static func shouldRestorePreviousSession(from otel: SpanDataProtocol) -> Bool {
+        guard let pid = otel.getString(forKey: .pid),
+              let oldPid = otel.getString(forKey: .prevPid) else {
+            return false
+        }
+        return pid == oldPid
     }
     
     func getDictionary() -> [String: Any] {
@@ -60,5 +74,18 @@ struct SessionContext {
         result[Keys.sessionId.rawValue] = self.sessionId
         result[Keys.sessionCreationDate.rawValue] = self.sessionCreationDate.milliseconds
         return result
+    }
+}
+
+
+// MARK: - Helper Extension
+
+private extension SpanDataProtocol {
+    func getString(forKey key: Keys) -> String? {
+        getAttribute(forKey: key.rawValue) as? String
+    }
+    
+    func getTimeInterval(forKey key: Keys) -> TimeInterval? {
+        getAttribute(forKey: key.rawValue) as? TimeInterval
     }
 }
