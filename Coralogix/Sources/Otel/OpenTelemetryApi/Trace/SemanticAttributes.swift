@@ -19,9 +19,11 @@ public enum SemanticAttributes: String {
     case httpRequestBodySize = "http.request.body.size"
     case httpResponseBodySize = "http.response.body.size"
     
-    // Network attributes  
+    // Network attributes
     case netPeerName = "net.peer.name"
     case netPeerPort = "net.peer.port"
+    case netHostName = "net.host.name"
+    case netHostPort = "net.host.port"
     case netSockPeerName = "net.sock.peer.name"
     case netSockPeerAddr = "net.sock.peer.addr"
     case netSockPeerPort = "net.sock.peer.port"
