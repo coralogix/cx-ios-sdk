@@ -55,7 +55,7 @@ class CxRumBuilder {
         
         // Patch, in case of session creation date is bigger that log timeStamp
         if sessionContext.sessionCreationDate > timeStamp {
-            timeStamp = Date().timeIntervalSince1970
+            timeStamp = sessionContext.sessionCreationDate
         }
         
         return CxRum(timeStamp: timeStamp,
@@ -125,3 +125,4 @@ class CxRumBuilder {
         return nil
     }
 }
+
