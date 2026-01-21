@@ -41,13 +41,28 @@ class CxRumBuilder {
         
         let traceContext = Helper.getTraceAndSpanId(otel: otel)
         let userMetadata = options.userContext?.userMetadata
-        let hasRecording = sessionManager.doesSessionhasRecording()
+        let hasRecording = sessionManager.doesSessionHasRecording()
+        var timeStamp = otel.getStartTime() ?? Date().timeIntervalSince1970
+        var prevSessionContext: SessionContext? = nil
+        let sessionContext = SessionContext(otel: otel,
+                                            userMetadata: userMetadata,
+                                            hasRecording: hasRecording)
+        if SessionContext.shouldRestorePreviousSession(from: otel){
+            prevSessionContext = SessionContext(otel: otel,
+                                                userMetadata: userMetadata,
+                                                hasRecording: hasRecording)
+        }
         
-        return CxRum(timeStamp: otel.getStartTime() ?? Date().timeIntervalSince1970,
+        // Patch, in case of session creation date is bigger that log timeStamp
+        if sessionContext.sessionCreationDate > timeStamp {
+            timeStamp = sessionContext.sessionCreationDate
+        }
+        
+        return CxRum(timeStamp: timeStamp,
                      networkRequestContext: NetworkRequestContext(otel: otel),
                      versionMetadata: versionMetadata,
-                     sessionContext: sessionManager.getSessionMetadata().map { SessionContext(otel: otel, sessionMetadata: $0, userMetadata: userMetadata, hasRecording: hasRecording) },
-                     prevSessionContext: sessionManager.getPrevSessionMetadata().map { SessionContext(otel: otel, sessionMetadata: $0, userMetadata: userMetadata, hasRecording: hasRecording) },
+                     sessionContext: sessionContext,
+                     prevSessionContext: prevSessionContext,
                      eventContext: eventContext,
                      logContext: LogContext(otel: otel),
                      mobileSDK: CoralogixRum.mobileSDK,
@@ -110,3 +125,4 @@ class CxRumBuilder {
         return nil
     }
 }
+

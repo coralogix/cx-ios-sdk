@@ -37,6 +37,7 @@ public class URLSessionInstrumentation {
     private let configurationQueue = DispatchQueue(label: "io.opentelemetry.configuration")
     
     static var instrumentedKey = "io.opentelemetry.instrumentedCall"
+    private static var delegateSwizzleKey: UInt8 = 0
     
     static let AVTaskClassList: [AnyClass] = [
         "__NSCFBackgroundAVAggregateAssetDownloadTask",
@@ -74,11 +75,20 @@ public class URLSessionInstrumentation {
                 ignoredPrefixes: configuration.ignoredClassPrefixes
             )
         }()
+        let totalClassCount = classes.count
+        var delegateClassCount = 0
+        var swizzledClassCount = 0
         
         for theClass in classes {
             guard class_getSuperclass(theClass) != nil else { continue }
             guard !class_isMetaClass(theClass) else { continue }
             guard theClass != Self.self else { continue }
+            guard class_conformsToProtocol(theClass, URLSessionTaskDelegate.self) ||
+                    class_conformsToProtocol(theClass, URLSessionDataDelegate.self) else { continue }
+            delegateClassCount += 1
+            if objc_getAssociatedObject(theClass, &Self.delegateSwizzleKey) != nil {
+                continue
+            }
             
             var methodCount: UInt32 = 0
             guard let methodListPointer = class_copyMethodList(theClass, &methodCount) else { continue }
@@ -89,10 +99,14 @@ public class URLSessionInstrumentation {
             for selector in selectors {
                 if methodList.contains(where: { method_getName($0) == selector }) {
                     injectIntoDelegateClass(cls: theClass)
+                    objc_setAssociatedObject(theClass, &Self.delegateSwizzleKey, true, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+                    swizzledClassCount += 1
                     break
                 }
             }
         }
+        
+        Log.d("[URLSessionInstrumentation] Swizzle stats - total classes: \(totalClassCount), delegate classes: \(delegateClassCount), swizzled: \(swizzledClassCount)")
         
         if #available(OSX 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) {
             injectIntoNSURLSessionCreateTaskMethods()

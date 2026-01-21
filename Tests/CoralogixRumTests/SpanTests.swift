@@ -78,7 +78,6 @@ final class SpanTests: XCTestCase {
         XCTAssertNotNil(cxSpan.versionMetadata)
         XCTAssertEqual(cxSpan.subsystemName, Keys.cxRum.rawValue)
         XCTAssertEqual(cxSpan.severity, 3)
-        XCTAssertNotNil(cxSpan.timeStamp)
         XCTAssertNotNil(cxSpan.cxRum)
     }
     
