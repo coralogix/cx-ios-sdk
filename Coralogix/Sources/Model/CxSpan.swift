@@ -61,6 +61,12 @@ public class CxSpan {
             if let editableCxRum = self.beforeSend?(subsetOfCxRum) {
                 let mergedDict = mergeDictionaries(original: originalCxRum, editable: editableCxRum)
                 result[Keys.text.rawValue] = [Keys.cxRum.rawValue: mergedDict]
+                
+                // Sync severity from editableCxRum to CxSpan's top-level severity
+                if let eventContext = editableCxRum[Keys.eventContext.rawValue] as? [String: Any],
+                   let newSeverity = eventContext[Keys.severity.rawValue] as? Int {
+                    result[Keys.severity.rawValue] = newSeverity
+                }
             } else {
                 return nil // editableCxRum is nil we need to drop that span
             }
