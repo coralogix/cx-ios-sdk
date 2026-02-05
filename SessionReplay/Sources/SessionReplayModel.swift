@@ -213,17 +213,28 @@ public class SessionReplayModel {
     /// Captures screenshot asynchronously with dynamic mask regions.
     /// - Parameter properties: Additional properties for the screenshot
     private func captureAutomaticWithMaskRegions(properties: [String: Any]?) {
+        // Check if caller already incremented the counter (native instrumentation provides properties)
+        let callerIncrementedCounter = properties?[Keys.segmentIndex.rawValue] as? Int != nil
+        
         prepareScreenshotWithMaskRegions(properties: properties) { [weak self] screenshotData in
             guard let self = self else { return }
             
             guard let screenshotData = screenshotData else {
                 Log.e("[SessionReplayModel] Failed to capture screenshot with mask regions")
+                // Revert counter if caller had already incremented it
+                if callerIncrementedCounter {
+                    SdkManager.shared.getCoralogixSdk()?.revertScreenshotCounter()
+                }
                 return
             }
             
             if let prvScreenshotData = self.prvScreenshotData,
                !self.imagesAreDifferent(screenshotData, prvScreenshotData) {
                 Log.d("[SessionReplayModel] Same screenshot, skipping...")
+                // Revert counter if caller had already incremented it
+                if callerIncrementedCounter {
+                    SdkManager.shared.getCoralogixSdk()?.revertScreenshotCounter()
+                }
                 return
             }
             
