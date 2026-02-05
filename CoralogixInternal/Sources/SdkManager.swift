@@ -41,6 +41,7 @@ public protocol SessionReplayInterface {
     func registerMaskRegion(_ id: String)
     func unregisterMaskRegion(_ id: String)
     func getMaskedRegionIds() -> Set<String>
+    func getSessionReplayFolderPath() -> String?
 }
 
 public class SdkManager {

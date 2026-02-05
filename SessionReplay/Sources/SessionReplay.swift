@@ -422,5 +422,39 @@ public class SessionReplay: SessionReplayInterface {
         }
         self.sessionReplayModel = model
     }
+    
+    // MARK: - Debug Utilities
+    
+    /// Returns the path to the session replay folder where screenshots are stored.
+    /// Only returns the path when debug mode is enabled, otherwise returns nil.
+    /// Useful for hybrid apps (Flutter, React Native) to access session replay files during development.
+    /// - Returns: The absolute path to the SessionReplay folder, or nil if not in debug mode or not initialized.
+    public func getSessionReplayFolderPath() -> String? {
+        if isDummyInstance {
+            Log.d("SessionReplay.getSessionReplayFolderPath() called on inactive instance (skipped by sampling)")
+            return nil
+        }
+        
+        // Only expose path in debug mode
+        guard let coralogixSdk = SdkManager.shared.getCoralogixSdk(),
+              coralogixSdk.isDebug() else {
+            Log.d("[SessionReplay] getSessionReplayFolderPath() is only available in debug mode")
+            return nil
+        }
+        
+        guard let documentsDirectory = FileManager.default.urls(
+            for: .documentDirectory,
+            in: .userDomainMask
+        ).first else {
+            Log.e("[SessionReplay] Could not locate Documents directory")
+            return nil
+        }
+        
+        let sessionReplayPath = documentsDirectory
+            .appendingPathComponent("SessionReplay")
+            .path
+        
+        return sessionReplayPath
+    }
 }
 
