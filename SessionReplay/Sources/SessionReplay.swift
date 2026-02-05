@@ -219,11 +219,8 @@ public class SessionReplay: SessionReplayInterface {
         pendingRegionsQueue.sync {
             guard !pendingMaskRegionIds.isEmpty else { return }
             
-            Log.d("[SessionReplay] Applying \(pendingMaskRegionIds.count) pending mask region registrations")
-            
             for id in pendingMaskRegionIds {
                 instance.sessionReplayModel?.maskedRegionIds.insert(id)
-                Log.d("[SessionReplay] Applied pending mask region: \(id)")
             }
             
             // Clear pending registrations
@@ -236,7 +233,6 @@ public class SessionReplay: SessionReplayInterface {
     internal static func queuePendingMaskRegion(_ id: String) {
         pendingRegionsQueue.sync {
             pendingMaskRegionIds.insert(id)
-            Log.d("[SessionReplay] Queued pending mask region: \(id), pending count: \(pendingMaskRegionIds.count)")
         }
     }
     
@@ -245,7 +241,6 @@ public class SessionReplay: SessionReplayInterface {
     internal static func removePendingMaskRegion(_ id: String) {
         pendingRegionsQueue.sync {
             pendingMaskRegionIds.remove(id)
-            Log.d("[SessionReplay] Removed pending mask region: \(id), pending count: \(pendingMaskRegionIds.count)")
         }
     }
 
@@ -404,7 +399,7 @@ public class SessionReplay: SessionReplayInterface {
         }
         
         sessionReplayModel.maskedRegionIds.insert(id)
-        Log.d("[SessionReplay] Registered mask region: \(id), total count: \(sessionReplayModel.maskedRegionIds.count)")
+        Log.d("[SessionReplay] Registered mask region: \(id)")
     }
     
     /// Removes a region from the mask list.
