@@ -30,9 +30,23 @@ public class SessionReplayModel {
     private var prvScreenshotData: Data? = nil
     private lazy var comparisonContext = CIContext(options: [.workingColorSpace: NSNull()])
     
+    /// Serial queue for synchronizing access to mask region data
+    private let maskRegionsQueue = DispatchQueue(label: "com.coralogix.sessionReplay.maskRegionsQueue")
+    
     /// Set of registered region IDs that should be masked during capture.
     /// Uses a pull-based model where coordinates are fetched at capture time via maskRegionsProvider.
-    var maskedRegionIds = Set<String>()
+    /// Access must be synchronized via maskRegionsQueue.
+    private var _maskedRegionIds = Set<String>()
+    
+    /// Thread-safe accessor for maskedRegionIds
+    var maskedRegionIds: Set<String> {
+        get {
+            maskRegionsQueue.sync { _maskedRegionIds }
+        }
+        set {
+            maskRegionsQueue.sync { _maskedRegionIds = newValue }
+        }
+    }
 
     internal var getKeyWindow: () -> UIWindow? = {
         Global.getKeyWindow()
@@ -85,26 +99,28 @@ public class SessionReplayModel {
     }
     
     /// Cached mask regions from the last provider call
-    private var cachedMaskRegions: [CGRect] = []
+    /// Access must be synchronized via maskRegionsQueue.
+    private var _cachedMaskRegions: [CGRect] = []
     
-    /// Returns the cached mask regions
+    /// Returns a thread-safe copy of the cached mask regions
     internal func getCachedMaskRegions() -> [CGRect] {
-        return cachedMaskRegions
+        return maskRegionsQueue.sync { _cachedMaskRegions }
     }
     
     /// Fetches mask regions from the provider and caches them.
     /// Call this method before capturing to ensure fresh coordinates.
     /// - Parameter completion: Called when regions are fetched and cached
     internal func fetchMaskRegions(completion: @escaping () -> Void) {
+        // Read maskedRegionIds under queue synchronization
+        let ids = maskRegionsQueue.sync { Array(_maskedRegionIds) }
+        
         guard let options = self.sessionReplayOptions,
               let provider = options.maskRegionsProvider,
-              !maskedRegionIds.isEmpty else {
-            cachedMaskRegions = []
+              !ids.isEmpty else {
+            maskRegionsQueue.sync { _cachedMaskRegions = [] }
             completion()
             return
         }
-        
-        let ids = Array(maskedRegionIds)
         
         provider(ids) { [weak self] maskRegions in
             guard let self = self else {
@@ -112,8 +128,9 @@ public class SessionReplayModel {
                 return
             }
             
-            // Convert MaskRegion objects to CGRect
-            self.cachedMaskRegions = maskRegions.map { $0.toCGRect() }
+            // Convert MaskRegion objects to CGRect and cache under queue synchronization
+            let rects = maskRegions.map { $0.toCGRect() }
+            self.maskRegionsQueue.sync { self._cachedMaskRegions = rects }
             completion()
         }
     }
