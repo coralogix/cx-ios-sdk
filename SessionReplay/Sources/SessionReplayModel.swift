@@ -337,10 +337,13 @@ public class SessionReplayModel {
     }
     
     internal func generateFileName(properties: [String: Any]?) -> String {
-        guard let properties = properties,
-              let segmentIndex = properties[Keys.segmentIndex.rawValue] as? Int,
-              let page = properties[Keys.page.rawValue] as? Int else {
-            return "file_name_error"
+        let segmentIndex = properties?[Keys.segmentIndex.rawValue] as? Int ?? 0
+        let page = properties?[Keys.page.rawValue] as? Int ?? 0
+        let timestamp = Int(Date().timeIntervalSince1970 * 1000)
+        
+        // Use timestamp to ensure unique filenames when segmentIndex/page are not provided
+        if properties?[Keys.segmentIndex.rawValue] == nil || properties?[Keys.page.rawValue] == nil {
+            return "\(sessionId)_\(timestamp).jpg"
         }
         
         return "\(sessionId)_\(page)_\(segmentIndex).jpg"
