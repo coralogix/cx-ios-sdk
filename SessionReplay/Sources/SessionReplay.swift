@@ -232,7 +232,7 @@ public class SessionReplay: SessionReplayInterface {
     /// Called when registerMaskRegion is invoked before initialization.
     internal static func queuePendingMaskRegion(_ id: String) {
         pendingRegionsQueue.sync {
-            pendingMaskRegionIds.insert(id)
+            _ = pendingMaskRegionIds.insert(id)
         }
     }
     
@@ -240,7 +240,7 @@ public class SessionReplay: SessionReplayInterface {
     /// Called when unregisterMaskRegion is invoked before initialization.
     internal static func removePendingMaskRegion(_ id: String) {
         pendingRegionsQueue.sync {
-            pendingMaskRegionIds.remove(id)
+            _ = pendingMaskRegionIds.remove(id)
         }
     }
 
