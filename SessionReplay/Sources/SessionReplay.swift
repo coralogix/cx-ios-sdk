@@ -220,7 +220,7 @@ public class SessionReplay: SessionReplayInterface {
             guard !pendingMaskRegionIds.isEmpty else { return }
             
             for id in pendingMaskRegionIds {
-                instance.sessionReplayModel?.maskedRegionIds.insert(id)
+                instance.sessionReplayModel?.registerMaskedRegion(id: id)
             }
             
             // Clear pending registrations
@@ -398,7 +398,7 @@ public class SessionReplay: SessionReplayInterface {
             return
         }
         
-        sessionReplayModel.maskedRegionIds.insert(id)
+        sessionReplayModel.registerMaskedRegion(id: id)
         Log.d("[SessionReplay] Registered mask region: \(id)")
     }
     
@@ -417,7 +417,7 @@ public class SessionReplay: SessionReplayInterface {
             return
         }
 
-        sessionReplayModel.maskedRegionIds.remove(id)
+        sessionReplayModel.unregisterMaskedRegion(id: id)
         Log.d("[SessionReplay] Unregistered mask region: \(id)")
     }
     

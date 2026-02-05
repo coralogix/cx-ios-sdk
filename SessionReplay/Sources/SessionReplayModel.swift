@@ -38,13 +38,34 @@ public class SessionReplayModel {
     /// Access must be synchronized via maskRegionsQueue.
     private var _maskedRegionIds = Set<String>()
     
-    /// Thread-safe accessor for maskedRegionIds
+    /// Thread-safe read-only accessor for maskedRegionIds
     var maskedRegionIds: Set<String> {
-        get {
-            maskRegionsQueue.sync { _maskedRegionIds }
+        maskRegionsQueue.sync { _maskedRegionIds }
+    }
+    
+    // MARK: - Atomic Mutation Helpers for maskedRegionIds
+    
+    /// Atomically registers a mask region ID.
+    /// - Parameter id: The region ID to register
+    func registerMaskedRegion(id: String) {
+        maskRegionsQueue.sync {
+            _ = _maskedRegionIds.insert(id)
         }
-        set {
-            maskRegionsQueue.sync { _maskedRegionIds = newValue }
+    }
+    
+    /// Atomically unregisters a mask region ID.
+    /// - Parameter id: The region ID to unregister
+    func unregisterMaskedRegion(id: String) {
+        maskRegionsQueue.sync {
+            _ = _maskedRegionIds.remove(id)
+        }
+    }
+    
+    /// Atomically replaces all masked region IDs.
+    /// - Parameter ids: The new set of region IDs
+    func replaceMaskedRegions(_ ids: Set<String>) {
+        maskRegionsQueue.sync {
+            _maskedRegionIds = ids
         }
     }
 
