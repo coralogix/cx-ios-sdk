@@ -72,7 +72,7 @@ public class SessionReplayModel {
     internal func prepareScreenshotIfNeeded(properties: [String: Any]?) -> Data? {
         guard Thread.isMainThread else {
             DispatchQueue.main.async { [weak self] in
-                self?.captureImage(properties: properties)
+                _ = self?.captureImage(properties: properties)
             }
             return nil
         }
