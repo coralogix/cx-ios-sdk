@@ -127,4 +127,16 @@ extension CoralogixRum: CoralogixInterface {
     public func isIdle() -> Bool {
         return self.coralogixExporter?.getSessionManager().isIdle ?? false
     }
+    
+    public func getNextScreenshotLocationProperties() -> [String: Any] {
+        guard let screenshotManager = self.coralogixExporter?.getScreenshotManager() else {
+            Log.e("[CoralogixRum] ScreenshotManager not available")
+            return [:]
+        }
+        return screenshotManager.nextScreenshotLocation.toProperties()
+    }
+    
+    public func revertScreenshotCounter() {
+        self.coralogixExporter?.getScreenshotManager().revertScreenshotCounter()
+    }
 }

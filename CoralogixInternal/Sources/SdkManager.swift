@@ -29,6 +29,13 @@ public protocol CoralogixInterface {
     func periodicallyCaptureEventTriggered()
     func getProxyUrl() -> String
     func isIdle() -> Bool
+    
+    /// Returns the next screenshot location properties (segmentIndex, page, screenshotId).
+    /// Used by SessionReplay when captureEvent is called without properties.
+    func getNextScreenshotLocationProperties() -> [String: Any]
+    
+    /// Reverts the screenshot counter when a capture is skipped.
+    func revertScreenshotCounter()
 }
 
 public protocol SessionReplayInterface {

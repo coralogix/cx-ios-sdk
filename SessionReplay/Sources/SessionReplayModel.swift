@@ -33,12 +33,6 @@ public class SessionReplayModel {
     /// Set of registered region IDs that should be masked during capture.
     /// Uses a pull-based model where coordinates are fetched at capture time via maskRegionsProvider.
     var maskedRegionIds = Set<String>()
-    
-    /// Internal counters for generating screenshot metadata when not provided by caller.
-    /// Used when SessionReplay.captureEvent() is called directly (e.g., from Flutter).
-    private var internalSegmentIndex: Int = 0
-    private var internalPage: Int = 0
-    private let maxScreenshotsPerPage: Int = 20
 
     internal var getKeyWindow: () -> UIWindow? = {
         Global.getKeyWindow()
@@ -249,7 +243,6 @@ public class SessionReplayModel {
         if sessionId != self.sessionId {
             self.sessionId = sessionId
             self.prvScreenshotData = nil
-            self.resetInternalCounters()
             _ = self.clearSessionReplayFolder()
             SRUtils.deleteURLsFromDisk()
         }
@@ -347,39 +340,23 @@ public class SessionReplayModel {
         let segmentIndex: Int
         let page: Int
         
-        // Use provided properties if available, otherwise use internal counters
+        // Use provided properties if available, otherwise request from CoralogixRum
         if let providedSegmentIndex = properties?[Keys.segmentIndex.rawValue] as? Int,
            let providedPage = properties?[Keys.page.rawValue] as? Int {
             segmentIndex = providedSegmentIndex
             page = providedPage
+        } else if let coralogixSdk = SdkManager.shared.getCoralogixSdk() {
+            // Request screenshot location from CoralogixRum (uses ScreenshotManager)
+            let locationProps = coralogixSdk.getNextScreenshotLocationProperties()
+            segmentIndex = locationProps[Keys.segmentIndex.rawValue] as? Int ?? 0
+            page = locationProps[Keys.page.rawValue] as? Int ?? 0
         } else {
-            // Auto-generate using internal counters (for direct captureEvent calls, e.g., from Flutter)
-            let location = nextInternalScreenshotLocation()
-            segmentIndex = location.segmentIndex
-            page = location.page
+            Log.e("[SessionReplayModel] Cannot generate file name: no properties and CoralogixRum not available")
+            segmentIndex = 0
+            page = 0
         }
         
         return "\(sessionId)_\(page)_\(segmentIndex).jpg"
-    }
-    
-    /// Generates the next screenshot location using internal counters.
-    /// Used when captureEvent is called directly without going through CoralogixRum instrumentation.
-    private func nextInternalScreenshotLocation() -> (segmentIndex: Int, page: Int) {
-        internalSegmentIndex += 1
-        
-        if internalSegmentIndex > maxScreenshotsPerPage {
-            internalPage += 1
-            internalSegmentIndex = 1
-            Log.d("[SessionReplayModel] Internal page incremented to: \(internalPage)")
-        }
-        
-        return (segmentIndex: internalSegmentIndex, page: internalPage)
-    }
-    
-    /// Resets internal screenshot counters. Called when session changes.
-    internal func resetInternalCounters() {
-        internalSegmentIndex = 0
-        internalPage = 0
     }
     
     internal func handleCapturedData(fileURL: URL, data: Data, properties: [String: Any]?) {
