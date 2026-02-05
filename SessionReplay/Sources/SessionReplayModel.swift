@@ -27,7 +27,11 @@ public class SessionReplayModel {
     var sessionReplayOptions: SessionReplayOptions?
     var isRecording = false  // Custom flag to track recording state
     private let srNetworkManager: SRNetworkManager?
-    private var prvScreenshotData: Data? = nil
+    
+    /// Serial queue for synchronizing access to prvScreenshotData
+    private let screenshotDataQueue = DispatchQueue(label: "com.coralogix.sessionReplay.screenshotDataQueue")
+    private var _prvScreenshotData: Data? = nil
+    
     private lazy var comparisonContext = CIContext(options: [.workingColorSpace: NSNull()])
     
     /// Serial queue for synchronizing access to mask region data
@@ -236,12 +240,20 @@ public class SessionReplayModel {
         
         // Synchronous capture without dynamic mask regions
         if let screenshotData = prepareScreenshotIfNeeded(properties: properties) {
-            if let prvScreenshotData = prvScreenshotData, !self.imagesAreDifferent(screenshotData, prvScreenshotData) {
+            // Atomic read-compare-write for prvScreenshotData
+            let shouldSkip = screenshotDataQueue.sync { () -> Bool in
+                if let prvData = _prvScreenshotData, !self.imagesAreDifferent(screenshotData, prvData) {
+                    return true
+                }
+                _prvScreenshotData = screenshotData
+                return false
+            }
+            
+            if shouldSkip {
                 Log.d("[SessionReplayModel] Same screenshot, skipping...")
                 return .failure(.skippingEvent)
             }
             
-            prvScreenshotData = screenshotData
             saveScreenshotToFileSystem(screenshotData: screenshotData, properties: properties)
             return .success(())
         }
@@ -266,8 +278,17 @@ public class SessionReplayModel {
                 return
             }
             
-            if let prvScreenshotData = self.prvScreenshotData,
-               !self.imagesAreDifferent(screenshotData, prvScreenshotData) {
+            // Atomic read-compare-write for prvScreenshotData
+            let shouldSkip = self.screenshotDataQueue.sync { () -> Bool in
+                if let prvData = self._prvScreenshotData,
+                   !self.imagesAreDifferent(screenshotData, prvData) {
+                    return true
+                }
+                self._prvScreenshotData = screenshotData
+                return false
+            }
+            
+            if shouldSkip {
                 Log.d("[SessionReplayModel] Same screenshot, skipping...")
                 // Revert counter if caller had already incremented it
                 if callerIncrementedCounter {
@@ -276,7 +297,7 @@ public class SessionReplayModel {
                 return
             }
             
-            self.prvScreenshotData = screenshotData
+            // prvScreenshotData already set atomically in the sync block above
             self.saveScreenshotToFileSystem(screenshotData: screenshotData, properties: properties)
         }
     }
@@ -288,7 +309,7 @@ public class SessionReplayModel {
     internal func updateSessionId(with sessionId: String) {
         if sessionId != self.sessionId {
             self.sessionId = sessionId
-            self.prvScreenshotData = nil
+            screenshotDataQueue.sync { _prvScreenshotData = nil }
             _ = self.clearSessionReplayFolder()
             SRUtils.deleteURLsFromDisk()
         }
