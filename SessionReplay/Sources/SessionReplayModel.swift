@@ -45,6 +45,9 @@ public class SessionReplayModel {
         self.urlObserver = URLObserver(urlManager: self.urlManager,
                                        sessionReplayOptions: sessionReplayOptions)
         _ = self.createSessionReplayFolder()
+        
+        let hasProvider = sessionReplayOptions?.maskRegionsProvider != nil
+        Log.d("[SessionReplayModel] Initialized with maskRegionsProvider: \(hasProvider)")
     }
     
     deinit {
@@ -96,16 +99,29 @@ public class SessionReplayModel {
     /// Call this method before capturing to ensure fresh coordinates.
     /// - Parameter completion: Called when regions are fetched and cached
     internal func fetchMaskRegions(completion: @escaping () -> Void) {
-        guard let options = self.sessionReplayOptions,
-              let provider = options.maskRegionsProvider,
-              !maskedRegionIds.isEmpty else {
-            // No regions to fetch
+        guard let options = self.sessionReplayOptions else {
+            Log.e("[SessionReplayModel] fetchMaskRegions - sessionReplayOptions is nil")
+            cachedMaskRegions = []
+            completion()
+            return
+        }
+        
+        guard let provider = options.maskRegionsProvider else {
+            Log.d("[SessionReplayModel] fetchMaskRegions - maskRegionsProvider is nil")
+            cachedMaskRegions = []
+            completion()
+            return
+        }
+        
+        guard !maskedRegionIds.isEmpty else {
+            Log.d("[SessionReplayModel] fetchMaskRegions - maskedRegionIds is empty")
             cachedMaskRegions = []
             completion()
             return
         }
         
         let ids = Array(maskedRegionIds)
+        Log.d("[SessionReplayModel] fetchMaskRegions - calling provider with \(ids.count) IDs: \(ids)")
         
         provider(ids) { [weak self] maskRegions in
             guard let self = self else {
@@ -115,7 +131,10 @@ public class SessionReplayModel {
             
             // Convert MaskRegion objects to CGRect
             self.cachedMaskRegions = maskRegions.map { $0.toCGRect() }
-            Log.d("[SessionReplayModel] Fetched \(maskRegions.count) mask regions")
+            Log.d("[SessionReplayModel] fetchMaskRegions - received \(maskRegions.count) mask regions")
+            for region in maskRegions {
+                Log.d("[SessionReplayModel] Region: id=\(region.id), x=\(region.x), y=\(region.y), w=\(region.width), h=\(region.height)")
+            }
             
             completion()
         }
@@ -181,9 +200,11 @@ public class SessionReplayModel {
         }
         
         guard let screenshotData = properties?[Keys.screenshotData.rawValue] as? Data else {
+            Log.d("[SessionReplayModel] captureImage - no screenshotData provided, using captureAutomatic")
             return self.captureAutomatic(properties: properties)
         }
-       
+        
+        Log.d("[SessionReplayModel] captureImage - screenshotData provided (\(screenshotData.count) bytes), using captureManual")
         self.captureManual(properties: properties, screenshotData: screenshotData)
         return .success(())
     }
@@ -193,8 +214,11 @@ public class SessionReplayModel {
         let hasProvider = sessionReplayOptions?.maskRegionsProvider != nil
         let hasRegionIds = !maskedRegionIds.isEmpty
         
+        Log.d("[SessionReplayModel] captureAutomatic - hasProvider: \(hasProvider), hasRegionIds: \(hasRegionIds), maskedRegionIds count: \(maskedRegionIds.count)")
+        
         if hasProvider && hasRegionIds {
             // Use async capture with dynamic mask regions
+            Log.d("[SessionReplayModel] Using async capture with mask regions provider")
             captureAutomaticWithMaskRegions(properties: properties)
             return .success(()) // Return success as the capture is in progress
         }

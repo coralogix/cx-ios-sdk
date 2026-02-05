@@ -360,7 +360,7 @@ public class SessionReplay: SessionReplayInterface {
         }
         
         sessionReplayModel.maskedRegionIds.insert(id)
-        Log.d("[SessionReplay] Registered mask region: \(id)")
+        Log.d("[SessionReplay] Registered mask region: \(id), total count: \(sessionReplayModel.maskedRegionIds.count)")
     }
     
     /// Removes a region from the mask list.
