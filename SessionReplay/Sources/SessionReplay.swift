@@ -175,6 +175,11 @@ public class SessionReplay: SessionReplayInterface {
     // Private backing storage
     private static var _shared: SessionReplay?
     
+    /// Pending mask region IDs registered before SessionReplay was initialized.
+    /// These will be applied when SessionReplay is properly initialized.
+    private static var pendingMaskRegionIds = Set<String>()
+    private static let pendingRegionsQueue = DispatchQueue(label: "com.coralogix.sessionreplay.pendingregions")
+    
     // Properties for storing options
     internal var sessionReplayOptions: SessionReplayOptions?
 
@@ -186,6 +191,9 @@ public class SessionReplay: SessionReplayInterface {
     private init(sessionReplayOptions: SessionReplayOptions) {
         self.sessionReplayOptions = sessionReplayOptions
         self.sessionReplayModel = SessionReplayModel(sessionReplayOptions: sessionReplayOptions)
+        
+        // Apply any pending mask region registrations
+        Self.applyPendingMaskRegions(to: self)
         
         DispatchQueue.main.async {
             SdkManager.shared.register(sessionReplayInterface: self)
@@ -203,6 +211,41 @@ public class SessionReplay: SessionReplayInterface {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
                 self.startRecording()
             }
+        }
+    }
+    
+    /// Applies pending mask region registrations to the initialized SessionReplay instance.
+    private static func applyPendingMaskRegions(to instance: SessionReplay) {
+        pendingRegionsQueue.sync {
+            guard !pendingMaskRegionIds.isEmpty else { return }
+            
+            Log.d("[SessionReplay] Applying \(pendingMaskRegionIds.count) pending mask region registrations")
+            
+            for id in pendingMaskRegionIds {
+                instance.sessionReplayModel?.maskedRegionIds.insert(id)
+                Log.d("[SessionReplay] Applied pending mask region: \(id)")
+            }
+            
+            // Clear pending registrations
+            pendingMaskRegionIds.removeAll()
+        }
+    }
+    
+    /// Queues a mask region ID for registration when SessionReplay is initialized.
+    /// Called when registerMaskRegion is invoked before initialization.
+    internal static func queuePendingMaskRegion(_ id: String) {
+        pendingRegionsQueue.sync {
+            pendingMaskRegionIds.insert(id)
+            Log.d("[SessionReplay] Queued pending mask region: \(id), pending count: \(pendingMaskRegionIds.count)")
+        }
+    }
+    
+    /// Removes a mask region ID from the pending queue.
+    /// Called when unregisterMaskRegion is invoked before initialization.
+    internal static func removePendingMaskRegion(_ id: String) {
+        pendingRegionsQueue.sync {
+            pendingMaskRegionIds.remove(id)
+            Log.d("[SessionReplay] Removed pending mask region: \(id), pending count: \(pendingMaskRegionIds.count)")
         }
     }
 
@@ -350,7 +393,8 @@ public class SessionReplay: SessionReplayInterface {
     /// - Parameter id: Unique identifier for the region to mask
     public func registerMaskRegion(_ id: String) {
         if isDummyInstance {
-            Log.d("SessionReplay.registerMaskRegion() called on inactive instance (skipped by sampling)")
+            // Queue the registration for when SessionReplay is properly initialized
+            SessionReplay.queuePendingMaskRegion(id)
             return
         }
         
@@ -368,7 +412,8 @@ public class SessionReplay: SessionReplayInterface {
     /// - Parameter id: Unique identifier for the region to unregister
     public func unregisterMaskRegion(_ id: String) {
         if isDummyInstance {
-            Log.d("SessionReplay.unregisterMaskRegion() called on inactive instance (skipped by sampling)")
+            // Remove from pending queue if SessionReplay is not yet initialized
+            SessionReplay.removePendingMaskRegion(id)
             return
         }
         
