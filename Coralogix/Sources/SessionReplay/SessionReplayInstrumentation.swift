@@ -97,15 +97,15 @@ extension CoralogixRum: CoralogixInterface {
         return false
     }
     
-    public func registerMaskRegion(region: [String: Any]) {
+    public func registerMaskRegion(_ id: String) {
         if let sessionReplay = SdkManager.shared.getSessionReplay() {
-            sessionReplay.registerMaskRegion(region: region)
+            sessionReplay.registerMaskRegion(id)
         }
     }
     
-    public func unregisterMaskRegion(id: String) {
+    public func unregisterMaskRegion(_ id: String) {
         if let sessionReplay = SdkManager.shared.getSessionReplay() {
-            sessionReplay.unregisterMaskRegion(id: id)
+            sessionReplay.unregisterMaskRegion(id)
         }
     }
         
