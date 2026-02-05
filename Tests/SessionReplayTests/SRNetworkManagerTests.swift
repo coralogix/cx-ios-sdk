@@ -358,6 +358,14 @@ class MockCoralogix: CoralogixInterface {
     func isIdle() -> Bool {
         return idle
     }
+    
+    func getNextScreenshotLocationProperties() -> [String: Any] {
+        return [:]
+    }
+    
+    func revertScreenshotCounter() {
+        // No-op for mock
+    }
 }
 
 public class MockURLSession: URLSessionProtocol {
