@@ -82,7 +82,7 @@ final class SessionReplayModelTests: XCTestCase {
         let data = "mock image".data(using: .utf8)!
         let props: [String: Any] = ["screenshotData": data]
         
-        mockSessionReplayModel.captureImage(properties: props)
+        _ = mockSessionReplayModel.captureImage(properties: props)
         
         XCTAssertFalse(mockSessionReplayModel.didCallPrepareScreenshot, "Should not call fallback screenshot")
         XCTAssertFalse(mockSessionReplayModel.didCallSaveScreenshot)
@@ -93,7 +93,7 @@ final class SessionReplayModelTests: XCTestCase {
         let model = MockSessionReplayModel2()
         model.sessionId = "abc123"
         
-        model.captureImage(properties: nil)
+        _ = model.captureImage(properties: nil)
         
         XCTAssertTrue(model.didCallPrepareScreenshot)
         XCTAssertTrue(model.didCallSaveScreenshot)
@@ -111,7 +111,7 @@ final class SessionReplayModelTests: XCTestCase {
         let model = FailingScreenshotModel()
         model.sessionId = "abc123"
         
-        model.captureImage(properties: nil)
+        _ = model.captureImage(properties: nil)
         
         XCTAssertTrue(model.didCallPrepareScreenshot)
         XCTAssertFalse(model.didCallSaveScreenshot)
