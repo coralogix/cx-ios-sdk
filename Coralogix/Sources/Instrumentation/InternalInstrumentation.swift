@@ -10,7 +10,7 @@ import CoralogixInternal
 
 extension CoralogixRum {
     internal func createInitSpan() {
-        var span = makeSpan(event: .internalKey, source: .console, severity: .info)
+        let span = makeSpan(event: .internalKey, source: .console, severity: .info)
         span.end()
     }
 }
