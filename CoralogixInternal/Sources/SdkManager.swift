@@ -38,8 +38,8 @@ public protocol SessionReplayInterface {
     func update(sessionId: String)
     func isRecording() -> Bool
     func isInitialized() -> Bool
-    func registerMaskRegion(id: String)
-    func unregisterMaskRegion(id: String)
+    func registerMaskRegion(_ id: String)
+    func unregisterMaskRegion(_ id: String)
     func getMaskedRegionIds() -> Set<String>
 }
 
