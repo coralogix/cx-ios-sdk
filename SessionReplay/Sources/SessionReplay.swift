@@ -10,6 +10,57 @@ import ReplayKit
 import UIKit
 import CoralogixInternal
 
+/// Represents a mask region for session replay.
+/// Used in the pull-based model where coordinates are provided at capture time.
+public struct MaskRegion {
+    /// Unique identifier for the mask region
+    public let id: String
+    
+    /// X coordinate of the region's origin
+    public let x: CGFloat
+    
+    /// Y coordinate of the region's origin
+    public let y: CGFloat
+    
+    /// Width of the region
+    public let width: CGFloat
+    
+    /// Height of the region
+    public let height: CGFloat
+    
+    /// Device pixel ratio
+    public let dpr: CGFloat
+    
+    /// Initializes a new MaskRegion.
+    /// - Parameters:
+    ///   - id: Unique identifier for the mask region
+    ///   - x: X coordinate of the region's origin
+    ///   - y: Y coordinate of the region's origin
+    ///   - width: Width of the region
+    ///   - height: Height of the region
+    ///   - dpr: Device pixel ratio (default is 1.0)
+    public init(id: String, x: CGFloat, y: CGFloat, width: CGFloat, height: CGFloat, dpr: CGFloat = 1.0) {
+        self.id = id
+        self.x = x
+        self.y = y
+        self.width = width
+        self.height = height
+        self.dpr = dpr
+    }
+    
+    /// Converts the MaskRegion to a CGRect, applying the device pixel ratio.
+    public func toCGRect() -> CGRect {
+        return CGRect(x: x * dpr, y: y * dpr, width: width * dpr, height: height * dpr)
+    }
+}
+
+/// Type alias for the mask regions provider callback.
+/// Called at capture time to fetch current coordinates for registered region IDs.
+/// Uses a pull-based model where coordinates are fetched on-demand since widget positions can change.
+/// - Parameter ids: Array of registered region IDs that need masking
+/// - Parameter completion: Callback with array of MaskRegion objects containing current coordinates
+public typealias MaskRegionsProvider = (_ ids: [String], _ completion: @escaping ([MaskRegion]) -> Void) -> Void
+
 /// Represents the configuration options for session replay functionality.
 public struct SessionReplayOptions {
     public enum RecordingType {
@@ -56,6 +107,11 @@ public struct SessionReplayOptions {
     /// When `true`, the session recording begins automatically without requiring explicit invocation of `startSessionRecording`.
     public var autoStartSessionRecording: Bool
     
+    /// Callback to fetch mask regions at capture time.
+    /// Uses a pull-based model where coordinates are fetched on-demand since widget positions can change.
+    /// - Note: Set this callback to enable dynamic masking of regions (e.g., Flutter widgets).
+    public var maskRegionsProvider: MaskRegionsProvider?
+    
     /// Initializes a new instance of `SessionReplayOptions` with the provided parameters.
     /// - Parameters:
     ///   - imageRecordingType: The type of recording (default is `image`).
@@ -69,6 +125,7 @@ public struct SessionReplayOptions {
     ///   - maskFaces: Whether to mask faces (default is `false`).
     ///   - creditCardPredicate: An optional array of text, Determines if an image may contain a credit card based on specific text patterns. (default is `nil`).
     ///   - autoStartSessionRecording: Whether session recording starts automatically (default is `false`).
+    ///   - maskRegionsProvider: Optional callback to fetch mask regions at capture time (default is `nil`).
 
     public init(recordingType: RecordingType = .image,
                 captureTimeInterval: TimeInterval = 10,
@@ -80,7 +137,8 @@ public struct SessionReplayOptions {
                 maskAllImages: Bool = true,
                 maskFaces: Bool = false,
                 creditCardPredicate: [String]? = nil,
-                autoStartSessionRecording: Bool = false) {
+                autoStartSessionRecording: Bool = false,
+                maskRegionsProvider: MaskRegionsProvider? = nil) {
         self.recordingType = recordingType
         self.captureTimeInterval = captureTimeInterval
         self.captureScale = captureScale
@@ -92,6 +150,7 @@ public struct SessionReplayOptions {
         self.creditCardPredicate = creditCardPredicate
         self.autoStartSessionRecording = autoStartSessionRecording
         self.sessionRecordingSampleRate = sessionRecordingSampleRate
+        self.maskRegionsProvider = maskRegionsProvider
     }
 }
 
@@ -283,29 +342,59 @@ public class SessionReplay: SessionReplayInterface {
         return SessionReplay.initializationAttempted
     }
     
-    /// Register area to be masked on capture
-    public func registerMaskRegion(region: [String: Any]) {
+    // MARK: - Mask Region Methods (Pull-Based Model)
+    
+    /// Registers a region ID that should be masked during session replay.
+    /// Uses a pull-based model where the actual coordinates are fetched at capture time
+    /// via the `maskRegionsProvider` callback.
+    /// - Parameter id: Unique identifier for the region to mask
+    public func registerMaskRegion(_ id: String) {
         if isDummyInstance {
             Log.d("SessionReplay.registerMaskRegion() called on inactive instance (skipped by sampling)")
             return
         }
         
-        guard let sessionReplayModel = self.sessionReplayModel,
-                let id = region["id"] as? String else { return }
-
-        sessionReplayModel.regions.removeAll { $0["id"] as? String == id }
-        sessionReplayModel.regions.append(region)
+        guard let sessionReplayModel = self.sessionReplayModel else {
+            Log.e("[SessionReplay] missing SessionReplayModel")
+            return
+        }
+        
+        sessionReplayModel.maskedRegionIds.insert(id)
+        Log.d("[SessionReplay] Registered mask region: \(id)")
     }
     
-    /// Remove mask area from view
-    public func unregisterMaskRegion(id: String) {
+    /// Removes a region from the mask list.
+    /// Called when a masked widget/view is disposed.
+    /// - Parameter id: Unique identifier for the region to unregister
+    public func unregisterMaskRegion(_ id: String) {
         if isDummyInstance {
             Log.d("SessionReplay.unregisterMaskRegion() called on inactive instance (skipped by sampling)")
             return
         }
         
-        guard var regions = self.sessionReplayModel?.regions else { return }
-        self.sessionReplayModel?.regions.removeAll { $0["id"] as? String == id }
+        guard let sessionReplayModel = self.sessionReplayModel else {
+            Log.e("[SessionReplay] missing SessionReplayModel")
+            return
+        }
+
+        sessionReplayModel.maskedRegionIds.remove(id)
+        Log.d("[SessionReplay] Unregistered mask region: \(id)")
+    }
+    
+    /// Returns the set of currently registered region IDs for masking.
+    /// - Returns: Set of registered region IDs
+    public func getMaskedRegionIds() -> Set<String> {
+        if isDummyInstance {
+            Log.d("SessionReplay.getMaskedRegionIds() called on inactive instance (skipped by sampling)")
+            return Set<String>()
+        }
+        
+        guard let sessionReplayModel = self.sessionReplayModel else {
+            Log.e("[SessionReplay] missing SessionReplayModel")
+            return Set<String>()
+        }
+        
+        return sessionReplayModel.maskedRegionIds
     }
     
     public func update(sessionId: String) {

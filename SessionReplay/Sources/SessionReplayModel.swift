@@ -29,7 +29,10 @@ public class SessionReplayModel {
     private let srNetworkManager: SRNetworkManager?
     private var prvScreenshotData: Data? = nil
     private lazy var comparisonContext = CIContext(options: [.workingColorSpace: NSNull()])
-    var regions = [[String: Any]]()
+    
+    /// Set of registered region IDs that should be masked during capture.
+    /// Uses a pull-based model where coordinates are fetched at capture time via maskRegionsProvider.
+    var maskedRegionIds = Set<String>()
 
     internal var getKeyWindow: () -> UIWindow? = {
         Global.getKeyWindow()
@@ -71,13 +74,77 @@ public class SessionReplayModel {
             return nil
         }
 
-        let regionsRect: [CGRect] = Global.rects(from: regions)
+        // Use cached mask regions from the provider (fetched before capture)
+        let regionsRect: [CGRect] = getCachedMaskRegions()
             
         return window.captureScreenshot(
             scale: options.captureScale,
             compressionQuality: options.captureCompressionQuality,
             regions: regionsRect
         )
+    }
+    
+    /// Cached mask regions from the last provider call
+    private var cachedMaskRegions: [CGRect] = []
+    
+    /// Returns the cached mask regions
+    internal func getCachedMaskRegions() -> [CGRect] {
+        return cachedMaskRegions
+    }
+    
+    /// Fetches mask regions from the provider and caches them.
+    /// Call this method before capturing to ensure fresh coordinates.
+    /// - Parameter completion: Called when regions are fetched and cached
+    internal func fetchMaskRegions(completion: @escaping () -> Void) {
+        guard let options = self.sessionReplayOptions,
+              let provider = options.maskRegionsProvider,
+              !maskedRegionIds.isEmpty else {
+            // No regions to fetch
+            cachedMaskRegions = []
+            completion()
+            return
+        }
+        
+        let ids = Array(maskedRegionIds)
+        
+        provider(ids) { [weak self] maskRegions in
+            guard let self = self else {
+                completion()
+                return
+            }
+            
+            // Convert MaskRegion objects to CGRect
+            self.cachedMaskRegions = maskRegions.map { $0.toCGRect() }
+            Log.d("[SessionReplayModel] Fetched \(maskRegions.count) mask regions")
+            
+            completion()
+        }
+    }
+    
+    /// Prepares screenshot with mask regions fetched asynchronously.
+    /// This is the preferred method when dynamic masking is active.
+    /// - Parameters:
+    ///   - properties: Additional properties for the screenshot
+    ///   - completion: Called with the screenshot data or nil if capture failed
+    internal func prepareScreenshotWithMaskRegions(properties: [String: Any]?, completion: @escaping (Data?) -> Void) {
+        // Fetch mask regions first, then capture
+        fetchMaskRegions { [weak self] in
+            guard let self = self else {
+                completion(nil)
+                return
+            }
+            
+            // Ensure we're on main thread for screenshot capture
+            if Thread.isMainThread {
+                let data = self.prepareScreenshotIfNeeded(properties: properties)
+                completion(data)
+            } else {
+                DispatchQueue.main.async {
+                    let data = self.prepareScreenshotIfNeeded(properties: properties)
+                    completion(data)
+                }
+            }
+        }
     }
     
     internal func saveScreenshotToFileSystem(
@@ -122,6 +189,17 @@ public class SessionReplayModel {
     }
     
     internal func captureAutomatic(properties: [String: Any]?) -> Result<Void, CaptureEventError> {
+        // Check if we need to use async region fetching (pull-based model)
+        let hasProvider = sessionReplayOptions?.maskRegionsProvider != nil
+        let hasRegionIds = !maskedRegionIds.isEmpty
+        
+        if hasProvider && hasRegionIds {
+            // Use async capture with dynamic mask regions
+            captureAutomaticWithMaskRegions(properties: properties)
+            return .success(()) // Return success as the capture is in progress
+        }
+        
+        // Synchronous capture without dynamic mask regions
         if let screenshotData = prepareScreenshotIfNeeded(properties: properties) {
             if let prvScreenshotData = prvScreenshotData, !self.imagesAreDifferent(screenshotData, prvScreenshotData) {
                 Log.d("[SessionReplayModel] Same screenshot, skipping...")
@@ -133,6 +211,28 @@ public class SessionReplayModel {
             return .success(())
         }
         return .failure(.captureFailed)
+    }
+    
+    /// Captures screenshot asynchronously with dynamic mask regions.
+    /// - Parameter properties: Additional properties for the screenshot
+    private func captureAutomaticWithMaskRegions(properties: [String: Any]?) {
+        prepareScreenshotWithMaskRegions(properties: properties) { [weak self] screenshotData in
+            guard let self = self else { return }
+            
+            guard let screenshotData = screenshotData else {
+                Log.e("[SessionReplayModel] Failed to capture screenshot with mask regions")
+                return
+            }
+            
+            if let prvScreenshotData = self.prvScreenshotData,
+               !self.imagesAreDifferent(screenshotData, prvScreenshotData) {
+                Log.d("[SessionReplayModel] Same screenshot, skipping...")
+                return
+            }
+            
+            self.prvScreenshotData = screenshotData
+            self.saveScreenshotToFileSystem(screenshotData: screenshotData, properties: properties)
+        }
     }
     
     internal func captureManual(properties: [String: Any]?, screenshotData: Data) {
