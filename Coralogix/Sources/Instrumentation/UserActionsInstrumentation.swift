@@ -40,19 +40,10 @@ extension CoralogixRum {
        
         if let sessionReplay = SdkManager.shared.getSessionReplay(),
            let screenshotLocation = self.coralogixExporter?.getScreenshotManager().nextScreenshotLocation {
-            guard let window = window else {
-                Log.e("No key window found")
-                return
-            }
-            
-            guard let screenshotData = window.captureScreenshot() else {
-                Log.e("Failed to capture screenshot")
-                return
-            }
-            
+            // Don't capture screenshot here - let SessionReplay capture it
+            // so that mask regions (e.g., Flutter widgets) are applied
             let metadata = buildMetadata(properties: properties,
-                                         screenshotLocation: screenshotLocation,
-                                         screenshotData: screenshotData)
+                                         screenshotLocation: screenshotLocation)
             let result = sessionReplay.captureEvent(properties: metadata)
             switch result {
             case .success:
@@ -72,14 +63,8 @@ extension CoralogixRum {
     }
     
     internal func buildMetadata(properties: [String: Any],
-                                screenshotLocation: ScreenshotLocation,
-                                screenshotData: Data?) -> [String: Any] {
+                                screenshotLocation: ScreenshotLocation) -> [String: Any] {
         var metadata = screenshotLocation.toProperties()
-        
-        if screenshotData != nil {
-            metadata[Keys.screenshotData.rawValue] =  screenshotData
-        }
-
         metadata.merge(properties) { current, _ in current } // keep SDK value
         return metadata
     }

@@ -133,7 +133,7 @@ public class URLSessionInstrumentation {
     }
     
     private func injectIntoNSURLSessionCreateTaskMethods() {
-        let cls = URLSession.self
+        let cls: AnyClass = URLSession.self
         let selectors: [Selector] = [
             #selector(URLSession.dataTask(with:) as (URLSession) -> (URLRequest) -> URLSessionDataTask),
             #selector(URLSession.dataTask(with:) as (URLSession) -> (URL) -> URLSessionDataTask),
@@ -296,7 +296,7 @@ public class URLSessionInstrumentation {
         typealias UploadWithDataIMP = @convention(c) (URLSession, Selector, URLRequest, Data?) -> URLSessionTask
         typealias UploadWithFileIMP = @convention(c) (URLSession, Selector, URLRequest, URL) -> URLSessionTask
         
-        let cls = URLSession.self
+        let cls: AnyClass = URLSession.self
         
         // MARK: Swizzle `uploadTask(with:from:)`
         if let method = class_getInstanceMethod(cls, #selector(URLSession.uploadTask(with:from:))) {
@@ -352,7 +352,7 @@ public class URLSessionInstrumentation {
     }
     
     private func injectIntoNSURLSessionAsyncDataAndDownloadTaskMethods() {
-        let cls = URLSession.self
+        let cls: AnyClass = URLSession.self
         [
             #selector(URLSession.dataTask(with:completionHandler:) as (URLSession) -> (URLRequest, @escaping (Data?, URLResponse?, Error?) -> Void) -> URLSessionDataTask),
             #selector(URLSession.dataTask(with:completionHandler:) as (URLSession) -> (URL, @escaping (Data?, URLResponse?, Error?) -> Void) -> URLSessionDataTask),
@@ -435,7 +435,7 @@ public class URLSessionInstrumentation {
     }
     
     private func injectIntoNSURLSessionAsyncUploadTaskMethods() {
-        let cls = URLSession.self
+        let cls: AnyClass = URLSession.self
         [
             #selector(URLSession.uploadTask(with:from:completionHandler:)),
             #selector(URLSession.uploadTask(with:fromFile:completionHandler:)),

@@ -97,15 +97,15 @@ extension CoralogixRum: CoralogixInterface {
         return false
     }
     
-    public func registerMaskRegion(region: [String: Any]) {
+    public func registerMaskRegion(_ id: String) {
         if let sessionReplay = SdkManager.shared.getSessionReplay() {
-            sessionReplay.registerMaskRegion(region: region)
+            sessionReplay.registerMaskRegion(id)
         }
     }
     
-    public func unregisterMaskRegion(id: String) {
+    public func unregisterMaskRegion(_ id: String) {
         if let sessionReplay = SdkManager.shared.getSessionReplay() {
-            sessionReplay.unregisterMaskRegion(id: id)
+            sessionReplay.unregisterMaskRegion(id)
         }
     }
         
@@ -126,5 +126,17 @@ extension CoralogixRum: CoralogixInterface {
     
     public func isIdle() -> Bool {
         return self.coralogixExporter?.getSessionManager().isIdle ?? false
+    }
+    
+    public func getNextScreenshotLocationProperties() -> [String: Any] {
+        guard let screenshotManager = self.coralogixExporter?.getScreenshotManager() else {
+            Log.e("[CoralogixRum] ScreenshotManager not available")
+            return [:]
+        }
+        return screenshotManager.nextScreenshotLocation.toProperties()
+    }
+    
+    public func revertScreenshotCounter() {
+        self.coralogixExporter?.getScreenshotManager().revertScreenshotCounter()
     }
 }

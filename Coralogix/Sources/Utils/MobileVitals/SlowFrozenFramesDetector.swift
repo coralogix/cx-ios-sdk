@@ -33,8 +33,36 @@ final class SlowFrozenFramesDetector {
     private let lifecycleCenter = NotificationCenter.default
     
     // MARK: - Stored window results (one entry per report window)
-    internal var windowSlow: [Int] = []      // number of slow frames in a window
-    internal var windowFrozen: [Int] = []    // number of frozen frames in a window
+    private let windowLock = NSLock()
+    private var _windowSlow: [Int] = []      // number of slow frames in a window
+    private var _windowFrozen: [Int] = []    // number of frozen frames in a window
+    
+    // Thread-safe accessors for window arrays
+    internal var windowSlow: [Int] {
+        get {
+            windowLock.lock()
+            defer { windowLock.unlock() }
+            return _windowSlow
+        }
+        set {
+            windowLock.lock()
+            _windowSlow = newValue
+            windowLock.unlock()
+        }
+    }
+    
+    internal var windowFrozen: [Int] {
+        get {
+            windowLock.lock()
+            defer { windowLock.unlock() }
+            return _windowFrozen
+        }
+        set {
+            windowLock.lock()
+            _windowFrozen = newValue
+            windowLock.unlock()
+        }
+    }
     
     // MARK: - Public stats (computed over stored windows)
     // Slow
@@ -121,8 +149,10 @@ final class SlowFrozenFramesDetector {
     }
     
     public func reset() {
-        windowSlow.removeAll()
-        windowFrozen.removeAll()
+        windowLock.lock()
+        _windowSlow.removeAll()
+        _windowFrozen.removeAll()
+        windowLock.unlock()
     }
 
     deinit {
@@ -175,8 +205,10 @@ final class SlowFrozenFramesDetector {
 
         
         // Store this window’s counts (independently; skip zeros for each metric)
-        if slow > 0 { windowSlow.append(slow) }
-        if frozen > 0 { windowFrozen.append(frozen) }
+        windowLock.lock()
+        if slow > 0 { _windowSlow.append(slow) }
+        if frozen > 0 { _windowFrozen.append(frozen) }
+        windowLock.unlock()
 
 //        Log.d("[Metric] slow: \(slow), frozen: \(frozen)")
     }

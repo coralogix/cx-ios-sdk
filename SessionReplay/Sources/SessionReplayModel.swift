@@ -27,9 +27,51 @@ public class SessionReplayModel {
     var sessionReplayOptions: SessionReplayOptions?
     var isRecording = false  // Custom flag to track recording state
     private let srNetworkManager: SRNetworkManager?
-    private var prvScreenshotData: Data? = nil
+    
+    /// Serial queue for synchronizing access to prvScreenshotData
+    private let screenshotDataQueue = DispatchQueue(label: "com.coralogix.sessionReplay.screenshotDataQueue")
+    private var _prvScreenshotData: Data? = nil
+    
     private lazy var comparisonContext = CIContext(options: [.workingColorSpace: NSNull()])
-    var regions = [[String: Any]]()
+    
+    /// Serial queue for synchronizing access to mask region data
+    private let maskRegionsQueue = DispatchQueue(label: "com.coralogix.sessionReplay.maskRegionsQueue")
+    
+    /// Set of registered region IDs that should be masked during capture.
+    /// Uses a pull-based model where coordinates are fetched at capture time via maskRegionsProvider.
+    /// Access must be synchronized via maskRegionsQueue.
+    private var _maskedRegionIds = Set<String>()
+    
+    /// Thread-safe read-only accessor for maskedRegionIds
+    var maskedRegionIds: Set<String> {
+        maskRegionsQueue.sync { _maskedRegionIds }
+    }
+    
+    // MARK: - Atomic Mutation Helpers for maskedRegionIds
+    
+    /// Atomically registers a mask region ID.
+    /// - Parameter id: The region ID to register
+    func registerMaskedRegion(id: String) {
+        maskRegionsQueue.sync {
+            _ = _maskedRegionIds.insert(id)
+        }
+    }
+    
+    /// Atomically unregisters a mask region ID.
+    /// - Parameter id: The region ID to unregister
+    func unregisterMaskedRegion(id: String) {
+        maskRegionsQueue.sync {
+            _ = _maskedRegionIds.remove(id)
+        }
+    }
+    
+    /// Atomically replaces all masked region IDs.
+    /// - Parameter ids: The new set of region IDs
+    func replaceMaskedRegions(_ ids: Set<String>) {
+        maskRegionsQueue.sync {
+            _maskedRegionIds = ids
+        }
+    }
 
     internal var getKeyWindow: () -> UIWindow? = {
         Global.getKeyWindow()
@@ -55,7 +97,7 @@ public class SessionReplayModel {
     internal func prepareScreenshotIfNeeded(properties: [String: Any]?) -> Data? {
         guard Thread.isMainThread else {
             DispatchQueue.main.async { [weak self] in
-                self?.captureImage(properties: properties)
+                _ = self?.captureImage(properties: properties)
             }
             return nil
         }
@@ -71,13 +113,77 @@ public class SessionReplayModel {
             return nil
         }
 
-        let regionsRect: [CGRect] = Global.rects(from: regions)
+        // Use cached mask regions from the provider (fetched before capture)
+        let regionsRect: [CGRect] = getCachedMaskRegions()
             
         return window.captureScreenshot(
             scale: options.captureScale,
             compressionQuality: options.captureCompressionQuality,
             regions: regionsRect
         )
+    }
+    
+    /// Cached mask regions from the last provider call
+    /// Access must be synchronized via maskRegionsQueue.
+    private var _cachedMaskRegions: [CGRect] = []
+    
+    /// Returns a thread-safe copy of the cached mask regions
+    internal func getCachedMaskRegions() -> [CGRect] {
+        return maskRegionsQueue.sync { _cachedMaskRegions }
+    }
+    
+    /// Fetches mask regions from the provider and caches them.
+    /// Call this method before capturing to ensure fresh coordinates.
+    /// - Parameter completion: Called when regions are fetched and cached
+    internal func fetchMaskRegions(completion: @escaping () -> Void) {
+        // Read maskedRegionIds under queue synchronization
+        let ids = maskRegionsQueue.sync { Array(_maskedRegionIds) }
+        
+        guard let options = self.sessionReplayOptions,
+              let provider = options.maskRegionsProvider,
+              !ids.isEmpty else {
+            maskRegionsQueue.sync { _cachedMaskRegions = [] }
+            completion()
+            return
+        }
+        
+        provider(ids) { [weak self] maskRegions in
+            guard let self = self else {
+                completion()
+                return
+            }
+            
+            // Convert MaskRegion objects to CGRect and cache under queue synchronization
+            let rects = maskRegions.map { $0.toCGRect() }
+            self.maskRegionsQueue.sync { self._cachedMaskRegions = rects }
+            completion()
+        }
+    }
+    
+    /// Prepares screenshot with mask regions fetched asynchronously.
+    /// This is the preferred method when dynamic masking is active.
+    /// - Parameters:
+    ///   - properties: Additional properties for the screenshot
+    ///   - completion: Called with the screenshot data or nil if capture failed
+    internal func prepareScreenshotWithMaskRegions(properties: [String: Any]?, completion: @escaping (Data?) -> Void) {
+        // Fetch mask regions first, then capture
+        fetchMaskRegions { [weak self] in
+            guard let self = self else {
+                completion(nil)
+                return
+            }
+            
+            // Ensure we're on main thread for screenshot capture
+            if Thread.isMainThread {
+                let data = self.prepareScreenshotIfNeeded(properties: properties)
+                completion(data)
+            } else {
+                DispatchQueue.main.async {
+                    let data = self.prepareScreenshotIfNeeded(properties: properties)
+                    completion(data)
+                }
+            }
+        }
     }
     
     internal func saveScreenshotToFileSystem(
@@ -116,23 +222,84 @@ public class SessionReplayModel {
         guard let screenshotData = properties?[Keys.screenshotData.rawValue] as? Data else {
             return self.captureAutomatic(properties: properties)
         }
-       
+        
         self.captureManual(properties: properties, screenshotData: screenshotData)
         return .success(())
     }
     
     internal func captureAutomatic(properties: [String: Any]?) -> Result<Void, CaptureEventError> {
+        // Check if we need to use async region fetching (pull-based model)
+        let hasProvider = sessionReplayOptions?.maskRegionsProvider != nil
+        let hasRegionIds = !maskedRegionIds.isEmpty
+        
+        if hasProvider && hasRegionIds {
+            // Use async capture with dynamic mask regions
+            captureAutomaticWithMaskRegions(properties: properties)
+            return .success(()) // Return success as the capture is in progress
+        }
+        
+        // Synchronous capture without dynamic mask regions
         if let screenshotData = prepareScreenshotIfNeeded(properties: properties) {
-            if let prvScreenshotData = prvScreenshotData, !self.imagesAreDifferent(screenshotData, prvScreenshotData) {
+            // Atomic read-compare-write for prvScreenshotData
+            let shouldSkip = screenshotDataQueue.sync { () -> Bool in
+                if let prvData = _prvScreenshotData, !self.imagesAreDifferent(screenshotData, prvData) {
+                    return true
+                }
+                _prvScreenshotData = screenshotData
+                return false
+            }
+            
+            if shouldSkip {
                 Log.d("[SessionReplayModel] Same screenshot, skipping...")
                 return .failure(.skippingEvent)
             }
             
-            prvScreenshotData = screenshotData
             saveScreenshotToFileSystem(screenshotData: screenshotData, properties: properties)
             return .success(())
         }
         return .failure(.captureFailed)
+    }
+    
+    /// Captures screenshot asynchronously with dynamic mask regions.
+    /// - Parameter properties: Additional properties for the screenshot
+    private func captureAutomaticWithMaskRegions(properties: [String: Any]?) {
+        // Check if caller already incremented the counter (native instrumentation provides properties)
+        let callerIncrementedCounter = properties?[Keys.segmentIndex.rawValue] as? Int != nil
+        
+        prepareScreenshotWithMaskRegions(properties: properties) { [weak self] screenshotData in
+            guard let self = self else { return }
+            
+            guard let screenshotData = screenshotData else {
+                Log.e("[SessionReplayModel] Failed to capture screenshot with mask regions")
+                // Revert counter if caller had already incremented it
+                if callerIncrementedCounter {
+                    SdkManager.shared.getCoralogixSdk()?.revertScreenshotCounter()
+                }
+                return
+            }
+            
+            // Atomic read-compare-write for prvScreenshotData
+            let shouldSkip = self.screenshotDataQueue.sync { () -> Bool in
+                if let prvData = self._prvScreenshotData,
+                   !self.imagesAreDifferent(screenshotData, prvData) {
+                    return true
+                }
+                self._prvScreenshotData = screenshotData
+                return false
+            }
+            
+            if shouldSkip {
+                Log.d("[SessionReplayModel] Same screenshot, skipping...")
+                // Revert counter if caller had already incremented it
+                if callerIncrementedCounter {
+                    SdkManager.shared.getCoralogixSdk()?.revertScreenshotCounter()
+                }
+                return
+            }
+            
+            // prvScreenshotData already set atomically in the sync block above
+            self.saveScreenshotToFileSystem(screenshotData: screenshotData, properties: properties)
+        }
     }
     
     internal func captureManual(properties: [String: Any]?, screenshotData: Data) {
@@ -142,7 +309,7 @@ public class SessionReplayModel {
     internal func updateSessionId(with sessionId: String) {
         if sessionId != self.sessionId {
             self.sessionId = sessionId
-            self.prvScreenshotData = nil
+            screenshotDataQueue.sync { _prvScreenshotData = nil }
             _ = self.clearSessionReplayFolder()
             SRUtils.deleteURLsFromDisk()
         }
@@ -237,10 +404,23 @@ public class SessionReplayModel {
     }
     
     internal func generateFileName(properties: [String: Any]?) -> String {
-        guard let properties = properties,
-              let segmentIndex = properties[Keys.segmentIndex.rawValue] as? Int,
-              let page = properties[Keys.page.rawValue] as? Int else {
-            return "file_name_error"
+        let segmentIndex: Int
+        let page: Int
+        
+        // Use provided properties if available, otherwise request from CoralogixRum
+        if let providedSegmentIndex = properties?[Keys.segmentIndex.rawValue] as? Int,
+           let providedPage = properties?[Keys.page.rawValue] as? Int {
+            segmentIndex = providedSegmentIndex
+            page = providedPage
+        } else if let coralogixSdk = SdkManager.shared.getCoralogixSdk() {
+            // Request screenshot location from CoralogixRum (uses ScreenshotManager)
+            let locationProps = coralogixSdk.getNextScreenshotLocationProperties()
+            segmentIndex = locationProps[Keys.segmentIndex.rawValue] as? Int ?? 0
+            page = locationProps[Keys.page.rawValue] as? Int ?? 0
+        } else {
+            Log.e("[SessionReplayModel] Cannot generate file name: no properties and CoralogixRum not available")
+            segmentIndex = 0
+            page = 0
         }
         
         return "\(sessionId)_\(page)_\(segmentIndex).jpg"

@@ -63,7 +63,7 @@ class ScannerPipeline {
             }
 
             textScanner.processImage(ciImage: input, maskText: options.maskText) { outputImage in
-                completion(outputImage ?? input)
+                completion(outputImage)
             }
         }
 
