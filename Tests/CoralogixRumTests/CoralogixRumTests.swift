@@ -322,15 +322,11 @@ final class CoralogixRumTests: XCTestCase {
             "key2": 123
         ]
         let screenshotId = "screenshot_001"
-        let screenshotData = "fakeImage".data(using: .utf8)
         
         let screenshotLocation = ScreenshotLocation(segmentIndex: 0, page: 0, screenshotId: screenshotId)
         let result = coralogixRum.buildMetadata(properties: properties,
-                                                screenshotLocation: screenshotLocation,
-                                                screenshotData: screenshotData)
+                                                screenshotLocation: screenshotLocation)
         // Assert
-        XCTAssertEqual(result["screenshotId"] as? String, screenshotId)
-        XCTAssertEqual(result[Keys.screenshotData.rawValue] as? Data, screenshotData)
         XCTAssertEqual(result[Keys.page.rawValue] as? Int, 0)
         XCTAssertEqual(result[Keys.segmentIndex.rawValue] as? Int, 0)
         XCTAssertEqual(result[Keys.screenshotId.rawValue] as? String, screenshotId)
