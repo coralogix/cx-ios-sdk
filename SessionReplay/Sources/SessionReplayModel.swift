@@ -33,6 +33,12 @@ public class SessionReplayModel {
     /// Set of registered region IDs that should be masked during capture.
     /// Uses a pull-based model where coordinates are fetched at capture time via maskRegionsProvider.
     var maskedRegionIds = Set<String>()
+    
+    /// Internal counters for generating screenshot metadata when not provided by caller.
+    /// Used when SessionReplay.captureEvent() is called directly (e.g., from Flutter).
+    private var internalSegmentIndex: Int = 0
+    private var internalPage: Int = 0
+    private let maxScreenshotsPerPage: Int = 20
 
     internal var getKeyWindow: () -> UIWindow? = {
         Global.getKeyWindow()
@@ -243,6 +249,7 @@ public class SessionReplayModel {
         if sessionId != self.sessionId {
             self.sessionId = sessionId
             self.prvScreenshotData = nil
+            self.resetInternalCounters()
             _ = self.clearSessionReplayFolder()
             SRUtils.deleteURLsFromDisk()
         }
@@ -337,16 +344,42 @@ public class SessionReplayModel {
     }
     
     internal func generateFileName(properties: [String: Any]?) -> String {
-        let segmentIndex = properties?[Keys.segmentIndex.rawValue] as? Int ?? 0
-        let page = properties?[Keys.page.rawValue] as? Int ?? 0
-        let timestamp = Int(Date().timeIntervalSince1970 * 1000)
+        let segmentIndex: Int
+        let page: Int
         
-        // Use timestamp to ensure unique filenames when segmentIndex/page are not provided
-        if properties?[Keys.segmentIndex.rawValue] == nil || properties?[Keys.page.rawValue] == nil {
-            return "\(sessionId)_\(timestamp).jpg"
+        // Use provided properties if available, otherwise use internal counters
+        if let providedSegmentIndex = properties?[Keys.segmentIndex.rawValue] as? Int,
+           let providedPage = properties?[Keys.page.rawValue] as? Int {
+            segmentIndex = providedSegmentIndex
+            page = providedPage
+        } else {
+            // Auto-generate using internal counters (for direct captureEvent calls, e.g., from Flutter)
+            let location = nextInternalScreenshotLocation()
+            segmentIndex = location.segmentIndex
+            page = location.page
         }
         
         return "\(sessionId)_\(page)_\(segmentIndex).jpg"
+    }
+    
+    /// Generates the next screenshot location using internal counters.
+    /// Used when captureEvent is called directly without going through CoralogixRum instrumentation.
+    private func nextInternalScreenshotLocation() -> (segmentIndex: Int, page: Int) {
+        internalSegmentIndex += 1
+        
+        if internalSegmentIndex > maxScreenshotsPerPage {
+            internalPage += 1
+            internalSegmentIndex = 1
+            Log.d("[SessionReplayModel] Internal page incremented to: \(internalPage)")
+        }
+        
+        return (segmentIndex: internalSegmentIndex, page: internalPage)
+    }
+    
+    /// Resets internal screenshot counters. Called when session changes.
+    internal func resetInternalCounters() {
+        internalSegmentIndex = 0
+        internalPage = 0
     }
     
     internal func handleCapturedData(fileURL: URL, data: Data, properties: [String: Any]?) {
