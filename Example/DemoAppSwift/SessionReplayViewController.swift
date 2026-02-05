@@ -160,18 +160,11 @@ class SessionReplayViewController: UITableViewController {
             showAlertView(message: "isInitialized: \(CoralogixRumManager.shared.sdk.isSRInitialized())")
         } else if item == Keys.registerMaskRegion.rawValue {
             let maskRegionId = "demoMaskRegion"
-            let region: [String: Any] = [
-                "id": maskRegionId,
-                "x": 100,
-                "y": 100,
-                "width": 100,
-                "height": 100
-            ]
-            CoralogixRumManager.shared.sdk.registerMaskRegion(region: region)
+            CoralogixRumManager.shared.sdk.registerMaskRegion(maskRegionId)
             showAlertView(message: "Registered mask region with id: \(maskRegionId)")
         } else if item == Keys.unregisterMaskRegion.rawValue {
             let maskRegionId = "demoMaskRegion"
-            CoralogixRumManager.shared.sdk.unregisterMaskRegion(id: maskRegionId)
+            CoralogixRumManager.shared.sdk.unregisterMaskRegion(maskRegionId)
             showAlertView(message: "Unregistered mask region with id: \(maskRegionId)")
         }
 
