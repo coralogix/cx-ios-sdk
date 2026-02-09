@@ -59,4 +59,5 @@ enum Keys: String {
     case maskUI = "Mask UI"
     case registerMaskRegion   = "Register mask region"
     case unregisterMaskRegion = "Unregister mask region"
+    case userDefaultsTest = "UserDefaults Bug Test"
 }

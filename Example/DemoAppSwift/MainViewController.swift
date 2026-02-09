@@ -61,6 +61,12 @@ final class MainViewController: UITableViewController {
             subtitle: "Hide sensitive on-screen data",
             systemImageName: "eye.slash",
             key: .maskUI
+        ),
+        .init(
+            title: "UserDefaults Bug Test",
+            subtitle: "Test class scanning side effects",
+            systemImageName: "ladybug",
+            key: .userDefaultsTest
         )
     ]
 
@@ -249,6 +255,8 @@ final class MainViewController: UITableViewController {
             vc = SchemaValidationViewController()
         case .maskUI:
             vc = MaskViewController()
+        case .userDefaultsTest:
+            vc = UserDefaultsTestViewController()
         default:
             showToast("Not implemented for this menu item")
             return
