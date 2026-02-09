@@ -24,6 +24,7 @@
 		E64ABB172F3A205C00D990A9 /* (null) in Frameworks */ = {isa = PBXBuildFile; };
 		E64ABB182F3A205C00D990A9 /* (null) in Frameworks */ = {isa = PBXBuildFile; };
 		E64ABB192F3A205C00D990A9 /* (null) in Frameworks */ = {isa = PBXBuildFile; };
+		E64ABB1F2F3A228A00D990A9 /* CloudKitTestHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = E64ABB1E2F3A228A00D990A9 /* CloudKitTestHelper.swift */; };
 		E6525B5B2E38BE3C006DB4AA /* envs.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6525B5A2E38BE3A006DB4AA /* envs.swift */; };
 		E6525B602E38C548006DB4AA /* envs.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6525B5A2E38BE3A006DB4AA /* envs.swift */; };
 		E6525B612E38C548006DB4AA /* envs.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6525B5A2E38BE3A006DB4AA /* envs.swift */; };
@@ -140,6 +141,7 @@
 		E6320FB42BE7CE6800A4547E /* NetworkSim.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = NetworkSim.swift; sourceTree = "<group>"; };
 		E648914B2ED35B2600624978 /* FullImageCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FullImageCell.swift; sourceTree = "<group>"; };
 		E64ABB152F3A18FB00D990A9 /* UserDefaultsTestViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserDefaultsTestViewController.swift; sourceTree = "<group>"; };
+		E64ABB1E2F3A228A00D990A9 /* CloudKitTestHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitTestHelper.swift; sourceTree = "<group>"; };
 		E6525B5A2E38BE3A006DB4AA /* envs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = envs.swift; sourceTree = "<group>"; };
 		E65A5CA22EF17D5B008C58D3 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
 		E66938272C722EE60002335F /* DemoAppTvOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DemoAppTvOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -305,6 +307,7 @@
 		E68681A32BFA279500B127E7 /* DemoAppSwift */ = {
 			isa = PBXGroup;
 			children = (
+				E64ABB1E2F3A228A00D990A9 /* CloudKitTestHelper.swift */,
 				E64ABB152F3A18FB00D990A9 /* UserDefaultsTestViewController.swift */,
 				E66938542C74A7EF0002335F /* UIElements */,
 				E68681A42BFA279500B127E7 /* AppDelegate.swift */,
@@ -627,6 +630,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E64ABB1F2F3A228A00D990A9 /* CloudKitTestHelper.swift in Sources */,
 				E603F6CC2C5631CF007C55DA /* CollectionViewController.swift in Sources */,
 				E66938532C7489050002335F /* SdkViewController.swift in Sources */,
 				E6FDDA2D2DF176DC0005F274 /* ClockViewController.swift in Sources */,

@@ -48,21 +48,15 @@ final class UserDefaultsTestViewController: UIViewController {
         scrollView.addSubview(contentStack)
         
         // Test buttons
-        let button1 = createButton(title: "1️⃣ Test Before SDK Init", action: #selector(testBeforeSDKInit))
-        let button2 = createButton(title: "2️⃣ Single Class Scan (Coralogix)", action: #selector(triggerClassScanning))
-        let button3 = createButton(title: "3️⃣ Multiple Scans (Sentry + Coralogix)", action: #selector(triggerMultipleScans))
-        let button4 = createButton(title: "4️⃣ Test After Scanning", action: #selector(testAfterScanning))
-        let button5 = createButton(title: "🔄 Run Full Test", action: #selector(runFullTest))
-        let button6 = createButton(title: "🔍 Check Linked Frameworks", action: #selector(checkLinkedFrameworks))
+        let button1 = createButton(title: "🔍 Check SDK Initialization Status", action: #selector(checkLinkedFrameworks))
+        let button2 = createButton(title: "🧪 Test UserDefaults (After SDK Init)", action: #selector(testUserDefaultsAfterSDKInit))
+        let button3 = createButton(title: "🔄 Run Full Test", action: #selector(runFullTest))
         let clearButton = createButton(title: "🗑️ Clear Logs", action: #selector(clearLogs))
         clearButton.backgroundColor = .systemRed
         
         contentStack.addArrangedSubview(button1)
         contentStack.addArrangedSubview(button2)
         contentStack.addArrangedSubview(button3)
-        contentStack.addArrangedSubview(button4)
-        contentStack.addArrangedSubview(button5)
-        contentStack.addArrangedSubview(button6)
         contentStack.addArrangedSubview(clearButton)
         
         // Log text view
@@ -91,13 +85,14 @@ final class UserDefaultsTestViewController: UIViewController {
         ])
         
         log("✅ UserDefaults Bug Test Ready\n")
-        log("📋 Instructions:")
-        log("1. First check linked frameworks (button 6)")
-        log("2. Run full test (button 5)")
-        log("3. If no bug, try 'Multiple Scans' (button 3)\n")
-        log("⚠️ Bug: If CloudKit classes are initialized during")
-        log("   objc_getClassList(), UserDefaults may only work in memory")
-        log("   This is more likely with multiple SDKs (Sentry + Coralogix)\n")
+        log("📋 Real-World Test:")
+        log("• Sentry initialized in AppDelegate (FIRST)")
+        log("• Coralogix initialized in AppDelegate (SECOND)")
+        log("• This test checks if UserDefaults was corrupted\n")
+        log("⚠️ Bug: Sentry's objc_getClassList() triggers")
+        log("   CloudKit +initialize, which corrupts UserDefaults")
+        log("   Values work in memory but don't persist to disk\n")
+        log("🎯 Press 'Run Full Test' to check for corruption\n")
         log("─────────────────────────────────────────────\n")
     }
     
@@ -117,30 +112,74 @@ final class UserDefaultsTestViewController: UIViewController {
     
     // MARK: - Test Methods
     
-    @objc private func testBeforeSDKInit() {
-        log("\n🧪 TEST 1: UserDefaults BEFORE class scanning")
+    @objc private func testUserDefaultsAfterSDKInit() {
+        log("\n🧪 Testing UserDefaults (After SDK Initialization)")
         log("─────────────────────────────────────────────")
+        log("⚠️  Note: Sentry and Coralogix already initialized in AppDelegate")
+        log("   If corruption happened, we'll detect it now\n")
         
         // Clear any previous test value
         UserDefaults.standard.removeObject(forKey: testKey)
         UserDefaults.standard.synchronize()
         
-        // Set a test value
-        let testValue = "value_before_scanning_\(Date().timeIntervalSince1970)"
+        // Write a test value
+        let testValue = "test_value_\(Date().timeIntervalSince1970)"
+        log("📝 Writing to UserDefaults...")
+        log("   Key: \(testKey)")
+        log("   Value: \(testValue)")
+        
         UserDefaults.standard.set(testValue, forKey: testKey)
         UserDefaults.standard.synchronize()
         
-        // Read it back
+        // Read it back immediately (from memory)
         let readValue = UserDefaults.standard.string(forKey: testKey)
         
+        log("\n📖 Reading from UserDefaults (memory)...")
         if readValue == testValue {
-            log("✅ PASS: UserDefaults working correctly")
-            log("   Written: \(testValue)")
-            log("   Read:    \(readValue ?? "nil")")
+            log("   ✅ Read successful: \(readValue ?? "nil")")
         } else {
-            log("❌ FAIL: UserDefaults not working")
-            log("   Written: \(testValue)")
-            log("   Read:    \(readValue ?? "nil")")
+            log("   ❌ Read failed: \(readValue ?? "nil")")
+        }
+        
+        // Check if it's actually in the plist file (disk)
+        log("\n📁 Checking UserDefaults plist file (disk)...")
+        if let plistPath = getUserDefaultsPlistPath() {
+            log("   Path: \(plistPath)")
+            let fileExists = FileManager.default.fileExists(atPath: plistPath)
+            log("   File exists: \(fileExists)")
+            
+            if fileExists, let plistData = FileManager.default.contents(atPath: plistPath),
+               let plist = try? PropertyListSerialization.propertyList(from: plistData, format: nil) as? [String: Any] {
+                let hasTestKey = plist[testKey] != nil
+                let diskValue = plist[testKey] as? String
+                
+                log("   Contains key '\(testKey)': \(hasTestKey)")
+                if hasTestKey {
+                    log("   Disk value: \(diskValue ?? "nil")")
+                }
+                
+                // The verdict
+                if readValue != nil && !hasTestKey {
+                    log("\n❌ BUG DETECTED!")
+                    log("   • Value exists in memory: ✅")
+                    log("   • Value persisted to disk: ❌")
+                    log("   • Corruption confirmed: UserDefaults is in memory-only mode")
+                    log("   • Cause: Sentry/Coralogix class scanning triggered CloudKit +initialize")
+                } else if readValue != nil && hasTestKey {
+                    log("\n✅ NO BUG")
+                    log("   • Value exists in memory: ✅")
+                    log("   • Value persisted to disk: ✅")
+                    log("   • UserDefaults working normally")
+                } else {
+                    log("\n⚠️  UNEXPECTED STATE")
+                    log("   • Memory value: \(readValue ?? "nil")")
+                    log("   • Disk value: \(diskValue ?? "nil")")
+                }
+            } else {
+                log("   ⚠️  Could not read plist file")
+            }
+        } else {
+            log("   ❌ Could not determine plist path")
         }
     }
     
@@ -219,161 +258,36 @@ final class UserDefaultsTestViewController: UIViewController {
         }
     }
     
-    @objc private func triggerClassScanning() {
-        log("\n🔬 TEST 2: Single class scan (Coralogix SDK)")
-        log("─────────────────────────────────────────────")
-        log("⚠️  About to call objc_getClassList() + NSStringFromClass()")
-        log("   This triggers +initialize on ALL classes including CloudKit\n")
-        
-        performClassScan(label: "Coralogix")
-    }
-    
-    @objc private func triggerMultipleScans() {
-        log("\n🔬 TEST 3: Multiple class scans (Sentry + Coralogix)")
-        log("─────────────────────────────────────────────")
-        log("⚠️  Simulating multiple SDKs scanning classes")
-        log("   Real-world scenario: App has Sentry AND Coralogix")
-        log("   Each SDK scans ALL classes during initialization\n")
-        
-        performClassScan(label: "Sentry (1st scan)")
-        
-        log("\n⏱️  Waiting 100ms...\n")
-        Thread.sleep(forTimeInterval: 0.1)
-        
-        performClassScan(label: "Coralogix (2nd scan)")
-        
-        log("\n⚠️  Multiple scans can compound the corruption")
-        log("   Each scan re-triggers +initialize methods")
-    }
-    
-    private func performClassScan(label: String) {
-        log("🔍 \(label) scanning classes...")
-        
-        let expectedClassCount = ObjectiveC.objc_getClassList(nil, 0)
-        let allClasses = UnsafeMutablePointer<AnyClass>.allocate(capacity: Int(expectedClassCount))
-        let autoreleasingAllClasses = AutoreleasingUnsafeMutablePointer<AnyClass>(allClasses)
-        let actualClassCount: Int32 = ObjectiveC.objc_getClassList(autoreleasingAllClasses, expectedClassCount)
-        
-        var ckClassCount = 0
-        var ubClassCount = 0
-        var sentryCount = 0
-        var firebaseCount = 0
-        
-        for i in 0 ..< actualClassCount {
-            let cls = allClasses[Int(i)]
-            let className = NSStringFromClass(cls)  // ⚠️ THIS TRIGGERS +initialize
-            
-            if className.hasPrefix("CK") {
-                ckClassCount += 1
-                if ckClassCount <= 3 {
-                    log("   Found CloudKit class: \(className)")
-                }
-            } else if className.hasPrefix("UB") || className.hasPrefix("_UB") {
-                ubClassCount += 1
-                if ubClassCount <= 3 {
-                    log("   Found iCloud class: \(className)")
-                }
-            } else if className.hasPrefix("Sentry") {
-                sentryCount += 1
-            } else if className.hasPrefix("FIR") || className.hasPrefix("Firebase") {
-                firebaseCount += 1
-            }
-        }
-        
-        allClasses.deallocate()
-        
-        log("\n📊 \(label) scan results:")
-        log("   Total classes: \(actualClassCount)")
-        log("   CloudKit (CK*): \(ckClassCount)")
-        log("   iCloud (UB*, _UB*): \(ubClassCount)")
-        if sentryCount > 0 {
-            log("   Sentry: \(sentryCount)")
-        }
-        if firebaseCount > 0 {
-            log("   Firebase: \(firebaseCount)")
-        }
-        
-        if ckClassCount > 0 || ubClassCount > 0 {
-            log("\n⚠️  CloudKit/iCloud classes triggered!")
-            log("   +initialize methods have been called")
-            log("   UserDefaults corruption risk is HIGH")
-        } else {
-            log("\n✅ No CloudKit classes (can't reproduce bug)")
-        }
-    }
-    
-    @objc private func testAfterScanning() {
-        log("\n🧪 TEST 4: UserDefaults AFTER class scanning")
-        log("─────────────────────────────────────────────")
-        
-        // Try to write a new value
-        let testValue = "value_after_scanning_\(Date().timeIntervalSince1970)"
-        UserDefaults.standard.set(testValue, forKey: testKey)
-        UserDefaults.standard.synchronize()
-        
-        // Read it back immediately
-        let readValue = UserDefaults.standard.string(forKey: testKey)
-        
-        if readValue == testValue {
-            log("✅ PASS: UserDefaults still working")
-            log("   Written: \(testValue)")
-            log("   Read:    \(readValue ?? "nil")")
-            log("\n💡 No corruption detected (or CloudKit not linked)")
-        } else {
-            log("❌ FAIL: UserDefaults corrupted!")
-            log("   Written: \(testValue)")
-            log("   Read:    \(readValue ?? "nil")")
-            log("\n🐛 BUG REPRODUCED:")
-            log("   CloudKit +initialize corrupted UserDefaults")
-            log("   Values only persist in memory, not to disk")
-        }
-        
-        // Check file system
-        log("\n📁 Checking UserDefaults plist file:")
-        if let plistPath = getUserDefaultsPlistPath() {
-            log("   Path: \(plistPath)")
-            let fileExists = FileManager.default.fileExists(atPath: plistPath)
-            log("   File exists: \(fileExists)")
-            
-            if fileExists, let plistData = FileManager.default.contents(atPath: plistPath),
-               let plist = try? PropertyListSerialization.propertyList(from: plistData, format: nil) as? [String: Any] {
-                let hasTestKey = plist[testKey] != nil
-                log("   Contains test key '\(testKey)': \(hasTestKey)")
-                
-                if !hasTestKey && readValue != nil {
-                    log("\n⚠️  CORRUPTION CONFIRMED:")
-                    log("   Value exists in memory but NOT in plist file!")
-                }
-            }
-        }
-    }
     
     @objc private func runFullTest() {
         clearLogs()
-        log("🚀 Running Full UserDefaults Corruption Test\n")
+        log("🚀 Running Real-World UserDefaults Test\n")
+        log("⏱️  Timeline:")
+        log("   1. AppDelegate.didFinishLaunching (ALREADY RAN)")
+        log("      - CloudKitTestHelper.forceLoadCloudKit() ✅")
+        log("      - Sentry.initialize() ← Scans 65k classes ⚠️")
+        log("      - Coralogix.initialize() ← Scans 65k classes ⚠️")
+        log("   2. This test (RUNNING NOW)")
+        log("      - Check if UserDefaults corrupted by SDK init\n")
         
         checkLinkedFrameworks()
         
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            self.testBeforeSDKInit()
+            self.testUserDefaultsAfterSDKInit()
             
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                // Use multiple scans to increase chance of reproduction
-                self.triggerMultipleScans()
-                
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    self.testAfterScanning()
-                    
-                    self.log("\n═══════════════════════════════════════════")
-                    self.log("TEST COMPLETE")
-                    self.log("═══════════════════════════════════════════")
-                    
-                    if NSClassFromString("CKDatabase") == nil {
-                        self.log("\n💡 Tip: Bug requires CloudKit to be linked")
-                        self.log("   In production apps with Sentry + CloudKit,")
-                        self.log("   this bug is more likely to occur")
-                    }
-                }
+            self.log("\n═══════════════════════════════════════════")
+            self.log("TEST COMPLETE")
+            self.log("═══════════════════════════════════════════\n")
+            
+            if NSClassFromString("CKDatabase") != nil {
+                self.log("💡 Interpretation:")
+                self.log("   • If bug detected: Sentry/Coralogix class scanning")
+                self.log("     triggered CloudKit +initialize during app launch")
+                self.log("   • If no bug: Either corruption didn't happen OR")
+                self.log("     Apple fixed it in this iOS version")
+            } else {
+                self.log("⚠️  CloudKit not available")
+                self.log("   Bug cannot reproduce without CloudKit")
             }
         }
     }

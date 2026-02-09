@@ -18,7 +18,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         // Force CloudKit to load for testing UserDefaults corruption bug
-        CloudKitTestHelper.forceLoadCloudKit()
+        //CloudKitTestHelper.forceLoadCloudKit()
         
         SentrySDK.start { options in
             options.dsn = "https://a1981f08beeecc23b04fd02f17a06424@o4510856319205376.ingest.us.sentry.io/4510856320909312"
