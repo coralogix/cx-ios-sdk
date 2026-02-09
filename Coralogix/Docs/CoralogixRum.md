@@ -136,7 +136,7 @@ This document describes the public functions available for interacting with the 
 
 ### setUserContext
 ```swift
-public func setUserContext(userContext: UserContext)
+public func setUserContext(userContext: UserContext?)
 ```
 Sets the user context for the Coralogix exporter.
 #### Parameters

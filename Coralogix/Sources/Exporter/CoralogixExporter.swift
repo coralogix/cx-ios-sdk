@@ -65,7 +65,7 @@ public class CoralogixExporter: SpanExporter {
         }
     }
     
-    public func update(userContext: UserContext) {
+    public func update(userContext: UserContext?) {
         self.options.userContext = userContext
     }
     
