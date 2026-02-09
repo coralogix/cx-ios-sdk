@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		67CEAE3217F1492E8381C8B5 /* Sentry in Frameworks */ = {isa = PBXBuildFile; productRef = 33EBC397BB774A0E87EE0A1F /* Sentry */; };
 		E603F6CC2C5631CF007C55DA /* CollectionViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E603F6CB2C5631CF007C55DA /* CollectionViewController.swift */; };
 		E603F6CE2C56792D007C55DA /* PageController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E603F6CD2C56792D007C55DA /* PageController.swift */; };
 		E622115B2BFDEB8B00052682 /* DemoAppSwiftUIApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = E622115A2BFDEB8B00052682 /* DemoAppSwiftUIApp.swift */; };
@@ -20,6 +21,9 @@
 		E622116D2BFF2D5300052682 /* Keys.swift in Sources */ = {isa = PBXBuildFile; fileRef = E622116B2BFF2A7B00052682 /* Keys.swift */; };
 		E648914C2ED35B2600624978 /* FullImageCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = E648914B2ED35B2600624978 /* FullImageCell.swift */; };
 		E64ABB162F3A18FB00D990A9 /* UserDefaultsTestViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E64ABB152F3A18FB00D990A9 /* UserDefaultsTestViewController.swift */; };
+		E64ABB172F3A205C00D990A9 /* (null) in Frameworks */ = {isa = PBXBuildFile; };
+		E64ABB182F3A205C00D990A9 /* (null) in Frameworks */ = {isa = PBXBuildFile; };
+		E64ABB192F3A205C00D990A9 /* (null) in Frameworks */ = {isa = PBXBuildFile; };
 		E6525B5B2E38BE3C006DB4AA /* envs.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6525B5A2E38BE3A006DB4AA /* envs.swift */; };
 		E6525B602E38C548006DB4AA /* envs.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6525B5A2E38BE3A006DB4AA /* envs.swift */; };
 		E6525B612E38C548006DB4AA /* envs.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6525B5A2E38BE3A006DB4AA /* envs.swift */; };
@@ -177,6 +181,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E64ABB192F3A205C00D990A9 /* (null) in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -186,6 +191,7 @@
 			files = (
 				E66E3B6C2DA7FB6400FBC86B /* Coralogix in Frameworks */,
 				E6B60A022DB4E53F003AD35D /* SessionReplay in Frameworks */,
+				E64ABB172F3A205C00D990A9 /* (null) in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -195,6 +201,7 @@
 			files = (
 				E66E3B6A2DA7FAE900FBC86B /* Coralogix in Frameworks */,
 				E6B60A002DB4E531003AD35D /* SessionReplay in Frameworks */,
+				E64ABB182F3A205C00D990A9 /* (null) in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -207,6 +214,7 @@
 				E690EAE02EF182F60011C147 /* FirebaseCrashlytics in Frameworks */,
 				E690EADE2EF182F60011C147 /* FirebaseCore in Frameworks */,
 				E690EADC2EF182F60011C147 /* FirebaseAnalytics in Frameworks */,
+				67CEAE3217F1492E8381C8B5 /* Sentry in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -417,6 +425,7 @@
 				E68681A02BFA279500B127E7 /* Resources */,
 				E6C60AAC2C2BF7D6003469B3 /* Embed Frameworks */,
 				E690EAE12EF18F370011C147 /* ShellScript */,
+				1D25A7C1BF2444AB8810C7DA /* Upload Debug Symbols to Sentry */,
 			);
 			buildRules = (
 			);
@@ -429,6 +438,7 @@
 				E690EADB2EF182F60011C147 /* FirebaseAnalytics */,
 				E690EADD2EF182F60011C147 /* FirebaseCore */,
 				E690EADF2EF182F60011C147 /* FirebaseCrashlytics */,
+				33EBC397BB774A0E87EE0A1F /* Sentry */,
 			);
 			productName = DemoAppSwift;
 			productReference = E68681A22BFA279500B127E7 /* DemoAppSwift.app */;
@@ -471,6 +481,7 @@
 			packageReferences = (
 				E66E3B662DA7F76C00FBC86B /* XCLocalSwiftPackageReference "../../cx-ios-sdk" */,
 				E690EADA2EF182F60011C147 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
+				516DDD24DECD415DBCB80E29 /* XCRemoteSwiftPackageReference "sentry-cocoa" */,
 			);
 			productRefGroup = E6320F832BE7C94F00A4547E /* Products */;
 			projectDirPath = "";
@@ -528,6 +539,21 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
+		1D25A7C1BF2444AB8810C7DA /* Upload Debug Symbols to Sentry */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"${DWARF_DSYM_FOLDER_PATH}/${DWARF_DSYM_FILE_NAME}/Contents/Resources/DWARF/${TARGET_NAME}",
+			);
+			name = "Upload Debug Symbols to Sentry";
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# This script is responsible for uploading debug symbols and source context for Sentry.\nif which sentry-cli >/dev/null; then\n  export SENTRY_ORG=dow-yi\n  export SENTRY_PROJECT=apple-ios\n  ERROR=$(sentry-cli debug-files upload --include-sources \"$DWARF_DSYM_FOLDER_PATH\" 2>&1 >/dev/null)\n  if [ ! $? -eq 0 ]; then\n    echo \"warning: sentry-cli - $ERROR\"\n  fi\nelse\n  echo \"warning: sentry-cli not installed, download from https://github.com/getsentry/sentry-cli/releases\"\nfi\n";
+		};
 		E690EAE12EF18F370011C147 /* ShellScript */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
@@ -957,6 +983,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = 5V73DZ2JCN;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = DemoAppSwift/Info.plist;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -987,7 +1014,9 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = 5V73DZ2JCN;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = DemoAppSwift/Info.plist;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -1068,6 +1097,14 @@
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		516DDD24DECD415DBCB80E29 /* XCRemoteSwiftPackageReference "sentry-cocoa" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/getsentry/sentry-cocoa/";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 8.0.0;
+			};
+		};
 		E690EADA2EF182F60011C147 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/firebase/firebase-ios-sdk.git";
@@ -1079,6 +1116,11 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		33EBC397BB774A0E87EE0A1F /* Sentry */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 516DDD24DECD415DBCB80E29 /* XCRemoteSwiftPackageReference "sentry-cocoa" */;
+			productName = Sentry;
+		};
 		E66E3B672DA7F76C00FBC86B /* Coralogix */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = Coralogix;
