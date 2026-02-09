@@ -8,6 +8,7 @@
 
 import UIKit
 import Coralogix
+import MachO
 
 final class UserDefaultsTestViewController: UIViewController {
     
@@ -48,9 +49,11 @@ final class UserDefaultsTestViewController: UIViewController {
         
         // Test buttons
         let button1 = createButton(title: "1️⃣ Test Before SDK Init", action: #selector(testBeforeSDKInit))
-        let button2 = createButton(title: "2️⃣ Trigger Class Scanning (Simulate SDK)", action: #selector(triggerClassScanning))
-        let button3 = createButton(title: "3️⃣ Test After Scanning", action: #selector(testAfterScanning))
-        let button4 = createButton(title: "🔄 Run Full Test", action: #selector(runFullTest))
+        let button2 = createButton(title: "2️⃣ Single Class Scan (Coralogix)", action: #selector(triggerClassScanning))
+        let button3 = createButton(title: "3️⃣ Multiple Scans (Sentry + Coralogix)", action: #selector(triggerMultipleScans))
+        let button4 = createButton(title: "4️⃣ Test After Scanning", action: #selector(testAfterScanning))
+        let button5 = createButton(title: "🔄 Run Full Test", action: #selector(runFullTest))
+        let button6 = createButton(title: "🔍 Check Linked Frameworks", action: #selector(checkLinkedFrameworks))
         let clearButton = createButton(title: "🗑️ Clear Logs", action: #selector(clearLogs))
         clearButton.backgroundColor = .systemRed
         
@@ -58,6 +61,8 @@ final class UserDefaultsTestViewController: UIViewController {
         contentStack.addArrangedSubview(button2)
         contentStack.addArrangedSubview(button3)
         contentStack.addArrangedSubview(button4)
+        contentStack.addArrangedSubview(button5)
+        contentStack.addArrangedSubview(button6)
         contentStack.addArrangedSubview(clearButton)
         
         // Log text view
@@ -87,11 +92,12 @@ final class UserDefaultsTestViewController: UIViewController {
         
         log("✅ UserDefaults Bug Test Ready\n")
         log("📋 Instructions:")
-        log("1. Press buttons in order (1→2→3)")
-        log("2. Or press 'Run Full Test' to run all at once")
-        log("3. Watch for UserDefaults corruption after class scanning\n")
+        log("1. First check linked frameworks (button 6)")
+        log("2. Run full test (button 5)")
+        log("3. If no bug, try 'Multiple Scans' (button 3)\n")
         log("⚠️ Bug: If CloudKit classes are initialized during")
-        log("   objc_getClassList(), UserDefaults may only work in memory\n")
+        log("   objc_getClassList(), UserDefaults may only work in memory")
+        log("   This is more likely with multiple SDKs (Sentry + Coralogix)\n")
         log("─────────────────────────────────────────────\n")
     }
     
@@ -138,13 +144,111 @@ final class UserDefaultsTestViewController: UIViewController {
         }
     }
     
+    @objc private func checkLinkedFrameworks() {
+        log("\n🔍 Checking Linked Frameworks")
+        log("─────────────────────────────────────────────")
+        
+        // Check for common frameworks that might contain CloudKit
+        let frameworksToCheck = [
+            "CloudKit",
+            "CloudKitDistributedSync", 
+            "iCloudQuota",
+            "Sentry",
+            "Firebase",
+            "FirebaseCore",
+            "Datadog",
+            "DatadogCore"
+        ]
+        
+        var foundFrameworks: [String] = []
+        
+        for framework in frameworksToCheck {
+            // Try to get a class from the framework
+            if let _ = NSClassFromString(framework) ?? 
+                       NSClassFromString("\(framework).Configuration") ??
+                       NSClassFromString("CKDatabase") {  // CloudKit specific
+                foundFrameworks.append(framework)
+            }
+        }
+        
+        if foundFrameworks.isEmpty {
+            log("✅ No known APM/CloudKit frameworks detected")
+            log("   This might be why the bug doesn't reproduce")
+        } else {
+            log("⚠️  Found frameworks: \(foundFrameworks.joined(separator: ", "))")
+            log("   These frameworks increase corruption risk")
+        }
+        
+        // Check for CloudKit classes specifically
+        let ckClasses = ["CKDatabase", "CKContainer", "CKRecord", "CKRecordZone"]
+        var foundCKClasses: [String] = []
+        
+        for className in ckClasses {
+            if NSClassFromString(className) != nil {
+                foundCKClasses.append(className)
+            }
+        }
+        
+        if foundCKClasses.isEmpty {
+            log("\n❌ CloudKit classes NOT available")
+            log("   Bug cannot reproduce without CloudKit")
+            log("\n💡 To reproduce the bug:")
+            log("   1. Link CloudKit.framework in Xcode")
+            log("   2. Or test in an app that uses iCloud")
+        } else {
+            log("\n⚠️  CloudKit classes available: \(foundCKClasses.joined(separator: ", "))")
+            log("   Bug CAN reproduce in this environment")
+        }
+        
+        // Check if any images have CloudKit
+        let loadedImages = _dyld_image_count()
+        var hasCloudKit = false
+        for i in 0..<loadedImages {
+            if let imageName = _dyld_get_image_name(i) {
+                let name = String(cString: imageName)
+                if name.contains("CloudKit") {
+                    hasCloudKit = true
+                    log("\n📦 CloudKit loaded from: \(name)")
+                    break
+                }
+            }
+        }
+        
+        if !hasCloudKit {
+            log("\n❌ CloudKit.framework NOT loaded in memory")
+        }
+    }
+    
     @objc private func triggerClassScanning() {
-        log("\n🔬 TEST 2: Triggering class scanning (simulating SDK init)")
+        log("\n🔬 TEST 2: Single class scan (Coralogix SDK)")
         log("─────────────────────────────────────────────")
         log("⚠️  About to call objc_getClassList() + NSStringFromClass()")
         log("   This triggers +initialize on ALL classes including CloudKit\n")
         
-        // Simulate what the SDK does
+        performClassScan(label: "Coralogix")
+    }
+    
+    @objc private func triggerMultipleScans() {
+        log("\n🔬 TEST 3: Multiple class scans (Sentry + Coralogix)")
+        log("─────────────────────────────────────────────")
+        log("⚠️  Simulating multiple SDKs scanning classes")
+        log("   Real-world scenario: App has Sentry AND Coralogix")
+        log("   Each SDK scans ALL classes during initialization\n")
+        
+        performClassScan(label: "Sentry (1st scan)")
+        
+        log("\n⏱️  Waiting 100ms...\n")
+        Thread.sleep(forTimeInterval: 0.1)
+        
+        performClassScan(label: "Coralogix (2nd scan)")
+        
+        log("\n⚠️  Multiple scans can compound the corruption")
+        log("   Each scan re-triggers +initialize methods")
+    }
+    
+    private func performClassScan(label: String) {
+        log("🔍 \(label) scanning classes...")
+        
         let expectedClassCount = ObjectiveC.objc_getClassList(nil, 0)
         let allClasses = UnsafeMutablePointer<AnyClass>.allocate(capacity: Int(expectedClassCount))
         let autoreleasingAllClasses = AutoreleasingUnsafeMutablePointer<AnyClass>(allClasses)
@@ -152,6 +256,8 @@ final class UserDefaultsTestViewController: UIViewController {
         
         var ckClassCount = 0
         var ubClassCount = 0
+        var sentryCount = 0
+        var firebaseCount = 0
         
         for i in 0 ..< actualClassCount {
             let cls = allClasses[Int(i)]
@@ -159,7 +265,7 @@ final class UserDefaultsTestViewController: UIViewController {
             
             if className.hasPrefix("CK") {
                 ckClassCount += 1
-                if ckClassCount <= 3 {  // Only log first 3
+                if ckClassCount <= 3 {
                     log("   Found CloudKit class: \(className)")
                 }
             } else if className.hasPrefix("UB") || className.hasPrefix("_UB") {
@@ -167,28 +273,37 @@ final class UserDefaultsTestViewController: UIViewController {
                 if ubClassCount <= 3 {
                     log("   Found iCloud class: \(className)")
                 }
+            } else if className.hasPrefix("Sentry") {
+                sentryCount += 1
+            } else if className.hasPrefix("FIR") || className.hasPrefix("Firebase") {
+                firebaseCount += 1
             }
         }
         
         allClasses.deallocate()
         
-        log("\n📊 Class scan results:")
-        log("   Total classes scanned: \(actualClassCount)")
-        log("   CloudKit classes (CK*): \(ckClassCount)")
-        log("   iCloud classes (UB*, _UB*): \(ubClassCount)")
+        log("\n📊 \(label) scan results:")
+        log("   Total classes: \(actualClassCount)")
+        log("   CloudKit (CK*): \(ckClassCount)")
+        log("   iCloud (UB*, _UB*): \(ubClassCount)")
+        if sentryCount > 0 {
+            log("   Sentry: \(sentryCount)")
+        }
+        if firebaseCount > 0 {
+            log("   Firebase: \(firebaseCount)")
+        }
         
         if ckClassCount > 0 || ubClassCount > 0 {
-            log("\n⚠️  WARNING: CloudKit/iCloud classes detected!")
-            log("   Their +initialize methods have been called")
-            log("   UserDefaults may be corrupted now...")
+            log("\n⚠️  CloudKit/iCloud classes triggered!")
+            log("   +initialize methods have been called")
+            log("   UserDefaults corruption risk is HIGH")
         } else {
-            log("\n✅ No CloudKit/iCloud classes found")
-            log("   (App doesn't link CloudKit framework)")
+            log("\n✅ No CloudKit classes (can't reproduce bug)")
         }
     }
     
     @objc private func testAfterScanning() {
-        log("\n🧪 TEST 3: UserDefaults AFTER class scanning")
+        log("\n🧪 TEST 4: UserDefaults AFTER class scanning")
         log("─────────────────────────────────────────────")
         
         // Try to write a new value
@@ -237,17 +352,28 @@ final class UserDefaultsTestViewController: UIViewController {
         clearLogs()
         log("🚀 Running Full UserDefaults Corruption Test\n")
         
-        testBeforeSDKInit()
+        checkLinkedFrameworks()
         
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            self.triggerClassScanning()
+            self.testBeforeSDKInit()
             
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                self.testAfterScanning()
+                // Use multiple scans to increase chance of reproduction
+                self.triggerMultipleScans()
                 
-                self.log("\n═══════════════════════════════════════════")
-                self.log("TEST COMPLETE")
-                self.log("═══════════════════════════════════════════")
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    self.testAfterScanning()
+                    
+                    self.log("\n═══════════════════════════════════════════")
+                    self.log("TEST COMPLETE")
+                    self.log("═══════════════════════════════════════════")
+                    
+                    if NSClassFromString("CKDatabase") == nil {
+                        self.log("\n💡 Tip: Bug requires CloudKit to be linked")
+                        self.log("   In production apps with Sentry + CloudKit,")
+                        self.log("   this bug is more likely to occur")
+                    }
+                }
             }
         }
     }

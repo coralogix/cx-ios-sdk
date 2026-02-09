@@ -19,6 +19,7 @@
 		E622116C2BFF2A7B00052682 /* Keys.swift in Sources */ = {isa = PBXBuildFile; fileRef = E622116B2BFF2A7B00052682 /* Keys.swift */; };
 		E622116D2BFF2D5300052682 /* Keys.swift in Sources */ = {isa = PBXBuildFile; fileRef = E622116B2BFF2A7B00052682 /* Keys.swift */; };
 		E648914C2ED35B2600624978 /* FullImageCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = E648914B2ED35B2600624978 /* FullImageCell.swift */; };
+		E64ABB162F3A18FB00D990A9 /* UserDefaultsTestViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E64ABB152F3A18FB00D990A9 /* UserDefaultsTestViewController.swift */; };
 		E6525B5B2E38BE3C006DB4AA /* envs.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6525B5A2E38BE3A006DB4AA /* envs.swift */; };
 		E6525B602E38C548006DB4AA /* envs.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6525B5A2E38BE3A006DB4AA /* envs.swift */; };
 		E6525B612E38C548006DB4AA /* envs.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6525B5A2E38BE3A006DB4AA /* envs.swift */; };
@@ -134,6 +135,7 @@
 		E6320FB32BE7CE6800A4547E /* ErrorSim.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ErrorSim.swift; sourceTree = "<group>"; };
 		E6320FB42BE7CE6800A4547E /* NetworkSim.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = NetworkSim.swift; sourceTree = "<group>"; };
 		E648914B2ED35B2600624978 /* FullImageCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FullImageCell.swift; sourceTree = "<group>"; };
+		E64ABB152F3A18FB00D990A9 /* UserDefaultsTestViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserDefaultsTestViewController.swift; sourceTree = "<group>"; };
 		E6525B5A2E38BE3A006DB4AA /* envs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = envs.swift; sourceTree = "<group>"; };
 		E65A5CA22EF17D5B008C58D3 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
 		E66938272C722EE60002335F /* DemoAppTvOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DemoAppTvOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -295,6 +297,7 @@
 		E68681A32BFA279500B127E7 /* DemoAppSwift */ = {
 			isa = PBXGroup;
 			children = (
+				E64ABB152F3A18FB00D990A9 /* UserDefaultsTestViewController.swift */,
 				E66938542C74A7EF0002335F /* UIElements */,
 				E68681A42BFA279500B127E7 /* AppDelegate.swift */,
 				E68681A62BFA279500B127E7 /* SceneDelegate.swift */,
@@ -619,6 +622,7 @@
 				E68681DA2BFC739C00B127E7 /* ModalViewController.swift in Sources */,
 				E68681D62BFA300300B127E7 /* CrashSim.swift in Sources */,
 				E6D4BBF92DE336310096B46D /* CoralogixRumManager.swift in Sources */,
+				E64ABB162F3A18FB00D990A9 /* UserDefaultsTestViewController.swift in Sources */,
 				E68681D82BFA300C00B127E7 /* NetworkSim.swift in Sources */,
 				E68681D72BFA300800B127E7 /* ErrorSim.swift in Sources */,
 			);
