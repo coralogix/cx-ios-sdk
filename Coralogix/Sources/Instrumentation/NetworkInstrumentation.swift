@@ -58,8 +58,7 @@ extension CoralogixRum {
             shouldInjectTracingHeaders: { [weak self] request in
                 return self?.shouldAddTraceParent(to: request, options: options) ?? false
             },
-            receivedResponse: self.receivedResponse,
-            ignoredClassPrefixes: options.ignoredClassPrefixes
+            receivedResponse: self.receivedResponse
         )
         self.sessionInstrumentation = URLSessionInstrumentation(configuration: configuration)
     }

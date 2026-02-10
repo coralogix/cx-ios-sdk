@@ -24,7 +24,6 @@ public struct URLSessionInstrumentationConfiguration {
                 receivedResponse: ((URLResponse, DataOrFile?, any Span) -> Void)? = nil,
                 receivedError: ((Error, DataOrFile?, HTTPStatus, any Span) -> Void)? = nil,
                 delegateClassesToInstrument: [AnyClass]? = nil,
-                ignoredClassPrefixes: [String]? = nil,
                 tracer: Tracer? = nil) {
         self.shouldRecordPayload = shouldRecordPayload
         self.shouldInstrument = shouldInstrument
@@ -36,7 +35,6 @@ public struct URLSessionInstrumentationConfiguration {
         self.receivedResponse = receivedResponse
         self.receivedError = receivedError
         self.delegateClassesToInstrument = delegateClassesToInstrument
-        self.ignoredClassPrefixes = ignoredClassPrefixes
         self.tracer = tracer ??
              OpenTelemetry.instance.tracerProvider.get(instrumentationName: "NSURLSession", instrumentationVersion: "0.0.1")
     }
@@ -80,8 +78,4 @@ public struct URLSessionInstrumentationConfiguration {
     /// NOTE: Auto-detection has been disabled. You must explicitly provide classes to enable delegate swizzling.
     /// If nil or empty, delegate methods will not be swizzled (URLSession method swizzling still works).
     public var delegateClassesToInstrument: [AnyClass]?
-    
-    /// DEPRECATED: No longer used. Delegate class scanning is disabled by default.
-    /// @available(*, deprecated, message: "Delegate scanning is disabled. Use delegateClassesToInstrument for explicit opt-in.")
-    public let ignoredClassPrefixes: [String]?
 }

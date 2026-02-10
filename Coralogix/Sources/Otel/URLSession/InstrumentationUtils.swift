@@ -11,39 +11,6 @@ import Foundation
 #endif
 
 enum InstrumentationUtils {
-    static func objc_getClassList() -> [AnyClass] {
-        let expectedClassCount = ObjectiveC.objc_getClassList(nil, 0)
-        let allClasses = UnsafeMutablePointer<AnyClass>.allocate(capacity: Int(expectedClassCount))
-        let autoreleasingAllClasses = AutoreleasingUnsafeMutablePointer<AnyClass>(allClasses)
-        let actualClassCount: Int32 = ObjectiveC.objc_getClassList(autoreleasingAllClasses, expectedClassCount)
-
-        var classes = [AnyClass]()
-        for i in 0 ..< actualClassCount {
-            classes.append(allClasses[Int(i)])
-        }
-        allClasses.deallocate()
-        return classes
-    }
-    
-    static func objc_getSafeClassList(ignoredPrefixes: [String]? = nil) -> [AnyClass] {
-        let allClasses = objc_getClassList()
-        var safeClasses: [AnyClass] = []
-        
-        for cls in allClasses {
-            let className = NSStringFromClass(cls)
-            if let ignoredPrefixes = ignoredPrefixes {
-                if ignoredPrefixes.contains(where: { className.hasPrefix($0) }) {
-                    //Log.d("[URLSessionInstrumentation] Skipping class \(className) due to ignored prefix")
-                    continue
-                }
-            }
-            
-            safeClasses.append(cls)
-        }
-        Log.d("[URLSessionInstrumentation] Found \(safeClasses.count) safe classes for swizzling")
-        return safeClasses
-    }
-
     static func instanceRespondsAndImplements(cls: AnyClass, selector: Selector) -> Bool {
         var implements = false
         if cls.instancesRespond(to: selector) {
