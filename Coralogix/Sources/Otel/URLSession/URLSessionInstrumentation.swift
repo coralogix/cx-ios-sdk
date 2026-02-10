@@ -429,19 +429,15 @@ public class URLSessionInstrumentation {
                         let completionWrapper: (Any?, URLResponse?, Error?) -> Void = { object, response, error in
                             if error != nil {
                                 let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-                                let logMessage = "[URLSessionInstrumentation] Logging error for taskId: \(sessionTaskId), status: \(status)"
-                                Log.d(logMessage)
                                 #if DEBUG
-                                Log.testLog(logMessage)
+                                Log.testLog("[URLSessionInstrumentation] Logging error for taskId: \(sessionTaskId), status: \(status)")
                                 #endif
                                 URLSessionLogger.logError(error!, dataOrFile: object, statusCode: status, instrumentation: self, sessionTaskId: sessionTaskId)
                             } else {
                                 if let response = response {
                                     let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-                                    let logMessage = "[URLSessionInstrumentation] Logging response for taskId: \(sessionTaskId), status: \(status)"
-                                    Log.d(logMessage)
                                     #if DEBUG
-                                    Log.testLog(logMessage)
+                                    Log.testLog("[URLSessionInstrumentation] Logging response for taskId: \(sessionTaskId), status: \(status)")
                                     #endif
                                     URLSessionLogger.logResponse(response, dataOrFile: object, instrumentation: self, sessionTaskId: sessionTaskId)
                                 }
@@ -499,19 +495,15 @@ public class URLSessionInstrumentation {
                     let completionWrapper: (Any?, URLResponse?, Error?) -> Void = { object, response, error in
                         if error != nil {
                             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-                            let logMessage = "[URLSessionInstrumentation] Logging error for taskId: \(sessionTaskId), status: \(status)"
-                            Log.d(logMessage)
                             #if DEBUG
-                            Log.testLog(logMessage)
+                            Log.testLog("[URLSessionInstrumentation] Logging error for taskId: \(sessionTaskId), status: \(status)")
                             #endif
                             URLSessionLogger.logError(error!, dataOrFile: object, statusCode: status, instrumentation: self, sessionTaskId: sessionTaskId)
                         } else {
                             if let response = response {
                                 let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-                                let logMessage = "[URLSessionInstrumentation] Logging response for taskId: \(sessionTaskId), status: \(status)"
-                                Log.d(logMessage)
                                 #if DEBUG
-                                Log.testLog(logMessage)
+                                Log.testLog("[URLSessionInstrumentation] Logging response for taskId: \(sessionTaskId), status: \(status)")
                                 #endif
                                 URLSessionLogger.logResponse(response, dataOrFile: object, instrumentation: self, sessionTaskId: sessionTaskId)
                             }
@@ -594,10 +586,8 @@ public class URLSessionInstrumentation {
                 
                 // Call hook
                 if let urlSessionTask = task as? URLSessionTask {
-                    let logMessage = "[URLSessionInstrumentation] 🔵 resume() called - task: \(urlSessionTask), URL: \(urlSessionTask.currentRequest?.url?.absoluteString ?? "nil")"
-                    Log.d(logMessage)
                     #if DEBUG
-                    Log.testLog(logMessage)
+                    Log.testLog("[URLSessionInstrumentation] 🔵 resume() called - task: \(urlSessionTask), URL: \(urlSessionTask.currentRequest?.url?.absoluteString ?? "nil")")
                     #endif
                     self.urlSessionTaskWillResume(urlSessionTask)
                 }
@@ -797,18 +787,14 @@ public class URLSessionInstrumentation {
         }
         if let error = error {
             let status = (task.response as? HTTPURLResponse)?.statusCode ?? 0
-            let logMessage = "[URLSessionInstrumentation] Logging error for taskId: \(taskId), status: \(status)"
-            Log.d(logMessage)
             #if DEBUG
-            Log.testLog(logMessage)
+            Log.testLog("[URLSessionInstrumentation] Logging error for taskId: \(taskId), status: \(status)")
             #endif
             URLSessionLogger.logError(error, dataOrFile: requestState?.dataProcessed, statusCode: status, instrumentation: self, sessionTaskId: taskId)
         } else if let response = task.response {
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-            let logMessage = "[URLSessionInstrumentation] Logging response for taskId: \(taskId), status: \(status)"
-            Log.d(logMessage)
             #if DEBUG
-            Log.testLog(logMessage)
+            Log.testLog("[URLSessionInstrumentation] Logging response for taskId: \(taskId), status: \(status)")
             #endif
             URLSessionLogger.logResponse(response, dataOrFile: requestState?.dataProcessed, instrumentation: self, sessionTaskId: taskId)
         }
@@ -841,17 +827,13 @@ public class URLSessionInstrumentation {
         /// Code for instrumenting collection should be written here
         if let error = task.error {
             let status = (task.response as? HTTPURLResponse)?.statusCode ?? 0
-            let logMessage = "[URLSessionInstrumentation] Logging error for taskId: \(taskId), status: \(status)"
-            Log.d(logMessage)
             #if DEBUG
-            Log.testLog(logMessage)
+            Log.testLog("[URLSessionInstrumentation] Logging error for taskId: \(taskId), status: \(status)")
             #endif
             URLSessionLogger.logError(error, dataOrFile: requestState?.dataProcessed, statusCode: status, instrumentation: self, sessionTaskId: taskId)
         } else if let response = task.response {
-            let logMessage = "[URLSessionInstrumentation] Logging response for taskId: \(taskId), status: \((response as? HTTPURLResponse)?.statusCode ?? 0)"
-            Log.d(logMessage)
             #if DEBUG
-            Log.testLog(logMessage)
+            Log.testLog("[URLSessionInstrumentation] Logging response for taskId: \(taskId), status: \((response as? HTTPURLResponse)?.statusCode ?? 0)")
             #endif
             URLSessionLogger.logResponse(response, dataOrFile: requestState?.dataProcessed, instrumentation: self, sessionTaskId: taskId)
         }
@@ -898,10 +880,8 @@ public class URLSessionInstrumentation {
           }
           
           if isAsyncContext {
-            let logMessage = "[URLSessionInstrumentation] ✅ Detected async/await context, instrumenting request"
-            Log.d(logMessage)
             #if DEBUG
-            Log.testLog(logMessage)
+            Log.testLog("[URLSessionInstrumentation] ✅ Detected async/await context, instrumenting request")
             #endif
             let instrumentedRequest = URLSessionLogger.processAndLogRequest(request,
                                                                             sessionTaskId: taskId,
