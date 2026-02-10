@@ -17,9 +17,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         // Enable test logger for UI tests
         #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("--uitesting") {
-            TestLogger.shared.enable()
-            TestLogger.shared.log("🧪 Test mode enabled - logging to /tmp/coralogix_test_logs.txt")
-            print("🧪 Test mode enabled - TestLogger writing to /tmp/coralogix_test_logs.txt")
+            Log.enableTestLogging()
+            Log.testLog("🧪 Test mode enabled - logging to /tmp/coralogix_test_logs.txt")
+            print("🧪 Test mode enabled - Test logging writing to /tmp/coralogix_test_logs.txt")
         }
         #endif
 

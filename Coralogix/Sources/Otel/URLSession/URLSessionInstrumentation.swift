@@ -432,7 +432,7 @@ public class URLSessionInstrumentation {
                                 let logMessage = "[URLSessionInstrumentation] Logging error for taskId: \(sessionTaskId), status: \(status)"
                                 Log.d(logMessage)
                                 #if DEBUG
-                                TestLogger.shared.log(logMessage)
+                                Log.testLog(logMessage)
                                 #endif
                                 URLSessionLogger.logError(error!, dataOrFile: object, statusCode: status, instrumentation: self, sessionTaskId: sessionTaskId)
                             } else {
@@ -441,7 +441,7 @@ public class URLSessionInstrumentation {
                                     let logMessage = "[URLSessionInstrumentation] Logging response for taskId: \(sessionTaskId), status: \(status)"
                                     Log.d(logMessage)
                                     #if DEBUG
-                                    TestLogger.shared.log(logMessage)
+                                    Log.testLog(logMessage)
                                     #endif
                                     URLSessionLogger.logResponse(response, dataOrFile: object, instrumentation: self, sessionTaskId: sessionTaskId)
                                 }
@@ -502,7 +502,7 @@ public class URLSessionInstrumentation {
                             let logMessage = "[URLSessionInstrumentation] Logging error for taskId: \(sessionTaskId), status: \(status)"
                             Log.d(logMessage)
                             #if DEBUG
-                            TestLogger.shared.log(logMessage)
+                            Log.testLog(logMessage)
                             #endif
                             URLSessionLogger.logError(error!, dataOrFile: object, statusCode: status, instrumentation: self, sessionTaskId: sessionTaskId)
                         } else {
@@ -511,7 +511,7 @@ public class URLSessionInstrumentation {
                                 let logMessage = "[URLSessionInstrumentation] Logging response for taskId: \(sessionTaskId), status: \(status)"
                                 Log.d(logMessage)
                                 #if DEBUG
-                                TestLogger.shared.log(logMessage)
+                                Log.testLog(logMessage)
                                 #endif
                                 URLSessionLogger.logResponse(response, dataOrFile: object, instrumentation: self, sessionTaskId: sessionTaskId)
                             }
@@ -597,7 +597,7 @@ public class URLSessionInstrumentation {
                     let logMessage = "[URLSessionInstrumentation] 🔵 resume() called - task: \(urlSessionTask), URL: \(urlSessionTask.currentRequest?.url?.absoluteString ?? "nil")"
                     Log.d(logMessage)
                     #if DEBUG
-                    TestLogger.shared.log(logMessage)
+                    Log.testLog(logMessage)
                     #endif
                     self.urlSessionTaskWillResume(urlSessionTask)
                 }
@@ -800,7 +800,7 @@ public class URLSessionInstrumentation {
             let logMessage = "[URLSessionInstrumentation] Logging error for taskId: \(taskId), status: \(status)"
             Log.d(logMessage)
             #if DEBUG
-            TestLogger.shared.log(logMessage)
+            Log.testLog(logMessage)
             #endif
             URLSessionLogger.logError(error, dataOrFile: requestState?.dataProcessed, statusCode: status, instrumentation: self, sessionTaskId: taskId)
         } else if let response = task.response {
@@ -808,7 +808,7 @@ public class URLSessionInstrumentation {
             let logMessage = "[URLSessionInstrumentation] Logging response for taskId: \(taskId), status: \(status)"
             Log.d(logMessage)
             #if DEBUG
-            TestLogger.shared.log(logMessage)
+            Log.testLog(logMessage)
             #endif
             URLSessionLogger.logResponse(response, dataOrFile: requestState?.dataProcessed, instrumentation: self, sessionTaskId: taskId)
         }
@@ -844,14 +844,14 @@ public class URLSessionInstrumentation {
             let logMessage = "[URLSessionInstrumentation] Logging error for taskId: \(taskId), status: \(status)"
             Log.d(logMessage)
             #if DEBUG
-            TestLogger.shared.log(logMessage)
+            Log.testLog(logMessage)
             #endif
             URLSessionLogger.logError(error, dataOrFile: requestState?.dataProcessed, statusCode: status, instrumentation: self, sessionTaskId: taskId)
         } else if let response = task.response {
             let logMessage = "[URLSessionInstrumentation] Logging response for taskId: \(taskId), status: \((response as? HTTPURLResponse)?.statusCode ?? 0)"
             Log.d(logMessage)
             #if DEBUG
-            TestLogger.shared.log(logMessage)
+            Log.testLog(logMessage)
             #endif
             URLSessionLogger.logResponse(response, dataOrFile: requestState?.dataProcessed, instrumentation: self, sessionTaskId: taskId)
         }
@@ -901,7 +901,7 @@ public class URLSessionInstrumentation {
             let logMessage = "[URLSessionInstrumentation] ✅ Detected async/await context, instrumenting request"
             Log.d(logMessage)
             #if DEBUG
-            TestLogger.shared.log(logMessage)
+            Log.testLog(logMessage)
             #endif
             let instrumentedRequest = URLSessionLogger.processAndLogRequest(request,
                                                                             sessionTaskId: taskId,
@@ -956,7 +956,7 @@ class FakeDelegate: NSObject, URLSessionTaskDelegate {
     
     func urlSession(_ session: URLSession, task: URLSessionTask, didFinishCollecting metrics: URLSessionTaskMetrics) {
         #if DEBUG
-        TestLogger.shared.log("[FakeDelegate] didFinishCollecting called, forwarding to instrumentation")
+        Log.testLog("[FakeDelegate] didFinishCollecting called, forwarding to instrumentation")
         #endif
         instrumentation?.urlSession(session, task: task, didFinishCollecting: metrics)
     }

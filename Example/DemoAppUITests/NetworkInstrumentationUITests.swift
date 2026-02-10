@@ -66,7 +66,7 @@ final class NetworkInstrumentationUITests: XCTestCase {
             print("   File exists: \(fileExists)")
             print("   Path: \(testLogsPath)")
             print("   Launch args: \(app.launchArguments)")
-            XCTFail("❌ No test logs found. Check TestLogger is enabled.", file: file, line: line)
+            XCTFail("❌ No test logs found. Check test logging is enabled.", file: file, line: line)
             return
         }
         
