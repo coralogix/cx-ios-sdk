@@ -822,10 +822,7 @@ public class URLSessionInstrumentation {
     }
     
     internal func urlSession(_ session: URLSession, task: URLSessionTask, didFinishCollecting metrics: URLSessionTaskMetrics) {
-        Log.d("[URLSessionInstrumentation] didFinishCollecting called for URL: \(task.currentRequest?.url?.absoluteString ?? "nil")")
-        
         guard let taskId = objc_getAssociatedObject(task, &idKey) as? String else {
-            Log.d("[URLSessionInstrumentation] No taskId found, skipping")
             return
         }
         var requestState: NetworkRequestState?
@@ -838,7 +835,6 @@ public class URLSessionInstrumentation {
         }
         
         guard requestState?.request != nil else {
-            Log.d("[URLSessionInstrumentation] No request state found for taskId: \(taskId)")
             return
         }
         
@@ -893,14 +889,12 @@ public class URLSessionInstrumentation {
           if #available(OSX 13.0, iOS 16.0, watchOS 9.0, tvOS 16.0, *) {
             // iOS 16+: Use Task.basePriority as reliable indicator
             isAsyncContext = Task.basePriority != nil
-            Log.d("[URLSessionInstrumentation] iOS 16+ async check - basePriority: \(String(describing: Task.basePriority)), isAsync: \(isAsyncContext)")
           } else {
             // iOS 15: Heuristic - async tasks typically have no delegate
             let hasDelegate = task.delegate != nil
             let isRunning = task.state == .running
             let hasSessionDelegate = (task.value(forKey: "session") as? URLSession)?.delegate != nil
             isAsyncContext = !hasDelegate && !isRunning && !hasSessionDelegate
-            Log.d("[URLSessionInstrumentation] iOS 15 async check - hasDelegate: \(hasDelegate), isRunning: \(isRunning), hasSessionDelegate: \(hasSessionDelegate), isAsync: \(isAsyncContext)")
           }
           
           if isAsyncContext {
@@ -916,9 +910,6 @@ public class URLSessionInstrumentation {
             if let instrumentedRequest {
               // Try to inject headers using KVC
               task.setValue(instrumentedRequest, forKey: "currentRequest")
-              Log.d("[URLSessionInstrumentation] Injected headers via KVC")
-            } else {
-              Log.d("[URLSessionInstrumentation] No instrumented request returned, using original request")
             }
             self.setIdKey(value: taskId, for: task)
 
@@ -927,10 +918,7 @@ public class URLSessionInstrumentation {
               let fakeDelegate = FakeDelegate()
               fakeDelegate.instrumentation = self
               task.delegate = fakeDelegate
-              Log.d("[URLSessionInstrumentation] Set FakeDelegate to capture completion")
             }
-          } else {
-            Log.d("[URLSessionInstrumentation] ⚠️ Not detected as async/await, skipping special handling")
           }
         }
       }
@@ -963,14 +951,12 @@ class FakeDelegate: NSObject, URLSessionTaskDelegate {
     weak var instrumentation: URLSessionInstrumentation?
     
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
-        Log.d("[FakeDelegate] didCompleteWithError called")
+        // Intentionally empty - we only care about metrics collection
     }
     
     func urlSession(_ session: URLSession, task: URLSessionTask, didFinishCollecting metrics: URLSessionTaskMetrics) {
-        let logMessage = "[FakeDelegate] didFinishCollecting called, forwarding to instrumentation"
-        Log.d(logMessage)
         #if DEBUG
-        TestLogger.shared.log(logMessage)
+        TestLogger.shared.log("[FakeDelegate] didFinishCollecting called, forwarding to instrumentation")
         #endif
         instrumentation?.urlSession(session, task: task, didFinishCollecting: metrics)
     }
