@@ -157,7 +157,7 @@ final class NetworkInstrumentationUITests: XCTestCase {
     }
     
     /// Test failing network request instrumentation
-    /// Validates SDK captures error/failed requests
+    /// Validates SDK captures error/failed requests (404 status)
     func testFailingNetworkRequest() throws {
         print("\n========================================")
         print("🧪 TEST: Failing Network Request")
@@ -177,11 +177,12 @@ final class NetworkInstrumentationUITests: XCTestCase {
         // Wait for network request to complete/fail
         Thread.sleep(forTimeInterval: 3)
         
-        // Verify request was logged
-        Thread.sleep(forTimeInterval: 2)
-        let logs = getTestLogs()
-        XCTAssertTrue(logs.contains("🔵 resume() called"), "Request should be logged")
-        XCTAssertTrue(logs.contains("Logging") || logs.contains("status:"), "Response/error should be logged")
+        // Verify expected log messages (404 error response)
+        verifyLogContains([
+            "🔵 resume() called",
+            "Logging response for taskId:",
+            "status: 404"
+        ])
     }
     
     /// Test traditional POST request instrumentation
@@ -275,8 +276,8 @@ final class NetworkInstrumentationUITests: XCTestCase {
     - Request logged with status 200
  
  ✅ testFailingNetworkRequest:
-    - Error requests are captured
-    - Failures are logged properly
+    - HTTP error responses captured (404)
+    - Request logged with status 404
  
  ✅ testPostRequest:
     - Traditional POST with completion handler
