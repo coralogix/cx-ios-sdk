@@ -75,6 +75,7 @@ public class URLSessionInstrumentation {
         injectIntoNSURLSessionCreateTaskWithParameterMethods()
         injectIntoNSURLSessionAsyncDataAndDownloadTaskMethods()
         injectIntoNSURLSessionAsyncUploadTaskMethods()
+        
         injectIntoNSURLSessionTaskResume()
     }
     
@@ -428,9 +429,20 @@ public class URLSessionInstrumentation {
                         let completionWrapper: (Any?, URLResponse?, Error?) -> Void = { object, response, error in
                             if error != nil {
                                 let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+                                let logMessage = "[URLSessionInstrumentation] Logging error for taskId: \(sessionTaskId), status: \(status)"
+                                Log.d(logMessage)
+                                #if DEBUG
+                                TestLogger.shared.log(logMessage)
+                                #endif
                                 URLSessionLogger.logError(error!, dataOrFile: object, statusCode: status, instrumentation: self, sessionTaskId: sessionTaskId)
                             } else {
                                 if let response = response {
+                                    let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+                                    let logMessage = "[URLSessionInstrumentation] Logging response for taskId: \(sessionTaskId), status: \(status)"
+                                    Log.d(logMessage)
+                                    #if DEBUG
+                                    TestLogger.shared.log(logMessage)
+                                    #endif
                                     URLSessionLogger.logResponse(response, dataOrFile: object, instrumentation: self, sessionTaskId: sessionTaskId)
                                 }
                             }
@@ -487,9 +499,20 @@ public class URLSessionInstrumentation {
                     let completionWrapper: (Any?, URLResponse?, Error?) -> Void = { object, response, error in
                         if error != nil {
                             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+                            let logMessage = "[URLSessionInstrumentation] Logging error for taskId: \(sessionTaskId), status: \(status)"
+                            Log.d(logMessage)
+                            #if DEBUG
+                            TestLogger.shared.log(logMessage)
+                            #endif
                             URLSessionLogger.logError(error!, dataOrFile: object, statusCode: status, instrumentation: self, sessionTaskId: sessionTaskId)
                         } else {
                             if let response = response {
+                                let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+                                let logMessage = "[URLSessionInstrumentation] Logging response for taskId: \(sessionTaskId), status: \(status)"
+                                Log.d(logMessage)
+                                #if DEBUG
+                                TestLogger.shared.log(logMessage)
+                                #endif
                                 URLSessionLogger.logResponse(response, dataOrFile: object, instrumentation: self, sessionTaskId: sessionTaskId)
                             }
                         }
@@ -571,7 +594,11 @@ public class URLSessionInstrumentation {
                 
                 // Call hook
                 if let urlSessionTask = task as? URLSessionTask {
-                    Log.d("[URLSessionInstrumentation] 🔵 resume() called - task: \(urlSessionTask), URL: \(urlSessionTask.currentRequest?.url?.absoluteString ?? "nil")")
+                    let logMessage = "[URLSessionInstrumentation] 🔵 resume() called - task: \(urlSessionTask), URL: \(urlSessionTask.currentRequest?.url?.absoluteString ?? "nil")"
+                    Log.d(logMessage)
+                    #if DEBUG
+                    TestLogger.shared.log(logMessage)
+                    #endif
                     self.urlSessionTaskWillResume(urlSessionTask)
                 }
                 
@@ -770,8 +797,19 @@ public class URLSessionInstrumentation {
         }
         if let error = error {
             let status = (task.response as? HTTPURLResponse)?.statusCode ?? 0
+            let logMessage = "[URLSessionInstrumentation] Logging error for taskId: \(taskId), status: \(status)"
+            Log.d(logMessage)
+            #if DEBUG
+            TestLogger.shared.log(logMessage)
+            #endif
             URLSessionLogger.logError(error, dataOrFile: requestState?.dataProcessed, statusCode: status, instrumentation: self, sessionTaskId: taskId)
         } else if let response = task.response {
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            let logMessage = "[URLSessionInstrumentation] Logging response for taskId: \(taskId), status: \(status)"
+            Log.d(logMessage)
+            #if DEBUG
+            TestLogger.shared.log(logMessage)
+            #endif
             URLSessionLogger.logResponse(response, dataOrFile: requestState?.dataProcessed, instrumentation: self, sessionTaskId: taskId)
         }
     }
@@ -783,8 +821,11 @@ public class URLSessionInstrumentation {
         setIdKey(value: taskId, for: downloadTask)
     }
     
-    private func urlSession(_ session: URLSession, task: URLSessionTask, didFinishCollecting metrics: URLSessionTaskMetrics) {
+    internal func urlSession(_ session: URLSession, task: URLSessionTask, didFinishCollecting metrics: URLSessionTaskMetrics) {
+        Log.d("[URLSessionInstrumentation] didFinishCollecting called for URL: \(task.currentRequest?.url?.absoluteString ?? "nil")")
+        
         guard let taskId = objc_getAssociatedObject(task, &idKey) as? String else {
+            Log.d("[URLSessionInstrumentation] No taskId found, skipping")
             return
         }
         var requestState: NetworkRequestState?
@@ -797,14 +838,25 @@ public class URLSessionInstrumentation {
         }
         
         guard requestState?.request != nil else {
+            Log.d("[URLSessionInstrumentation] No request state found for taskId: \(taskId)")
             return
         }
         
         /// Code for instrumenting collection should be written here
         if let error = task.error {
             let status = (task.response as? HTTPURLResponse)?.statusCode ?? 0
+            let logMessage = "[URLSessionInstrumentation] Logging error for taskId: \(taskId), status: \(status)"
+            Log.d(logMessage)
+            #if DEBUG
+            TestLogger.shared.log(logMessage)
+            #endif
             URLSessionLogger.logError(error, dataOrFile: requestState?.dataProcessed, statusCode: status, instrumentation: self, sessionTaskId: taskId)
         } else if let response = task.response {
+            let logMessage = "[URLSessionInstrumentation] Logging response for taskId: \(taskId), status: \((response as? HTTPURLResponse)?.statusCode ?? 0)"
+            Log.d(logMessage)
+            #if DEBUG
+            TestLogger.shared.log(logMessage)
+            #endif
             URLSessionLogger.logResponse(response, dataOrFile: requestState?.dataProcessed, instrumentation: self, sessionTaskId: taskId)
         }
     }
@@ -833,23 +885,52 @@ public class URLSessionInstrumentation {
             self.requestMap[taskId]?.setRequest(request)
         }
 
-        if #available(OSX 13.0, iOS 16.0, watchOS 9.0, tvOS 16.0, *) {
-          guard Task.basePriority != nil else {
-            // If not inside a Task basePriority is nil
-            return
+        // Handle iOS 15+ async/await - try to inject headers via KVC
+        if #available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, *) {
+          // Try to detect if this is an async/await call
+          var isAsyncContext = false
+          
+          if #available(OSX 13.0, iOS 16.0, watchOS 9.0, tvOS 16.0, *) {
+            // iOS 16+: Use Task.basePriority as reliable indicator
+            isAsyncContext = Task.basePriority != nil
+            Log.d("[URLSessionInstrumentation] iOS 16+ async check - basePriority: \(String(describing: Task.basePriority)), isAsync: \(isAsyncContext)")
+          } else {
+            // iOS 15: Heuristic - async tasks typically have no delegate
+            let hasDelegate = task.delegate != nil
+            let isRunning = task.state == .running
+            let hasSessionDelegate = (task.value(forKey: "session") as? URLSession)?.delegate != nil
+            isAsyncContext = !hasDelegate && !isRunning && !hasSessionDelegate
+            Log.d("[URLSessionInstrumentation] iOS 15 async check - hasDelegate: \(hasDelegate), isRunning: \(isRunning), hasSessionDelegate: \(hasSessionDelegate), isAsync: \(isAsyncContext)")
           }
+          
+          if isAsyncContext {
+            let logMessage = "[URLSessionInstrumentation] ✅ Detected async/await context, instrumenting request"
+            Log.d(logMessage)
+            #if DEBUG
+            TestLogger.shared.log(logMessage)
+            #endif
+            let instrumentedRequest = URLSessionLogger.processAndLogRequest(request,
+                                                                            sessionTaskId: taskId,
+                                                                            instrumentation: self,
+                                                                            shouldInjectHeaders: true)
+            if let instrumentedRequest {
+              // Try to inject headers using KVC
+              task.setValue(instrumentedRequest, forKey: "currentRequest")
+              Log.d("[URLSessionInstrumentation] Injected headers via KVC")
+            } else {
+              Log.d("[URLSessionInstrumentation] No instrumented request returned, using original request")
+            }
+            self.setIdKey(value: taskId, for: task)
 
-          let instrumentedRequest = URLSessionLogger.processAndLogRequest(request,
-                                                                          sessionTaskId: taskId,
-                                                                          instrumentation: self,
-                                                                          shouldInjectHeaders: true)
-          if let instrumentedRequest {
-            task.setValue(instrumentedRequest, forKey: "currentRequest")
-          }
-          self.setIdKey(value: taskId, for: task)
-
-          if task.delegate == nil, task.state != .running, (task.value(forKey: "session") as? URLSession)?.delegate == nil {
-            task.delegate = FakeDelegate()
+            // Set fake delegate if needed to capture completion
+            if task.delegate == nil, task.state != .running, (task.value(forKey: "session") as? URLSession)?.delegate == nil {
+              let fakeDelegate = FakeDelegate()
+              fakeDelegate.instrumentation = self
+              task.delegate = fakeDelegate
+              Log.d("[URLSessionInstrumentation] Set FakeDelegate to capture completion")
+            }
+          } else {
+            Log.d("[URLSessionInstrumentation] ⚠️ Not detected as async/await, skipping special handling")
           }
         }
       }
@@ -879,7 +960,20 @@ public class URLSessionInstrumentation {
 }
 
 class FakeDelegate: NSObject, URLSessionTaskDelegate {
-    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {}
+    weak var instrumentation: URLSessionInstrumentation?
+    
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        Log.d("[FakeDelegate] didCompleteWithError called")
+    }
+    
+    func urlSession(_ session: URLSession, task: URLSessionTask, didFinishCollecting metrics: URLSessionTaskMetrics) {
+        let logMessage = "[FakeDelegate] didFinishCollecting called, forwarding to instrumentation"
+        Log.d(logMessage)
+        #if DEBUG
+        TestLogger.shared.log(logMessage)
+        #endif
+        instrumentation?.urlSession(session, task: task, didFinishCollecting: metrics)
+    }
 }
 
 @available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, *)

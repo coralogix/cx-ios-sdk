@@ -14,6 +14,14 @@ import Firebase
 class AppDelegate: UIResponder, UIApplicationDelegate {
     
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+        // Enable test logger for UI tests
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("--uitesting") {
+            TestLogger.shared.enable()
+            TestLogger.shared.log("🧪 Test mode enabled - logging to /tmp/coralogix_test_logs.txt")
+            print("🧪 Test mode enabled - TestLogger writing to /tmp/coralogix_test_logs.txt")
+        }
+        #endif
 
         CoralogixRumManager.shared.initialize()
 

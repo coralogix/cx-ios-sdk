@@ -54,7 +54,16 @@ public class MetricsManager {
             vitals[Keys.slowFrozen.rawValue] = slowFrozenFramesDetector.statsDictionary()
         }
         
-        vitals[MobileVitalsType.fps.stringValue] = fpsDetector.statsDictionary()
+        // Only include FPS if rendering detector is running
+        if fpsDetector.isRunning {
+            vitals[MobileVitalsType.fps.stringValue] = fpsDetector.statsDictionary()
+        }
+        
+        // Don't send if no vitals collected
+        guard !vitals.isEmpty else {
+            Log.d("[MetricsManager] No vitals to send, skipping")
+            return
+        }
         
         // Send event
         self.metricsManagerClosure?(vitals)
@@ -64,16 +73,22 @@ public class MetricsManager {
         cpuDetector?.reset()
         memoryDetector?.reset()
         slowFrozenFramesDetector?.reset()
-        fpsDetector.reset()
+        if fpsDetector.isRunning {
+            fpsDetector.reset()
+        }
     }
     
     func startMonitoring(using options: CoralogixExporterOptions?) {
         guard let options = options else { return }
-        self.initializeEnabledMobileVitals(using: options)
-        startSendScheduler()   // start periodic sending
+        let hasEnabledVitals = self.initializeEnabledMobileVitals(using: options)
+        
+        // Only start scheduler if at least one mobile vital is enabled
+        if hasEnabledVitals {
+            startSendScheduler()
+        }
     }
     
-    private func initializeEnabledMobileVitals(using options: CoralogixExporterOptions) {
+    private func initializeEnabledMobileVitals(using options: CoralogixExporterOptions) -> Bool {
         let mobileVitalsMap: [(CoralogixExporterOptions.MobileVitalsType, () -> Void)] = [
             (.coldDetector, self.startColdStartMonitoring),
             (.warmDetector, self.startWarmStartMonitoring),
@@ -83,9 +98,13 @@ public class MetricsManager {
             (.slowFrozenFramesDetector, self.startSlowFrozenFramesMonitoring)
         ]
         
+        var anyEnabled = false
         for (type, initializer) in mobileVitalsMap where options.shouldInitMobileVitals(mobileVital: type) {
             initializer()
+            anyEnabled = true
         }
+        
+        return anyEnabled
     }
     
     func startColdStartMonitoring() {
