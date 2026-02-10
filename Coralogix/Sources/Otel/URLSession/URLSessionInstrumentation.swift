@@ -59,6 +59,26 @@ public class URLSessionInstrumentation {
     }
     
     private func injectInNSURLClasses() {
+        // Only swizzle delegate classes if explicitly provided
+        if let explicitClasses = configuration.delegateClassesToInstrument, !explicitClasses.isEmpty {
+            Log.d("[URLSessionInstrumentation] Swizzling \(explicitClasses.count) explicitly provided delegate classes")
+            swizzleExplicitDelegateClasses(explicitClasses)
+        } else {
+            Log.d("[URLSessionInstrumentation] Delegate class swizzling disabled (no explicit classes provided)")
+            Log.d("[URLSessionInstrumentation] Using URLSession method swizzling only for network instrumentation")
+        }
+        
+        // Always swizzle URLSession methods (no class scanning needed - safe)
+        if #available(OSX 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) {
+            injectIntoNSURLSessionCreateTaskMethods()
+        }
+        injectIntoNSURLSessionCreateTaskWithParameterMethods()
+        injectIntoNSURLSessionAsyncDataAndDownloadTaskMethods()
+        injectIntoNSURLSessionAsyncUploadTaskMethods()
+        injectIntoNSURLSessionTaskResume()
+    }
+    
+    private func swizzleExplicitDelegateClasses(_ classes: [AnyClass]) {
         let selectors = [
             #selector(URLSessionDataDelegate.urlSession(_:dataTask:didReceive:)),
             #selector(URLSessionDataDelegate.urlSession(_:dataTask:didReceive:completionHandler:)),
@@ -67,54 +87,62 @@ public class URLSessionInstrumentation {
             #selector(URLSessionDataDelegate.urlSession(_:dataTask:didBecome:) as (URLSessionDataDelegate) -> ((URLSession, URLSessionDataTask, URLSessionStreamTask) -> Void)?),
         ]
         
-        let classes: [AnyClass] = {
-            if let explicit =  configuration.delegateClassesToInstrument {
-                if explicit.isEmpty { return [] }
-            }
-            return InstrumentationUtils.objc_getSafeClassList(
-                ignoredPrefixes: configuration.ignoredClassPrefixes
-            )
-        }()
-        let totalClassCount = classes.count
-        var delegateClassCount = 0
-        var swizzledClassCount = 0
+        var swizzledCount = 0
         
         for theClass in classes {
-            guard class_getSuperclass(theClass) != nil else { continue }
-            guard !class_isMetaClass(theClass) else { continue }
-            guard theClass != Self.self else { continue }
+            guard class_getSuperclass(theClass) != nil else { 
+                Log.w("[URLSessionInstrumentation] Skipping \(theClass) - no superclass")
+                continue 
+            }
+            guard !class_isMetaClass(theClass) else { 
+                Log.w("[URLSessionInstrumentation] Skipping \(theClass) - is metaclass")
+                continue 
+            }
+            guard theClass != Self.self else { 
+                Log.w("[URLSessionInstrumentation] Skipping \(theClass) - is self")
+                continue 
+            }
             guard class_conformsToProtocol(theClass, URLSessionTaskDelegate.self) ||
-                    class_conformsToProtocol(theClass, URLSessionDataDelegate.self) else { continue }
-            delegateClassCount += 1
+                    class_conformsToProtocol(theClass, URLSessionDataDelegate.self) else { 
+                Log.w("[URLSessionInstrumentation] Skipping \(theClass) - doesn't conform to URLSessionDelegate protocols")
+                continue 
+            }
+            
+            // Check if already swizzled
             if objc_getAssociatedObject(theClass, &Self.delegateSwizzleKey) != nil {
+                Log.d("[URLSessionInstrumentation] Skipping \(theClass) - already swizzled")
                 continue
             }
             
+            // Check if class implements any of the selectors we want to swizzle
             var methodCount: UInt32 = 0
-            guard let methodListPointer = class_copyMethodList(theClass, &methodCount) else { continue }
+            guard let methodListPointer = class_copyMethodList(theClass, &methodCount) else { 
+                Log.w("[URLSessionInstrumentation] Skipping \(theClass) - no methods found")
+                continue 
+            }
             defer { free(methodListPointer) }
             
             let methodList = UnsafeBufferPointer(start: methodListPointer, count: Int(methodCount))
             
+            var hasTargetMethod = false
             for selector in selectors {
                 if methodList.contains(where: { method_getName($0) == selector }) {
-                    injectIntoDelegateClass(cls: theClass)
-                    objc_setAssociatedObject(theClass, &Self.delegateSwizzleKey, true, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
-                    swizzledClassCount += 1
+                    hasTargetMethod = true
                     break
                 }
             }
+            
+            if hasTargetMethod {
+                injectIntoDelegateClass(cls: theClass)
+                objc_setAssociatedObject(theClass, &Self.delegateSwizzleKey, true, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+                swizzledCount += 1
+                Log.d("[URLSessionInstrumentation] ✅ Swizzled delegate class: \(theClass)")
+            } else {
+                Log.w("[URLSessionInstrumentation] Skipping \(theClass) - no target delegate methods found")
+            }
         }
         
-        Log.d("[URLSessionInstrumentation] Swizzle stats - total classes: \(totalClassCount), delegate classes: \(delegateClassCount), swizzled: \(swizzledClassCount)")
-        
-        if #available(OSX 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) {
-            injectIntoNSURLSessionCreateTaskMethods()
-        }
-        injectIntoNSURLSessionCreateTaskWithParameterMethods()
-        injectIntoNSURLSessionAsyncDataAndDownloadTaskMethods()
-        injectIntoNSURLSessionAsyncUploadTaskMethods()
-        injectIntoNSURLSessionTaskResume()
+        Log.d("[URLSessionInstrumentation] Successfully swizzled \(swizzledCount) of \(classes.count) explicit delegate classes")
     }
     
     private func injectIntoDelegateClass(cls: AnyClass) {
@@ -506,20 +534,17 @@ public class URLSessionInstrumentation {
             appendMethodIfExists(for: cfURLSession, selector: NSSelectorFromString("resume"))
         }
         
-        // Swizzle AFNetworking (if used)
-        if NSClassFromString("AFURLSessionManager") != nil {
-            let classes = InstrumentationUtils.objc_getSafeClassList(
-                ignoredPrefixes: configuration.ignoredClassPrefixes
-            )
-            if classes.isEmpty {
-                Log.d("[URLSessionInstrumentation] No safe classes found for af_resume swizzling")
-            } else {
-                for cls in classes {
-                    appendMethodIfExists(for: cls, selector: NSSelectorFromString("af_resume"))
-                }
+        // Auto-detect and swizzle AFNetworking (if used) - no class scanning needed
+        if let afManagerClass = NSClassFromString("AFURLSessionManager") {
+            Log.d("[URLSessionInstrumentation] AFNetworking detected - swizzling af_resume")
+            appendMethodIfExists(for: afManagerClass, selector: NSSelectorFromString("af_resume"))
+            
+            // Also check for AFHTTPSessionManager (subclass of AFURLSessionManager)
+            if let afHTTPManagerClass = NSClassFromString("AFHTTPSessionManager") {
+                appendMethodIfExists(for: afHTTPManagerClass, selector: NSSelectorFromString("af_resume"))
             }
         } else {
-            Log.d("[URLSessionInstrumentation] AFNetworking not detected, skipping swizzling")
+            Log.d("[URLSessionInstrumentation] AFNetworking not detected, skipping af_resume swizzling")
         }
         
         for (cls, selector, method) in methodsToSwizzle {

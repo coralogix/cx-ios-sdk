@@ -76,9 +76,12 @@ public struct URLSessionInstrumentationConfiguration {
     ///  Called before the span is ended, it allows to add extra information to the Span
     public var receivedError: ((Error, DataOrFile?, HTTPStatus, any Span) -> Void)?
     
-    ///  The array of URLSession delegate classes that will be instrumented by the library, will autodetect if nil is passed.
+    /// The array of URLSession delegate classes that will be instrumented by the library.
+    /// NOTE: Auto-detection has been disabled. You must explicitly provide classes to enable delegate swizzling.
+    /// If nil or empty, delegate methods will not be swizzled (URLSession method swizzling still works).
     public var delegateClassesToInstrument: [AnyClass]?
     
-    /// The Array of Prefixes you can avoid in swizzle process
+    /// DEPRECATED: No longer used. Delegate class scanning is disabled by default.
+    /// @available(*, deprecated, message: "Delegate scanning is disabled. Use delegateClassesToInstrument for explicit opt-in.")
     public let ignoredClassPrefixes: [String]?
 }

@@ -93,7 +93,11 @@ public struct CoralogixExporterOptions {
     
     public var traceParentInHeader: [String: Any]?
     
-    /// The Array of Prefixes you can avoid in swizzle process (Network)
+    /// DEPRECATED: No longer used. Delegate class scanning is disabled by default.
+    /// To enable delegate swizzling, use `delegateClassesToInstrument` with explicit classes.
+    /// This option was used to blocklist classes from automatic scanning, but automatic
+    /// scanning has been removed to prevent CloudKit +initialize side effects.
+    @available(*, deprecated, message: "Delegate scanning is disabled. Use delegateClassesToInstrument for explicit opt-in.")
     public let ignoredClassPrefixes: [String]?
     
     /// A list of mobile vitals that you wish to switch off during runtime. all mobile vitals are active by default.
