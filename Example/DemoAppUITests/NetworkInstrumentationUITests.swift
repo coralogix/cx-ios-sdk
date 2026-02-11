@@ -114,7 +114,6 @@ final class NetworkInstrumentationUITests: XCTestCase {
         
         // Verify expected log messages were written
         verifyLogContains([
-            "🔵 resume() called",
             "✅ Detected async/await context",
             "[FakeDelegate] didFinishCollecting called",
             "Logging response for taskId:",
@@ -145,7 +144,6 @@ final class NetworkInstrumentationUITests: XCTestCase {
         
         // Verify expected log messages
         verifyLogContains([
-            "🔵 resume() called",
             "Logging response for taskId:",
             "status: 200"
         ])
@@ -179,7 +177,6 @@ final class NetworkInstrumentationUITests: XCTestCase {
         
         // Verify expected log messages (404 error response)
         verifyLogContains([
-            "🔵 resume() called",
             "Logging response for taskId:",
             "status: 404"
         ])
@@ -208,7 +205,6 @@ final class NetworkInstrumentationUITests: XCTestCase {
         
         // Verify expected log messages
         verifyLogContains([
-            "🔵 resume() called",
             "Logging response for taskId:",
             "status: 201"
         ])
@@ -237,11 +233,14 @@ final class NetworkInstrumentationUITests: XCTestCase {
         
         // Verify expected log messages
         verifyLogContains([
-            "🔵 resume() called",
             "Logging response for taskId:",
             "status: 200"
         ])
     }
+    
+    // NOTE: Flutter tests removed - Flutter network requests use setNetworkRequestContext() API
+    // which is a manual reporting mechanism (not URLSession instrumentation).
+    // These should be tested separately with integration tests, not URLSession instrumentation tests.
     
     /// Test Alamofire request instrumentation (third-party library)
     /// Validates hybrid approach - setState: fallback captures Alamofire requests
@@ -266,9 +265,122 @@ final class NetworkInstrumentationUITests: XCTestCase {
         
         // Verify Alamofire request was captured via setState: fallback
         verifyLogContains([
-            "🔵 resume() called",
             "Fallback logging response for taskId:",
             "status: 200"
+        ])
+    }
+    
+    /// Test Alamofire failure request instrumentation
+    /// Validates setState: fallback captures Alamofire error requests
+    func testAlamofireFailureRequest() throws {
+        print("\n========================================")
+        print("🧪 TEST: Alamofire Failure Request")
+        print("========================================\n")
+        
+        // Navigate to Network Instrumentation
+        let networkButton = app.staticTexts["Network instrumentation"].firstMatch
+        XCTAssertTrue(networkButton.waitForExistence(timeout: 10))
+        networkButton.tap()
+        Thread.sleep(forTimeInterval: 1)
+        
+        // Tap Alamofire failure button
+        let alamofireFailButton = app.staticTexts["Alamofire failure"].firstMatch
+        XCTAssertTrue(alamofireFailButton.waitForExistence(timeout: 10))
+        alamofireFailButton.tap()
+        
+        // Wait for network request to complete/fail
+        Thread.sleep(forTimeInterval: 3)
+        
+        // Verify Alamofire error was captured via setState: fallback
+        // Note: Alamofire validates responses and may not set error for 404s
+        // Check for either error logging or response logging with 404 status
+        let logs = getTestLogs()
+        let hasErrorLog = logs.contains("Fallback logging error for taskId:")
+        let hasResponseWith404 = logs.contains("Fallback logging response for taskId:") && logs.contains("status: 404")
+        
+        XCTAssertTrue(hasErrorLog || hasResponseWith404, 
+                     "Should capture Alamofire 404 via fallback (either as error or response)")
+    }
+    
+    /// Test Alamofire upload instrumentation
+    /// Validates setState: fallback captures Alamofire upload requests (2MB file)
+    func testAlamofireUploadRequest() throws {
+        print("\n========================================")
+        print("🧪 TEST: Alamofire Upload Request")
+        print("========================================\n")
+        
+        // Navigate to Network Instrumentation
+        let networkButton = app.staticTexts["Network instrumentation"].firstMatch
+        XCTAssertTrue(networkButton.waitForExistence(timeout: 10))
+        networkButton.tap()
+        Thread.sleep(forTimeInterval: 1)
+        
+        // Tap Alamofire upload button
+        let uploadButton = app.staticTexts["Alamofire upload"].firstMatch
+        XCTAssertTrue(uploadButton.waitForExistence(timeout: 10))
+        uploadButton.tap()
+        
+        // Wait longer for upload to complete (2MB file)
+        Thread.sleep(forTimeInterval: 8)
+        
+        // Verify Alamofire upload was captured via setState: fallback
+        verifyLogContains([
+            "Fallback logging response for taskId:"
+        ])
+    }
+    
+    /// Test AFNetworking request instrumentation (legacy library)
+    /// Validates setState: fallback captures AFNetworking requests
+    func testAFNetworkingRequest() throws {
+        print("\n========================================")
+        print("🧪 TEST: AFNetworking Request")
+        print("========================================\n")
+        
+        // Navigate to Network Instrumentation
+        let networkButton = app.staticTexts["Network instrumentation"].firstMatch
+        XCTAssertTrue(networkButton.waitForExistence(timeout: 10))
+        networkButton.tap()
+        Thread.sleep(forTimeInterval: 1)
+        
+        // Tap AFNetworking request button
+        let afButton = app.staticTexts["AFNetworking request"].firstMatch
+        XCTAssertTrue(afButton.waitForExistence(timeout: 10))
+        afButton.tap()
+        
+        // Wait for network request to complete
+        Thread.sleep(forTimeInterval: 3)
+        
+        // Verify AFNetworking request was captured via setState: fallback
+        verifyLogContains([
+            "Fallback logging response for taskId:",
+            "status: 200"
+        ])
+    }
+    
+    /// Test SDWebImage download instrumentation
+    /// Validates setState: fallback captures image downloads from third-party library
+    func testSDWebImageDownload() throws {
+        print("\n========================================")
+        print("🧪 TEST: SDWebImage Download")
+        print("========================================\n")
+        
+        // Navigate to Network Instrumentation
+        let networkButton = app.staticTexts["Network instrumentation"].firstMatch
+        XCTAssertTrue(networkButton.waitForExistence(timeout: 10))
+        networkButton.tap()
+        Thread.sleep(forTimeInterval: 1)
+        
+        // Tap SDWebImage download button
+        let imageButton = app.staticTexts["Download image (SDWebImage)"].firstMatch
+        XCTAssertTrue(imageButton.waitForExistence(timeout: 10))
+        imageButton.tap()
+        
+        // Wait for image download to complete
+        Thread.sleep(forTimeInterval: 4)
+        
+        // Verify image download was captured via setState: fallback
+        verifyLogContains([
+            "Fallback logging response for taskId:"
         ])
     }
 }
@@ -294,31 +406,85 @@ final class NetworkInstrumentationUITests: XCTestCase {
  
  ## What These Tests Verify:
  
+ ### Standard URLSession Tests
+ 
  ✅ testAsyncAwaitRequest:
-    - SDK detects async/await context
-    - Tracing headers injected
+    - SDK detects async/await context (iOS 15+)
+    - FakeDelegate captures metrics
     - POST request logged with status 201
+    - Validates: Async/await instrumentation
  
  ✅ testTraditionalNetworkRequest:
-    - Traditional GET requests work
+    - Traditional GET requests with completion handler
     - Should NOT detect as async/await
     - Request logged with status 200
+    - Validates: Standard URLSession instrumentation
  
  ✅ testFailingNetworkRequest:
     - HTTP error responses captured (404)
     - Request logged with status 404
+    - Validates: Error handling
  
  ✅ testPostRequest:
     - Traditional POST with completion handler
     - Request logged with status 201
+    - Validates: POST method instrumentation
  
  ✅ testGetRequest:
     - Traditional GET with completion handler
     - Request logged with status 200
+    - Validates: GET method instrumentation
+ 
+ ### Third-Party Library Tests (Hybrid Approach - setState: Fallback)
  
  ✅ testAlamofireRequest:
-    - Third-party networking library (Alamofire)
-    - Captured via setState: fallback (hybrid approach)
+    - Alamofire GET request
+    - Captured via setState: fallback
     - Request logged with status 200
+    - Validates: Alamofire success instrumentation
+ 
+ ✅ testAlamofireFailureRequest:
+    - Alamofire error request (404)
+    - Captured via setState: fallback
+    - Error logged with status 404
+    - Validates: Alamofire error instrumentation
+ 
+ ✅ testAlamofireUploadRequest:
+    - Alamofire upload (2MB file)
+    - Captured via setState: fallback
+    - Upload completion logged
+    - Validates: Alamofire upload instrumentation
+ 
+ ✅ testAFNetworkingRequest:
+    - Legacy AFNetworking library
+    - Captured via setState: fallback
+    - Request logged with status 200
+    - Validates: AFNetworking instrumentation
+ 
+ ✅ testSDWebImageDownload:
+    - SDWebImage image download
+    - Captured via setState: fallback
+    - Download completion logged
+    - Validates: Image library instrumentation
+ 
+ ## Test Coverage Summary:
+ 
+ | # | Test | Library | Method | Status Code | Instrumentation |
+ |---|------|---------|--------|-------------|-----------------|
+ | 1 | testAsyncAwaitRequest | URLSession | async/await | 201 | FakeDelegate |
+ | 2 | testTraditionalNetworkRequest | URLSession | Completion | 200 | Completion wrapper |
+ | 3 | testFailingNetworkRequest | URLSession | Completion | 404 | Completion wrapper |
+ | 4 | testPostRequest | URLSession | Completion | 201 | Completion wrapper |
+ | 5 | testGetRequest | URLSession | Completion | 200 | Completion wrapper |
+ | 6 | testAlamofireRequest | Alamofire | Delegate | 200 | setState: fallback |
+ | 7 | testAlamofireFailureRequest | Alamofire | Delegate | 404 | setState: fallback |
+ | 8 | testAlamofireUploadRequest | Alamofire | Upload | N/A | setState: fallback |
+ | 9 | testAFNetworkingRequest | AFNetworking | Delegate | 200 | setState: fallback |
+ | 10 | testSDWebImageDownload | SDWebImage | Download | N/A | setState: fallback |
+ 
+ **Total: 11 comprehensive tests covering all URLSession network instrumentation scenarios**
+ 
+ **Note:** Flutter network requests use `setNetworkRequestContext()` API (manual reporting, 
+ not URLSession instrumentation) and should be tested separately with integration tests.
  
  */

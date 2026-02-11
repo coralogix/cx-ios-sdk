@@ -585,9 +585,6 @@ public class URLSessionInstrumentation {
                 
                 // Call hook
                 if let urlSessionTask = task as? URLSessionTask {
-                    #if DEBUG
-                    Log.testLog("[URLSessionInstrumentation] 🔵 resume() called - task: \(urlSessionTask), URL: \(urlSessionTask.currentRequest?.url?.absoluteString ?? "nil")")
-                    #endif
                     self.urlSessionTaskWillResume(urlSessionTask)
                 }
                 
@@ -623,25 +620,13 @@ public class URLSessionInstrumentation {
         
         let setStateSelector = NSSelectorFromString("setState:")
         
-        #if DEBUG
-        Log.testLog("[URLSessionInstrumentation] 🔍 Starting class discovery from: \(type(of: dummyTask))")
-        #endif
-        
         // Traverse the class hierarchy from the task's actual class up to NSObject
         // Collect all classes until we reach the base class or run out of hierarchy
         while let cls = currentClass {
             let className = NSStringFromClass(cls)
             
-            #if DEBUG
-            Log.testLog("[URLSessionInstrumentation] 🔍 Examining class: \(className)")
-            #endif
-            
             // Check if this class has setState: method
             if let method = class_getInstanceMethod(cls, setStateSelector) {
-                #if DEBUG
-                Log.testLog("[URLSessionInstrumentation] ✅ Class \(className) has setState: method")
-                #endif
-                
                 // Get superclass to compare implementations
                 if let superClass = class_getSuperclass(cls),
                    let superMethod = class_getInstanceMethod(superClass, setStateSelector) {
@@ -652,26 +637,13 @@ public class URLSessionInstrumentation {
                     // Only add if this class has its own implementation (not inherited)
                     if classIMP != superIMP {
                         result.append(cls)
-                        #if DEBUG
-                        Log.testLog("[URLSessionInstrumentation] ➕ Added \(className) - has unique implementation")
-                        #endif
-                    } else {
-                        #if DEBUG
-                        Log.testLog("[URLSessionInstrumentation] ⏭️ Skipped \(className) - inherited implementation")
-                        #endif
                     }
                 } else {
                     // This is the base class or can't find superclass method - add it and stop
                     result.append(cls)
-                    #if DEBUG
-                    Log.testLog("[URLSessionInstrumentation] ➕ Added \(className) - base class")
-                    #endif
                     break
                 }
             } else {
-                #if DEBUG
-                Log.testLog("[URLSessionInstrumentation] ⏹️ Class \(className) doesn't have setState:, stopping")
-                #endif
                 break
             }
             
@@ -683,10 +655,6 @@ public class URLSessionInstrumentation {
         dummyTask.cancel()
         session.finishTasksAndInvalidate()
         
-        #if DEBUG
-        Log.testLog("[URLSessionInstrumentation] 🏁 Discovery complete: \(result.count) classes found")
-        #endif
-        
         return result
     }
     
@@ -694,10 +662,6 @@ public class URLSessionInstrumentation {
     /// This provides fallback logging when completion handlers or delegates don't fire
     private func injectIntoNSURLSessionTaskSetState() {
         let classesToSwizzle = discoverTaskClassesToSwizzle()
-        
-        #if DEBUG
-        Log.testLog("[URLSessionInstrumentation] 🔍 Discovered \(classesToSwizzle.count) task classes for setState: swizzling: \(classesToSwizzle)")
-        #endif
         
         guard !classesToSwizzle.isEmpty else {
             Log.w("[URLSessionInstrumentation] No task classes discovered for setState: swizzling")
@@ -727,9 +691,6 @@ public class URLSessionInstrumentation {
                 
                 // Handle completion state for fallback logging
                 if state == .completed, let urlTask = task as? URLSessionTask {
-                    #if DEBUG
-                    Log.testLog("[URLSessionInstrumentation] 🟢 setState: completed for task: \(urlTask)")
-                    #endif
                     instrumentation.urlSessionTaskDidChangeState(urlTask, newState: state)
                 }
             }
@@ -739,10 +700,6 @@ public class URLSessionInstrumentation {
             
             // Mark as swizzled
             objc_setAssociatedObject(cls, &Self.setStateSwizzleKey, true, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
-            
-            #if DEBUG
-            Log.testLog("[URLSessionInstrumentation] ✅ Swizzled setState: for class: \(cls)")
-            #endif
         }
     }
     
@@ -750,15 +707,8 @@ public class URLSessionInstrumentation {
     private func urlSessionTaskDidChangeState(_ task: URLSessionTask, newState: URLSessionTask.State) {
         guard newState == .completed else { return }
         
-        #if DEBUG
-        Log.testLog("[URLSessionInstrumentation] 🟣 setState: fired for task: \(task)")
-        #endif
-        
         // Check if already logged by completion handler or delegate
         if objc_getAssociatedObject(task, &Self.loggedKey) != nil {
-            #if DEBUG
-            Log.testLog("[URLSessionInstrumentation] ⏭️ Task already logged, skipping fallback")
-            #endif
             return // Already logged, skip to avoid duplicates
         }
         
@@ -773,20 +723,9 @@ public class URLSessionInstrumentation {
     /// Fallback logging method when completion handler or delegate didn't fire
     /// Provides basic instrumentation data (status, error, duration) without metrics or payload
     private func logTaskCompletionFallback(_ task: URLSessionTask) {
-        #if DEBUG
-        Log.testLog("[URLSessionInstrumentation] 🎯 logTaskCompletionFallback called for task: \(task)")
-        #endif
-        
         guard let taskId = objc_getAssociatedObject(task, &idKey) as? String else {
-            #if DEBUG
-            Log.testLog("[URLSessionInstrumentation] ❌ No taskId found - task not tracked")
-            #endif
             return // Task not tracked by us
         }
-        
-        #if DEBUG
-        Log.testLog("[URLSessionInstrumentation] ✅ Found taskId: \(taskId)")
-        #endif
         
         var requestState: NetworkRequestState?
         queue.sync(flags: .barrier) {
