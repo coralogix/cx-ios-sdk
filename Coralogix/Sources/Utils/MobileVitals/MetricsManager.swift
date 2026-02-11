@@ -216,7 +216,6 @@ class MyMetricSubscriber: NSObject, MXMetricManagerSubscriber {
     public func didReceive(_ payloads: [MXMetricPayload]) {
         for payload in payloads {
             if let metricPayloadJsonString = String(data: payload.jsonRepresentation(), encoding: .utf8) {
-                Log.d("metricPayloadJsonString  \(metricPayloadJsonString)")
                 // send instrumentaion event
                 let vital = [
                     Keys.metricKit.rawValue: [
@@ -227,16 +226,15 @@ class MyMetricSubscriber: NSObject, MXMetricManagerSubscriber {
             }
                     
             if let applicationLaunchMetric = payload.applicationLaunchMetrics {
-                Log.d("Launch Time: \(applicationLaunchMetric.histogrammedApplicationResumeTime)")
-                Log.d("Time to First Draw: \(applicationLaunchMetric.histogrammedTimeToFirstDraw)")
+                // Application launch metrics collected
             }
             
             if let diskWritesMetric = payload.diskIOMetrics {
-                Log.d("Disk Writes: \(diskWritesMetric.cumulativeLogicalWrites)")
+                // Disk IO metrics collected
             }
             
             if let memoryMetric = payload.memoryMetrics {
-                Log.d("Memory Usage: \(memoryMetric.averageSuspendedMemory)")
+                // Memory metrics collected
             }
         }
     }
@@ -246,9 +244,7 @@ class MyMetricSubscriber: NSObject, MXMetricManagerSubscriber {
     public func didReceive(_ payloads: [MXDiagnosticPayload]) {
         for payload in payloads {
             if let hangDiagnostics = payload.hangDiagnostics {
-                for hangDiagnostic in hangDiagnostics {
-                    Log.d("Call Stack Tree: \(hangDiagnostic.callStackTree)")
-                }
+                // Hang diagnostics collected
             }
         }
     }

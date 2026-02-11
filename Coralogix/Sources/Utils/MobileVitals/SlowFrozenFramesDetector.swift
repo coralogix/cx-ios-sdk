@@ -111,7 +111,6 @@ final class SlowFrozenFramesDetector {
             link.add(to: .main, forMode: .common) // fire during scrolling/gestures
             self.displayLink = link
             self.lastFrameTimestamp = 0
-            Log.d("[Metric] slow/frozen frames monitor started @ \(self.refreshRateHz)Hz (budget=\(String(format: "%.2f", self.slowBudgetMs))ms)")
         }
 
         // Start periodic reporter on background queue
@@ -137,7 +136,6 @@ final class SlowFrozenFramesDetector {
             guard let self = self else { return }
             self.displayLink?.invalidate()
             self.displayLink = nil
-            Log.d("slow/frozen frames monitor stopped")
         }
 
         reporterTimer?.cancel()
@@ -177,7 +175,6 @@ final class SlowFrozenFramesDetector {
                 frozenCount += 1
             } else if dtMs > (slowBudgetMs + allowedDeviation) {
                 slowCount += 1
-                // Log.d("slow frame detected: \(dtMs)")
             }
             statsLock.unlock()
         }
@@ -209,8 +206,6 @@ final class SlowFrozenFramesDetector {
         if slow > 0 { _windowSlow.append(slow) }
         if frozen > 0 { _windowFrozen.append(frozen) }
         windowLock.unlock()
-
-//        Log.d("[Metric] slow: \(slow), frozen: \(frozen)")
     }
     
     func statsDictionary() -> [String: Any] {

@@ -55,8 +55,6 @@ final class WarmDetector {
             let currentTime = CFAbsoluteTimeGetCurrent()
             self.foregroundEndTime = currentTime
             let warmStartDuration = (currentTime - foregroundStartTime) * 1000
-
-//           Log.d("[Metric] Warm start duration: \(warmStartRounded) milliseconds")
             
             let warm =  [
                 MobileVitalsType.warm.stringValue: [

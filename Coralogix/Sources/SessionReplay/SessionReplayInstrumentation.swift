@@ -46,15 +46,13 @@ extension CoralogixRum: CoralogixInterface {
     }
     
     public func reportError(_ error: String) {
-        Log.d("[SessionRelay] Reporting error: \(error)")
+        // Error reported to session replay
     }
     
     public func initializeSessionReplay() {
         SdkManager.shared.register(coralogixInterface: self)
         
         self.sessionManager?.sessionChangedCallback = { sessionId in
-            Log.d("[Changed Session Id: \(sessionId)]")
-            
             guard let sessionReplay = SdkManager.shared.getSessionReplay() else {
                 Log.e("Failed to get Session Recording ")
                 return

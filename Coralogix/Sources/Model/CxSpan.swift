@@ -176,13 +176,11 @@ public struct SessionMetadata {
                                                                key: Keys.keySessionId.rawValue),
            let oldSessionTimeInterval = keychain.readStringFromKeychain(service: Keys.service.rawValue,
                                                                          key: Keys.keySessionTimeInterval.rawValue) {
-            Log.d("OLD Process ID:\(oldPid), Session ID:\(oldSessionId), TimeInterval:\(oldSessionTimeInterval)")
             self.oldPid = oldPid
             self.oldSessionId = oldSessionId
             self.oldSessionTimeInterval = TimeInterval(oldSessionTimeInterval)
         }
         
-        Log.d("NEW Process ID:\(newPid), Session ID:\(sessionId), TimeInterval:\(sessionCreationDate)")
         keychain.writeStringToKeychain(service: Keys.service.rawValue,
                                         key: Keys.pid.rawValue,
                                         value: String(newPid))

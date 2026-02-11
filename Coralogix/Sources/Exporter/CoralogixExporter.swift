@@ -182,7 +182,7 @@ public class CoralogixExporter: SpanExporter {
                 let matchFound = regex.firstMatch(in: string, options: [], range: range) != nil
                 return matchFound
             } catch {
-                Log.d("Invalid regex pattern: \(regex) — Error: \(error)")
+                Log.w("Invalid regex pattern: \(regex) — Error: \(error)")
                 continue // Skip invalid regex instead of crashing
             }
         }

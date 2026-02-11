@@ -434,7 +434,6 @@ public class URLSessionInstrumentation {
         ].forEach {
             let selector = $0
             guard let original = class_getInstanceMethod(cls, selector) else {
-                Log.d("injectInto \(selector.description) failed")
                 return
             }
             var originalIMP: IMP?
@@ -524,7 +523,6 @@ public class URLSessionInstrumentation {
         ].forEach {
             let selector = $0
             guard let original = class_getInstanceMethod(cls, selector) else {
-                Log.d("injectInto \(selector.description) failed")
                 return
             }
             var originalIMP: IMP?
