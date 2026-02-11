@@ -37,8 +37,14 @@ final class SessionContextTests: XCTestCase {
     }
     
     func testInitSessionContext() {
-        let context = SessionContext(otel: mockSpanData,
-                                     userMetadata: ["role": "admin"])
+        let contextOptional = SessionContext(otel: mockSpanData,
+                                            userMetadata: ["role": "admin"])
+        
+        XCTAssertNotNil(contextOptional, "SessionContext should succeed with valid session attributes")
+        guard let context = contextOptional else {
+            XCTFail("SessionContext init failed")
+            return
+        }
         
         XCTAssertEqual(context.sessionId, "session_001")
         XCTAssertEqual(context.sessionCreationDate, 1609459200)
@@ -50,8 +56,11 @@ final class SessionContextTests: XCTestCase {
     }
 
     func testGetDictionary() {
-        let context = SessionContext(otel: mockSpanData,
-                                     userMetadata: ["role": "admin"])
+        guard let context = SessionContext(otel: mockSpanData,
+                                          userMetadata: ["role": "admin"]) else {
+            XCTFail("SessionContext init failed")
+            return
+        }
         let dictionary = context.getDictionary()
         
         XCTAssertEqual(dictionary[Keys.sessionId.rawValue] as? String, "session_001")
@@ -64,15 +73,21 @@ final class SessionContextTests: XCTestCase {
     }
 
     func testHasSessionReplay() {
-        let context = SessionContext(otel: mockSpanData,
-                                     userMetadata: ["role": "admin"],
-                                     hasRecording: true)
+        guard let context = SessionContext(otel: mockSpanData,
+                                          userMetadata: ["role": "admin"],
+                                          hasRecording: true) else {
+            XCTFail("SessionContext init failed")
+            return
+        }
         let dictionary = context.getDictionary()
         XCTAssertEqual(dictionary[Keys.hasRecording.rawValue] as? Bool, true)
     }
 
     func testGetPrevSessionDictionary() {
-        let context = SessionContext(otel: mockSpanData, userMetadata: nil)
+        guard let context = SessionContext(otel: mockSpanData, userMetadata: nil) else {
+            XCTFail("SessionContext init failed")
+            return
+        }
         let prevDictionary = context.getPrevSessionDictionary()
         
         XCTAssertEqual(prevDictionary[Keys.sessionId.rawValue] as? String, "session_001")

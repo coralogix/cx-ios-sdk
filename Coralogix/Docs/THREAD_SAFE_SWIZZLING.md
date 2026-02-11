@@ -234,9 +234,9 @@ func testConcurrentInitialization() {
 - Uses dispatch_once pattern
 - Single-swizzle guarantee
 
-### Sentry
-- Uses internal locking mechanisms
-- Has encountered thread-safety issues (GitHub issues #3167, #3341)
+### Other Industry SDKs
+- Use internal locking mechanisms
+- Thread-safety is critical for production stability
 
 ### Our Approach
 - ✅ pthread_mutex (industry standard)

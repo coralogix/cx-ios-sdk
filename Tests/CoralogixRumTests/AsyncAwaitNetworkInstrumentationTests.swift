@@ -21,12 +21,12 @@ final class AsyncAwaitNetworkInstrumentationTests: XCTestCase {
     override func setUpWithError() throws {
         // Create instrumentation directly for testing
         let config = URLSessionInstrumentationConfiguration(
-            shouldInjectTracingHeaders: { _ in true },
             shouldRecordPayload: { _ in true },
             shouldInstrument: { _ in true },
+            shouldInjectTracingHeaders: { _ in true },
             createdRequest: { _, _ in },
-            receivedResponse: { _, _, _, _ in },
-            receivedError: { _, _, _ in },
+            receivedResponse: { _, _, _ in },
+            receivedError: { _, _, _, _ in },
             delegateClassesToInstrument: nil
         )
         

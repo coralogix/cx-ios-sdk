@@ -26,7 +26,9 @@ final class InstrumentationDataTests: XCTestCase {
                                              Keys.environment.rawValue: AttributeValue("prod"),
                                              Keys.userId.rawValue: AttributeValue("12345"),
                                              Keys.userName.rawValue: AttributeValue("John Doe"),
-                                             Keys.userEmail.rawValue: AttributeValue("john.doe@example.com")],
+                                             Keys.userEmail.rawValue: AttributeValue("john.doe@example.com"),
+                                             Keys.sessionId.rawValue: AttributeValue("session_001"),
+                                             Keys.sessionCreationDate.rawValue: AttributeValue(1609459200)],
                                 startTime: statTime, endTime: endTime, spanId: "span123",
                                 traceId: "trace123", name: "testSpan", kind: 1,
                                 statusCode: ["status": "ok"],
@@ -52,7 +54,7 @@ final class InstrumentationDataTests: XCTestCase {
         XCTAssertNotNil(dict)
         let otelSpan = instrumentationData.otelSpan
         let otelResource = instrumentationData.otelResource
-        XCTAssertEqual(otelSpan.attributes.count, 8)
+        XCTAssertEqual(otelSpan.attributes.count, 10) // 7 original + 1 label + 2 session attributes (sessionId, sessionCreationDate)
         XCTAssertEqual(otelResource.attributes.count, 3)
     }
     

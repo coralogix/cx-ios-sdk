@@ -89,7 +89,11 @@ final class NetworkViewController: UITableViewController {
         .init(title: "Async/Await example",
               subtitle: "async await in action",
               systemImageName: "photo.on.rectangle",
-              key: .signingWithAsyncAwait)
+              key: .signingWithAsyncAwait),
+        .init(title: "Async/Await with SSL Pinning",
+              subtitle: "async/await + custom delegate",
+              systemImageName: "lock.shield",
+              key: .asyncAwaitWithSSLPinning)
     ]
 
     // MARK: - Init
@@ -200,6 +204,10 @@ final class NetworkViewController: UITableViewController {
 
         case .signingWithAsyncAwait:
             NetworkSim.callAsyncAwait()
+        
+        case .asyncAwaitWithSSLPinning:
+            NetworkSim.callAsyncAwaitWithSSLPinning()
+        
         default:
             break
         }

@@ -646,11 +646,32 @@ public class URLSessionInstrumentation {
     
     // MARK: - Hybrid Approach: setState: Swizzling for Universal Coverage
     
-    /// Discovers NSURLSessionTask classes to swizzle using a battle-tested approach (from AFNetworking)
-    /// This is safe - creates a temporary session to discover the actual task class hierarchy
-    /// without using objc_getClassList() which could trigger +initialize side effects
+    /// Discovers NSURLSessionTask classes to swizzle using safe two-phase approach
+    /// Phase 1: Discover class names (safe on any thread)
+    /// Phase 2: Convert to classes on main thread (prevents +initialize issues)
     /// THREAD-SAFE: Called within swizzleLock, protected from concurrent access
     private func discoverTaskClassesToSwizzle() -> [AnyClass] {
+        // Best Practice: Work with class names first, convert to classes on main thread
+        // This prevents +initialize side effects on background threads
+        let classNames = discoverTaskClassNames()
+        
+        // CRITICAL: Convert class names to classes on MAIN THREAD ONLY
+        // Calling NSClassFromString off main thread can trigger +initialize on UIKit classes → CRASH
+        assert(Thread.isMainThread, "[URLSessionInstrumentation] Class discovery must run on main thread to prevent +initialize crashes")
+        
+        return classNames.compactMap { className in
+            // This is safe because:
+            // 1. We're on main thread (asserted above)
+            // 2. We're only looking up NSURLSessionTask subclasses (not UIKit)
+            // 3. Classes are already loaded (we got names from instance)
+            NSClassFromString(className)
+        }
+    }
+    
+    /// Phase 1: Discover class names using safe instance-based approach
+    /// Returns class NAMES (strings) which are safe to work with on any thread
+    /// Based on AFNetworking approach - battle-tested since 2015
+    private func discoverTaskClassNames() -> [String] {
         // SAFETY: Create a temporary session with ephemeral configuration
         // This is safe - no network calls are made, just class discovery
         let configuration = URLSessionConfiguration.ephemeral
@@ -664,21 +685,20 @@ public class URLSessionInstrumentation {
         }
         let dummyTask = session.dataTask(with: dummyURL)
         
-        var currentClass: AnyClass? = type(of: dummyTask)
-        var result: [AnyClass] = []
-        
-        let setStateSelector = NSSelectorFromString("setState:")
-        
         // SAFETY: Always cleanup session resources, even if discovery fails
         defer {
             dummyTask.cancel()
             session.finishTasksAndInvalidate()
         }
         
+        var currentClass: AnyClass? = type(of: dummyTask)
+        var result: [String] = []  // Store NAMES, not class objects (industry best practice)
+        let setStateSelector = NSSelectorFromString("setState:")
+        
         // Traverse the class hierarchy from the task's actual class up to NSObject
-        // Collect all classes until we reach the base class or run out of hierarchy
+        // Collect all class NAMES until we reach the base class or run out of hierarchy
         while let cls = currentClass {
-            let className = NSStringFromClass(cls)
+            let className = NSStringFromClass(cls)  // ✅ NSStringFromClass is always safe
             
             // Check if this class has setState: method
             if let method = class_getInstanceMethod(cls, setStateSelector) {
@@ -691,11 +711,11 @@ public class URLSessionInstrumentation {
                     
                     // Only add if this class has its own implementation (not inherited)
                     if classIMP != superIMP {
-                        result.append(cls)
+                        result.append(className)  // Store NAME, not class object
                     }
                 } else {
                     // This is the base class or can't find superclass method - add it and stop
-                    result.append(cls)
+                    result.append(className)  // Store NAME, not class object
                     break
                 }
             } else {

@@ -140,6 +140,7 @@ class ColdDetectorTests: XCTestCase {
         XCTAssertNil(sut?.launchEndTime)
         
         // Deallocate
+        // swiftlint:disable:next weak_var_mutated
         weak var weakSut = sut
         sut = nil
         XCTAssertNil(weakSut, "ColdDetector should deallocate")
