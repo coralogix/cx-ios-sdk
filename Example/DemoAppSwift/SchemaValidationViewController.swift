@@ -241,6 +241,11 @@ class SchemaValidationViewController: UIViewController {
                 handleError("Invalid JSON format")
                 return
             }
+            
+            // TESTING: Save validation response for UI tests
+            if CommandLine.arguments.contains("--uitesting") {
+                saveValidationDataForTesting(data)
+            }
 
             var allValid = true
             var errorMessages: [String] = []
@@ -298,6 +303,21 @@ class SchemaValidationViewController: UIViewController {
 
         } catch {
             handleError("Failed to parse response: \(error.localizedDescription)")
+        }
+    }
+    
+    // MARK: - Testing Support
+    
+    private func saveValidationDataForTesting(_ validationData: [[String: Any]]) {
+        let testDataPath = "/tmp/coralogix_validation_response.json"
+        
+        do {
+            let jsonData = try JSONSerialization.data(withJSONObject: validationData, options: .prettyPrinted)
+            try jsonData.write(to: URL(fileURLWithPath: testDataPath))
+            print("💾 Saved validation data for testing: \(testDataPath)")
+            print("💾 Saved \(validationData.count) log entries")
+        } catch {
+            print("❌ Failed to save validation data: \(error)")
         }
     }
 
