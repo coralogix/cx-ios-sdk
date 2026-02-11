@@ -170,17 +170,23 @@ final class NetworkInstrumentationUITests: XCTestCase {
             return nil
         }
         
-        // Parse JSON - it can be either:
-        // 1. Array of log objects: [[String: Any]]
-        // 2. Array with wrapper object: [{"logs": [...], "validationResult": {...}}]
+        // Parse JSON - validation response structure:
+        // [{"logs": [log1, log2], "validationResult": {...}}, {"logs": [log3], "validationResult": {...}}, ...]
+        // Need to collect logs from ALL objects, not just the first one
         if let directArray = try? JSONSerialization.jsonObject(with: jsonData) as? [[String: Any]] {
-            // Check if it's a wrapped structure
+            // Check if it's wrapped structure with "logs" key
             if directArray.count > 0,
                let firstItem = directArray.first,
-               let logs = firstItem["logs"] as? [[String: Any]] {
-                // Wrapped structure - extract the logs
-                print("\n📊 Read \(logs.count) log entries from validation response (unwrapped)")
-                return logs
+               firstItem["logs"] != nil {
+                // Wrapped structure - collect logs from ALL objects
+                var allLogs: [[String: Any]] = []
+                for item in directArray {
+                    if let logs = item["logs"] as? [[String: Any]] {
+                        allLogs.append(contentsOf: logs)
+                    }
+                }
+                print("\n📊 Read \(allLogs.count) log entries from validation response (unwrapped from \(directArray.count) validation objects)")
+                return allLogs
             } else {
                 // Direct array of logs
                 print("\n📊 Read \(directArray.count) log entries from validation response")
