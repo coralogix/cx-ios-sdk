@@ -18,13 +18,13 @@ public class CxSpan {
     var beforeSend: (([String: Any]) -> [String: Any]?)?
     let viewManager: ViewManager?
     
-    init(otel: SpanDataProtocol,
-         versionMetadata: VersionMetadata,
-         sessionManager: SessionManager,
-         networkManager: NetworkProtocol,
-         viewManager: ViewManager,
-         metricsManager: MetricsManager,
-         options: CoralogixExporterOptions) {
+    init?(otel: SpanDataProtocol,
+          versionMetadata: VersionMetadata,
+          sessionManager: SessionManager,
+          networkManager: NetworkProtocol,
+          viewManager: ViewManager,
+          metricsManager: MetricsManager,
+          options: CoralogixExporterOptions) {
         
         self.viewManager = viewManager
         self.applicationName = versionMetadata.appName
@@ -42,7 +42,11 @@ public class CxSpan {
                                       networkManager: networkManager,
                                       options: options)
         // 2. Build the immutable data object.
-        self.cxRum = rumBuilder.build()
+        // If build() returns nil (missing session attributes), fail initialization
+        guard let cxRum = rumBuilder.build() else {
+            return nil
+        }
+        self.cxRum = cxRum
         
         if cxRum.eventContext.type == CoralogixEventType.networkRequest {
             self.instrumentationData = InstrumentationData(otel: otel, labels: options.labels)

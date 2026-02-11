@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import CoralogixInternal
 
 class CxRumBuilder {
     private let otel: SpanDataProtocol
@@ -31,7 +32,7 @@ class CxRumBuilder {
         self.options = options
     }
     
-    func build() -> CxRum {
+    func build() -> CxRum? {
         let eventContext = EventContext(otel: otel)
         
         updateSessionCounters(for: eventContext)
@@ -44,9 +45,15 @@ class CxRumBuilder {
         let hasRecording = sessionManager.doesSessionHasRecording()
         var timeStamp = otel.getStartTime() ?? Date().timeIntervalSince1970
         var prevSessionContext: SessionContext? = nil
-        let sessionContext = SessionContext(otel: otel,
-                                            userMetadata: userMetadata,
-                                            hasRecording: hasRecording)
+        
+        // CRITICAL: If SessionContext creation fails (missing session attributes), drop the span
+        guard let sessionContext = SessionContext(otel: otel,
+                                                  userMetadata: userMetadata,
+                                                  hasRecording: hasRecording) else {
+            Log.w("[CxRumBuilder] Dropping span due to missing session attributes")
+            return nil
+        }
+        
         if SessionContext.shouldRestorePreviousSession(from: otel){
             prevSessionContext = SessionContext(otel: otel,
                                                 userMetadata: userMetadata,
