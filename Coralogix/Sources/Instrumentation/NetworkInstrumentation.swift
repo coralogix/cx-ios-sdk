@@ -96,13 +96,6 @@ extension CoralogixRum {
     private func spanCustomization(request: URLRequest, spanBuilder: SpanBuilder) {
         spanBuilder.setAttribute(key: Keys.eventType.rawValue, value: CoralogixEventType.networkRequest.rawValue)
         spanBuilder.setAttribute(key: Keys.source.rawValue, value: Keys.fetch.rawValue)
-        
-        // Add session attributes to network spans to maintain session consistency
-        // Without these, each network log creates a new session ID (bug fix)
-        if let sessionMetadata = self.sessionManager?.sessionMetadata {
-            spanBuilder.setAttribute(key: Keys.sessionId.rawValue, value: sessionMetadata.sessionId)
-            spanBuilder.setAttribute(key: Keys.sessionCreationDate.rawValue, value: String(Int(sessionMetadata.sessionCreationDate)))
-        }
     }
     
     private func receivedResponse(response: URLResponse, data: DataOrFile?, span: any Span) {
