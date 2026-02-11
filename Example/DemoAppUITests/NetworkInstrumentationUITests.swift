@@ -40,48 +40,110 @@ final class NetworkInstrumentationUITests: XCTestCase {
     }
     
     private func navigateToNetworkInstrumentation() {
+        print("🧭 Navigating to Network instrumentation...")
         let networkButton = app.staticTexts["Network instrumentation"]
-        XCTAssertTrue(networkButton.waitForExistence(timeout: 10), "Network instrumentation button should exist")
+        XCTAssertTrue(networkButton.waitForExistence(timeout: 15), "Network instrumentation button should exist")
         networkButton.tap()
-        Thread.sleep(forTimeInterval: 1)
+        Thread.sleep(forTimeInterval: 2)
+        
+        // Verify we're on the network instrumentation screen
+        let asyncButton = app.staticTexts["Async/Await example"]
+        XCTAssertTrue(asyncButton.waitForExistence(timeout: 5), "Should be on network instrumentation screen")
+        print("✅ Successfully navigated to Network instrumentation")
     }
     
     private func navigateBackToMainMenu() {
-        // Tap back button to return to main menu
-        if app.navigationBars.buttons.firstMatch.exists {
-            app.navigationBars.buttons.firstMatch.tap()
-            Thread.sleep(forTimeInterval: 1)
+        print("🧭 Navigating back to main menu...")
+        
+        // Try back button first
+        let backButton = app.navigationBars.buttons.firstMatch
+        if backButton.exists {
+            backButton.tap()
+            Thread.sleep(forTimeInterval: 2)
+            
+            // Verify we're back on main menu
+            let schemaButton = app.staticTexts["Verify schema"]
+            if schemaButton.waitForExistence(timeout: 5) {
+                print("✅ Successfully navigated back to main menu")
+                return
+            }
         }
+        
+        // Fallback: Try tapping back multiple times
+        print("⚠️ First back attempt failed, trying alternative navigation...")
+        for _ in 0..<3 {
+            if app.navigationBars.buttons.firstMatch.exists {
+                app.navigationBars.buttons.firstMatch.tap()
+                Thread.sleep(forTimeInterval: 1)
+            }
+        }
+        
+        let schemaButton = app.staticTexts["Verify schema"]
+        XCTAssertTrue(schemaButton.waitForExistence(timeout: 5), "Should be back on main menu")
+        print("✅ Successfully navigated back to main menu (fallback)")
     }
     
     private func navigateToSchemaValidation() {
+        print("🧭 Navigating to Schema validation...")
         let schemaButton = app.staticTexts["Verify schema"]
-        XCTAssertTrue(schemaButton.waitForExistence(timeout: 5), "Schema validation button should exist")
+        XCTAssertTrue(schemaButton.waitForExistence(timeout: 10), "Schema validation button should exist")
         schemaButton.tap()
-        Thread.sleep(forTimeInterval: 1)
+        Thread.sleep(forTimeInterval: 2)
+        
+        // Verify we're on schema validation screen
+        let validateButton = app.buttons["Validate Schema"]
+        XCTAssertTrue(validateButton.waitForExistence(timeout: 5), "Should be on schema validation screen")
+        print("✅ Successfully navigated to Schema validation")
     }
     
     private func triggerValidation() {
+        print("🔍 Triggering validation...")
         let validateButton = app.buttons["Validate Schema"]
-        XCTAssertTrue(validateButton.waitForExistence(timeout: 5), "Validate button should exist")
+        XCTAssertTrue(validateButton.waitForExistence(timeout: 10), "Validate button should exist")
+        
+        // Ensure button is enabled before tapping
+        XCTAssertTrue(validateButton.isEnabled, "Validate button should be enabled")
         validateButton.tap()
         
         // Wait for validation to complete (backend needs time to fetch and validate logs)
-        print("⏳ Waiting for backend validation...")
-        Thread.sleep(forTimeInterval: 10)
+        print("⏳ Waiting for backend validation (15 seconds)...")
+        Thread.sleep(forTimeInterval: 15)
+        
+        print("✅ Validation request completed")
+    }
+    
+    private func tapNetworkOption(_ optionName: String, waitTime: TimeInterval = 2.5) {
+        print("📡 Triggering: \(optionName)")
+        let button = app.staticTexts[optionName]
+        
+        if !button.waitForExistence(timeout: 5) {
+            print("⚠️ Button '\(optionName)' not found, scrolling...")
+            // Try scrolling to find the button
+            app.tables.firstMatch.swipeUp()
+            Thread.sleep(forTimeInterval: 1)
+        }
+        
+        XCTAssertTrue(button.exists, "Button '\(optionName)' should exist")
+        button.tap()
+        print("   ✓ Tapped '\(optionName)', waiting \(waitTime)s...")
+        Thread.sleep(forTimeInterval: waitTime)
     }
     
     private func verifySchemaValidationPassed(file: StaticString = #file, line: UInt = #line) {
+        print("🔍 Checking validation result...")
+        
         let successMessage = "All logs are valid! ✅"
         let statusLabel = app.staticTexts[successMessage]
         
-        if !statusLabel.exists {
+        // Wait a bit longer for status to update
+        if !statusLabel.waitForExistence(timeout: 5) {
             // Capture failure details
             print("\n❌ SCHEMA VALIDATION FAILED!")
             let allLabels = app.staticTexts.allElementsBoundByIndex.map { $0.label }
-            print("📋 Status labels found:")
+            print("📋 All status labels found:")
             for label in allLabels {
-                if label.contains("Validation") || label.contains("Failed") || label.contains("Error") {
+                if label.contains("Validation") || label.contains("Failed") || label.contains("Error") || 
+                   label.contains("logs") || label.contains("Session") {
                     print("   - \(label)")
                 }
             }
@@ -203,57 +265,44 @@ final class NetworkInstrumentationUITests: XCTestCase {
         
         navigateToNetworkInstrumentation()
         
+        print("\n📡 Phase 1: Triggering network requests...")
+        print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+        
         // 1. Async/Await request
-        print("📡 Triggering: Async/Await request")
-        app.staticTexts["Async/Await example"].tap()
-        Thread.sleep(forTimeInterval: 2)
+        tapNetworkOption("Async/Await example", waitTime: 3)
         
         // 2. Traditional successful network request
-        print("📡 Triggering: Successful network request")
-        app.staticTexts["Successful network request"].tap()
-        Thread.sleep(forTimeInterval: 2)
+        tapNetworkOption("Successful network request", waitTime: 2.5)
         
         // 3. Failing network request
-        print("📡 Triggering: Failing network request")
-        app.staticTexts["Failing network request"].tap()
-        Thread.sleep(forTimeInterval: 2)
+        tapNetworkOption("Failing network request", waitTime: 2.5)
         
         // 4. POST request
-        print("📡 Triggering: POST request")
-        app.staticTexts["POST request"].tap()
-        Thread.sleep(forTimeInterval: 2)
+        tapNetworkOption("POST request", waitTime: 2.5)
         
         // 5. GET request
-        print("📡 Triggering: GET request")
-        app.staticTexts["GET request"].tap()
-        Thread.sleep(forTimeInterval: 2)
+        tapNetworkOption("GET request", waitTime: 2.5)
         
         // 6. Alamofire success
-        print("📡 Triggering: Alamofire success")
-        app.staticTexts["Alamofire success"].tap()
-        Thread.sleep(forTimeInterval: 2)
+        tapNetworkOption("Alamofire success", waitTime: 3)
         
         // 7. Alamofire failure
-        print("📡 Triggering: Alamofire failure")
-        app.staticTexts["Alamofire failure"].tap()
-        Thread.sleep(forTimeInterval: 2)
+        tapNetworkOption("Alamofire failure", waitTime: 3)
         
         // 8. Alamofire upload (takes longer)
-        print("📡 Triggering: Alamofire upload")
-        app.staticTexts["Alamofire upload"].tap()
-        Thread.sleep(forTimeInterval: 4)
+        tapNetworkOption("Alamofire upload", waitTime: 5)
         
         // 9. AFNetworking
-        print("📡 Triggering: AFNetworking request")
-        app.staticTexts["AFNetworking request"].tap()
-        Thread.sleep(forTimeInterval: 2)
+        tapNetworkOption("AFNetworking request", waitTime: 3)
         
         // Wait for SDK to batch and send all data to backend
-        print("\n⏳ Waiting for SDK to send all data to backend...")
-        Thread.sleep(forTimeInterval: 5)
+        print("\n⏳ Phase 2: Waiting for SDK to send data to backend (8 seconds)...")
+        print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+        Thread.sleep(forTimeInterval: 8)
         
         // Navigate to schema validation
-        print("\n🔍 Navigating to schema validation...")
+        print("🔍 Phase 3: Validating schema...")
+        print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
         navigateBackToMainMenu()
         navigateToSchemaValidation()
         
@@ -264,6 +313,8 @@ final class NetworkInstrumentationUITests: XCTestCase {
         verifySchemaValidationPassed()
         
         // Verify specific requests and status codes
+        print("\n🔎 Phase 4: Verifying specific requests...")
+        print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
         let expectedRequests: [(url: String, statusCode: Int, description: String)] = [
             ("jsonplaceholder.typicode.com/posts", 201, "Async/Await POST"),
             ("jsonplaceholder.typicode.com/posts", 200, "Successful GET"),
@@ -279,6 +330,7 @@ final class NetworkInstrumentationUITests: XCTestCase {
         verifyExpectedRequests(expectedRequests)
         
         print("\n✅ SUCCESS: All network instrumentation validated end-to-end!")
+        print("========================================\n")
     }
     
     /// Quick smoke test: Single request to verify instrumentation is working
@@ -289,13 +341,12 @@ final class NetworkInstrumentationUITests: XCTestCase {
         
         navigateToNetworkInstrumentation()
         
-        print("📡 Triggering: Async/Await request")
-        app.staticTexts["Async/Await example"].tap()
-        Thread.sleep(forTimeInterval: 3)
+        tapNetworkOption("Async/Await example", waitTime: 3)
         
-        print("\n⏳ Waiting for SDK to send data...")
-        Thread.sleep(forTimeInterval: 3)
+        print("\n⏳ Waiting for SDK to send data (5 seconds)...")
+        Thread.sleep(forTimeInterval: 5)
         
+        print("\n🔍 Validating...")
         navigateBackToMainMenu()
         navigateToSchemaValidation()
         triggerValidation()
@@ -310,6 +361,31 @@ final class NetworkInstrumentationUITests: XCTestCase {
         
         XCTAssertTrue(validationData.count > 0, "Should have at least one log entry")
         print("✅ Smoke test passed: \(validationData.count) log entries found")
+        print("========================================\n")
+    }
+    
+    /// Navigation test: Verify app navigation works without crashes
+    func testNavigationOnly() throws {
+        print("\n========================================")
+        print("🧪 TEST: Navigation Test (No Requests)")
+        print("========================================\n")
+        
+        print("🧭 Testing navigation flow...")
+        
+        // Navigate to network instrumentation
+        navigateToNetworkInstrumentation()
+        print("✅ Network instrumentation screen loaded")
+        
+        // Navigate back
+        navigateBackToMainMenu()
+        print("✅ Back to main menu")
+        
+        // Navigate to schema validation
+        navigateToSchemaValidation()
+        print("✅ Schema validation screen loaded")
+        
+        print("\n✅ SUCCESS: Navigation test passed!")
+        print("========================================\n")
     }
 }
 
