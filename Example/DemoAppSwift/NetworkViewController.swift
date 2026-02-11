@@ -58,7 +58,7 @@ final class NetworkViewController: UITableViewController {
         ),
         .init(
             title: "Alamofire upload",
-            subtitle: "Upload a 10MB sample file",
+            subtitle: "Upload a 2MB sample file",
             systemImageName: "arrow.up.doc",
             key: .alamofireUploadRequest
         ),
@@ -183,7 +183,7 @@ final class NetworkViewController: UITableViewController {
             NetworkSim.failureAlamofire()
 
         case .alamofireUploadRequest:
-            let fileUrl = NetworkSim.createSampleFile(sizeInMB: 10)
+            let fileUrl = NetworkSim.createSampleFile(sizeInMB: 2)
             NetworkSim.uploadFile(fileURL: fileUrl)
 
         case .afnetworkingRequest:

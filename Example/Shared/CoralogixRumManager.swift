@@ -34,11 +34,11 @@ final class CoralogixRumManager {
                                                publicKey: Envs.PUBLIC_KEY.rawValue,
                                                instrumentations: [
                                                 .mobileVitals: true,
-                                                                  .custom: true,
-                                                                  .errors: true,
-                                                                  .userActions: true,
+                                                                  .custom: false,
+                                                                  .errors: false,
+                                                                  .userActions: false,
                                                                   .network: true,
-                                                                  .anr: true,
+                                                                  .anr: false,
                                                                   .lifeCycle: false],
                                                collectIPData: true,
 //                                               beforeSend: { cxRum in
@@ -50,13 +50,13 @@ final class CoralogixRumManager {
 //            return editableCxRum
 //        },
                                                enableSwizzling: true,
-                                               proxyUrl: Envs.PROXY_URL.rawValue, // remove if not need to use proxy
-                                               mobileVitals:[.cpuDetector: true,
-                                                             .warmDetector: true,
-                                                             .coldDetector: true,
-                                                             .slowFrozenFramesDetector: true,
-                                                             .memoryDetector: true,
-                                                             .renderingDetector: true],
+//                                               proxyUrl: Envs.PROXY_URL.rawValue, // remove if not need to use proxy
+                                               mobileVitals:[.cpuDetector: false,
+                                                             .warmDetector: false,
+                                                             .coldDetector: false,
+                                                             .slowFrozenFramesDetector: false,
+                                                             .memoryDetector: false,
+                                                             .renderingDetector: false],
                                                debug: true
         )
 //        let log = OSLog(subsystem: "test.CoralogixTest", category: .pointsOfInterest)

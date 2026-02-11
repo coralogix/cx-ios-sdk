@@ -242,6 +242,35 @@ final class NetworkInstrumentationUITests: XCTestCase {
             "status: 200"
         ])
     }
+    
+    /// Test Alamofire request instrumentation (third-party library)
+    /// Validates hybrid approach - setState: fallback captures Alamofire requests
+    func testAlamofireRequest() throws {
+        print("\n========================================")
+        print("🧪 TEST: Alamofire Request")
+        print("========================================\n")
+        
+        // Navigate to Network Instrumentation
+        let networkButton = app.staticTexts["Network instrumentation"].firstMatch
+        XCTAssertTrue(networkButton.waitForExistence(timeout: 10))
+        networkButton.tap()
+        Thread.sleep(forTimeInterval: 1)
+        
+        // Tap Alamofire success button
+        let alamofireButton = app.staticTexts["Alamofire success"].firstMatch
+        XCTAssertTrue(alamofireButton.waitForExistence(timeout: 10))
+        alamofireButton.tap()
+        
+        // Wait for network request to complete
+        Thread.sleep(forTimeInterval: 3)
+        
+        // Verify Alamofire request was captured via setState: fallback
+        verifyLogContains([
+            "🔵 resume() called",
+            "Fallback logging response for taskId:",
+            "status: 200"
+        ])
+    }
 }
 
 // MARK: - How to Run
@@ -285,6 +314,11 @@ final class NetworkInstrumentationUITests: XCTestCase {
  
  ✅ testGetRequest:
     - Traditional GET with completion handler
+    - Request logged with status 200
+ 
+ ✅ testAlamofireRequest:
+    - Third-party networking library (Alamofire)
+    - Captured via setState: fallback (hybrid approach)
     - Request logged with status 200
  
  */

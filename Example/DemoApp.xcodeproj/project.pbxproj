@@ -19,6 +19,9 @@
 		E622116C2BFF2A7B00052682 /* Keys.swift in Sources */ = {isa = PBXBuildFile; fileRef = E622116B2BFF2A7B00052682 /* Keys.swift */; };
 		E622116D2BFF2D5300052682 /* Keys.swift in Sources */ = {isa = PBXBuildFile; fileRef = E622116B2BFF2A7B00052682 /* Keys.swift */; };
 		E648914C2ED35B2600624978 /* FullImageCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = E648914B2ED35B2600624978 /* FullImageCell.swift */; };
+		E64ABB282F3C5CFA00D990A9 /* AFNetworking in Frameworks */ = {isa = PBXBuildFile; productRef = E64ABB272F3C5CFA00D990A9 /* AFNetworking */; };
+		E64ABB2B2F3C5ECB00D990A9 /* SDWebImage in Frameworks */ = {isa = PBXBuildFile; productRef = E64ABB2A2F3C5ECB00D990A9 /* SDWebImage */; };
+		E64ABB2E2F3C5F0300D990A9 /* Alamofire in Frameworks */ = {isa = PBXBuildFile; productRef = E64ABB2D2F3C5F0300D990A9 /* Alamofire */; };
 		E6525B5B2E38BE3C006DB4AA /* envs.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6525B5A2E38BE3A006DB4AA /* envs.swift */; };
 		E6525B602E38C548006DB4AA /* envs.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6525B5A2E38BE3A006DB4AA /* envs.swift */; };
 		E6525B612E38C548006DB4AA /* envs.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6525B5A2E38BE3A006DB4AA /* envs.swift */; };
@@ -201,10 +204,13 @@
 			buildActionMask = 2147483647;
 			files = (
 				E66E3B682DA7F76C00FBC86B /* Coralogix in Frameworks */,
+				E64ABB2E2F3C5F0300D990A9 /* Alamofire in Frameworks */,
 				E6B60A042DB4E544003AD35D /* SessionReplay in Frameworks */,
 				E690EAE02EF182F60011C147 /* FirebaseCrashlytics in Frameworks */,
+				E64ABB2B2F3C5ECB00D990A9 /* SDWebImage in Frameworks */,
 				E690EADE2EF182F60011C147 /* FirebaseCore in Frameworks */,
 				E690EADC2EF182F60011C147 /* FirebaseAnalytics in Frameworks */,
+				E64ABB282F3C5CFA00D990A9 /* AFNetworking in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -426,6 +432,9 @@
 				E690EADB2EF182F60011C147 /* FirebaseAnalytics */,
 				E690EADD2EF182F60011C147 /* FirebaseCore */,
 				E690EADF2EF182F60011C147 /* FirebaseCrashlytics */,
+				E64ABB272F3C5CFA00D990A9 /* AFNetworking */,
+				E64ABB2A2F3C5ECB00D990A9 /* SDWebImage */,
+				E64ABB2D2F3C5F0300D990A9 /* Alamofire */,
 			);
 			productName = DemoAppSwift;
 			productReference = E68681A22BFA279500B127E7 /* DemoAppSwift.app */;
@@ -468,6 +477,9 @@
 			packageReferences = (
 				E66E3B662DA7F76C00FBC86B /* XCLocalSwiftPackageReference "../../cx-ios-sdk" */,
 				E690EADA2EF182F60011C147 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
+				E64ABB262F3C5CFA00D990A9 /* XCRemoteSwiftPackageReference "AFNetworking" */,
+				E64ABB292F3C5ECB00D990A9 /* XCRemoteSwiftPackageReference "SDWebImage" */,
+				E64ABB2C2F3C5F0300D990A9 /* XCRemoteSwiftPackageReference "Alamofire" */,
 			);
 			productRefGroup = E6320F832BE7C94F00A4547E /* Products */;
 			projectDirPath = "";
@@ -1064,6 +1076,30 @@
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		E64ABB262F3C5CFA00D990A9 /* XCRemoteSwiftPackageReference "AFNetworking" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/AFNetworking/AFNetworking.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 4.0.1;
+			};
+		};
+		E64ABB292F3C5ECB00D990A9 /* XCRemoteSwiftPackageReference "SDWebImage" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/SDWebImage/SDWebImage.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 5.21.6;
+			};
+		};
+		E64ABB2C2F3C5F0300D990A9 /* XCRemoteSwiftPackageReference "Alamofire" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/Alamofire/Alamofire.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 5.11.1;
+			};
+		};
 		E690EADA2EF182F60011C147 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/firebase/firebase-ios-sdk.git";
@@ -1075,6 +1111,21 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		E64ABB272F3C5CFA00D990A9 /* AFNetworking */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E64ABB262F3C5CFA00D990A9 /* XCRemoteSwiftPackageReference "AFNetworking" */;
+			productName = AFNetworking;
+		};
+		E64ABB2A2F3C5ECB00D990A9 /* SDWebImage */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E64ABB292F3C5ECB00D990A9 /* XCRemoteSwiftPackageReference "SDWebImage" */;
+			productName = SDWebImage;
+		};
+		E64ABB2D2F3C5F0300D990A9 /* Alamofire */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E64ABB2C2F3C5F0300D990A9 /* XCRemoteSwiftPackageReference "Alamofire" */;
+			productName = Alamofire;
+		};
 		E66E3B672DA7F76C00FBC86B /* Coralogix */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = Coralogix;
