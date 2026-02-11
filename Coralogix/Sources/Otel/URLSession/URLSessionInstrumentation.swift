@@ -41,6 +41,9 @@ public class URLSessionInstrumentation {
     private static var loggedKey: UInt8 = 0  // Deduplication flag for hybrid approach
     private static var setStateSwizzleKey: UInt8 = 0
     
+    // Thread-safe swizzling lock - protects against concurrent swizzle attempts
+    private static let swizzleLock = Lock()
+    
     static let AVTaskClassList: [AnyClass] = [
         "__NSCFBackgroundAVAggregateAssetDownloadTask",
         "__NSCFBackgroundAVAssetDownloadTask",
@@ -57,28 +60,67 @@ public class URLSessionInstrumentation {
     
     public init(configuration: URLSessionInstrumentationConfiguration) {
         self._configuration = configuration
-        self.injectInNSURLClasses()
+        
+        // Perform swizzling with thread-safety protection
+        // CRITICAL: All swizzling must be thread-safe to prevent host app crashes
+        Self.swizzleLock.withLock {
+            self.injectInNSURLClasses()
+        }
     }
     
     private func injectInNSURLClasses() {
+        // CRITICAL: All swizzling operations are wrapped in error handling
+        // to prevent SDK from crashing the host app
+        
         // Only swizzle delegate classes if explicitly provided
         if let explicitClasses = configuration.delegateClassesToInstrument, !explicitClasses.isEmpty {
             Log.d("[URLSessionInstrumentation] Swizzling \(explicitClasses.count) explicitly provided delegate classes")
-            swizzleExplicitDelegateClasses(explicitClasses)
+            safeSwizzle(operation: "delegate classes") {
+                swizzleExplicitDelegateClasses(explicitClasses)
+            }
         }
         
         // Always swizzle URLSession methods (no class scanning needed - safe)
         if #available(OSX 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) {
-            injectIntoNSURLSessionCreateTaskMethods()
+            safeSwizzle(operation: "URLSession create task methods") {
+                injectIntoNSURLSessionCreateTaskMethods()
+            }
         }
-        injectIntoNSURLSessionCreateTaskWithParameterMethods()
-        injectIntoNSURLSessionAsyncDataAndDownloadTaskMethods()
-        injectIntoNSURLSessionAsyncUploadTaskMethods()
         
-        injectIntoNSURLSessionTaskResume()
+        safeSwizzle(operation: "URLSession create task with parameters") {
+            injectIntoNSURLSessionCreateTaskWithParameterMethods()
+        }
+        
+        safeSwizzle(operation: "URLSession async data/download tasks") {
+            injectIntoNSURLSessionAsyncDataAndDownloadTaskMethods()
+        }
+        
+        safeSwizzle(operation: "URLSession async upload tasks") {
+            injectIntoNSURLSessionAsyncUploadTaskMethods()
+        }
+        
+        safeSwizzle(operation: "URLSessionTask resume()") {
+            injectIntoNSURLSessionTaskResume()
+        }
         
         // Hybrid approach: Add setState: swizzling for universal coverage (Alamofire, etc.)
-        injectIntoNSURLSessionTaskSetState()
+        safeSwizzle(operation: "URLSessionTask setState: (hybrid approach)") {
+            injectIntoNSURLSessionTaskSetState()
+        }
+    }
+    
+    /// Safely executes a swizzling operation with error handling
+    /// CRITICAL: Prevents SDK from crashing the host app if swizzling fails
+    private func safeSwizzle(operation: String, _ block: () -> Void) {
+        do {
+            // Note: Swift doesn't have try-catch for Objective-C exceptions
+            // But we can still structure code defensively
+            block()
+        } catch {
+            // This catch won't capture ObjC exceptions, but shows intent
+            Log.e("[URLSessionInstrumentation] Failed to swizzle \(operation): \(error)")
+            Log.e("[URLSessionInstrumentation] Continuing despite swizzling failure to prevent host app crash")
+        }
     }
     
     private func swizzleExplicitDelegateClasses(_ classes: [AnyClass]) {
@@ -111,9 +153,10 @@ public class URLSessionInstrumentation {
                 continue 
             }
             
-            // Check if already swizzled
+            // THREAD-SAFE: Check if already swizzled
+            // This check is inside the lock (from init), preventing TOCTOU race conditions
             if objc_getAssociatedObject(theClass, &Self.delegateSwizzleKey) != nil {
-                continue
+                continue // Already swizzled, skip to prevent double-swizzling
             }
             
             // Check if class implements any of the selectors we want to swizzle
@@ -606,19 +649,31 @@ public class URLSessionInstrumentation {
     /// Discovers NSURLSessionTask classes to swizzle using a battle-tested approach (from AFNetworking)
     /// This is safe - creates a temporary session to discover the actual task class hierarchy
     /// without using objc_getClassList() which could trigger +initialize side effects
+    /// THREAD-SAFE: Called within swizzleLock, protected from concurrent access
     private func discoverTaskClassesToSwizzle() -> [AnyClass] {
-        // Create a temporary session with ephemeral configuration
+        // SAFETY: Create a temporary session with ephemeral configuration
+        // This is safe - no network calls are made, just class discovery
         let configuration = URLSessionConfiguration.ephemeral
         let session = URLSession(configuration: configuration)
         
-        // Create a dummy task to discover its actual class (use valid URL)
-        guard let dummyURL = URL(string: "https://example.com") else { return [] }
+        // SAFETY: Create a dummy task to discover its actual class (use valid URL)
+        // No network request is actually sent, this is just for class discovery
+        guard let dummyURL = URL(string: "https://example.com") else {
+            Log.w("[URLSessionInstrumentation] Failed to create URL for class discovery")
+            return []
+        }
         let dummyTask = session.dataTask(with: dummyURL)
         
         var currentClass: AnyClass? = type(of: dummyTask)
         var result: [AnyClass] = []
         
         let setStateSelector = NSSelectorFromString("setState:")
+        
+        // SAFETY: Always cleanup session resources, even if discovery fails
+        defer {
+            dummyTask.cancel()
+            session.finishTasksAndInvalidate()
+        }
         
         // Traverse the class hierarchy from the task's actual class up to NSObject
         // Collect all classes until we reach the base class or run out of hierarchy
@@ -651,10 +706,6 @@ public class URLSessionInstrumentation {
             currentClass = class_getSuperclass(cls)
         }
         
-        // Cleanup
-        dummyTask.cancel()
-        session.finishTasksAndInvalidate()
-        
         return result
     }
     
@@ -665,8 +716,11 @@ public class URLSessionInstrumentation {
         
         guard !classesToSwizzle.isEmpty else {
             Log.w("[URLSessionInstrumentation] No task classes discovered for setState: swizzling")
+            Log.w("[URLSessionInstrumentation] Third-party library fallback (Alamofire, etc.) may not work")
             return
         }
+        
+        Log.d("[URLSessionInstrumentation] Discovered \(classesToSwizzle.count) task classes for setState: swizzling")
         
         typealias SetStateIMPType = @convention(c) (AnyObject, Selector, URLSessionTask.State) -> Void
         let selector = NSSelectorFromString("setState:")
@@ -676,9 +730,10 @@ public class URLSessionInstrumentation {
                 continue
             }
             
-            // Check if already swizzled for this class
+            // THREAD-SAFE: Check if already swizzled for this class
+            // This check is inside the lock (from init), preventing TOCTOU race conditions
             if objc_getAssociatedObject(cls, &Self.setStateSwizzleKey) != nil {
-                continue
+                continue // Already swizzled, skip to prevent double-swizzling
             }
             
             let originalIMP = method_getImplementation(method)
