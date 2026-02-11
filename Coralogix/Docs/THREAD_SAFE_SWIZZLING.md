@@ -164,6 +164,65 @@ defer {
 
 ---
 
+## Swizzling Method: class_replaceMethod (Industry Best Practice)
+
+### Why We Use class_replaceMethod
+
+We follow the industry-standard swizzling pattern used by major SDKs (Datadog, New Relic, etc.) for **maximum multi-SDK compatibility**.
+
+**Pattern:**
+```swift
+let swizzledIMP = imp_implementationWithBlock(block)
+let typeEncoding = method_getTypeEncoding(original)
+let previousIMP = class_replaceMethod(cls, selector, swizzledIMP, typeEncoding)
+if previousIMP != nil {
+    originalIMP = previousIMP  // Chain with existing implementation
+} else {
+    Log.w("Failed to swizzle - may have been swizzled by another SDK")
+}
+```
+
+### Advantages Over method_setImplementation
+
+| Aspect | `class_replaceMethod` ✅ | `method_setImplementation` |
+|--------|--------------------------|----------------------------|
+| **Industry adoption** | ✅ Used by Datadog, New Relic, Firebase | Less common |
+| **Multi-SDK compatibility** | ✅ Battle-tested with Pendo, Firebase, Splunk | Can have conflicts |
+| **Initialization timing** | ✅ More predictable | More sensitive to order |
+| **NULL return handling** | ✅ Can detect conflicts | No feedback |
+| **Documentation** | ✅ Widely documented | Less examples |
+| **Chaining behavior** | ✅ Returns previous IMP | Returns previous IMP |
+
+### Multi-SDK Conflict Detection
+
+We log warnings when swizzling fails (NULL return):
+
+```swift
+if previousIMP == nil {
+    Log.w("[URLSessionInstrumentation] Failed to swizzle \(selector) - method may not exist or was already swizzled by another SDK")
+}
+```
+
+**This helps diagnose issues when running alongside:**
+- Pendo
+- Datadog
+- Splunk
+- Firebase
+- New Relic
+- Other APM/analytics SDKs
+
+### Why This Matters
+
+In production apps with **5-10+ SDKs**, using the same swizzling pattern as others:
+- ✅ Reduces initialization conflicts
+- ✅ Provides better diagnostic info
+- ✅ Follows established best practices
+- ✅ Increases stability across SDK combinations
+
+**Result:** More reliable instrumentation in multi-SDK environments.
+
+---
+
 ## Performance Impact
 
 ### Lock Overhead

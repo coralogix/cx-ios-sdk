@@ -254,7 +254,11 @@ public class URLSessionInstrumentation {
             }
             
             let swizzledIMP = imp_implementationWithBlock(block as Any)
-            _ = method_setImplementation(method, swizzledIMP)
+            let typeEncoding = method_getTypeEncoding(method)
+            let previousIMP = class_replaceMethod(cls, selector, swizzledIMP, typeEncoding)
+            if previousIMP == nil {
+                Log.w("[URLSessionInstrumentation] Failed to swizzle \(selector) - method may not exist or was already swizzled by another SDK")
+            }
         }
     }
     
@@ -393,7 +397,11 @@ public class URLSessionInstrumentation {
                 return task
             }
             let swizzledIMP = imp_implementationWithBlock(block)
-            method_setImplementation(method, swizzledIMP)
+            let typeEncoding = method_getTypeEncoding(method)
+            let previousIMP = class_replaceMethod(cls, #selector(URLSession.uploadTask(with:from:)), swizzledIMP, typeEncoding)
+            if previousIMP == nil {
+                Log.w("[URLSessionInstrumentation] Failed to swizzle uploadTask(with:from:) - method may not exist or was already swizzled by another SDK")
+            }
         }
         
         // MARK: Swizzle `uploadTask(with:fromFile:)`
@@ -419,7 +427,11 @@ public class URLSessionInstrumentation {
                 return task
             }
             let swizzledIMP = imp_implementationWithBlock(block)
-            method_setImplementation(method, swizzledIMP)
+            let typeEncoding = method_getTypeEncoding(method)
+            let previousIMP = class_replaceMethod(cls, #selector(URLSession.uploadTask(with:fromFile:)), swizzledIMP, typeEncoding)
+            if previousIMP == nil {
+                Log.w("[URLSessionInstrumentation] Failed to swizzle uploadTask(with:fromFile:) - method may not exist or was already swizzled by another SDK")
+            }
         }
     }
     
@@ -511,7 +523,13 @@ public class URLSessionInstrumentation {
                 return task
             }
             let swizzledIMP = imp_implementationWithBlock(unsafeBitCast(block, to: AnyObject.self))
-            originalIMP = method_setImplementation(original, swizzledIMP)
+            let typeEncoding = method_getTypeEncoding(original)
+            let previousIMP = class_replaceMethod(cls, selector, swizzledIMP, typeEncoding)
+            if previousIMP != nil {
+                originalIMP = previousIMP
+            } else {
+                Log.w("[URLSessionInstrumentation] Failed to swizzle \(selector) - method may not exist or was already swizzled by another SDK")
+            }
         }
     }
     
@@ -571,7 +589,13 @@ public class URLSessionInstrumentation {
                 return task
             }
             let swizzledIMP = imp_implementationWithBlock(unsafeBitCast(block, to: AnyObject.self))
-            originalIMP = method_setImplementation(original, swizzledIMP)
+            let typeEncoding = method_getTypeEncoding(original)
+            let previousIMP = class_replaceMethod(cls, selector, swizzledIMP, typeEncoding)
+            if previousIMP != nil {
+                originalIMP = previousIMP
+            } else {
+                Log.w("[URLSessionInstrumentation] Failed to swizzle \(selector) - method may not exist or was already swizzled by another SDK")
+            }
         }
     }
     
@@ -638,7 +662,10 @@ public class URLSessionInstrumentation {
             }
             
             let swizzledIMP = imp_implementationWithBlock(block as Any)
-            method_setImplementation(method, swizzledIMP)
+            let previousIMP = class_replaceMethod(cls, selector, swizzledIMP, typeEncoding)
+            if previousIMP == nil {
+                Log.w("[URLSessionInstrumentation] Failed to swizzle resume on \(cls) - method may not exist or was already swizzled by another SDK")
+            }
         }
     }
     
@@ -769,7 +796,11 @@ public class URLSessionInstrumentation {
             }
             
             let swizzledIMP = imp_implementationWithBlock(block as Any)
-            method_setImplementation(method, swizzledIMP)
+            let typeEncoding = method_getTypeEncoding(method)
+            let previousIMP = class_replaceMethod(cls, selector, swizzledIMP, typeEncoding)
+            if previousIMP == nil {
+                Log.w("[URLSessionInstrumentation] Failed to swizzle setState: on \(cls) - method may not exist or was already swizzled by another SDK")
+            }
             
             // Mark as swizzled
             objc_setAssociatedObject(cls, &Self.setStateSwizzleKey, true, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
@@ -842,7 +873,13 @@ public class URLSessionInstrumentation {
             objc_setAssociatedObject(session, key, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
         }
         let swizzledIMP = imp_implementationWithBlock(unsafeBitCast(block, to: AnyObject.self))
-        originalIMP = method_setImplementation(original, swizzledIMP)
+        let typeEncoding = method_getTypeEncoding(original)
+        let previousIMP = class_replaceMethod(cls, selector, swizzledIMP, typeEncoding)
+        if previousIMP != nil {
+            originalIMP = previousIMP
+        } else {
+            Log.w("[URLSessionInstrumentation] Failed to swizzle urlSession(_:dataTask:didReceive:) on \(cls) - method may not exist or was already swizzled by another SDK")
+        }
     }
     
     private func injectTaskDidReceiveResponseIntoDelegateClass(cls: AnyClass) {
@@ -862,7 +899,13 @@ public class URLSessionInstrumentation {
             objc_setAssociatedObject(session, key, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
         }
         let swizzledIMP = imp_implementationWithBlock(unsafeBitCast(block, to: AnyObject.self))
-        originalIMP = method_setImplementation(original, swizzledIMP)
+        let typeEncoding = method_getTypeEncoding(original)
+        let previousIMP = class_replaceMethod(cls, selector, swizzledIMP, typeEncoding)
+        if previousIMP != nil {
+            originalIMP = previousIMP
+        } else {
+            Log.w("[URLSessionInstrumentation] Failed to swizzle urlSession(_:dataTask:didReceive:completionHandler:) on \(cls) - method may not exist or was already swizzled by another SDK")
+        }
     }
     
     private func injectTaskDidCompleteWithErrorIntoDelegateClass(cls: AnyClass) {
@@ -883,7 +926,13 @@ public class URLSessionInstrumentation {
             objc_setAssociatedObject(session, key, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
         }
         let swizzledIMP = imp_implementationWithBlock(unsafeBitCast(block, to: AnyObject.self))
-        originalIMP = method_setImplementation(original, swizzledIMP)
+        let typeEncoding = method_getTypeEncoding(original)
+        let previousIMP = class_replaceMethod(cls, selector, swizzledIMP, typeEncoding)
+        if previousIMP != nil {
+            originalIMP = previousIMP
+        } else {
+            Log.w("[URLSessionInstrumentation] Failed to swizzle urlSession(_:task:didCompleteWithError:) on \(cls) - method may not exist or was already swizzled by another SDK")
+        }
     }
     
     private func injectTaskDidFinishCollectingMetricsIntoDelegateClass(cls: AnyClass) {
@@ -908,7 +957,13 @@ public class URLSessionInstrumentation {
             objc_setAssociatedObject(session, key, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
         }
         let swizzledIMP = imp_implementationWithBlock(unsafeBitCast(block, to: AnyObject.self))
-        originalIMP = method_setImplementation(original, swizzledIMP)
+        let typeEncoding = method_getTypeEncoding(original)
+        let previousIMP = class_replaceMethod(cls, selector, swizzledIMP, typeEncoding)
+        if previousIMP != nil {
+            originalIMP = previousIMP
+        } else {
+            Log.w("[URLSessionInstrumentation] Failed to swizzle urlSession(_:task:didFinishCollecting:) on \(cls) - method may not exist or was already swizzled by another SDK")
+        }
     }
     
     func injectRespondsToSelectorIntoDelegateClass(cls: AnyClass) {
@@ -928,7 +983,13 @@ public class URLSessionInstrumentation {
             return castedIMP(object, selector, respondsTo)
         }
         let swizzledIMP = imp_implementationWithBlock(unsafeBitCast(block, to: AnyObject.self))
-        originalIMP = method_setImplementation(original, swizzledIMP)
+        let typeEncoding = method_getTypeEncoding(original)
+        let previousIMP = class_replaceMethod(cls, selector, swizzledIMP, typeEncoding)
+        if previousIMP != nil {
+            originalIMP = previousIMP
+        } else {
+            Log.w("[URLSessionInstrumentation] Failed to swizzle responds(to:) on \(cls) - method may not exist or was already swizzled by another SDK")
+        }
     }
     
     private func injectDataTaskDidBecomeDownloadTaskIntoDelegateClass(cls: AnyClass) {
@@ -952,7 +1013,13 @@ public class URLSessionInstrumentation {
             objc_setAssociatedObject(session, key, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
         }
         let swizzledIMP = imp_implementationWithBlock(unsafeBitCast(block, to: AnyObject.self))
-        originalIMP = method_setImplementation(original, swizzledIMP)
+        let typeEncoding = method_getTypeEncoding(original)
+        let previousIMP = class_replaceMethod(cls, selector, swizzledIMP, typeEncoding)
+        if previousIMP != nil {
+            originalIMP = previousIMP
+        } else {
+            Log.w("[URLSessionInstrumentation] Failed to swizzle urlSession(_:dataTask:didBecome:) on \(cls) - method may not exist or was already swizzled by another SDK")
+        }
     }
     
     // URLSessionTask methods
