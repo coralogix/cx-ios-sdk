@@ -106,9 +106,9 @@ final class NetworkInstrumentationUITests: XCTestCase {
         validateButton.tap()
         
         // Wait for validation to complete (backend needs time to fetch and validate logs)
-        print("⏳ Waiting for backend validation (15 seconds)...")
-        print("   (Backend needs time to ingest and index logs)")
-        Thread.sleep(forTimeInterval: 15)
+        print("⏳ Waiting for backend validation (3 seconds)...")
+        print("   (Backend fetches logs from ingestion pipeline)")
+        Thread.sleep(forTimeInterval: 3)
         
         print("✅ Validation request completed")
     }
@@ -214,7 +214,13 @@ final class NetworkInstrumentationUITests: XCTestCase {
             if let context = logEntry["network_request_context"] as? [String: Any] {
                 networkContext = context
             }
-            // Check if it's nested in another structure
+            // Check nested in text.cx_rum.network_request_context (most common)
+            else if let text = logEntry["text"] as? [String: Any],
+                    let cxRum = text["cx_rum"] as? [String: Any],
+                    let context = cxRum["network_request_context"] as? [String: Any] {
+                networkContext = context
+            }
+            // Check if it's nested in body structure
             else if let body = logEntry["body"] as? [String: Any],
                     let context = body["network_request_context"] as? [String: Any] {
                 networkContext = context
@@ -275,10 +281,19 @@ final class NetworkInstrumentationUITests: XCTestCase {
         // Count how many entries have network_request_context
         var networkLogCount = 0
         for logEntry in validationData {
+            // Check top-level
             if let _ = logEntry["network_request_context"] as? [String: Any] {
                 networkLogCount += 1
-            } else if let body = logEntry["body"] as? [String: Any],
-                      let _ = body["network_request_context"] as? [String: Any] {
+            }
+            // Check text.cx_rum.network_request_context
+            else if let text = logEntry["text"] as? [String: Any],
+                    let cxRum = text["cx_rum"] as? [String: Any],
+                    let _ = cxRum["network_request_context"] as? [String: Any] {
+                networkLogCount += 1
+            }
+            // Check body.network_request_context
+            else if let body = logEntry["body"] as? [String: Any],
+                    let _ = body["network_request_context"] as? [String: Any] {
                 networkLogCount += 1
             }
         }
@@ -317,24 +332,40 @@ final class NetworkInstrumentationUITests: XCTestCase {
             var statusCode: Any?
             var logType = "unknown"
             
+            // Check top-level network_request_context
             if let context = logEntry["network_request_context"] as? [String: Any] {
                 url = context["url"] as? String
                 statusCode = context["status_code"]
                 logType = "network"
-            } else if let body = logEntry["body"] as? [String: Any],
-                      let context = body["network_request_context"] as? [String: Any] {
+            }
+            // Check text.cx_rum.network_request_context (most common path)
+            else if let text = logEntry["text"] as? [String: Any],
+                    let cxRum = text["cx_rum"] as? [String: Any],
+                    let context = cxRum["network_request_context"] as? [String: Any] {
                 url = context["url"] as? String
                 statusCode = context["status_code"]
                 logType = "network"
-            } else {
-                // Check what type of log this is
-                let body = logEntry["body"] as? [String: Any]
-                if logEntry["view_context"] != nil || body?["view_context"] != nil {
-                    logType = "view"
-                } else if logEntry["error_context"] != nil || body?["error_context"] != nil {
-                    logType = "error"
-                } else if logEntry["interaction_context"] != nil || body?["interaction_context"] != nil {
-                    logType = "interaction"
+            }
+            // Check body.network_request_context
+            else if let body = logEntry["body"] as? [String: Any],
+                    let context = body["network_request_context"] as? [String: Any] {
+                url = context["url"] as? String
+                statusCode = context["status_code"]
+                logType = "network"
+            }
+            // Check what type of log this is if not network
+            else {
+                if let text = logEntry["text"] as? [String: Any],
+                   let cxRum = text["cx_rum"] as? [String: Any] {
+                    if cxRum["view_context"] != nil {
+                        logType = "view"
+                    } else if cxRum["error_context"] != nil {
+                        logType = "error"
+                    } else if cxRum["interaction_context"] != nil {
+                        logType = "interaction"
+                    } else if cxRum["internal_context"] != nil {
+                        logType = "internal"
+                    }
                 }
             }
             
@@ -475,10 +506,10 @@ final class NetworkInstrumentationUITests: XCTestCase {
  In CI mode (CI=true env var), the test REQUIRES status code verification and will fail if temp file is missing.
  
  ## Expected Duration:
- - ~65 seconds total
+ - ~53 seconds total
  - 11 network requests (~35 seconds)
  - SDK batching wait (~8 seconds) - SDK exports every 2s
- - Backend validation (~15 seconds) - Backend ingestion/indexing time
+ - Backend validation (~3 seconds) - Backend fetches logs
  - Screen navigation (~7 seconds)
  
  ## What This Test Validates:
@@ -536,8 +567,8 @@ final class NetworkInstrumentationUITests: XCTestCase {
   - Backend ingestion pipeline may need more time
   - Check console output to see what log types were found (network vs text/view/error)
   - SDK exports every 2 seconds, so 8s = 4 cycles (should be enough)
-  - Increase backend validation wait if needed (currently 15s)
-  - Backend may have ingestion lag for network logs specifically
+  - Increase backend validation wait if needed (currently 3s)
+  - Backend typically returns logs immediately once indexed
  
 - **If test shows "Could not read validation data file"**:
   - Check that --uitesting flag is being passed (see setUpWithError)
