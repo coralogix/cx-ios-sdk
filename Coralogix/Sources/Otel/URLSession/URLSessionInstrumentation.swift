@@ -109,18 +109,21 @@ public class URLSessionInstrumentation {
         }
     }
     
-    /// Safely executes a swizzling operation with error handling
-    /// CRITICAL: Prevents SDK from crashing the host app if swizzling fails
+    /// Executes a swizzling operation
+    /// 
+    /// IMPORTANT: Swift's do-catch cannot catch Objective-C exceptions (NSException).
+    /// ObjC exceptions from runtime methods (class_getInstanceMethod, method_setImplementation, etc.)
+    /// will still crash the app if thrown. However, these methods rarely throw exceptions in practice.
+    /// 
+    /// Defense strategy:
+    /// - Use defensive nil checks before calling runtime methods
+    /// - Validate method existence with class_getInstanceMethod != nil
+    /// - Use class_replaceMethod which returns nil on failure (doesn't throw)
+    /// - Log warnings when operations fail rather than throwing exceptions
     private func safeSwizzle(operation: String, _ block: () -> Void) {
-        do {
-            // Note: Swift doesn't have try-catch for Objective-C exceptions
-            // But we can still structure code defensively
-            block()
-        } catch {
-            // This catch won't capture ObjC exceptions, but shows intent
-            Log.e("[URLSessionInstrumentation] Failed to swizzle \(operation): \(error)")
-            Log.e("[URLSessionInstrumentation] Continuing despite swizzling failure to prevent host app crash")
-        }
+        // Note: Cannot wrap in @try/@catch here as Swift doesn't support it
+        // Objective-C exceptions will propagate and potentially crash the app
+        block()
     }
     
     private func swizzleExplicitDelegateClasses(_ classes: [AnyClass]) {
@@ -448,7 +451,8 @@ public class URLSessionInstrumentation {
             guard let original = class_getInstanceMethod(cls, selector) else {
                 return
             }
-            var originalIMP: IMP?
+            // CRITICAL: Get original IMP BEFORE creating block to prevent nil crash
+            let originalIMP = method_getImplementation(original)
             
             let block: @convention(block) (URLSession, AnyObject, ((Any?, URLResponse?, Error?) -> Void)?) -> URLSessionTask = { session, argument, completion in
                 
@@ -525,9 +529,7 @@ public class URLSessionInstrumentation {
             let swizzledIMP = imp_implementationWithBlock(unsafeBitCast(block, to: AnyObject.self))
             let typeEncoding = method_getTypeEncoding(original)
             let previousIMP = class_replaceMethod(cls, selector, swizzledIMP, typeEncoding)
-            if previousIMP != nil {
-                originalIMP = previousIMP
-            } else {
+            if previousIMP == nil {
                 Log.w("[URLSessionInstrumentation] Failed to swizzle \(selector) - method may not exist or was already swizzled by another SDK")
             }
         }
@@ -543,7 +545,8 @@ public class URLSessionInstrumentation {
             guard let original = class_getInstanceMethod(cls, selector) else {
                 return
             }
-            var originalIMP: IMP?
+            // CRITICAL: Get original IMP BEFORE creating block to prevent nil crash
+            let originalIMP = method_getImplementation(original)
             
             let block: @convention(block) (URLSession, URLRequest, AnyObject, ((Any?, URLResponse?, Error?) -> Void)?) -> URLSessionTask = { session, request, argument, completion in
                 
@@ -591,9 +594,7 @@ public class URLSessionInstrumentation {
             let swizzledIMP = imp_implementationWithBlock(unsafeBitCast(block, to: AnyObject.self))
             let typeEncoding = method_getTypeEncoding(original)
             let previousIMP = class_replaceMethod(cls, selector, swizzledIMP, typeEncoding)
-            if previousIMP != nil {
-                originalIMP = previousIMP
-            } else {
+            if previousIMP == nil {
                 Log.w("[URLSessionInstrumentation] Failed to swizzle \(selector) - method may not exist or was already swizzled by another SDK")
             }
         }
@@ -861,7 +862,8 @@ public class URLSessionInstrumentation {
         guard let original = class_getInstanceMethod(cls, selector) else {
             return
         }
-        var originalIMP: IMP?
+        // CRITICAL: Get original IMP BEFORE creating block to prevent nil crash
+        let originalIMP = method_getImplementation(original)
         let block: @convention(block) (Any, URLSession, URLSessionDataTask, Data) -> Void = { object, session, dataTask, data in
             if objc_getAssociatedObject(session, &idKey) == nil {
                 self.urlSession(session, dataTask: dataTask, didReceive: data)
@@ -875,9 +877,7 @@ public class URLSessionInstrumentation {
         let swizzledIMP = imp_implementationWithBlock(unsafeBitCast(block, to: AnyObject.self))
         let typeEncoding = method_getTypeEncoding(original)
         let previousIMP = class_replaceMethod(cls, selector, swizzledIMP, typeEncoding)
-        if previousIMP != nil {
-            originalIMP = previousIMP
-        } else {
+        if previousIMP == nil {
             Log.w("[URLSessionInstrumentation] Failed to swizzle urlSession(_:dataTask:didReceive:) on \(cls) - method may not exist or was already swizzled by another SDK")
         }
     }
@@ -887,7 +887,8 @@ public class URLSessionInstrumentation {
         guard let original = class_getInstanceMethod(cls, selector) else {
             return
         }
-        var originalIMP: IMP?
+        // CRITICAL: Get original IMP BEFORE creating block to prevent nil crash
+        let originalIMP = method_getImplementation(original)
         let block: @convention(block) (Any, URLSession, URLSessionDataTask, URLResponse, @escaping (URLSession.ResponseDisposition) -> Void) -> Void = { object, session, dataTask, response, completion in
             if objc_getAssociatedObject(session, &idKey) == nil {
                 self.urlSession(session, dataTask: dataTask, didReceive: response, completionHandler: completion)
@@ -901,9 +902,7 @@ public class URLSessionInstrumentation {
         let swizzledIMP = imp_implementationWithBlock(unsafeBitCast(block, to: AnyObject.self))
         let typeEncoding = method_getTypeEncoding(original)
         let previousIMP = class_replaceMethod(cls, selector, swizzledIMP, typeEncoding)
-        if previousIMP != nil {
-            originalIMP = previousIMP
-        } else {
+        if previousIMP == nil {
             Log.w("[URLSessionInstrumentation] Failed to swizzle urlSession(_:dataTask:didReceive:completionHandler:) on \(cls) - method may not exist or was already swizzled by another SDK")
         }
     }
@@ -913,7 +912,8 @@ public class URLSessionInstrumentation {
         guard let original = class_getInstanceMethod(cls, selector) else {
             return
         }
-        var originalIMP: IMP?
+        // CRITICAL: Get original IMP BEFORE creating block to prevent nil crash
+        let originalIMP = method_getImplementation(original)
         let instrumentation = self
         let block: @convention(block) (Any, URLSession, URLSessionTask, Error?) -> Void = { object, session, task, error in
             if objc_getAssociatedObject(session, &idKey) == nil {
@@ -928,9 +928,7 @@ public class URLSessionInstrumentation {
         let swizzledIMP = imp_implementationWithBlock(unsafeBitCast(block, to: AnyObject.self))
         let typeEncoding = method_getTypeEncoding(original)
         let previousIMP = class_replaceMethod(cls, selector, swizzledIMP, typeEncoding)
-        if previousIMP != nil {
-            originalIMP = previousIMP
-        } else {
+        if previousIMP == nil {
             Log.w("[URLSessionInstrumentation] Failed to swizzle urlSession(_:task:didCompleteWithError:) on \(cls) - method may not exist or was already swizzled by another SDK")
         }
     }
@@ -945,7 +943,8 @@ public class URLSessionInstrumentation {
             class_addMethod(cls, selector, imp, "@@@")
             return
         }
-        var originalIMP: IMP?
+        // CRITICAL: Get original IMP BEFORE creating block to prevent nil crash
+        let originalIMP = method_getImplementation(original)
         let block: @convention(block) (Any, URLSession, URLSessionTask, URLSessionTaskMetrics) -> Void = { object, session, task, metrics in
             if objc_getAssociatedObject(session, &idKey) == nil {
                 self.urlSession(session, task: task, didFinishCollecting: metrics)
@@ -959,9 +958,7 @@ public class URLSessionInstrumentation {
         let swizzledIMP = imp_implementationWithBlock(unsafeBitCast(block, to: AnyObject.self))
         let typeEncoding = method_getTypeEncoding(original)
         let previousIMP = class_replaceMethod(cls, selector, swizzledIMP, typeEncoding)
-        if previousIMP != nil {
-            originalIMP = previousIMP
-        } else {
+        if previousIMP == nil {
             Log.w("[URLSessionInstrumentation] Failed to swizzle urlSession(_:task:didFinishCollecting:) on \(cls) - method may not exist or was already swizzled by another SDK")
         }
     }
@@ -974,7 +971,8 @@ public class URLSessionInstrumentation {
             return
         }
         
-        var originalIMP: IMP?
+        // CRITICAL: Get original IMP BEFORE creating block to prevent nil crash
+        let originalIMP = method_getImplementation(original)
         let block: @convention(block) (Any, Selector) -> Bool = { object, respondsTo in
             if respondsTo == #selector(URLSessionDataDelegate.urlSession(_:dataTask:didReceive:completionHandler:)) {
                 return true
@@ -985,9 +983,7 @@ public class URLSessionInstrumentation {
         let swizzledIMP = imp_implementationWithBlock(unsafeBitCast(block, to: AnyObject.self))
         let typeEncoding = method_getTypeEncoding(original)
         let previousIMP = class_replaceMethod(cls, selector, swizzledIMP, typeEncoding)
-        if previousIMP != nil {
-            originalIMP = previousIMP
-        } else {
+        if previousIMP == nil {
             Log.w("[URLSessionInstrumentation] Failed to swizzle responds(to:) on \(cls) - method may not exist or was already swizzled by another SDK")
         }
     }
@@ -1001,7 +997,8 @@ public class URLSessionInstrumentation {
         guard let original = class_getInstanceMethod(cls, selector) else {
             return
         }
-        var originalIMP: IMP?
+        // CRITICAL: Get original IMP BEFORE creating block to prevent nil crash
+        let originalIMP = method_getImplementation(original)
         let block: @convention(block) (Any, URLSession, URLSessionDataTask, URLSessionDownloadTask) -> Void = { object, session, dataTask, downloadTask in
             if objc_getAssociatedObject(session, &idKey) == nil {
                 self.urlSession(session, dataTask: dataTask, didBecome: downloadTask)
@@ -1015,9 +1012,7 @@ public class URLSessionInstrumentation {
         let swizzledIMP = imp_implementationWithBlock(unsafeBitCast(block, to: AnyObject.self))
         let typeEncoding = method_getTypeEncoding(original)
         let previousIMP = class_replaceMethod(cls, selector, swizzledIMP, typeEncoding)
-        if previousIMP != nil {
-            originalIMP = previousIMP
-        } else {
+        if previousIMP == nil {
             Log.w("[URLSessionInstrumentation] Failed to swizzle urlSession(_:dataTask:didBecome:) on \(cls) - method may not exist or was already swizzled by another SDK")
         }
     }
