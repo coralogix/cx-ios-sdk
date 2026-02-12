@@ -90,7 +90,7 @@ Combine **two complementary techniques**:
 ## Request Flow Examples
 
 ### Scenario 1: Standard URLSession Request
-```
+```text
 ┌─────────────────────────────────────────────────────────┐
 │ 1. Task Creation                                        │
 │    • dataTask(with:completionHandler:) swizzled         │
@@ -119,7 +119,7 @@ Result: ⭐⭐⭐⭐⭐ Full data captured, no duplicates
 ```
 
 ### Scenario 2: Async/Await Request
-```
+```text
 ┌─────────────────────────────────────────────────────────┐
 │ 1. Task Creation                                        │
 │    • data(for:) creates internal task                   │
@@ -146,7 +146,7 @@ Result: ⭐⭐⭐⭐⭐ Full data + metrics, no duplicates
 ```
 
 ### Scenario 3: Alamofire Request (NEW - Currently Broken)
-```
+```text
 ┌─────────────────────────────────────────────────────────┐
 │ 1. Task Creation (Alamofire Internal)                  │
 │    • Alamofire creates task with its own delegate      │
