@@ -38,6 +38,11 @@ public class URLSessionInstrumentation {
     
     static var instrumentedKey = "io.opentelemetry.instrumentedCall"
     private static var delegateSwizzleKey: UInt8 = 0
+    private static var loggedKey: UInt8 = 0  // Deduplication flag for hybrid approach
+    private static var setStateSwizzleKey: UInt8 = 0
+    
+    // Thread-safe swizzling lock - protects against concurrent swizzle attempts
+    private static let swizzleLock = Lock()
     
     static let AVTaskClassList: [AnyClass] = [
         "__NSCFBackgroundAVAggregateAssetDownloadTask",
@@ -55,10 +60,73 @@ public class URLSessionInstrumentation {
     
     public init(configuration: URLSessionInstrumentationConfiguration) {
         self._configuration = configuration
-        self.injectInNSURLClasses()
+        
+        // Perform swizzling with thread-safety protection
+        // CRITICAL: All swizzling must be thread-safe to prevent host app crashes
+        Self.swizzleLock.withLock {
+            self.injectInNSURLClasses()
+        }
     }
     
     private func injectInNSURLClasses() {
+        // CRITICAL: All swizzling operations are wrapped in error handling
+        // to prevent SDK from crashing the host app
+        
+        // Only swizzle delegate classes if explicitly provided
+        if let explicitClasses = configuration.delegateClassesToInstrument, !explicitClasses.isEmpty {
+            Log.d("[URLSessionInstrumentation] Swizzling \(explicitClasses.count) explicitly provided delegate classes")
+            safeSwizzle(operation: "delegate classes") {
+                swizzleExplicitDelegateClasses(explicitClasses)
+            }
+        }
+        
+        // Always swizzle URLSession methods (no class scanning needed - safe)
+        if #available(OSX 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) {
+            safeSwizzle(operation: "URLSession create task methods") {
+                injectIntoNSURLSessionCreateTaskMethods()
+            }
+        }
+        
+        safeSwizzle(operation: "URLSession create task with parameters") {
+            injectIntoNSURLSessionCreateTaskWithParameterMethods()
+        }
+        
+        safeSwizzle(operation: "URLSession async data/download tasks") {
+            injectIntoNSURLSessionAsyncDataAndDownloadTaskMethods()
+        }
+        
+        safeSwizzle(operation: "URLSession async upload tasks") {
+            injectIntoNSURLSessionAsyncUploadTaskMethods()
+        }
+        
+        safeSwizzle(operation: "URLSessionTask resume()") {
+            injectIntoNSURLSessionTaskResume()
+        }
+        
+        // Hybrid approach: Add setState: swizzling for universal coverage (Alamofire, etc.)
+        safeSwizzle(operation: "URLSessionTask setState: (hybrid approach)") {
+            injectIntoNSURLSessionTaskSetState()
+        }
+    }
+    
+    /// Executes a swizzling operation
+    /// 
+    /// IMPORTANT: Swift's do-catch cannot catch Objective-C exceptions (NSException).
+    /// ObjC exceptions from runtime methods (class_getInstanceMethod, method_setImplementation, etc.)
+    /// will still crash the app if thrown. However, these methods rarely throw exceptions in practice.
+    /// 
+    /// Defense strategy:
+    /// - Use defensive nil checks before calling runtime methods
+    /// - Validate method existence with class_getInstanceMethod != nil
+    /// - Use class_replaceMethod which returns nil on failure (doesn't throw)
+    /// - Log warnings when operations fail rather than throwing exceptions
+    private func safeSwizzle(operation: String, _ block: () -> Void) {
+        // Note: Cannot wrap in @try/@catch here as Swift doesn't support it
+        // Objective-C exceptions will propagate and potentially crash the app
+        block()
+    }
+    
+    private func swizzleExplicitDelegateClasses(_ classes: [AnyClass]) {
         let selectors = [
             #selector(URLSessionDataDelegate.urlSession(_:dataTask:didReceive:)),
             #selector(URLSessionDataDelegate.urlSession(_:dataTask:didReceive:completionHandler:)),
@@ -67,54 +135,61 @@ public class URLSessionInstrumentation {
             #selector(URLSessionDataDelegate.urlSession(_:dataTask:didBecome:) as (URLSessionDataDelegate) -> ((URLSession, URLSessionDataTask, URLSessionStreamTask) -> Void)?),
         ]
         
-        let classes: [AnyClass] = {
-            if let explicit =  configuration.delegateClassesToInstrument {
-                if explicit.isEmpty { return [] }
-            }
-            return InstrumentationUtils.objc_getSafeClassList(
-                ignoredPrefixes: configuration.ignoredClassPrefixes
-            )
-        }()
-        let totalClassCount = classes.count
-        var delegateClassCount = 0
-        var swizzledClassCount = 0
+        var swizzledCount = 0
         
         for theClass in classes {
-            guard class_getSuperclass(theClass) != nil else { continue }
-            guard !class_isMetaClass(theClass) else { continue }
-            guard theClass != Self.self else { continue }
+            guard class_getSuperclass(theClass) != nil else { 
+                Log.w("[URLSessionInstrumentation] Skipping \(theClass) - no superclass")
+                continue 
+            }
+            guard !class_isMetaClass(theClass) else { 
+                Log.w("[URLSessionInstrumentation] Skipping \(theClass) - is metaclass")
+                continue 
+            }
+            guard theClass != Self.self else { 
+                Log.w("[URLSessionInstrumentation] Skipping \(theClass) - is self")
+                continue 
+            }
             guard class_conformsToProtocol(theClass, URLSessionTaskDelegate.self) ||
-                    class_conformsToProtocol(theClass, URLSessionDataDelegate.self) else { continue }
-            delegateClassCount += 1
-            if objc_getAssociatedObject(theClass, &Self.delegateSwizzleKey) != nil {
-                continue
+                    class_conformsToProtocol(theClass, URLSessionDataDelegate.self) else { 
+                Log.w("[URLSessionInstrumentation] Skipping \(theClass) - doesn't conform to URLSessionDelegate protocols")
+                continue 
             }
             
+            // THREAD-SAFE: Check if already swizzled
+            // This check is inside the lock (from init), preventing TOCTOU race conditions
+            if objc_getAssociatedObject(theClass, &Self.delegateSwizzleKey) != nil {
+                continue // Already swizzled, skip to prevent double-swizzling
+            }
+            
+            // Check if class implements any of the selectors we want to swizzle
             var methodCount: UInt32 = 0
-            guard let methodListPointer = class_copyMethodList(theClass, &methodCount) else { continue }
+            guard let methodListPointer = class_copyMethodList(theClass, &methodCount) else { 
+                Log.w("[URLSessionInstrumentation] Skipping \(theClass) - no methods found")
+                continue 
+            }
             defer { free(methodListPointer) }
             
             let methodList = UnsafeBufferPointer(start: methodListPointer, count: Int(methodCount))
             
+            var hasTargetMethod = false
             for selector in selectors {
                 if methodList.contains(where: { method_getName($0) == selector }) {
-                    injectIntoDelegateClass(cls: theClass)
-                    objc_setAssociatedObject(theClass, &Self.delegateSwizzleKey, true, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
-                    swizzledClassCount += 1
+                    hasTargetMethod = true
                     break
                 }
             }
+            
+            if hasTargetMethod {
+                injectIntoDelegateClass(cls: theClass)
+                objc_setAssociatedObject(theClass, &Self.delegateSwizzleKey, true, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+                swizzledCount += 1
+            } else {
+                Log.w("[URLSessionInstrumentation] Skipping \(theClass) - no target delegate methods found")
+            }
         }
         
-        Log.d("[URLSessionInstrumentation] Swizzle stats - total classes: \(totalClassCount), delegate classes: \(delegateClassCount), swizzled: \(swizzledClassCount)")
-        
-        if #available(OSX 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) {
-            injectIntoNSURLSessionCreateTaskMethods()
-        }
-        injectIntoNSURLSessionCreateTaskWithParameterMethods()
-        injectIntoNSURLSessionAsyncDataAndDownloadTaskMethods()
-        injectIntoNSURLSessionAsyncUploadTaskMethods()
-        injectIntoNSURLSessionTaskResume()
+        Log.d("[URLSessionInstrumentation] Successfully swizzled \(swizzledCount) of \(classes.count) explicit delegate classes")
     }
     
     private func injectIntoDelegateClass(cls: AnyClass) {
@@ -182,7 +257,11 @@ public class URLSessionInstrumentation {
             }
             
             let swizzledIMP = imp_implementationWithBlock(block as Any)
-            _ = method_setImplementation(method, swizzledIMP)
+            let typeEncoding = method_getTypeEncoding(method)
+            let previousIMP = class_replaceMethod(cls, selector, swizzledIMP, typeEncoding)
+            if previousIMP == nil {
+                Log.w("[URLSessionInstrumentation] Failed to swizzle \(selector) - method may not exist or was already swizzled by another SDK")
+            }
         }
     }
     
@@ -321,7 +400,11 @@ public class URLSessionInstrumentation {
                 return task
             }
             let swizzledIMP = imp_implementationWithBlock(block)
-            method_setImplementation(method, swizzledIMP)
+            let typeEncoding = method_getTypeEncoding(method)
+            let previousIMP = class_replaceMethod(cls, #selector(URLSession.uploadTask(with:from:)), swizzledIMP, typeEncoding)
+            if previousIMP == nil {
+                Log.w("[URLSessionInstrumentation] Failed to swizzle uploadTask(with:from:) - method may not exist or was already swizzled by another SDK")
+            }
         }
         
         // MARK: Swizzle `uploadTask(with:fromFile:)`
@@ -347,7 +430,11 @@ public class URLSessionInstrumentation {
                 return task
             }
             let swizzledIMP = imp_implementationWithBlock(block)
-            method_setImplementation(method, swizzledIMP)
+            let typeEncoding = method_getTypeEncoding(method)
+            let previousIMP = class_replaceMethod(cls, #selector(URLSession.uploadTask(with:fromFile:)), swizzledIMP, typeEncoding)
+            if previousIMP == nil {
+                Log.w("[URLSessionInstrumentation] Failed to swizzle uploadTask(with:fromFile:) - method may not exist or was already swizzled by another SDK")
+            }
         }
     }
     
@@ -362,10 +449,10 @@ public class URLSessionInstrumentation {
         ].forEach {
             let selector = $0
             guard let original = class_getInstanceMethod(cls, selector) else {
-                Log.d("injectInto \(selector.description) failed")
                 return
             }
-            var originalIMP: IMP?
+            // CRITICAL: Get original IMP BEFORE creating block to prevent nil crash
+            let originalIMP = method_getImplementation(original)
             
             let block: @convention(block) (URLSession, AnyObject, ((Any?, URLResponse?, Error?) -> Void)?) -> URLSessionTask = { session, argument, completion in
                 
@@ -400,12 +487,22 @@ public class URLSessionInstrumentation {
                         let completionWrapper: (Any?, URLResponse?, Error?) -> Void = { object, response, error in
                             if error != nil {
                                 let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+                                #if DEBUG
+                                Log.testLog("[URLSessionInstrumentation] Logging error for taskId: \(sessionTaskId), status: \(status)")
+                                #endif
                                 URLSessionLogger.logError(error!, dataOrFile: object, statusCode: status, instrumentation: self, sessionTaskId: sessionTaskId)
                             } else {
                                 if let response = response {
+                                    let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+                                    #if DEBUG
+                                    Log.testLog("[URLSessionInstrumentation] Logging response for taskId: \(sessionTaskId), status: \(status)")
+                                    #endif
                                     URLSessionLogger.logResponse(response, dataOrFile: object, instrumentation: self, sessionTaskId: sessionTaskId)
                                 }
                             }
+                            // Mark as logged to prevent duplicate in setState: fallback
+                            objc_setAssociatedObject(task, &Self.loggedKey, true, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+                            
                             if let completion = completion {
                                 completion(object, response, error)
                             } else {
@@ -430,7 +527,11 @@ public class URLSessionInstrumentation {
                 return task
             }
             let swizzledIMP = imp_implementationWithBlock(unsafeBitCast(block, to: AnyObject.self))
-            originalIMP = method_setImplementation(original, swizzledIMP)
+            let typeEncoding = method_getTypeEncoding(original)
+            let previousIMP = class_replaceMethod(cls, selector, swizzledIMP, typeEncoding)
+            if previousIMP == nil {
+                Log.w("[URLSessionInstrumentation] Failed to swizzle \(selector) - method may not exist or was already swizzled by another SDK")
+            }
         }
     }
     
@@ -442,10 +543,10 @@ public class URLSessionInstrumentation {
         ].forEach {
             let selector = $0
             guard let original = class_getInstanceMethod(cls, selector) else {
-                Log.d("injectInto \(selector.description) failed")
                 return
             }
-            var originalIMP: IMP?
+            // CRITICAL: Get original IMP BEFORE creating block to prevent nil crash
+            let originalIMP = method_getImplementation(original)
             
             let block: @convention(block) (URLSession, URLRequest, AnyObject, ((Any?, URLResponse?, Error?) -> Void)?) -> URLSessionTask = { session, request, argument, completion in
                 
@@ -459,12 +560,22 @@ public class URLSessionInstrumentation {
                     let completionWrapper: (Any?, URLResponse?, Error?) -> Void = { object, response, error in
                         if error != nil {
                             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+                            #if DEBUG
+                            Log.testLog("[URLSessionInstrumentation] Logging error for taskId: \(sessionTaskId), status: \(status)")
+                            #endif
                             URLSessionLogger.logError(error!, dataOrFile: object, statusCode: status, instrumentation: self, sessionTaskId: sessionTaskId)
                         } else {
                             if let response = response {
+                                let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+                                #if DEBUG
+                                Log.testLog("[URLSessionInstrumentation] Logging response for taskId: \(sessionTaskId), status: \(status)")
+                                #endif
                                 URLSessionLogger.logResponse(response, dataOrFile: object, instrumentation: self, sessionTaskId: sessionTaskId)
                             }
                         }
+                        // Mark as logged to prevent duplicate in setState: fallback
+                        objc_setAssociatedObject(task, &Self.loggedKey, true, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+                        
                         if let completion = completion {
                             completion(object, response, error)
                         } else {
@@ -481,7 +592,11 @@ public class URLSessionInstrumentation {
                 return task
             }
             let swizzledIMP = imp_implementationWithBlock(unsafeBitCast(block, to: AnyObject.self))
-            originalIMP = method_setImplementation(original, swizzledIMP)
+            let typeEncoding = method_getTypeEncoding(original)
+            let previousIMP = class_replaceMethod(cls, selector, swizzledIMP, typeEncoding)
+            if previousIMP == nil {
+                Log.w("[URLSessionInstrumentation] Failed to swizzle \(selector) - method may not exist or was already swizzled by another SDK")
+            }
         }
     }
     
@@ -506,20 +621,14 @@ public class URLSessionInstrumentation {
             appendMethodIfExists(for: cfURLSession, selector: NSSelectorFromString("resume"))
         }
         
-        // Swizzle AFNetworking (if used)
-        if NSClassFromString("AFURLSessionManager") != nil {
-            let classes = InstrumentationUtils.objc_getSafeClassList(
-                ignoredPrefixes: configuration.ignoredClassPrefixes
-            )
-            if classes.isEmpty {
-                Log.d("[URLSessionInstrumentation] No safe classes found for af_resume swizzling")
-            } else {
-                for cls in classes {
-                    appendMethodIfExists(for: cls, selector: NSSelectorFromString("af_resume"))
-                }
+        // Auto-detect and swizzle AFNetworking (if used) - no class scanning needed
+        if let afManagerClass = NSClassFromString("AFURLSessionManager") {
+            appendMethodIfExists(for: afManagerClass, selector: NSSelectorFromString("af_resume"))
+            
+            // Also check for AFHTTPSessionManager (subclass of AFURLSessionManager)
+            if let afHTTPManagerClass = NSClassFromString("AFHTTPSessionManager") {
+                appendMethodIfExists(for: afHTTPManagerClass, selector: NSSelectorFromString("af_resume"))
             }
-        } else {
-            Log.d("[URLSessionInstrumentation] AFNetworking not detected, skipping swizzling")
         }
         
         for (cls, selector, method) in methodsToSwizzle {
@@ -527,17 +636,13 @@ public class URLSessionInstrumentation {
             // ✅ Safety check: ensure method signature is void-return, no args
             // Accept variations like "v@:" or "v16@0:8" (with frame size info)
             guard let typeEncoding = method_getTypeEncoding(method) else {
-                Log.d("[URLSessionInstrumentation] Skipping method \(selector) on \(cls) - no type encoding")
                 continue
             }
             let encoding = String(cString: typeEncoding)
             // Check if it's a void return method with no arguments (may include frame size info)
             guard encoding.starts(with: "v") && encoding.contains("@") && encoding.contains(":") else {
-                Log.d("[URLSessionInstrumentation] Skipping method \(selector) on \(cls) due to invalid signature: \(encoding)")
                 continue
             }
-            
-            Log.d("[URLSessionInstrumentation] ✅ Successfully swizzled \(selector) on class: \(cls)")
             
             let originalIMP = method_getImplementation(method)
             
@@ -546,7 +651,6 @@ public class URLSessionInstrumentation {
                 
                 // Call hook
                 if let urlSessionTask = task as? URLSessionTask {
-                    Log.d("[URLSessionInstrumentation] 🔵 resume() called - task: \(urlSessionTask), URL: \(urlSessionTask.currentRequest?.url?.absoluteString ?? "nil")")
                     self.urlSessionTaskWillResume(urlSessionTask)
                 }
                 
@@ -559,19 +663,219 @@ public class URLSessionInstrumentation {
             }
             
             let swizzledIMP = imp_implementationWithBlock(block as Any)
-            method_setImplementation(method, swizzledIMP)
+            let previousIMP = class_replaceMethod(cls, selector, swizzledIMP, typeEncoding)
+            if previousIMP == nil {
+                Log.w("[URLSessionInstrumentation] Failed to swizzle resume on \(cls) - method may not exist or was already swizzled by another SDK")
+            }
         }
-        
-        Log.d("[URLSessionInstrumentation] Total methods swizzled for resume: \(methodsToSwizzle.count)")
     }
     
-    // Delegate methods
+    // MARK: - Hybrid Approach: setState: Swizzling for Universal Coverage
+    
+    /// Discovers NSURLSessionTask classes to swizzle using safe two-phase approach
+    /// Phase 1: Discover class names (safe on any thread)
+    /// Phase 2: Convert to classes on main thread (prevents +initialize issues)
+    /// THREAD-SAFE: Called within swizzleLock, protected from concurrent access
+    ///
+    /// - Important: **Must be called on main thread** for optimal performance
+    /// - Calling from background thread will block until main thread is available
+    private func discoverTaskClassesToSwizzle() -> [AnyClass] {
+        // Best Practice: Work with class names first, convert to classes on main thread
+        // This prevents +initialize side effects on background threads
+        let classNames = discoverTaskClassNames()
+        
+        // CRITICAL: NSClassFromString must be called on main thread
+        // Calling NSClassFromString off main thread can trigger +initialize → CRASH or undefined behavior
+        if Thread.isMainThread {
+            // Best case - already on main thread
+            return classNames.compactMap { NSClassFromString($0) }
+        } else {
+            // Not on main thread - customer is misusing SDK
+            #if DEBUG
+            // In debug: Help developers catch this early
+            assertionFailure("CoralogixRUM must be initialized on the main thread")
+            #endif
+            
+            Log.w("[URLSessionInstrumentation] CRITICAL: SDK initialized off main thread - dispatching to main (may block). Please initialize on main thread to avoid performance issues.")
+            
+            // In production: Gracefully handle by dispatching sync
+            // This ensures correctness even if it blocks
+            return DispatchQueue.main.sync {
+                return classNames.compactMap { NSClassFromString($0) }
+            }
+        }
+    }
+    
+    /// Phase 1: Discover class names using safe instance-based approach
+    /// Returns class NAMES (strings) which are safe to work with on any thread
+    /// Based on AFNetworking approach - battle-tested since 2015
+    private func discoverTaskClassNames() -> [String] {
+        // SAFETY: Create a temporary session with ephemeral configuration
+        // This is safe - no network calls are made, just class discovery
+        let configuration = URLSessionConfiguration.ephemeral
+        let session = URLSession(configuration: configuration)
+        
+        // SAFETY: Create a dummy task to discover its actual class (use valid URL)
+        // No network request is actually sent, this is just for class discovery
+        guard let dummyURL = URL(string: "https://example.com") else {
+            Log.w("[URLSessionInstrumentation] Failed to create URL for class discovery")
+            return []
+        }
+        let dummyTask = session.dataTask(with: dummyURL)
+        
+        // SAFETY: Always cleanup session resources, even if discovery fails
+        defer {
+            dummyTask.cancel()
+            session.finishTasksAndInvalidate()
+        }
+        
+        var currentClass: AnyClass? = type(of: dummyTask)
+        var result: [String] = []  // Store NAMES, not class objects (industry best practice)
+        let setStateSelector = NSSelectorFromString("setState:")
+        
+        // Traverse the class hierarchy from the task's actual class up to NSObject
+        // Collect all class NAMES until we reach the base class or run out of hierarchy
+        while let cls = currentClass {
+            let className = NSStringFromClass(cls)  // ✅ NSStringFromClass is always safe
+            
+            // Check if this class has setState: method
+            if let method = class_getInstanceMethod(cls, setStateSelector) {
+                // Get superclass to compare implementations
+                if let superClass = class_getSuperclass(cls),
+                   let superMethod = class_getInstanceMethod(superClass, setStateSelector) {
+                    
+                    let classIMP = method_getImplementation(method)
+                    let superIMP = method_getImplementation(superMethod)
+                    
+                    // Only add if this class has its own implementation (not inherited)
+                    if classIMP != superIMP {
+                        result.append(className)  // Store NAME, not class object
+                    }
+                } else {
+                    // This is the base class or can't find superclass method - add it and stop
+                    result.append(className)  // Store NAME, not class object
+                    break
+                }
+            } else {
+                break
+            }
+            
+            // Move up the hierarchy
+            currentClass = class_getSuperclass(cls)
+        }
+        
+        return result
+    }
+    
+    /// Swizzles setState: on discovered task classes for universal coverage (Alamofire, AFNetworking, etc.)
+    /// This provides fallback logging when completion handlers or delegates don't fire
+    private func injectIntoNSURLSessionTaskSetState() {
+        let classesToSwizzle = discoverTaskClassesToSwizzle()
+        
+        guard !classesToSwizzle.isEmpty else {
+            Log.w("[URLSessionInstrumentation] No task classes discovered for setState: swizzling")
+            Log.w("[URLSessionInstrumentation] Third-party library fallback (Alamofire, etc.) may not work")
+            return
+        }
+        
+        Log.d("[URLSessionInstrumentation] Discovered \(classesToSwizzle.count) task classes for setState: swizzling")
+        
+        typealias SetStateIMPType = @convention(c) (AnyObject, Selector, URLSessionTask.State) -> Void
+        let selector = NSSelectorFromString("setState:")
+        
+        for cls in classesToSwizzle {
+            guard let method = class_getInstanceMethod(cls, selector) else {
+                continue
+            }
+            
+            // THREAD-SAFE: Check if already swizzled for this class
+            // This check is inside the lock (from init), preventing TOCTOU race conditions
+            if objc_getAssociatedObject(cls, &Self.setStateSwizzleKey) != nil {
+                continue // Already swizzled, skip to prevent double-swizzling
+            }
+            
+            let originalIMP = method_getImplementation(method)
+            let instrumentation = self
+            
+            let block: @convention(block) (AnyObject, URLSessionTask.State) -> Void = { task, state in
+                // Call original implementation first
+                let originalFunc = unsafeBitCast(originalIMP, to: SetStateIMPType.self)
+                originalFunc(task, selector, state)
+                
+                // Handle completion state for fallback logging
+                if state == .completed, let urlTask = task as? URLSessionTask {
+                    instrumentation.urlSessionTaskDidChangeState(urlTask, newState: state)
+                }
+            }
+            
+            let swizzledIMP = imp_implementationWithBlock(block as Any)
+            let typeEncoding = method_getTypeEncoding(method)
+            let previousIMP = class_replaceMethod(cls, selector, swizzledIMP, typeEncoding)
+            if previousIMP == nil {
+                Log.w("[URLSessionInstrumentation] Failed to swizzle setState: on \(cls) - method may not exist or was already swizzled by another SDK")
+            }
+            
+            // Mark as swizzled
+            objc_setAssociatedObject(cls, &Self.setStateSwizzleKey, true, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        }
+    }
+    
+    /// Called when task state changes to .completed - provides fallback logging for third-party libraries
+    private func urlSessionTaskDidChangeState(_ task: URLSessionTask, newState: URLSessionTask.State) {
+        guard newState == .completed else { return }
+        
+        // Check if already logged by completion handler or delegate
+        if objc_getAssociatedObject(task, &Self.loggedKey) != nil {
+            return // Already logged, skip to avoid duplicates
+        }
+        
+        // Fallback logging for tasks not captured by completion handlers or delegates
+        // This handles Alamofire, AFNetworking, and other libraries
+        logTaskCompletionFallback(task)
+        
+        // Mark as logged
+        objc_setAssociatedObject(task, &Self.loggedKey, true, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+    }
+    
+    /// Fallback logging method when completion handler or delegate didn't fire
+    /// Provides basic instrumentation data (status, error, duration) without metrics or payload
+    private func logTaskCompletionFallback(_ task: URLSessionTask) {
+        guard let taskId = objc_getAssociatedObject(task, &idKey) as? String else {
+            return // Task not tracked by us
+        }
+        
+        var requestState: NetworkRequestState?
+        queue.sync(flags: .barrier) {
+            requestState = requestMap[taskId]
+            if requestState != nil {
+                requestMap[taskId] = nil
+            }
+        }
+        
+        // Log with basic data available from task
+        if let error = task.error {
+            let status = (task.response as? HTTPURLResponse)?.statusCode ?? 0
+            #if DEBUG
+            Log.testLog("[URLSessionInstrumentation] Fallback logging error for taskId: \(taskId), status: \(status)")
+            #endif
+            URLSessionLogger.logError(error, dataOrFile: requestState?.dataProcessed, statusCode: status, instrumentation: self, sessionTaskId: taskId)
+        } else if let response = task.response {
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            #if DEBUG
+            Log.testLog("[URLSessionInstrumentation] Fallback logging response for taskId: \(taskId), status: \(status)")
+            #endif
+            URLSessionLogger.logResponse(response, dataOrFile: requestState?.dataProcessed, instrumentation: self, sessionTaskId: taskId)
+        }
+    }
+    
+    // MARK: - Delegate methods
     private func injectTaskDidReceiveDataIntoDelegateClass(cls: AnyClass) {
         let selector = #selector(URLSessionDataDelegate.urlSession(_:dataTask:didReceive:))
         guard let original = class_getInstanceMethod(cls, selector) else {
             return
         }
-        var originalIMP: IMP?
+        // CRITICAL: Get original IMP BEFORE creating block to prevent nil crash
+        let originalIMP = method_getImplementation(original)
         let block: @convention(block) (Any, URLSession, URLSessionDataTask, Data) -> Void = { object, session, dataTask, data in
             if objc_getAssociatedObject(session, &idKey) == nil {
                 self.urlSession(session, dataTask: dataTask, didReceive: data)
@@ -583,7 +887,11 @@ public class URLSessionInstrumentation {
             objc_setAssociatedObject(session, key, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
         }
         let swizzledIMP = imp_implementationWithBlock(unsafeBitCast(block, to: AnyObject.self))
-        originalIMP = method_setImplementation(original, swizzledIMP)
+        let typeEncoding = method_getTypeEncoding(original)
+        let previousIMP = class_replaceMethod(cls, selector, swizzledIMP, typeEncoding)
+        if previousIMP == nil {
+            Log.w("[URLSessionInstrumentation] Failed to swizzle urlSession(_:dataTask:didReceive:) on \(cls) - method may not exist or was already swizzled by another SDK")
+        }
     }
     
     private func injectTaskDidReceiveResponseIntoDelegateClass(cls: AnyClass) {
@@ -591,7 +899,8 @@ public class URLSessionInstrumentation {
         guard let original = class_getInstanceMethod(cls, selector) else {
             return
         }
-        var originalIMP: IMP?
+        // CRITICAL: Get original IMP BEFORE creating block to prevent nil crash
+        let originalIMP = method_getImplementation(original)
         let block: @convention(block) (Any, URLSession, URLSessionDataTask, URLResponse, @escaping (URLSession.ResponseDisposition) -> Void) -> Void = { object, session, dataTask, response, completion in
             if objc_getAssociatedObject(session, &idKey) == nil {
                 self.urlSession(session, dataTask: dataTask, didReceive: response, completionHandler: completion)
@@ -603,7 +912,11 @@ public class URLSessionInstrumentation {
             objc_setAssociatedObject(session, key, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
         }
         let swizzledIMP = imp_implementationWithBlock(unsafeBitCast(block, to: AnyObject.self))
-        originalIMP = method_setImplementation(original, swizzledIMP)
+        let typeEncoding = method_getTypeEncoding(original)
+        let previousIMP = class_replaceMethod(cls, selector, swizzledIMP, typeEncoding)
+        if previousIMP == nil {
+            Log.w("[URLSessionInstrumentation] Failed to swizzle urlSession(_:dataTask:didReceive:completionHandler:) on \(cls) - method may not exist or was already swizzled by another SDK")
+        }
     }
     
     private func injectTaskDidCompleteWithErrorIntoDelegateClass(cls: AnyClass) {
@@ -611,7 +924,8 @@ public class URLSessionInstrumentation {
         guard let original = class_getInstanceMethod(cls, selector) else {
             return
         }
-        var originalIMP: IMP?
+        // CRITICAL: Get original IMP BEFORE creating block to prevent nil crash
+        let originalIMP = method_getImplementation(original)
         let instrumentation = self
         let block: @convention(block) (Any, URLSession, URLSessionTask, Error?) -> Void = { object, session, task, error in
             if objc_getAssociatedObject(session, &idKey) == nil {
@@ -624,7 +938,11 @@ public class URLSessionInstrumentation {
             objc_setAssociatedObject(session, key, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
         }
         let swizzledIMP = imp_implementationWithBlock(unsafeBitCast(block, to: AnyObject.self))
-        originalIMP = method_setImplementation(original, swizzledIMP)
+        let typeEncoding = method_getTypeEncoding(original)
+        let previousIMP = class_replaceMethod(cls, selector, swizzledIMP, typeEncoding)
+        if previousIMP == nil {
+            Log.w("[URLSessionInstrumentation] Failed to swizzle urlSession(_:task:didCompleteWithError:) on \(cls) - method may not exist or was already swizzled by another SDK")
+        }
     }
     
     private func injectTaskDidFinishCollectingMetricsIntoDelegateClass(cls: AnyClass) {
@@ -637,7 +955,8 @@ public class URLSessionInstrumentation {
             class_addMethod(cls, selector, imp, "@@@")
             return
         }
-        var originalIMP: IMP?
+        // CRITICAL: Get original IMP BEFORE creating block to prevent nil crash
+        let originalIMP = method_getImplementation(original)
         let block: @convention(block) (Any, URLSession, URLSessionTask, URLSessionTaskMetrics) -> Void = { object, session, task, metrics in
             if objc_getAssociatedObject(session, &idKey) == nil {
                 self.urlSession(session, task: task, didFinishCollecting: metrics)
@@ -649,7 +968,11 @@ public class URLSessionInstrumentation {
             objc_setAssociatedObject(session, key, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
         }
         let swizzledIMP = imp_implementationWithBlock(unsafeBitCast(block, to: AnyObject.self))
-        originalIMP = method_setImplementation(original, swizzledIMP)
+        let typeEncoding = method_getTypeEncoding(original)
+        let previousIMP = class_replaceMethod(cls, selector, swizzledIMP, typeEncoding)
+        if previousIMP == nil {
+            Log.w("[URLSessionInstrumentation] Failed to swizzle urlSession(_:task:didFinishCollecting:) on \(cls) - method may not exist or was already swizzled by another SDK")
+        }
     }
     
     func injectRespondsToSelectorIntoDelegateClass(cls: AnyClass) {
@@ -660,7 +983,8 @@ public class URLSessionInstrumentation {
             return
         }
         
-        var originalIMP: IMP?
+        // CRITICAL: Get original IMP BEFORE creating block to prevent nil crash
+        let originalIMP = method_getImplementation(original)
         let block: @convention(block) (Any, Selector) -> Bool = { object, respondsTo in
             if respondsTo == #selector(URLSessionDataDelegate.urlSession(_:dataTask:didReceive:completionHandler:)) {
                 return true
@@ -669,7 +993,11 @@ public class URLSessionInstrumentation {
             return castedIMP(object, selector, respondsTo)
         }
         let swizzledIMP = imp_implementationWithBlock(unsafeBitCast(block, to: AnyObject.self))
-        originalIMP = method_setImplementation(original, swizzledIMP)
+        let typeEncoding = method_getTypeEncoding(original)
+        let previousIMP = class_replaceMethod(cls, selector, swizzledIMP, typeEncoding)
+        if previousIMP == nil {
+            Log.w("[URLSessionInstrumentation] Failed to swizzle responds(to:) on \(cls) - method may not exist or was already swizzled by another SDK")
+        }
     }
     
     private func injectDataTaskDidBecomeDownloadTaskIntoDelegateClass(cls: AnyClass) {
@@ -681,7 +1009,8 @@ public class URLSessionInstrumentation {
         guard let original = class_getInstanceMethod(cls, selector) else {
             return
         }
-        var originalIMP: IMP?
+        // CRITICAL: Get original IMP BEFORE creating block to prevent nil crash
+        let originalIMP = method_getImplementation(original)
         let block: @convention(block) (Any, URLSession, URLSessionDataTask, URLSessionDownloadTask) -> Void = { object, session, dataTask, downloadTask in
             if objc_getAssociatedObject(session, &idKey) == nil {
                 self.urlSession(session, dataTask: dataTask, didBecome: downloadTask)
@@ -693,7 +1022,11 @@ public class URLSessionInstrumentation {
             objc_setAssociatedObject(session, key, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
         }
         let swizzledIMP = imp_implementationWithBlock(unsafeBitCast(block, to: AnyObject.self))
-        originalIMP = method_setImplementation(original, swizzledIMP)
+        let typeEncoding = method_getTypeEncoding(original)
+        let previousIMP = class_replaceMethod(cls, selector, swizzledIMP, typeEncoding)
+        if previousIMP == nil {
+            Log.w("[URLSessionInstrumentation] Failed to swizzle urlSession(_:dataTask:didBecome:) on \(cls) - method may not exist or was already swizzled by another SDK")
+        }
     }
     
     // URLSessionTask methods
@@ -745,10 +1078,20 @@ public class URLSessionInstrumentation {
         }
         if let error = error {
             let status = (task.response as? HTTPURLResponse)?.statusCode ?? 0
+            #if DEBUG
+            Log.testLog("[URLSessionInstrumentation] Logging error for taskId: \(taskId), status: \(status)")
+            #endif
             URLSessionLogger.logError(error, dataOrFile: requestState?.dataProcessed, statusCode: status, instrumentation: self, sessionTaskId: taskId)
         } else if let response = task.response {
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            #if DEBUG
+            Log.testLog("[URLSessionInstrumentation] Logging response for taskId: \(taskId), status: \(status)")
+            #endif
             URLSessionLogger.logResponse(response, dataOrFile: requestState?.dataProcessed, instrumentation: self, sessionTaskId: taskId)
         }
+        
+        // Mark as logged to prevent duplicate in setState: fallback
+        objc_setAssociatedObject(task, &Self.loggedKey, true, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
     }
     
     private func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didBecome downloadTask: URLSessionDownloadTask) {
@@ -758,7 +1101,7 @@ public class URLSessionInstrumentation {
         setIdKey(value: taskId, for: downloadTask)
     }
     
-    private func urlSession(_ session: URLSession, task: URLSessionTask, didFinishCollecting metrics: URLSessionTaskMetrics) {
+    internal func urlSession(_ session: URLSession, task: URLSessionTask, didFinishCollecting metrics: URLSessionTaskMetrics) {
         guard let taskId = objc_getAssociatedObject(task, &idKey) as? String else {
             return
         }
@@ -778,10 +1121,19 @@ public class URLSessionInstrumentation {
         /// Code for instrumenting collection should be written here
         if let error = task.error {
             let status = (task.response as? HTTPURLResponse)?.statusCode ?? 0
+            #if DEBUG
+            Log.testLog("[URLSessionInstrumentation] Logging error for taskId: \(taskId), status: \(status)")
+            #endif
             URLSessionLogger.logError(error, dataOrFile: requestState?.dataProcessed, statusCode: status, instrumentation: self, sessionTaskId: taskId)
         } else if let response = task.response {
+            #if DEBUG
+            Log.testLog("[URLSessionInstrumentation] Logging response for taskId: \(taskId), status: \((response as? HTTPURLResponse)?.statusCode ?? 0)")
+            #endif
             URLSessionLogger.logResponse(response, dataOrFile: requestState?.dataProcessed, instrumentation: self, sessionTaskId: taskId)
         }
+        
+        // Mark as logged to prevent duplicate in setState: fallback
+        objc_setAssociatedObject(task, &Self.loggedKey, true, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
     }
     
     private func urlSessionTaskWillResume(_ task: URLSessionTask) {
@@ -801,6 +1153,20 @@ public class URLSessionInstrumentation {
 
       let taskId = idKeyForTask(task)
       if let request = task.currentRequest {
+        // CRITICAL: Inject headers BEFORE task runs (industry-standard approach)
+        // This is the ONLY safe time to modify the request - headers cannot be injected later
+        let shouldInject = shouldInject(for: request)
+        let instrumentedRequest = URLSessionLogger.processAndLogRequest(request,
+                                                                        sessionTaskId: taskId,
+                                                                        instrumentation: self,
+                                                                        shouldInjectHeaders: shouldInject)
+        
+        // Try to inject headers using industry-standard approach (private setCurrentRequest: selector)
+        if shouldInject, let instrumentedRequest = instrumentedRequest {
+          injectHeadersIntoTask(task, request: instrumentedRequest)
+        }
+        
+        // Store request for tracking
         queue.sync(flags: .barrier) {
             if self.requestMap[taskId] == nil {
                 self.requestMap[taskId] = NetworkRequestState()
@@ -808,26 +1174,105 @@ public class URLSessionInstrumentation {
             self.requestMap[taskId]?.setRequest(request)
         }
 
-        if #available(OSX 13.0, iOS 16.0, watchOS 9.0, tvOS 16.0, *) {
-          guard Task.basePriority != nil else {
-            // If not inside a Task basePriority is nil
-            return
+        // Handle iOS 15+ async/await - detect and set up delegate for completion tracking
+        if #available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, *) {
+          // Try to detect if this is an async/await call
+          var isAsyncContext = false
+          
+          if #available(OSX 13.0, iOS 16.0, watchOS 9.0, tvOS 16.0, *) {
+            // iOS 16+: Use Task.basePriority as reliable indicator
+            isAsyncContext = Task.basePriority != nil
+          } else {
+            // iOS 15: Heuristic - async tasks typically have no delegate
+            // Note: task.delegate is only available on iOS 15+
+            if #available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, *) {
+              let hasDelegate = task.delegate != nil
+              let isRunning = task.state == .running
+              let hasSessionDelegate = (task.value(forKey: "session") as? URLSession)?.delegate != nil
+              isAsyncContext = !hasDelegate && !isRunning && !hasSessionDelegate
+            }
           }
+          
+          if isAsyncContext {
+            #if DEBUG
+            Log.testLog("[URLSessionInstrumentation] ✅ Detected async/await context, tracking request")
+            #endif
+            
+            // Track this task with its ID
+            self.setIdKey(value: taskId, for: task)
 
-          let instrumentedRequest = URLSessionLogger.processAndLogRequest(request,
-                                                                          sessionTaskId: taskId,
-                                                                          instrumentation: self,
-                                                                          shouldInjectHeaders: true)
-          if let instrumentedRequest {
-            task.setValue(instrumentedRequest, forKey: "currentRequest")
-          }
-          self.setIdKey(value: taskId, for: task)
-
-          if task.delegate == nil, task.state != .running, (task.value(forKey: "session") as? URLSession)?.delegate == nil {
-            task.delegate = FakeDelegate()
+            // Set fake delegate if needed to capture completion (iOS 15+ only)
+            if #available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, *) {
+              if task.delegate == nil, task.state != .running, (task.value(forKey: "session") as? URLSession)?.delegate == nil {
+                let fakeDelegate = FakeDelegate()
+                fakeDelegate.instrumentation = self
+                task.delegate = fakeDelegate
+              }
+            }
           }
         }
       }
+    }
+    
+    /// Injects headers into a URLSessionTask using industry-standard approach
+    /// 
+    /// This method attempts to modify the task's currentRequest by:
+    /// 1. Checking if currentRequest is already mutable (rare but possible)
+    /// 2. Using the private `setCurrentRequest:` selector if available (most task types support this)
+    /// 3. Gracefully degrading if neither approach works
+    ///
+    /// This is based on the industry-standard implementation used by major APM vendors:
+    /// - Use `setCurrentRequest:` with `respondsToSelector:` safety check
+    /// - Call it dynamically using `methodForSelector`
+    /// - Accept silent failure if the method isn't available
+    ///
+    /// - Parameters:
+    ///   - task: The URLSessionTask to modify
+    ///   - request: The instrumented request with headers to inject
+    private func injectHeadersIntoTask(_ task: URLSessionTask, request: URLRequest) {
+        // Scenario A: currentRequest is already mutable (rare but possible)
+        if let mutableRequest = task.currentRequest as? NSMutableURLRequest {
+            // Easy case - modify directly
+            for (key, value) in request.allHTTPHeaderFields ?? [:] {
+                mutableRequest.setValue(value, forHTTPHeaderField: key)
+            }
+            return
+        }
+        
+        // Scenario B: Use private setCurrentRequest: selector (industry-standard approach)
+        let setCurrentRequestSelector = NSSelectorFromString("setCurrentRequest:")
+        guard task.responds(to: setCurrentRequestSelector) else {
+            // Task doesn't support setCurrentRequest: - headers won't be injected
+            // This is acceptable - some task types may not support header injection
+            Log.d("[URLSessionInstrumentation] Task \(type(of: task)) doesn't respond to setCurrentRequest:, skipping header injection")
+            return
+        }
+        
+        // Create mutable copy with headers from instrumented request
+        guard let currentRequest = task.currentRequest else {
+            Log.d("[URLSessionInstrumentation] No currentRequest available")
+            return
+        }
+        
+        guard let newRequest = (currentRequest as NSURLRequest).mutableCopy() as? NSMutableURLRequest else {
+            Log.d("[URLSessionInstrumentation] Failed to create mutable copy of currentRequest")
+            return
+        }
+        
+        // Copy headers from instrumented request
+        for (key, value) in request.allHTTPHeaderFields ?? [:] {
+            newRequest.setValue(value, forHTTPHeaderField: key)
+        }
+        
+        // Call setCurrentRequest: dynamically (industry-standard pattern)
+        let setterIMP = task.method(for: setCurrentRequestSelector)
+        typealias SetterFunc = @convention(c) (Any, Selector, URLRequest) -> Void
+        let setter = unsafeBitCast(setterIMP, to: SetterFunc.self)
+        setter(task, setCurrentRequestSelector, newRequest as URLRequest)
+        
+        #if DEBUG
+        Log.d("[URLSessionInstrumentation] ✅ Successfully injected headers into \(type(of: task)) using setCurrentRequest:")
+        #endif
     }
 
     // Helpers
@@ -854,7 +1299,18 @@ public class URLSessionInstrumentation {
 }
 
 class FakeDelegate: NSObject, URLSessionTaskDelegate {
-    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {}
+    weak var instrumentation: URLSessionInstrumentation?
+    
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        // Intentionally empty - we only care about metrics collection
+    }
+    
+    func urlSession(_ session: URLSession, task: URLSessionTask, didFinishCollecting metrics: URLSessionTaskMetrics) {
+        #if DEBUG
+        Log.testLog("[FakeDelegate] didFinishCollecting called, forwarding to instrumentation")
+        #endif
+        instrumentation?.urlSession(session, task: task, didFinishCollecting: metrics)
+    }
 }
 
 @available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, *)

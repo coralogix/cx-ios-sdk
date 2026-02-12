@@ -41,7 +41,6 @@ public class ScreenshotManager {
                                   
                 page += 1
                 screenshotCount = 1
-                Log.d("Page incremented to: \(page)")
             }
             
             return ScreenshotLocation(
@@ -61,7 +60,6 @@ public class ScreenshotManager {
                 if page > 1 {
                     page -= 1
                     screenshotCount = maxScreenshotsPerPage
-                    Log.d("Page reverted to: \(page)")
                 } else {
                     screenshotCount = 0
                 }
@@ -70,7 +68,7 @@ public class ScreenshotManager {
     }
     
     public func printDebugInfo() {
-        Log.d("ScreenshotManager: page: \(page), screenshotCount: \(screenshotCount)")
+        // Screenshot manager state: page \(page), count \(screenshotCount)
     }
 
     public func reset() {

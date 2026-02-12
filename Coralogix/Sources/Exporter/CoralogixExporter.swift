@@ -158,13 +158,19 @@ public class CoralogixExporter: SpanExporter {
         
         let metatadata = VersionMetadata(appName: self.options.application,
                                          appVersion: self.options.version)
-        return CxSpan(otel: otelSpan,
-                      versionMetadata: metatadata,
-                      sessionManager: self.sessionManager,
-                      networkManager: self.networkManager,
-                      viewManager: self.viewManager,
-                      metricsManager: self.metricsManager,
-                      options: self.options).getDictionary()
+        
+        // CxSpan init can fail if session attributes are missing
+        guard let cxSpan = CxSpan(otel: otelSpan,
+                                  versionMetadata: metatadata,
+                                  sessionManager: self.sessionManager,
+                                  networkManager: self.networkManager,
+                                  viewManager: self.viewManager,
+                                  metricsManager: self.metricsManager,
+                                  options: self.options) else {
+            return nil  // Span will be filtered out by compactMap
+        }
+        
+        return cxSpan.getDictionary()
     }
     
     private func isMatchesRegexPattern(string: String, regexs: [String]) -> Bool {
@@ -176,7 +182,7 @@ public class CoralogixExporter: SpanExporter {
                 let matchFound = regex.firstMatch(in: string, options: [], range: range) != nil
                 return matchFound
             } catch {
-                Log.d("Invalid regex pattern: \(regex) — Error: \(error)")
+                Log.w("Invalid regex pattern: \(regex) — Error: \(error)")
                 continue // Skip invalid regex instead of crashing
             }
         }

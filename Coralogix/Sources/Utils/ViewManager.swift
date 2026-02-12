@@ -108,7 +108,7 @@ public class ViewManager {
     }
     
     deinit {
-        Log.d("deinint ViewManager")
+        // ViewManager deallocated
     }
     
     func syncSafe<T>(_ block: () -> T) -> T {

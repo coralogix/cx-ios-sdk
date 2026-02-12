@@ -238,7 +238,6 @@ public enum Keys: String {
     case memoryUsageSampleRate
     case cpuUsageSampleRate
     case debug
-    case ignoredClassPrefixes
     case proxyUrl
     case enableSwizzling
     case beforeSend

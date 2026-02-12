@@ -35,7 +35,9 @@ final class CxRumTests: XCTestCase {
                                                  Keys.userName.rawValue: AttributeValue("John Doe"),
                                                  Keys.userEmail.rawValue: AttributeValue("john.doe@example.com"),
                                                  Keys.snapshotContext.rawValue: AttributeValue(snapshotString),
-                                                 Keys.screenshotId.rawValue: AttributeValue("10")],
+                                                 Keys.screenshotId.rawValue: AttributeValue("10"),
+                                                 Keys.sessionId.rawValue: AttributeValue("session_001"),
+                                                 Keys.sessionCreationDate.rawValue: AttributeValue(1609459200)],
                                     startTime: Date(), spanId: "20", traceId: "30")
         mockVersionMetadata = VersionMetadata(appName: "ExampleApp", appVersion: "1.1.1")
         mockSessionManager = SessionManager()
@@ -76,6 +78,12 @@ final class CxRumTests: XCTestCase {
                                       options: options)
         let cxRum = rumBuilder.build()
         
+        // Verify build succeeded (not nil - would be nil if session attributes missing)
+        XCTAssertNotNil(cxRum, "CxRum build should succeed with valid session attributes")
+        guard let cxRum = cxRum else {
+            XCTFail("CxRum build failed")
+            return
+        }
         
         // Verify initialization
         XCTAssertNotNil(cxRum.timeStamp)
@@ -101,7 +109,14 @@ final class CxRumTests: XCTestCase {
                                       viewManager: mockViewerManager,
                                       networkManager: mockNetworkManager,
                                       options: options)
-        let cxRum = rumBuilder.build()
+        let cxRumOptional = rumBuilder.build()
+        
+        XCTAssertNotNil(cxRumOptional, "CxRum build should succeed")
+        guard let cxRum = cxRumOptional else {
+            XCTFail("CxRum build failed")
+            return
+        }
+        
         var payloadBuilder = CxRumPayloadBuilder(rum: cxRum, viewManager: mockViewerManager)
         let result = payloadBuilder.build()
         
@@ -143,7 +158,9 @@ final class CxRumTests: XCTestCase {
                                                  Keys.environment.rawValue: AttributeValue("prod"),
                                                  Keys.userId.rawValue: AttributeValue("12345"),
                                                  Keys.userName.rawValue: AttributeValue("John Doe"),
-                                                 Keys.userEmail.rawValue: AttributeValue("john.doe@example.com")],
+                                                 Keys.userEmail.rawValue: AttributeValue("john.doe@example.com"),
+                                                 Keys.sessionId.rawValue: AttributeValue("session_001"),
+                                                 Keys.sessionCreationDate.rawValue: AttributeValue(1609459200)],
                                     startTime: Date(), spanId: "20", traceId: "30")
         
         let oneMinuteInThePast: TimeInterval = -120
@@ -161,7 +178,14 @@ final class CxRumTests: XCTestCase {
                                       viewManager: mockViewerManager,
                                       networkManager: mockNetworkManager,
                                       options: options)
-        let cxRum = rumBuilder.build()
+        let cxRumOptional = rumBuilder.build()
+        
+        XCTAssertNotNil(cxRumOptional, "CxRum build should succeed")
+        guard let cxRum = cxRumOptional else {
+            XCTFail("CxRum build failed")
+            return
+        }
+        
         XCTAssertNotNil(cxRum.snapshotContext)
     }
 }

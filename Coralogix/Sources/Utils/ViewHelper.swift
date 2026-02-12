@@ -18,7 +18,7 @@ class ViewHelper {
         }
         let isClickable = self.isClickableControlOrView(view: view) || self.isClickableCellOrRow(view: view)
         if let text = ViewHelper.extractTextsFrom(view: view) {
-            Log.d("isClickable: \(isClickable), text: \(text)")
+            // View analysis: clickable=\(isClickable)
         }
         return [String: Any]()
     }

@@ -66,4 +66,59 @@ public class Log {
     public static func error(_ error: Error) {
         print("🟥 \(error.localizedDescription)")
     }
+    
+    // MARK: - Test Logging (DEBUG only)
+    
+    #if DEBUG
+    private static var isTestLoggingEnabled = false
+    private static let testLogFileURL = URL(fileURLWithPath: "/tmp/coralogix_test_logs.txt")
+    private static let testLogQueue = DispatchQueue(label: "com.coralogix.testlogger", qos: .utility)
+    
+    public static func enableTestLogging() {
+        testLogQueue.sync {
+            isTestLoggingEnabled = true
+            // Clear previous logs
+            try? "".write(to: testLogFileURL, atomically: true, encoding: .utf8)
+        }
+    }
+    
+    public static func disableTestLogging() {
+        testLogQueue.sync {
+            isTestLoggingEnabled = false
+        }
+    }
+    
+    public static func testLog(_ message: String) {
+        testLogQueue.async {
+            // Read flag under queue protection to avoid race with enable/disable
+            guard isTestLoggingEnabled else { return }
+            
+            let timestamp = ISO8601DateFormatter().string(from: Date())
+            let logEntry = "[\(timestamp)] \(message)\n"
+            
+            if let handle = try? FileHandle(forWritingTo: testLogFileURL) {
+                handle.seekToEndOfFile()
+                if let data = logEntry.data(using: .utf8) {
+                    handle.write(data)
+                }
+                try? handle.close()
+            } else {
+                try? logEntry.write(to: testLogFileURL, atomically: true, encoding: .utf8)
+            }
+        }
+    }
+    
+    public static func getTestLogs() -> String {
+        // Synchronize with testLogQueue to ensure all pending writes complete before reading
+        return testLogQueue.sync {
+            return (try? String(contentsOf: testLogFileURL, encoding: .utf8)) ?? ""
+        }
+    }
+    
+    public static func clearTestLogs() {
+        testLogQueue.sync {
+            try? "".write(to: testLogFileURL, atomically: true, encoding: .utf8)
+        }
+    }
+    #endif
 }

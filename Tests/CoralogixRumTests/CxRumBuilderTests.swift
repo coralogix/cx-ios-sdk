@@ -66,7 +66,9 @@ class CxRumBuilderTests: XCTestCase {
         mockSpanData = MockSpanData(attributes: [
             Keys.eventType.rawValue: AttributeValue("error"),
             Keys.source.rawValue: AttributeValue("userAction"),
-            Keys.severity.rawValue: AttributeValue("5")
+            Keys.severity.rawValue: AttributeValue("5"),
+            Keys.sessionId.rawValue: AttributeValue("session_001"),
+            Keys.sessionCreationDate.rawValue: AttributeValue(1609459200)
         ])
     }
     
@@ -153,7 +155,9 @@ class CxRumBuilderTests: XCTestCase {
                                                    Keys.environment.rawValue: AttributeValue("prod"),
                                                    Keys.userId.rawValue: AttributeValue("12345"),
                                                    Keys.userName.rawValue: AttributeValue("John Doe"),
-                                                   Keys.userEmail.rawValue: AttributeValue("john.doe@example.com")],
+                                                   Keys.userEmail.rawValue: AttributeValue("john.doe@example.com"),
+                                                   Keys.sessionId.rawValue: AttributeValue("session_001"),
+                                                   Keys.sessionCreationDate.rawValue: AttributeValue(1609459200)],
                                       startTime: currentTime,
                                       endTime: endTime,
                                       spanId: "20",

@@ -8,9 +8,9 @@
 import Foundation
 import UIKit
 import Coralogix
-//import Alamofire
-//import AFNetworking
-//import SDWebImage
+import Alamofire
+import AFNetworking
+import SDWebImage
 
 //https://github.com/AFNetworking/AFNetworking.git
 //https://github.com/Alamofire/Alamofire.git
@@ -63,21 +63,21 @@ class NetworkSim {
     }
     
     static func sendAFNetworkingRequest() {
-//        let manager = AFHTTPSessionManager()
-//        
-//        // Set response serializer (JSON in this case)
-//        manager.responseSerializer = AFJSONResponseSerializer()
-//        
-//        // Perform GET request
-//        manager.get(url, parameters: nil, headers: nil, progress: nil, success: { task, responseObject in
-//            // Success block
-//            if let response = responseObject {
-//                print("Response: \(response)")
-//            }
-//        }) { task, error in
-//            // Failure block
-//            print("Error: \(error.localizedDescription)")
-//        }
+        let manager = AFHTTPSessionManager()
+        
+        // Set response serializer (JSON in this case)
+        manager.responseSerializer = AFJSONResponseSerializer()
+        
+        // Perform GET request
+        manager.get(url, parameters: nil, headers: nil, progress: nil, success: { task, responseObject in
+            // Success block
+            if let response = responseObject {
+                print("Response: \(response)")
+            }
+        }) { task, error in
+            // Failure block
+            print("Error: \(error.localizedDescription)")
+        }
     }
     
     static func setNetworkRequestContextSuccsess() {
@@ -179,42 +179,42 @@ class NetworkSim {
     }
     
     static func succesfullAlamofire() {
-//        // Create a request using Alamofire
-//        AF.request(url, method: .get)
-//            .validate()  // Validates the response status code
-//            .responseData { response in
-//                switch response.result {
-//                case .success(let data):
-//                    do {
-//                        let json = try JSONSerialization.jsonObject(with: data, options: [])
-//                        print("Request Successful")
-//                        print("Response Data: \(json)")
-//                    } catch {
-//                        print("JSON Parsing Error: \(error)")
-//                    }
-//                case .failure(let error):
-//                    print("Request failed with error: \(error)")
-//                }
-//            }
+        // Create a request using Alamofire
+        AF.request(url, method: .get)
+            .validate()  // Validates the response status code
+            .responseData { response in
+                switch response.result {
+                case .success(let data):
+                    do {
+                        let json = try JSONSerialization.jsonObject(with: data, options: [])
+                        print("Request Successful")
+                        print("Response Data: \(json)")
+                    } catch {
+                        print("JSON Parsing Error: \(error)")
+                    }
+                case .failure(let error):
+                    print("Request failed with error: \(error)")
+                }
+            }
     }
     
     static func failureAlamofire() {
-//        AF.request(errorUrl, method: .get)
-//            .validate()  // Validates the response status code
-//            .responseData { response in
-//                switch response.result {
-//                case .success(let data):
-//                    do {
-//                        let json = try JSONSerialization.jsonObject(with: data, options: [])
-//                        print("Request Successful")
-//                        print("Response Data: \(json)")
-//                    } catch {
-//                        print("JSON Parsing Error: \(error)")
-//                    }
-//                case .failure(let error):
-//                    print("Request failed with error: \(error)")
-//                }
-//            }
+        AF.request(errorUrl, method: .get)
+            .validate()  // Validates the response status code
+            .responseData { response in
+                switch response.result {
+                case .success(let data):
+                    do {
+                        let json = try JSONSerialization.jsonObject(with: data, options: [])
+                        print("Request Successful")
+                        print("Response Data: \(json)")
+                    } catch {
+                        print("JSON Parsing Error: \(error)")
+                    }
+                case .failure(let error):
+                    print("Request failed with error: \(error)")
+                }
+            }
     }
     
     static func createSampleFile() -> URL? {
@@ -249,53 +249,53 @@ class NetworkSim {
     }
     
     static func uploadFile(fileURL: URL?) {
-//        let url = "https://api.escuelajs.co/api/v1/files/upload"
-//        
-//        // Simulated file — use a file from your local bundle or Documents directory
-//        guard let fileURL = fileURL else {
-//            print("UploadFile: File URL not found.")
-//            return
-//        }
-//        
-//        // Start upload
-//        AF.upload(multipartFormData: { multipartFormData in
-//            multipartFormData.append(fileURL, withName: "file", fileName: "sample.txt", mimeType: "text/plain")
-//        }, to: url)
-//        .uploadProgress { progress in
-//            print("Upload Progress: \(progress.fractionCompleted)")
-//        }
-//        .response { response in
-//            switch response.result {
-//            case .success(let data):
-//                print("Upload succeeded")
-//                if let data = data, let responseString = String(data: data, encoding: .utf8) {
-//                    print("Response: \(responseString)")
-//                }
-//            case .failure(let error):
-//                print("Upload failed: \(error)")
-//            }
-//        }
+        let url = "https://api.escuelajs.co/api/v1/files/upload"
+        
+        // Simulated file — use a file from your local bundle or Documents directory
+        guard let fileURL = fileURL else {
+            print("UploadFile: File URL not found.")
+            return
+        }
+        
+        // Start upload
+        AF.upload(multipartFormData: { multipartFormData in
+            multipartFormData.append(fileURL, withName: "file", fileName: "sample.txt", mimeType: "text/plain")
+        }, to: url)
+        .uploadProgress { progress in
+            print("Upload Progress: \(progress.fractionCompleted)")
+        }
+        .response { response in
+            switch response.result {
+            case .success(let data):
+                print("Upload succeeded")
+                if let data = data, let responseString = String(data: data, encoding: .utf8) {
+                    print("Response: \(responseString)")
+                }
+            case .failure(let error):
+                print("Upload failed: \(error)")
+            }
+        }
     }
     
     static func downloadImage() {
-//        let urlString = "https://www.google.com/url?sa=i&url=https%3A%2F%2Funikal.az%2Fnews%2F490204%2Ftramp-meshur-aparicinin-verilisini-baglatdirir&psig=AOvVaw1NJs_lRnGqkjnhDu8j3AOd&ust=1753266023938000&source=images&cd=vfe&opi=89978449&ved=2ahUKEwjIstmFn9COAxX0UqQEHfprJpkQjRx6BAgAEBo"
-//        guard let url = URL(string: urlString) else { return }
-//        
-//        DispatchQueue.global(qos: .background).async {
-//            SDWebImageDownloader.shared.downloadImage(
-//                with: url,
-//                options: [],
-//                progress: nil
-//            ) { image, data, error, finished in
-//                guard let image = image, finished else { return }
-//                DispatchQueue.main.async {
-//                    let imageView = UIImageView(image: image)
-//                    if imageView.image != nil {
-//                        print("Image downloaded")
-//                    }
-//                }
-//            }
-//        }
+        let urlString = "https://www.google.com/url?sa=i&url=https%3A%2F%2Funikal.az%2Fnews%2F490204%2Ftramp-meshur-aparicinin-verilisini-baglatdirir&psig=AOvVaw1NJs_lRnGqkjnhDu8j3AOd&ust=1753266023938000&source=images&cd=vfe&opi=89978449&ved=2ahUKEwjIstmFn9COAxX0UqQEHfprJpkQjRx6BAgAEBo"
+        guard let url = URL(string: urlString) else { return }
+        
+        DispatchQueue.global(qos: .background).async {
+            SDWebImageDownloader.shared.downloadImage(
+                with: url,
+                options: [],
+                progress: nil
+            ) { image, data, error, finished in
+                guard let image = image, finished else { return }
+                DispatchQueue.main.async {
+                    let imageView = UIImageView(image: image)
+                    if imageView.image != nil {
+                        print("Image downloaded")
+                    }
+                }
+            }
+        }
     }
     
     static func callAsyncAwait() {
@@ -305,6 +305,22 @@ class NetworkSim {
                 Log.d("Success: \(response.title)")
             } catch {
                 Log.e("Error: \(error.localizedDescription)")
+            }
+        }
+    }
+    
+    /// Simulates customer's SSL pinning scenario:
+    /// - URLSession with custom delegate (SSL pinning only)
+    /// - Using async/await
+    /// - Delegate does NOT implement URLSessionTaskDelegate methods
+    /// This replicates the customer's issue where network traces go missing
+    static func callAsyncAwaitWithSSLPinning() {
+        Task {
+            do {
+                let response = try await SSLPinningSession.shared.makeRequest()
+                Log.d("✅ SSL Pinning Request Success: \(response.title)")
+            } catch {
+                Log.e("❌ SSL Pinning Request Error: \(error.localizedDescription)")
             }
         }
     }
@@ -364,5 +380,71 @@ class NetworkSim {
             decoder.keyDecodingStrategy = .convertFromSnakeCase
             return try decoder.decode(DataResponse.self, from: data)
         }
+    }
+    
+    /// Replicates customer's SSL pinning setup
+    /// This demonstrates the bug where async/await + custom delegate = no instrumentation
+    final class SSLPinningSession: NSObject {
+        static let shared = SSLPinningSession()
+        
+        // URLSession with custom delegate (like customer's setup)
+        private lazy var session: URLSession = {
+            URLSession(
+                configuration: .default,
+                delegate: self,  // ← Custom delegate for SSL pinning
+                delegateQueue: nil
+            )
+        }()
+        
+        private override init() {
+            super.init()
+        }
+        
+        func makeRequest() async throws -> DataResponse {
+            guard let url = URL(string: "https://jsonplaceholder.typicode.com/posts") else {
+                throw URLError(.badURL)
+            }
+            
+            let requestBody: [String: Any] = [
+                "title": "SSL Pinning Request",
+                "body": "Testing async/await with SSL pinning delegate",
+                "userId": 1
+            ]
+            
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.setValue("application/json", forHTTPHeaderField: "Accept")
+            request.timeoutInterval = 30
+            request.httpBody = try? JSONSerialization.data(withJSONObject: requestBody, options: [])
+            
+            print("🔐 Making async/await request with SSL pinning delegate...")
+            let (data, response) = try await session.data(for: request)
+            
+            if let httpResponse = response as? HTTPURLResponse {
+                print("🔐 SSL Pinning Response Code:", httpResponse.statusCode)
+            }
+            
+            let decoder = JSONDecoder()
+            decoder.keyDecodingStrategy = .convertFromSnakeCase
+            return try decoder.decode(DataResponse.self, from: data)
+        }
+    }
+}
+
+// MARK: - SSL Pinning Delegate (Mimics Customer's Setup)
+extension NetworkSim.SSLPinningSession: URLSessionDelegate {
+    /// This delegate ONLY handles SSL challenges
+    /// It does NOT implement URLSessionTaskDelegate methods
+    /// This is exactly like the customer's setup
+    func urlSession(
+        _ session: URLSession,
+        didReceive challenge: URLAuthenticationChallenge
+    ) async -> (URLSession.AuthChallengeDisposition, URLCredential?) {
+        print("🔐 SSL challenge received (would validate cert here)")
+        
+        // In real app, would validate certificate against pinned certs
+        // For demo, just accept default handling
+        return (.performDefaultHandling, nil)
     }
 }

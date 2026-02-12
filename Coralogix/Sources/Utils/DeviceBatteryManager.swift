@@ -27,16 +27,9 @@ class DeviceBatteryManager {
 
     public func getBatteryLevel() -> Float {
     #if os(tvOS)
-    Log.d("Battery level is not applicable on tvOS")
-    return -1.0 // or return 0.0 to indicate no battery
+    return -1.0 // Battery level not applicable on tvOS
     #else
         let batteryLevel = UIDevice.current.batteryLevel
-        if batteryLevel < 0 {
-            // If battery level is -1.0, the battery level is unknown.
-            Log.d("[Coralogix] Battery level is unknown")
-        } else {
-            Log.d("[Coralogix] Battery level is \(batteryLevel * 100)%")
-        }
         return batteryLevel
     #endif
     }

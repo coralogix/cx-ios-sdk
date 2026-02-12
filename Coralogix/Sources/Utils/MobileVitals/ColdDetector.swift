@@ -30,8 +30,6 @@ final class ColdDetector {
                 let epochStartTime = Helper.convertCFAbsoluteTimeToEpoch(launchStartTime)
                 let epochEndTime = Helper.convertCFAbsoluteTimeToEpoch(launchEndTime)
                 let millisecondsRounded = self.calculateTime(start: epochStartTime, stop: epochEndTime)
-
-//              Log.d("[COLD DEBUG] cold start = \(millisecondsRounded) ms")
                 
                 let cold = [
                     MobileVitalsType.cold.stringValue: [

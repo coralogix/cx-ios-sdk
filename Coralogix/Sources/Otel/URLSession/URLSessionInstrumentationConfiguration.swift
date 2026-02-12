@@ -24,7 +24,6 @@ public struct URLSessionInstrumentationConfiguration {
                 receivedResponse: ((URLResponse, DataOrFile?, any Span) -> Void)? = nil,
                 receivedError: ((Error, DataOrFile?, HTTPStatus, any Span) -> Void)? = nil,
                 delegateClassesToInstrument: [AnyClass]? = nil,
-                ignoredClassPrefixes: [String]? = nil,
                 tracer: Tracer? = nil) {
         self.shouldRecordPayload = shouldRecordPayload
         self.shouldInstrument = shouldInstrument
@@ -36,7 +35,6 @@ public struct URLSessionInstrumentationConfiguration {
         self.receivedResponse = receivedResponse
         self.receivedError = receivedError
         self.delegateClassesToInstrument = delegateClassesToInstrument
-        self.ignoredClassPrefixes = ignoredClassPrefixes
         self.tracer = tracer ??
              OpenTelemetry.instance.tracerProvider.get(instrumentationName: "NSURLSession", instrumentationVersion: "0.0.1")
     }
@@ -76,9 +74,8 @@ public struct URLSessionInstrumentationConfiguration {
     ///  Called before the span is ended, it allows to add extra information to the Span
     public var receivedError: ((Error, DataOrFile?, HTTPStatus, any Span) -> Void)?
     
-    ///  The array of URLSession delegate classes that will be instrumented by the library, will autodetect if nil is passed.
+    /// The array of URLSession delegate classes that will be instrumented by the library.
+    /// NOTE: Auto-detection has been disabled. You must explicitly provide classes to enable delegate swizzling.
+    /// If nil or empty, delegate methods will not be swizzled (URLSession method swizzling still works).
     public var delegateClassesToInstrument: [AnyClass]?
-    
-    /// The Array of Prefixes you can avoid in swizzle process
-    public let ignoredClassPrefixes: [String]?
 }

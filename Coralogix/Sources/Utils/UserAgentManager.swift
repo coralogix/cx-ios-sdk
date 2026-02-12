@@ -49,7 +49,6 @@ public class UserAgentManager: NSObject, WKNavigationDelegate {
         webView.evaluateJavaScript("navigator.userAgent") { [weak self] (result, error) in
             if let userAgent = result as? String {
                 self?.cachedUserAgent = userAgent
-                Log.d("User agent successfully retrieved and cached: \(userAgent)")
             } else {
                 Log.e("Error retrieving user agent: \(error?.localizedDescription ?? "unknown error")")
             }

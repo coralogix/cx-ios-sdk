@@ -228,6 +228,9 @@ class SchemaValidationViewController: UIViewController {
     }
 
     private func validateSchemaResponse(data: Data?) {
+        print("\n🔍 validateSchemaResponse() called")
+        print("   Data received: \(data?.count ?? 0) bytes")
+        
         guard let data = data else {
             handleError("No data received")
             return
@@ -235,11 +238,33 @@ class SchemaValidationViewController: UIViewController {
 
         do {
             // Parse JSON response
+            print("   Parsing JSON response...")
             let jsonArray = try JSONSerialization.jsonObject(with: data) as? [[String: Any]]
 
             guard let data = jsonArray else {
+                print("❌ JSON parsing failed - not an array")
                 handleError("Invalid JSON format")
                 return
+            }
+            
+            print("✅ Successfully parsed \(data.count) items from JSON response")
+            
+            // TESTING: Save validation response for UI tests
+            print("\n🔍 Test mode check:")
+            print("   All CommandLine.arguments:")
+            for (index, arg) in CommandLine.arguments.enumerated() {
+                print("      [\(index)] \(arg)")
+            }
+            
+            let isTestMode = CommandLine.arguments.contains("--uitesting")
+            print("   Contains '--uitesting': \(isTestMode)")
+            
+            if isTestMode {
+                print("✅ Test mode ENABLED - Saving validation data...")
+                saveValidationDataForTesting(data)
+            } else {
+                print("⚠️  Test mode DISABLED - Validation data will NOT be saved")
+                print("   To enable: Pass '--uitesting' as launch argument")
             }
 
             var allValid = true
@@ -298,6 +323,30 @@ class SchemaValidationViewController: UIViewController {
 
         } catch {
             handleError("Failed to parse response: \(error.localizedDescription)")
+        }
+    }
+    
+    // MARK: - Testing Support
+    
+    private func saveValidationDataForTesting(_ validationData: [[String: Any]]) {
+        print("📝 saveValidationDataForTesting() called with \(validationData.count) entries")
+        let testDataPath = "/tmp/coralogix_validation_response.json"
+        
+        do {
+            let jsonData = try JSONSerialization.data(withJSONObject: validationData, options: .prettyPrinted)
+            try jsonData.write(to: URL(fileURLWithPath: testDataPath))
+            print("💾 Successfully saved validation data to: \(testDataPath)")
+            print("💾 File size: \(jsonData.count) bytes")
+            print("💾 Entries saved: \(validationData.count)")
+            
+            // Verify file was written
+            if FileManager.default.fileExists(atPath: testDataPath) {
+                print("✅ File verified to exist at path")
+            } else {
+                print("❌ File does not exist after write!")
+            }
+        } catch {
+            print("❌ Failed to save validation data: \(error)")
         }
     }
 

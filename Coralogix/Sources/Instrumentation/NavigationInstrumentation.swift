@@ -24,7 +24,10 @@ extension CoralogixRum {
         if cxView.state == .notifyOnAppear,
            let viewManager = coralogixExporter?.getViewManager() {
             if viewManager.isUniqueView(name: cxView.name) {
-                metricsManager.sendMobileVitals()
+                // Only send mobile vitals if instrumentation is enabled
+                if options?.shouldInitInstrumentation(instrumentation: .mobileVitals) == true {
+                    metricsManager.sendMobileVitals()
+                }
                 
                 var span = makeSpan(event: .navigation, source: .console, severity: .info)
                 handleAppearStateIfNeeded(cxView: cxView, span: &span)

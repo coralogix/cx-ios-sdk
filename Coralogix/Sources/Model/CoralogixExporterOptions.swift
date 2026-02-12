@@ -93,9 +93,6 @@ public struct CoralogixExporterOptions {
     
     public var traceParentInHeader: [String: Any]?
     
-    /// The Array of Prefixes you can avoid in swizzle process (Network)
-    public let ignoredClassPrefixes: [String]?
-    
     /// A list of mobile vitals that you wish to switch off during runtime. all mobile vitals are active by default.
     var mobileVitals: [MobileVitalsType: Bool]?
     
@@ -118,7 +115,6 @@ public struct CoralogixExporterOptions {
                 enableSwizzling: Bool = true,
                 proxyUrl: String? = nil,
                 traceParentInHeader: [String: Any]? = nil,
-                ignoredClassPrefixes: [String]? = nil,
                 mobileVitals: [MobileVitalsType: Bool]? = nil,
                 debug: Bool = false) {
         self.coralogixDomain = coralogixDomain
@@ -141,7 +137,6 @@ public struct CoralogixExporterOptions {
         self.enableSwizzling = enableSwizzling
         self.proxyUrl = proxyUrl
         self.traceParentInHeader = traceParentInHeader
-        self.ignoredClassPrefixes = ignoredClassPrefixes
         self.mobileVitals = mobileVitals
     }
     
@@ -171,7 +166,6 @@ public struct CoralogixExporterOptions {
         initData[Keys.enableSwizzling.rawValue] = self.enableSwizzling
         initData[Keys.proxyUrl.rawValue] = self.proxyUrl
         initData[Keys.traceParentInHeader.rawValue] = self.traceParentInHeader
-        initData[Keys.ignoredClassPrefixes.rawValue] = self.ignoredClassPrefixes
         initData[Keys.mobileVitals.rawValue] = self.getStatesAsDictionary(from: self.mobileVitals)
         initData[Keys.debug.rawValue] = self.debug
         

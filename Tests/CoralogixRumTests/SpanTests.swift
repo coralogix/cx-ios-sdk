@@ -29,7 +29,9 @@ final class SpanTests: XCTestCase {
                                                  Keys.environment.rawValue: AttributeValue("prod"),
                                                  Keys.userId.rawValue: AttributeValue("12345"),
                                                  Keys.userName.rawValue: AttributeValue("John Doe"),
-                                                 Keys.userEmail.rawValue: AttributeValue("john.doe@example.com")],
+                                                 Keys.userEmail.rawValue: AttributeValue("john.doe@example.com"),
+                                                 Keys.sessionId.rawValue: AttributeValue("session_001"),
+                                                 Keys.sessionCreationDate.rawValue: AttributeValue(1609459200)],
                                     startTime: statTime, endTime: endTime, spanId: "20",
                                     traceId: "30", name: "testSpan", kind: 1,
                                     statusCode: ["status": "ok"],
@@ -66,13 +68,16 @@ final class SpanTests: XCTestCase {
     func testInitialization() {
         guard let options = options else { return XCTFail("Failed to load options") }
 
-        let cxSpan = CxSpan(otel: mockSpanData,
-                            versionMetadata: mockVersionMetadata,
-                            sessionManager: mockSessionManager,
-                            networkManager: mockNetworkManager,
-                            viewManager: mockViewManager,
-                            metricsManager: mockCxMetricsManager,
-                            options: options)
+        guard let cxSpan = CxSpan(otel: mockSpanData,
+                                 versionMetadata: mockVersionMetadata,
+                                 sessionManager: mockSessionManager,
+                                 networkManager: mockNetworkManager,
+                                 viewManager: mockViewManager,
+                                 metricsManager: mockCxMetricsManager,
+                                 options: options) else {
+            XCTFail("CxSpan init failed")
+            return
+        }
         
         XCTAssertEqual(cxSpan.applicationName, "ExampleApp")
         XCTAssertNotNil(cxSpan.versionMetadata)
@@ -90,7 +95,9 @@ final class SpanTests: XCTestCase {
                                                  Keys.environment.rawValue: AttributeValue("prod"),
                                                  Keys.userId.rawValue: AttributeValue("12345"),
                                                  Keys.userName.rawValue: AttributeValue("John Doe"),
-                                                 Keys.userEmail.rawValue: AttributeValue("john.doe@example.com")],
+                                                 Keys.userEmail.rawValue: AttributeValue("john.doe@example.com"),
+                                                 Keys.sessionId.rawValue: AttributeValue("session_001"),
+                                                 Keys.sessionCreationDate.rawValue: AttributeValue(1609459200)],
                                     startTime: statTime, endTime: endTime, spanId: "20",
                                     traceId: "30", name: "testSpan", kind: 1,
                                     statusCode: ["status": "ok"],
@@ -98,13 +105,16 @@ final class SpanTests: XCTestCase {
                                                 "b": AttributeValue("2"),
                                                 "c": AttributeValue("3")])
         
-        let cxSpan = CxSpan(otel: mockSpanData,
-                            versionMetadata: mockVersionMetadata,
-                            sessionManager: mockSessionManager,
-                            networkManager: mockNetworkManager,
-                            viewManager: mockViewManager,
-                            metricsManager: mockCxMetricsManager,
-                            options: options)
+        guard let cxSpan = CxSpan(otel: mockSpanData,
+                                 versionMetadata: mockVersionMetadata,
+                                 sessionManager: mockSessionManager,
+                                 networkManager: mockNetworkManager,
+                                 viewManager: mockViewManager,
+                                 metricsManager: mockCxMetricsManager,
+                                 options: options) else {
+            XCTFail("CxSpan init failed")
+            return
+        }
         XCTAssertNotNil(cxSpan.instrumentationData)
         
         if let dict = cxSpan.getDictionary() {
@@ -202,13 +212,16 @@ final class SpanTests: XCTestCase {
     func testCreateSubsetOfCxRum_RemovesSpecifiedKeys() {
         guard let options = options else { return XCTFail("Failed to load options") }
 
-        let cxSpan = CxSpan(otel: mockSpanData,
-                            versionMetadata: mockVersionMetadata,
-                            sessionManager: mockSessionManager,
-                            networkManager: mockNetworkManager,
-                            viewManager: mockViewManager,
-                            metricsManager: mockCxMetricsManager,
-                            options: options)
+        guard let cxSpan = CxSpan(otel: mockSpanData,
+                                 versionMetadata: mockVersionMetadata,
+                                 sessionManager: mockSessionManager,
+                                 networkManager: mockNetworkManager,
+                                 viewManager: mockViewManager,
+                                 metricsManager: mockCxMetricsManager,
+                                 options: options) else {
+            XCTFail("CxSpan init failed")
+            return
+        }
         // Given
         let originalCxRum: [String: Any] = [
             Keys.sessionContext.rawValue: [
@@ -244,13 +257,16 @@ final class SpanTests: XCTestCase {
     func testCreateSubsetOfCxRum_NoSessionContext() {
         guard let options = options else { return XCTFail("Failed to load options") }
 
-        let cxSpan = CxSpan(otel: mockSpanData,
-                            versionMetadata: mockVersionMetadata,
-                            sessionManager: mockSessionManager,
-                            networkManager: mockNetworkManager,
-                            viewManager: mockViewManager,
-                            metricsManager: mockCxMetricsManager,
-                            options: options)
+        guard let cxSpan = CxSpan(otel: mockSpanData,
+                                 versionMetadata: mockVersionMetadata,
+                                 sessionManager: mockSessionManager,
+                                 networkManager: mockNetworkManager,
+                                 viewManager: mockViewManager,
+                                 metricsManager: mockCxMetricsManager,
+                                 options: options) else {
+            XCTFail("CxSpan init failed")
+            return
+        }
         // Given
         let originalCxRum: [String: Any] = [
             Keys.timestamp.rawValue: 1234567890,
@@ -283,13 +299,16 @@ final class SpanTests: XCTestCase {
             ],
             "key3": "value3"
         ]
-        let cxSpan = CxSpan(otel: mockSpanData,
-                            versionMetadata: mockVersionMetadata,
-                            sessionManager: mockSessionManager,
-                            networkManager: mockNetworkManager,
-                            viewManager: mockViewManager,
-                            metricsManager: mockCxMetricsManager,
-                            options: options)
+        guard let cxSpan = CxSpan(otel: mockSpanData,
+                                 versionMetadata: mockVersionMetadata,
+                                 sessionManager: mockSessionManager,
+                                 networkManager: mockNetworkManager,
+                                 viewManager: mockViewManager,
+                                 metricsManager: mockCxMetricsManager,
+                                 options: options) else {
+            XCTFail("CxSpan init failed")
+            return
+        }
         let result = cxSpan.mergeDictionaries(original: dict1, editable: dict2)
         XCTAssertEqual(result.count, 3)
         if let key2 = result["key2"] as? [String: Any] {
@@ -318,13 +337,16 @@ final class SpanTests: XCTestCase {
         },
                                                debug: true)
         
-        let cxSpan = CxSpan(otel: mockSpanData,
-                            versionMetadata: mockVersionMetadata,
-                            sessionManager: mockSessionManager,
-                            networkManager: mockNetworkManager,
-                            viewManager: mockViewManager,
-                            metricsManager: mockCxMetricsManager,
-                            options: options)
+        guard let cxSpan = CxSpan(otel: mockSpanData,
+                                 versionMetadata: mockVersionMetadata,
+                                 sessionManager: mockSessionManager,
+                                 networkManager: mockNetworkManager,
+                                 viewManager: mockViewManager,
+                                 metricsManager: mockCxMetricsManager,
+                                 options: options) else {
+            XCTFail("CxSpan init failed")
+            return
+        }
         
         if let dict = cxSpan.getDictionary(),
            let text = dict[Keys.text.rawValue] as? [String: Any],
