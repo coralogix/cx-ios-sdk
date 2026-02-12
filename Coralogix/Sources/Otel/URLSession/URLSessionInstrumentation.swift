@@ -676,21 +676,33 @@ public class URLSessionInstrumentation {
     /// Phase 1: Discover class names (safe on any thread)
     /// Phase 2: Convert to classes on main thread (prevents +initialize issues)
     /// THREAD-SAFE: Called within swizzleLock, protected from concurrent access
+    ///
+    /// - Important: **Must be called on main thread** for optimal performance
+    /// - Calling from background thread will block until main thread is available
     private func discoverTaskClassesToSwizzle() -> [AnyClass] {
         // Best Practice: Work with class names first, convert to classes on main thread
         // This prevents +initialize side effects on background threads
         let classNames = discoverTaskClassNames()
         
-        // CRITICAL: Convert class names to classes on MAIN THREAD ONLY
-        // Calling NSClassFromString off main thread can trigger +initialize on UIKit classes → CRASH
-        assert(Thread.isMainThread, "[URLSessionInstrumentation] Class discovery must run on main thread to prevent +initialize crashes")
-        
-        return classNames.compactMap { className in
-            // This is safe because:
-            // 1. We're on main thread (asserted above)
-            // 2. We're only looking up NSURLSessionTask subclasses (not UIKit)
-            // 3. Classes are already loaded (we got names from instance)
-            NSClassFromString(className)
+        // CRITICAL: NSClassFromString must be called on main thread
+        // Calling NSClassFromString off main thread can trigger +initialize → CRASH or undefined behavior
+        if Thread.isMainThread {
+            // Best case - already on main thread
+            return classNames.compactMap { NSClassFromString($0) }
+        } else {
+            // Not on main thread - customer is misusing SDK
+            #if DEBUG
+            // In debug: Help developers catch this early
+            assertionFailure("CoralogixRUM must be initialized on the main thread")
+            #endif
+            
+            Log.w("[URLSessionInstrumentation] CRITICAL: SDK initialized off main thread - dispatching to main (may block). Please initialize on main thread to avoid performance issues.")
+            
+            // In production: Gracefully handle by dispatching sync
+            // This ensures correctness even if it blocks
+            return DispatchQueue.main.sync {
+                return classNames.compactMap { NSClassFromString($0) }
+            }
         }
     }
     

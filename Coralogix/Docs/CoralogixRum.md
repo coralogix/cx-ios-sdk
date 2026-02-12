@@ -21,6 +21,25 @@
 >[!NOTE]
 >The `API Key` can be found in your Coralogix page under DataFlow -> API Keys.
 
+>[!IMPORTANT]
+>**Thread Safety:** Coralogix RUM **must be initialized on the main thread**.
+>
+>✅ **Correct:** Initialize in `application(_:didFinishLaunchingWithOptions:)` or `scene(_:willConnectTo:options:)`
+>
+>❌ **Incorrect:** Initializing on a background thread will log a warning and may cause blocking or performance issues.
+>
+>```swift
+>// ✅ CORRECT - On main thread
+>func application(...) {
+>    self.coralogixRum = CoralogixRum(options: options)
+>}
+>
+>// ❌ INCORRECT - On background thread
+>DispatchQueue.global().async {
+>    self.coralogixRum = CoralogixRum(options: options)  // Will block!
+>}
+>```
+
 Identify if your app project contains an `AppDelegate` file or a `SceneDelegate` file. Pure SwiftUI projects do not include either of these files. To use Coralogix in your app, you will need to create one of them.  
 
 
@@ -261,6 +280,39 @@ Use this manually whenever you want to track Screen Name within swiftUI project.
 ```
 
 ## Troubleshooting
+
+### SDK Initialization Issues
+
+**Warning:** "SDK initialized off main thread - dispatching to main (may block)"
+
+**Cause:** Coralogix RUM was initialized on a background thread instead of the main thread.
+
+**Solution:** Always initialize the SDK on the main thread:
+
+```swift
+// ✅ CORRECT - In AppDelegate on main thread
+func application(_ application: UIApplication, didFinishLaunchingWithOptions...) -> Bool {
+    self.coralogixRum = CoralogixRum(options: options)  // Runs on main thread
+    return true
+}
+
+// ❌ INCORRECT - On background thread
+DispatchQueue.global().async {
+    self.coralogixRum = CoralogixRum(options: options)  // Will cause warning and blocking
+}
+```
+
+**Impact:** Initializing on a background thread is safe but may cause:
+- Warning messages in logs
+- Blocking of the background thread (typically <1ms)
+- Potential performance degradation during initialization
+- In debug builds: Assertion failure to help catch the issue early
+
+**Best Practice:** Always initialize Coralogix RUM in `application(_:didFinishLaunchingWithOptions:)`, `scene(_:willConnectTo:options:)`, or other main-thread lifecycle methods.
+
+---
+
+### General Issues
 
 - For technical issues, please [review open issues]
 
