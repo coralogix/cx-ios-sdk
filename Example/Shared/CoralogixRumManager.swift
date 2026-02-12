@@ -34,12 +34,12 @@ final class CoralogixRumManager {
                                                publicKey: Envs.PUBLIC_KEY.rawValue,
                                                instrumentations: [
                                                 .mobileVitals: true,
-                                                                  .custom: false,
-                                                                  .errors: false,
-                                                                  .userActions: false,
+                                                                  .custom: true,
+                                                                  .errors: true,
+                                                                  .userActions: true,
                                                                   .network: true,
-                                                                  .anr: false,
-                                                                  .lifeCycle: false],
+                                                                  .anr: true,
+                                                                  .lifeCycle: true],
                                                collectIPData: true,
 //                                               beforeSend: { cxRum in
 //            var editableCxRum = cxRum
