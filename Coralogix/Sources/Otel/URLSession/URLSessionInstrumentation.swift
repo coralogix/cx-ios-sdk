@@ -1253,7 +1253,11 @@ public class URLSessionInstrumentation {
             Log.d("[URLSessionInstrumentation] No currentRequest available")
             return
         }
-        let newRequest = (currentRequest as NSURLRequest).mutableCopy() as! NSMutableURLRequest
+        
+        guard let newRequest = (currentRequest as NSURLRequest).mutableCopy() as? NSMutableURLRequest else {
+            Log.d("[URLSessionInstrumentation] Failed to create mutable copy of currentRequest")
+            return
+        }
         
         // Copy headers from instrumented request
         for (key, value) in request.allHTTPHeaderFields ?? [:] {

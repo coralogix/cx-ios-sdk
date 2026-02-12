@@ -55,6 +55,8 @@ class CxRumBuilder {
         }
         
         if SessionContext.shouldRestorePreviousSession(from: otel){
+            // Note: prevSessionContext can be nil if session attributes are missing
+            // This is acceptable - we'll use the current session instead
             prevSessionContext = SessionContext(otel: otel,
                                                 userMetadata: userMetadata,
                                                 hasRecording: hasRecording)
