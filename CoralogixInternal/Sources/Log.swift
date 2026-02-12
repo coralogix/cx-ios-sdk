@@ -89,9 +89,10 @@ public class Log {
     }
     
     public static func testLog(_ message: String) {
-        guard isTestLoggingEnabled else { return }
-        
         testLogQueue.async {
+            // Read flag under queue protection to avoid race with enable/disable
+            guard isTestLoggingEnabled else { return }
+            
             let timestamp = ISO8601DateFormatter().string(from: Date())
             let logEntry = "[\(timestamp)] \(message)\n"
             
@@ -100,7 +101,7 @@ public class Log {
                 if let data = logEntry.data(using: .utf8) {
                     handle.write(data)
                 }
-                handle.closeFile()
+                try? handle.close()
             } else {
                 try? logEntry.write(to: testLogFileURL, atomically: true, encoding: .utf8)
             }
@@ -108,7 +109,10 @@ public class Log {
     }
     
     public static func getTestLogs() -> String {
-        return (try? String(contentsOf: testLogFileURL, encoding: .utf8)) ?? ""
+        // Synchronize with testLogQueue to ensure all pending writes complete before reading
+        return testLogQueue.sync {
+            return (try? String(contentsOf: testLogFileURL, encoding: .utf8)) ?? ""
+        }
     }
     
     public static func clearTestLogs() {
