@@ -36,7 +36,7 @@
 >
 >// ❌ INCORRECT - On background thread
 >DispatchQueue.global().async {
->    self.coralogixRum = CoralogixRum(options: options)  // Will block!
+>    self.coralogixRum = CoralogixRum(options: options)  // May block - will synchronously hop to main
 >}
 >```
 
@@ -298,13 +298,13 @@ func application(_ application: UIApplication, didFinishLaunchingWithOptions...)
 
 // ❌ INCORRECT - On background thread
 DispatchQueue.global().async {
-    self.coralogixRum = CoralogixRum(options: options)  // Will cause warning and blocking
+    self.coralogixRum = CoralogixRum(options: options)  // May cause warning and blocking
 }
 ```
 
 **Impact:** Initializing on a background thread is safe but may cause:
 - Warning messages in logs
-- Blocking of the background thread (typically <1ms)
+- May block the background thread while dispatching to main (typically <1ms)
 - Potential performance degradation during initialization
 - In debug builds: Assertion failure to help catch the issue early
 

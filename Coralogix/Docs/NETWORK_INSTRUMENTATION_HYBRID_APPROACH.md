@@ -291,15 +291,17 @@ func isAlreadyLogged(_ task: NSURLSessionTask) -> Bool {
 ## Benefits
 
 ### For Customers
+
 | Benefit | Impact |
 |---------|--------|
 | 🎉 **Alamofire works automatically** | No configuration needed, complete RUM data |
-| 🎉 **AFNetworking works automatically** | Legacy apps automatically supported |
+| 🎉 **AFNetworking works automatically** | Legacy apps supported |
 | 🎉 **Any networking library works** | Future-proof against new libraries |
 | 📊 **Complete network visibility** | No blind spots in RUM data |
 | 🚀 **Zero-config experience** | Better DX, faster integration |
 
 ### For Us
+
 | Benefit | Impact |
 |---------|--------|
 | 🛡️ **Battle-tested approach** | Proven by New (millions of apps) |
