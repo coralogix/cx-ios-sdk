@@ -1153,6 +1153,20 @@ public class URLSessionInstrumentation {
 
       let taskId = idKeyForTask(task)
       if let request = task.currentRequest {
+        // CRITICAL: Inject headers BEFORE task runs (industry-standard approach)
+        // This is the ONLY safe time to modify the request - headers cannot be injected later
+        let shouldInject = shouldInject(for: request)
+        let instrumentedRequest = URLSessionLogger.processAndLogRequest(request,
+                                                                        sessionTaskId: taskId,
+                                                                        instrumentation: self,
+                                                                        shouldInjectHeaders: shouldInject)
+        
+        // Try to inject headers using industry-standard approach (private setCurrentRequest: selector)
+        if shouldInject, let instrumentedRequest = instrumentedRequest {
+          injectHeadersIntoTask(task, request: instrumentedRequest)
+        }
+        
+        // Store request for tracking
         queue.sync(flags: .barrier) {
             if self.requestMap[taskId] == nil {
                 self.requestMap[taskId] = NetworkRequestState()
@@ -1160,7 +1174,7 @@ public class URLSessionInstrumentation {
             self.requestMap[taskId]?.setRequest(request)
         }
 
-        // Handle iOS 15+ async/await - try to inject headers via KVC
+        // Handle iOS 15+ async/await - detect and set up delegate for completion tracking
         if #available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, *) {
           // Try to detect if this is an async/await call
           var isAsyncContext = false
@@ -1170,35 +1184,91 @@ public class URLSessionInstrumentation {
             isAsyncContext = Task.basePriority != nil
           } else {
             // iOS 15: Heuristic - async tasks typically have no delegate
-            let hasDelegate = task.delegate != nil
-            let isRunning = task.state == .running
-            let hasSessionDelegate = (task.value(forKey: "session") as? URLSession)?.delegate != nil
-            isAsyncContext = !hasDelegate && !isRunning && !hasSessionDelegate
+            // Note: task.delegate is only available on iOS 15+
+            if #available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, *) {
+              let hasDelegate = task.delegate != nil
+              let isRunning = task.state == .running
+              let hasSessionDelegate = (task.value(forKey: "session") as? URLSession)?.delegate != nil
+              isAsyncContext = !hasDelegate && !isRunning && !hasSessionDelegate
+            }
           }
           
           if isAsyncContext {
             #if DEBUG
-            Log.testLog("[URLSessionInstrumentation] ✅ Detected async/await context, instrumenting request")
+            Log.testLog("[URLSessionInstrumentation] ✅ Detected async/await context, tracking request")
             #endif
-            let instrumentedRequest = URLSessionLogger.processAndLogRequest(request,
-                                                                            sessionTaskId: taskId,
-                                                                            instrumentation: self,
-                                                                            shouldInjectHeaders: true)
-            if let instrumentedRequest {
-              // Try to inject headers using KVC
-              task.setValue(instrumentedRequest, forKey: "currentRequest")
-            }
+            
+            // Track this task with its ID
             self.setIdKey(value: taskId, for: task)
 
-            // Set fake delegate if needed to capture completion
-            if task.delegate == nil, task.state != .running, (task.value(forKey: "session") as? URLSession)?.delegate == nil {
-              let fakeDelegate = FakeDelegate()
-              fakeDelegate.instrumentation = self
-              task.delegate = fakeDelegate
+            // Set fake delegate if needed to capture completion (iOS 15+ only)
+            if #available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, *) {
+              if task.delegate == nil, task.state != .running, (task.value(forKey: "session") as? URLSession)?.delegate == nil {
+                let fakeDelegate = FakeDelegate()
+                fakeDelegate.instrumentation = self
+                task.delegate = fakeDelegate
+              }
             }
           }
         }
       }
+    }
+    
+    /// Injects headers into a URLSessionTask using industry-standard approach
+    /// 
+    /// This method attempts to modify the task's currentRequest by:
+    /// 1. Checking if currentRequest is already mutable (rare but possible)
+    /// 2. Using the private `setCurrentRequest:` selector if available (most task types support this)
+    /// 3. Gracefully degrading if neither approach works
+    ///
+    /// This is based on the industry-standard implementation used by major APM vendors:
+    /// - Use `setCurrentRequest:` with `respondsToSelector:` safety check
+    /// - Call it dynamically using `methodForSelector`
+    /// - Accept silent failure if the method isn't available
+    ///
+    /// - Parameters:
+    ///   - task: The URLSessionTask to modify
+    ///   - request: The instrumented request with headers to inject
+    private func injectHeadersIntoTask(_ task: URLSessionTask, request: URLRequest) {
+        // Scenario A: currentRequest is already mutable (rare but possible)
+        if let mutableRequest = task.currentRequest as? NSMutableURLRequest {
+            // Easy case - modify directly
+            for (key, value) in request.allHTTPHeaderFields ?? [:] {
+                mutableRequest.setValue(value, forHTTPHeaderField: key)
+            }
+            return
+        }
+        
+        // Scenario B: Use private setCurrentRequest: selector (industry-standard approach)
+        let setCurrentRequestSelector = NSSelectorFromString("setCurrentRequest:")
+        guard task.responds(to: setCurrentRequestSelector) else {
+            // Task doesn't support setCurrentRequest: - headers won't be injected
+            // This is acceptable - some task types may not support header injection
+            Log.d("[URLSessionInstrumentation] Task \(type(of: task)) doesn't respond to setCurrentRequest:, skipping header injection")
+            return
+        }
+        
+        // Create mutable copy with headers from instrumented request
+        guard let currentRequest = task.currentRequest else {
+            Log.d("[URLSessionInstrumentation] No currentRequest available")
+            return
+        }
+        let newRequest = (currentRequest as NSURLRequest).mutableCopy() as! NSMutableURLRequest
+        
+        // Copy headers from instrumented request
+        for (key, value) in request.allHTTPHeaderFields ?? [:] {
+            newRequest.setValue(value, forHTTPHeaderField: key)
+        }
+        
+        // Call setCurrentRequest: dynamically (industry-standard pattern)
+        let setterIMP = task.method(for: setCurrentRequestSelector)
+        typealias SetterFunc = @convention(c) (Any, Selector, URLRequest) -> Void
+        let setter = unsafeBitCast(setterIMP, to: SetterFunc.self)
+        setter(task, setCurrentRequestSelector, newRequest as URLRequest)
+        
+        #if DEBUG
+        Log.d("[URLSessionInstrumentation] ✅ Successfully injected headers into \(type(of: task)) using setCurrentRequest:")
+        #endif
     }
 
     // Helpers
