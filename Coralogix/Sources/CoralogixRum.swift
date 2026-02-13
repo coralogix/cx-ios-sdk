@@ -158,8 +158,20 @@ public class CoralogixRum {
         guard CoralogixRum.isInitialized else { return nil }
         return self.options?.userContext
     }
-    
-    public func setUserContext(userContext: UserContext) {
+
+
+    /// Updates the user context associated with all subsequent telemetry events.
+    ///
+    /// Use this to attach or replace identifying information about the current user
+    /// (such as user ID, name, or email). Passing `nil` clears the existing user context.
+    ///
+    /// Notes:
+    /// - This call has no effect if the SDK has not been initialized.
+    /// - The provided `UserContext` is propagated to the underlying exporter and will
+    ///   be applied to future events only; previously sent data is not modified.
+    ///
+    /// - Parameter userContext: The new user context to associate with telemetry, or `nil` to clear it.
+    public func setUserContext(userContext: UserContext?) {
         guard CoralogixRum.isInitialized else { return }
         self.coralogixExporter?.update(userContext: userContext)
     }
