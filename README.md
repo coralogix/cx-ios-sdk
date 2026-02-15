@@ -10,7 +10,8 @@ The SDK provides mobile Telemetry instrumentation that captures:
 4. Crashes - using PLCrashReporter
 5. Page navigation (Swift use swizzling / SwiftUI use modifier)
 6. User Actions (Clicks - UI elements)
-7. Mobile Vitals (FPS, Application not responding, Cold Start, Warm Start)
+7. ANR (Application Not Responding) detection
+8. Mobile Vitals (FPS, CPU, Memory, Cold Start, Warm Start, Slow/Frozen Frames)
 
 ## Requirements
 
@@ -90,12 +91,11 @@ Turn on/off specific instrumentation, default to true. Each instrumentation is r
                                            application: "APP-NAME",
                                            version: "APP-VERSION",
                                            publicKey: "API-KEY",
-                                           instrumentations: [.navigation: true,
-                                                              .mobileVitals: false,
+                                           instrumentations: [.mobileVitals: true,
                                                               .custom: true,
                                                               .errors: true,
-                                                              .userActions: false,
                                                               .network: true,
+                                                              .userActions: false,
                                                               .anr: true,
                                                               .lifeCycle: false])
 ```
@@ -203,14 +203,14 @@ let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
 ```
 ### Mobile Vitals
 Turn on/off specific Mobile Vitals, default to all trues. Each Mobile Vitals is responsible for which data the SDK will track and collect for you.
+Note: ANR is controlled separately via the `instrumentations` option, not as a mobile vital.
 ```
  let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
                                            environment: "ENVIRONMENT",
                                            application: "APP-NAME",
                                            version: "APP-VERSION",
                                            publicKey: "API-KEY",
-                                           mobileVitals: [.anrDetector: true,
-                                                          .cpuDetector: true,
+                                           mobileVitals: [.cpuDetector: true,
                                                           .warmDetector: true,
                                                           .coldDetector: true,
                                                           .slowFrozenFramesDetector: true,
