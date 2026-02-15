@@ -58,6 +58,6 @@ internal class ANRDetector {
         
         let currentTime = CFAbsoluteTimeGetCurrent()
         let duration = currentTime - lastCheckTimestamp
-        Log.d("[Metric] ANR detected: Main thread unresponsive for \(duration) seconds")
+        Log.d("[Metric] ANR detected: Main thread unresponsive for \(String(format: "%.2f", duration)) seconds")
     }
 }

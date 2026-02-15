@@ -16,12 +16,19 @@ extension CoralogixRum {
         self.metricsManager.anrErrorClosure = { [weak self] errorMessage, errorType in
             self?.reportANRError(errorMessage: errorMessage, errorType: errorType)
         }
+        
+        // Verify closure was set before starting monitoring
+        guard self.metricsManager.anrErrorClosure != nil else {
+            Log.d("[CoralogixRum] Warning: Failed to set anrErrorClosure, ANR monitoring not started")
+            return
+        }
+        
         self.metricsManager.startANRMonitoring()
     }
     
     /// Reports ANR as an error event
     /// - Parameters:
-    ///   - errorMessage: The formatted ANR error message (e.g., "Application Not Responding for at least 5000 ms.")
+    ///   - errorMessage: The ANR error message (e.g., "Application Not Responding")
     ///   - errorType: The error type (always "ANR")
     private func reportANRError(errorMessage: String, errorType: String) {
         var span = makeSpan(event: .error, source: .code, severity: .error)

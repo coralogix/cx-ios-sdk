@@ -34,6 +34,12 @@ final class MetricsManagerTests: XCTestCase {
         let expectation = XCTestExpectation(description: "ANR error closure should be called")
         var receivedErrorMessage: String?
         var receivedErrorType: String?
+        var mobileVitalsWasCalled = false
+        
+        // Set up mobile vitals closure (should NOT be called)
+        metricsManager.metricsManagerClosure = { _ in
+            mobileVitalsWasCalled = true
+        }
         
         // Set up the ANR error closure
         metricsManager.anrErrorClosure = { errorMessage, errorType in
@@ -55,6 +61,9 @@ final class MetricsManagerTests: XCTestCase {
         XCTAssertNotNil(receivedErrorType, "Error type should be received")
         XCTAssertEqual(receivedErrorType, "ANR", "Error type should be 'ANR'")
         XCTAssertEqual(receivedErrorMessage, "Application Not Responding", "Error message should be 'Application Not Responding'")
+        
+        // Verify mobile vitals closure was NOT called
+        XCTAssertFalse(mobileVitalsWasCalled, "Mobile vitals closure should not be called for ANR events")
     }
     
     func testANRDoesNotCallMobileVitalsClosure() {

@@ -21,7 +21,7 @@ public class MetricsManager {
     var slowFrozenFramesDetector: SlowFrozenFramesDetector?
     var fpsDetector = FPSDetector()
     var metricsManagerClosure: (([String: Any]) -> Void)?
-    var anrErrorClosure: ((String, String) -> Void)?  // (errorMessage, errorType) -> Void
+    var anrErrorClosure: ((String, String) -> Void)?
     
     // MARK: - Internal timer for periodic send
     private let sendInterval: TimeInterval = 15.0
@@ -141,8 +141,12 @@ public class MetricsManager {
         let errorType = "ANR"
         
         // Report ANR as error (not mobile vitals)
-        self.anrErrorClosure?(errorMessage, errorType)
+        guard let anrErrorClosure = self.anrErrorClosure else {
+            Log.d("[MetricsManager] Warning: anrErrorClosure not set, ANR event not reported")
+            return
+        }
         
+        anrErrorClosure(errorMessage, errorType)
         Log.d("[MetricsManager] ANR error reported: \(errorMessage)")
     }
     
@@ -236,16 +240,17 @@ class MyMetricSubscriber: NSObject, MXMetricManagerSubscriber {
                 self.metricKitClosure?(vital)
             }
                     
+            // MetricKit payloads - reserved for future implementation
             if payload.applicationLaunchMetrics != nil {
-                // Application launch metrics collected
+                // TODO: Process application launch metrics
             }
             
             if payload.diskIOMetrics != nil {
-                // Disk IO metrics collected
+                // TODO: Process disk I/O metrics
             }
             
             if payload.memoryMetrics != nil {
-                // Memory metrics collected
+                // TODO: Process memory metrics
             }
         }
     }
@@ -254,8 +259,9 @@ class MyMetricSubscriber: NSObject, MXMetricManagerSubscriber {
     @available(iOS 14.0, *)
     public func didReceive(_ payloads: [MXDiagnosticPayload]) {
         for payload in payloads {
+            // MetricKit diagnostics - reserved for future implementation
             if payload.hangDiagnostics != nil {
-                // Hang diagnostics collected
+                // TODO: Process hang diagnostics
             }
         }
     }
