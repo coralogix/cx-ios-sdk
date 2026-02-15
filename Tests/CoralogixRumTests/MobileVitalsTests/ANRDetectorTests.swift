@@ -19,7 +19,7 @@ final class ANRDetectorTests: XCTestCase {
         // Initialize ANRDetector with short intervals for faster testing
         anrDetector = ANRDetector(checkInterval: 0.1, maxBlockTime: 0.5)
         // Set a default ANR handler closure that does nothing, we'll override it in specific tests
-        anrDetector.handleANRClosure = { _ in }
+        anrDetector.handleANRClosure = { }
     }
     
     override func tearDown() {
@@ -54,9 +54,7 @@ final class ANRDetectorTests: XCTestCase {
         expectation = XCTestExpectation(description: "ANR handler should be called")
         
         // Override the ANR handler to fulfill the expectation
-        anrDetector.handleANRClosure = { payload in
-            XCTAssertNotNil(payload, "ANR payload should not be nil")
-            // You can add more assertions here about the payload content if needed
+        anrDetector.handleANRClosure = {
             self.expectation.fulfill()
         }
         
@@ -79,7 +77,7 @@ final class ANRDetectorTests: XCTestCase {
         expectation.isInverted = true // This expectation will pass if not fulfilled
         
         // Override the ANR handler to fail the test if it's called
-        anrDetector.handleANRClosure = { _ in
+        anrDetector.handleANRClosure = {
             XCTFail("ANR handler should not be called when the main thread is responsive")
             self.expectation.fulfill() // Fulfill to make sure the wait doesn't time out
         }
@@ -108,7 +106,7 @@ final class ANRDetectorTests: XCTestCase {
         
         expectation = XCTestExpectation(description: "ANR handler should be called after extended block")
         
-        anrDetector.handleANRClosure = { _ in
+        anrDetector.handleANRClosure = {
             self.expectation.fulfill()
         }
         
@@ -129,23 +127,13 @@ final class ANRDetectorTests: XCTestCase {
         // not necessarily triggered by the timer mechanism, but by directly calling it.
         
         expectation = XCTestExpectation(description: "ANR handler closure should be called")
-        var receivedPayload: [String: Any]?
         
-        anrDetector.handleANRClosure = { payload in
-            receivedPayload = payload
+        anrDetector.handleANRClosure = {
             self.expectation.fulfill()
         }
        
         anrDetector.handleANR()
         
         wait(for: [expectation], timeout: 1.0) // Short timeout as it's a direct call
-        
-        XCTAssertNotNil(receivedPayload, "The ANR handler closure should have been called")
-        XCTAssertTrue(receivedPayload!.keys.contains(Keys.anr.rawValue), "Payload should contain ANR key")
-        if let anrData = receivedPayload?[Keys.anr.rawValue] as? Bool {
-            XCTAssertEqual(anrData, true, "Mobile vitals units should be correct")
-        } else {
-            XCTFail("ANR data structure is incorrect")
-        }
     }
 }

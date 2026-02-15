@@ -1201,13 +1201,12 @@ public class URLSessionInstrumentation {
             // Track this task with its ID
             self.setIdKey(value: taskId, for: task)
 
-            // Set fake delegate if needed to capture completion (iOS 15+ only)
-            if #available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, *) {
-              if task.delegate == nil, task.state != .running, (task.value(forKey: "session") as? URLSession)?.delegate == nil {
-                let fakeDelegate = FakeDelegate()
-                fakeDelegate.instrumentation = self
-                task.delegate = fakeDelegate
-              }
+            // Set fake delegate if needed to capture completion
+            // Note: task.delegate is iOS 15+ (already guaranteed by outer #available)
+            if task.delegate == nil, task.state != .running, (task.value(forKey: "session") as? URLSession)?.delegate == nil {
+              let fakeDelegate = FakeDelegate()
+              fakeDelegate.instrumentation = self
+              task.delegate = fakeDelegate
             }
           }
         }

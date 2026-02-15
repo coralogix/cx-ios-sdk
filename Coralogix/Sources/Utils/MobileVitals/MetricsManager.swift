@@ -21,6 +21,7 @@ public class MetricsManager {
     var slowFrozenFramesDetector: SlowFrozenFramesDetector?
     var fpsDetector = FPSDetector()
     var metricsManagerClosure: (([String: Any]) -> Void)?
+    var anrErrorClosure: ((String, String) -> Void)?  // (errorMessage, errorType) -> Void
     
     // MARK: - Internal timer for periodic send
     private let sendInterval: TimeInterval = 15.0
@@ -129,10 +130,20 @@ public class MetricsManager {
     
     func startANRMonitoring() {
         self.anrDetector = ANRDetector()
-        self.anrDetector?.handleANRClosure = { [weak self] dict in
-            self?.metricsManagerClosure?(dict)
+        self.anrDetector?.handleANRClosure = { [weak self] in
+            self?.handleANREvent()
         }
         self.anrDetector?.startMonitoring()
+    }
+    
+    private func handleANREvent() {
+        let errorMessage = "Application Not Responding"
+        let errorType = "ANR"
+        
+        // Report ANR as error (not mobile vitals)
+        self.anrErrorClosure?(errorMessage, errorType)
+        
+        Log.d("[MetricsManager] ANR error reported: \(errorMessage)")
     }
     
     func startCPUMonitoring() {
@@ -225,15 +236,15 @@ class MyMetricSubscriber: NSObject, MXMetricManagerSubscriber {
                 self.metricKitClosure?(vital)
             }
                     
-            if let applicationLaunchMetric = payload.applicationLaunchMetrics {
+            if payload.applicationLaunchMetrics != nil {
                 // Application launch metrics collected
             }
             
-            if let diskWritesMetric = payload.diskIOMetrics {
+            if payload.diskIOMetrics != nil {
                 // Disk IO metrics collected
             }
             
-            if let memoryMetric = payload.memoryMetrics {
+            if payload.memoryMetrics != nil {
                 // Memory metrics collected
             }
         }
@@ -243,7 +254,7 @@ class MyMetricSubscriber: NSObject, MXMetricManagerSubscriber {
     @available(iOS 14.0, *)
     public func didReceive(_ payloads: [MXDiagnosticPayload]) {
         for payload in payloads {
-            if let hangDiagnostics = payload.hangDiagnostics {
+            if payload.hangDiagnostics != nil {
                 // Hang diagnostics collected
             }
         }
