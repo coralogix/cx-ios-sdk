@@ -21,6 +21,7 @@ public class MetricsManager {
     var slowFrozenFramesDetector: SlowFrozenFramesDetector?
     var fpsDetector = FPSDetector()
     var metricsManagerClosure: (([String: Any]) -> Void)?
+    var anrErrorClosure: ((String, String) -> Void)?
     
     // MARK: - Internal timer for periodic send
     private let sendInterval: TimeInterval = 15.0
@@ -129,10 +130,24 @@ public class MetricsManager {
     
     func startANRMonitoring() {
         self.anrDetector = ANRDetector()
-        self.anrDetector?.handleANRClosure = { [weak self] dict in
-            self?.metricsManagerClosure?(dict)
+        self.anrDetector?.handleANRClosure = { [weak self] in
+            self?.handleANREvent()
         }
         self.anrDetector?.startMonitoring()
+    }
+    
+    private func handleANREvent() {
+        let errorMessage = "Application Not Responding"
+        let errorType = "ANR"
+        
+        // Report ANR as error (not mobile vitals)
+        guard let anrErrorClosure = self.anrErrorClosure else {
+            Log.d("[MetricsManager] Warning: anrErrorClosure not set, ANR event not reported")
+            return
+        }
+        
+        anrErrorClosure(errorMessage, errorType)
+        Log.d("[MetricsManager] ANR error reported: \(errorMessage)")
     }
     
     func startCPUMonitoring() {
@@ -225,16 +240,17 @@ class MyMetricSubscriber: NSObject, MXMetricManagerSubscriber {
                 self.metricKitClosure?(vital)
             }
                     
-            if let applicationLaunchMetric = payload.applicationLaunchMetrics {
-                // Application launch metrics collected
+            // MetricKit payloads - reserved for future implementation
+            if payload.applicationLaunchMetrics != nil {
+                // TODO: Process application launch metrics
             }
             
-            if let diskWritesMetric = payload.diskIOMetrics {
-                // Disk IO metrics collected
+            if payload.diskIOMetrics != nil {
+                // TODO: Process disk I/O metrics
             }
             
-            if let memoryMetric = payload.memoryMetrics {
-                // Memory metrics collected
+            if payload.memoryMetrics != nil {
+                // TODO: Process memory metrics
             }
         }
     }
@@ -243,8 +259,9 @@ class MyMetricSubscriber: NSObject, MXMetricManagerSubscriber {
     @available(iOS 14.0, *)
     public func didReceive(_ payloads: [MXDiagnosticPayload]) {
         for payload in payloads {
-            if let hangDiagnostics = payload.hangDiagnostics {
-                // Hang diagnostics collected
+            // MetricKit diagnostics - reserved for future implementation
+            if payload.hangDiagnostics != nil {
+                // TODO: Process hang diagnostics
             }
         }
     }

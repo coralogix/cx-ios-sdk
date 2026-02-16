@@ -104,6 +104,7 @@ extension CoralogixRum {
             spanBuilder.setAttribute(key: Keys.sessionId.rawValue, value: sessionMetadata.sessionId)
             spanBuilder.setAttribute(key: Keys.sessionCreationDate.rawValue, value: String(Int(sessionMetadata.sessionCreationDate)))
         }
+
     }
     
     private func receivedResponse(response: URLResponse, data: DataOrFile?, span: any Span) {

@@ -10,7 +10,8 @@ The SDK provides mobile Telemetry instrumentation that captures:
 4. Crashes - using PLCrashReporter
 5. Page navigation (Swift use swizzling / SwiftUI use modifier)
 6. User Actions (Clicks - UI elements)
-7. Mobile Vitals (FPS, Application not responding, Cold Start, Warm Start)
+7. ANR (Application Not Responding) detection
+8. Mobile Vitals (FPS, CPU, Memory, Cold Start, Warm Start, Slow/Frozen Frames)
 
 ## Requirements
 
@@ -84,25 +85,24 @@ struct DemoAppApp: App {
 ```
 ### Instrumentations
 Turn on/off specific instrumentation, default to true. Each instrumentation is responsible for which data the SDK will track and collect for you.
-```
+```swift
  let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
                                            environment: "ENVIRONMENT",
                                            application: "APP-NAME",
                                            version: "APP-VERSION",
                                            publicKey: "API-KEY",
-                                           instrumentations: [.navigation: true,
-                                                              .mobileVitals: false,
+                                           instrumentations: [.mobileVitals: true,
                                                               .custom: true,
                                                               .errors: true,
-                                                              .userActions: false,
                                                               .network: true,
+                                                              .userActions: false,
                                                               .anr: true,
                                                               .lifeCycle: false])
 ```
 
 ### Ignore Errors
 The ignoreErrors option allows you to exclude errors that meet specific criteria. This option accepts a set of strings and regular expressions to match against the event's error message. Use regular expressions for exact matching as strings remove partial matches.
-```
+```swift
  let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
                                         environment: "ENVIRONMENT",
                                         application: "APP-NAME",
@@ -114,7 +114,7 @@ The ignoreErrors option allows you to exclude errors that meet specific criteria
 ### Ignore Urls
 The ignoreUrls option allows you to exclude network requests that meet specific criteria. This options accepts a set of strings and regular expressions to match against the event's network url. Use regular expressions for exact matching as strings remove partial matches.
 
-```
+```swift
 let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
                                         environment: "ENVIRONMENT",
                                         application: "APP-NAME",
@@ -125,7 +125,7 @@ let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
 
 ### Label Providers
 Provide labels based on url or event
-```
+```swift
 let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
                                         environment: "ENVIRONMENT",
                                         application: "APP-NAME",
@@ -136,7 +136,7 @@ let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
 
 ### CollectIPData
 Determines whether the SDK should collect the user's IP address and corresponding geolocation data. Defaults to true.
-```
+```swift
 let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
                                         environment: "ENVIRONMENT",
                                         application: "APP-NAME",
@@ -147,7 +147,7 @@ let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
 
 ### Sample Rate
 Number between 0-100 as a percentage of SDK sessions should be initialized.
-```
+```swift
 let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
                                         environment: "ENVIRONMENT",
                                         application: "APP-NAME",
@@ -158,7 +158,7 @@ let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
 
 ### Mobile Vitals FPS Sample Rate
 The time interval the SDK will run the FPS sampling in an hour. Default is every 1 minute.
-```
+```swift
 let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
                                         environment: "ENVIRONMENT",
                                         application: "APP-NAME",
@@ -169,7 +169,7 @@ let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
   
 ### Before Send
 Enable event access and modification before sending to Coralogix, supporting content modification.
-```
+```swift
 let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
                                         environment: "ENVIRONMENT",
                                         application: "APP-NAME",
@@ -185,7 +185,7 @@ let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
         })
 ```
 , and event discarding
-```
+```swift
 let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
                                         environment: "ENVIRONMENT",
                                         application: "APP-NAME",
@@ -203,14 +203,14 @@ let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
 ```
 ### Mobile Vitals
 Turn on/off specific Mobile Vitals, default to all trues. Each Mobile Vitals is responsible for which data the SDK will track and collect for you.
-```
+Note: ANR is controlled separately via the `instrumentations` option, not as a mobile vital.
+```swift
  let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
                                            environment: "ENVIRONMENT",
                                            application: "APP-NAME",
                                            version: "APP-VERSION",
                                            publicKey: "API-KEY",
-                                           mobileVitals: [.anrDetector: true,
-                                                          .cpuDetector: true,
+                                           mobileVitals: [.cpuDetector: true,
                                                           .warmDetector: true,
                                                           .coldDetector: true,
                                                           .slowFrozenFramesDetector: true,
