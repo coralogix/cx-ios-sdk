@@ -347,6 +347,22 @@ public class SessionReplay: SessionReplayInterface {
         var updatedProperties = properties ?? [:]
         updatedProperties[Keys.timestamp.rawValue] = Date().timeIntervalSince1970
         
+        // Fix: Get next screenshot location for manual captures to prevent file naming collisions
+        // Manual captures need unique segment indices to avoid overwriting each other
+        if updatedProperties[Keys.segmentIndex.rawValue] == nil || 
+           updatedProperties[Keys.page.rawValue] == nil {
+            let locationProps = coralogixSdk.getNextScreenshotLocationProperties()
+            
+            if updatedProperties[Keys.segmentIndex.rawValue] == nil {
+                updatedProperties[Keys.segmentIndex.rawValue] = locationProps[Keys.segmentIndex.rawValue]
+            }
+            if updatedProperties[Keys.page.rawValue] == nil {
+                updatedProperties[Keys.page.rawValue] = locationProps[Keys.page.rawValue]
+            }
+            
+            Log.d("[SessionReplay] Manual capture assigned location: page=\(updatedProperties[Keys.page.rawValue] ?? "nil"), segment=\(updatedProperties[Keys.segmentIndex.rawValue] ?? "nil")")
+        }
+        
         if sessionReplayOptions.recordingType == .image {
             guard sessionReplayModel.isRecording else {
                 Log.e("[SessionReplay] Session Replay not recording ...")
