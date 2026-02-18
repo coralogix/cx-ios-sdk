@@ -11,6 +11,8 @@ import UIKit
 import CoralogixInternal
 
 /// CPU usage of *your app* as a % of total device CPU (all cores).
+/// Values can exceed 100% when app saturates multiple cores (e.g., 200% = 2 cores fully used).
+/// This matches Apple Instruments behavior.
 final class CPUDetector {
     private var timer: Timer?
     internal var isRunning = false
@@ -28,7 +30,7 @@ final class CPUDetector {
     var handleCpuClosure: (() -> Void)?
     
     // MARK: - Stored samples (per-interval)
-    internal var usageSamples: [Double] = []          // percent 0...100
+    internal var usageSamples: [Double] = []          // percent (can exceed 100% for multi-core saturation)
     internal var totalCpuDeltaMsSamples: [Double] = [] // process CPU delta ms in interval
     internal var mainThreadDeltaMsSamples: [Double] = [] // main-thread CPU delta ms in interval
 
@@ -132,7 +134,10 @@ final class CPUDetector {
         lastWallSeconds = wall
         lastMainMs = mainNow
         // Per-interval metrics
-        let usagePct = min(max((dProc / (dWall * cpuCount)) * 100.0, 0), 100)
+        // Note: Can exceed 100% when app saturates multiple cores (e.g., 200% = 2 cores fully used)
+        // This matches Apple Instruments behavior and enables detection of CPU-intensive workloads
+        // See CX-31663 for analysis and rationale
+        let usagePct = max((dProc / (dWall * cpuCount)) * 100.0, 0)
         let totalCpuDeltaMs = dProc * 1000.0 // convert sec -> ms
         
         guard usagePct.isFinite, totalCpuDeltaMs.isFinite, dMain.isFinite else { return }
