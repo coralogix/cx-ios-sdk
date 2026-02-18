@@ -36,8 +36,10 @@ final class MemoryDetectorTests: XCTestCase {
         }
         XCTAssertGreaterThanOrEqual(m.footprintMB, 0, "footprintMB should be ≥ 0")
         XCTAssertGreaterThanOrEqual(m.residentMB, 0, "residentMB should be ≥ 0")
-        XCTAssertTrue((0.0...100.0).contains(m.utilizationPercent),
-                      "utilizationPercent should be clamped to [0, 100]")
+        XCTAssertGreaterThanOrEqual(m.utilizationPercent, 0,
+                                    "utilizationPercent should be ≥ 0 (cap removed per CX-31664)")
+        XCTAssertLessThan(m.utilizationPercent, 100,
+                          "Under normal conditions, memory utilization should be < 100%")
     }
     
     func testStatsDictionary_withDefaultValues_returnsCorrectDictionary() {

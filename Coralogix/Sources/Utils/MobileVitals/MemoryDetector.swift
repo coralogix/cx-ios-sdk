@@ -14,7 +14,9 @@ public struct MemoryMeasurement {
     public let footprintMB: Double
     /// Traditional RSS (in MB), optional/for reference.
     public let residentMB: Double
-    /// Percentage of device RAM used (based on footprint).
+    /// App memory footprint as % of total device physical RAM.
+    /// Note: iOS reserves 1-2GB for system, so practical app maximum is ~70-80%.
+    /// Values >100% should not occur but cap removed to avoid hiding measurement errors.
     public let utilizationPercent: Double
 }
 
@@ -29,7 +31,7 @@ final class MemoryDetector {
     // MARK: - Stored samples (instantaneous per sample)
     internal var footprintSamples: [Double] = []       // MB
     internal var residentSamples: [Double] = []        // MB
-    internal var utilizationSamples: [Double] = []     // %
+    internal var utilizationSamples: [Double] = []     // % of total device RAM
 
     // MARK: - Public stats
     // Footprint (MB)
@@ -139,6 +141,10 @@ final class MemoryDetector {
         let residentMB  = Double(vm.resident_size) / bytesPerMB
         let totalRAMMB  = Double(ProcessInfo.processInfo.physicalMemory) / bytesPerMB
 
+        // Memory utilization as % of total device physical RAM
+        // Note: iOS reserves ~1-2GB for system, so app footprint relative to total device capacity
+        // Cap removed to avoid hiding measurement errors (values >100% theoretically impossible)
+        // See CX-31664 for analysis and rationale
         let util = totalRAMMB > 0
             ? (footprintMB / totalRAMMB) * 100.0
             : 0.0
@@ -146,7 +152,7 @@ final class MemoryDetector {
         return MemoryMeasurement(
             footprintMB: footprintMB,
             residentMB: residentMB,
-            utilizationPercent: min(max(util, 0), 100)
+            utilizationPercent: max(util, 0)
         )
     }
     
