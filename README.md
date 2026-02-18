@@ -219,6 +219,16 @@ These intervals are optimized for battery efficiency while capturing all importa
 
 > **Note:** Prior to v2.2.0, the SDK exposed (non-functional) configuration parameters for these intervals. These have been removed as they were never actually used.
 
+#### Understanding Mobile Vitals Metrics
+
+**Memory Utilization:**
+- Calculated as: `(app footprint / total device physical RAM) × 100%`
+- Example: 500MB footprint on 6GB device = 8.3%
+- Note: iOS reserves 1-2GB for system processes, so practical app maximum is typically 70-80%
+- Apps exceeding ~80% utilization risk receiving memory warnings from iOS and may be terminated if memory pressure continues
+- The SDK reports utilization relative to total device capacity (matching iOS Instruments behavior)
+- **Edge case:** Values >100% are theoretically impossible but the cap was removed to surface measurement anomalies. If you observe >100% readings, treat them as flags for investigation (likely indicating measurement timing issues, device reporting quirks, or transient OS behavior) rather than literal memory usage
+
 ### Session Recording
 See the [Session Recording Guide](SessionReplay/Sources/Docs/README.md) for installation steps and examples.
 
