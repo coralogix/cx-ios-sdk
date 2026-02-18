@@ -180,11 +180,10 @@ class CxRumBuilderTests: XCTestCase {
                                            application: "TestApp-iOS",
                                            version: "1.0",
                                            publicKey: "token",
-                                           ignoreUrls: [], //[".*\\.il$", "https://www.coralogix.com/academy"],
-                                           ignoreErrors: [], //[".*errorcode=.*", "Im cusom Error"],
-                                           labels: ["key": "value"],
-                                           fpsSampleRate: 100,
-                                           debug: true)
+                                          ignoreUrls: [], //[".*\\.il$", "https://www.coralogix.com/academy"],
+                                          ignoreErrors: [], //[".*errorcode=.*", "Im cusom Error"],
+                                          labels: ["key": "value"],
+                                          debug: true)
         
         guard let options = options else { return nil }
         

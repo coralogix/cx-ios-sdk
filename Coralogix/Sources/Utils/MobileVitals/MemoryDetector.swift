@@ -21,7 +21,10 @@ public struct MemoryMeasurement {
 final class MemoryDetector {
     private var timer: Timer?
     private var isRunning = false
-    private let defaultInterval: TimeInterval = 0.1
+    // Battery-optimized: 1s interval captures all memory trends while reducing sampling by 10×
+    // Memory changes slowly (seconds), so 1s provides accurate min/max/avg/p95 statistics
+    // See CX-31659 for analysis and rationale
+    private let defaultInterval: TimeInterval = 1.0
     
     // MARK: - Stored samples (instantaneous per sample)
     internal var footprintSamples: [Double] = []       // MB
@@ -89,11 +92,12 @@ final class MemoryDetector {
         let t = Timer.scheduledTimer(withTimeInterval: defaultInterval, repeats: true) { [weak self] _ in
             self?.sampleOnce()
         }
-        t.tolerance = 1.0 // minute-level sampling can tolerate some slack
+        // Allow 1s tolerance for timer firing - battery-friendly for 1-second sampling
+        t.tolerance = 1.0
         RunLoop.main.add(t, forMode: .common)
         timer = t
         
-        // Trigger an immediate first sample (optional; comment out if you want to wait a minute)
+        // Trigger an immediate first sample to avoid waiting for the first 1-second interval
         sampleOnce()
     }
     
