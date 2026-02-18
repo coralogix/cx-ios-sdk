@@ -86,9 +86,9 @@ final class CPUDetectorTests: XCTestCase {
     }
     
     func testCPUUsageCanExceed100Percent_forMultiCoreSaturation() {
-        // Given: Simulated multi-core saturation (CPU usage > 100%)
-        // This can happen when app uses 2+ cores simultaneously
-        // Example: 120% = ~1.2 cores fully saturated, 200% = 2 cores fully saturated
+        // Given: CPU usage samples with values > 100%
+        // Note: Formula normalizes by cpuCount, so 100% = all cores saturated
+        // Values >100% can occur due to timing jitter or brief measurement anomalies
         sut.usageSamples = [80.0, 95.0, 120.0, 140.0, 105.0]
         sut.totalCpuDeltaMsSamples = [800, 950, 1200, 1400, 1050].map { Double($0) }
         sut.mainThreadDeltaMsSamples = [100, 120, 150, 180, 130].map { Double($0) }
@@ -102,16 +102,16 @@ final class CPUDetectorTests: XCTestCase {
             return
         }
         
-        // Max should be 140%, not capped at 100%
+        // Max should be 140%, not artificially capped at 100%
         XCTAssertEqual(cpuUsage[Keys.max.rawValue] as? Double, 140.0, 
-                       "Max CPU should allow values > 100% to detect multi-core saturation")
+                       "Max CPU should allow values > 100% from timing jitter")
         
-        // Min should still be normal range
+        // Min should be in normal range
         XCTAssertEqual(cpuUsage[Keys.min.rawValue] as? Double, 80.0)
         
         // Avg should be 108%, not capped
         XCTAssertEqual(cpuUsage[Keys.avg.rawValue] as? Double, 108.0,
-                       "Avg CPU should reflect actual multi-core usage")
+                       "Avg CPU should reflect actual measurements including jitter")
         
         // P95 should be 140%, not capped at 100%
         XCTAssertEqual(cpuUsage[Keys.p95.rawValue] as? Double, 140.0,
