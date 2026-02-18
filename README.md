@@ -217,6 +217,8 @@ Mobile vitals are sampled at fixed, battery-optimized intervals:
 
 These intervals are optimized for battery efficiency while capturing all important performance trends. The 1-second sampling provides accurate statistics (min/max/avg/p95) for monitoring without excessive battery drain.
 
+> **Note:** Prior to v2.2.0, the SDK exposed (non-functional) configuration parameters for these intervals. These have been removed as they were never actually used.
+
 ### Session Recording
 See the [Session Recording Guide](SessionReplay/Sources/Docs/README.md) for installation steps and examples.
 
