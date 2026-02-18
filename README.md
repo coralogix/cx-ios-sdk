@@ -211,7 +211,7 @@ Note: ANR is controlled separately via the `instrumentations` option, not as a m
 
 Mobile vitals are sampled at fixed, battery-optimized intervals:
 
-- **FPS**: 1 second (real-time per-frame tracking via CADisplayLink)
+- **FPS**: Continuous per-frame tracking via CADisplayLink (~60Hz) with 1-second aggregation/reporting
 - **CPU**: 1 second
 - **Memory**: 1 second
 

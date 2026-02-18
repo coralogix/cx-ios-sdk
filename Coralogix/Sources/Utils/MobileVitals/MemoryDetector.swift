@@ -92,11 +92,12 @@ final class MemoryDetector {
         let t = Timer.scheduledTimer(withTimeInterval: defaultInterval, repeats: true) { [weak self] _ in
             self?.sampleOnce()
         }
-        t.tolerance = 1.0 // minute-level sampling can tolerate some slack
+        // Allow 1s tolerance for timer firing - battery-friendly for 1-second sampling
+        t.tolerance = 1.0
         RunLoop.main.add(t, forMode: .common)
         timer = t
         
-        // Trigger an immediate first sample (optional; comment out if you want to wait a minute)
+        // Trigger an immediate first sample to avoid waiting for the first 1-second interval
         sampleOnce()
     }
     
