@@ -669,7 +669,6 @@ final class CoralogixRumTests: XCTestCase {
             publicKey: "token",
             ignoreUrls: [],
             ignoreErrors: [],
-            fpsSampleRate: 100,
             debug: true
         )
         

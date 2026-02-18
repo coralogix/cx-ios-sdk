@@ -156,17 +156,6 @@ let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
                                         sampleRate: 100)
 ```
 
-### Mobile Vitals FPS Sample Rate
-The time interval the SDK will run the FPS sampling in an hour. Default is every 1 minute.
-```swift
-let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
-                                        environment: "ENVIRONMENT",
-                                        application: "APP-NAME",
-                                        version: "APP-VERSION",
-                                        publicKey: "API-KEY",
-                                        mobileVitalsFPSSamplingRate: 60)
-```
-  
 ### Before Send
 Enable event access and modification before sending to Coralogix, supporting content modification.
 ```swift
@@ -217,6 +206,16 @@ Note: ANR is controlled separately via the `instrumentations` option, not as a m
                                                           .memoryDetector: true,
                                                           .renderingDetector: true])
 ```
+
+#### Mobile Vitals Sampling Intervals
+
+Mobile vitals are sampled at fixed, battery-optimized intervals:
+
+- **FPS**: 1 second (real-time per-frame tracking via CADisplayLink)
+- **CPU**: 1 second
+- **Memory**: 1 second
+
+These intervals are optimized for battery efficiency while capturing all important performance trends. The 1-second sampling provides accurate statistics (min/max/avg/p95) for monitoring without excessive battery drain.
 
 ### Session Recording
 See the [Session Recording Guide](SessionReplay/Sources/Docs/README.md) for installation steps and examples.

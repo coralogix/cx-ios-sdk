@@ -21,7 +21,9 @@ public struct MemoryMeasurement {
 final class MemoryDetector {
     private var timer: Timer?
     private var isRunning = false
-    private let defaultInterval: TimeInterval = 0.1
+    // Battery-optimized: 1s interval captures all memory trends while reducing sampling by 10×
+    // Memory changes slowly (seconds), so 1s provides accurate min/max/avg/p95 statistics
+    private let defaultInterval: TimeInterval = 1.0
     
     // MARK: - Stored samples (instantaneous per sample)
     internal var footprintSamples: [Double] = []       // MB

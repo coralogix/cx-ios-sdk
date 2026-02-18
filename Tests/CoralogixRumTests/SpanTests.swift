@@ -51,11 +51,10 @@ final class SpanTests: XCTestCase {
                                            application: "TestApp-iOS",
                                            version: "1.0",
                                            publicKey: "token",
-                                           ignoreUrls: [], //[".*\\.il$", "https://www.coralogix.com/academy"],
-                                           ignoreErrors: [], //[".*errorcode=.*", "Im cusom Error"],
-                                           labels: ["key": "value"],
-                                           fpsSampleRate: 100,
-                                           debug: true)
+                                          ignoreUrls: [], //[".*\\.il$", "https://www.coralogix.com/academy"],
+                                          ignoreErrors: [], //[".*errorcode=.*", "Im cusom Error"],
+                                          labels: ["key": "value"],
+                                          debug: true)
     }
     
     override func tearDownWithError() throws {
@@ -323,11 +322,10 @@ final class SpanTests: XCTestCase {
                                                application: "TestApp-iOS",
                                                version: "1.0",
                                                publicKey: "token",
-                                               ignoreUrls: [], //[".*\\.il$", "https://www.coralogix.com/academy"],
-                                               ignoreErrors: [], //[".*errorcode=.*", "Im cusom Error"],
-                                               labels: ["key": "value"],
-                                               fpsSampleRate: 100,
-                                               beforeSend:{ cxRum in
+                                              ignoreUrls: [], //[".*\\.il$", "https://www.coralogix.com/academy"],
+                                              ignoreErrors: [], //[".*errorcode=.*", "Im cusom Error"],
+                                              labels: ["key": "value"],
+                                              beforeSend:{ cxRum in
             var editableCxRum = cxRum
             if var sessionContext = editableCxRum["session_context"] as? [String: Any] {
                 sessionContext["user_email"] = "jone.dow@coralogix.com"

@@ -60,15 +60,6 @@ public struct CoralogixExporterOptions {
     /// Number between 0-100 as a precentage of SDK should be init.
     var sdkSampler: SDKSampler
     
-    /// Seconds between FPS samples. Default: 300s (~5 minutes).
-    let fpsSampleRate: TimeInterval
-    
-    /// Seconds between Memory samples. Default: 60s.
-    let memoryUsageSampleRate: TimeInterval
-    
-    /// Seconds between CPU samples. Default: 60s.
-    let cpuUsageSampleRate: TimeInterval
-    
     /// A list of instruments that you wish to switch off during runtime. all instrumentations are active by default.
     var instrumentations: [InstrumentationType: Bool]?
     
@@ -106,9 +97,6 @@ public struct CoralogixExporterOptions {
                 ignoreErrors: [String]? = nil,
                 labels: [String: Any]? = nil,
                 sessionSampleRate: Int = 100, // percent (0–100)
-                memoryUsageSampleRate: TimeInterval = 60, // seconds
-                cpuUsageSampleRate: TimeInterval = 60, // seconds
-                fpsSampleRate: TimeInterval = 300, // seconds (5 minutes)
                 instrumentations: [InstrumentationType: Bool]? = nil,
                 collectIPData: Bool = true,
                 beforeSend: (([String: Any]) -> [String: Any]?)? = nil,
@@ -128,9 +116,6 @@ public struct CoralogixExporterOptions {
         self.version = version
         self.labels = labels
         self.sdkSampler = SDKSampler(sampleRate: sessionSampleRate)
-        self.fpsSampleRate = fpsSampleRate
-        self.memoryUsageSampleRate = memoryUsageSampleRate
-        self.cpuUsageSampleRate = cpuUsageSampleRate
         self.instrumentations = instrumentations
         self.collectIPData = collectIPData
         self.beforeSend = beforeSend
@@ -158,9 +143,6 @@ public struct CoralogixExporterOptions {
         initData[Keys.ignoreErrors.rawValue] = self.ignoreErrors
         initData[Keys.labels.rawValue] = self.labels
         initData[Keys.sessionSampleRate.rawValue] = self.sdkSampler.sampleRate
-        initData[Keys.fpsSampleRate.rawValue] = self.fpsSampleRate
-        initData[Keys.memoryUsageSampleRate.rawValue] = self.memoryUsageSampleRate
-        initData[Keys.cpuUsageSampleRate.rawValue] = self.cpuUsageSampleRate
         initData[Keys.instrumentations.rawValue] = self.getStatesAsDictionary(from: self.instrumentations)
         initData[Keys.collectIPData.rawValue] = self.collectIPData
         initData[Keys.enableSwizzling.rawValue] = self.enableSwizzling
