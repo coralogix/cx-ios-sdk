@@ -40,6 +40,7 @@ final class CPUDetectorTests: XCTestCase {
     }
     
     func testStatsDictionary_withDefaultValues_returnsCorrectDictionary() {
+        // Test with normal CPU usage (< 100%)
         sut.usageSamples = [10.0, 20.0, 5.0, 30.0, 15.0]
         sut.totalCpuDeltaMsSamples = [100, 200, 50, 300, 150].map { Double($0) }
         sut.mainThreadDeltaMsSamples = [50, 100, 25, 150, 75].map { Double($0) }
@@ -82,5 +83,38 @@ final class CPUDetectorTests: XCTestCase {
         XCTAssertEqual(mainThreadCpuTime[Keys.max.rawValue] as? Double, 150.0)
         XCTAssertEqual(mainThreadCpuTime[Keys.avg.rawValue] as? Double, 80.0)
         XCTAssertEqual(mainThreadCpuTime[Keys.p95.rawValue] as? Double, 150.0)
+    }
+    
+    func testCPUUsageCanExceed100Percent_forMultiCoreSaturation() {
+        // Given: CPU usage samples with values > 100%
+        // Note: Formula normalizes by cpuCount, so 100% = all cores saturated
+        // Values >100% can occur due to timing jitter or brief measurement anomalies
+        sut.usageSamples = [80.0, 95.0, 120.0, 140.0, 105.0]
+        sut.totalCpuDeltaMsSamples = [800, 950, 1200, 1400, 1050].map { Double($0) }
+        sut.mainThreadDeltaMsSamples = [100, 120, 150, 180, 130].map { Double($0) }
+        
+        // When
+        let stats = sut.statsDictionary()
+        
+        // Then: Should report actual values > 100%, not capped
+        guard let cpuUsage = stats[MobileVitalsType.cpuUsage.stringValue] as? [String: Any] else {
+            XCTFail("CPU Usage section is missing")
+            return
+        }
+        
+        // Max should be 140%, not artificially capped at 100%
+        XCTAssertEqual(cpuUsage[Keys.max.rawValue] as? Double, 140.0, 
+                       "Max CPU should allow values > 100% from timing jitter")
+        
+        // Min should be in normal range
+        XCTAssertEqual(cpuUsage[Keys.min.rawValue] as? Double, 80.0)
+        
+        // Avg should be 108%, not capped
+        XCTAssertEqual(cpuUsage[Keys.avg.rawValue] as? Double, 108.0,
+                       "Avg CPU should reflect actual measurements including jitter")
+        
+        // P95 should be 140%, not capped at 100%
+        XCTAssertEqual(cpuUsage[Keys.p95.rawValue] as? Double, 140.0,
+                       "P95 CPU should allow values > 100%")
     }
 }
