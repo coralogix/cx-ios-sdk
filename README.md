@@ -229,6 +229,13 @@ These intervals are optimized for battery efficiency while capturing all importa
 - The SDK reports utilization relative to total device capacity (matching iOS Instruments behavior)
 - **Edge case:** Values >100% are theoretically impossible but the cap was removed to surface measurement anomalies. If you observe >100% readings, treat them as flags for investigation (likely indicating measurement timing issues, device reporting quirks, or transient OS behavior) rather than literal memory usage
 
+**Slow and Frozen Frames:**
+- **Slow frames**: Frame render time exceeds expected budget + 3% tolerance (e.g., >17.2ms on 60Hz display)
+- **Frozen frames**: Frame render time >= 700ms (causes perceivable UI freeze)
+- The 700ms frozen frame threshold aligns with ANR detection, providing consistent "unresponsive UI" definition across the SDK
+- Thresholds automatically adapt to display refresh rate (60Hz standard, 120Hz ProMotion)
+- Industry comparison: Apple recommends 250ms, Firebase uses 400ms, Sentry/Coralogix use 700ms (aligned with ANR)
+
 ### Session Recording
 See the [Session Recording Guide](SessionReplay/Sources/Docs/README.md) for installation steps and examples.
 
