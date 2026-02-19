@@ -234,11 +234,7 @@ public enum Keys: String {
     case collectIPData
     case sessionSampleRate
     case traceParentInHeader
-    case fpsSampleRate
-    case memoryUsageSampleRate
-    case cpuUsageSampleRate
     case debug
-    case ignoredClassPrefixes
     case proxyUrl
     case enableSwizzling
     case beforeSend

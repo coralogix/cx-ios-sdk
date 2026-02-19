@@ -28,11 +28,10 @@ final class CoralogixExporterTests: XCTestCase {
                                            application: "TestApp-iOS",
                                            version: "1.0",
                                            publicKey: "token",
-                                           ignoreUrls: [], //[".*\\.il$", "https://www.coralogix.com/academy"],
-                                           ignoreErrors: [], //[".*errorcode=.*", "Im cusom Error"],
-                                           labels: ["item" : "banana", "itemPrice" : 1000],
-                                           fpsSampleRate: 100,
-                                           debug: true)
+                                          ignoreUrls: [], //[".*\\.il$", "https://www.coralogix.com/academy"],
+                                          ignoreErrors: [], //[".*errorcode=.*", "Im cusom Error"],
+                                          labels: ["item" : "banana", "itemPrice" : 1000],
+                                          debug: true)
         let coralogixRum = CoralogixRum(options: options!)
         coralogixExporter = coralogixRum.coralogixExporter
         
@@ -45,7 +44,9 @@ final class CoralogixExporterTests: XCTestCase {
                                              Keys.environment.rawValue: AttributeValue("prod"),
                                              Keys.userId.rawValue: AttributeValue("12345"),
                                              Keys.userName.rawValue: AttributeValue("John Doe"),
-                                             Keys.userEmail.rawValue: AttributeValue("john.doe@example.com"),],
+                                             Keys.userEmail.rawValue: AttributeValue("john.doe@example.com"),
+                                             Keys.sessionId.rawValue: AttributeValue("session_001"),
+                                             Keys.sessionCreationDate.rawValue: AttributeValue(1609459200)],
                                 startTime: statTime, endTime: endTime, spanId: "span123",
                                 traceId: "trace123", name: "testSpan", kind: 1,
                                 statusCode: ["status": "ok"],
@@ -64,6 +65,8 @@ final class CoralogixExporterTests: XCTestCase {
                                              Keys.userId.rawValue: AttributeValue("12345"),
                                              Keys.userName.rawValue: AttributeValue("John Doe"),
                                              Keys.userEmail.rawValue: AttributeValue("john.doe@example.com"),
+                                             Keys.sessionId.rawValue: AttributeValue("session_001"),
+                                             Keys.sessionCreationDate.rawValue: AttributeValue(1609459200),
                                              SemanticAttributes.httpUrl.rawValue: AttributeValue("https://ingress.us2.rum-ingress-coralogix.com/browser/v1beta/logs")],
                                 startTime: statTime, endTime: endTime, spanId: "span123",
                                 traceId: "trace123", name: "testSpan", kind: 1,
@@ -84,6 +87,8 @@ final class CoralogixExporterTests: XCTestCase {
                                              Keys.userId.rawValue: AttributeValue("12345"),
                                              Keys.userName.rawValue: AttributeValue("John Doe"),
                                              Keys.userEmail.rawValue: AttributeValue("john.doe@example.com"),
+                                             Keys.sessionId.rawValue: AttributeValue("session_001"),
+                                             Keys.sessionCreationDate.rawValue: AttributeValue(1609459200),
                                              SemanticAttributes.httpUrl.rawValue: AttributeValue("https://coralogix.com")],
                                 startTime: statTime, endTime: endTime, spanId: "span123",
                                 traceId: "trace123", name: "testSpan", kind: 1,
@@ -102,11 +107,10 @@ final class CoralogixExporterTests: XCTestCase {
                                            application: "TestApp-iOS",
                                            version: "1.0",
                                            publicKey: "token",
-                                           ignoreUrls: ["https://ignore.com"],
-                                           ignoreErrors: [],
-                                           labels: ["item" : "banana", "itemPrice" : 1000],
-                                           fpsSampleRate: 100,
-                                           debug: true)
+                                          ignoreUrls: ["https://ignore.com"],
+                                          ignoreErrors: [],
+                                          labels: ["item" : "banana", "itemPrice" : 1000],
+                                          debug: true)
         let coralogixRum = CoralogixRum(options: options!)
         coralogixExporter = coralogixRum.coralogixExporter
         
@@ -117,6 +121,8 @@ final class CoralogixExporterTests: XCTestCase {
                                              Keys.userId.rawValue: AttributeValue("12345"),
                                              Keys.userName.rawValue: AttributeValue("John Doe"),
                                              Keys.userEmail.rawValue: AttributeValue("john.doe@example.com"),
+                                             Keys.sessionId.rawValue: AttributeValue("session_001"),
+                                             Keys.sessionCreationDate.rawValue: AttributeValue(1609459200),
                                              SemanticAttributes.httpUrl.rawValue: AttributeValue("https://ignore.com")],
                                 startTime: statTime, endTime: endTime, spanId: "span123",
                                 traceId: "trace123", name: "testSpan", kind: 1,
@@ -135,11 +141,10 @@ final class CoralogixExporterTests: XCTestCase {
                                            application: "TestApp-iOS",
                                            version: "1.0",
                                            publicKey: "token",
-                                           ignoreUrls: ["ignore\\.com"],
-                                           ignoreErrors: [],
-                                           labels: ["item" : "banana", "itemPrice" : 1000],
-                                           fpsSampleRate: 100,
-                                           debug: true)
+                                          ignoreUrls: ["ignore\\.com"],
+                                          ignoreErrors: [],
+                                          labels: ["item" : "banana", "itemPrice" : 1000],
+                                          debug: true)
         let coralogixRum = CoralogixRum(options: options!)
         coralogixExporter = coralogixRum.coralogixExporter
         
@@ -150,6 +155,8 @@ final class CoralogixExporterTests: XCTestCase {
                                              Keys.userId.rawValue: AttributeValue("12345"),
                                              Keys.userName.rawValue: AttributeValue("John Doe"),
                                              Keys.userEmail.rawValue: AttributeValue("john.doe@example.com"),
+                                             Keys.sessionId.rawValue: AttributeValue("session_001"),
+                                             Keys.sessionCreationDate.rawValue: AttributeValue(1609459200),
                                              SemanticAttributes.httpUrl.rawValue: AttributeValue("https://ignore.com")],
                                 startTime: statTime, endTime: endTime, spanId: "span123",
                                 traceId: "trace123", name: "testSpan", kind: 1,
@@ -167,11 +174,10 @@ final class CoralogixExporterTests: XCTestCase {
                                            application: "TestApp-iOS",
                                            version: "1.0",
                                            publicKey: "token",
-                                           ignoreUrls: ["patternthatdoesnotmatch"],
-                                           ignoreErrors: [],
-                                           labels: ["item" : "banana", "itemPrice" : 1000],
-                                           fpsSampleRate: 100,
-                                           debug: true)
+                                          ignoreUrls: ["patternthatdoesnotmatch"],
+                                          ignoreErrors: [],
+                                          labels: ["item" : "banana", "itemPrice" : 1000],
+                                          debug: true)
         let coralogixRum = CoralogixRum(options: options!)
         coralogixExporter = coralogixRum.coralogixExporter
         
@@ -182,6 +188,8 @@ final class CoralogixExporterTests: XCTestCase {
                                              Keys.userId.rawValue: AttributeValue("12345"),
                                              Keys.userName.rawValue: AttributeValue("John Doe"),
                                              Keys.userEmail.rawValue: AttributeValue("john.doe@example.com"),
+                                             Keys.sessionId.rawValue: AttributeValue("session_001"),
+                                             Keys.sessionCreationDate.rawValue: AttributeValue(1609459200),
                                              SemanticAttributes.httpUrl.rawValue: AttributeValue("https://no-match.com")],
                                 startTime: statTime, endTime: endTime, spanId: "span123",
                                 traceId: "trace123", name: "testSpan", kind: 1,
@@ -199,11 +207,10 @@ final class CoralogixExporterTests: XCTestCase {
                                            application: "TestApp-iOS",
                                            version: "1.0",
                                            publicKey: "token",
-                                           ignoreUrls: [],
-                                           ignoreErrors: [],
-                                           labels: ["item" : "banana", "itemPrice" : 1000],
-                                           fpsSampleRate: 100,
-                                           debug: true)
+                                          ignoreUrls: [],
+                                          ignoreErrors: [],
+                                          labels: ["item" : "banana", "itemPrice" : 1000],
+                                          debug: true)
         let coralogixRum = CoralogixRum(options: options!)
         coralogixExporter = coralogixRum.coralogixExporter
         
@@ -214,6 +221,8 @@ final class CoralogixExporterTests: XCTestCase {
                                              Keys.userId.rawValue: AttributeValue("12345"),
                                              Keys.userName.rawValue: AttributeValue("John Doe"),
                                              Keys.userEmail.rawValue: AttributeValue("john.doe@example.com"),
+                                             Keys.sessionId.rawValue: AttributeValue("session_001"),
+                                             Keys.sessionCreationDate.rawValue: AttributeValue(1609459200),
                                              SemanticAttributes.httpUrl.rawValue: AttributeValue("https://any.com")],
                                 startTime: statTime, endTime: endTime, spanId: "span123",
                                 traceId: "trace123", name: "testSpan", kind: 1,
@@ -231,11 +240,10 @@ final class CoralogixExporterTests: XCTestCase {
                                            application: "TestApp-iOS",
                                            version: "1.0",
                                            publicKey: "token",
-                                           ignoreUrls: [],
-                                           ignoreErrors: [],
-                                           labels: ["item" : "banana", "itemPrice" : 1000],
-                                           fpsSampleRate: 100,
-                                           debug: true)
+                                          ignoreUrls: [],
+                                          ignoreErrors: [],
+                                          labels: ["item" : "banana", "itemPrice" : 1000],
+                                          debug: true)
         let coralogixRum = CoralogixRum(options: options!)
         coralogixExporter = coralogixRum.coralogixExporter
         
@@ -246,6 +254,8 @@ final class CoralogixExporterTests: XCTestCase {
                                              Keys.userId.rawValue: AttributeValue("12345"),
                                              Keys.userName.rawValue: AttributeValue("John Doe"),
                                              Keys.userEmail.rawValue: AttributeValue("john.doe@example.com"),
+                                             Keys.sessionId.rawValue: AttributeValue("session_001"),
+                                             Keys.sessionCreationDate.rawValue: AttributeValue(1609459200),
                                              SemanticAttributes.httpUrl.rawValue: AttributeValue("https://any.com")],
                                 startTime: statTime, endTime: endTime, spanId: "span123",
                                 traceId: "trace123", name: "testSpan", kind: 1,
@@ -264,11 +274,10 @@ final class CoralogixExporterTests: XCTestCase {
                                            application: "TestApp-iOS",
                                            version: "1.0",
                                            publicKey: "token",
-                                           ignoreUrls: [],
-                                           ignoreErrors: ["IgnoreThisError"],
-                                           labels: ["item" : "banana", "itemPrice" : 1000],
-                                           fpsSampleRate: 100,
-                                           debug: true)
+                                          ignoreUrls: [],
+                                          ignoreErrors: ["IgnoreThisError"],
+                                          labels: ["item" : "banana", "itemPrice" : 1000],
+                                          debug: true)
         let coralogixRum = CoralogixRum(options: options!)
         coralogixExporter = coralogixRum.coralogixExporter
         
@@ -280,6 +289,8 @@ final class CoralogixExporterTests: XCTestCase {
                                              Keys.userName.rawValue: AttributeValue("John Doe"),
                                              Keys.errorMessage.rawValue: AttributeValue("IgnoreThisError"),
                                              Keys.userEmail.rawValue: AttributeValue("john.doe@example.com"),
+                                             Keys.sessionId.rawValue: AttributeValue("session_001"),
+                                             Keys.sessionCreationDate.rawValue: AttributeValue(1609459200),
                                              SemanticAttributes.httpUrl.rawValue: AttributeValue("https://any.com")],
                                 startTime: statTime, endTime: endTime, spanId: "span123",
                                 traceId: "trace123", name: "testSpan", kind: 1,
@@ -298,11 +309,10 @@ final class CoralogixExporterTests: XCTestCase {
                                            application: "TestApp-iOS",
                                            version: "1.0",
                                            publicKey: "token",
-                                           ignoreUrls: [],
-                                           ignoreErrors: [#"\b\w*regex\w*\b"#],
-                                           labels: ["item" : "banana", "itemPrice" : 1000],
-                                           fpsSampleRate: 100,
-                                           debug: true)
+                                          ignoreUrls: [],
+                                          ignoreErrors: [#"\b\w*regex\w*\b"#],
+                                          labels: ["item" : "banana", "itemPrice" : 1000],
+                                          debug: true)
         let coralogixRum = CoralogixRum(options: options!)
         coralogixExporter = coralogixRum.coralogixExporter
         
@@ -314,6 +324,8 @@ final class CoralogixExporterTests: XCTestCase {
                                              Keys.userName.rawValue: AttributeValue("John Doe"),
                                              Keys.errorMessage.rawValue: AttributeValue("SomethingRegexErrorTriggered"),
                                              Keys.userEmail.rawValue: AttributeValue("john.doe@example.com"),
+                                             Keys.sessionId.rawValue: AttributeValue("session_001"),
+                                             Keys.sessionCreationDate.rawValue: AttributeValue(1609459200),
                                              SemanticAttributes.httpUrl.rawValue: AttributeValue("https://any.com")],
                                 startTime: statTime, endTime: endTime, spanId: "span123",
                                 traceId: "trace123", name: "testSpan", kind: 1,
@@ -332,11 +344,10 @@ final class CoralogixExporterTests: XCTestCase {
                                            application: "TestApp-iOS",
                                            version: "1.0",
                                            publicKey: "token",
-                                           ignoreUrls: [],
-                                           ignoreErrors: [],
-                                           labels: ["item" : "banana", "itemPrice" : 1000],
-                                           fpsSampleRate: 100,
-                                           debug: true)
+                                          ignoreUrls: [],
+                                          ignoreErrors: [],
+                                          labels: ["item" : "banana", "itemPrice" : 1000],
+                                          debug: true)
         let coralogixRum = CoralogixRum(options: options!)
         coralogixExporter = coralogixRum.coralogixExporter
         
@@ -348,6 +359,8 @@ final class CoralogixExporterTests: XCTestCase {
                                              Keys.userName.rawValue: AttributeValue("John Doe"),
                                              Keys.errorMessage.rawValue: AttributeValue("SomeOtherError"),
                                              Keys.userEmail.rawValue: AttributeValue("john.doe@example.com"),
+                                             Keys.sessionId.rawValue: AttributeValue("session_001"),
+                                             Keys.sessionCreationDate.rawValue: AttributeValue(1609459200),
                                              SemanticAttributes.httpUrl.rawValue: AttributeValue("https://any.com")],
                                 startTime: statTime, endTime: endTime, spanId: "span123",
                                 traceId: "trace123", name: "testSpan", kind: 1,
@@ -368,12 +381,11 @@ final class CoralogixExporterTests: XCTestCase {
                                            application: "TestApp-iOS",
                                            version: "1.0",
                                            publicKey: "token",
-                                           ignoreUrls: [],
-                                           ignoreErrors: [],
-                                           labels: ["item" : "banana", "itemPrice" : 1000],
-                                           fpsSampleRate: 100,
-                                           proxyUrl: proxyUrl,
-                                           debug: true)
+                                          ignoreUrls: [],
+                                          ignoreErrors: [],
+                                          labels: ["item" : "banana", "itemPrice" : 1000],
+                                          proxyUrl: proxyUrl,
+                                          debug: true)
         let coralogixRum = CoralogixRum(options: options!)
         
         // When
@@ -398,12 +410,11 @@ final class CoralogixExporterTests: XCTestCase {
                                            application: "TestApp-iOS",
                                            version: "1.0",
                                            publicKey: "token",
-                                           ignoreUrls: [],
-                                           ignoreErrors: [],
-                                           labels: ["item" : "banana", "itemPrice" : 1000],
-                                           fpsSampleRate: 100,
-                                           proxyUrl: nil,
-                                           debug: true)
+                                          ignoreUrls: [],
+                                          ignoreErrors: [],
+                                          labels: ["item" : "banana", "itemPrice" : 1000],
+                                          proxyUrl: nil,
+                                          debug: true)
         let coralogixRum = CoralogixRum(options: options!)
         // When
         let result = coralogixRum.coralogixExporter?.spanUploader.resolvedUrlString(endPoint: endPoint)

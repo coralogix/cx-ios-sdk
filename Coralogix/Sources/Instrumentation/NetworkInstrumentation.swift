@@ -58,8 +58,7 @@ extension CoralogixRum {
             shouldInjectTracingHeaders: { [weak self] request in
                 return self?.shouldAddTraceParent(to: request, options: options) ?? false
             },
-            receivedResponse: self.receivedResponse,
-            ignoredClassPrefixes: options.ignoredClassPrefixes
+            receivedResponse: self.receivedResponse
         )
         self.sessionInstrumentation = URLSessionInstrumentation(configuration: configuration)
     }
@@ -97,6 +96,15 @@ extension CoralogixRum {
     private func spanCustomization(request: URLRequest, spanBuilder: SpanBuilder) {
         spanBuilder.setAttribute(key: Keys.eventType.rawValue, value: CoralogixEventType.networkRequest.rawValue)
         spanBuilder.setAttribute(key: Keys.source.rawValue, value: Keys.fetch.rawValue)
+        
+        // CRITICAL: Add session attributes to network spans
+        // Without these, each network log creates a new random session ID
+        // This is a critical bug - network logs must share the same session as other events
+        if let sessionMetadata = self.sessionManager?.sessionMetadata {
+            spanBuilder.setAttribute(key: Keys.sessionId.rawValue, value: sessionMetadata.sessionId)
+            spanBuilder.setAttribute(key: Keys.sessionCreationDate.rawValue, value: String(Int(sessionMetadata.sessionCreationDate)))
+        }
+
     }
     
     private func receivedResponse(response: URLResponse, data: DataOrFile?, span: any Span) {

@@ -80,7 +80,6 @@ final class SpanUploader {
     
     internal func logJSON(from jsonData: Data, prettyPrint: Bool) {
         guard let jsonObject = try? JSONSerialization.jsonObject(with: jsonData, options: []) else {
-            Log.d("❌ Failed to parse JSON data.")
             return
         }
         
@@ -88,9 +87,7 @@ final class SpanUploader {
         
         if let formattedData = try? JSONSerialization.data(withJSONObject: jsonObject, options: options),
            let jsonString = String(data: formattedData, encoding: .utf8) {
-            Log.d("⚡️ JSON string: ⚡️\n\(jsonString)")
-        } else {
-            Log.d("❌ Failed to format JSON string.")
+            Log.d("📤 Sending to Coralogix:\n\(jsonString)")
         }
     }
 }

@@ -21,7 +21,7 @@ internal class ANRDetector {
     private var lastCheckTimestamp: CFAbsoluteTime = CFAbsoluteTimeGetCurrent()
 
     // ANR handling closure (useful for testing)
-    var handleANRClosure: (([String: Any]) -> Void)?
+    var handleANRClosure: (() -> Void)?
     
     init(checkInterval: TimeInterval = 1.0, maxBlockTime: TimeInterval = 5.0) {
         self.checkInterval = checkInterval
@@ -54,11 +54,10 @@ internal class ANRDetector {
     }
 
     public func handleANR() {
-        let anr = [
-            Keys.anr.rawValue: true
-        ]
+        handleANRClosure?()
         
-        handleANRClosure?(anr)  // Call closure in test
-        Log.d("[Metric] ANR detected: Main thread unresponsive for more than \(maxBlockTime) seconds")
+        let currentTime = CFAbsoluteTimeGetCurrent()
+        let duration = currentTime - lastCheckTimestamp
+        Log.d("[Metric] ANR detected: Main thread unresponsive for \(String(format: "%.2f", duration)) seconds")
     }
 }

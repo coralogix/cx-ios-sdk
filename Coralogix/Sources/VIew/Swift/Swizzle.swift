@@ -25,17 +25,26 @@ public struct CXView {
 class SwizzleUtils {
     private static var originalImplementations: [Selector: IMP] = [:]
     
+    // THREAD-SAFE: Lock protects originalImplementations dictionary access
+    // CRITICAL: Prevents race conditions when multiple swizzles happen concurrently
+    private static let swizzleLock = NSLock()
+    
     static func swizzleInstanceMethod(for cls: AnyClass, originalSelector: Selector, swizzledSelector: Selector) {
+        // SAFETY: Wrap entire swizzle operation in lock to prevent TOCTOU race conditions
+        swizzleLock.lock()
+        defer { swizzleLock.unlock() }
+        
         guard let originalMethod = class_getInstanceMethod(cls, originalSelector),
               let swizzledMethod = class_getInstanceMethod(cls, swizzledSelector) else {
-            Log.e("Failed to swizzle \(originalSelector)")
-            return
+            Log.e("Failed to swizzle \(originalSelector) on \(cls)")
+            return // SAFETY: Log error but don't crash host app
         }
         
         let originalIMP = method_getImplementation(originalMethod)
         let swizzledIMP = method_getImplementation(swizzledMethod)
         
         let key = originalSelector
+        // THREAD-SAFE: Dictionary access protected by lock
         if originalImplementations[key] == nil {
             originalImplementations[key] = originalIMP
         }

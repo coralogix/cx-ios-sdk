@@ -14,3 +14,6 @@ DerivedData/
 # Ignore secret config
 Secrets.swift
 Example/envs.swift
+
+# Ignore tech debt documentation
+tech-debt/

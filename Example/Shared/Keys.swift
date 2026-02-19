@@ -48,6 +48,7 @@ enum Keys: String {
     case alamofireUploadRequest = "🔌 Upload Alamofire Request"
     case downloadSDWebImage = "🔌 Download SDWebImage"
     case signingWithAsyncAwait = "Signing with async/await"
+    case asyncAwaitWithSSLPinning = "Async/Await with SSL Pinning"
     case schemaValidation = "Verify schema"
     case reportMobileVitalsMeasurement = "Report Mobile Vitals Measurement"
     case customLabels = "Log with Custom Labels"

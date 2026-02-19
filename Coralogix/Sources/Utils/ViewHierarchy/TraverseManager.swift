@@ -26,12 +26,10 @@ extension CoralogixRum {
     
     @objc private func appWillEnterForeground() {
         // Handle the app entering the foreground
-        Log.d("App will enter foreground")
     }
     
     @objc private func appDidBecomeActive() {
         // Handle the app becoming active
-        Log.d("App did become active")
         self.startCXTraverse()
     }
     
@@ -40,9 +38,8 @@ extension CoralogixRum {
             if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
                let window = windowScene.windows.first {
                 // Now you have access to the main UIWindow
-                Log.d("\(window)")
                 if let rootViewController = rootViewControllerFrom(window: window) {
-                    Log.d("\(rootViewController)")
+                    // Root view controller found
                 }
             }
         } else {

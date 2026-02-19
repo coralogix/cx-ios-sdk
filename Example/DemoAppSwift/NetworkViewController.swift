@@ -58,7 +58,7 @@ final class NetworkViewController: UITableViewController {
         ),
         .init(
             title: "Alamofire upload",
-            subtitle: "Upload a 10MB sample file",
+            subtitle: "Upload a 2MB sample file",
             systemImageName: "arrow.up.doc",
             key: .alamofireUploadRequest
         ),
@@ -89,7 +89,11 @@ final class NetworkViewController: UITableViewController {
         .init(title: "Async/Await example",
               subtitle: "async await in action",
               systemImageName: "photo.on.rectangle",
-              key: .signingWithAsyncAwait)
+              key: .signingWithAsyncAwait),
+        .init(title: "Async/Await with SSL Pinning",
+              subtitle: "async/await + custom delegate",
+              systemImageName: "lock.shield",
+              key: .asyncAwaitWithSSLPinning)
     ]
 
     // MARK: - Init
@@ -183,7 +187,7 @@ final class NetworkViewController: UITableViewController {
             NetworkSim.failureAlamofire()
 
         case .alamofireUploadRequest:
-            let fileUrl = NetworkSim.createSampleFile(sizeInMB: 10)
+            let fileUrl = NetworkSim.createSampleFile(sizeInMB: 2)
             NetworkSim.uploadFile(fileURL: fileUrl)
 
         case .afnetworkingRequest:
@@ -200,6 +204,10 @@ final class NetworkViewController: UITableViewController {
 
         case .signingWithAsyncAwait:
             NetworkSim.callAsyncAwait()
+        
+        case .asyncAwaitWithSSLPinning:
+            NetworkSim.callAsyncAwaitWithSSLPinning()
+        
         default:
             break
         }

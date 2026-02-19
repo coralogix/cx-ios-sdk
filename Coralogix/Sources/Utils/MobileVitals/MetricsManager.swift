@@ -21,6 +21,7 @@ public class MetricsManager {
     var slowFrozenFramesDetector: SlowFrozenFramesDetector?
     var fpsDetector = FPSDetector()
     var metricsManagerClosure: (([String: Any]) -> Void)?
+    var anrErrorClosure: ((String, String) -> Void)?
     
     // MARK: - Internal timer for periodic send
     private let sendInterval: TimeInterval = 15.0
@@ -54,7 +55,16 @@ public class MetricsManager {
             vitals[Keys.slowFrozen.rawValue] = slowFrozenFramesDetector.statsDictionary()
         }
         
-        vitals[MobileVitalsType.fps.stringValue] = fpsDetector.statsDictionary()
+        // Only include FPS if rendering detector is running
+        if fpsDetector.isRunning {
+            vitals[MobileVitalsType.fps.stringValue] = fpsDetector.statsDictionary()
+        }
+        
+        // Don't send if no vitals collected
+        guard !vitals.isEmpty else {
+            Log.d("[MetricsManager] No vitals to send, skipping")
+            return
+        }
         
         // Send event
         self.metricsManagerClosure?(vitals)
@@ -64,16 +74,22 @@ public class MetricsManager {
         cpuDetector?.reset()
         memoryDetector?.reset()
         slowFrozenFramesDetector?.reset()
-        fpsDetector.reset()
+        if fpsDetector.isRunning {
+            fpsDetector.reset()
+        }
     }
     
     func startMonitoring(using options: CoralogixExporterOptions?) {
         guard let options = options else { return }
-        self.initializeEnabledMobileVitals(using: options)
-        startSendScheduler()   // start periodic sending
+        let hasEnabledVitals = self.initializeEnabledMobileVitals(using: options)
+        
+        // Only start scheduler if at least one mobile vital is enabled
+        if hasEnabledVitals {
+            startSendScheduler()
+        }
     }
     
-    private func initializeEnabledMobileVitals(using options: CoralogixExporterOptions) {
+    private func initializeEnabledMobileVitals(using options: CoralogixExporterOptions) -> Bool {
         let mobileVitalsMap: [(CoralogixExporterOptions.MobileVitalsType, () -> Void)] = [
             (.coldDetector, self.startColdStartMonitoring),
             (.warmDetector, self.startWarmStartMonitoring),
@@ -83,9 +99,13 @@ public class MetricsManager {
             (.slowFrozenFramesDetector, self.startSlowFrozenFramesMonitoring)
         ]
         
+        var anyEnabled = false
         for (type, initializer) in mobileVitalsMap where options.shouldInitMobileVitals(mobileVital: type) {
             initializer()
+            anyEnabled = true
         }
+        
+        return anyEnabled
     }
     
     func startColdStartMonitoring() {
@@ -110,10 +130,24 @@ public class MetricsManager {
     
     func startANRMonitoring() {
         self.anrDetector = ANRDetector()
-        self.anrDetector?.handleANRClosure = { [weak self] dict in
-            self?.metricsManagerClosure?(dict)
+        self.anrDetector?.handleANRClosure = { [weak self] in
+            self?.handleANREvent()
         }
         self.anrDetector?.startMonitoring()
+    }
+    
+    private func handleANREvent() {
+        let errorMessage = "Application Not Responding"
+        let errorType = "ANR"
+        
+        // Report ANR as error (not mobile vitals)
+        guard let anrErrorClosure = self.anrErrorClosure else {
+            Log.d("[MetricsManager] Warning: anrErrorClosure not set, ANR event not reported")
+            return
+        }
+        
+        anrErrorClosure(errorMessage, errorType)
+        Log.d("[MetricsManager] ANR error reported: \(errorMessage)")
     }
     
     func startCPUMonitoring() {
@@ -197,7 +231,6 @@ class MyMetricSubscriber: NSObject, MXMetricManagerSubscriber {
     public func didReceive(_ payloads: [MXMetricPayload]) {
         for payload in payloads {
             if let metricPayloadJsonString = String(data: payload.jsonRepresentation(), encoding: .utf8) {
-                Log.d("metricPayloadJsonString  \(metricPayloadJsonString)")
                 // send instrumentaion event
                 let vital = [
                     Keys.metricKit.rawValue: [
@@ -207,17 +240,17 @@ class MyMetricSubscriber: NSObject, MXMetricManagerSubscriber {
                 self.metricKitClosure?(vital)
             }
                     
-            if let applicationLaunchMetric = payload.applicationLaunchMetrics {
-                Log.d("Launch Time: \(applicationLaunchMetric.histogrammedApplicationResumeTime)")
-                Log.d("Time to First Draw: \(applicationLaunchMetric.histogrammedTimeToFirstDraw)")
+            // MetricKit payloads - reserved for future implementation
+            if payload.applicationLaunchMetrics != nil {
+                // TODO: Process application launch metrics
             }
             
-            if let diskWritesMetric = payload.diskIOMetrics {
-                Log.d("Disk Writes: \(diskWritesMetric.cumulativeLogicalWrites)")
+            if payload.diskIOMetrics != nil {
+                // TODO: Process disk I/O metrics
             }
             
-            if let memoryMetric = payload.memoryMetrics {
-                Log.d("Memory Usage: \(memoryMetric.averageSuspendedMemory)")
+            if payload.memoryMetrics != nil {
+                // TODO: Process memory metrics
             }
         }
     }
@@ -226,10 +259,9 @@ class MyMetricSubscriber: NSObject, MXMetricManagerSubscriber {
     @available(iOS 14.0, *)
     public func didReceive(_ payloads: [MXDiagnosticPayload]) {
         for payload in payloads {
-            if let hangDiagnostics = payload.hangDiagnostics {
-                for hangDiagnostic in hangDiagnostics {
-                    Log.d("Call Stack Tree: \(hangDiagnostic.callStackTree)")
-                }
+            // MetricKit diagnostics - reserved for future implementation
+            if payload.hangDiagnostics != nil {
+                // TODO: Process hang diagnostics
             }
         }
     }

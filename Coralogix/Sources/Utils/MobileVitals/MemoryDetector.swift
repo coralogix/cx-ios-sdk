@@ -14,19 +14,24 @@ public struct MemoryMeasurement {
     public let footprintMB: Double
     /// Traditional RSS (in MB), optional/for reference.
     public let residentMB: Double
-    /// Percentage of device RAM used (based on footprint).
+    /// App memory footprint as % of total device physical RAM.
+    /// Note: iOS reserves 1-2GB for system, so practical app maximum is ~70-80%.
+    /// Values >100% should not occur but cap removed to avoid hiding measurement errors.
     public let utilizationPercent: Double
 }
 
 final class MemoryDetector {
     private var timer: Timer?
     private var isRunning = false
-    private let defaultInterval: TimeInterval = 0.1
+    // Battery-optimized: 1s interval captures all memory trends while reducing sampling by 10×
+    // Memory changes slowly (seconds), so 1s provides accurate min/max/avg/p95 statistics
+    // See CX-31659 for analysis and rationale
+    private let defaultInterval: TimeInterval = 1.0
     
     // MARK: - Stored samples (instantaneous per sample)
     internal var footprintSamples: [Double] = []       // MB
     internal var residentSamples: [Double] = []        // MB
-    internal var utilizationSamples: [Double] = []     // %
+    internal var utilizationSamples: [Double] = []     // % of total device RAM
 
     // MARK: - Public stats
     // Footprint (MB)
@@ -89,11 +94,12 @@ final class MemoryDetector {
         let t = Timer.scheduledTimer(withTimeInterval: defaultInterval, repeats: true) { [weak self] _ in
             self?.sampleOnce()
         }
-        t.tolerance = 1.0 // minute-level sampling can tolerate some slack
+        // Allow 1s tolerance for timer firing - battery-friendly for 1-second sampling
+        t.tolerance = 1.0
         RunLoop.main.add(t, forMode: .common)
         timer = t
         
-        // Trigger an immediate first sample (optional; comment out if you want to wait a minute)
+        // Trigger an immediate first sample to avoid waiting for the first 1-second interval
         sampleOnce()
     }
     
@@ -135,6 +141,10 @@ final class MemoryDetector {
         let residentMB  = Double(vm.resident_size) / bytesPerMB
         let totalRAMMB  = Double(ProcessInfo.processInfo.physicalMemory) / bytesPerMB
 
+        // Memory utilization as % of total device physical RAM
+        // Note: iOS reserves ~1-2GB for system, so app footprint relative to total device capacity
+        // Cap removed to avoid hiding measurement errors (values >100% theoretically impossible)
+        // See CX-31664 for analysis and rationale
         let util = totalRAMMB > 0
             ? (footprintMB / totalRAMMB) * 100.0
             : 0.0
@@ -142,7 +152,7 @@ final class MemoryDetector {
         return MemoryMeasurement(
             footprintMB: footprintMB,
             residentMB: residentMB,
-            utilizationPercent: min(max(util, 0), 100)
+            utilizationPercent: max(util, 0)
         )
     }
     

@@ -60,15 +60,6 @@ public struct CoralogixExporterOptions {
     /// Number between 0-100 as a precentage of SDK should be init.
     var sdkSampler: SDKSampler
     
-    /// Seconds between FPS samples. Default: 300s (~5 minutes).
-    let fpsSampleRate: TimeInterval
-    
-    /// Seconds between Memory samples. Default: 60s.
-    let memoryUsageSampleRate: TimeInterval
-    
-    /// Seconds between CPU samples. Default: 60s.
-    let cpuUsageSampleRate: TimeInterval
-    
     /// A list of instruments that you wish to switch off during runtime. all instrumentations are active by default.
     var instrumentations: [InstrumentationType: Bool]?
     
@@ -93,9 +84,6 @@ public struct CoralogixExporterOptions {
     
     public var traceParentInHeader: [String: Any]?
     
-    /// The Array of Prefixes you can avoid in swizzle process (Network)
-    public let ignoredClassPrefixes: [String]?
-    
     /// A list of mobile vitals that you wish to switch off during runtime. all mobile vitals are active by default.
     var mobileVitals: [MobileVitalsType: Bool]?
     
@@ -109,16 +97,12 @@ public struct CoralogixExporterOptions {
                 ignoreErrors: [String]? = nil,
                 labels: [String: Any]? = nil,
                 sessionSampleRate: Int = 100, // percent (0–100)
-                memoryUsageSampleRate: TimeInterval = 60, // seconds
-                cpuUsageSampleRate: TimeInterval = 60, // seconds
-                fpsSampleRate: TimeInterval = 300, // seconds (5 minutes)
                 instrumentations: [InstrumentationType: Bool]? = nil,
                 collectIPData: Bool = true,
                 beforeSend: (([String: Any]) -> [String: Any]?)? = nil,
                 enableSwizzling: Bool = true,
                 proxyUrl: String? = nil,
                 traceParentInHeader: [String: Any]? = nil,
-                ignoredClassPrefixes: [String]? = nil,
                 mobileVitals: [MobileVitalsType: Bool]? = nil,
                 debug: Bool = false) {
         self.coralogixDomain = coralogixDomain
@@ -132,16 +116,12 @@ public struct CoralogixExporterOptions {
         self.version = version
         self.labels = labels
         self.sdkSampler = SDKSampler(sampleRate: sessionSampleRate)
-        self.fpsSampleRate = fpsSampleRate
-        self.memoryUsageSampleRate = memoryUsageSampleRate
-        self.cpuUsageSampleRate = cpuUsageSampleRate
         self.instrumentations = instrumentations
         self.collectIPData = collectIPData
         self.beforeSend = beforeSend
         self.enableSwizzling = enableSwizzling
         self.proxyUrl = proxyUrl
         self.traceParentInHeader = traceParentInHeader
-        self.ignoredClassPrefixes = ignoredClassPrefixes
         self.mobileVitals = mobileVitals
     }
     
@@ -163,15 +143,11 @@ public struct CoralogixExporterOptions {
         initData[Keys.ignoreErrors.rawValue] = self.ignoreErrors
         initData[Keys.labels.rawValue] = self.labels
         initData[Keys.sessionSampleRate.rawValue] = self.sdkSampler.sampleRate
-        initData[Keys.fpsSampleRate.rawValue] = self.fpsSampleRate
-        initData[Keys.memoryUsageSampleRate.rawValue] = self.memoryUsageSampleRate
-        initData[Keys.cpuUsageSampleRate.rawValue] = self.cpuUsageSampleRate
         initData[Keys.instrumentations.rawValue] = self.getStatesAsDictionary(from: self.instrumentations)
         initData[Keys.collectIPData.rawValue] = self.collectIPData
         initData[Keys.enableSwizzling.rawValue] = self.enableSwizzling
         initData[Keys.proxyUrl.rawValue] = self.proxyUrl
         initData[Keys.traceParentInHeader.rawValue] = self.traceParentInHeader
-        initData[Keys.ignoredClassPrefixes.rawValue] = self.ignoredClassPrefixes
         initData[Keys.mobileVitals.rawValue] = self.getStatesAsDictionary(from: self.mobileVitals)
         initData[Keys.debug.rawValue] = self.debug
         

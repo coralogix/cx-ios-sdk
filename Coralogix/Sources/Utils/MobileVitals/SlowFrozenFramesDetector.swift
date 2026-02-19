@@ -8,6 +8,37 @@
 import Foundation
 import UIKit
 
+/// Detects slow and frozen frames using CADisplayLink frame timestamps.
+///
+/// ## Thresholds
+/// - **Slow frames**: Frame time > (expected frame budget + 3% tolerance) AND < 700ms
+///   - Adapts to display refresh rate (60Hz = 16.7ms, 120Hz ProMotion = 8.3ms)
+///   - 3% tolerance prevents false positives from normal variance
+/// - **Frozen frames**: Frame time >= 700ms (frames that cause perceived UI freeze)
+///
+/// ## Why 700ms for Frozen Frames?
+/// The 700ms threshold was chosen to align with the SDK's ANR (Application Not Responding)
+/// detection threshold, providing a consistent definition of "unresponsive UI" across all
+/// SDK features. This matches Sentry's production-tested approach and balances sensitivity
+/// with noise reduction.
+///
+/// Industry comparison:
+/// - Apple WWDC guidelines: 250ms (very sensitive, includes moderate hitches)
+/// - Firebase Performance: 400ms (moderate sensitivity)
+/// - Sentry/Coralogix: 700ms (aligned with ANR, focused on severe freezes)
+///
+/// A frame frozen for 700ms will trigger BOTH:
+/// 1. A frozen frame metric (this detector)
+/// 2. An ANR error event (ANRDetector)
+///
+/// This intentional overlap ensures severe UI unresponsiveness is captured from both
+/// performance monitoring and error tracking perspectives.
+///
+/// ## Reporting
+/// Aggregates slow/frozen counts into 60-second windows and reports statistics:
+/// min, max, avg, p95 for both slow and frozen frame counts per window.
+///
+/// See CX-31665 for threshold analysis and rationale.
 final class SlowFrozenFramesDetector {
   
     // MARK: - Configuration
@@ -80,6 +111,14 @@ final class SlowFrozenFramesDetector {
     
     
     // MARK: - Init
+    /// Creates a new slow/frozen frame detector.
+    ///
+    /// - Parameters:
+    ///   - frozenThresholdMs: Frame time (ms) at which a frame is considered frozen.
+    ///     Default 700ms aligns with ANR threshold for consistent "unresponsive UI" definition.
+    ///     Industry varies: Apple 250ms, Firebase 400ms, Sentry/Coralogix 700ms.
+    ///   - reportIntervalMs: Window size for aggregating frame counts. Default 60s.
+    ///   - tolerancePercentage: Tolerance for slow frame detection. Default 3% to prevent false positives.
     init(
         frozenThresholdMs: Double = 700.0,
         reportIntervalMs: Int64 = 60_000,
@@ -111,7 +150,6 @@ final class SlowFrozenFramesDetector {
             link.add(to: .main, forMode: .common) // fire during scrolling/gestures
             self.displayLink = link
             self.lastFrameTimestamp = 0
-            Log.d("[Metric] slow/frozen frames monitor started @ \(self.refreshRateHz)Hz (budget=\(String(format: "%.2f", self.slowBudgetMs))ms)")
         }
 
         // Start periodic reporter on background queue
@@ -137,7 +175,6 @@ final class SlowFrozenFramesDetector {
             guard let self = self else { return }
             self.displayLink?.invalidate()
             self.displayLink = nil
-            Log.d("slow/frozen frames monitor stopped")
         }
 
         reporterTimer?.cancel()
@@ -173,11 +210,12 @@ final class SlowFrozenFramesDetector {
             sumFrameMs += dtMs
             frameSamples += 1
             let allowedDeviation = slowBudgetMs * tolerancePercentage
+            // 700ms threshold: aligns with ANR detection for consistent "unresponsive UI" definition
+            // See class documentation and CX-31665 for rationale
             if dtMs >= frozenThresholdMs {
                 frozenCount += 1
             } else if dtMs > (slowBudgetMs + allowedDeviation) {
                 slowCount += 1
-                // Log.d("slow frame detected: \(dtMs)")
             }
             statsLock.unlock()
         }
@@ -185,7 +223,8 @@ final class SlowFrozenFramesDetector {
     }
 
     // MARK: - Reporting (grouped window)
-    /// Snapshot & reset counts, then post metrics (skip if both zero).
+    /// Snapshot & reset counts, then post metrics.
+    /// Always includes windows (even with zero counts) for accurate statistics.
     private func emitWindow() {
         var slow = 0
         var frozen = 0
@@ -201,16 +240,13 @@ final class SlowFrozenFramesDetector {
         frameSamples = 0
         statsLock.unlock()
 
-        if slow == 0 && frozen == 0 { return }
-
-        
-        // Store this window’s counts (independently; skip zeros for each metric)
+        // Always store window counts (including zeros) for accurate percentile calculations
+        // Skipping zero-count windows artificially inflates min/max/avg/p95 statistics
+        // See CX-31666 for analysis and rationale
         windowLock.lock()
-        if slow > 0 { _windowSlow.append(slow) }
-        if frozen > 0 { _windowFrozen.append(frozen) }
+        _windowSlow.append(slow)
+        _windowFrozen.append(frozen)
         windowLock.unlock()
-
-//        Log.d("[Metric] slow: \(slow), frozen: \(frozen)")
     }
     
     func statsDictionary() -> [String: Any] {

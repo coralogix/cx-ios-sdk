@@ -17,10 +17,14 @@ struct SessionContext {
     var isPidEqualToOldPid: Bool = false
     var hasRecording: Bool = false
     
-    init(otel: SpanDataProtocol,
-         userMetadata: [String: String]?,
-         hasRecording: Bool = false) {
-        (self.sessionId, self.sessionCreationDate, self.isPidEqualToOldPid) = SessionContext.resolveSession(from: otel)
+    init?(otel: SpanDataProtocol,
+          userMetadata: [String: String]?,
+          hasRecording: Bool = false) {
+        guard let sessionInfo = SessionContext.resolveSession(from: otel) else {
+            return nil  // Drop span if session attributes are missing
+        }
+        
+        (self.sessionId, self.sessionCreationDate, self.isPidEqualToOldPid) = sessionInfo
 
         self.userId = otel.getString(forKey: .userId) ?? ""
         self.userName = otel.getString(forKey: .userName) ?? ""
@@ -29,7 +33,7 @@ struct SessionContext {
         self.hasRecording = hasRecording
     }
     
-    private static func resolveSession(from otel: SpanDataProtocol) -> (id: String, creationDate: TimeInterval, isPidEqual: Bool) {
+    private static func resolveSession(from otel: SpanDataProtocol) -> (id: String, creationDate: TimeInterval, isPidEqual: Bool)? {
         if shouldRestorePreviousSession(from: otel),
            let oldSessionId = otel.getString(forKey: .prevSessionId),
            let oldCreationDateString = otel.getString(forKey: .prevSessionCreationDate),
@@ -37,12 +41,23 @@ struct SessionContext {
             return (oldSessionId, oldCreationDate, true)
         }
         
-        let sessionId = otel.getString(forKey: .sessionId) ?? UUID().uuidString.lowercased()
-        var creationDate: TimeInterval = Date().timeIntervalSince1970
-        if let timeIntervalString = otel.getString(forKey: .sessionCreationDate),
-           let timeInterval = TimeInterval(timeIntervalString) {
-            creationDate = timeInterval
+        // CRITICAL: Session attributes MUST be present on spans
+        // If missing, this indicates a bug in instrumentation
+        guard let sessionId = otel.getString(forKey: .sessionId) else {
+            Log.w("[SessionContext] ⚠️  CRITICAL: Span missing sessionId attribute - dropping span to prevent data corruption")
+            Log.w("[SessionContext]    Span name: \(otel.getName() ?? "unknown")")
+            Log.w("[SessionContext]    This indicates a bug in the instrumentation that created this span")
+            return nil
         }
+        
+        guard let timeIntervalString = otel.getString(forKey: .sessionCreationDate),
+              let creationDate = TimeInterval(timeIntervalString) else {
+            Log.w("[SessionContext] ⚠️  CRITICAL: Span missing sessionCreationDate attribute - dropping span to prevent data corruption")
+            Log.w("[SessionContext]    Span name: \(otel.getName() ?? "unknown")")
+            Log.w("[SessionContext]    Session ID: \(sessionId)")
+            return nil
+        }
+        
         return (sessionId, creationDate, false)
     }
     
