@@ -8,6 +8,37 @@
 import Foundation
 import UIKit
 
+/// Detects slow and frozen frames using CADisplayLink frame timestamps.
+///
+/// ## Thresholds
+/// - **Slow frames**: Frame time > (expected frame budget + 3% tolerance) AND < 700ms
+///   - Adapts to display refresh rate (60Hz = 16.7ms, 120Hz ProMotion = 8.3ms)
+///   - 3% tolerance prevents false positives from normal variance
+/// - **Frozen frames**: Frame time >= 700ms (frames that cause perceived UI freeze)
+///
+/// ## Why 700ms for Frozen Frames?
+/// The 700ms threshold was chosen to align with the SDK's ANR (Application Not Responding)
+/// detection threshold, providing a consistent definition of "unresponsive UI" across all
+/// SDK features. This matches Sentry's production-tested approach and balances sensitivity
+/// with noise reduction.
+///
+/// Industry comparison:
+/// - Apple WWDC guidelines: 250ms (very sensitive, includes moderate hitches)
+/// - Firebase Performance: 400ms (moderate sensitivity)
+/// - Sentry/Coralogix: 700ms (aligned with ANR, focused on severe freezes)
+///
+/// A frame frozen for 700ms will trigger BOTH:
+/// 1. A frozen frame metric (this detector)
+/// 2. An ANR error event (ANRDetector)
+///
+/// This intentional overlap ensures severe UI unresponsiveness is captured from both
+/// performance monitoring and error tracking perspectives.
+///
+/// ## Reporting
+/// Aggregates slow/frozen counts into 60-second windows and reports statistics:
+/// min, max, avg, p95 for both slow and frozen frame counts per window.
+///
+/// See CX-31665 for threshold analysis and rationale.
 final class SlowFrozenFramesDetector {
   
     // MARK: - Configuration
@@ -80,6 +111,14 @@ final class SlowFrozenFramesDetector {
     
     
     // MARK: - Init
+    /// Creates a new slow/frozen frame detector.
+    ///
+    /// - Parameters:
+    ///   - frozenThresholdMs: Frame time (ms) at which a frame is considered frozen.
+    ///     Default 700ms aligns with ANR threshold for consistent "unresponsive UI" definition.
+    ///     Industry varies: Apple 250ms, Firebase 400ms, Sentry/Coralogix 700ms.
+    ///   - reportIntervalMs: Window size for aggregating frame counts. Default 60s.
+    ///   - tolerancePercentage: Tolerance for slow frame detection. Default 3% to prevent false positives.
     init(
         frozenThresholdMs: Double = 700.0,
         reportIntervalMs: Int64 = 60_000,
@@ -171,6 +210,8 @@ final class SlowFrozenFramesDetector {
             sumFrameMs += dtMs
             frameSamples += 1
             let allowedDeviation = slowBudgetMs * tolerancePercentage
+            // 700ms threshold: aligns with ANR detection for consistent "unresponsive UI" definition
+            // See class documentation and CX-31665 for rationale
             if dtMs >= frozenThresholdMs {
                 frozenCount += 1
             } else if dtMs > (slowBudgetMs + allowedDeviation) {
