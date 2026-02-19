@@ -83,7 +83,7 @@ final class CoralogixRumTests: XCTestCase {
 
         coralogixRum.setUserContext(userContext: nil)
         if let options = coralogixRum.coralogixExporter?.getOptions() {
-            // Verify that userContext is set correctly
+            // Verify that userContext was cleared (nil)
             XCTAssertNil(options.userContext)
         } else {
             XCTFail("Expected to receive updated options")
