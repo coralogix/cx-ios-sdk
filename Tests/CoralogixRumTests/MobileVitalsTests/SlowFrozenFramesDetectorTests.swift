@@ -82,4 +82,46 @@ final class SlowFrozenFramesDetectorTests: XCTestCase {
         XCTAssertEqual(frozenFramesStats[Keys.avg.rawValue] as? Double, expectedAvgFrozen)
         XCTAssertEqual(frozenFramesStats[Keys.p95.rawValue] as? Double, expectedP95FrozenCorrected)
     }
+    
+    func testZeroCountWindowsAreIncludedInStatistics() {
+        // Given: A detector with mix of zero and non-zero windows
+        let detector = SlowFrozenFramesDetector()
+        
+        // Simulate 5 windows: mostly smooth with occasional slowdown
+        detector.windowSlow = [0, 0, 5, 0, 10]    // 3 zero windows, 2 with issues
+        detector.windowFrozen = [0, 0, 0, 0, 1]   // 4 zero windows, 1 with issue
+        
+        // When: We get statistics
+        let stats = detector.statsDictionary()
+        
+        // Then: Zero windows should be included in calculations
+        guard let slowStats = stats[MobileVitalsType.slowFrames.stringValue] as? [String: Any] else {
+            XCTFail("Slow frames stats missing")
+            return
+        }
+        
+        // Min should be 0 (not 5, which would be the case if zeros were skipped)
+        XCTAssertEqual(slowStats[Keys.min.rawValue] as? Double, 0.0,
+                       "Min should include zero-count windows per CX-31666")
+        
+        // Avg should account for all 5 windows including zeros
+        let expectedAvg = (0 + 0 + 5 + 0 + 10) / 5.0  // = 3.0
+        XCTAssertEqual(slowStats[Keys.avg.rawValue] as? Double, expectedAvg,
+                       "Avg should include zero-count windows per CX-31666")
+        
+        // P95 with zeros included: [0,0,0,5,10] sorted, rank = ceil(0.95*5) = 5, index 4 → 10.0
+        XCTAssertEqual(slowStats[Keys.p95.rawValue] as? Double, 10.0,
+                       "P95 should include zero-count windows per CX-31666")
+        
+        // Verify frozen frames also include zeros
+        guard let frozenStats = stats[MobileVitalsType.frozenFrames.stringValue] as? [String: Any] else {
+            XCTFail("Frozen frames stats missing")
+            return
+        }
+        
+        XCTAssertEqual(frozenStats[Keys.min.rawValue] as? Double, 0.0,
+                       "Min frozen should include zero-count windows per CX-31666")
+        XCTAssertEqual(frozenStats[Keys.avg.rawValue] as? Double, 0.2,
+                       "Avg frozen (1/5=0.2) should include zero-count windows per CX-31666")
+    }
 }
