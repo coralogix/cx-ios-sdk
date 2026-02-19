@@ -182,7 +182,8 @@ final class SlowFrozenFramesDetector {
     }
 
     // MARK: - Reporting (grouped window)
-    /// Snapshot & reset counts, then post metrics (skip if both zero).
+    /// Snapshot & reset counts, then post metrics.
+    /// Always includes windows (even with zero counts) for accurate statistics.
     private func emitWindow() {
         var slow = 0
         var frozen = 0
@@ -198,13 +199,12 @@ final class SlowFrozenFramesDetector {
         frameSamples = 0
         statsLock.unlock()
 
-        if slow == 0 && frozen == 0 { return }
-
-        
-        // Store this window’s counts (independently; skip zeros for each metric)
+        // Always store window counts (including zeros) for accurate percentile calculations
+        // Skipping zero-count windows artificially inflates min/max/avg/p95 statistics
+        // See CX-31666 for analysis and rationale
         windowLock.lock()
-        if slow > 0 { _windowSlow.append(slow) }
-        if frozen > 0 { _windowFrozen.append(frozen) }
+        _windowSlow.append(slow)
+        _windowFrozen.append(frozen)
         windowLock.unlock()
     }
     
