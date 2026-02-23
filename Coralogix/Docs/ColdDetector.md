@@ -37,7 +37,7 @@ the moment the OS spawned the process until the app became interactive for the f
 The previous implementation recorded `CFAbsoluteTimeGetCurrent()` during SDK init inside
 `didFinishLaunchingWithOptions`. This missed all pre-main work:
 
-```
+```text
 Process birth
     │
     ├─ dyld loads frameworks           ← not captured before
