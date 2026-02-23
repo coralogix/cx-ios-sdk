@@ -31,16 +31,17 @@ final class ColdDetector {
     }
 
     @objc private func appDidBecomeActive() {
+        // Remove the observer unconditionally on first delivery so it never
+        // leaks into subsequent foreground cycles regardless of guard outcome.
+        NotificationCenter.default.removeObserver(self,
+                                                  name: UIApplication.didBecomeActiveNotification,
+                                                  object: nil)
+
         guard let launchStartTime = self.launchStartTime,
               self.launchEndTime == nil else { return }
 
         let launchEndTime = CFAbsoluteTimeGetCurrent()
         self.launchEndTime = launchEndTime
-
-        // Cold start fires exactly once — remove the observer immediately.
-        NotificationCenter.default.removeObserver(self,
-                                                  name: UIApplication.didBecomeActiveNotification,
-                                                  object: nil)
 
         let epochStartTime = Helper.convertCFAbsoluteTimeToEpoch(launchStartTime)
         let epochEndTime = Helper.convertCFAbsoluteTimeToEpoch(launchEndTime)
@@ -66,9 +67,9 @@ final class ColdDetector {
     /// Returns `nil` if the syscall fails; callers should fall back to `CFAbsoluteTimeGetCurrent()`.
     static func processStartTime() -> CFAbsoluteTime? {
         var kip = kinfo_proc()
-        var size = MemoryLayout<kinfo_proc>.stride
+        var size = MemoryLayout<kinfo_proc>.size
         var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, getpid()]
-        guard sysctl(&mib, 4, &kip, &size, nil, 0) == 0 else { return nil }
+        guard sysctl(&mib, UInt32(mib.count), &kip, &size, nil, 0) == 0 else { return nil }
 
         let tv = kip.kp_proc.p_starttime
         // tv_sec / tv_usec are relative to Unix epoch (1 Jan 1970).
