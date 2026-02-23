@@ -6,6 +6,7 @@
 //
 
 import XCTest
+import MetricKit
 import CoralogixInternal
 @testable import Coralogix
 
@@ -88,6 +89,94 @@ final class MetricsManagerTests: XCTestCase {
         metricsManager.anrDetector?.handleANR()
         
         wait(for: [expectation], timeout: 1.0)
+    }
+
+    // MARK: - MetricKit Hang Diagnostics
+
+    /// Verifies that `processHangDiagnostic` fires `hangDiagnosticClosure` with the correct
+    /// error type so hang events are routed to the error pipeline, not mobile vitals.
+    func testProcessHangDiagnostic_firesHangDiagnosticClosure() {
+        var receivedMessage: String?
+        var receivedErrorType: String?
+
+        MyMetricSubscriber.shared.hangDiagnosticClosure = { message, errorType in
+            receivedMessage = message
+            receivedErrorType = errorType
+        }
+
+        MyMetricSubscriber.shared.processHangDiagnostic(durationMs: 2500)
+
+        XCTAssertEqual(receivedErrorType, "MXHangDiagnostic",
+                       "Error type must be MXHangDiagnostic so the UI can distinguish it from runtime ANR")
+        XCTAssertEqual(receivedMessage, "App hang detected by MetricKit for 2500 ms",
+                       "Message must include the exact duration in milliseconds")
+
+        MyMetricSubscriber.shared.hangDiagnosticClosure = nil
+    }
+
+    /// Verifies that the duration is rounded to whole milliseconds in the error message,
+    /// preventing floating-point noise (e.g. "2500.000000023 ms").
+    func testProcessHangDiagnostic_durationIsRoundedToWholeMs() {
+        var receivedMessage: String?
+
+        MyMetricSubscriber.shared.hangDiagnosticClosure = { message, _ in
+            receivedMessage = message
+        }
+
+        MyMetricSubscriber.shared.processHangDiagnostic(durationMs: 1234.987)
+
+        XCTAssertEqual(receivedMessage, "App hang detected by MetricKit for 1234 ms",
+                       "Duration should be truncated to whole milliseconds")
+
+        MyMetricSubscriber.shared.hangDiagnosticClosure = nil
+    }
+
+    /// Verifies that when `hangDiagnosticClosure` is nil, `processHangDiagnostic` is a no-op
+    /// and does not crash.
+    func testProcessHangDiagnostic_whenClosureIsNil_doesNotCrash() {
+        MyMetricSubscriber.shared.hangDiagnosticClosure = nil
+        // Must not crash
+        MyMetricSubscriber.shared.processHangDiagnostic(durationMs: 1000)
+    }
+
+    /// Verifies that `addMetricKitObservers()` wires `hangDiagnosticClosure` so that a MetricKit
+    /// hang is forwarded to `anrErrorClosure` — not to `metricsManagerClosure` (mobile vitals).
+    func testAddMetricKitObservers_hangRoutesToAnrErrorClosure() {
+        var errorMessage: String?
+        var errorType: String?
+        var mobileVitalsCalled = false
+
+        metricsManager.metricsManagerClosure = { _ in mobileVitalsCalled = true }
+        metricsManager.anrErrorClosure = { msg, type in
+            errorMessage = msg
+            errorType = type
+        }
+
+        metricsManager.addMetricKitObservers()
+
+        // Simulate a hang arriving via MyMetricSubscriber
+        MyMetricSubscriber.shared.processHangDiagnostic(durationMs: 3000)
+
+        XCTAssertEqual(errorType, "MXHangDiagnostic", "Hang must be routed to the error closure")
+        XCTAssertEqual(errorMessage, "App hang detected by MetricKit for 3000 ms")
+        XCTAssertFalse(mobileVitalsCalled, "Hang must not trigger mobile vitals closure")
+
+        // Clean up shared state
+        MyMetricSubscriber.shared.hangDiagnosticClosure = nil
+        MXMetricManager.shared.remove(MyMetricSubscriber.shared)
+    }
+
+    /// Verifies that when `anrErrorClosure` is not set, a MetricKit hang is silently dropped
+    /// and does not crash.
+    func testAddMetricKitObservers_hangDroppedWhenAnrErrorClosureIsNil() {
+        metricsManager.anrErrorClosure = nil
+        metricsManager.addMetricKitObservers()
+
+        // Must not crash
+        MyMetricSubscriber.shared.processHangDiagnostic(durationMs: 1500)
+
+        MyMetricSubscriber.shared.hangDiagnosticClosure = nil
+        MXMetricManager.shared.remove(MyMetricSubscriber.shared)
     }
 }
 
