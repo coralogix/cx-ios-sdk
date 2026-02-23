@@ -13,28 +13,28 @@ final class WarmDetector {
     var foregroundEndTime: CFAbsoluteTime?
     var warmMetricIsActive = false
     var handleWarmClosure: (([String: Any]) -> Void)?
+    private var isMonitoring = false
 
     func startMonitoring() {
-        NotificationCenter.default.addObserver(self, selector: #selector(self.appDidEnterBackgroundNotification),
+        guard !isMonitoring else { return }
+        isMonitoring = true
+
+        // UIApplication lifecycle notifications fire for all iOS apps regardless of
+        // the framework (Swift, Flutter, React Native), so we register for all platforms.
+        NotificationCenter.default.addObserver(self,
+                                               selector: #selector(self.appDidEnterBackgroundNotification),
                                                name: UIApplication.didEnterBackgroundNotification,
                                                object: nil)
-        
-        let sdk = CoralogixRum.mobileSDK.sdkFramework
 
-        switch sdk {
-        case .flutter, .reactNative:
-            // it's flutter or react-native
-            break
-        case .swift:
-            NotificationCenter.default.addObserver(self,
-                                                   selector: #selector(self.appWillEnterForegroundNotification),
-                                                   name: UIApplication.willEnterForegroundNotification,
-                                                   object: nil)
-            
-            NotificationCenter.default.addObserver(self, selector: #selector(self.appDidBecomeActiveNotification),
-                                                   name: UIApplication.didBecomeActiveNotification,
-                                                   object: nil)
-        }
+        NotificationCenter.default.addObserver(self,
+                                               selector: #selector(self.appWillEnterForegroundNotification),
+                                               name: UIApplication.willEnterForegroundNotification,
+                                               object: nil)
+
+        NotificationCenter.default.addObserver(self,
+                                               selector: #selector(self.appDidBecomeActiveNotification),
+                                               name: UIApplication.didBecomeActiveNotification,
+                                               object: nil)
     }
     
     @objc internal func appWillEnterForegroundNotification() {
