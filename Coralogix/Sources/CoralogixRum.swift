@@ -8,7 +8,6 @@ import UIKit
 extension Notification.Name {
     static let cxRumNotification = Notification.Name("cxRumNotification")
     static let cxRumNotificationUserActions = Notification.Name("cxRumNotificationUserActions")
-    static let cxViewDidAppear = Notification.Name("cxViewDidAppear")
 }
 
 public class CoralogixRum {

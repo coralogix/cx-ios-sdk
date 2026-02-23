@@ -12,146 +12,172 @@ import UIKit
 @testable import Coralogix
 
 class ColdDetectorTests: XCTestCase {
-    
-    private func makeMetricsDict(launchEndTime: CFAbsoluteTime) -> [String: Any] {
-        return [MobileVitalsType.cold.stringValue: launchEndTime]
-    }
-    
-    var coldDetector: ColdDetector!
-    var expectation: XCTestExpectation!
-    
+    var sut: ColdDetector!
+
     override func setUp() {
         super.setUp()
-        coldDetector = ColdDetector()
+        sut = ColdDetector()
     }
-    
+
     override func tearDown() {
-        coldDetector = nil
+        sut = nil
         super.tearDown()
     }
- 
-    func testStartMonitoring_setsStartTime() {
-        XCTAssertNil(coldDetector.launchStartTime)
 
-        coldDetector.startMonitoring()
+    // MARK: - processStartTime()
 
-        XCTAssertNotNil(coldDetector.launchStartTime, "startMonitoring() should set launchStartTime")
-        // No assertion for observer registration directly; other tests indirectly verify by posting notifications.
-        _ = coldDetector // keep alive
-    }
-    
-    func testHandleNotification_setsEndTimeAndEmitsColdOnce() {
-        // Use deterministic times. Any constant offset added by Helper's conversion cancels in the delta.
-        coldDetector.startMonitoring()
-
-        let start: CFAbsoluteTime = 1_000.0
-        let end: CFAbsoluteTime = 1_500.0
-        coldDetector.launchStartTime = start
-        
-
-        let called = expectation(description: "handleColdClosure called exactly once")
-        called.expectedFulfillmentCount = 1
-        
-        var received: [String: Any]?
-        coldDetector.handleColdClosure = { payload in
-            received = payload
-            called.fulfill()
+    /// Verifies that `processStartTime()` successfully reads the kernel process birth time via sysctl.
+    /// The returned value must be in the past (before now) and positive, proving it reflects a real
+    /// process start rather than a fallback or zero.
+    func testProcessStartTime_returnsValidPastTime() throws {
+        guard let startTime = ColdDetector.processStartTime() else {
+            throw XCTSkip("sysctl unavailable in this sandbox environment")
         }
-        
-        // Post first (valid) notification
-        NotificationCenter.default.post(
-            name: .cxViewDidAppear,
-            object: makeMetricsDict(launchEndTime: end)
-        )
-        
-        // Post a second notification that should be ignored since launchEndTime is already set
-        NotificationCenter.default.post(
-            name: .cxViewDidAppear,
-            object: makeMetricsDict(launchEndTime: end + 100.0)
-        )
-        
-        wait(for: [called], timeout: 1.0)
-        
-        // Verify the detector latched the first end time only
-        XCTAssertEqual(coldDetector.launchEndTime, end, "launchEndTime should be set from the first valid notification only")
-        
-        // Verify payload structure & value
-        guard
-            let payload = received?[MobileVitalsType.cold.stringValue] as? [String: Any],
-            let units = payload[Keys.mobileVitalsUnits.rawValue] as? String,
-            let value = payload[Keys.value.rawValue] as? Double
-        else {
-            return XCTFail("Payload structure is not as expected")
-        }
-        
-        XCTAssertEqual(units, MeasurementUnits.milliseconds.stringValue, "Units should be milliseconds")
-        
-        // Helper converts both start and end to epoch before delta, so delta should remain (end - start)
-        let expected = coldDetector.calculateTime(start: Helper.convertCFAbsoluteTimeToEpoch(start),
-                                         stop: Helper.convertCFAbsoluteTimeToEpoch(end))
-        XCTAssertEqual(value, expected, accuracy: 0.000_1, "Cold start ms should equal converted delta")
+
+        let now = CFAbsoluteTimeGetCurrent()
+        XCTAssertLessThan(startTime, now, "Process start time must be in the past")
+        XCTAssertGreaterThan(startTime, 0, "Process start time must be a positive CFAbsoluteTime")
     }
-    
-    func testHandleNotification_ignoresWhenStartNotSet() {
-        let sut = ColdDetector()
+
+    /// Verifies that `processStartTime()` returns a time earlier than `CFAbsoluteTimeGetCurrent()`
+    /// recorded at SDK init — confirming we capture pre-main work that was previously missed.
+    func testProcessStartTime_isEarlierThanSdkInit() throws {
+        let sdkInitTime = CFAbsoluteTimeGetCurrent()
+
+        guard let kernelStartTime = ColdDetector.processStartTime() else {
+            throw XCTSkip("sysctl unavailable in this sandbox environment")
+        }
+
+        XCTAssertLessThan(kernelStartTime, sdkInitTime,
+                          "Kernel process start must predate SDK init — it captures pre-main work")
+    }
+
+    // MARK: - startMonitoring()
+
+    /// Verifies that `startMonitoring()` sets `launchStartTime` to the kernel process birth time,
+    /// which should be earlier than any time recorded after the call.
+    func testStartMonitoring_setsLaunchStartTime() throws {
+        XCTAssertNil(sut.launchStartTime)
+
+        sut.startMonitoring()
+
+        let startTime = try XCTUnwrap(sut.launchStartTime, "startMonitoring() must set launchStartTime")
+        XCTAssertLessThan(startTime, CFAbsoluteTimeGetCurrent(),
+                          "launchStartTime should be in the past (kernel process birth or SDK init)")
+    }
+
+    // MARK: - Cold Start Measurement
+
+    /// End-to-end test: verifies that posting `didBecomeActiveNotification` after `startMonitoring()`
+    /// fires `handleColdClosure` with the correct dictionary structure and a positive duration.
+    func testDidBecomeActive_afterStartMonitoring_reportsColdStart() {
+        sut.startMonitoring()
+
+        var receivedMetric: [String: Any]?
+        sut.handleColdClosure = { receivedMetric = $0 }
+
+        NotificationCenter.default.post(name: UIApplication.didBecomeActiveNotification, object: nil)
+
+        XCTAssertNotNil(receivedMetric, "handleColdClosure should be called on didBecomeActive")
+
+        let inner = receivedMetric?[MobileVitalsType.cold.stringValue] as? [String: Any]
+        XCTAssertNotNil(inner, "Payload must contain the cold key")
+        XCTAssertEqual(inner?[Keys.mobileVitalsUnits.rawValue] as? String,
+                       MeasurementUnits.milliseconds.stringValue,
+                       "Units must be milliseconds")
+
+        let duration = inner?[Keys.value.rawValue] as? Double
+        XCTAssertNotNil(duration)
+        XCTAssertGreaterThanOrEqual(duration ?? -1, 0, "Duration must be non-negative")
+    }
+
+    /// Verifies that cold start is reported exactly once even if `didBecomeActiveNotification`
+    /// fires multiple times (e.g. app goes to background and returns after cold start).
+    /// The observer is removed on first delivery so subsequent fires are ignored.
+    func testDidBecomeActive_firesOnlyOnce() {
+        sut.startMonitoring()
+
+        var callCount = 0
+        sut.handleColdClosure = { _ in callCount += 1 }
+
+        NotificationCenter.default.post(name: UIApplication.didBecomeActiveNotification, object: nil)
+        NotificationCenter.default.post(name: UIApplication.didBecomeActiveNotification, object: nil)
+        NotificationCenter.default.post(name: UIApplication.didBecomeActiveNotification, object: nil)
+
+        XCTAssertEqual(callCount, 1, "Cold start must be reported exactly once")
+    }
+
+    /// Verifies that if `startMonitoring()` is never called, posting `didBecomeActiveNotification`
+    /// does nothing — no observer is registered and no closure fires.
+    func testDidBecomeActive_withoutStartMonitoring_doesNotReport() {
+        var called = false
+        sut.handleColdClosure = { _ in called = true }
+
+        NotificationCenter.default.post(name: UIApplication.didBecomeActiveNotification, object: nil)
+
+        XCTAssertFalse(called, "handleColdClosure must not fire if startMonitoring() was never called")
+    }
+
+    /// Verifies that if `launchStartTime` is nil when `didBecomeActive` fires, no metric is reported
+    /// and the observer is still removed (no leak into subsequent foreground cycles).
+    func testDidBecomeActive_whenStartTimeNil_doesNotReport() {
+        sut.startMonitoring()
         sut.launchStartTime = nil
-        
-        let notCalled = expectation(description: "handleColdClosure not called")
-        notCalled.isInverted = true
-        
-        sut.handleColdClosure = { _ in
-            notCalled.fulfill()
-        }
-        
-        NotificationCenter.default.post(
-            name: .cxViewDidAppear,
-            object: makeMetricsDict(launchEndTime: 1234.0)
-        )
-        
-        wait(for: [notCalled], timeout: 0.5)
-        XCTAssertNil(sut.launchEndTime, "launchEndTime should remain nil if start was never set")
+
+        var called = false
+        sut.handleColdClosure = { _ in called = true }
+
+        NotificationCenter.default.post(name: UIApplication.didBecomeActiveNotification, object: nil)
+        XCTAssertFalse(called, "handleColdClosure must not fire when launchStartTime is nil")
+
+        // A second post must also be ignored — confirms the observer was removed even on early return.
+        NotificationCenter.default.post(name: UIApplication.didBecomeActiveNotification, object: nil)
+        XCTAssertFalse(called, "Observer must be removed even when guard exits early")
     }
-    
+
+    /// Verifies that `launchEndTime` is set to a non-nil value after `didBecomeActive` fires,
+    /// acting as a latch to prevent duplicate reports.
+    func testDidBecomeActive_setsLaunchEndTime() {
+        sut.startMonitoring()
+        XCTAssertNil(sut.launchEndTime)
+
+        NotificationCenter.default.post(name: UIApplication.didBecomeActiveNotification, object: nil)
+
+        XCTAssertNotNil(sut.launchEndTime, "launchEndTime must be set after cold start is reported")
+    }
+
+    // MARK: - calculateTime()
+
+    /// Verifies the helper returns the correct positive delta and clamps negative values to zero.
     func testCalculateTime_isNonNegative() {
-        let sut = ColdDetector()
-        // Normal forward time
         XCTAssertEqual(sut.calculateTime(start: 10, stop: 25), 15, accuracy: 0.000_1)
-        // Negative delta is clamped to zero
-        XCTAssertEqual(sut.calculateTime(start: 25, stop: 10), 0, accuracy: 0.000_1)
-        // Equal times
-        XCTAssertEqual(sut.calculateTime(start: 42, stop: 42), 0, accuracy: 0.000_1)
+        XCTAssertEqual(sut.calculateTime(start: 25, stop: 10), 0, accuracy: 0.000_1, "Negative delta must clamp to zero")
+        XCTAssertEqual(sut.calculateTime(start: 42, stop: 42), 0, accuracy: 0.000_1, "Zero delta must return zero")
     }
-    
-    func testDeinit_removesObserver_andZeroesEndTime() {
-        // We can’t directly introspect NotificationCenter observers, but we can:
-        // 1) Ensure no crash/closure call after the object is deallocated.
-        // 2) Verify the deinit side-effect on launchEndTime by peeking just before release.
-        var sut: ColdDetector? = ColdDetector()
-        sut?.startMonitoring()
-        sut?.launchStartTime = 100
-        
-        // Set a closure that would trip if a dangling observer existed after dealloc.
-        let notCalled = expectation(description: "No callbacks after deallocation")
-        notCalled.isInverted = true
-        sut?.handleColdClosure = { _ in notCalled.fulfill() }
-        
-        // Capture endTime change in deinit (it sets to 0)
-        // We cannot assert after dealloc, so assert right before releasing and then ensure no callbacks happen.
-        XCTAssertNil(sut?.launchEndTime)
-        
-        // Deallocate
-        // swiftlint:disable:next weak_var_mutated
-        weak var weakSut = sut
-        sut = nil
-        XCTAssertNil(weakSut, "ColdDetector should deallocate")
-        
-        // Post a notification; if observer wasn't removed, it might try to message a zombie (would crash)
-        NotificationCenter.default.post(
-            name: .cxViewDidAppear,
-            object: makeMetricsDict(launchEndTime: 200)
-        )
-        
-        wait(for: [notCalled], timeout: 0.5)
-        // NOTE: We cannot read launchEndTime after dealloc to assert it's 0; this line intentionally omitted.
+
+    // MARK: - Deallocation
+
+    /// Verifies that `deinit` removes all observers so that a deallocated `ColdDetector`
+    /// never processes `didBecomeActiveNotification`, preventing crashes or stale callbacks.
+    /// Explicitly asserts deallocation via a weak reference before posting notifications.
+    func testDeinit_removesObservers() {
+        var closureCalled = false
+        weak var weakRef: ColdDetector?
+
+        func createAndRelease() {
+            let local = ColdDetector()
+            weakRef = local
+            local.startMonitoring()
+            local.handleColdClosure = { _ in closureCalled = true }
+            // `local` goes out of scope — deinit is called synchronously.
+        }
+
+        createAndRelease()
+
+        XCTAssertNil(weakRef, "ColdDetector must have deallocated before notifications are posted")
+
+        NotificationCenter.default.post(name: UIApplication.didBecomeActiveNotification, object: nil)
+
+        XCTAssertFalse(closureCalled, "No closure should fire after ColdDetector is deallocated")
     }
 }
