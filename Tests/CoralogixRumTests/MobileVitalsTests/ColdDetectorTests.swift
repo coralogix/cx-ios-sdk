@@ -41,12 +41,12 @@ class ColdDetectorTests: XCTestCase {
 
     /// Verifies that `processStartTime()` returns a time earlier than `CFAbsoluteTimeGetCurrent()`
     /// recorded at SDK init — confirming we capture pre-main work that was previously missed.
-    func testProcessStartTime_isEarlierThanSdkInit() {
+    func testProcessStartTime_isEarlierThanSdkInit() throws {
         let sdkInitTime = CFAbsoluteTimeGetCurrent()
-        let kernelStartTime = ColdDetector.processStartTime()
+        let kernelStartTime = try XCTUnwrap(ColdDetector.processStartTime(),
+                                            "sysctl must succeed on a real device/simulator")
 
-        XCTAssertNotNil(kernelStartTime)
-        XCTAssertLessThan(kernelStartTime!, sdkInitTime,
+        XCTAssertLessThan(kernelStartTime, sdkInitTime,
                           "Kernel process start must predate SDK init — it captures pre-main work")
     }
 

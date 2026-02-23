@@ -17,7 +17,12 @@ final class ColdDetector {
     func startMonitoring() {
         // Use kernel process birth time for the most accurate cold-start start point.
         // Falls back to the current time (SDK init) if the syscall is unavailable.
-        self.launchStartTime = ColdDetector.processStartTime() ?? CFAbsoluteTimeGetCurrent()
+        if let kernelStartTime = ColdDetector.processStartTime() {
+            self.launchStartTime = kernelStartTime
+        } else {
+            Log.w("ColdDetector: sysctl failed to read process start time, falling back to SDK init time")
+            self.launchStartTime = CFAbsoluteTimeGetCurrent()
+        }
 
         NotificationCenter.default.addObserver(self,
                                                selector: #selector(appDidBecomeActive),
