@@ -29,14 +29,13 @@ class ColdDetectorTests: XCTestCase {
     /// Verifies that `processStartTime()` successfully reads the kernel process birth time via sysctl.
     /// The returned value must be in the past (before now) and positive, proving it reflects a real
     /// process start rather than a fallback or zero.
-    func testProcessStartTime_returnsValidPastTime() {
-        let startTime = ColdDetector.processStartTime()
-
-        XCTAssertNotNil(startTime, "sysctl should succeed on a real device/simulator")
+    func testProcessStartTime_returnsValidPastTime() throws {
+        let startTime = try XCTUnwrap(ColdDetector.processStartTime(),
+                                      "sysctl should succeed on a real device/simulator")
 
         let now = CFAbsoluteTimeGetCurrent()
-        XCTAssertLessThan(startTime!, now, "Process start time must be in the past")
-        XCTAssertGreaterThan(startTime!, 0, "Process start time must be a positive CFAbsoluteTime")
+        XCTAssertLessThan(startTime, now, "Process start time must be in the past")
+        XCTAssertGreaterThan(startTime, 0, "Process start time must be a positive CFAbsoluteTime")
     }
 
     /// Verifies that `processStartTime()` returns a time earlier than `CFAbsoluteTimeGetCurrent()`
