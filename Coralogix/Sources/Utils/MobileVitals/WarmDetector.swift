@@ -13,8 +13,12 @@ final class WarmDetector {
     var foregroundEndTime: CFAbsoluteTime?
     var warmMetricIsActive = false
     var handleWarmClosure: (([String: Any]) -> Void)?
+    private var isMonitoring = false
 
     func startMonitoring() {
+        guard !isMonitoring else { return }
+        isMonitoring = true
+
         // UIApplication lifecycle notifications fire for all iOS apps regardless of
         // the framework (Swift, Flutter, React Native), so we register for all platforms.
         NotificationCenter.default.addObserver(self,

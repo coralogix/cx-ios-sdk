@@ -173,6 +173,25 @@ class WarmDetectorTests: XCTestCase {
         XCTAssertEqual(callCount, 0, "Warm start should not fire if app never went to background")
     }
 
+    // MARK: - Idempotency
+
+    /// Verifies that calling `startMonitoring()` more than once does not register
+    /// duplicate observers. Without the guard, a second call would fire the closure
+    /// twice per lifecycle event (once per registered observer).
+    func testStartMonitoring_calledTwice_doesNotDuplicateEvents() {
+        var callCount = 0
+        sut.handleWarmClosure = { _ in callCount += 1 }
+
+        sut.startMonitoring()
+        sut.startMonitoring()
+
+        NotificationCenter.default.post(name: UIApplication.didEnterBackgroundNotification, object: nil)
+        NotificationCenter.default.post(name: UIApplication.willEnterForegroundNotification, object: nil)
+        NotificationCenter.default.post(name: UIApplication.didBecomeActiveNotification, object: nil)
+
+        XCTAssertEqual(callCount, 1, "Warm start must be reported exactly once even if startMonitoring is called multiple times")
+    }
+
     // MARK: - All Platforms Receive Notifications (CX-31661)
 
     /// Verifies that WarmDetector registers UIApplication observers unconditionally,
