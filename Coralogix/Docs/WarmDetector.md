@@ -14,9 +14,11 @@ The detector hooks into the standard `UIApplication` lifecycle notifications to 
 4.  **Calculation**: The duration between the start and end times is calculated, converted to milliseconds, and passed to the `handleWarmClosure` for reporting. This logic is designed to run only once per foregrounding event.
 5.  **Cleanup**: The `deinit` method automatically removes all notification observers to prevent memory leaks.
 
-### Framework-Specific Behavior
+### Framework Compatibility
 
-This detector is designed specifically for native Swift applications. It includes logic to disable its `willEnterForeground` and `didBecomeActive` observers if the encompassing SDK is identified as running in a **Flutter** or **React Native** environment, as those frameworks manage their lifecycle events differently.
+This detector works across all supported frameworks: **native Swift**, **Flutter**, and **React Native**.
+
+`UIApplication` lifecycle notifications (`willEnterForegroundNotification`, `didBecomeActiveNotification`, `didEnterBackgroundNotification`) are standard iOS system notifications fired by the OS for every iOS app, regardless of the framework running on top of UIKit. Flutter and React Native apps receive these notifications identically to native apps.
 
 ---
 
