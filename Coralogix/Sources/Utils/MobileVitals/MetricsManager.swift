@@ -32,6 +32,14 @@ public class MetricsManager {
         MyMetricSubscriber.shared.metricKitClosure = { [weak self] dict in
             self?.metricsManagerClosure?(dict)
         }
+        MyMetricSubscriber.shared.hangDiagnosticClosure = { [weak self] message, errorType in
+            guard let self = self else { return }
+            guard let anrErrorClosure = self.anrErrorClosure else {
+                Log.d("[MetricsManager] Warning: anrErrorClosure not set, MetricKit hang not reported")
+                return
+            }
+            anrErrorClosure(message, errorType)
+        }
         MXMetricManager.shared.add(MyMetricSubscriber.shared)
     }
     
@@ -223,15 +231,28 @@ public class MetricsManager {
     }
 }
   
+/// Abstracts `MXHangDiagnostic` so hang processing can be tested without
+/// instantiating the uninitializable system class.
+protocol HangDiagnosticProviding {
+    var hangDurationMs: Double { get }
+}
+
+@available(iOS 14.0, *)
+extension MXHangDiagnostic: HangDiagnosticProviding {
+    var hangDurationMs: Double {
+        hangDuration.converted(to: .milliseconds).value
+    }
+}
+
 class MyMetricSubscriber: NSObject, MXMetricManagerSubscriber {
     static let shared = MyMetricSubscriber()
     var metricKitClosure: (([String: Any]) -> Void)?
+    var hangDiagnosticClosure: ((String, String) -> Void)?
 
     // Handle received metrics
     public func didReceive(_ payloads: [MXMetricPayload]) {
         for payload in payloads {
             if let metricPayloadJsonString = String(data: payload.jsonRepresentation(), encoding: .utf8) {
-                // send instrumentaion event
                 let vital = [
                     Keys.metricKit.rawValue: [
                         Keys.name.rawValue: metricPayloadJsonString
@@ -239,30 +260,25 @@ class MyMetricSubscriber: NSObject, MXMetricManagerSubscriber {
                 ]
                 self.metricKitClosure?(vital)
             }
-                    
-            // MetricKit payloads - reserved for future implementation
-            if payload.applicationLaunchMetrics != nil {
-                // TODO: Process application launch metrics
-            }
-            
-            if payload.diskIOMetrics != nil {
-                // TODO: Process disk I/O metrics
-            }
-            
-            if payload.memoryMetrics != nil {
-                // TODO: Process memory metrics
-            }
+
+            // TODO: Process application launch metrics (pending web UI support)
+            // TODO: Process disk I/O metrics (pending web UI support)
+            // TODO: Process memory metrics (pending web UI support)
         }
     }
-    
+
     // Handle received diagnostics
     @available(iOS 14.0, *)
     public func didReceive(_ payloads: [MXDiagnosticPayload]) {
         for payload in payloads {
-            // MetricKit diagnostics - reserved for future implementation
-            if payload.hangDiagnostics != nil {
-                // TODO: Process hang diagnostics
-            }
+            payload.hangDiagnostics?.forEach { processHang($0) }
         }
+    }
+
+    /// Processes a single hang diagnostic. Accepts `HangDiagnosticProviding` so tests
+    /// can inject a mock without needing a real `MXHangDiagnostic` instance.
+    func processHang(_ diagnostic: HangDiagnosticProviding) {
+        let message = "App hang detected by MetricKit for \(Int(diagnostic.hangDurationMs.rounded())) ms"
+        hangDiagnosticClosure?(message, "MXHangDiagnostic")
     }
 }
