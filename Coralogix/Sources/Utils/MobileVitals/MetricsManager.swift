@@ -231,6 +231,19 @@ public class MetricsManager {
     }
 }
   
+/// Abstracts `MXHangDiagnostic` so hang processing can be tested without
+/// instantiating the uninitializable system class.
+protocol HangDiagnosticProviding {
+    var hangDurationMs: Double { get }
+}
+
+@available(iOS 14.0, *)
+extension MXHangDiagnostic: HangDiagnosticProviding {
+    var hangDurationMs: Double {
+        hangDuration.converted(to: .milliseconds).value
+    }
+}
+
 class MyMetricSubscriber: NSObject, MXMetricManagerSubscriber {
     static let shared = MyMetricSubscriber()
     var metricKitClosure: (([String: Any]) -> Void)?
@@ -258,16 +271,14 @@ class MyMetricSubscriber: NSObject, MXMetricManagerSubscriber {
     @available(iOS 14.0, *)
     public func didReceive(_ payloads: [MXDiagnosticPayload]) {
         for payload in payloads {
-            payload.hangDiagnostics?.forEach { diagnostic in
-                let durationMs = diagnostic.hangDuration.converted(to: .milliseconds).value
-                processHangDiagnostic(durationMs: durationMs)
-            }
+            payload.hangDiagnostics?.forEach { processHang($0) }
         }
     }
 
-    /// Extracted for testability — processes a single hang event given its duration in milliseconds.
-    func processHangDiagnostic(durationMs: Double) {
-        let message = "App hang detected by MetricKit for \(Int(durationMs)) ms"
+    /// Processes a single hang diagnostic. Accepts `HangDiagnosticProviding` so tests
+    /// can inject a mock without needing a real `MXHangDiagnostic` instance.
+    func processHang(_ diagnostic: HangDiagnosticProviding) {
+        let message = "App hang detected by MetricKit for \(Int(diagnostic.hangDurationMs)) ms"
         hangDiagnosticClosure?(message, "MXHangDiagnostic")
     }
 }
