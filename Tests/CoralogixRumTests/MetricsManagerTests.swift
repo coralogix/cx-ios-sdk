@@ -22,6 +22,9 @@ final class MetricsManagerTests: XCTestCase {
     }
 
     override func tearDown() {
+        // Reset shared singleton state so a mid-test failure never leaks
+        // hangDiagnosticClosure into subsequent tests.
+        MyMetricSubscriber.shared.hangDiagnosticClosure = nil
         mockFPSMonitor = nil
         super.tearDown()
     }
@@ -110,11 +113,9 @@ final class MetricsManagerTests: XCTestCase {
                        "Error type must be MXHangDiagnostic so it is distinguishable from runtime ANR")
         XCTAssertEqual(receivedMessage, "App hang detected by MetricKit for 2500 ms",
                        "Message must include the exact duration in whole milliseconds")
-
-        MyMetricSubscriber.shared.hangDiagnosticClosure = nil
     }
 
-    /// Verifies that the duration from `HangDiagnosticProviding` is truncated to whole
+    /// Verifies that the duration from `HangDiagnosticProviding` is rounded to whole
     /// milliseconds in the error message, preventing floating-point noise.
     func testProcessHang_durationIsRoundedToWholeMs() {
         var receivedMessage: String?
@@ -125,18 +126,16 @@ final class MetricsManagerTests: XCTestCase {
 
         MyMetricSubscriber.shared.processHang(MockHangDiagnostic(hangDurationMs: 1234.987))
 
-        XCTAssertEqual(receivedMessage, "App hang detected by MetricKit for 1234 ms",
-                       "Duration should be truncated to whole milliseconds")
-
-        MyMetricSubscriber.shared.hangDiagnosticClosure = nil
+        XCTAssertEqual(receivedMessage, "App hang detected by MetricKit for 1235 ms",
+                       "Duration should be rounded to the nearest whole millisecond")
     }
 
     /// Verifies that when `hangDiagnosticClosure` is nil, `processHang` is a no-op
     /// and does not crash.
     func testProcessHang_whenClosureIsNil_doesNotCrash() {
         MyMetricSubscriber.shared.hangDiagnosticClosure = nil
-        // Must not crash
         MyMetricSubscriber.shared.processHang(MockHangDiagnostic(hangDurationMs: 1000))
+        // Passes if no crash occurs
     }
 
     /// Verifies that `addMetricKitObservers()` wires `hangDiagnosticClosure` so that a MetricKit
@@ -160,7 +159,6 @@ final class MetricsManagerTests: XCTestCase {
         XCTAssertEqual(errorMessage, "App hang detected by MetricKit for 3000 ms")
         XCTAssertFalse(mobileVitalsCalled, "Hang must not trigger mobile vitals closure")
 
-        MyMetricSubscriber.shared.hangDiagnosticClosure = nil
         MXMetricManager.shared.remove(MyMetricSubscriber.shared)
     }
 
@@ -170,10 +168,9 @@ final class MetricsManagerTests: XCTestCase {
         metricsManager.anrErrorClosure = nil
         metricsManager.addMetricKitObservers()
 
-        // Must not crash
         MyMetricSubscriber.shared.processHang(MockHangDiagnostic(hangDurationMs: 1500))
+        // Passes if no crash occurs
 
-        MyMetricSubscriber.shared.hangDiagnosticClosure = nil
         MXMetricManager.shared.remove(MyMetricSubscriber.shared)
     }
 }

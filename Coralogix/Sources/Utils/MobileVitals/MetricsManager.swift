@@ -278,7 +278,7 @@ class MyMetricSubscriber: NSObject, MXMetricManagerSubscriber {
     /// Processes a single hang diagnostic. Accepts `HangDiagnosticProviding` so tests
     /// can inject a mock without needing a real `MXHangDiagnostic` instance.
     func processHang(_ diagnostic: HangDiagnosticProviding) {
-        let message = "App hang detected by MetricKit for \(Int(diagnostic.hangDurationMs)) ms"
+        let message = "App hang detected by MetricKit for \(Int(diagnostic.hangDurationMs.rounded())) ms"
         hangDiagnosticClosure?(message, "MXHangDiagnostic")
     }
 }
