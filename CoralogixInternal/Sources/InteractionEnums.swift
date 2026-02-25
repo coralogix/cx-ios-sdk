@@ -9,15 +9,15 @@ import Foundation
 
 /// The type of a recorded user interaction.
 public enum InteractionEventName: String {
-    case click  = "click"
-    case scroll = "scroll"
-    case swipe  = "swipe"
+    case click
+    case scroll
+    case swipe
 }
 
 /// Direction of a scroll or swipe gesture.
 public enum ScrollDirection: String {
-    case up    = "up"
-    case down  = "down"
-    case left  = "left"
-    case right = "right"
+    case up
+    case down
+    case left
+    case right
 }
