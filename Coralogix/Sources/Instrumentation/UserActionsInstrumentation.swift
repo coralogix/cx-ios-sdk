@@ -13,27 +13,24 @@ import CoralogixInternal
 extension CoralogixRum {
     public func initializeUserActionsInstrumentation() {
         NotificationCenter.default.addObserver(self,
-                                               selector: #selector(handleTapNotification(notification:)),
+                                               selector: #selector(handleInteractionNotification(notification:)),
                                                name: .cxRumNotificationUserActions, object: nil)
-        
     }
-    
-    @objc func handleTapNotification(notification: Notification) {
+
+    @objc func handleInteractionNotification(notification: Notification) {
         guard let touchEvent = notification.object as? TouchEvent else {
             Log.e("Notification received with no TouchEvent object")
             return
         }
 
-        processTapObject(TapDataExtractor.extract(from: touchEvent))
+        processInteractionEvent(TapDataExtractor.extract(from: touchEvent))
     }
-    
-    // Increment the click counter and handle the tap object
-    private func processTapObject(_ tapObject: [String: Any]) {
+
+    private func processInteractionEvent(_ properties: [String: Any]) {
         var span = makeSpan(event: .userInteraction, source: .console, severity: .info)
-        handleUserInteractionEvent(tapObject, span: &span)
+        handleUserInteractionEvent(properties, span: &span)
     }
     
-    // Handle the case where x and y coordinates are present
     internal func handleUserInteractionEvent(_ properties: [String: Any],
                                              span: inout any Span,
                                              window: UIWindow? = Global.getKeyWindow()) {
@@ -69,7 +66,6 @@ extension CoralogixRum {
         return metadata
     }
     
-    // Check if the dictionary contains x and y properties
     internal func containsXY(_ dict: [String: Any]) -> Bool {
         return dict[Keys.positionX.rawValue] != nil && dict[Keys.positionY.rawValue] != nil
     }
