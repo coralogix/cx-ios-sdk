@@ -144,6 +144,84 @@ final class InteractionContextTests: XCTestCase {
         XCTAssertEqual(result, .down)
     }
 
+    // MARK: - safeInnerText — PII rules
+
+    /// UITextField must always return nil regardless of content (user-typed).
+    func testSafeInnerText_textField_returnsNil() {
+        let tf = UITextField()
+        tf.text = "user@example.com"
+        XCTAssertNil(TapDataExtractor.safeInnerText(from: tf))
+    }
+
+    /// Secure UITextField (password) must also return nil.
+    func testSafeInnerText_secureTextField_returnsNil() {
+        let tf = UITextField()
+        tf.isSecureTextEntry = true
+        tf.text = "super-secret"
+        XCTAssertNil(TapDataExtractor.safeInnerText(from: tf))
+    }
+
+    /// UITextView must always return nil (free-form user content).
+    func testSafeInnerText_textView_returnsNil() {
+        let tv = UITextView()
+        tv.text = "some user note"
+        XCTAssertNil(TapDataExtractor.safeInnerText(from: tv))
+    }
+
+    /// UISearchBar must always return nil (user search query).
+    func testSafeInnerText_searchBar_returnsNil() {
+        let sb = UISearchBar()
+        sb.text = "search term"
+        XCTAssertNil(TapDataExtractor.safeInnerText(from: sb))
+    }
+
+    /// UIButton title is developer-authored — must be captured.
+    func testSafeInnerText_button_returnsTitle() {
+        let btn = UIButton()
+        btn.setTitle("Add to Cart", for: .normal)
+        XCTAssertEqual(TapDataExtractor.safeInnerText(from: btn), "Add to Cart")
+    }
+
+    /// UILabel text is developer-authored — must be captured.
+    func testSafeInnerText_label_returnsText() {
+        let lbl = UILabel()
+        lbl.text = "Section Header"
+        XCTAssertEqual(TapDataExtractor.safeInnerText(from: lbl), "Section Header")
+    }
+
+    /// UITableViewCell primary text is developer-authored — must be captured.
+    func testSafeInnerText_tableViewCell_returnsTextLabel() {
+        let cell = UITableViewCell()
+        cell.textLabel?.text = "Settings"
+        XCTAssertEqual(TapDataExtractor.safeInnerText(from: cell), "Settings")
+    }
+
+    /// UISegmentedControl selected segment title is developer-authored — must be captured.
+    func testSafeInnerText_segmentedControl_returnsSelectedTitle() {
+        let seg = UISegmentedControl(items: ["Day", "Week", "Month"])
+        seg.selectedSegmentIndex = 1
+        XCTAssertEqual(TapDataExtractor.safeInnerText(from: seg), "Week")
+    }
+
+    /// UISegmentedControl with no selection must return nil.
+    func testSafeInnerText_segmentedControl_noSelection_returnsNil() {
+        let seg = UISegmentedControl(items: ["Day", "Week"])
+        seg.selectedSegmentIndex = UISegmentedControl.noSegment
+        XCTAssertNil(TapDataExtractor.safeInnerText(from: seg))
+    }
+
+    /// accessibilityLabel is the safe fallback for any other view type.
+    func testSafeInnerText_genericView_usesAccessibilityLabel() {
+        let view = UIView()
+        view.accessibilityLabel = "Profile Avatar"
+        XCTAssertEqual(TapDataExtractor.safeInnerText(from: view), "Profile Avatar")
+    }
+
+    /// A generic UIView with no text and no accessibilityLabel must return nil.
+    func testSafeInnerText_genericView_noText_returnsNil() {
+        XCTAssertNil(TapDataExtractor.safeInnerText(from: UIView()))
+    }
+
     // MARK: - ScrollTracker.direction — simulates the .cancelled path
     //
     // UIScrollView / UITableView gesture recognisers *cancel* touches instead of ending them.

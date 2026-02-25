@@ -119,17 +119,14 @@ enum TapDataExtractor {
             tapData[Keys.elementId.rawValue] = accessibilityId
         }
 
-        // target_element_inner_text: only for interactive leaf views.
-        // Container views (UITableView, UIScrollView, etc.) must be skipped because
-        // findFirstLabelText traverses ALL subviews and would return text from an
-        // unrelated cell (e.g. tapping the empty area below cells returns the last cell's text).
-        if !isContainerView(resolvedClassName) {
-            let innerText = ViewHelper.extractTextsFrom(view: view)
-                ?? view.accessibilityLabel
-                ?? Helper.findFirstLabelText(in: view)
-            if let innerText = innerText, !innerText.isEmpty {
-                tapData[Keys.targetElementInnerText.rawValue] = innerText
-            }
+        // target_element_inner_text: PII-safe text only.
+        // Container views are skipped (they span many items; text would be ambiguous).
+        // Input views (UITextField, UITextView, UISearchBar) are always skipped —
+        // they hold user-typed content which may be passwords, emails, or other PII.
+        if !isContainerView(resolvedClassName),
+           let innerText = safeInnerText(from: view),
+           !innerText.isEmpty {
+            tapData[Keys.targetElementInnerText.rawValue] = innerText
         }
 
         // scroll_direction: only present for scroll/swipe events
@@ -156,6 +153,46 @@ enum TapDataExtractor {
 
     private static func isContainerView(_ resolvedClassName: String) -> Bool {
         return containerClasses.contains(resolvedClassName)
+    }
+
+    /// Returns developer-authored text for known safe view types.
+    ///
+    /// **Deny-list (always nil — user-typed or sensitive content):**
+    /// - `UITextField` — user input; `isSecureTextEntry` may mean it's a password
+    /// - `UITextView`  — user input; can contain long free-form PII
+    /// - `UISearchBar` — captures the user's search query
+    ///
+    /// **Allow-list (developer-authored, safe to capture):**
+    /// - `UIButton`           → button title
+    /// - `UILabel`            → label text
+    /// - `UITableViewCell`    → primary text label
+    /// - `UISegmentedControl` → currently selected segment title
+    ///
+    /// **Fallback:** `accessibilityLabel` — always developer-set, never user-typed.
+    static func safeInnerText(from view: UIView) -> String? {
+        // --- Deny-list: user-typed / sensitive ---
+        if view is UITextField { return nil }
+        if view is UITextView  { return nil }
+        if view is UISearchBar { return nil }
+
+        // --- Allow-list: developer-authored text ---
+        if let button = view as? UIButton {
+            return button.title(for: .normal)
+        }
+        if let label = view as? UILabel {
+            return label.text
+        }
+        if let cell = view as? UITableViewCell {
+            return cell.textLabel?.text
+        }
+        if let segment = view as? UISegmentedControl {
+            let idx = segment.selectedSegmentIndex
+            guard idx != UISegmentedControl.noSegment else { return nil }
+            return segment.titleForSegment(at: idx)
+        }
+
+        // --- Fallback: accessibility label (developer-set, never user-typed) ---
+        return view.accessibilityLabel
     }
 
     /// Maps internal UIKit private subclass names to their canonical public class name.
