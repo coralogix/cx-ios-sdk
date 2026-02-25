@@ -45,7 +45,7 @@ final class ScrollTracker {
     static let shared = ScrollTracker()
 
     /// Minimum movement in points to classify a gesture as a scroll rather than a tap.
-    let threshold: CGFloat = 20.0
+    static let threshold: CGFloat = 20.0
 
     private struct TouchState {
         let view: UIView
@@ -104,7 +104,7 @@ final class ScrollTracker {
     func direction(from start: CGPoint, to end: CGPoint) -> ScrollDirection? {
         let dx = end.x - start.x
         let dy = end.y - start.y
-        guard abs(dx) >= threshold || abs(dy) >= threshold else { return nil }
+        guard abs(dx) >= Self.threshold || abs(dy) >= Self.threshold else { return nil }
         return abs(dy) >= abs(dx)
             ? (dy < 0 ? .up : .down)
             : (dx < 0 ? .left : .right)

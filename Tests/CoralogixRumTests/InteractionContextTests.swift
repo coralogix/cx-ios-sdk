@@ -140,7 +140,7 @@ final class InteractionContextTests: XCTestCase {
     func testScrollTracker_exactThreshold_returnsDirection() {
         let tracker = ScrollTracker()
         let result = tracker.direction(from: CGPoint(x: 0, y: 0),
-                                       to: CGPoint(x: 0, y: tracker.threshold))
+                                       to: CGPoint(x: 0, y: ScrollTracker.threshold))
         XCTAssertEqual(result, .down)
     }
 
