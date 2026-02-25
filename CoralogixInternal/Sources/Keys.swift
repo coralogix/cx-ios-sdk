@@ -66,6 +66,8 @@ public enum Keys: String {
     case targetXpath = "target_xpath"
     case targetElement = "target_element"
     case targetElementType = "target_element_type"
+    case targetElementInnerText = "target_element_inner_text"
+    case scrollDirection = "scroll_direction"
     case fetch
     case networkRequestContext = "network_request_context"
     case method

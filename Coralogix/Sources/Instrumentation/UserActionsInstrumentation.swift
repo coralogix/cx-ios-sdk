@@ -19,12 +19,12 @@ extension CoralogixRum {
     }
     
     @objc func handleTapNotification(notification: Notification) {
-        guard let tapObject = notification.object as? [String: Any] else {
-            Log.e("Notification received with no object or with a different object type")
+        guard let touchEvent = notification.object as? TouchEvent else {
+            Log.e("Notification received with no TouchEvent object")
             return
         }
-        
-        processTapObject(tapObject)
+
+        processTapObject(TapDataExtractor.extract(from: touchEvent))
     }
     
     // Increment the click counter and handle the tap object

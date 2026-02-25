@@ -119,37 +119,34 @@ extension UIApplication {
     }()
     
     @objc func cx_sendEvent(_ event: UIEvent) {
-        // Call the original implementation (swizzled now)
         cx_sendEvent(event)
-        
-        // Process touch events
-        if let touches = event.allTouches,
-           let touch = touches.first,
-           touch.phase == .began {
-            if let view = touch.view {
-                var tapData = [String: Any]()
-                Global.updateLocation(tapData: &tapData, touch: touch)
 
-                let className = NSStringFromClass(type(of: view))
-                if className.contains("UITableViewCellContentView") {
-                    tapData[Keys.tapName.rawValue] = "UITableView Cell"
-                } else if className.contains("_UIPageIndicatorView") {
-                    tapData[Keys.tapName.rawValue] = "UIPageIndicatorView"
-                } else if className.contains("UITabBarButton") {
-                    tapData[Keys.tapName.rawValue] = "UITabBarButton"
-                } else if className.contains("UITableView") {
-                    tapData[Keys.tapName.rawValue] = "UITableView"
-                } else {
-                    Log.w("Unsupported view class: \(className)")
-                }
-                
-                if let labelText = Helper.findFirstLabelText(in: view),
-                   let existing = tapData[Keys.tapName.rawValue] as? String {
-                    tapData[Keys.tapName.rawValue] = "\(existing.lowercased()) - \(labelText.lowercased())"
-                }
-                
-                NotificationCenter.default.post(name: .cxRumNotificationUserActions, object: tapData)
+        guard let touches = event.allTouches,
+              let touch = touches.first,
+              let view = touch.view else { return }
+
+        switch touch.phase {
+        case .began:
+            ScrollTracker.shared.recordBegan(touch)
+
+        case .ended:
+            if let direction = ScrollTracker.shared.processEnded(touch) {
+                NotificationCenter.default.post(
+                    name: .cxRumNotificationUserActions,
+                    object: TouchEvent(view: view, touch: touch, eventType: .scroll, scrollDirection: direction)
+                )
+            } else {
+                NotificationCenter.default.post(
+                    name: .cxRumNotificationUserActions,
+                    object: TouchEvent(view: view, touch: touch, eventType: .click)
+                )
             }
+
+        case .cancelled:
+            ScrollTracker.shared.cancel(touch)
+
+        default:
+            break
         }
     }
 }

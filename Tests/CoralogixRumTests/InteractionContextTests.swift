@@ -1,6 +1,6 @@
 //
 //  InteractionContextTests.swift
-//  
+//
 //
 //  Created by Coralogix Dev Team on 04/08/2024.
 //
@@ -10,50 +10,267 @@ import CoralogixInternal
 @testable import Coralogix
 
 final class InteractionContextTests: XCTestCase {
-    var mockSpan: SpanDataProtocol!
-    var statTime: Date!
+    var startTime: Date!
     var endTime: Date!
-    
+
     override func setUpWithError() throws {
-        statTime = Date()
+        startTime = Date()
         endTime = Date()
-        let tapObject = [Keys.tapName.rawValue: "UIButton",
-                         Keys.attributes.rawValue: [Keys.text.rawValue: "click me"]] as [String : Any]
-           mockSpan = MockSpanData(attributes: [Keys.severity.rawValue: AttributeValue("3"),
-                                             Keys.eventType.rawValue: AttributeValue("user-interaction"),
-                                             Keys.source.rawValue: AttributeValue("console"),
-                                             Keys.environment.rawValue: AttributeValue("prod"),
-                                             Keys.tapObject.rawValue:AttributeValue( Helper.convertDictionayToJsonString(dict: tapObject))],
-                                startTime: statTime,
-                                endTime: endTime,
-                                spanId: "span123",
-                                traceId: "trace123",
-                                name: "testSpan",
-                                kind: 1,
-                                statusCode: ["status": "ok"],
-                                resources: ["a": AttributeValue("1"),
-                                            "b": AttributeValue("2"),
-                                            "c": AttributeValue("3")])
     }
 
     override func tearDownWithError() throws {
-        mockSpan = nil
+        startTime = nil
+        endTime = nil
     }
 
-    func testInitialization() throws {
-        let context = InteractionContext(otel: mockSpan)
-        XCTAssertEqual(context.elementId, "UIButton")
-        XCTAssertEqual(context.eventName, Keys.click.rawValue)
-        if let attributes = context.attributes, let text = attributes[Keys.text.rawValue] as? String {
-            XCTAssertEqual(text, "click me")
-        }
+    // MARK: - Helpers
+
+    private func makeSpan(tapObject: [String: Any]) -> SpanDataProtocol {
+        MockSpanData(
+            attributes: [
+                Keys.severity.rawValue:    AttributeValue("3"),
+                Keys.eventType.rawValue:   AttributeValue("user-interaction"),
+                Keys.source.rawValue:      AttributeValue("console"),
+                Keys.environment.rawValue: AttributeValue("prod"),
+                Keys.tapObject.rawValue:   AttributeValue(Helper.convertDictionayToJsonString(dict: tapObject))
+            ],
+            startTime: startTime,
+            endTime: endTime,
+            spanId: "span123",
+            traceId: "trace123",
+            name: "testSpan",
+            kind: 1,
+            statusCode: ["status": "ok"],
+            resources: ["a": AttributeValue("1")]
+        )
     }
-    
-    func testGetDictionary() {
-        let context = InteractionContext(otel: mockSpan)
-        
-        let dictionary = context.getDictionary()
-        XCTAssertEqual(dictionary[Keys.elementId.rawValue] as? String, "UIButton")
-        XCTAssertEqual(dictionary[Keys.eventName.rawValue] as? String, Keys.click.rawValue)
+
+    // MARK: - InteractionEventName enum
+
+    func testInteractionEventName_rawValues() {
+        XCTAssertEqual(InteractionEventName(rawValue: "click"),  .click)
+        XCTAssertEqual(InteractionEventName(rawValue: "scroll"), .scroll)
+        XCTAssertEqual(InteractionEventName(rawValue: "swipe"),  .swipe)
+        XCTAssertNil(InteractionEventName(rawValue: "unknown"))
+    }
+
+    // MARK: - ScrollDirection enum
+
+    func testScrollDirection_rawValues() {
+        XCTAssertEqual(ScrollDirection(rawValue: "up"),    .up)
+        XCTAssertEqual(ScrollDirection(rawValue: "down"),  .down)
+        XCTAssertEqual(ScrollDirection(rawValue: "left"),  .left)
+        XCTAssertEqual(ScrollDirection(rawValue: "right"), .right)
+        XCTAssertNil(ScrollDirection(rawValue: "diagonal"))
+    }
+
+    // MARK: - TapDataExtractor.resolveClassName
+
+    /// Private / internal UIKit subclass names must be normalized to their canonical public name.
+    func testResolveClassName_privateSubclassNames_mapToCanonical() {
+        XCTAssertEqual(TapDataExtractor.resolveClassName("UITableViewCellContentView"), "UITableViewCell")
+        XCTAssertEqual(TapDataExtractor.resolveClassName("_UIPageIndicatorView"),       "UIPageIndicatorView")
+        XCTAssertEqual(TapDataExtractor.resolveClassName("UITabBarButton"),             "UITabBarButton")
+        XCTAssertEqual(TapDataExtractor.resolveClassName("UICollectionViewCell"),       "UICollectionViewCell")
+        XCTAssertEqual(TapDataExtractor.resolveClassName("UITableView"),                "UITableView")
+    }
+
+    /// Unknown class names must pass through unchanged so element_classes is never silently dropped.
+    func testResolveClassName_unknownClass_returnsAsIs() {
+        XCTAssertEqual(TapDataExtractor.resolveClassName("UIListContentView"),  "UIListContentView")
+        XCTAssertEqual(TapDataExtractor.resolveClassName("SomeThirdPartyView"), "SomeThirdPartyView")
+    }
+
+    // MARK: - ScrollTracker.direction(from:to:)
+
+    /// Downward finger movement (content scrolls down) must resolve to .down.
+    func testScrollTracker_verticalDown_returnsDown() {
+        let tracker = ScrollTracker()
+        let result = tracker.direction(from: CGPoint(x: 100, y: 100), to: CGPoint(x: 102, y: 150))
+        XCTAssertEqual(result, .down)
+    }
+
+    /// Upward finger movement (content scrolls up) must resolve to .up.
+    func testScrollTracker_verticalUp_returnsUp() {
+        let tracker = ScrollTracker()
+        let result = tracker.direction(from: CGPoint(x: 100, y: 150), to: CGPoint(x: 102, y: 100))
+        XCTAssertEqual(result, .up)
+    }
+
+    /// Rightward finger movement must resolve to .right.
+    func testScrollTracker_horizontalRight_returnsRight() {
+        let tracker = ScrollTracker()
+        let result = tracker.direction(from: CGPoint(x: 100, y: 100), to: CGPoint(x: 150, y: 102))
+        XCTAssertEqual(result, .right)
+    }
+
+    /// Leftward finger movement must resolve to .left.
+    func testScrollTracker_horizontalLeft_returnsLeft() {
+        let tracker = ScrollTracker()
+        let result = tracker.direction(from: CGPoint(x: 150, y: 100), to: CGPoint(x: 100, y: 102))
+        XCTAssertEqual(result, .left)
+    }
+
+    /// Movement below the threshold (small wobble during a tap) must return nil — treated as a tap.
+    func testScrollTracker_belowThreshold_returnsNil() {
+        let tracker = ScrollTracker()
+        let result = tracker.direction(from: CGPoint(x: 100, y: 100), to: CGPoint(x: 105, y: 105))
+        XCTAssertNil(result, "Movement below threshold must be classified as a tap, not a scroll")
+    }
+
+    /// Exactly at the threshold must be treated as a scroll.
+    func testScrollTracker_exactThreshold_returnsDirection() {
+        let tracker = ScrollTracker()
+        let result = tracker.direction(from: CGPoint(x: 0, y: 0),
+                                       to: CGPoint(x: 0, y: tracker.threshold))
+        XCTAssertEqual(result, .down)
+    }
+
+    // MARK: - Tap / Click
+
+    /// A standard tap event must populate event_name, element_classes, element_id,
+    /// target_element_inner_text, and target_element.
+    func testInit_tapEvent_mapsAllFields() {
+        let tapObject: [String: Any] = [
+            Keys.eventName.rawValue:              "click",
+            Keys.elementClasses.rawValue:         "UIButton",
+            Keys.elementId.rawValue:              "buy_button",
+            Keys.targetElementInnerText.rawValue: "Buy Now",
+            Keys.targetElement.rawValue:          "UIButton",
+            Keys.tapAttributes.rawValue:          [Keys.text.rawValue: "promo"]
+        ]
+        let context = InteractionContext(otel: makeSpan(tapObject: tapObject))
+
+        XCTAssertEqual(context.eventName,              .click)
+        XCTAssertEqual(context.elementClasses,         "UIButton")
+        XCTAssertEqual(context.elementId,              "buy_button")
+        XCTAssertEqual(context.targetElementInnerText, "Buy Now")
+        XCTAssertNil(context.scrollDirection,          "Tap must not have a scroll direction")
+        XCTAssertEqual(context.targetElement,          "UIButton")
+        XCTAssertEqual(context.attributes?[Keys.text.rawValue] as? String, "promo")
+    }
+
+    /// event_name must default to "click" when the tapObject omits it.
+    func testInit_missingEventName_defaultsToClick() {
+        let tapObject: [String: Any] = [
+            Keys.elementClasses.rawValue: "UITableViewCell",
+            Keys.targetElement.rawValue:  "UITableViewCell"
+        ]
+        let context = InteractionContext(otel: makeSpan(tapObject: tapObject))
+
+        XCTAssertEqual(context.eventName, .click)
+    }
+
+    /// Optional fields must be nil when absent from the tapObject.
+    func testInit_optionalFieldsAbsent_areNil() {
+        let tapObject: [String: Any] = [
+            Keys.eventName.rawValue:      "click",
+            Keys.elementClasses.rawValue: "UIButton",
+            Keys.targetElement.rawValue:  "UIButton"
+        ]
+        let context = InteractionContext(otel: makeSpan(tapObject: tapObject))
+
+        XCTAssertNil(context.elementId)
+        XCTAssertNil(context.targetElementInnerText)
+        XCTAssertNil(context.scrollDirection)
+        XCTAssertNil(context.attributes)
+    }
+
+    // MARK: - Scroll
+
+    /// A scroll event must carry event_name "scroll" and a typed scroll_direction.
+    func testInit_scrollEvent_mapsDirectionField() {
+        let tapObject: [String: Any] = [
+            Keys.eventName.rawValue:       "scroll",
+            Keys.elementClasses.rawValue:  "UIScrollView",
+            Keys.targetElement.rawValue:   "UIScrollView",
+            Keys.scrollDirection.rawValue: ScrollDirection.down.rawValue
+        ]
+        let context = InteractionContext(otel: makeSpan(tapObject: tapObject))
+
+        XCTAssertEqual(context.eventName,       .scroll)
+        XCTAssertEqual(context.elementClasses,  "UIScrollView")
+        XCTAssertEqual(context.scrollDirection, .down)
+        XCTAssertNil(context.elementId)
+        XCTAssertNil(context.targetElementInnerText)
+    }
+
+    // MARK: - getDictionary
+
+    /// getDictionary must emit strings and omit nil optional fields.
+    func testGetDictionary_emitsStringsAndOmitsNilFields() {
+        let tapObject: [String: Any] = [
+            Keys.eventName.rawValue:      "click",
+            Keys.elementClasses.rawValue: "UIButton",
+            Keys.targetElement.rawValue:  "UIButton"
+        ]
+        let dict = InteractionContext(otel: makeSpan(tapObject: tapObject)).getDictionary()
+
+        XCTAssertEqual(dict[Keys.eventName.rawValue] as? String,      "click")
+        XCTAssertEqual(dict[Keys.elementClasses.rawValue] as? String, "UIButton")
+        XCTAssertEqual(dict[Keys.targetElement.rawValue] as? String,  "UIButton")
+        XCTAssertNil(dict[Keys.elementId.rawValue],              "element_id must be absent when nil")
+        XCTAssertNil(dict[Keys.targetElementInnerText.rawValue], "target_element_inner_text must be absent when nil")
+        XCTAssertNil(dict[Keys.scrollDirection.rawValue],        "scroll_direction must be absent when nil")
+        XCTAssertNil(dict[Keys.attributes.rawValue],             "attributes must be absent when nil")
+    }
+
+    /// Vertical scroll: direction must dominate when dy > dx.
+    func testInit_scrollEvent_verticalDominates() {
+        let tapObject: [String: Any] = [
+            Keys.eventName.rawValue:       "scroll",
+            Keys.elementClasses.rawValue:  "UITableView",
+            Keys.targetElement.rawValue:   "UITableView",
+            Keys.scrollDirection.rawValue: "up"
+        ]
+        let context = InteractionContext(otel: makeSpan(tapObject: tapObject))
+        XCTAssertEqual(context.scrollDirection, .up)
+    }
+
+    /// getDictionary for a scroll event must include scroll_direction as its rawValue string.
+    func testGetDictionary_scrollEvent_includesDirectionRawValue() {
+        let tapObject: [String: Any] = [
+            Keys.eventName.rawValue:       "scroll",
+            Keys.elementClasses.rawValue:  "UITableView",
+            Keys.targetElement.rawValue:   "UITableView",
+            Keys.scrollDirection.rawValue: ScrollDirection.up.rawValue
+        ]
+        let dict = InteractionContext(otel: makeSpan(tapObject: tapObject)).getDictionary()
+
+        XCTAssertEqual(dict[Keys.eventName.rawValue] as? String,       "scroll")
+        XCTAssertEqual(dict[Keys.scrollDirection.rawValue] as? String, "up")
+    }
+
+    /// Any class name — including those not previously in any enum — must be preserved as-is.
+    func testInit_unknownElementClass_isPreservedAsString() {
+        let tapObject: [String: Any] = [
+            Keys.eventName.rawValue:      "click",
+            Keys.elementClasses.rawValue: "UIListContentView",
+            Keys.targetElement.rawValue:  "UIListContentView"
+        ]
+        let context = InteractionContext(otel: makeSpan(tapObject: tapObject))
+
+        XCTAssertEqual(context.elementClasses, "UIListContentView",
+                       "Any class name must be kept as-is, never silently dropped")
+    }
+
+    /// An empty / missing tapObject must produce a context with all nil fields.
+    func testInit_emptySpan_producesAllNilContext() {
+        let emptySpan = MockSpanData(
+            attributes: [:],
+            startTime: startTime,
+            endTime: endTime,
+            spanId: "s", traceId: "t", name: "n", kind: 1,
+            statusCode: [:], resources: [:]
+        )
+        let context = InteractionContext(otel: emptySpan)
+
+        XCTAssertNil(context.eventName)
+        XCTAssertNil(context.elementClasses)
+        XCTAssertNil(context.elementId)
+        XCTAssertNil(context.targetElementInnerText)
+        XCTAssertNil(context.scrollDirection)
+        XCTAssertNil(context.targetElement)
+        XCTAssertNil(context.attributes)
     }
 }
