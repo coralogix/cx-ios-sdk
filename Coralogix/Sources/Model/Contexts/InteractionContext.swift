@@ -24,7 +24,12 @@ struct InteractionContext {
         }
 
         if let nameStr = tapObject[Keys.eventName.rawValue] as? String {
-            eventName = InteractionEventName(rawValue: nameStr) ?? .click
+            if let parsed = InteractionEventName(rawValue: nameStr) {
+                eventName = parsed
+            } else {
+                Log.w("InteractionContext: unknown event_name '\(nameStr)' — defaulting to .click")
+                eventName = .click
+            }
         } else {
             eventName = .click
         }
