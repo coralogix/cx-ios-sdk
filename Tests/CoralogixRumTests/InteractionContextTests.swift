@@ -79,6 +79,10 @@ final class InteractionContextTests: XCTestCase {
     func testResolveClassName_unknownClass_returnsAsIs() {
         XCTAssertEqual(TapDataExtractor.resolveClassName("UIListContentView"),  "UIListContentView")
         XCTAssertEqual(TapDataExtractor.resolveClassName("SomeThirdPartyView"), "SomeThirdPartyView")
+        // A third-party class whose name *contains* a UIKit name mid-string must NOT be misidentified.
+        XCTAssertEqual(TapDataExtractor.resolveClassName("SomeSDKUITableViewProxy"), "SomeSDKUITableViewProxy")
+        // Module-prefixed names should still resolve correctly.
+        XCTAssertEqual(TapDataExtractor.resolveClassName("UIKit.UITableViewCell"), "UITableViewCell")
     }
 
     // MARK: - Interaction context attributes (x/y)

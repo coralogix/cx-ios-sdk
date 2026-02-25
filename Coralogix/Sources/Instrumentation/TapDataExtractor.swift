@@ -214,14 +214,21 @@ enum TapDataExtractor {
     /// Maps internal UIKit private subclass names to their canonical public class name.
     /// e.g. "UITableViewCellContentView" → "UITableViewCell", "_UIPageIndicatorView" → "UIPageIndicatorView".
     /// Falls through to the raw class name for all other views.
+    ///
+    /// Uses `hasPrefix` on the bare class name (module prefix stripped) so that a third-party
+    /// class like "SomeSDKUITableViewProxy" does NOT accidentally match "UITableView".
     static func resolveClassName(_ className: String) -> String {
-        if className.contains("UITableViewCellContentView") { return "UITableViewCell" }
-        if className.contains("_UIPageIndicatorView")       { return "UIPageIndicatorView" }
-        if className.contains("UITabBarButton")             { return "UITabBarButton" }
-        if className.contains("UITableViewCell")            { return "UITableViewCell" }
-        if className.contains("UICollectionViewCell")       { return "UICollectionViewCell" }
-        if className.contains("UICollectionView")           { return "UICollectionView" }
-        if className.contains("UITableView")                { return "UITableView" }
+        // Strip module prefix: "MyModule.UITableView" → "UITableView"
+        let bare = className.components(separatedBy: ".").last ?? className
+
+        // More specific prefixes must be checked before their shorter superstrings.
+        if bare.hasPrefix("UITableViewCellContentView") { return "UITableViewCell" }
+        if bare.hasPrefix("_UIPageIndicatorView")       { return "UIPageIndicatorView" }
+        if bare.hasPrefix("UITabBarButton")             { return "UITabBarButton" }
+        if bare.hasPrefix("UITableViewCell")            { return "UITableViewCell" }
+        if bare.hasPrefix("UICollectionViewCell")       { return "UICollectionViewCell" }
+        if bare.hasPrefix("UICollectionView")           { return "UICollectionView" }
+        if bare.hasPrefix("UITableView")                { return "UITableView" }
         return className
     }
 }
