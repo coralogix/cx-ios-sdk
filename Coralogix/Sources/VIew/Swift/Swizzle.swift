@@ -144,6 +144,8 @@ extension UIApplication {
                     name: .cxRumNotificationUserActions,
                     object: TouchEvent(view: view, touch: touch, eventType: .click)
                 )
+            } else {
+                Log.w("cx_sendEvent .ended: touch.view is nil — tap event dropped")
             }
 
         case .cancelled:
