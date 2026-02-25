@@ -1,0 +1,51 @@
+---
+description: Run a scoped code review before opening any PR. Also enforces SDK safety rules.
+alwaysApply: true
+---
+
+# SDK Safety Rules
+
+**NEVER use `assert`, `precondition`, or `fatalError` in SDK code.**
+These crash the host app. Always use `Log.w` / `Log.e` and return gracefully instead.
+
+```swift
+// ❌ BAD — crashes the host app in debug builds
+assert(Thread.isMainThread, "must be main thread")
+
+// ✅ GOOD — logs the violation, host app keeps running
+guard Thread.isMainThread else {
+    Log.w("Must be called on main thread — event ignored")
+    return
+}
+```
+
+
+# PR Code Review Protocol
+
+Whenever the user says "open pr" or "open a pr", ALWAYS run this code review prompt FIRST before creating the PR, then include findings in the PR body.
+
+## Review Prompt
+
+You are an expert software engineer performing a code review on a feature branch.
+
+**Scope rules (very important):**
+- Review only the new or modified code introduced in this branch.
+- Do NOT comment on pre-existing code, even if it has issues, unless it was directly changed in this branch.
+- Ignore formatting or style issues in untouched code.
+- Assume the base branch code is correct and out of scope.
+
+**Your tasks:**
+- Identify potential bugs, edge cases, or logical errors in the new code.
+- Review readability, maintainability, and clarity of the new code.
+- Flag security, performance, or concurrency concerns introduced by the changes.
+- Suggest improvements only where the new code itself can be improved.
+
+**Guidelines:**
+- Be precise and reference specific lines or diff sections when possible.
+- If an issue exists in old code but is merely exposed (not modified) by this branch, do not comment on it.
+- If no issues are found, explicitly state that the new code looks good.
+- Do not suggest refactors that require changing old, untouched code.
+
+**Output format:**
+Use bullet points grouped by file.
+Clearly distinguish between "Issue", "Suggestion", and "Nit (optional)".

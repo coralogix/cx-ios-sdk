@@ -56,12 +56,20 @@ final class ScrollTracker {
     private var touchStates: [ObjectIdentifier: TouchState] = [:]
 
     func recordBegan(_ touch: UITouch, view: UIView) {
+        guard Thread.isMainThread else {
+            Log.w("ScrollTracker.recordBegan called off the main thread — event ignored")
+            return
+        }
         let loc = touch.location(in: nil)
         touchStates[ObjectIdentifier(touch)] = TouchState(view: view, start: loc, current: loc)
     }
 
     /// Must be called on every `.moved` event so `processCancelled` has an up-to-date position.
     func recordMoved(_ touch: UITouch) {
+        guard Thread.isMainThread else {
+            Log.w("ScrollTracker.recordMoved called off the main thread — event ignored")
+            return
+        }
         let id = ObjectIdentifier(touch)
         guard touchStates[id] != nil else { return }
         touchStates[id]?.current = touch.location(in: nil)
@@ -69,6 +77,10 @@ final class ScrollTracker {
 
     /// Returns `(view, direction)` if movement exceeded the threshold (scroll), or `nil` (tap).
     func processEnded(_ touch: UITouch) -> (view: UIView, direction: ScrollDirection)? {
+        guard Thread.isMainThread else {
+            Log.w("ScrollTracker.processEnded called off the main thread — event ignored")
+            return nil
+        }
         guard let state = touchStates.removeValue(forKey: ObjectIdentifier(touch)) else { return nil }
         guard let dir = direction(from: state.start, to: touch.location(in: nil)) else { return nil }
         return (state.view, dir)
@@ -78,6 +90,10 @@ final class ScrollTracker {
     /// Uses `state.current` (last `.moved` position) because `touch.view` / `touch.location`
     /// are unreliable at `.cancelled` time.
     func processCancelled(_ touch: UITouch) -> (view: UIView, direction: ScrollDirection)? {
+        guard Thread.isMainThread else {
+            Log.w("ScrollTracker.processCancelled called off the main thread — event ignored")
+            return nil
+        }
         guard let state = touchStates.removeValue(forKey: ObjectIdentifier(touch)) else { return nil }
         guard let dir = direction(from: state.start, to: state.current) else { return nil }
         return (state.view, dir)
