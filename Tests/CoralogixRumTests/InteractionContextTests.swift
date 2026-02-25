@@ -144,6 +144,34 @@ final class InteractionContextTests: XCTestCase {
         XCTAssertEqual(result, .down)
     }
 
+    // MARK: - ScrollTracker.direction — simulates the .cancelled path
+    //
+    // UIScrollView / UITableView gesture recognisers *cancel* touches instead of ending them.
+    // When that happens, processCancelled(touch) uses state.current (last .moved position) to
+    // compute the direction. The direction() function below is the same logic — so these tests
+    // also validate what processCancelled would return for a typical in-table scroll.
+
+    /// A realistic downward table scroll (finger moves ~120 pts down) must resolve to .down.
+    func testScrollTracker_cancelledDownScroll_directionIsDown() {
+        let tracker = ScrollTracker()
+        let result = tracker.direction(from: CGPoint(x: 190, y: 300), to: CGPoint(x: 192, y: 420))
+        XCTAssertEqual(result, .down, "Cancelled downward scroll must resolve to .down")
+    }
+
+    /// A realistic upward table scroll must resolve to .up.
+    func testScrollTracker_cancelledUpScroll_directionIsUp() {
+        let tracker = ScrollTracker()
+        let result = tracker.direction(from: CGPoint(x: 190, y: 420), to: CGPoint(x: 192, y: 300))
+        XCTAssertEqual(result, .up, "Cancelled upward scroll must resolve to .up")
+    }
+
+    /// A small wobble during a tap that gets cancelled must not produce a scroll event.
+    func testScrollTracker_cancelledTinyMovement_returnsNil() {
+        let tracker = ScrollTracker()
+        let result = tracker.direction(from: CGPoint(x: 190, y: 300), to: CGPoint(x: 191, y: 308))
+        XCTAssertNil(result, "Cancelled touch with sub-threshold movement must not fire a scroll event")
+    }
+
     // MARK: - Tap / Click
 
     /// A standard tap event must populate event_name, element_classes, element_id,

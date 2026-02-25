@@ -121,21 +121,25 @@ extension UIApplication {
     @objc func cx_sendEvent(_ event: UIEvent) {
         cx_sendEvent(event)
 
-        guard let touches = event.allTouches,
-              let touch = touches.first,
-              let view = touch.view else { return }
+        guard let touches = event.allTouches, let touch = touches.first else { return }
 
         switch touch.phase {
         case .began:
-            ScrollTracker.shared.recordBegan(touch)
+            // Store the originating view here — it will be nil by the time .cancelled fires.
+            guard let view = touch.view else { return }
+            ScrollTracker.shared.recordBegan(touch, view: view)
+
+        case .moved:
+            // Keep current position updated so processCancelled has accurate data.
+            ScrollTracker.shared.recordMoved(touch)
 
         case .ended:
-            if let direction = ScrollTracker.shared.processEnded(touch) {
+            if let result = ScrollTracker.shared.processEnded(touch) {
                 NotificationCenter.default.post(
                     name: .cxRumNotificationUserActions,
-                    object: TouchEvent(view: view, touch: touch, eventType: .scroll, scrollDirection: direction)
+                    object: TouchEvent(view: result.view, touch: touch, eventType: .scroll, scrollDirection: result.direction)
                 )
-            } else {
+            } else if let view = touch.view {
                 NotificationCenter.default.post(
                     name: .cxRumNotificationUserActions,
                     object: TouchEvent(view: view, touch: touch, eventType: .click)
@@ -143,7 +147,15 @@ extension UIApplication {
             }
 
         case .cancelled:
-            ScrollTracker.shared.cancel(touch)
+            // UIScrollView / UITableView gesture recognisers cancel touches instead of ending them.
+            // touch.view is nil here; we rely on the view stored at .began time.
+            if let result = ScrollTracker.shared.processCancelled(touch) {
+                NotificationCenter.default.post(
+                    name: .cxRumNotificationUserActions,
+                    object: TouchEvent(view: result.view, touch: touch, eventType: .scroll, scrollDirection: result.direction)
+                )
+            }
+            // If processCancelled returns nil the movement was below threshold (cancelled tap) — discard.
 
         default:
             break

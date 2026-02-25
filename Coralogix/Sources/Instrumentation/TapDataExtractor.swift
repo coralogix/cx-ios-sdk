@@ -33,32 +33,58 @@ struct TouchEvent {
 
 // MARK: - ScrollTracker
 
-/// Tracks touch start positions to distinguish taps from scrolls and determine scroll direction.
+/// Tracks touch state to distinguish taps from scrolls and determine scroll direction.
 /// All methods must be called on the main thread (UIKit events are always on the main thread).
+///
+/// Key design decision: UIScrollView / UITableView gesture recognizers *cancel* the touch
+/// (`.cancelled` phase) instead of ending it (`.ended`) when they take over scrolling.
+/// At `.cancelled` time, `touch.view` is already nil. We therefore store both the originating
+/// view and the latest position on every `.moved` call so `processCancelled` has everything it
+/// needs without touching `UITouch` state that UIKit has already invalidated.
 final class ScrollTracker {
     static let shared = ScrollTracker()
 
     /// Minimum movement in points to classify a gesture as a scroll rather than a tap.
     let threshold: CGFloat = 20.0
 
-    private var startLocations: [ObjectIdentifier: CGPoint] = [:]
-
-    func recordBegan(_ touch: UITouch) {
-        startLocations[ObjectIdentifier(touch)] = touch.location(in: nil)
+    private struct TouchState {
+        let view: UIView
+        let start: CGPoint
+        var current: CGPoint
     }
 
-    /// Returns the scroll direction if movement exceeded the threshold, or `nil` if it was a tap.
-    func processEnded(_ touch: UITouch) -> ScrollDirection? {
-        guard let start = startLocations.removeValue(forKey: ObjectIdentifier(touch)) else { return nil }
-        return direction(from: start, to: touch.location(in: nil))
+    private var touchStates: [ObjectIdentifier: TouchState] = [:]
+
+    func recordBegan(_ touch: UITouch, view: UIView) {
+        let loc = touch.location(in: nil)
+        touchStates[ObjectIdentifier(touch)] = TouchState(view: view, start: loc, current: loc)
     }
 
-    func cancel(_ touch: UITouch) {
-        startLocations.removeValue(forKey: ObjectIdentifier(touch))
+    /// Must be called on every `.moved` event so `processCancelled` has an up-to-date position.
+    func recordMoved(_ touch: UITouch) {
+        let id = ObjectIdentifier(touch)
+        guard touchStates[id] != nil else { return }
+        touchStates[id]?.current = touch.location(in: nil)
+    }
+
+    /// Returns `(view, direction)` if movement exceeded the threshold (scroll), or `nil` (tap).
+    func processEnded(_ touch: UITouch) -> (view: UIView, direction: ScrollDirection)? {
+        guard let state = touchStates.removeValue(forKey: ObjectIdentifier(touch)) else { return nil }
+        guard let dir = direction(from: state.start, to: touch.location(in: nil)) else { return nil }
+        return (state.view, dir)
+    }
+
+    /// Called when UIKit cancels a touch because a scroll-view gesture recogniser took over.
+    /// Uses `state.current` (last `.moved` position) because `touch.view` / `touch.location`
+    /// are unreliable at `.cancelled` time.
+    func processCancelled(_ touch: UITouch) -> (view: UIView, direction: ScrollDirection)? {
+        guard let state = touchStates.removeValue(forKey: ObjectIdentifier(touch)) else { return nil }
+        guard let dir = direction(from: state.start, to: state.current) else { return nil }
+        return (state.view, dir)
     }
 
     /// Pure direction resolver — separated for testability.
-    /// Returns `nil` when the delta is below the threshold (i.e. it is a tap, not a scroll).
+    /// Returns `nil` when the delta is below the threshold (tap, not scroll).
     func direction(from start: CGPoint, to end: CGPoint) -> ScrollDirection? {
         let dx = end.x - start.x
         let dy = end.y - start.y
