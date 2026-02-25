@@ -79,8 +79,6 @@ enum TapDataExtractor {
         var tapData = [String: Any]()
         let view = event.view
 
-        Global.updateLocation(tapData: &tapData, touch: event.touch)
-
         tapData[Keys.eventName.rawValue] = event.eventType.rawValue
 
         // Both element_classes and target_element start with the same resolved class name.
@@ -95,10 +93,17 @@ enum TapDataExtractor {
             tapData[Keys.elementId.rawValue] = accessibilityId
         }
 
-        // target_element_inner_text: visible text or accessibility label
-        let innerText = Helper.findFirstLabelText(in: view) ?? view.accessibilityLabel
-        if let innerText = innerText, !innerText.isEmpty {
-            tapData[Keys.targetElementInnerText.rawValue] = innerText
+        // target_element_inner_text: only for interactive leaf views.
+        // Container views (UITableView, UIScrollView, etc.) must be skipped because
+        // findFirstLabelText traverses ALL subviews and would return text from an
+        // unrelated cell (e.g. tapping the empty area below cells returns the last cell's text).
+        if !isContainerView(resolvedClassName) {
+            let innerText = ViewHelper.extractTextsFrom(view: view)
+                ?? view.accessibilityLabel
+                ?? Helper.findFirstLabelText(in: view)
+            if let innerText = innerText, !innerText.isEmpty {
+                tapData[Keys.targetElementInnerText.rawValue] = innerText
+            }
         }
 
         // scroll_direction: only present for scroll/swipe events
@@ -106,7 +111,25 @@ enum TapDataExtractor {
             tapData[Keys.scrollDirection.rawValue] = direction.rawValue
         }
 
+        // attributes: tap position (x/y) so callers can use coordinates for heatmaps etc.
+        // x/y are also stored in tapData root for session replay metadata compatibility.
+        var attributes = [String: Any]()
+        Global.updateLocation(tapData: &attributes, touch: event.touch)
+        tapData.merge(attributes) { existing, _ in existing }
+        tapData[Keys.tapAttributes.rawValue] = attributes
+
         return tapData
+    }
+
+    /// Container views that span multiple content items — extracting inner text from them
+    /// would return text from an arbitrary child (e.g. the last visible cell), not the tapped item.
+    private static let containerClasses: Set<String> = [
+        "UITableView", "UIScrollView", "UICollectionView",
+        "UINavigationBar", "UITabBar", "UIWindow", "UIView"
+    ]
+
+    private static func isContainerView(_ resolvedClassName: String) -> Bool {
+        return containerClasses.contains(resolvedClassName)
     }
 
     /// Maps internal UIKit private subclass names to their canonical public class name.

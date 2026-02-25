@@ -81,6 +81,24 @@ final class InteractionContextTests: XCTestCase {
         XCTAssertEqual(TapDataExtractor.resolveClassName("SomeThirdPartyView"), "SomeThirdPartyView")
     }
 
+    // MARK: - Interaction context attributes (x/y)
+
+    /// Tap position (x/y) must appear in interaction_context.attributes so dashboards can use them.
+    func testInit_tapEvent_positionAppearsInAttributes() {
+        let tapObject: [String: Any] = [
+            Keys.eventName.rawValue:      "click",
+            Keys.elementClasses.rawValue: "UIButton",
+            Keys.targetElement.rawValue:  "UIButton",
+            Keys.tapAttributes.rawValue:  [Keys.positionX.rawValue: 100.0,
+                                           Keys.positionY.rawValue: 200.0]
+        ]
+        let context = InteractionContext(otel: makeSpan(tapObject: tapObject))
+
+        XCTAssertNotNil(context.attributes, "attributes must not be nil when position is present")
+        XCTAssertNotNil(context.attributes?[Keys.positionX.rawValue], "positionX must be in attributes")
+        XCTAssertNotNil(context.attributes?[Keys.positionY.rawValue], "positionY must be in attributes")
+    }
+
     // MARK: - ScrollTracker.direction(from:to:)
 
     /// Downward finger movement (content scrolls down) must resolve to .down.
