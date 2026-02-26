@@ -184,7 +184,7 @@ enum TapDataExtractor {
     /// **Allow-list (developer-authored, safe to capture):**
     /// - `UIButton`           → button title
     /// - `UILabel`            → label text
-    /// - `UITableViewCell`    → primary text label
+    /// - `UITableViewCell`    → `UIListContentConfiguration.text` (iOS 14+), else `textLabel`
     /// - `UISegmentedControl` → currently selected segment title
     ///
     /// **Fallback:** `accessibilityLabel` — always developer-set, never user-typed.
@@ -204,6 +204,12 @@ enum TapDataExtractor {
             return label.text
         }
         if let cell = view as? UITableViewCell {
+            // iOS 14+: prefer UIListContentConfiguration (the modern cell config API).
+            // textLabel is deprecated in iOS 14 and is nil for cells configured this way.
+            if #available(iOS 14.0, *),
+               let config = cell.contentConfiguration as? UIListContentConfiguration {
+                return config.text ?? config.secondaryText
+            }
             return cell.textLabel?.text
         }
         if let segment = view as? UISegmentedControl {
