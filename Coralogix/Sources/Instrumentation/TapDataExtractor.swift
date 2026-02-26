@@ -186,7 +186,7 @@ enum TapDataExtractor {
     /// `UITextField`, `UITextView`, and `UISearchBar` without repeating logic per class.
     private static func hasSensitivePIIProperties(_ view: UIView) -> Bool {
         guard let traits = view as? UITextInputTraits else { return false }
-        if traits.isSecureTextEntry { return true }
+        if traits.isSecureTextEntry == true { return true }
         if let contentType = traits.textContentType,
            sensitiveContentTypes.contains(contentType) { return true }
         return false
