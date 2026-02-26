@@ -133,9 +133,13 @@ public enum Global: String {
     }
     
     public static func updateLocation(tapData: inout [String: Any], touch: UITouch) {
-        let locationInScreen = touch.location(in: nil) // UIKit coordinate system (top-left origin)
-        tapData[Keys.positionX.rawValue] = locationInScreen.x
-        tapData[Keys.positionY.rawValue] = locationInScreen.y
+        updateLocation(tapData: &tapData, location: touch.location(in: nil))
+    }
+
+    /// Overload for contexts where a live `UITouch` is unavailable (e.g. gesture recogniser callbacks).
+    public static func updateLocation(tapData: inout [String: Any], location: CGPoint) {
+        tapData[Keys.positionX.rawValue] = location.x
+        tapData[Keys.positionY.rawValue] = location.y
     }
     
     public static func rects(from regions: [[String: Any]]) -> [CGRect] {

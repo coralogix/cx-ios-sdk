@@ -95,6 +95,41 @@ extension UIGestureRecognizer {
     }
 }
 
+extension UISwipeGestureRecognizer {
+    /// Intercepts swipe gesture completion to emit a `.swipe` interaction event.
+    /// Called after the original `touchesEnded`, at which point `state == .recognized`.
+    @objc func cx_swipeTouchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
+        cx_swipeTouchesEnded(touches, with: event) // call original — updates recogniser state
+
+        // Only fire when the gesture was actually recognized (discrete recognisers use .recognized == .ended).
+        guard state == .recognized,
+              let view = self.view else { return }
+
+        // Suppress multi-finger swipes (same policy as multi-touch scrolls).
+        let touchCount = touches.count
+        guard touchCount == 1 else { return }
+
+        let location = touches.first?.location(in: nil) ?? self.location(in: nil)
+        let swipeDir = cxScrollDirection(from: self.direction)
+
+        NotificationCenter.default.post(
+            name: .cxRumNotificationUserActions,
+            object: TouchEvent(view: view, location: location,
+                               eventType: .swipe, scrollDirection: swipeDir)
+        )
+    }
+
+    /// Maps `UISwipeGestureRecognizer.Direction` bitmask to our `ScrollDirection` enum.
+    /// Direction is always a single-bit value when set by the developer, but we check
+    /// each flag in priority order as a safety net.
+    private func cxScrollDirection(from d: UISwipeGestureRecognizer.Direction) -> ScrollDirection {
+        if d.contains(.up)    { return .up }
+        if d.contains(.down)  { return .down }
+        if d.contains(.left)  { return .left }
+        return .right
+    }
+}
+
 extension UIApplication {
     public static let swizzleTouchesEnded: Void = {
         guard let targetClass = NSClassFromString("SwiftUI.UIKitGestureRecognizer") else {
@@ -114,6 +149,15 @@ extension UIApplication {
         let swizzledSelector = #selector(cx_sendEvent(_:))
         
         SwizzleUtils.swizzleInstanceMethod(for: UIApplication.self,
+                                           originalSelector: originalSelector,
+                                           swizzledSelector: swizzledSelector)
+    }()
+
+    public static let swizzleSwipeGestureRecognizer: Void = {
+        let originalSelector = #selector(UIGestureRecognizer.touchesEnded(_:with:))
+        let swizzledSelector = #selector(UISwipeGestureRecognizer.cx_swipeTouchesEnded(_:with:))
+
+        SwizzleUtils.swizzleInstanceMethod(for: UISwipeGestureRecognizer.self,
                                            originalSelector: originalSelector,
                                            swizzledSelector: swizzledSelector)
     }()

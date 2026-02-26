@@ -144,6 +144,7 @@ public class CoralogixRum {
         UIViewController.swizzleViewDidAppear
         UIViewController.swizzleViewDidDisappear
         UIApplication.swizzleSendEvent
+        UIApplication.swizzleSwipeGestureRecognizer
     }
     
     // MARK: - Public API

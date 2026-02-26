@@ -16,16 +16,31 @@ import CoralogixInternal
 /// from the swizzle layer to the instrumentation layer.
 struct TouchEvent {
     let view: UIView
-    let touch: UITouch
+    let touch: UITouch?       // nil when the event originates from a gesture recogniser
+    let location: CGPoint     // screen-coordinate position (top-left origin)
     let eventType: InteractionEventName
     let scrollDirection: ScrollDirection?
 
+    /// Standard init — position is derived from the live UITouch (tap / scroll path).
     init(view: UIView,
          touch: UITouch,
          eventType: InteractionEventName = .click,
          scrollDirection: ScrollDirection? = nil) {
         self.view = view
         self.touch = touch
+        self.location = touch.location(in: nil)
+        self.eventType = eventType
+        self.scrollDirection = scrollDirection
+    }
+
+    /// Gesture-recogniser init — no live UITouch available (swipe path).
+    init(view: UIView,
+         location: CGPoint,
+         eventType: InteractionEventName,
+         scrollDirection: ScrollDirection? = nil) {
+        self.view = view
+        self.touch = nil
+        self.location = location
         self.eventType = eventType
         self.scrollDirection = scrollDirection
     }
@@ -154,7 +169,7 @@ enum TapDataExtractor {
         // and in the nested attributes dict (interaction_context schema).
         // On key collision, the incoming value wins — attributes data overrides earlier values.
         var attributes = [String: Any]()
-        Global.updateLocation(tapData: &attributes, touch: event.touch)
+        Global.updateLocation(tapData: &attributes, location: event.location)
         tapData.merge(attributes) { _, new in new }
         tapData[Keys.attributes.rawValue] = attributes
 
