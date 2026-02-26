@@ -150,11 +150,12 @@ enum TapDataExtractor {
             tapData[Keys.scrollDirection.rawValue] = direction.rawValue
         }
 
-        // attributes: tap position (x/y) so callers can use coordinates for heatmaps etc.
-        // x/y are also stored in tapData root for session replay metadata compatibility.
+        // x/y coordinates are stored both in tapData root (session replay compatibility)
+        // and in the nested attributes dict (interaction_context schema).
+        // On key collision, the incoming value wins — attributes data overrides earlier values.
         var attributes = [String: Any]()
         Global.updateLocation(tapData: &attributes, touch: event.touch)
-        tapData.merge(attributes) { existing, _ in existing }
+        tapData.merge(attributes) { _, new in new }
         tapData[Keys.tapAttributes.rawValue] = attributes
 
         return tapData
