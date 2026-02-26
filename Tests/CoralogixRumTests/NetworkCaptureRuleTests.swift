@@ -12,19 +12,35 @@ final class NetworkCaptureRuleTests: XCTestCase {
 
     // MARK: - matches(_:) — string init
 
-    func testMatches_exactSubstring_returnsTrue() {
+    func testMatches_exactSubstring_returnsTrue() throws {
         let rule = NetworkCaptureRule(url: "api.example.com")
-        XCTAssertTrue(rule.matches(URL(string: "https://api.example.com/users")!))
+        let url = try XCTUnwrap(URL(string: "https://api.example.com/users"))
+        XCTAssertTrue(rule.matches(url))
     }
 
-    func testMatches_substring_caseInsensitive_returnsTrue() {
+    func testMatches_substring_caseInsensitive_returnsTrue() throws {
         let rule = NetworkCaptureRule(url: "API.EXAMPLE.COM")
-        XCTAssertTrue(rule.matches(URL(string: "https://api.example.com/users")!))
+        let url = try XCTUnwrap(URL(string: "https://api.example.com/users"))
+        XCTAssertTrue(rule.matches(url))
     }
 
-    func testMatches_noSubstringMatch_returnsFalse() {
+    func testMatches_noSubstringMatch_returnsFalse() throws {
         let rule = NetworkCaptureRule(url: "other.com")
-        XCTAssertFalse(rule.matches(URL(string: "https://api.example.com/users")!))
+        let url = try XCTUnwrap(URL(string: "https://api.example.com/users"))
+        XCTAssertFalse(rule.matches(url))
+    }
+
+    func testMatches_substringInPath_returnsTrue() throws {
+        // Substring matching covers the full absolute URL, not just the host.
+        let rule = NetworkCaptureRule(url: "users")
+        let url = try XCTUnwrap(URL(string: "https://api.example.com/users/42"))
+        XCTAssertTrue(rule.matches(url))
+    }
+
+    func testMatches_substringInQuery_returnsTrue() throws {
+        let rule = NetworkCaptureRule(url: "search")
+        let url = try XCTUnwrap(URL(string: "https://api.example.com/endpoint?search=foo"))
+        XCTAssertTrue(rule.matches(url))
     }
 
     // MARK: - matches(_:) — regex init
@@ -32,13 +48,15 @@ final class NetworkCaptureRuleTests: XCTestCase {
     func testMatches_regex_matchingPattern_returnsTrue() throws {
         let pattern = try NSRegularExpression(pattern: "api\\.example\\.com/users/\\d+")
         let rule = NetworkCaptureRule(urlPattern: pattern)
-        XCTAssertTrue(rule.matches(URL(string: "https://api.example.com/users/42")!))
+        let url = try XCTUnwrap(URL(string: "https://api.example.com/users/42"))
+        XCTAssertTrue(rule.matches(url))
     }
 
     func testMatches_regex_nonMatchingPattern_returnsFalse() throws {
         let pattern = try NSRegularExpression(pattern: "api\\.example\\.com/orders/\\d+")
         let rule = NetworkCaptureRule(urlPattern: pattern)
-        XCTAssertFalse(rule.matches(URL(string: "https://api.example.com/users/42")!))
+        let url = try XCTUnwrap(URL(string: "https://api.example.com/users/42"))
+        XCTAssertFalse(rule.matches(url))
     }
 
     // MARK: - Default values
@@ -80,6 +98,9 @@ final class NetworkCaptureRuleTests: XCTestCase {
     }
 
     // MARK: - Mutual exclusivity
+    // These are white-box tests of the internal discriminator fields (url / urlPattern).
+    // They verify the invariant that exactly one matcher is set per init path.
+    // If the internal representation ever changes, update these alongside the implementation.
 
     func testStringInit_urlPatternIsNil() {
         let rule = NetworkCaptureRule(url: "api.example.com")

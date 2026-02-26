@@ -19,7 +19,6 @@ import Foundation
 /// - `NSRegularExpression` → regex match against the full absolute URL string.
 ///
 /// **Header capture** is allowlist-only: only names listed in `reqHeaders`/`resHeaders` are forwarded.
-/// Lookup is case-insensitive; the original name casing from the config is preserved in the output.
 ///
 /// **Payload capture** is disabled by default and must be explicitly opted-in per rule.
 public struct NetworkCaptureRule {
@@ -41,10 +40,10 @@ public struct NetworkCaptureRule {
     /// Allowlisted response header names to capture. `nil` means "capture none".
     public let resHeaders: [String]?
 
-    /// When `true`, the request body is captured as a UTF-8 string (≤ 1 024 chars; dropped if over).
+    /// When `true`, the request body is captured and forwarded to Coralogix.
     public let collectReqPayload: Bool
 
-    /// When `true`, the response body is captured as a UTF-8 string (≤ 1 024 chars; dropped if over).
+    /// When `true`, the response body is captured and forwarded to Coralogix.
     public let collectResPayload: Bool
 
     // MARK: - Initialisers
@@ -82,7 +81,7 @@ public struct NetworkCaptureRule {
     // MARK: - Internal matching
 
     /// Returns `true` when this rule applies to the given request URL.
-    internal func matches(_ requestURL: URL) -> Bool {
+    func matches(_ requestURL: URL) -> Bool {
         let absoluteString = requestURL.absoluteString
         if let pattern = urlPattern {
             let range = NSRange(absoluteString.startIndex..., in: absoluteString)
