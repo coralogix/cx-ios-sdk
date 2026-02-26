@@ -243,6 +243,24 @@ final class InteractionContextTests: XCTestCase {
         XCTAssertNil(result, "Cancelled touch with sub-threshold movement must not fire a scroll event")
     }
 
+    // MARK: - ScrollTracker off-main-thread guard
+
+    /// processCancelled called from a background thread must return nil without crashing.
+    /// This guards the SDK safety rule: never crash the host app due to threading mistakes.
+    func testScrollTracker_processCancelled_offMainThread_returnsNilSafely() {
+        let tracker = ScrollTracker()
+        let expectation = self.expectation(description: "background thread completed")
+        var result: (view: UIView, direction: ScrollDirection)? = (UIView(), .down)
+
+        DispatchQueue.global().async {
+            result = tracker.processCancelled(UITouch())
+            expectation.fulfill()
+        }
+
+        waitForExpectations(timeout: 1)
+        XCTAssertNil(result, "processCancelled off the main thread must return nil, not crash")
+    }
+
     // MARK: - Tap / Click
 
     /// A standard tap event must populate event_name, element_classes, element_id,
