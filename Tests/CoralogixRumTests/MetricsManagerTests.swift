@@ -25,6 +25,9 @@ final class MetricsManagerTests: XCTestCase {
         // Reset shared singleton state so a mid-test failure never leaks
         // hangDiagnosticClosure into subsequent tests.
         MyMetricSubscriber.shared.hangDiagnosticClosure = nil
+        // Remove the subscriber unconditionally so a failed assertion in any test
+        // that calls addMetricKitObservers() cannot pollute subsequent test runs.
+        MXMetricManager.shared.remove(MyMetricSubscriber.shared)
         mockFPSMonitor = nil
         super.tearDown()
     }
@@ -158,8 +161,6 @@ final class MetricsManagerTests: XCTestCase {
         XCTAssertEqual(errorType, "MXHangDiagnostic", "Hang must be routed to the error closure")
         XCTAssertEqual(errorMessage, "App hang detected by MetricKit for 3000 ms")
         XCTAssertFalse(mobileVitalsCalled, "Hang must not trigger mobile vitals closure")
-
-        MXMetricManager.shared.remove(MyMetricSubscriber.shared)
     }
 
     /// Verifies that when `anrErrorClosure` is not set, a MetricKit hang is silently dropped
@@ -170,8 +171,6 @@ final class MetricsManagerTests: XCTestCase {
 
         MyMetricSubscriber.shared.processHang(MockHangDiagnostic(hangDurationMs: 1500))
         // Passes if no crash occurs
-
-        MXMetricManager.shared.remove(MyMetricSubscriber.shared)
     }
 }
 

@@ -119,36 +119,59 @@ extension UIApplication {
     }()
     
     @objc func cx_sendEvent(_ event: UIEvent) {
-        // Call the original implementation (swizzled now)
         cx_sendEvent(event)
-        
-        // Process touch events
-        if let touches = event.allTouches,
-           let touch = touches.first,
-           touch.phase == .began {
-            if let view = touch.view {
-                var tapData = [String: Any]()
-                Global.updateLocation(tapData: &tapData, touch: touch)
 
-                let className = NSStringFromClass(type(of: view))
-                if className.contains("UITableViewCellContentView") {
-                    tapData[Keys.tapName.rawValue] = "UITableView Cell"
-                } else if className.contains("_UIPageIndicatorView") {
-                    tapData[Keys.tapName.rawValue] = "UIPageIndicatorView"
-                } else if className.contains("UITabBarButton") {
-                    tapData[Keys.tapName.rawValue] = "UITabBarButton"
-                } else if className.contains("UITableView") {
-                    tapData[Keys.tapName.rawValue] = "UITableView"
-                } else {
-                    Log.w("Unsupported view class: \(className)")
+        guard let touches = event.allTouches else { return }
+
+        // Interaction events (click / scroll) are only meaningful for single-finger gestures.
+        // For multi-touch (pinch, two-finger scroll etc.) we still track every touch so that
+        // ScrollTracker.touchStates is fully cleaned up, but we suppress event firing.
+        let isSingleTouch = touches.count == 1
+
+        for touch in touches {
+            switch touch.phase {
+            case .began:
+                // Store the originating view — it will be nil by the time .cancelled fires.
+                guard let view = touch.view else { continue }
+                ScrollTracker.shared.recordBegan(touch, view: view)
+
+            case .moved:
+                // Keep current position updated so processCancelled has accurate data.
+                ScrollTracker.shared.recordMoved(touch)
+
+            case .ended:
+                if let result = ScrollTracker.shared.processEnded(touch), isSingleTouch {
+                    NotificationCenter.default.post(
+                        name: .cxRumNotificationUserActions,
+                        object: TouchEvent(view: result.view, touch: touch, eventType: .scroll, scrollDirection: result.direction)
+                    )
+                } else if isSingleTouch {
+                    if let view = touch.view {
+                        NotificationCenter.default.post(
+                            name: .cxRumNotificationUserActions,
+                            object: TouchEvent(view: view, touch: touch, eventType: .click)
+                        )
+                    } else {
+                        // touch.view can be nil at .ended if the view was removed from
+                        // the hierarchy between .began and .ended (e.g. a modal dismissed
+                        // during the gesture). Dropping the tap is the correct behaviour.
+                        Log.w("cx_sendEvent .ended: touch.view is nil — tap event dropped")
+                    }
                 }
-                
-                if let labelText = Helper.findFirstLabelText(in: view),
-                   let existing = tapData[Keys.tapName.rawValue] as? String {
-                    tapData[Keys.tapName.rawValue] = "\(existing.lowercased()) - \(labelText.lowercased())"
+
+            case .cancelled:
+                // UIScrollView / UITableView gesture recognisers cancel touches instead of ending them.
+                // touch.view is nil here; we rely on the view stored at .began time.
+                if let result = ScrollTracker.shared.processCancelled(touch), isSingleTouch {
+                    NotificationCenter.default.post(
+                        name: .cxRumNotificationUserActions,
+                        object: TouchEvent(view: result.view, touch: touch, eventType: .scroll, scrollDirection: result.direction)
+                    )
                 }
-                
-                NotificationCenter.default.post(name: .cxRumNotificationUserActions, object: tapData)
+                // processCancelled is always called (cleans up touchStates) but no event is posted for multi-touch.
+
+            default:
+                break
             }
         }
     }
