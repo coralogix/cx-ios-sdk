@@ -187,7 +187,7 @@ enum TapDataExtractor {
     private static func hasSensitivePIIProperties(_ view: UIView) -> Bool {
         guard let traits = view as? UITextInputTraits else { return false }
         if traits.isSecureTextEntry == true { return true }
-        if let contentType = traits.textContentType,
+        if let contentType = traits.textContentType.flatMap({ $0 }),
            sensitiveContentTypes.contains(contentType) { return true }
         return false
     }
