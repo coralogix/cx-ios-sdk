@@ -72,6 +72,8 @@ final class InteractionContextTests: XCTestCase {
         XCTAssertEqual(TapDataExtractor.resolveClassName("SomeSDKUITableViewProxy"), "SomeSDKUITableViewProxy")
         // Module-prefixed names should still resolve correctly.
         XCTAssertEqual(TapDataExtractor.resolveClassName("UIKit.UITableViewCell"), "UITableViewCell")
+        // Unknown app-module classes must return the bare name, not the module-qualified string.
+        XCTAssertEqual(TapDataExtractor.resolveClassName("MyApp.CustomView"), "CustomView")
     }
 
     // MARK: - Interaction context attributes (x/y)

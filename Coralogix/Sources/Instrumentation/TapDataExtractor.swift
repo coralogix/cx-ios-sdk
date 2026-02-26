@@ -224,7 +224,7 @@ enum TapDataExtractor {
 
     /// Maps internal UIKit private subclass names to their canonical public class name.
     /// e.g. "UITableViewCellContentView" → "UITableViewCell", "_UIPageIndicatorView" → "UIPageIndicatorView".
-    /// Falls through to the raw class name for all other views.
+    /// Falls through to the bare (module-prefix-stripped) class name for all other views.
     ///
     /// Uses `hasPrefix` on the bare class name (module prefix stripped) so that a third-party
     /// class like "SomeSDKUITableViewProxy" does NOT accidentally match "UITableView".
@@ -240,6 +240,6 @@ enum TapDataExtractor {
         if bare.hasPrefix("UICollectionViewCell")       { return "UICollectionViewCell" }
         if bare.hasPrefix("UICollectionView")           { return "UICollectionView" }
         if bare.hasPrefix("UITableView")                { return "UITableView" }
-        return className
+        return bare
     }
 }
