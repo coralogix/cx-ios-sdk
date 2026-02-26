@@ -152,6 +152,9 @@ extension UIApplication {
                             object: TouchEvent(view: view, touch: touch, eventType: .click)
                         )
                     } else {
+                        // touch.view can be nil at .ended if the view was removed from
+                        // the hierarchy between .began and .ended (e.g. a modal dismissed
+                        // during the gesture). Dropping the tap is the correct behaviour.
                         Log.w("cx_sendEvent .ended: touch.view is nil — tap event dropped")
                     }
                 }
@@ -165,7 +168,7 @@ extension UIApplication {
                         object: TouchEvent(view: result.view, touch: touch, eventType: .scroll, scrollDirection: result.direction)
                     )
                 }
-                // Multi-touch cancelled: processCancelled already cleaned up touchStates — no event fired.
+                // processCancelled is always called (cleans up touchStates) but no event is posted for multi-touch.
 
             default:
                 break

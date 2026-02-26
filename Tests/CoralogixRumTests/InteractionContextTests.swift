@@ -98,44 +98,38 @@ final class InteractionContextTests: XCTestCase {
 
     /// Downward finger movement (content scrolls down) must resolve to .down.
     func testScrollTracker_verticalDown_returnsDown() {
-        let tracker = ScrollTracker()
-        let result = tracker.direction(from: CGPoint(x: 100, y: 100), to: CGPoint(x: 102, y: 150))
+        let result = ScrollTracker.direction(from: CGPoint(x: 100, y: 100), to: CGPoint(x: 102, y: 150))
         XCTAssertEqual(result, .down)
     }
 
     /// Upward finger movement (content scrolls up) must resolve to .up.
     func testScrollTracker_verticalUp_returnsUp() {
-        let tracker = ScrollTracker()
-        let result = tracker.direction(from: CGPoint(x: 100, y: 150), to: CGPoint(x: 102, y: 100))
+        let result = ScrollTracker.direction(from: CGPoint(x: 100, y: 150), to: CGPoint(x: 102, y: 100))
         XCTAssertEqual(result, .up)
     }
 
     /// Rightward finger movement must resolve to .right.
     func testScrollTracker_horizontalRight_returnsRight() {
-        let tracker = ScrollTracker()
-        let result = tracker.direction(from: CGPoint(x: 100, y: 100), to: CGPoint(x: 150, y: 102))
+        let result = ScrollTracker.direction(from: CGPoint(x: 100, y: 100), to: CGPoint(x: 150, y: 102))
         XCTAssertEqual(result, .right)
     }
 
     /// Leftward finger movement must resolve to .left.
     func testScrollTracker_horizontalLeft_returnsLeft() {
-        let tracker = ScrollTracker()
-        let result = tracker.direction(from: CGPoint(x: 150, y: 100), to: CGPoint(x: 100, y: 102))
+        let result = ScrollTracker.direction(from: CGPoint(x: 150, y: 100), to: CGPoint(x: 100, y: 102))
         XCTAssertEqual(result, .left)
     }
 
     /// Movement below the threshold (small wobble during a tap) must return nil — treated as a tap.
     func testScrollTracker_belowThreshold_returnsNil() {
-        let tracker = ScrollTracker()
-        let result = tracker.direction(from: CGPoint(x: 100, y: 100), to: CGPoint(x: 105, y: 105))
+        let result = ScrollTracker.direction(from: CGPoint(x: 100, y: 100), to: CGPoint(x: 105, y: 105))
         XCTAssertNil(result, "Movement below threshold must be classified as a tap, not a scroll")
     }
 
     /// Exactly at the threshold must be treated as a scroll.
     func testScrollTracker_exactThreshold_returnsDirection() {
-        let tracker = ScrollTracker()
-        let result = tracker.direction(from: CGPoint(x: 0, y: 0),
-                                       to: CGPoint(x: 0, y: ScrollTracker.threshold))
+        let result = ScrollTracker.direction(from: CGPoint(x: 0, y: 0),
+                                             to: CGPoint(x: 0, y: ScrollTracker.threshold))
         XCTAssertEqual(result, .down)
     }
 
@@ -319,22 +313,19 @@ final class InteractionContextTests: XCTestCase {
 
     /// A realistic downward table scroll (finger moves ~120 pts down) must resolve to .down.
     func testScrollTracker_cancelledDownScroll_directionIsDown() {
-        let tracker = ScrollTracker()
-        let result = tracker.direction(from: CGPoint(x: 190, y: 300), to: CGPoint(x: 192, y: 420))
+        let result = ScrollTracker.direction(from: CGPoint(x: 190, y: 300), to: CGPoint(x: 192, y: 420))
         XCTAssertEqual(result, .down, "Cancelled downward scroll must resolve to .down")
     }
 
     /// A realistic upward table scroll must resolve to .up.
     func testScrollTracker_cancelledUpScroll_directionIsUp() {
-        let tracker = ScrollTracker()
-        let result = tracker.direction(from: CGPoint(x: 190, y: 420), to: CGPoint(x: 192, y: 300))
+        let result = ScrollTracker.direction(from: CGPoint(x: 190, y: 420), to: CGPoint(x: 192, y: 300))
         XCTAssertEqual(result, .up, "Cancelled upward scroll must resolve to .up")
     }
 
     /// A small wobble during a tap that gets cancelled must not produce a scroll event.
     func testScrollTracker_cancelledTinyMovement_returnsNil() {
-        let tracker = ScrollTracker()
-        let result = tracker.direction(from: CGPoint(x: 190, y: 300), to: CGPoint(x: 191, y: 308))
+        let result = ScrollTracker.direction(from: CGPoint(x: 190, y: 300), to: CGPoint(x: 191, y: 308))
         XCTAssertNil(result, "Cancelled touch with sub-threshold movement must not fire a scroll event")
     }
 
@@ -345,15 +336,19 @@ final class InteractionContextTests: XCTestCase {
     func testScrollTracker_processCancelled_offMainThread_returnsNilSafely() {
         let tracker = ScrollTracker()
         let expectation = self.expectation(description: "background thread completed")
-        var result: (view: UIView, direction: ScrollDirection)? = (UIView(), .down)
+        // Use a Bool flag instead of a sentinel tuple to avoid a data race:
+        // the closure writes on a background thread and the main thread reads
+        // after waitForExpectations; the flag makes the threading intent explicit.
+        var didReturnNonNil = false
 
         DispatchQueue.global().async {
-            result = tracker.processCancelled(UITouch())
+            let result = tracker.processCancelled(UITouch())
+            didReturnNonNil = result != nil
             expectation.fulfill()
         }
 
         waitForExpectations(timeout: 1)
-        XCTAssertNil(result, "processCancelled off the main thread must return nil, not crash")
+        XCTAssertFalse(didReturnNonNil, "processCancelled off the main thread must return nil, not crash")
     }
 
     // MARK: - Tap / Click

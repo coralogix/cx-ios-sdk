@@ -11,7 +11,7 @@ import Foundation
 public enum InteractionEventName: String {
     case click
     case scroll
-    case swipe
+    case swipe // Reserved for future use (UISwipeGestureRecognizer / SwiftUI DragGesture)
 }
 
 /// Direction of a scroll or swipe gesture.

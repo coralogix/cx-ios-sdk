@@ -101,7 +101,7 @@ final class ScrollTracker {
 
     /// Pure direction resolver — separated for testability.
     /// Returns `nil` when the delta is below the threshold (tap, not scroll).
-    func direction(from start: CGPoint, to end: CGPoint) -> ScrollDirection? {
+    static func direction(from start: CGPoint, to end: CGPoint) -> ScrollDirection? {
         let dx = end.x - start.x
         let dy = end.y - start.y
         guard abs(dx) >= Self.threshold || abs(dy) >= Self.threshold else { return nil }
@@ -187,7 +187,7 @@ enum TapDataExtractor {
     private static func hasSensitivePIIProperties(_ view: UIView) -> Bool {
         guard let traits = view as? UITextInputTraits else { return false }
         if traits.isSecureTextEntry == true { return true }
-        if let contentType = traits.textContentType.flatMap({ $0 }),
+        if let contentType = traits.textContentType,
            sensitiveContentTypes.contains(contentType) { return true }
         return false
     }
@@ -248,7 +248,6 @@ enum TapDataExtractor {
             } else if let text = cell.textLabel?.text,
                       !text.trimmingCharacters(in: .whitespaces).isEmpty {
                 return text
-                // fall through to accessibilityLabel
             }
         }
         if let segment = view as? UISegmentedControl {
