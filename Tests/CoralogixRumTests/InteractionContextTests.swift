@@ -479,8 +479,9 @@ final class InteractionContextTests: XCTestCase {
                        "Any class name must be kept as-is, never silently dropped")
     }
 
-    /// An empty / missing tapObject must produce a context with all nil fields.
-    func testInit_emptySpan_producesAllNilContext() {
+    /// A missing tapObject must produce a context with safe defaults for non-optional fields
+    /// and nil for all optional fields.
+    func testInit_emptySpan_producesDefaultContext() {
         let now = Date()
         let emptySpan = MockSpanData(
             attributes: [:],
@@ -491,12 +492,12 @@ final class InteractionContextTests: XCTestCase {
         )
         let context = InteractionContext(otel: emptySpan)
 
-        XCTAssertNil(context.eventName)
+        XCTAssertEqual(context.eventName,     .click)
+        XCTAssertEqual(context.targetElement, "")
         XCTAssertNil(context.elementClasses)
         XCTAssertNil(context.elementId)
         XCTAssertNil(context.targetElementInnerText)
         XCTAssertNil(context.scrollDirection)
-        XCTAssertNil(context.targetElement)
         XCTAssertNil(context.attributes)
     }
 }
