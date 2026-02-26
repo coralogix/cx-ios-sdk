@@ -141,14 +141,16 @@ final class InteractionContextTests: XCTestCase {
 
     // MARK: - safeInnerText — PII rules
 
-    /// UITextField must always return nil regardless of content (user-typed).
-    func testSafeInnerText_textField_returnsNil() {
+    // MARK: UITextField
+
+    /// A non-sensitive UITextField (no secure entry, no sensitive content type) must return its text.
+    func testSafeInnerText_textField_nonSensitive_returnsText() {
         let tf = UITextField()
         tf.text = "user@example.com"
-        XCTAssertNil(TapDataExtractor.safeInnerText(from: tf))
+        XCTAssertEqual(TapDataExtractor.safeInnerText(from: tf), "user@example.com")
     }
 
-    /// Secure UITextField (password) must also return nil.
+    /// UITextField with isSecureTextEntry must return nil — password/PIN field.
     func testSafeInnerText_secureTextField_returnsNil() {
         let tf = UITextField()
         tf.isSecureTextEntry = true
@@ -156,17 +158,68 @@ final class InteractionContextTests: XCTestCase {
         XCTAssertNil(TapDataExtractor.safeInnerText(from: tf))
     }
 
-    /// UITextView must always return nil (free-form user content).
-    func testSafeInnerText_textView_returnsNil() {
+    /// UITextField whose textContentType is .password must return nil.
+    func testSafeInnerText_textField_passwordContentType_returnsNil() {
+        let tf = UITextField()
+        tf.textContentType = .password
+        tf.text = "hunter2"
+        XCTAssertNil(TapDataExtractor.safeInnerText(from: tf))
+    }
+
+    /// UITextField whose textContentType is .newPassword must return nil.
+    func testSafeInnerText_textField_newPasswordContentType_returnsNil() {
+        let tf = UITextField()
+        tf.textContentType = .newPassword
+        tf.text = "S3cur3P@ss!"
+        XCTAssertNil(TapDataExtractor.safeInnerText(from: tf))
+    }
+
+    /// UITextField whose textContentType is .creditCardNumber must return nil.
+    func testSafeInnerText_textField_creditCardContentType_returnsNil() {
+        let tf = UITextField()
+        tf.textContentType = .creditCardNumber
+        tf.text = "4111111111111111"
+        XCTAssertNil(TapDataExtractor.safeInnerText(from: tf))
+    }
+
+    // MARK: UITextView
+
+    /// A non-sensitive UITextView must return its text.
+    func testSafeInnerText_textView_nonSensitive_returnsText() {
         let tv = UITextView()
         tv.text = "some user note"
+        XCTAssertEqual(TapDataExtractor.safeInnerText(from: tv), "some user note")
+    }
+
+    /// UITextView with isSecureTextEntry must return nil.
+    func testSafeInnerText_textView_secureEntry_returnsNil() {
+        let tv = UITextView()
+        tv.isSecureTextEntry = true
+        tv.text = "secret"
         XCTAssertNil(TapDataExtractor.safeInnerText(from: tv))
     }
 
-    /// UISearchBar must always return nil (user search query).
-    func testSafeInnerText_searchBar_returnsNil() {
+    /// Empty UITextView (no text) must return nil — nothing useful to capture.
+    func testSafeInnerText_textView_empty_returnsNil() {
+        let tv = UITextView()
+        tv.text = ""
+        XCTAssertNil(TapDataExtractor.safeInnerText(from: tv))
+    }
+
+    // MARK: UISearchBar
+
+    /// A non-sensitive UISearchBar must return its text.
+    func testSafeInnerText_searchBar_nonSensitive_returnsText() {
         let sb = UISearchBar()
         sb.text = "search term"
+        XCTAssertEqual(TapDataExtractor.safeInnerText(from: sb), "search term")
+    }
+
+    /// UISearchBar with isSecureTextEntry must return nil.
+    func testSafeInnerText_searchBar_secureEntry_returnsNil() {
+        let sb = UISearchBar()
+        sb.isSecureTextEntry = true
+        sb.text = "pin"
         XCTAssertNil(TapDataExtractor.safeInnerText(from: sb))
     }
 
@@ -189,6 +242,46 @@ final class InteractionContextTests: XCTestCase {
         let cell = UITableViewCell()
         cell.textLabel?.text = "Settings"
         XCTAssertEqual(TapDataExtractor.safeInnerText(from: cell), "Settings")
+    }
+
+    /// UITableViewCell with an empty textLabel must not return "" and must fall through to accessibilityLabel.
+    func testSafeInnerText_tableViewCell_emptyTextLabel_fallsBackToAccessibilityLabel() {
+        let cell = UITableViewCell()
+        cell.textLabel?.text = "   "
+        cell.accessibilityLabel = "Item Row"
+        if #available(iOS 14.0, *) {
+            cell.contentConfiguration = nil
+        }
+        XCTAssertEqual(TapDataExtractor.safeInnerText(from: cell), "Item Row",
+                       "Whitespace-only textLabel must fall through to accessibilityLabel")
+    }
+
+    /// UITableViewCell with a UIListContentConfiguration whose text and secondaryText are both
+    /// empty/whitespace must fall through to accessibilityLabel, not return an empty string.
+    @available(iOS 14.0, *)
+    func testSafeInnerText_tableViewCell_listConfigEmptyText_fallsBackToAccessibilityLabel() {
+        let cell = UITableViewCell()
+        var config = UIListContentConfiguration.cell()
+        config.text = ""
+        config.secondaryText = "   "
+        cell.contentConfiguration = config
+        cell.accessibilityLabel = "Product Row"
+        XCTAssertEqual(TapDataExtractor.safeInnerText(from: cell), "Product Row",
+                       "UIListContentConfiguration with empty text and whitespace secondaryText must fall through to accessibilityLabel")
+    }
+
+    /// UIListContentConfiguration with a non-empty secondaryText (and nil/empty primary text)
+    /// must return secondaryText — not fall through.
+    @available(iOS 14.0, *)
+    func testSafeInnerText_tableViewCell_listConfigSecondaryTextOnly_returnsSecondaryText() {
+        let cell = UITableViewCell()
+        var config = UIListContentConfiguration.cell()
+        config.text = ""
+        config.secondaryText = "Subtitle"
+        cell.contentConfiguration = config
+        cell.accessibilityLabel = "Should Not Be Used"
+        XCTAssertEqual(TapDataExtractor.safeInnerText(from: cell), "Subtitle",
+                       "Non-empty secondaryText must be returned when primary text is empty")
     }
 
     /// UISegmentedControl selected segment title is developer-authored — must be captured.

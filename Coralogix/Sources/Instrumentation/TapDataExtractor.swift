@@ -172,31 +172,61 @@ enum TapDataExtractor {
         return containerClasses.contains(resolvedClassName)
     }
 
-    /// Returns developer-authored text for known safe view types.
+    /// `UITextContentType` values that unambiguously signal sensitive PII.
+    /// Any input view whose `textContentType` is in this set is suppressed regardless of class.
+    private static let sensitiveContentTypes: Set<UITextContentType> = [
+        .password,
+        .newPassword,
+        .creditCardNumber,
+    ]
+
+    /// Returns `true` when the view carries iOS system properties that explicitly flag it as
+    /// holding sensitive PII — a password mask or a sensitive `textContentType`.
+    /// This is intentionally checked via `UITextInputTraits` so it applies uniformly to
+    /// `UITextField`, `UITextView`, and `UISearchBar` without repeating logic per class.
+    private static func hasSensitivePIIProperties(_ view: UIView) -> Bool {
+        guard let traits = view as? UITextInputTraits else { return false }
+        if traits.isSecureTextEntry { return true }
+        if let contentType = traits.textContentType,
+           sensitiveContentTypes.contains(contentType) { return true }
+        return false
+    }
+
+    /// Returns developer-authored or user-typed (non-sensitive) text for a tapped view.
     ///
-    /// **Deny-list (always nil — user-typed or sensitive content):**
-    /// - `UITextField`  — user input; `isSecureTextEntry` may mean it's a password
-    /// - `UITextView`   — user input; can contain long free-form PII
-    /// - `UISearchBar`  — captures the user's search query
-    /// - `UIDatePicker` — selected date can expose sensitive info such as a birthday
-    /// - `UIStepper`    — numeric value combined with surrounding context may be sensitive
+    /// **Property-based block (always nil — sensitive PII signals present):**
+    /// Text input views (`UITextField`, `UITextView`, `UISearchBar`) are blocked when iOS
+    /// system properties explicitly mark the field as sensitive:
+    /// - `isSecureTextEntry == true` (password / PIN masking)
+    /// - `textContentType` is `.password`, `.newPassword`, or `.creditCardNumber`
     ///
-    /// **Allow-list (developer-authored, safe to capture):**
+    /// **Text extraction (non-sensitive input and developer-authored text):**
+    /// - `UITextField` / `UITextView` / `UISearchBar` → current text (if non-sensitive)
     /// - `UIButton`           → button title
     /// - `UILabel`            → label text
     /// - `UITableViewCell`    → `UIListContentConfiguration.text` (iOS 14+), else `textLabel`
     /// - `UISegmentedControl` → currently selected segment title
+    /// - `UIDatePicker`, `UIStepper` → no text property; fall through to `accessibilityLabel`
     ///
     /// **Fallback:** `accessibilityLabel` — always developer-set, never user-typed.
     static func safeInnerText(from view: UIView) -> String? {
-        // --- Deny-list: user-typed / sensitive ---
-        if view is UITextField  { return nil }
-        if view is UITextView   { return nil }
-        if view is UISearchBar  { return nil }
-        if view is UIDatePicker { return nil }
-        if view is UIStepper    { return nil }
+        // --- Property-based PII block ---
+        // Checked before any type-specific extraction so it applies to all input classes.
+        if hasSensitivePIIProperties(view) { return nil }
 
-        // --- Allow-list: developer-authored text ---
+        // --- Text input views (non-sensitive) ---
+        if let textField = view as? UITextField {
+            return textField.text
+        }
+        if let textView = view as? UITextView {
+            let text = textView.text ?? ""
+            return text.isEmpty ? nil : text
+        }
+        if let searchBar = view as? UISearchBar {
+            return searchBar.text
+        }
+
+        // --- Developer-authored text ---
         if let button = view as? UIButton {
             return button.title(for: .normal)
         }
@@ -208,9 +238,18 @@ enum TapDataExtractor {
             // textLabel is deprecated in iOS 14 and is nil for cells configured this way.
             if #available(iOS 14.0, *),
                let config = cell.contentConfiguration as? UIListContentConfiguration {
-                return config.text ?? config.secondaryText
+                // Only return when we have a genuinely non-empty string.
+                // An empty config.text must not short-circuit the accessibilityLabel fallback.
+                let candidate = [config.text, config.secondaryText]
+                    .compactMap { $0 }
+                    .first { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+                if let candidate { return candidate }
+                // fall through to accessibilityLabel
+            } else if let text = cell.textLabel?.text,
+                      !text.trimmingCharacters(in: .whitespaces).isEmpty {
+                return text
+                // fall through to accessibilityLabel
             }
-            return cell.textLabel?.text
         }
         if let segment = view as? UISegmentedControl {
             let idx = segment.selectedSegmentIndex
