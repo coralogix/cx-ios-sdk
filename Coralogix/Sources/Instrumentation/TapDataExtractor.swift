@@ -174,9 +174,11 @@ enum TapDataExtractor {
     /// Returns developer-authored text for known safe view types.
     ///
     /// **Deny-list (always nil — user-typed or sensitive content):**
-    /// - `UITextField` — user input; `isSecureTextEntry` may mean it's a password
-    /// - `UITextView`  — user input; can contain long free-form PII
-    /// - `UISearchBar` — captures the user's search query
+    /// - `UITextField`  — user input; `isSecureTextEntry` may mean it's a password
+    /// - `UITextView`   — user input; can contain long free-form PII
+    /// - `UISearchBar`  — captures the user's search query
+    /// - `UIDatePicker` — selected date can expose sensitive info such as a birthday
+    /// - `UIStepper`    — numeric value combined with surrounding context may be sensitive
     ///
     /// **Allow-list (developer-authored, safe to capture):**
     /// - `UIButton`           → button title
@@ -187,9 +189,11 @@ enum TapDataExtractor {
     /// **Fallback:** `accessibilityLabel` — always developer-set, never user-typed.
     static func safeInnerText(from view: UIView) -> String? {
         // --- Deny-list: user-typed / sensitive ---
-        if view is UITextField { return nil }
-        if view is UITextView  { return nil }
-        if view is UISearchBar { return nil }
+        if view is UITextField  { return nil }
+        if view is UITextView   { return nil }
+        if view is UISearchBar  { return nil }
+        if view is UIDatePicker { return nil }
+        if view is UIStepper    { return nil }
 
         // --- Allow-list: developer-authored text ---
         if let button = view as? UIButton {
