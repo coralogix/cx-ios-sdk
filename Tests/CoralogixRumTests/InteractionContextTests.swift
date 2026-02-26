@@ -10,23 +10,12 @@ import CoralogixInternal
 @testable import Coralogix
 
 final class InteractionContextTests: XCTestCase {
-    var startTime: Date!
-    var endTime: Date!
-
-    override func setUpWithError() throws {
-        startTime = Date()
-        endTime = Date()
-    }
-
-    override func tearDownWithError() throws {
-        startTime = nil
-        endTime = nil
-    }
 
     // MARK: - Helpers
 
     private func makeSpan(tapObject: [String: Any]) -> SpanDataProtocol {
-        MockSpanData(
+        let now = Date()
+        return MockSpanData(
             attributes: [
                 Keys.severity.rawValue:    AttributeValue("3"),
                 Keys.eventType.rawValue:   AttributeValue("user-interaction"),
@@ -34,8 +23,8 @@ final class InteractionContextTests: XCTestCase {
                 Keys.environment.rawValue: AttributeValue("prod"),
                 Keys.tapObject.rawValue:   AttributeValue(Helper.convertDictionayToJsonString(dict: tapObject))
             ],
-            startTime: startTime,
-            endTime: endTime,
+            startTime: now,
+            endTime: now,
             spanId: "span123",
             traceId: "trace123",
             name: "testSpan",
@@ -93,8 +82,8 @@ final class InteractionContextTests: XCTestCase {
             Keys.eventName.rawValue:      "click",
             Keys.elementClasses.rawValue: "UIButton",
             Keys.targetElement.rawValue:  "UIButton",
-            Keys.tapAttributes.rawValue:  [Keys.positionX.rawValue: 100.0,
-                                           Keys.positionY.rawValue: 200.0]
+            Keys.attributes.rawValue:  [Keys.positionX.rawValue: 100.0,
+                                        Keys.positionY.rawValue: 200.0]
         ]
         let context = InteractionContext(otel: makeSpan(tapObject: tapObject))
 
@@ -265,7 +254,7 @@ final class InteractionContextTests: XCTestCase {
             Keys.elementId.rawValue:              "buy_button",
             Keys.targetElementInnerText.rawValue: "Buy Now",
             Keys.targetElement.rawValue:          "UIButton",
-            Keys.tapAttributes.rawValue:          [Keys.text.rawValue: "promo"]
+            Keys.attributes.rawValue:              [Keys.text.rawValue: "promo"]
         ]
         let context = InteractionContext(otel: makeSpan(tapObject: tapObject))
 
@@ -384,10 +373,11 @@ final class InteractionContextTests: XCTestCase {
 
     /// An empty / missing tapObject must produce a context with all nil fields.
     func testInit_emptySpan_producesAllNilContext() {
+        let now = Date()
         let emptySpan = MockSpanData(
             attributes: [:],
-            startTime: startTime,
-            endTime: endTime,
+            startTime: now,
+            endTime: now,
             spanId: "s", traceId: "t", name: "n", kind: 1,
             statusCode: [:], resources: [:]
         )
