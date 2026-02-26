@@ -156,7 +156,7 @@ enum TapDataExtractor {
         var attributes = [String: Any]()
         Global.updateLocation(tapData: &attributes, touch: event.touch)
         tapData.merge(attributes) { _, new in new }
-        tapData[Keys.tapAttributes.rawValue] = attributes
+        tapData[Keys.attributes.rawValue] = attributes
 
         return tapData
     }

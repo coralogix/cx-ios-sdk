@@ -45,7 +45,7 @@ struct InteractionContext {
         }
 
         targetElement = tapObject[Keys.targetElement.rawValue] as? String
-        attributes    = tapObject[Keys.tapAttributes.rawValue] as? [String: Any]
+        attributes    = tapObject[Keys.attributes.rawValue] as? [String: Any]
     }
 
     func getDictionary() -> [String: Any] {
