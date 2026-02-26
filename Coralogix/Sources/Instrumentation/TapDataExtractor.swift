@@ -82,7 +82,7 @@ final class ScrollTracker {
             return nil
         }
         guard let state = touchStates.removeValue(forKey: ObjectIdentifier(touch)) else { return nil }
-        guard let dir = direction(from: state.start, to: touch.location(in: nil)) else { return nil }
+        guard let dir = Self.direction(from: state.start, to: touch.location(in: nil)) else { return nil }
         return (state.view, dir)
     }
 
@@ -95,7 +95,7 @@ final class ScrollTracker {
             return nil
         }
         guard let state = touchStates.removeValue(forKey: ObjectIdentifier(touch)) else { return nil }
-        guard let dir = direction(from: state.start, to: state.current) else { return nil }
+        guard let dir = Self.direction(from: state.start, to: state.current) else { return nil }
         return (state.view, dir)
     }
 
