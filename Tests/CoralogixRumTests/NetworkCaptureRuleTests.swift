@@ -27,21 +27,16 @@ final class NetworkCaptureRuleTests: XCTestCase {
         XCTAssertFalse(rule.matches(URL(string: "https://api.example.com/users")!))
     }
 
-    func testMatches_emptyUrl_matchesEverything() {
-        let rule = NetworkCaptureRule(url: "")
-        XCTAssertTrue(rule.matches(URL(string: "https://api.example.com/users")!))
-    }
-
     // MARK: - matches(_:) — regex init
 
-    func testMatches_regex_matchingPattern_returnsTrue() {
-        let pattern = try! NSRegularExpression(pattern: "api\\.example\\.com/users/\\d+")
+    func testMatches_regex_matchingPattern_returnsTrue() throws {
+        let pattern = try NSRegularExpression(pattern: "api\\.example\\.com/users/\\d+")
         let rule = NetworkCaptureRule(urlPattern: pattern)
         XCTAssertTrue(rule.matches(URL(string: "https://api.example.com/users/42")!))
     }
 
-    func testMatches_regex_nonMatchingPattern_returnsFalse() {
-        let pattern = try! NSRegularExpression(pattern: "api\\.example\\.com/orders/\\d+")
+    func testMatches_regex_nonMatchingPattern_returnsFalse() throws {
+        let pattern = try NSRegularExpression(pattern: "api\\.example\\.com/orders/\\d+")
         let rule = NetworkCaptureRule(urlPattern: pattern)
         XCTAssertFalse(rule.matches(URL(string: "https://api.example.com/users/42")!))
     }
@@ -56,8 +51,8 @@ final class NetworkCaptureRuleTests: XCTestCase {
         XCTAssertFalse(rule.collectResPayload)
     }
 
-    func testDefaults_regexInit_allCaptureDisabled() {
-        let pattern = try! NSRegularExpression(pattern: ".*")
+    func testDefaults_regexInit_allCaptureDisabled() throws {
+        let pattern = try NSRegularExpression(pattern: ".*")
         let rule = NetworkCaptureRule(urlPattern: pattern)
         XCTAssertNil(rule.reqHeaders)
         XCTAssertNil(rule.resHeaders)
@@ -81,7 +76,21 @@ final class NetworkCaptureRuleTests: XCTestCase {
         XCTAssertEqual(options.networkExtraConfig?.count, 1)
         XCTAssertEqual(options.networkExtraConfig?.first?.url, "api.example.com")
         XCTAssertEqual(options.networkExtraConfig?.first?.reqHeaders, ["Authorization"])
-        XCTAssertTrue(options.networkExtraConfig?.first?.collectResPayload == true)
+        XCTAssertEqual(options.networkExtraConfig?.first?.collectResPayload, true)
+    }
+
+    // MARK: - Mutual exclusivity
+
+    func testStringInit_urlPatternIsNil() {
+        let rule = NetworkCaptureRule(url: "api.example.com")
+        XCTAssertNil(rule.urlPattern)
+    }
+
+    func testRegexInit_urlIsEmpty() throws {
+        let pattern = try NSRegularExpression(pattern: ".*")
+        let rule = NetworkCaptureRule(urlPattern: pattern)
+        XCTAssertEqual(rule.url, "")
+        XCTAssertNotNil(rule.urlPattern)
     }
 
     // MARK: - Helpers

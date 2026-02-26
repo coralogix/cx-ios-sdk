@@ -24,13 +24,14 @@ import Foundation
 /// **Payload capture** is disabled by default and must be explicitly opted-in per rule.
 public struct NetworkCaptureRule {
 
-    // MARK: - URL matcher
+    // MARK: - URL matcher (internal — use matches(_:) from outside the module)
 
-    /// Substring used for exact-string URL matching (empty when `urlPattern` is set).
-    public let url: String
+    /// Substring used for case-insensitive substring URL matching (empty when `urlPattern` is set).
+    let url: String
 
     /// Regex applied against the full absolute URL string (nil when `url` is used).
-    public let urlPattern: NSRegularExpression?
+    /// `urlPattern` takes precedence over `url` in `matches(_:)`.
+    let urlPattern: NSRegularExpression?
 
     // MARK: - Capture settings
 
@@ -49,11 +50,13 @@ public struct NetworkCaptureRule {
     // MARK: - Initialisers
 
     /// Creates a rule that matches requests whose absolute URL **contains** `url` (case-insensitive).
+    /// - Precondition: `url` must not be empty. Use the `urlPattern` initialiser for wildcard/regex matching.
     public init(url: String,
                 reqHeaders: [String]? = nil,
                 resHeaders: [String]? = nil,
                 collectReqPayload: Bool = false,
                 collectResPayload: Bool = false) {
+        precondition(!url.isEmpty, "NetworkCaptureRule: url must not be empty — use the urlPattern initialiser for pattern matching")
         self.url = url
         self.urlPattern = nil
         self.reqHeaders = reqHeaders
