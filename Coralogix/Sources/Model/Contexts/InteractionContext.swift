@@ -41,7 +41,11 @@ struct InteractionContext {
         targetElementInnerText = tapObject[Keys.targetElementInnerText.rawValue] as? String
 
         if let dirStr = tapObject[Keys.scrollDirection.rawValue] as? String {
-            scrollDirection = ScrollDirection(rawValue: dirStr)
+            if let parsed = ScrollDirection(rawValue: dirStr) {
+                scrollDirection = parsed
+            } else {
+                Log.w("InteractionContext: unknown scroll_direction '\(dirStr)' — field omitted")
+            }
         }
 
         targetElement = tapObject[Keys.targetElement.rawValue] as? String
