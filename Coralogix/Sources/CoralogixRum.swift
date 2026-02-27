@@ -140,11 +140,13 @@ public class CoralogixRum {
     }
     
     private func swizzle() {
-        UIApplication.swizzleTouchesEnded
+        // Navigation swizzles are always active — they track view lifecycle
+        // independently of the userActions instrumentation setting.
         UIViewController.swizzleViewDidAppear
         UIViewController.swizzleViewDidDisappear
-        UIApplication.swizzleSendEvent
-        UIApplication.swizzleSwipeGestureRecognizer
+        // Touch-event swizzles are installed on demand inside
+        // initializeUserActionsInstrumentation() so they are never active
+        // when userActions instrumentation is disabled.
     }
     
     // MARK: - Public API
