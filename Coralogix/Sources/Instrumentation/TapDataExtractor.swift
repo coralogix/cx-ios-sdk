@@ -97,8 +97,8 @@ final class ScrollTracker {
     struct GestureResult {
         let view: UIView
         let direction: ScrollDirection
-        /// Resolved event type — `.swipe` for discrete navigation gestures (page-flip,
-        /// navigation back-swipe), `.scroll` for continuous content scrolling.
+        /// Resolved event type — `.swipe` for discrete page-flip gestures,
+        /// `.scroll` for continuous content scrolling.
         let eventType: InteractionEventName
     }
 
@@ -183,7 +183,7 @@ final class ScrollTracker {
 
     /// Removes a touch from tracking without emitting any event.
     /// Call this when a swipe gesture recogniser on a non-scroll view has already claimed the
-    /// gesture — prevents `processCancelled` from also firing a redundant `.scroll` notification.
+    /// gesture — prevents `processCancelled` from also firing a redundant event.
     func discardTouch(_ touch: UITouch) {
         guard Thread.isMainThread else { return }
         touchStates.removeValue(forKey: ObjectIdentifier(touch))
