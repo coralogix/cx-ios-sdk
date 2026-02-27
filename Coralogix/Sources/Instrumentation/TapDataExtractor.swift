@@ -158,14 +158,19 @@ final class ScrollTracker {
 
     /// Classifies a cancelled/ended directional gesture as `.swipe` or `.scroll`.
     ///
-    /// Rules (in priority order):
-    /// 1. **Paged scroll view** (`isPagingEnabled`) — discrete page-flip → `.swipe`
-    /// 2. Everything else → `.scroll` (continuous content dragging).
+    /// Uses the same nearest-ancestor semantics as `isPagedScrollViewContext`: walks up
+    /// the hierarchy and stops at the **first** `UIScrollView` found.  If that scroll view
+    /// has `isPagingEnabled`, the gesture is a discrete page-flip → `.swipe`; otherwise it
+    /// is continuous content dragging → `.scroll`.
+    ///
+    /// Stopping at the nearest scroll ancestor (rather than continuing past non-paged ones)
+    /// ensures consistency with the threshold chosen in `processEnded`.  For example, a touch
+    /// inside a `UITableView` that is nested in a paged scroll view is classified as `.scroll`
+    /// because the table — not the outer pager — is the view that handled the gesture.
     private static func gestureEventType(view: UIView) -> InteractionEventName {
-        // Paged scroll view — discrete page-flip → .swipe
         var current: UIView? = view
         while let v = current {
-            if let sv = v as? UIScrollView, sv.isPagingEnabled { return .swipe }
+            if let sv = v as? UIScrollView { return sv.isPagingEnabled ? .swipe : .scroll }
             current = v.superview
         }
         return .scroll
