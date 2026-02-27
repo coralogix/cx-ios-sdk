@@ -23,37 +23,54 @@ public struct CXView {
 }
 
 class SwizzleUtils {
-    private static var originalImplementations: [Selector: IMP] = [:]
-    
+    /// Composite key that uniquely identifies a (class, selector) pair.
+    /// Using only `Selector` as the key is incorrect when the same selector is swizzled
+    /// on different classes (e.g. `touchesEnded(_:with:)` on both
+    /// `SwiftUI.UIKitGestureRecognizer` and `UISwipeGestureRecognizer`), because the
+    /// two entries would share a key and overwrite each other's original IMP.
+    private struct SwizzleKey: Hashable {
+        let classIdentifier: ObjectIdentifier
+        let selector: Selector
+
+        init(cls: AnyClass, selector: Selector) {
+            self.classIdentifier = ObjectIdentifier(cls)
+            self.selector = selector
+        }
+    }
+
+    private static var originalImplementations: [SwizzleKey: IMP] = [:]
+
     // THREAD-SAFE: Lock protects originalImplementations dictionary access
     // CRITICAL: Prevents race conditions when multiple swizzles happen concurrently
     private static let swizzleLock = NSLock()
-    
+
     static func swizzleInstanceMethod(for cls: AnyClass, originalSelector: Selector, swizzledSelector: Selector) {
         // SAFETY: Wrap entire swizzle operation in lock to prevent TOCTOU race conditions
         swizzleLock.lock()
         defer { swizzleLock.unlock() }
-        
+
         guard let originalMethod = class_getInstanceMethod(cls, originalSelector),
               let swizzledMethod = class_getInstanceMethod(cls, swizzledSelector) else {
             Log.e("Failed to swizzle \(originalSelector) on \(cls)")
             return // SAFETY: Log error but don't crash host app
         }
-        
+
         let originalIMP = method_getImplementation(originalMethod)
         let swizzledIMP = method_getImplementation(swizzledMethod)
-        
-        let key = originalSelector
+
+        // Key combines class identity and selector so two classes swizzling the same
+        // selector each get their own entry in originalImplementations.
+        let key = SwizzleKey(cls: cls, selector: originalSelector)
         // THREAD-SAFE: Dictionary access protected by lock
         if originalImplementations[key] == nil {
             originalImplementations[key] = originalIMP
         }
-        
+
         let didAddMethod = class_addMethod(cls,
                                            originalSelector,
                                            swizzledIMP,
                                            method_getTypeEncoding(swizzledMethod))
-        
+
         if didAddMethod {
             class_replaceMethod(cls,
                                 swizzledSelector,
@@ -68,11 +85,11 @@ class SwizzleUtils {
                     typealias Function = @convention(c) (Any, Selector) -> Void
                     let originalMethod = unsafeBitCast(originalIMP, to: Function.self)
                     originalMethod(obj, originalSelector)
-                    
+
                     let swizzledMethod = unsafeBitCast(swizzledIMP, to: Function.self)
                     swizzledMethod(obj, swizzledSelector)
                 }
-                
+
                 let newIMP = imp_implementationWithBlock(block)
                 method_setImplementation(originalMethod, newIMP)
             } else {
