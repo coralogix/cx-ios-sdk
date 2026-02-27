@@ -69,6 +69,10 @@ final class ScrollTracker {
         let view: UIView
         let start: CGPoint
         var current: CGPoint
+        /// Set to `true` on the first `.moved` update.
+        /// Used by `processCancelled` to decide whether `state.current` is a real
+        /// finger position or just the `.began` snapshot repeated.
+        var hasMoved: Bool = false
     }
 
     private var touchStates: [ObjectIdentifier: TouchState] = [:]
@@ -91,6 +95,7 @@ final class ScrollTracker {
         let id = ObjectIdentifier(touch)
         guard touchStates[id] != nil else { return }
         touchStates[id]?.current = touch.location(in: nil)
+        touchStates[id]?.hasMoved = true
     }
 
     /// Shared return envelope used by both `processEnded` and `processCancelled`.
@@ -135,7 +140,16 @@ final class ScrollTracker {
             return nil
         }
         guard let state = touchStates.removeValue(forKey: ObjectIdentifier(touch)) else { return nil }
-        let endPoint = state.current == state.start ? touch.location(in: nil) : state.current
+        // Prefer the last `.moved` snapshot; fall back to the live location when no `.moved`
+        // events arrived before the gesture recogniser cancelled the touch.
+        let endPoint = state.hasMoved ? state.current : touch.location(in: nil)
+        // Use `pagedThreshold` (5 pt) for all cancelled touches, not just paged ones.
+        // Rationale: any gesture recogniser cancelling a touch has already validated the
+        // gesture intent against its own (typically 10-20 pt) recognition threshold.
+        // By the time `.cancelled` arrives, our recorded displacement may be smaller than
+        // the actual finger movement because `.moved` events can lag behind recognition.
+        // 5 pt is always less than any recogniser's own threshold, so it never fires
+        // for accidental micro-movements that a recogniser would have rejected.
         guard let dir = Self.direction(from: state.start, to: endPoint,
                                        threshold: Self.pagedThreshold) else { return nil }
         let eventType = Self.gestureEventType(view: state.view)
@@ -157,8 +171,13 @@ final class ScrollTracker {
         return .scroll
     }
 
-    /// Returns `true` when `view` is embedded inside a `UIScrollView` that has `isPagingEnabled`.
+    /// Returns `true` when `view` is directly inside a `UIScrollView` that has `isPagingEnabled`.
     /// Used only to select the displacement threshold in `processEnded`.
+    ///
+    /// Intentionally stops at the **first** `UIScrollView` found walking up the hierarchy.
+    /// A touch inside a `UITableView` (non-paged) that is itself inside a paged scroll view
+    /// should be treated as a table scroll, not a page flip — the nearest scroll ancestor
+    /// is the one that actually received and handled the gesture.
     private static func isPagedScrollViewContext(_ view: UIView) -> Bool {
         var current: UIView? = view
         while let v = current {
