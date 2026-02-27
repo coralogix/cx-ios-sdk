@@ -115,10 +115,13 @@ extension UISwipeGestureRecognizer {
             ScrollTracker.shared.discardTouch(touch)
         }
 
+        // Drop the event if the direction bitmask is ambiguous (empty or multiple bits set).
+        guard let scrollDir = cxScrollDirection(from: direction) else { return }
+
         NotificationCenter.default.post(
             name: .cxRumNotificationUserActions,
             object: TouchEvent(view: view, location: touch.location(in: nil),
-                               eventType: .swipe, scrollDirection: cxScrollDirection(from: direction))
+                               eventType: .swipe, scrollDirection: scrollDir)
         )
     }
 
@@ -132,15 +135,23 @@ extension UISwipeGestureRecognizer {
         return false
     }
 
-    /// Maps `UISwipeGestureRecognizer.Direction` bitmask to our `ScrollDirection` enum.
-    /// Direction is always a single-bit value when set by the developer, but we check
-    /// each flag in priority order as a safety net.
-    private func cxScrollDirection(from d: UISwipeGestureRecognizer.Direction) -> ScrollDirection {
-        if d.contains(.up)    { return .up }
-        if d.contains(.down)  { return .down }
-        if d.contains(.left)  { return .left }
-        Log.w("cxScrollDirection: unexpected empty direction bitmask — defaulting to .right")
-        return .right
+    /// Maps a `UISwipeGestureRecognizer.Direction` bitmask to our `ScrollDirection` enum.
+    ///
+    /// Returns `nil` when the bitmask is ambiguous — either empty (no direction configured)
+    /// or containing more than one of `.up`, `.down`, `.left`, `.right`.  A multi-direction
+    /// recogniser (e.g. `.left | .right`) fires for both swipes but the `direction` property
+    /// always reflects the full configured set, so we cannot determine which way the user
+    /// actually swiped.  Callers must drop the event when `nil` is returned.
+    private func cxScrollDirection(from d: UISwipeGestureRecognizer.Direction) -> ScrollDirection? {
+        let candidates: [(UISwipeGestureRecognizer.Direction, ScrollDirection)] = [
+            (.up, .up), (.down, .down), (.left, .left), (.right, .right)
+        ]
+        let matches = candidates.filter { d.contains($0.0) }
+        guard matches.count == 1 else {
+            Log.w("cxScrollDirection: ambiguous direction bitmask \(d.rawValue) (\(matches.count) matches) — event dropped")
+            return nil
+        }
+        return matches[0].1
     }
 }
 
