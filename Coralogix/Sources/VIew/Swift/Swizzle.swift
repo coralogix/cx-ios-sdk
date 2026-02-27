@@ -201,7 +201,7 @@ extension UIApplication {
                 if let result = ScrollTracker.shared.processEnded(touch), isSingleTouch {
                     NotificationCenter.default.post(
                         name: .cxRumNotificationUserActions,
-                        object: TouchEvent(view: result.view, touch: touch, eventType: .scroll, scrollDirection: result.direction)
+                        object: TouchEvent(view: result.view, touch: touch, eventType: result.eventType, scrollDirection: result.direction)
                     )
                 } else if isSingleTouch {
                     if let view = touch.view {
@@ -218,12 +218,13 @@ extension UIApplication {
                 }
 
             case .cancelled:
-                // UIScrollView / UITableView gesture recognisers cancel touches instead of ending them.
-                // touch.view is nil here; we rely on the view stored at .began time.
+                // Gesture recognisers (UIScrollView pan, UIScreenEdgePanGestureRecognizer, etc.)
+                // cancel the touch instead of ending it. touch.view is nil here; the view and
+                // event type are resolved from the state recorded at .began time.
                 if let result = ScrollTracker.shared.processCancelled(touch), isSingleTouch {
                     NotificationCenter.default.post(
                         name: .cxRumNotificationUserActions,
-                        object: TouchEvent(view: result.view, touch: touch, eventType: .scroll, scrollDirection: result.direction)
+                        object: TouchEvent(view: result.view, touch: touch, eventType: result.eventType, scrollDirection: result.direction)
                     )
                 }
                 // processCancelled is always called (cleans up touchStates) but no event is posted for multi-touch.
@@ -257,12 +258,9 @@ extension UIViewController {
     // This method will replace viewDidAppear
     @objc func cx_viewDidAppear(_ animated: Bool) {
         if self.isKind(of: UINavigationController.self) {
-            // Call the original viewDidAppear method for UINavigationController
             cx_viewDidAppear(animated)
         } else {
-            // Custom implementation for UIViewController
             updateCoralogixRum(window: self.getWindow(), state: .notifyOnAppear)
-            // Call the original viewDidAppear
             cx_viewDidAppear(animated)
         }
     }
@@ -304,6 +302,8 @@ extension UIViewController {
         }
     }
 }
+
+// MARK: - Helpers
 
 private func updateCoralogixRum(window: UIWindow?, state: CXView.AppState) {
     if !Thread.current.isMainThread {

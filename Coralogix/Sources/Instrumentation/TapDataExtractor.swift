@@ -59,8 +59,11 @@ struct TouchEvent {
 final class ScrollTracker {
     static let shared = ScrollTracker()
 
-    /// Minimum movement in points to classify a gesture as a scroll rather than a tap.
+    /// Minimum movement in points to classify a regular scroll rather than a tap.
     static let threshold: CGFloat = 20.0
+    /// Lower threshold used for paged scroll views: a fast page-flip flick covers less
+    /// distance than a deliberate drag, but the intent is unambiguous.
+    static let pagedThreshold: CGFloat = 5.0
 
     private struct TouchState {
         let view: UIView
@@ -90,36 +93,89 @@ final class ScrollTracker {
         touchStates[id]?.current = touch.location(in: nil)
     }
 
-    /// Returns `(view, direction)` if movement exceeded the threshold (scroll), or `nil` (tap).
-    func processEnded(_ touch: UITouch) -> (view: UIView, direction: ScrollDirection)? {
+    /// Shared return envelope used by both `processEnded` and `processCancelled`.
+    struct GestureResult {
+        let view: UIView
+        let direction: ScrollDirection
+        /// Resolved event type — `.swipe` for discrete navigation gestures (page-flip,
+        /// navigation back-swipe), `.scroll` for continuous content scrolling.
+        let eventType: InteractionEventName
+    }
+
+    /// Returns a `GestureResult` if movement exceeded the threshold, or `nil` for a tap.
+    ///
+    /// For paged scroll views a lower threshold (5 pt) is used because a fast page-flip
+    /// flick lifts the finger before `UIPanGestureRecognizer` can formally recognise the
+    /// gesture — the displacement at `.ended` time is small even though the intent is clear.
+    func processEnded(_ touch: UITouch) -> GestureResult? {
         guard Thread.isMainThread else {
             Log.w("ScrollTracker.processEnded called off the main thread — event ignored")
             return nil
         }
         guard let state = touchStates.removeValue(forKey: ObjectIdentifier(touch)) else { return nil }
-        guard let dir = Self.direction(from: state.start, to: touch.location(in: nil)) else { return nil }
-        return (state.view, dir)
+        let isPaged = Self.isPagedScrollViewContext(state.view)
+        let threshold: CGFloat = isPaged ? Self.pagedThreshold : Self.threshold
+        guard let dir = Self.direction(from: state.start, to: touch.location(in: nil),
+                                       threshold: threshold) else { return nil }
+        let eventType = Self.gestureEventType(view: state.view)
+        return GestureResult(view: state.view, direction: dir, eventType: eventType)
     }
 
-    /// Called when UIKit cancels a touch because a scroll-view gesture recogniser took over.
-    /// Uses `state.current` (last `.moved` position) because `touch.view` / `touch.location`
-    /// are unreliable at `.cancelled` time.
-    func processCancelled(_ touch: UITouch) -> (view: UIView, direction: ScrollDirection)? {
+    /// Called when UIKit cancels a touch because a gesture recogniser took over.
+    ///
+    /// Prefers `state.current` (last `.moved` snapshot) because it was captured while
+    /// `touch.view` was still valid. Falls back to `touch.location(in: nil)` when no `.moved`
+    /// events arrived before cancellation — which happens with `UIScrollView.isPagingEnabled`
+    /// whose pan recogniser can claim the gesture before the first `.moved` event fires.
+    /// `touch.location(in: nil)` returns window-relative coordinates and is valid at `.cancelled`
+    /// time because it does not depend on `touch.view`.
+    func processCancelled(_ touch: UITouch) -> GestureResult? {
         guard Thread.isMainThread else {
             Log.w("ScrollTracker.processCancelled called off the main thread — event ignored")
             return nil
         }
         guard let state = touchStates.removeValue(forKey: ObjectIdentifier(touch)) else { return nil }
-        guard let dir = Self.direction(from: state.start, to: state.current) else { return nil }
-        return (state.view, dir)
+        let endPoint = state.current == state.start ? touch.location(in: nil) : state.current
+        guard let dir = Self.direction(from: state.start, to: endPoint,
+                                       threshold: Self.pagedThreshold) else { return nil }
+        let eventType = Self.gestureEventType(view: state.view)
+        return GestureResult(view: state.view, direction: dir, eventType: eventType)
+    }
+
+    /// Classifies a cancelled/ended directional gesture as `.swipe` or `.scroll`.
+    ///
+    /// Rules (in priority order):
+    /// 1. **Paged scroll view** (`isPagingEnabled`) — discrete page-flip → `.swipe`
+    /// 2. Everything else → `.scroll` (continuous content dragging).
+    private static func gestureEventType(view: UIView) -> InteractionEventName {
+        // Paged scroll view — discrete page-flip → .swipe
+        var current: UIView? = view
+        while let v = current {
+            if let sv = v as? UIScrollView, sv.isPagingEnabled { return .swipe }
+            current = v.superview
+        }
+        return .scroll
+    }
+
+    /// Returns `true` when `view` is embedded inside a `UIScrollView` that has `isPagingEnabled`.
+    /// Used only to select the displacement threshold in `processEnded`.
+    private static func isPagedScrollViewContext(_ view: UIView) -> Bool {
+        var current: UIView? = view
+        while let v = current {
+            if let sv = v as? UIScrollView { return sv.isPagingEnabled }
+            current = v.superview
+        }
+        return false
     }
 
     /// Pure direction resolver — separated for testability.
-    /// Returns `nil` when the delta is below the threshold (tap, not scroll).
-    static func direction(from start: CGPoint, to end: CGPoint) -> ScrollDirection? {
+    /// Returns `nil` when the delta is below `threshold` (tap, not scroll).
+    static func direction(from start: CGPoint,
+                          to end: CGPoint,
+                          threshold: CGFloat = ScrollTracker.threshold) -> ScrollDirection? {
         let dx = end.x - start.x
         let dy = end.y - start.y
-        guard abs(dx) >= Self.threshold || abs(dy) >= Self.threshold else { return nil }
+        guard abs(dx) >= threshold || abs(dy) >= threshold else { return nil }
         return abs(dy) >= abs(dx)
             ? (dy < 0 ? .up : .down)
             : (dx < 0 ? .left : .right)
