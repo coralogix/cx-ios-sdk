@@ -124,6 +124,14 @@ final class ScrollTracker {
             ? (dy < 0 ? .up : .down)
             : (dx < 0 ? .left : .right)
     }
+
+    /// Removes a touch from tracking without emitting any event.
+    /// Call this when a swipe gesture recogniser on a non-scroll view has already claimed the
+    /// gesture — prevents `processCancelled` from also firing a redundant `.scroll` notification.
+    func discardTouch(_ touch: UITouch) {
+        guard Thread.isMainThread else { return }
+        touchStates.removeValue(forKey: ObjectIdentifier(touch))
+    }
 }
 
 // MARK: - TapDataExtractor

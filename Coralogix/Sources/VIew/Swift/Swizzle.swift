@@ -103,20 +103,33 @@ extension UISwipeGestureRecognizer {
 
         // Only fire when the gesture was actually recognized (discrete recognisers use .recognized == .ended).
         guard state == .recognized,
-              let view = self.view else { return }
+              let view = self.view,
+              touches.count == 1,
+              let touch = touches.first else { return }
 
-        // Suppress multi-finger swipes (same policy as multi-touch scrolls).
-        let touchCount = touches.count
-        guard touchCount == 1 else { return }
-
-        let location = touches.first?.location(in: nil) ?? self.location(in: nil)
-        let swipeDir = cxScrollDirection(from: self.direction)
+        // Scroll-view context: let both events fire — .scroll represents content movement,
+        // .swipe represents the finger gesture. For all other views, discard the touch from
+        // ScrollTracker so the .cancelled phase in cx_sendEvent does not also post a
+        // redundant .scroll notification for the same gesture.
+        if !isScrollViewContext(view) {
+            ScrollTracker.shared.discardTouch(touch)
+        }
 
         NotificationCenter.default.post(
             name: .cxRumNotificationUserActions,
-            object: TouchEvent(view: view, location: location,
-                               eventType: .swipe, scrollDirection: swipeDir)
+            object: TouchEvent(view: view, location: touch.location(in: nil),
+                               eventType: .swipe, scrollDirection: cxScrollDirection(from: direction))
         )
+    }
+
+    /// Returns `true` when `view` is, or is embedded inside, a `UIScrollView` (including `UITableView`).
+    private func isScrollViewContext(_ view: UIView) -> Bool {
+        var current: UIView? = view
+        while let v = current {
+            if v is UIScrollView { return true }
+            current = v.superview
+        }
+        return false
     }
 
     /// Maps `UISwipeGestureRecognizer.Direction` bitmask to our `ScrollDirection` enum.
@@ -126,6 +139,7 @@ extension UISwipeGestureRecognizer {
         if d.contains(.up)    { return .up }
         if d.contains(.down)  { return .down }
         if d.contains(.left)  { return .left }
+        Log.w("cxScrollDirection: unexpected empty direction bitmask — defaulting to .right")
         return .right
     }
 }
