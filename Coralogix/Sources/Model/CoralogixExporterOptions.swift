@@ -74,9 +74,12 @@ public struct CoralogixExporterOptions {
     /// Return a non-nil `String` to override the default UIKit class name for that view.
     /// Return `nil` to fall back to the resolved class name (e.g. `"UIButton"`).
     ///
+    /// - Important: This closure is called on the **main thread** on every tap event.
+    ///   Keep the implementation fast and non-blocking (no I/O, no locks, no heavy computation).
+    ///
     /// - Parameter view: The UIView that was tapped.
     /// - Returns: A custom target name, or `nil` to use the class-name fallback.
-    public var resolveTargetName: ((UIView) -> String?)?
+    public let resolveTargetName: ((UIView) -> String?)?
 
     /// Called before `target_element_inner_text` is recorded for a tapped view.
     ///
@@ -84,11 +87,16 @@ public struct CoralogixExporterOptions {
     /// Use this to redact sensitive labels (e.g. account numbers, personal data)
     /// on a per-view or per-text basis without disabling text capture globally.
     ///
+    /// - Important: This closure is called on the **main thread** only when the SDK would
+    ///   otherwise record text — views where text extraction returns nothing (e.g. a plain
+    ///   `UIView` with no label) never trigger this callback.
+    ///   Keep the implementation fast and non-blocking.
+    ///
     /// - Parameters:
     ///   - view: The UIView that was tapped.
     ///   - text: The text that the SDK is about to record.
     /// - Returns: `true` to include the text in the event, `false` to omit it.
-    public var shouldSendText: ((UIView, String) -> Bool)?
+    public let shouldSendText: ((UIView, String) -> Bool)?
     
     /// Alternative beforeSend for Other Platfoms.
     public var beforeSendCallBack: (([[String: Any]]) -> Void)?
