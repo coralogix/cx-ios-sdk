@@ -21,6 +21,11 @@ public class CoralogixRum {
     internal var isNetworkInstrumentationReady = false
     private let notificationCenter = NotificationCenter.default
 
+    // Cached at initializeUserActionsInstrumentation() time to avoid
+    // copying CoralogixExporterOptions (a struct) on every tap event.
+    internal var cachedShouldSendText: ((UIView, String) -> Bool)?
+    internal var cachedResolveTargetName: ((UIView) -> String?)?
+
     internal lazy var tracerProvider: () -> Tracer = {
         return OpenTelemetry.instance.tracerProvider.get(
             instrumentationName: Keys.iosSdk.rawValue,
