@@ -304,6 +304,78 @@ final class InteractionContextTests: XCTestCase {
         XCTAssertNil(TapDataExtractor.safeInnerText(from: UIView()))
     }
 
+    // MARK: - safeInnerText — UIDatePicker / UIStepper fall through to accessibilityLabel
+
+    /// UIDatePicker has no text property — must fall through to accessibilityLabel.
+    func testSafeInnerText_datePicker_usesAccessibilityLabel() {
+        let picker = UIDatePicker()
+        picker.accessibilityLabel = "Birth Date"
+        XCTAssertEqual(TapDataExtractor.safeInnerText(from: picker), "Birth Date")
+    }
+
+    /// UIStepper has no text property — must fall through to accessibilityLabel.
+    func testSafeInnerText_stepper_usesAccessibilityLabel() {
+        let stepper = UIStepper()
+        stepper.accessibilityLabel = "Quantity"
+        XCTAssertEqual(TapDataExtractor.safeInnerText(from: stepper), "Quantity")
+    }
+
+    // MARK: - TapDataExtractor.extract — swipe events
+
+    /// A swipe TouchEvent (no UITouch) must produce event_name "swipe", scroll_direction,
+    /// and x/y coordinates derived from the stored location.
+    func testExtract_swipeEvent_hasCorrectEventNameAndDirection() {
+        let view = UIView()
+        let location = CGPoint(x: 42, y: 84)
+        let event = TouchEvent(view: view, location: location,
+                               eventType: .swipe, scrollDirection: .left)
+
+        let data = TapDataExtractor.extract(from: event)
+
+        XCTAssertEqual(data[Keys.eventName.rawValue] as? String, "swipe")
+        XCTAssertEqual(data[Keys.scrollDirection.rawValue] as? String, "left")
+        XCTAssertEqual(data[Keys.positionX.rawValue] as? CGFloat, 42)
+        XCTAssertEqual(data[Keys.positionY.rawValue] as? CGFloat, 84)
+    }
+
+    /// A swipe event on a non-container view with no text source must not include
+    /// target_element_inner_text. Uses UIButton (not UIView) so the container-class
+    /// skip path is not taken — the absence of the field is caused solely by the
+    /// lack of a title, label, or accessibilityLabel on the button.
+    func testExtract_swipeEvent_noInnerText_fieldAbsent() {
+        let button = UIButton() // non-container, no title, no accessibilityLabel
+        let event = TouchEvent(view: button, location: .zero, eventType: .swipe, scrollDirection: .right)
+        let data = TapDataExtractor.extract(from: event)
+        XCTAssertNil(data[Keys.targetElementInnerText.rawValue], "No text source — field must be absent")
+    }
+
+    /// UIView is in the container-class blocklist, so target_element_inner_text must be absent
+    /// even when an accessibilityLabel is set — the skip is caused by the container check,
+    /// not by the absence of a label. This is the companion to testExtract_swipeEvent_noInnerText_fieldAbsent.
+    func testExtract_swipeEvent_containerView_innerTextAlwaysAbsent() {
+        let view = UIView()
+        view.accessibilityLabel = "SomeLabel" // label present, but UIView is a container
+        let event = TouchEvent(view: view, location: .zero, eventType: .swipe, scrollDirection: .left)
+        let data = TapDataExtractor.extract(from: event)
+        XCTAssertNil(data[Keys.targetElementInnerText.rawValue],
+                     "UIView is a container — inner text must be absent even with an accessibilityLabel")
+    }
+
+    /// InteractionContext built from a swipe tapObject must have eventName .swipe and direction.
+    func testInit_swipeEvent_mapsEventNameAndDirection() {
+        let tapObject: [String: Any] = [
+            Keys.eventName.rawValue:       "swipe",
+            Keys.elementClasses.rawValue:  "UIView",
+            Keys.targetElement.rawValue:   "UIView",
+            Keys.scrollDirection.rawValue: "right"
+        ]
+        let context = InteractionContext(otel: makeSpan(tapObject: tapObject))
+
+        XCTAssertEqual(context.eventName,       .swipe)
+        XCTAssertEqual(context.scrollDirection, .right)
+        XCTAssertNil(context.targetElementInnerText)
+    }
+
     // MARK: - ScrollTracker.direction — simulates the .cancelled path
     //
     // UIScrollView / UITableView gesture recognisers *cancel* touches instead of ending them.

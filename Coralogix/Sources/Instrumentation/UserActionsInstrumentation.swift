@@ -12,6 +12,12 @@ import CoralogixInternal
 
 extension CoralogixRum {
     public func initializeUserActionsInstrumentation() {
+        // Install touch-event swizzles only when userActions is enabled.
+        // These are no-ops if called more than once (static let guarantees single execution).
+        UIApplication.swizzleTouchesEnded
+        UIApplication.swizzleSendEvent
+        UIApplication.swizzleSwipeGestureRecognizer
+
         NotificationCenter.default.addObserver(self,
                                                selector: #selector(handleInteractionNotification(notification:)),
                                                name: .cxRumNotificationUserActions, object: nil)

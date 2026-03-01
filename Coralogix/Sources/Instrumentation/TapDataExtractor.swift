@@ -16,16 +16,31 @@ import CoralogixInternal
 /// from the swizzle layer to the instrumentation layer.
 struct TouchEvent {
     let view: UIView
-    let touch: UITouch
+    let touch: UITouch?       // nil when the event originates from a gesture recogniser
+    let location: CGPoint     // screen-coordinate position (top-left origin)
     let eventType: InteractionEventName
     let scrollDirection: ScrollDirection?
 
+    /// Standard init — position is derived from the live UITouch (tap / scroll path).
     init(view: UIView,
          touch: UITouch,
          eventType: InteractionEventName = .click,
          scrollDirection: ScrollDirection? = nil) {
         self.view = view
         self.touch = touch
+        self.location = touch.location(in: nil)
+        self.eventType = eventType
+        self.scrollDirection = scrollDirection
+    }
+
+    /// Gesture-recogniser init — no live UITouch available (swipe path).
+    init(view: UIView,
+         location: CGPoint,
+         eventType: InteractionEventName,
+         scrollDirection: ScrollDirection? = nil) {
+        self.view = view
+        self.touch = nil
+        self.location = location
         self.eventType = eventType
         self.scrollDirection = scrollDirection
     }
@@ -44,13 +59,20 @@ struct TouchEvent {
 final class ScrollTracker {
     static let shared = ScrollTracker()
 
-    /// Minimum movement in points to classify a gesture as a scroll rather than a tap.
+    /// Minimum movement in points to classify a regular scroll rather than a tap.
     static let threshold: CGFloat = 20.0
+    /// Lower threshold used for paged scroll views: a fast page-flip flick covers less
+    /// distance than a deliberate drag, but the intent is unambiguous.
+    static let pagedThreshold: CGFloat = 5.0
 
     private struct TouchState {
         let view: UIView
         let start: CGPoint
         var current: CGPoint
+        /// Set to `true` on the first `.moved` update.
+        /// Used by `processCancelled` to decide whether `state.current` is a real
+        /// finger position or just the `.began` snapshot repeated.
+        var hasMoved: Bool = false
     }
 
     private var touchStates: [ObjectIdentifier: TouchState] = [:]
@@ -73,41 +95,109 @@ final class ScrollTracker {
         let id = ObjectIdentifier(touch)
         guard touchStates[id] != nil else { return }
         touchStates[id]?.current = touch.location(in: nil)
+        touchStates[id]?.hasMoved = true
     }
 
-    /// Returns `(view, direction)` if movement exceeded the threshold (scroll), or `nil` (tap).
-    func processEnded(_ touch: UITouch) -> (view: UIView, direction: ScrollDirection)? {
+    /// Shared return envelope used by both `processEnded` and `processCancelled`.
+    struct GestureResult {
+        let view: UIView
+        let direction: ScrollDirection
+        /// Resolved event type — `.swipe` for discrete page-flip gestures,
+        /// `.scroll` for continuous content scrolling.
+        let eventType: InteractionEventName
+    }
+
+    /// Returns a `GestureResult` if movement exceeded the threshold, or `nil` for a tap.
+    ///
+    /// For paged scroll views a lower threshold (5 pt) is used because a fast page-flip
+    /// flick lifts the finger before `UIPanGestureRecognizer` can formally recognise the
+    /// gesture — the displacement at `.ended` time is small even though the intent is clear.
+    func processEnded(_ touch: UITouch) -> GestureResult? {
         guard Thread.isMainThread else {
             Log.w("ScrollTracker.processEnded called off the main thread — event ignored")
             return nil
         }
         guard let state = touchStates.removeValue(forKey: ObjectIdentifier(touch)) else { return nil }
-        guard let dir = Self.direction(from: state.start, to: touch.location(in: nil)) else { return nil }
-        return (state.view, dir)
+        let nearestScroll = Self.nearestScrollAncestor(state.view)
+        let isPaged = nearestScroll?.isPagingEnabled == true
+        let threshold: CGFloat = isPaged ? Self.pagedThreshold : Self.threshold
+        guard let dir = Self.direction(from: state.start, to: touch.location(in: nil),
+                                       threshold: threshold) else { return nil }
+        let eventType: InteractionEventName = isPaged ? .swipe : .scroll
+        return GestureResult(view: state.view, direction: dir, eventType: eventType)
     }
 
-    /// Called when UIKit cancels a touch because a scroll-view gesture recogniser took over.
-    /// Uses `state.current` (last `.moved` position) because `touch.view` / `touch.location`
-    /// are unreliable at `.cancelled` time.
-    func processCancelled(_ touch: UITouch) -> (view: UIView, direction: ScrollDirection)? {
+    /// Called when UIKit cancels a touch because a gesture recogniser took over.
+    ///
+    /// Prefers `state.current` (last `.moved` snapshot) because it was captured while
+    /// `touch.view` was still valid. Falls back to `touch.location(in: nil)` when no `.moved`
+    /// events arrived before cancellation — which happens with `UIScrollView.isPagingEnabled`
+    /// whose pan recogniser can claim the gesture before the first `.moved` event fires.
+    /// `touch.location(in: nil)` returns window-relative coordinates and is valid at `.cancelled`
+    /// time because it does not depend on `touch.view`.
+    func processCancelled(_ touch: UITouch) -> GestureResult? {
         guard Thread.isMainThread else {
             Log.w("ScrollTracker.processCancelled called off the main thread — event ignored")
             return nil
         }
         guard let state = touchStates.removeValue(forKey: ObjectIdentifier(touch)) else { return nil }
-        guard let dir = Self.direction(from: state.start, to: state.current) else { return nil }
-        return (state.view, dir)
+        // Prefer the last `.moved` snapshot; fall back to the live location when no `.moved`
+        // events arrived before the gesture recogniser cancelled the touch.
+        let endPoint = state.hasMoved ? state.current : touch.location(in: nil)
+        // Use `pagedThreshold` (5 pt) for all cancelled touches, not just paged ones.
+        // Rationale: any gesture recogniser cancelling a touch has already validated the
+        // gesture intent against its own (typically 10-20 pt) recognition threshold.
+        // By the time `.cancelled` arrives, our recorded displacement may be smaller than
+        // the actual finger movement because `.moved` events can lag behind recognition.
+        // 5 pt is always less than any recogniser's own threshold, so it never fires
+        // for accidental micro-movements that a recogniser would have rejected.
+        guard let dir = Self.direction(from: state.start, to: endPoint,
+                                       threshold: Self.pagedThreshold) else { return nil }
+        let isPaged = Self.nearestScrollAncestor(state.view)?.isPagingEnabled == true
+        let eventType: InteractionEventName = isPaged ? .swipe : .scroll
+        return GestureResult(view: state.view, direction: dir, eventType: eventType)
+    }
+
+    /// Walks the view hierarchy upward and returns the first `UIScrollView` ancestor
+    /// (including `view` itself if it is a `UIScrollView`), or `nil` if none exists.
+    ///
+    /// Stopping at the **nearest** scroll ancestor ensures consistent behaviour in nested
+    /// hierarchies: a touch inside a `UITableView` that is itself inside a paged scroll view
+    /// is governed by the table — not the outer pager — because the table is the scroll view
+    /// that actually received the gesture.  Both the displacement threshold and the event type
+    /// (`.swipe` vs `.scroll`) are derived from the same `isPagingEnabled` flag on this one
+    /// ancestor, guaranteeing the two decisions are always in sync.
+    private static func nearestScrollAncestor(_ view: UIView) -> UIScrollView? {
+        var current: UIView? = view
+        while let v = current {
+            if let sv = v as? UIScrollView { return sv }
+            current = v.superview
+        }
+        return nil
     }
 
     /// Pure direction resolver — separated for testability.
-    /// Returns `nil` when the delta is below the threshold (tap, not scroll).
-    static func direction(from start: CGPoint, to end: CGPoint) -> ScrollDirection? {
+    /// Returns `nil` when the delta is below `threshold` (tap, not scroll).
+    static func direction(from start: CGPoint,
+                          to end: CGPoint,
+                          threshold: CGFloat = ScrollTracker.threshold) -> ScrollDirection? {
         let dx = end.x - start.x
         let dy = end.y - start.y
-        guard abs(dx) >= Self.threshold || abs(dy) >= Self.threshold else { return nil }
+        guard abs(dx) >= threshold || abs(dy) >= threshold else { return nil }
         return abs(dy) >= abs(dx)
             ? (dy < 0 ? .up : .down)
             : (dx < 0 ? .left : .right)
+    }
+
+    /// Removes a touch from tracking without emitting any event.
+    /// Call this when a swipe gesture recogniser on a non-scroll view has already claimed the
+    /// gesture — prevents `processCancelled` from also firing a redundant event.
+    func discardTouch(_ touch: UITouch) {
+        guard Thread.isMainThread else {
+            Log.w("ScrollTracker.discardTouch called off the main thread — event ignored")
+            return
+        }
+        touchStates.removeValue(forKey: ObjectIdentifier(touch))
     }
 }
 
@@ -154,7 +244,7 @@ enum TapDataExtractor {
         // and in the nested attributes dict (interaction_context schema).
         // On key collision, the incoming value wins — attributes data overrides earlier values.
         var attributes = [String: Any]()
-        Global.updateLocation(tapData: &attributes, touch: event.touch)
+        Global.updateLocation(tapData: &attributes, location: event.location)
         tapData.merge(attributes) { _, new in new }
         tapData[Keys.attributes.rawValue] = attributes
 
