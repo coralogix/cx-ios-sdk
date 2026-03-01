@@ -21,8 +21,8 @@ extension CoralogixRum {
         // Cache the closures once here so handleInteractionNotification does not
         // copy the CoralogixExporterOptions struct on every tap event.
         let options = coralogixExporter?.getOptions()
-        cachedShouldSendText = options?.shouldSendText
-        cachedResolveTargetName = options?.resolveTargetName
+        userActionsDelegates = UserActionsDelegates(shouldSendText: options?.shouldSendText,
+                                                    resolveTargetName: options?.resolveTargetName)
 
         NotificationCenter.default.addObserver(self,
                                                selector: #selector(handleInteractionNotification(notification:)),
@@ -36,8 +36,8 @@ extension CoralogixRum {
         }
 
         processInteractionEvent(TapDataExtractor.extract(from: touchEvent,
-                                                         shouldSendText: cachedShouldSendText,
-                                                         resolveTargetName: cachedResolveTargetName))
+                                                         shouldSendText: userActionsDelegates?.shouldSendText,
+                                                         resolveTargetName: userActionsDelegates?.resolveTargetName))
     }
 
     private func processInteractionEvent(_ properties: [String: Any]) {
