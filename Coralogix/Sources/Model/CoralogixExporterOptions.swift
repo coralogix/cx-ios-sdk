@@ -69,6 +69,15 @@ public struct CoralogixExporterOptions {
     /// Enable event access and modification before sending to Coralogix, supporting content modification, and event discarding.
     var beforeSend: (([String: Any]) -> [String: Any]?)?
 
+    /// Called to resolve a human-readable name for a tapped view, used as `target_element`.
+    ///
+    /// Return a non-nil `String` to override the default UIKit class name for that view.
+    /// Return `nil` to fall back to the resolved class name (e.g. `"UIButton"`).
+    ///
+    /// - Parameter view: The UIView that was tapped.
+    /// - Returns: A custom target name, or `nil` to use the class-name fallback.
+    public var resolveTargetName: ((UIView) -> String?)?
+
     /// Called before `target_element_inner_text` is recorded for a tapped view.
     ///
     /// Return `true` to allow the text to be captured, `false` to suppress it.
@@ -117,6 +126,7 @@ public struct CoralogixExporterOptions {
                 traceParentInHeader: [String: Any]? = nil,
                 mobileVitals: [MobileVitalsType: Bool]? = nil,
                 shouldSendText: ((UIView, String) -> Bool)? = nil,
+                resolveTargetName: ((UIView) -> String?)? = nil,
                 debug: Bool = false) {
         self.coralogixDomain = coralogixDomain
         self.userContext = userContext
@@ -137,6 +147,7 @@ public struct CoralogixExporterOptions {
         self.traceParentInHeader = traceParentInHeader
         self.mobileVitals = mobileVitals
         self.shouldSendText = shouldSendText
+        self.resolveTargetName = resolveTargetName
     }
     
     internal func shouldInitInstrumentation(instrumentation: InstrumentationType) -> Bool {

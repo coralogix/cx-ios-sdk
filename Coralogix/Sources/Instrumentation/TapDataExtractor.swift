@@ -210,19 +210,22 @@ enum TapDataExtractor {
     /// - Parameter shouldSendText: Optional delegate from `CoralogixExporterOptions`.
     ///   When provided, it is called with the view and candidate text before recording
     ///   `target_element_inner_text`. Return `false` to suppress the text for that view.
+    /// - Parameter resolveTargetName: Optional delegate from `CoralogixExporterOptions`.
+    ///   When provided, its return value replaces the UIKit class name in `target_element`.
+    ///   Returning `nil` falls back to the resolved class name.
     static func extract(from event: TouchEvent,
-                        shouldSendText: ((UIView, String) -> Bool)? = nil) -> [String: Any] {
+                        shouldSendText: ((UIView, String) -> Bool)? = nil,
+                        resolveTargetName: ((UIView) -> String?)? = nil) -> [String: Any] {
         var tapData = [String: Any]()
         let view = event.view
 
         tapData[Keys.eventName.rawValue] = event.eventType.rawValue
 
-        // Both element_classes and target_element start with the same resolved class name.
-        // CX-32583 will let users override target_element via resolveTargetName;
-        // element_classes always stays as the UIKit class name.
+        // element_classes always reflects the true UIKit class name — never overridden.
+        // target_element can be customised via resolveTargetName; falls back to class name.
         let resolvedClassName = resolveClassName(NSStringFromClass(type(of: view)))
         tapData[Keys.elementClasses.rawValue] = resolvedClassName
-        tapData[Keys.targetElement.rawValue]  = resolvedClassName
+        tapData[Keys.targetElement.rawValue]  = resolveTargetName?(view) ?? resolvedClassName
 
         // element_id: accessibility identifier set by the developer
         if let accessibilityId = view.accessibilityIdentifier, !accessibilityId.isEmpty {
