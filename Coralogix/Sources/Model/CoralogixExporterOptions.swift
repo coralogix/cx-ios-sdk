@@ -68,6 +68,18 @@ public struct CoralogixExporterOptions {
     
     /// Enable event access and modification before sending to Coralogix, supporting content modification, and event discarding.
     var beforeSend: (([String: Any]) -> [String: Any]?)?
+
+    /// Called before `target_element_inner_text` is recorded for a tapped view.
+    ///
+    /// Return `true` to allow the text to be captured, `false` to suppress it.
+    /// Use this to redact sensitive labels (e.g. account numbers, personal data)
+    /// on a per-view or per-text basis without disabling text capture globally.
+    ///
+    /// - Parameters:
+    ///   - view: The UIView that was tapped.
+    ///   - text: The text that the SDK is about to record.
+    /// - Returns: `true` to include the text in the event, `false` to omit it.
+    public var shouldSendText: ((UIView, String) -> Bool)?
     
     /// Alternative beforeSend for Other Platfoms.
     public var beforeSendCallBack: (([[String: Any]]) -> Void)?
@@ -104,6 +116,7 @@ public struct CoralogixExporterOptions {
                 proxyUrl: String? = nil,
                 traceParentInHeader: [String: Any]? = nil,
                 mobileVitals: [MobileVitalsType: Bool]? = nil,
+                shouldSendText: ((UIView, String) -> Bool)? = nil,
                 debug: Bool = false) {
         self.coralogixDomain = coralogixDomain
         self.userContext = userContext
@@ -123,6 +136,7 @@ public struct CoralogixExporterOptions {
         self.proxyUrl = proxyUrl
         self.traceParentInHeader = traceParentInHeader
         self.mobileVitals = mobileVitals
+        self.shouldSendText = shouldSendText
     }
     
     internal func shouldInitInstrumentation(instrumentation: InstrumentationType) -> Bool {
