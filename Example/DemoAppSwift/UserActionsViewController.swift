@@ -14,6 +14,7 @@ final class UserActionsViewController: UITableViewController {
         case segmentedCollectionView
         case pageController
         case alertView
+        case sensitiveLabel
         case simulateCrashBadAccess
         case simulateCrashFatalError
     }
@@ -51,6 +52,12 @@ final class UserActionsViewController: UITableViewController {
             title: "Alert View",
             subtitle: "Instrument alerts and user confirmations",
             systemImageName: "exclamationmark.triangle"
+        ),
+        .init(
+            key: .sensitiveLabel,
+            title: "Sensitive Label (text suppressed)",
+            subtitle: "Tap this — shouldSendText returns false, so no text is captured in RUM",
+            systemImageName: "eye.slash"
         ),
         .init(
             key: .simulateCrashBadAccess,
@@ -120,6 +127,9 @@ final class UserActionsViewController: UITableViewController {
         cell.accessoryType = .none
         cell.selectionStyle = .default
 
+        // Tag the sensitive-label row so shouldSendText can identify and suppress it.
+        cell.accessibilityIdentifier = item.key == .sensitiveLabel ? "sensitiveLabel" : nil
+
         return cell
     }
 
@@ -154,6 +164,9 @@ final class UserActionsViewController: UITableViewController {
                 self?.showToast("Alert dismissed")
             })
             present(alert, animated: true)
+
+        case .sensitiveLabel:
+            showToast("Tapped — but text is suppressed in RUM (shouldSendText → false)")
 
         case .simulateCrashBadAccess:
             simulateCrashWithFirstResponder()

@@ -18,6 +18,12 @@ extension CoralogixRum {
         UIApplication.swizzleSendEvent
         UIApplication.swizzleSwipeGestureRecognizer
 
+        // Cache the closures once here so handleInteractionNotification does not
+        // copy the CoralogixExporterOptions struct on every tap event.
+        let options = coralogixExporter?.getOptions()
+        userActionsDelegates = UserActionsDelegates(shouldSendText: options?.shouldSendText,
+                                                    resolveTargetName: options?.resolveTargetName)
+
         NotificationCenter.default.addObserver(self,
                                                selector: #selector(handleInteractionNotification(notification:)),
                                                name: .cxRumNotificationUserActions, object: nil)
@@ -29,7 +35,9 @@ extension CoralogixRum {
             return
         }
 
-        processInteractionEvent(TapDataExtractor.extract(from: touchEvent))
+        processInteractionEvent(TapDataExtractor.extract(from: touchEvent,
+                                                         shouldSendText: userActionsDelegates?.shouldSendText,
+                                                         resolveTargetName: userActionsDelegates?.resolveTargetName))
     }
 
     private func processInteractionEvent(_ properties: [String: Any]) {
