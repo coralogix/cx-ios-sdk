@@ -349,6 +349,18 @@ final class InteractionContextTests: XCTestCase {
         XCTAssertNil(data[Keys.targetElementInnerText.rawValue], "No text source — field must be absent")
     }
 
+    /// UIView is in the container-class blocklist, so target_element_inner_text must be absent
+    /// even when an accessibilityLabel is set — the skip is caused by the container check,
+    /// not by the absence of a label. This is the companion to testExtract_swipeEvent_noInnerText_fieldAbsent.
+    func testExtract_swipeEvent_containerView_innerTextAlwaysAbsent() {
+        let view = UIView()
+        view.accessibilityLabel = "SomeLabel" // label present, but UIView is a container
+        let event = TouchEvent(view: view, location: .zero, eventType: .swipe, scrollDirection: .left)
+        let data = TapDataExtractor.extract(from: event)
+        XCTAssertNil(data[Keys.targetElementInnerText.rawValue],
+                     "UIView is a container — inner text must be absent even with an accessibilityLabel")
+    }
+
     /// InteractionContext built from a swipe tapObject must have eventName .swipe and direction.
     func testInit_swipeEvent_mapsEventNameAndDirection() {
         let tapObject: [String: Any] = [

@@ -77,11 +77,13 @@ class SwizzleUtils {
                                 originalIMP,
                                 method_getTypeEncoding(originalMethod))
         } else {
-            // method_exchangeImplementations is always correct here.
-            // A chaining block would require knowing the exact method signature at compile time,
-            // which is not feasible generically — and since swizzleLock is held throughout,
-            // no other code can modify the IMP between reading originalIMP and this point,
-            // making the "already swizzled by another SDK" scenario impossible at this site.
+            // method_exchangeImplementations is correct even when another SDK has already
+            // swizzled this method (e.g. via +load before our code ran).
+            // Reason: the exchange is symmetric. If a third-party SDK already swapped
+            // originalSelector ↔ theirIMP, `originalIMP` above captured theirIMP.
+            // After our exchange, cx_* holds theirIMP, so calling `self.cx_*(args)` inside
+            // our swizzled method chains through their implementation and then to UIKit —
+            // the full call chain remains intact without any manual chaining block.
             method_exchangeImplementations(originalMethod, swizzledMethod)
         }
     }
