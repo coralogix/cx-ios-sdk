@@ -85,34 +85,24 @@ final class NetworkCaptureRuleTests: XCTestCase {
         XCTAssertNil(options.networkExtraConfig)
     }
 
-    func testOptions_networkExtraConfig_storesRules() {
+    func testOptions_networkExtraConfig_storesRules() throws {
         let rule = NetworkCaptureRule(url: "api.example.com",
                                      reqHeaders: ["Authorization"],
                                      collectResPayload: true)
         var options = makeOptions()
         options.networkExtraConfig = [rule]
         XCTAssertEqual(options.networkExtraConfig?.count, 1)
-        XCTAssertEqual(options.networkExtraConfig?.first?.url, "api.example.com")
+        // Verify capture settings are preserved (public API).
         XCTAssertEqual(options.networkExtraConfig?.first?.reqHeaders, ["Authorization"])
         XCTAssertEqual(options.networkExtraConfig?.first?.collectResPayload, true)
+        // Verify the stored rule matches behaviorally rather than inspecting internal state.
+        let matchingURL = try XCTUnwrap(URL(string: "https://api.example.com/endpoint"))
+        XCTAssertTrue(options.networkExtraConfig?.first?.matches(matchingURL) == true)
     }
 
     // MARK: - Mutual exclusivity
-    // These are white-box tests of the internal discriminator fields (url / urlPattern).
-    // They verify the invariant that exactly one matcher is set per init path.
-    // If the internal representation ever changes, update these alongside the implementation.
-
-    func testStringInit_urlPatternIsNil() {
-        let rule = NetworkCaptureRule(url: "api.example.com")
-        XCTAssertNil(rule.urlPattern)
-    }
-
-    func testRegexInit_urlIsEmpty() throws {
-        let pattern = try NSRegularExpression(pattern: ".*")
-        let rule = NetworkCaptureRule(urlPattern: pattern)
-        XCTAssertEqual(rule.url, "")
-        XCTAssertNotNil(rule.urlPattern)
-    }
+    // Enforced at compile time by the private Matcher enum — each init path sets exactly one
+    // case, so no runtime white-box tests are needed here.
 
     // MARK: - Helpers
 
