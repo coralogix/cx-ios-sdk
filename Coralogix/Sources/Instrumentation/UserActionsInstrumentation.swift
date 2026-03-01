@@ -29,7 +29,9 @@ extension CoralogixRum {
             return
         }
 
-        processInteractionEvent(TapDataExtractor.extract(from: touchEvent))
+        let shouldSendText = coralogixExporter?.getOptions().shouldSendText
+        processInteractionEvent(TapDataExtractor.extract(from: touchEvent,
+                                                         shouldSendText: shouldSendText))
     }
 
     private func processInteractionEvent(_ properties: [String: Any]) {

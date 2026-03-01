@@ -207,7 +207,11 @@ final class ScrollTracker {
 /// This is the single place that knows how to map UIKit view metadata
 /// to the interaction_context schema.
 enum TapDataExtractor {
-    static func extract(from event: TouchEvent) -> [String: Any] {
+    /// - Parameter shouldSendText: Optional delegate from `CoralogixExporterOptions`.
+    ///   When provided, it is called with the view and candidate text before recording
+    ///   `target_element_inner_text`. Return `false` to suppress the text for that view.
+    static func extract(from event: TouchEvent,
+                        shouldSendText: ((UIView, String) -> Bool)? = nil) -> [String: Any] {
         var tapData = [String: Any]()
         let view = event.view
 
@@ -229,9 +233,12 @@ enum TapDataExtractor {
         // Container views are skipped (they span many items; text would be ambiguous).
         // Input views (UITextField, UITextView, UISearchBar) are always skipped —
         // they hold user-typed content which may be passwords, emails, or other PII.
+        // If the caller supplied a shouldSendText delegate, it is the final gate:
+        // returning false suppresses the text even when all SDK-side checks pass.
         if !isContainerView(resolvedClassName),
            let innerText = safeInnerText(from: view),
-           !innerText.isEmpty {
+           !innerText.isEmpty,
+           shouldSendText?(view, innerText) ?? true {
             tapData[Keys.targetElementInnerText.rawValue] = innerText
         }
 
