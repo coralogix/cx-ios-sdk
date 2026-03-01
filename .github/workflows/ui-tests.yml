@@ -13,218 +13,285 @@ on:
 jobs:
   ui-tests:
     name: Run DemoApp UI Tests
-    runs-on: ubuntu-latest
-    # UI tests are temporarily broken. This job is a stub so the required
-    # branch-protection check passes. Restore original steps when tests are fixed.
-    timeout-minutes: 5
+    runs-on: macos-14
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+      checks: write
 
     steps:
-      - name: Skip (UI tests temporarily broken)
-        run: echo "UI tests skipped — restore original steps when fixed"
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-# ----- original job definition preserved below for easy restoration -----
-# jobs:
-#   ui-tests:
-#     name: Run DemoApp UI Tests
-#     runs-on: macos-14
-#     timeout-minutes: 30
-#     permissions:
-#       contents: read
-#       actions: read
-#       checks: write
-#
-#     steps:
-#       - name: Checkout code
-#         uses: actions/checkout@v4
-#
-#       - name: Select Xcode (via DEVELOPER_DIR)
-#         run: |
-#           if [ -d "/Applications/Xcode_16.2.app" ]; then
-#             echo "DEVELOPER_DIR=/Applications/Xcode_16.2.app/Contents/Developer" >> $GITHUB_ENV
-#           elif [ -d "/Applications/Xcode_16.1.app" ]; then
-#             echo "DEVELOPER_DIR=/Applications/Xcode_16.1.app/Contents/Developer" >> $GITHUB_ENV
-#           elif [ -d "/Applications/Xcode_16.0.app" ]; then
-#             echo "DEVELOPER_DIR=/Applications/Xcode_16.0.app/Contents/Developer" >> $GITHUB_ENV
-#           else
-#             echo "No pinned Xcode found; using default Xcode"
-#           fi
-#
-#       - name: Make root use the same Xcode
-#         run: |
-#           set -euo pipefail
-#           if [ -n "${DEVELOPER_DIR:-}" ]; then
-#             echo "Switching root xcode-select to: $DEVELOPER_DIR"
-#             sudo xcode-select -s "$DEVELOPER_DIR"
-#           else
-#             echo "DEVELOPER_DIR not set; using system default Xcode"
-#           fi
-#           sudo xcodebuild -version
-#           sudo xcodebuild -license accept || true
-#
-#       - name: Show Xcode version
-#         run: |
-#           echo "Using DEVELOPER_DIR=${DEVELOPER_DIR:-"(not set)"}"
-#           xcodebuild -version
-#
-#       - name: Xcode first launch setup
-#         run: |
-#           sudo env DEVELOPER_DIR="${DEVELOPER_DIR:-}" xcodebuild -runFirstLaunch || sudo xcodebuild -runFirstLaunch
-#
-#       - name: Xcode & Simulator Diagnostics
-#         run: |
-#           echo "===== XCODE SELECT ====="
-#           xcode-select -p
-#           echo
-#           echo "===== XCODE VERSION ====="
-#           xcodebuild -version
-#           echo
-#           echo "===== INSTALLED SDKs ====="
-#           xcodebuild -showsdks || true
-#           echo
-#           echo "===== INSTALLED SIMULATOR RUNTIMES ====="
-#           xcrun simctl list runtimes || true
-#           echo
-#
-#       - name: Verify iOS Simulator SDK exists (fail fast)
-#         run: |
-#           set -euo pipefail
-#           if ! xcodebuild -showsdks | grep -q "iOS Simulator"; then
-#             echo "iOS Simulator SDK is missing in this Xcode. Can't run UI tests on this runner."
-#             exit 1
-#           fi
-#           echo "iOS Simulator SDK is present."
-#
-#       - name: Verify project structure
-#         run: |
-#           echo "Verifying project structure..."
-#           if [ -f "Example/DemoApp.xcworkspace/contents.xcworkspacedata" ]; then
-#             echo "Found workspace: Example/DemoApp.xcworkspace"
-#           elif [ -d "Example/DemoApp.xcodeproj" ]; then
-#             echo "Found project: Example/DemoApp.xcodeproj"
-#           else
-#             echo "Project/workspace not found in Example/ directory"
-#             find . -name "*.xcworkspace" -o -name "*.xcodeproj" | head -10
-#             exit 1
-#           fi
-#
-#       - name: List available iOS simulators
-#         run: |
-#           set -euo pipefail
-#           echo "Available iOS Simulators:"
-#           xcrun simctl list devices available | grep -E "iPhone|iPad" | head -20 || true
-#
-#       - name: Set build configuration
-#         run: |
-#           if [ -f "Example/DemoApp.xcworkspace/contents.xcworkspacedata" ]; then
-#             echo "BUILD_TYPE=-workspace" >> $GITHUB_ENV
-#             echo "BUILD_PATH_RELATIVE=DemoApp.xcworkspace" >> $GITHUB_ENV
-#           elif [ -d "Example/DemoApp.xcodeproj" ]; then
-#             echo "BUILD_TYPE=-project" >> $GITHUB_ENV
-#             echo "BUILD_PATH_RELATIVE=DemoApp.xcodeproj" >> $GITHUB_ENV
-#           else
-#             echo "No Xcode workspace or project found in Example/ directory!"
-#             exit 1
-#           fi
-#           echo "SCHEME=DemoAppSwift" >> $GITHUB_ENV
-#
-#       - name: Install xcpretty
-#         run: |
-#           if ! command -v xcpretty &> /dev/null; then
-#             gem install xcpretty || true
-#           fi
-#
-#       - name: Set destination (auto from xcodebuild)
-#         run: |
-#           set -euo pipefail
-#           cd Example
-#           OUT=$(xcodebuild -showdestinations -workspace DemoApp.xcworkspace -scheme DemoAppSwift)
-#           echo "$OUT"
-#           LINE=$(echo "$OUT" | grep -E "platform:iOS Simulator, id:.*name:iPhone (1[6-9]|[2-9][0-9])" | grep -E "OS:1[89]\.[0-9]" | head -1 || true)
-#           if [ -z "$LINE" ]; then
-#             LINE=$(echo "$OUT" | grep -E "platform:iOS Simulator, id:.*name:iPhone" | grep -E "OS:1[89]\.[0-9]" | head -1 || true)
-#           fi
-#           if [ -z "$LINE" ]; then
-#             LINE=$(echo "$OUT" | grep -E "platform:iOS Simulator, id:.*name:iPhone" | grep -E "OS:1[7-9]\.[0-9]" | head -1 || true)
-#           fi
-#           if [ -z "$LINE" ]; then
-#             LINE=$(echo "$OUT" | grep -E "platform:iOS Simulator, id:.*name:iPhone" | head -1 || true)
-#           fi
-#           if [ -z "$LINE" ]; then
-#             echo "No iPhone simulator destination found"
-#             exit 1
-#           fi
-#           NAME=$(echo "$LINE" | sed -n 's/.*name:\([^,}]*\).*/\1/p' | xargs)
-#           OS=$(echo "$LINE" | sed -n 's/.*OS:\([^,}]*\).*/\1/p' | xargs)
-#           if [ -z "$NAME" ] || [ -z "$OS" ]; then
-#             echo "Failed to parse destination from line: $LINE"
-#             exit 1
-#           fi
-#           echo "DESTINATION_SPEC=platform=iOS Simulator,name=$NAME,OS=$OS" >> $GITHUB_ENV
-#           echo "SIMULATOR_NAME=$NAME" >> $GITHUB_ENV
-#
-#       - name: Boot simulator (ensure ready)
-#         run: |
-#           set -euo pipefail
-#           if [ -n "${SIMULATOR_NAME:-}" ]; then
-#             xcrun simctl boot "$SIMULATOR_NAME" 2>/dev/null || echo "Simulator already booted or booting..."
-#           else
-#             xcrun simctl boot "iPhone 16" 2>/dev/null || \
-#             xcrun simctl boot "iPhone 15" 2>/dev/null || echo "Could not boot simulator by name"
-#           fi
-#           sleep 3
-#           xcrun simctl list devices booted || true
-#
-#       - name: Generate envs.swift (CI)
-#         run: |
-#           set -euo pipefail
-#           cd Example
-#           PUBLIC_KEY="${{ secrets.DEMOAPP_API_KEY || 'CI_DUMMY' }}"
-#           printf 'import Foundation\n\npublic enum Envs: String {\n    case PUBLIC_KEY = "%s"\n    case PROXY_URL = "https://schema-validator-latest.onrender.com/logs"\n}\n' "$PUBLIC_KEY" > envs.swift
-#
-#       - name: Create placeholder GoogleService-Info.plist (CI)
-#         run: |
-#           set -euo pipefail
-#           cd Example
-#           printf '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0">\n<dict>\n  <key>API_KEY</key>\n  <string>AIzaSyAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA</string>\n  <key>GCM_SENDER_ID</key>\n  <string>000000000000</string>\n  <key>PLIST_VERSION</key>\n  <string>1</string>\n  <key>BUNDLE_ID</key>\n  <string>com.coralogix.DemoAppSwift</string>\n  <key>PROJECT_ID</key>\n  <string>placeholder-project</string>\n  <key>STORAGE_BUCKET</key>\n  <string>placeholder-project.appspot.com</string>\n  <key>IS_ADS_ENABLED</key>\n  <false/>\n  <key>IS_ANALYTICS_ENABLED</key>\n  <false/>\n  <key>IS_APPINVITE_ENABLED</key>\n  <false/>\n  <key>IS_GCM_ENABLED</key>\n  <false/>\n  <key>IS_SIGNIN_ENABLED</key>\n  <false/>\n  <key>GOOGLE_APP_ID</key>\n  <string>1:000000000000:ios:0000000000000000000000</string>\n</dict>\n</plist>\n' > GoogleService-Info.plist
-#
-#       - name: Build for testing
-#         run: |
-#           set -euo pipefail
-#           cd Example
-#           CI_DEPLOYMENT_TARGET="18.0"
-#           xcodebuild build-for-testing \
-#             $BUILD_TYPE "$BUILD_PATH_RELATIVE" \
-#             -scheme "$SCHEME" \
-#             -sdk iphonesimulator \
-#             -destination "$DESTINATION_SPEC" \
-#             -derivedDataPath ../DerivedData \
-#             CODE_SIGNING_ALLOWED=NO \
-#             CODE_SIGN_IDENTITY="" \
-#             IPHONEOS_DEPLOYMENT_TARGET="$CI_DEPLOYMENT_TARGET" \
-#             -jobs $(sysctl -n hw.ncpu) \
-#             | xcpretty --color || cat
-#
-#       - name: Run UI Tests
-#         run: |
-#           set -euo pipefail
-#           cd Example
-#           set +e
-#           xcodebuild test-without-building \
-#             $BUILD_TYPE "$BUILD_PATH_RELATIVE" \
-#             -scheme "$SCHEME" \
-#             -destination "$DESTINATION_SPEC" \
-#             -derivedDataPath ../DerivedData \
-#             -resultBundlePath ../DerivedData/TestResults.xcresult \
-#             -parallel-testing-enabled NO \
-#             2>&1 | tee ../test-output.log | xcpretty
-#           EXIT_CODE=${PIPESTATUS[0]}
-#           grep -E "Executed [0-9]+ tests" ../test-output.log || true
-#           if grep -q "Executed 0 tests" ../test-output.log; then
-#             echo "No tests were executed"
-#             exit 1
-#           fi
-#           if [ "$EXIT_CODE" -ne 0 ]; then
-#             echo "Tests failed"
-#             exit "$EXIT_CODE"
-#           fi
-#           echo "Tests passed!"
+      - name: Select Xcode (via DEVELOPER_DIR)
+        run: |
+          if [ -d "/Applications/Xcode_16.2.app" ]; then
+            echo "DEVELOPER_DIR=/Applications/Xcode_16.2.app/Contents/Developer" >> $GITHUB_ENV
+          elif [ -d "/Applications/Xcode_16.1.app" ]; then
+            echo "DEVELOPER_DIR=/Applications/Xcode_16.1.app/Contents/Developer" >> $GITHUB_ENV
+          elif [ -d "/Applications/Xcode_16.0.app" ]; then
+            echo "DEVELOPER_DIR=/Applications/Xcode_16.0.app/Contents/Developer" >> $GITHUB_ENV
+          else
+            echo "No pinned Xcode found; using default Xcode"
+          fi
+
+      - name: Make root use the same Xcode
+        run: |
+          set -euo pipefail
+          if [ -n "${DEVELOPER_DIR:-}" ]; then
+            echo "Switching root xcode-select to: $DEVELOPER_DIR"
+            sudo xcode-select -s "$DEVELOPER_DIR"
+          else
+            echo "DEVELOPER_DIR not set; using system default Xcode"
+          fi
+          sudo xcodebuild -version
+          sudo xcodebuild -license accept || true
+
+      - name: Show Xcode version
+        run: |
+          echo "Using DEVELOPER_DIR=${DEVELOPER_DIR:-"(not set)"}"
+          xcodebuild -version
+
+      - name: Xcode first launch setup
+        run: |
+          sudo env DEVELOPER_DIR="${DEVELOPER_DIR:-}" xcodebuild -runFirstLaunch || sudo xcodebuild -runFirstLaunch
+
+      - name: 🔎 Xcode & Simulator Diagnostics
+        run: |
+          echo "===== XCODE SELECT ====="
+          xcode-select -p
+          echo
+
+          echo "===== XCODE VERSION ====="
+          xcodebuild -version
+          echo
+
+          echo "===== INSTALLED SDKs ====="
+          xcodebuild -showsdks || true
+          echo
+
+          echo "===== INSTALLED SIMULATOR RUNTIMES ====="
+          xcrun simctl list runtimes || true
+          echo
+
+      - name: Verify iOS Simulator SDK exists (fail fast)
+        run: |
+          set -euo pipefail
+          if ! xcodebuild -showsdks | grep -q "iOS Simulator"; then
+            echo "❌ iOS Simulator SDK is missing in this Xcode. Can't run UI tests on this runner."
+            exit 1
+          fi
+          echo "✅ iOS Simulator SDK is present."
+
+      - name: Verify project structure
+        run: |
+          echo "📋 Verifying project structure..."
+          if [ -f "Example/DemoApp.xcworkspace/contents.xcworkspacedata" ]; then
+            echo "✅ Found workspace: Example/DemoApp.xcworkspace"
+          elif [ -d "Example/DemoApp.xcodeproj" ]; then
+            echo "✅ Found project: Example/DemoApp.xcodeproj"
+          else
+            echo "❌ Project/workspace not found in Example/ directory"
+            find . -name "*.xcworkspace" -o -name "*.xcodeproj" | head -10
+            exit 1
+          fi
+
+      - name: List available iOS simulators
+        run: |
+          set -euo pipefail
+          echo "📱 Available iOS Simulators:"
+          xcrun simctl list devices available | grep -E "iPhone|iPad" | head -20 || true
+          echo ""
+     
+      - name: Set build configuration
+        run: |
+          if [ -f "Example/DemoApp.xcworkspace/contents.xcworkspacedata" ]; then
+            echo "BUILD_TYPE=-workspace" >> $GITHUB_ENV
+            echo "BUILD_PATH_RELATIVE=DemoApp.xcworkspace" >> $GITHUB_ENV
+          elif [ -d "Example/DemoApp.xcodeproj" ]; then
+            echo "BUILD_TYPE=-project" >> $GITHUB_ENV
+            echo "BUILD_PATH_RELATIVE=DemoApp.xcodeproj" >> $GITHUB_ENV
+          else
+            echo "❌ No Xcode workspace or project found in Example/ directory!"
+            exit 1
+          fi
+          echo "SCHEME=DemoAppSwift" >> $GITHUB_ENV
+
+      - name: Install xcpretty 
+        run: |
+          if ! command -v xcpretty &> /dev/null; then
+            gem install xcpretty || true
+          fi
+
+      - name: Set destination (auto from xcodebuild)
+        run: |
+          set -euo pipefail
+          cd Example
+
+          OUT=$(xcodebuild -showdestinations -workspace DemoApp.xcworkspace -scheme DemoAppSwift)
+          echo "$OUT"
+
+          # Prefer iPhone 16 or newer with iOS 18.0+ (we override deployment target in CI)
+          LINE=$(echo "$OUT" | grep -E "platform:iOS Simulator, id:.*name:iPhone (1[6-9]|[2-9][0-9])" | grep -E "OS:1[89]\.[0-9]" | head -1 || true)
+          
+          # If not found, try any iPhone with iOS 18.0+
+          if [ -z "$LINE" ]; then
+            LINE=$(echo "$OUT" | grep -E "platform:iOS Simulator, id:.*name:iPhone" | grep -E "OS:1[89]\.[0-9]" | head -1 || true)
+          fi
+          
+          # If still not found, try any iPhone with iOS 17.0+ (fallback)
+          if [ -z "$LINE" ]; then
+            LINE=$(echo "$OUT" | grep -E "platform:iOS Simulator, id:.*name:iPhone" | grep -E "OS:1[7-9]\.[0-9]" | head -1 || true)
+          fi
+          
+          # Last resort: any iPhone simulator
+          if [ -z "$LINE" ]; then
+            LINE=$(echo "$OUT" | grep -E "platform:iOS Simulator, id:.*name:iPhone" | head -1 || true)
+          fi
+          
+          if [ -z "$LINE" ]; then
+            echo "❌ No iPhone simulator destination found"
+            exit 1
+          fi
+
+          NAME=$(echo "$LINE" | sed -n 's/.*name:\([^,}]*\).*/\1/p' | xargs)
+          OS=$(echo "$LINE" | sed -n 's/.*OS:\([^,}]*\).*/\1/p' | xargs)
+
+          if [ -z "$NAME" ] || [ -z "$OS" ]; then
+            echo "❌ Failed to parse destination from line: $LINE"
+            exit 1
+          fi
+
+          echo "✅ Selected simulator: $NAME ($OS) - deployment target will be overridden to 18.0 for CI"
+
+          echo "DESTINATION_SPEC=platform=iOS Simulator,name=$NAME,OS=$OS" >> $GITHUB_ENV
+          echo "SIMULATOR_NAME=$NAME" >> $GITHUB_ENV
+          echo "🎯 Final destination spec: platform=iOS Simulator,name=$NAME,OS=$OS"
+
+      - name: Boot simulator (ensure ready)
+        run: |
+          set -euo pipefail
+          echo "📱 Ensuring simulator is booted and ready..."
+          
+          # Use the simulator name from destination selection
+          if [ -n "${SIMULATOR_NAME:-}" ]; then
+            echo "   Attempting to boot: $SIMULATOR_NAME"
+            xcrun simctl boot "$SIMULATOR_NAME" 2>/dev/null || echo "   Simulator already booted or booting..."
+          else
+            # Fallback: try common device names
+            echo "   Attempting to boot iPhone 16..."
+            xcrun simctl boot "iPhone 16" 2>/dev/null || \
+            xcrun simctl boot "iPhone 15" 2>/dev/null || echo "   Could not boot simulator by name"
+          fi
+          
+          # Wait for simulator to be fully booted (reduced from 5s + 3s)
+          echo "   Waiting for simulator to be ready..."
+          sleep 3
+          
+          # Verify simulator is booted
+          BOOTED=$(xcrun simctl list devices booted | grep -i "iPhone" | head -1 || echo "")
+          if [ -z "$BOOTED" ]; then
+            echo "   ⚠️ No booted iPhone simulator found, but continuing..."
+          else
+            echo "   ✅ Booted simulator: $BOOTED"
+          fi
+          
+          xcrun simctl list devices booted || true
+
+      - name: Generate envs.swift (CI)
+        run: |
+          set -euo pipefail
+          cd Example
+          PUBLIC_KEY="${{ secrets.DEMOAPP_API_KEY || 'CI_DUMMY' }}"
+          printf 'import Foundation\n\npublic enum Envs: String {\n    case PUBLIC_KEY = "%s"\n    case PROXY_URL = "https://schema-validator-latest.onrender.com/logs"\n}\n' "$PUBLIC_KEY" > envs.swift
+
+          echo "✅ Generated envs.swift"
+          ls -la envs.swift
+          cat envs.swift
+
+      - name: Create placeholder GoogleService-Info.plist (CI)
+        run: |
+          set -euo pipefail
+          cd Example
+          # Create a minimal valid plist file to satisfy the build requirement
+          # The app will detect it's missing and skip Firebase initialization
+          # Alternative: Store a real test Firebase project plist as a secret and use:
+          # echo "${{ secrets.FIREBASE_TEST_PLIST }}" > GoogleService-Info.plist
+          printf '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0">\n<dict>\n  <key>API_KEY</key>\n  <string>AIzaSyAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA</string>\n  <key>GCM_SENDER_ID</key>\n  <string>000000000000</string>\n  <key>PLIST_VERSION</key>\n  <string>1</string>\n  <key>BUNDLE_ID</key>\n  <string>com.coralogix.DemoAppSwift</string>\n  <key>PROJECT_ID</key>\n  <string>placeholder-project</string>\n  <key>STORAGE_BUCKET</key>\n  <string>placeholder-project.appspot.com</string>\n  <key>IS_ADS_ENABLED</key>\n  <false/>\n  <key>IS_ANALYTICS_ENABLED</key>\n  <false/>\n  <key>IS_APPINVITE_ENABLED</key>\n  <false/>\n  <key>IS_GCM_ENABLED</key>\n  <false/>\n  <key>IS_SIGNIN_ENABLED</key>\n  <false/>\n  <key>GOOGLE_APP_ID</key>\n  <string>1:000000000000:ios:0000000000000000000000</string>\n</dict>\n</plist>\n' > GoogleService-Info.plist
+          echo "✅ Created placeholder GoogleService-Info.plist (app will skip Firebase init)"
+          ls -la GoogleService-Info.plist
+
+      - name: Build for testing
+        run: |
+          set -euo pipefail
+          cd Example
+
+          CI_DEPLOYMENT_TARGET="18.0"
+          echo "🔨 Building for testing (simulator only)..."
+          BUILD_START=$(date +%s)
+
+          xcodebuild build-for-testing \
+            $BUILD_TYPE "$BUILD_PATH_RELATIVE" \
+            -scheme "$SCHEME" \
+            -sdk iphonesimulator \
+            -destination "$DESTINATION_SPEC" \
+            -derivedDataPath ../DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGN_IDENTITY="" \
+            IPHONEOS_DEPLOYMENT_TARGET="$CI_DEPLOYMENT_TARGET" \
+            -jobs $(sysctl -n hw.ncpu) \
+            | xcpretty --color || cat
+
+          BUILD_END=$(date +%s)
+          BUILD_DURATION=$((BUILD_END - BUILD_START))
+          echo "✅ Build completed in ${BUILD_DURATION}s ($(($BUILD_DURATION / 60))m $(($BUILD_DURATION % 60))s)"
+
+      - name: Run UI Tests
+        run: |
+          set -euo pipefail
+          cd Example
+
+          echo "🧪 Running UI tests" 
+          echo "⏱️  Start time: $(date)"
+
+          set +e
+          TEST_START=$(date +%s)
+
+          xcodebuild test-without-building \
+            $BUILD_TYPE "$BUILD_PATH_RELATIVE" \
+            -scheme "$SCHEME" \
+            -destination "$DESTINATION_SPEC" \
+            -derivedDataPath ../DerivedData \
+            -resultBundlePath ../DerivedData/TestResults.xcresult \
+            -parallel-testing-enabled NO \
+            2>&1 | tee ../test-output.log | xcpretty 
+
+          EXIT_CODE=${PIPESTATUS[0]}
+          PIPESTAT=("${PIPESTATUS[@]}")
+
+          echo "PIPESTATUS: ${PIPESTAT[*]}"
+          echo "EXIT_CODE: $EXIT_CODE"
+
+          echo "🔎 Checking how many tests were executed..."
+
+          grep -E "Executed [0-9]+ tests" ../test-output.log || true
+
+          if grep -q "Executed 0 tests" ../test-output.log; then
+             echo "❌ No tests were executed → failing CI"
+             exit 1
+          fi
+
+          echo "🔎 Last 120 lines of xcodebuild output:"
+          tail -n 120 ../test-output.log
+
+          echo "🔎 Key error lines:"
+          grep -iE "error:|failed|unable|No devices|destination|Simulator|xctest|not found|timed out" ../test-output.log | tail -50 || true
+
+          if [ "$EXIT_CODE" -ne 0 ]; then
+             echo "❌ Tests failed"
+             exit "$EXIT_CODE"
+          fi
+
+          echo "✅ Tests passed!"
+          echo "⏱️  End time: $(date)"

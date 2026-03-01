@@ -77,24 +77,12 @@ class SwizzleUtils {
                                 originalIMP,
                                 method_getTypeEncoding(originalMethod))
         } else {
-            let previousIMP = method_getImplementation(originalMethod)
-            if previousIMP != originalIMP {
-                // Already swizzled by another SDK, chain the implementations
-                let block: @convention(block) (Any) -> Void = { obj in
-                    let originalIMP = originalImplementations[key] ?? previousIMP
-                    typealias Function = @convention(c) (Any, Selector) -> Void
-                    let originalMethod = unsafeBitCast(originalIMP, to: Function.self)
-                    originalMethod(obj, originalSelector)
-
-                    let swizzledMethod = unsafeBitCast(swizzledIMP, to: Function.self)
-                    swizzledMethod(obj, swizzledSelector)
-                }
-
-                let newIMP = imp_implementationWithBlock(block)
-                method_setImplementation(originalMethod, newIMP)
-            } else {
-                method_exchangeImplementations(originalMethod, swizzledMethod)
-            }
+            // method_exchangeImplementations is always correct here.
+            // A chaining block would require knowing the exact method signature at compile time,
+            // which is not feasible generically — and since swizzleLock is held throughout,
+            // no other code can modify the IMP between reading originalIMP and this point,
+            // making the "already swizzled by another SDK" scenario impossible at this site.
+            method_exchangeImplementations(originalMethod, swizzledMethod)
         }
     }
 }

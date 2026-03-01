@@ -118,11 +118,12 @@ final class ScrollTracker {
             return nil
         }
         guard let state = touchStates.removeValue(forKey: ObjectIdentifier(touch)) else { return nil }
-        let isPaged = Self.isPagedScrollViewContext(state.view)
+        let nearestScroll = Self.nearestScrollAncestor(state.view)
+        let isPaged = nearestScroll?.isPagingEnabled == true
         let threshold: CGFloat = isPaged ? Self.pagedThreshold : Self.threshold
         guard let dir = Self.direction(from: state.start, to: touch.location(in: nil),
                                        threshold: threshold) else { return nil }
-        let eventType = Self.gestureEventType(view: state.view)
+        let eventType: InteractionEventName = isPaged ? .swipe : .scroll
         return GestureResult(view: state.view, direction: dir, eventType: eventType)
     }
 
@@ -152,44 +153,27 @@ final class ScrollTracker {
         // for accidental micro-movements that a recogniser would have rejected.
         guard let dir = Self.direction(from: state.start, to: endPoint,
                                        threshold: Self.pagedThreshold) else { return nil }
-        let eventType = Self.gestureEventType(view: state.view)
+        let isPaged = Self.nearestScrollAncestor(state.view)?.isPagingEnabled == true
+        let eventType: InteractionEventName = isPaged ? .swipe : .scroll
         return GestureResult(view: state.view, direction: dir, eventType: eventType)
     }
 
-    /// Classifies a cancelled/ended directional gesture as `.swipe` or `.scroll`.
+    /// Walks the view hierarchy upward and returns the first `UIScrollView` ancestor
+    /// (including `view` itself if it is a `UIScrollView`), or `nil` if none exists.
     ///
-    /// Uses the same nearest-ancestor semantics as `isPagedScrollViewContext`: walks up
-    /// the hierarchy and stops at the **first** `UIScrollView` found.  If that scroll view
-    /// has `isPagingEnabled`, the gesture is a discrete page-flip → `.swipe`; otherwise it
-    /// is continuous content dragging → `.scroll`.
-    ///
-    /// Stopping at the nearest scroll ancestor (rather than continuing past non-paged ones)
-    /// ensures consistency with the threshold chosen in `processEnded`.  For example, a touch
-    /// inside a `UITableView` that is nested in a paged scroll view is classified as `.scroll`
-    /// because the table — not the outer pager — is the view that handled the gesture.
-    private static func gestureEventType(view: UIView) -> InteractionEventName {
+    /// Stopping at the **nearest** scroll ancestor ensures consistent behaviour in nested
+    /// hierarchies: a touch inside a `UITableView` that is itself inside a paged scroll view
+    /// is governed by the table — not the outer pager — because the table is the scroll view
+    /// that actually received the gesture.  Both the displacement threshold and the event type
+    /// (`.swipe` vs `.scroll`) are derived from the same `isPagingEnabled` flag on this one
+    /// ancestor, guaranteeing the two decisions are always in sync.
+    private static func nearestScrollAncestor(_ view: UIView) -> UIScrollView? {
         var current: UIView? = view
         while let v = current {
-            if let sv = v as? UIScrollView { return sv.isPagingEnabled ? .swipe : .scroll }
+            if let sv = v as? UIScrollView { return sv }
             current = v.superview
         }
-        return .scroll
-    }
-
-    /// Returns `true` when `view` is directly inside a `UIScrollView` that has `isPagingEnabled`.
-    /// Used only to select the displacement threshold in `processEnded`.
-    ///
-    /// Intentionally stops at the **first** `UIScrollView` found walking up the hierarchy.
-    /// A touch inside a `UITableView` (non-paged) that is itself inside a paged scroll view
-    /// should be treated as a table scroll, not a page flip — the nearest scroll ancestor
-    /// is the one that actually received and handled the gesture.
-    private static func isPagedScrollViewContext(_ view: UIView) -> Bool {
-        var current: UIView? = view
-        while let v = current {
-            if let sv = v as? UIScrollView { return sv.isPagingEnabled }
-            current = v.superview
-        }
-        return false
+        return nil
     }
 
     /// Pure direction resolver — separated for testability.
@@ -209,7 +193,10 @@ final class ScrollTracker {
     /// Call this when a swipe gesture recogniser on a non-scroll view has already claimed the
     /// gesture — prevents `processCancelled` from also firing a redundant event.
     func discardTouch(_ touch: UITouch) {
-        guard Thread.isMainThread else { return }
+        guard Thread.isMainThread else {
+            Log.w("ScrollTracker.discardTouch called off the main thread — event ignored")
+            return
+        }
         touchStates.removeValue(forKey: ObjectIdentifier(touch))
     }
 }

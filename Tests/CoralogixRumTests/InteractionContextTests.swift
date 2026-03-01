@@ -338,10 +338,13 @@ final class InteractionContextTests: XCTestCase {
         XCTAssertEqual(data[Keys.positionY.rawValue] as? CGFloat, 84)
     }
 
-    /// A swipe event with no accessibilityLabel must not include target_element_inner_text.
+    /// A swipe event on a non-container view with no text source must not include
+    /// target_element_inner_text. Uses UIButton (not UIView) so the container-class
+    /// skip path is not taken — the absence of the field is caused solely by the
+    /// lack of a title, label, or accessibilityLabel on the button.
     func testExtract_swipeEvent_noInnerText_fieldAbsent() {
-        let view = UIView() // no accessibilityLabel
-        let event = TouchEvent(view: view, location: .zero, eventType: .swipe, scrollDirection: .right)
+        let button = UIButton() // non-container, no title, no accessibilityLabel
+        let event = TouchEvent(view: button, location: .zero, eventType: .swipe, scrollDirection: .right)
         let data = TapDataExtractor.extract(from: event)
         XCTAssertNil(data[Keys.targetElementInnerText.rawValue], "No text source — field must be absent")
     }
