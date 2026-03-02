@@ -86,7 +86,11 @@ public struct CoralogixExporterOptions {
     
     /// A list of mobile vitals that you wish to switch off during runtime. all mobile vitals are active by default.
     var mobileVitals: [MobileVitalsType: Bool]?
-    
+
+    /// Per-URL rules for capturing request/response headers and payloads.
+    /// `nil` (default) disables all header and payload capture.
+    public var networkExtraConfig: [NetworkCaptureRule]?
+
     public init(coralogixDomain: CoralogixDomain,
                 userContext: UserContext? = nil,
                 environment: String,
@@ -104,6 +108,7 @@ public struct CoralogixExporterOptions {
                 proxyUrl: String? = nil,
                 traceParentInHeader: [String: Any]? = nil,
                 mobileVitals: [MobileVitalsType: Bool]? = nil,
+                networkExtraConfig: [NetworkCaptureRule]? = nil,
                 debug: Bool = false) {
         self.coralogixDomain = coralogixDomain
         self.userContext = userContext
@@ -123,6 +128,7 @@ public struct CoralogixExporterOptions {
         self.proxyUrl = proxyUrl
         self.traceParentInHeader = traceParentInHeader
         self.mobileVitals = mobileVitals
+        self.networkExtraConfig = networkExtraConfig
     }
     
     internal func shouldInitInstrumentation(instrumentation: InstrumentationType) -> Bool {
