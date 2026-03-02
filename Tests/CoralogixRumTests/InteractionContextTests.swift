@@ -338,6 +338,21 @@ final class InteractionContextTests: XCTestCase {
         XCTAssertEqual(data[Keys.positionY.rawValue] as? CGFloat, 84)
     }
 
+    /// TapDataExtractor.extract must emit scroll_direction for all four swipe directions.
+    func testExtract_swipeEvent_allFourDirections() {
+        let view = UIView()
+        for direction in [ScrollDirection.up, .down, .left, .right] {
+            let event = TouchEvent(view: view, location: CGPoint(x: 10, y: 20),
+                                   eventType: .swipe, scrollDirection: direction)
+            let data = TapDataExtractor.extract(from: event)
+
+            XCTAssertEqual(data[Keys.eventName.rawValue] as? String,       "swipe",
+                           "event_name must be 'swipe' for direction \(direction.rawValue)")
+            XCTAssertEqual(data[Keys.scrollDirection.rawValue] as? String, direction.rawValue,
+                           "scroll_direction must be '\(direction.rawValue)'")
+        }
+    }
+
     /// A swipe event on a non-container view with no text source must not include
     /// target_element_inner_text. Uses UIButton (not UIView) so the container-class
     /// skip path is not taken — the absence of the field is caused solely by the
@@ -381,7 +396,7 @@ final class InteractionContextTests: XCTestCase {
     /// When shouldSendText returns true the inner text must be captured as normal.
     func testExtract_shouldSendText_returnsTrue_includesInnerText() {
         let button = UIButton()
-        button.accessibilityLabel = "Submit"
+        button.setTitle("Submit", for: .normal) // safeInnerText reads currentTitle, not accessibilityLabel
         let event = TouchEvent(view: button, location: .zero, eventType: .click, scrollDirection: nil)
 
         let data = TapDataExtractor.extract(from: event, shouldSendText: { _, _ in true })
@@ -394,7 +409,7 @@ final class InteractionContextTests: XCTestCase {
     /// the SDK would otherwise record it.
     func testExtract_shouldSendText_returnsFalse_suppressesInnerText() {
         let button = UIButton()
-        button.accessibilityLabel = "Submit"
+        button.setTitle("Submit", for: .normal) // safeInnerText reads currentTitle, not accessibilityLabel
         let event = TouchEvent(view: button, location: .zero, eventType: .click, scrollDirection: nil)
 
         let data = TapDataExtractor.extract(from: event, shouldSendText: { _, _ in false })
@@ -406,7 +421,7 @@ final class InteractionContextTests: XCTestCase {
     /// With no shouldSendText delegate the inner text must be captured as normal (defaults to true).
     func testExtract_shouldSendText_nilDelegate_includesInnerText() {
         let button = UIButton()
-        button.accessibilityLabel = "Submit"
+        button.setTitle("Submit", for: .normal) // safeInnerText reads currentTitle, not accessibilityLabel
         let event = TouchEvent(view: button, location: .zero, eventType: .click, scrollDirection: nil)
 
         let data = TapDataExtractor.extract(from: event)
@@ -418,7 +433,7 @@ final class InteractionContextTests: XCTestCase {
     /// The shouldSendText closure must receive the exact view and text that the SDK extracted.
     func testExtract_shouldSendText_receivesCorrectViewAndText() {
         let button = UIButton()
-        button.accessibilityLabel = "Confirm Order"
+        button.setTitle("Confirm Order", for: .normal) // safeInnerText reads currentTitle, not accessibilityLabel
         let event = TouchEvent(view: button, location: .zero, eventType: .click, scrollDirection: nil)
 
         var capturedView: UIView?
@@ -479,6 +494,51 @@ final class InteractionContextTests: XCTestCase {
 
         XCTAssertEqual(data[Keys.targetElement.rawValue] as? String, "UIButton",
                        "With no resolveTargetName delegate, target_element must use UIKit class name")
+    }
+
+    // MARK: - resolveTargetName end-to-end: extract → InteractionContext → getDictionary
+
+    /// Full pipeline: resolveTargetName override must survive JSON serialisation and appear
+    /// in both InteractionContext.targetElement and getDictionary() output.
+    func testResolveTargetName_endToEnd_overridesSurvivesRoundtrip() {
+        let button = UIButton()
+        let event = TouchEvent(view: button, location: CGPoint(x: 50, y: 100),
+                               eventType: .click, scrollDirection: nil)
+
+        // Step 1 — extract with a resolveTargetName override.
+        let tapData = TapDataExtractor.extract(from: event, resolveTargetName: { _ in "Checkout Button" })
+
+        // Step 2 — wrap in a span (simulates how the SDK stores the event).
+        let span = makeSpan(tapObject: tapData)
+
+        // Step 3 — deserialise into InteractionContext.
+        let context = InteractionContext(otel: span)
+
+        // Step 4 — verify the property and the getDictionary output.
+        XCTAssertEqual(context.targetElement, "Checkout Button",
+                       "resolveTargetName override must be preserved in InteractionContext.targetElement")
+        XCTAssertEqual(context.getDictionary()[Keys.targetElement.rawValue] as? String, "Checkout Button",
+                       "resolveTargetName override must appear in getDictionary() output")
+        XCTAssertEqual(context.getDictionary()[Keys.elementClasses.rawValue] as? String, "UIButton",
+                       "element_classes must remain the UIKit class name after the roundtrip")
+    }
+
+    /// Full pipeline: when resolveTargetName returns nil the UIKit class name must survive
+    /// the full JSON serialisation/deserialisation roundtrip unchanged.
+    func testResolveTargetName_endToEnd_nilFallbackSurvivesRoundtrip() {
+        let button = UIButton()
+        button.accessibilityLabel = "Submit"
+        let event = TouchEvent(view: button, location: .zero, eventType: .click, scrollDirection: nil)
+
+        let tapData = TapDataExtractor.extract(from: event, resolveTargetName: { _ in nil })
+        let context = InteractionContext(otel: makeSpan(tapObject: tapData))
+
+        XCTAssertEqual(context.targetElement, "UIButton",
+                       "nil resolveTargetName fallback must produce UIKit class name after roundtrip")
+        XCTAssertEqual(context.getDictionary()[Keys.targetElement.rawValue] as? String, "UIButton")
+        // Inner text must still be captured — resolveTargetName only affects target_element.
+        XCTAssertEqual(context.targetElementInnerText, "Submit",
+                       "resolveTargetName must not affect inner text capture")
     }
 
     // MARK: - ScrollTracker.direction — simulates the .cancelled path
@@ -641,6 +701,39 @@ final class InteractionContextTests: XCTestCase {
 
         XCTAssertEqual(dict[Keys.eventName.rawValue] as? String,       "scroll")
         XCTAssertEqual(dict[Keys.scrollDirection.rawValue] as? String, "up")
+    }
+
+    /// getDictionary for a swipe event must include scroll_direction as its rawValue string —
+    /// swipe events carry the same direction field as scroll events.
+    func testGetDictionary_swipeEvent_includesDirectionRawValue() {
+        let tapObject: [String: Any] = [
+            Keys.eventName.rawValue:       "swipe",
+            Keys.elementClasses.rawValue:  "UIView",
+            Keys.targetElement.rawValue:   "UIView",
+            Keys.scrollDirection.rawValue: ScrollDirection.left.rawValue
+        ]
+        let dict = InteractionContext(otel: makeSpan(tapObject: tapObject)).getDictionary()
+
+        XCTAssertEqual(dict[Keys.eventName.rawValue] as? String,       "swipe")
+        XCTAssertEqual(dict[Keys.scrollDirection.rawValue] as? String, "left")
+    }
+
+    /// getDictionary for a swipe event must include scroll_direction for all four directions.
+    func testGetDictionary_swipeEvent_allFourDirections() {
+        for direction in [ScrollDirection.up, .down, .left, .right] {
+            let tapObject: [String: Any] = [
+                Keys.eventName.rawValue:       "swipe",
+                Keys.elementClasses.rawValue:  "UIView",
+                Keys.targetElement.rawValue:   "UIView",
+                Keys.scrollDirection.rawValue: direction.rawValue
+            ]
+            let dict = InteractionContext(otel: makeSpan(tapObject: tapObject)).getDictionary()
+
+            XCTAssertEqual(dict[Keys.eventName.rawValue] as? String,       "swipe",
+                           "event_name must be 'swipe' for direction \(direction.rawValue)")
+            XCTAssertEqual(dict[Keys.scrollDirection.rawValue] as? String, direction.rawValue,
+                           "scroll_direction must be '\(direction.rawValue)' in getDictionary output")
+        }
     }
 
     /// Any class name — including those not previously in any enum — must be preserved as-is.
