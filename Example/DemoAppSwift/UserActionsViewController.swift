@@ -84,6 +84,25 @@ final class UserActionsViewController: UITableViewController {
 
         setupNavigationBar()
         setupTableView()
+        setupResolveTargetNameDemoHeader()
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+
+        // tableHeaderView must be resized after layout so it gets the real table width.
+        // tableView.bounds.width is 0 during viewDidLoad; updating the frame here (and
+        // reassigning tableHeaderView to trigger UITableView's measurement) is the
+        // standard UIKit pattern for Auto Layout-free table headers.
+        if let header = tableView.tableHeaderView {
+            var frame = header.frame
+            let targetWidth = tableView.bounds.width
+            if frame.size.width != targetWidth {
+                frame.size.width = targetWidth
+                header.frame = frame
+                tableView.tableHeaderView = header
+            }
+        }
     }
 
     // MARK: - UI Setup
@@ -97,6 +116,32 @@ final class UserActionsViewController: UITableViewController {
         tableView.register(UITableViewCell.self, forCellReuseIdentifier: Self.cellIdentifier)
         tableView.backgroundColor = .systemGroupedBackground
         tableView.separatorInset = UIEdgeInsets(top: 0, left: 56, bottom: 0, right: 16)
+    }
+
+    /// Adds a standalone UIButton as the table header so its `accessibilityIdentifier`
+    /// ("loginButton") is the exact hit-tested view — enabling the `resolveTargetName`
+    /// callback in CoralogixRumManager to map it to "Login Button" in RUM events.
+    private func setupResolveTargetNameDemoHeader() {
+        let container = UIView(frame: CGRect(x: 0, y: 0, width: tableView.bounds.width, height: 56))
+
+        let loginButton = UIButton(type: .system)
+        loginButton.setTitle("Log In (resolveTargetName demo)", for: .normal)
+        loginButton.titleLabel?.font = UIFont.preferredFont(forTextStyle: .body)
+        loginButton.accessibilityIdentifier = "loginButton"
+        loginButton.translatesAutoresizingMaskIntoConstraints = false
+        loginButton.addTarget(self, action: #selector(loginButtonTapped), for: .touchUpInside)
+
+        container.addSubview(loginButton)
+        NSLayoutConstraint.activate([
+            loginButton.centerXAnchor.constraint(equalTo: container.centerXAnchor),
+            loginButton.centerYAnchor.constraint(equalTo: container.centerYAnchor)
+        ])
+
+        tableView.tableHeaderView = container
+    }
+
+    @objc private func loginButtonTapped() {
+        showToast("Login tapped — target_element will be 'Login Button' in RUM")
     }
 
     // MARK: - Table view data source
