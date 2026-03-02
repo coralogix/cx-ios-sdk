@@ -87,6 +87,24 @@ final class UserActionsViewController: UITableViewController {
         setupResolveTargetNameDemoHeader()
     }
 
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+
+        // tableHeaderView must be resized after layout so it gets the real table width.
+        // tableView.bounds.width is 0 during viewDidLoad; updating the frame here (and
+        // reassigning tableHeaderView to trigger UITableView's measurement) is the
+        // standard UIKit pattern for Auto Layout-free table headers.
+        if let header = tableView.tableHeaderView {
+            var frame = header.frame
+            let targetWidth = tableView.bounds.width
+            if frame.width != targetWidth {
+                frame.width = targetWidth
+                header.frame = frame
+                tableView.tableHeaderView = header
+            }
+        }
+    }
+
     // MARK: - UI Setup
 
     private func setupNavigationBar() {
@@ -107,7 +125,7 @@ final class UserActionsViewController: UITableViewController {
         let container = UIView(frame: CGRect(x: 0, y: 0, width: tableView.bounds.width, height: 56))
 
         let loginButton = UIButton(type: .system)
-        loginButton.setTitle("Log In  (resolveTargetName demo)", for: .normal)
+        loginButton.setTitle("Log In (resolveTargetName demo)", for: .normal)
         loginButton.titleLabel?.font = UIFont.preferredFont(forTextStyle: .body)
         loginButton.accessibilityIdentifier = "loginButton"
         loginButton.translatesAutoresizingMaskIntoConstraints = false
