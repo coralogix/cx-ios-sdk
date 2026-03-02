@@ -464,14 +464,17 @@ final class UserInteractionUITests: XCTestCase {
         let frame = element.frame
         let cx = frame.midX
         let cy = frame.midY
-        let offset: CGFloat = frame.width * 0.35   // 35% of element width/height
+        // Use the axis-appropriate dimension so the swipe distance is 35% of the
+        // element's width for horizontal directions and 35% of its height for vertical.
+        let hOffset: CGFloat = frame.width  * 0.35
+        let vOffset: CGFloat = frame.height * 0.35
 
         let (startX, startY, endX, endY): (CGFloat, CGFloat, CGFloat, CGFloat)
         switch direction {
-        case .left:  (startX, startY, endX, endY) = (cx + offset, cy, cx - offset, cy)
-        case .right: (startX, startY, endX, endY) = (cx - offset, cy, cx + offset, cy)
-        case .up:    (startX, startY, endX, endY) = (cx, cy + offset, cx, cy - offset)
-        case .down:  (startX, startY, endX, endY) = (cx, cy - offset, cx, cy + offset)
+        case .left:  (startX, startY, endX, endY) = (cx + hOffset, cy, cx - hOffset, cy)
+        case .right: (startX, startY, endX, endY) = (cx - hOffset, cy, cx + hOffset, cy)
+        case .up:    (startX, startY, endX, endY) = (cx, cy + vOffset, cx, cy - vOffset)
+        case .down:  (startX, startY, endX, endY) = (cx, cy - vOffset, cx, cy + vOffset)
         }
 
         let start = app.coordinate(withNormalizedOffset: .zero)
