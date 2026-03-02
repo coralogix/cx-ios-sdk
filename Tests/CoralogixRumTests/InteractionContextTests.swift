@@ -527,7 +527,7 @@ final class InteractionContextTests: XCTestCase {
     /// the full JSON serialisation/deserialisation roundtrip unchanged.
     func testResolveTargetName_endToEnd_nilFallbackSurvivesRoundtrip() {
         let button = UIButton()
-        button.accessibilityLabel = "Submit"
+        button.setTitle("Submit", for: .normal) // safeInnerText reads currentTitle, not accessibilityLabel
         let event = TouchEvent(view: button, location: .zero, eventType: .click, scrollDirection: nil)
 
         let tapData = TapDataExtractor.extract(from: event, resolveTargetName: { _ in nil })
