@@ -23,6 +23,7 @@ class PageController: UIViewController, UIScrollViewDelegate {
     func setupScrollView() {
         scrollView = UIScrollView(frame: self.view.bounds)
         scrollView.delegate = self
+        scrollView.accessibilityIdentifier = "pageControllerScrollView"
 #if os(iOS)
         scrollView.isPagingEnabled = true
 #endif

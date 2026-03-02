@@ -97,8 +97,8 @@ final class UserActionsViewController: UITableViewController {
         if let header = tableView.tableHeaderView {
             var frame = header.frame
             let targetWidth = tableView.bounds.width
-            if frame.width != targetWidth {
-                frame.width = targetWidth
+            if frame.size.width != targetWidth {
+                frame.size.width = targetWidth
                 header.frame = frame
                 tableView.tableHeaderView = header
             }

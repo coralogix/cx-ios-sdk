@@ -139,9 +139,11 @@ final class UserInteractionUITests: XCTestCase {
         // at least one `.moved` event fires before the UIPanGestureRecognizer
         // cancels the touch — guaranteeing ScrollTracker.state.hasMoved = true
         // and a stable direction reading.
-        let pageScrollView = app.scrollViews.firstMatch
+        // Query by accessibilityIdentifier to avoid picking up the nav bar's
+        // large-title internal UIScrollView, which appears earlier in the tree.
+        let pageScrollView = app.scrollViews["pageControllerScrollView"].firstMatch
         XCTAssertTrue(pageScrollView.waitForExistence(timeout: elementTimeout),
-                      "❌ Paged scroll view not found in PageController")
+                      "❌ Paged scroll view ('pageControllerScrollView') not found — check PageController.setupScrollView()")
 
         log("👆 Performing slow swipeLeft (advance page)…")
         slowSwipe(on: pageScrollView, direction: .left)
@@ -306,7 +308,7 @@ final class UserInteractionUITests: XCTestCase {
             pageControllerCell.tap()
             Thread.sleep(forTimeInterval: shortDelay)
 
-            let scrollView = app.scrollViews.firstMatch
+            let scrollView = app.scrollViews["pageControllerScrollView"].firstMatch
             if scrollView.waitForExistence(timeout: elementTimeout) {
                 log("👆 Generating swipe events…")
                 slowSwipe(on: scrollView, direction: .left)
@@ -395,7 +397,7 @@ final class UserInteractionUITests: XCTestCase {
             pageControllerCell.tap()
             Thread.sleep(forTimeInterval: shortDelay)
 
-            let scrollView = app.scrollViews.firstMatch
+            let scrollView = app.scrollViews["pageControllerScrollView"].firstMatch
             if scrollView.waitForExistence(timeout: elementTimeout) {
                 slowSwipe(on: scrollView, direction: .left)
                 Thread.sleep(forTimeInterval: shortDelay)
