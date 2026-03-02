@@ -58,7 +58,6 @@ final class CoralogixRumManager {
                                                              .slowFrozenFramesDetector: false,
                                                              .memoryDetector: false,
                                                              .renderingDetector: false],
-                                               debug: true,
                                                shouldSendText: { view, text in
             // Return false to suppress text capture for a specific view.
             return view.accessibilityIdentifier != "sensitiveLabel"
@@ -73,7 +72,8 @@ final class CoralogixRumManager {
             case "profileAvatar":    return "Profile Avatar"
             default:                 return nil  // nil → SDK falls back to UIKit class name
             }
-        }
+        },
+                                               debug: true
         )
 //        let log = OSLog(subsystem: "test.CoralogixTest", category: .pointsOfInterest)
 //        let signpostID = OSSignpostID(log: log)
