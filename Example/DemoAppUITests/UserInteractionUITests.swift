@@ -609,7 +609,6 @@ final class UserInteractionUITests: XCTestCase {
     }
 
     private func handleMissingValidationData(file: StaticString = #file, line: UInt = #line) {
-        let isCI = ProcessInfo.processInfo.environment["CI"] == "true"
         if isCI {
             XCTFail("Validation data file required in CI mode", file: file, line: line)
         } else {
