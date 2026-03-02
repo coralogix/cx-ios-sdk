@@ -223,6 +223,15 @@ final class UserInteractionUITests: XCTestCase {
     /// shouldSendText callback suppresses text capture for any view whose
     /// accessibilityIdentifier == "sensitiveLabel". The backend event must
     /// NOT contain target_element_inner_text.
+    ///
+    /// NOTE on element_id reliability: `touch.view` at gesture time is the cell's
+    /// contentView (or an inner label), not the UITableViewCell itself, so
+    /// `element_id` in the RUM payload may not be "sensitiveLabel". We therefore:
+    ///  1. Confirm at least one click event landed in the backend (proves the tap
+    ///     was captured and the data arrived — avoids a vacuous pass).
+    ///  2. Then assert that NONE of those click events have a non-empty
+    ///     `target_element_inner_text` (the cell's row title is "Sensitive Label
+    ///     (text suppressed)" — if suppression fails, that text would appear).
     func testShouldSendText_sensitiveLabel_noInnerTextInBackend() throws {
         log("\n========================================")
         log("🧪 TEST: shouldSendText — sensitiveLabel suppression")
@@ -242,19 +251,30 @@ final class UserInteractionUITests: XCTestCase {
         // ── Phase 3: Flush + validate ──
         flushAndValidate()
 
-        // ── Phase 4: Verify absence of inner text ──
+        // ── Phase 4: Verify suppression ──
         guard let data = readValidationData() else {
             handleMissingValidationData()
             return
         }
 
-        // There should be NO interaction event that has both elementId="sensitiveLabel"
-        // AND a non-empty target_element_inner_text field.
-        let hasLeakedText = hasInteractionEventWithInnerText(in: data, elementId: "sensitiveLabel")
-        XCTAssertFalse(hasLeakedText,
-                       "❌ shouldSendText failed: target_element_inner_text found for sensitiveLabel — text was not suppressed")
+        // Step 4a: Confirm at least one click event arrived in the backend.
+        // Without this positive guard the suppression assertion below would
+        // trivially pass if no data arrived at all.
+        let anyClickEvent = hasInteractionEvent(in: data, eventName: "click")
+        XCTAssertTrue(anyClickEvent,
+                      "❌ No click events found in backend — tap may not have been captured or data did not arrive")
 
-        log("✅ shouldSendText confirmed — no inner text leaked for sensitiveLabel")
+        // Step 4b: None of the click events should carry the suppressed inner text.
+        // The row title "Sensitive Label (text suppressed)" would appear in
+        // target_element_inner_text if shouldSendText incorrectly returned true.
+        let suppressedText = "Sensitive Label (text suppressed)"
+        let hasLeakedText = hasInteractionEventWithInnerTextValue(in: data,
+                                                                  eventName: "click",
+                                                                  innerText: suppressedText)
+        XCTAssertFalse(hasLeakedText,
+                       "❌ shouldSendText failed: '\(suppressedText)' found in target_element_inner_text — text was not suppressed")
+
+        log("✅ shouldSendText confirmed — sensitive text not found in any click event")
     }
 
     // MARK: - Test: All interaction events are attributed to the active session
@@ -305,7 +325,7 @@ final class UserInteractionUITests: XCTestCase {
         let interactionLogs = data.filter { extractInteractionContext(from: $0) != nil }
 
         guard !interactionLogs.isEmpty else {
-            print("⚠️  No interaction logs found — skipping session-attribution check")
+            XCTFail("❌ No interaction events found in backend — gestures may not have been captured or data did not arrive in time")
             return
         }
 
@@ -419,9 +439,12 @@ final class UserInteractionUITests: XCTestCase {
                       "❌ Missing click event with target_element = 'Login Button' (resolveTargetName)")
         log("✅ resolveTargetName (Login Button) verified")
 
-        // shouldSendText: no inner text for sensitiveLabel
-        XCTAssertFalse(hasInteractionEventWithInnerText(in: data, elementId: "sensitiveLabel"),
-                       "❌ shouldSendText failed: inner text leaked for sensitiveLabel")
+        // shouldSendText: the cell's row title must not appear in any click event
+        let suppressedText = "Sensitive Label (text suppressed)"
+        XCTAssertFalse(hasInteractionEventWithInnerTextValue(in: data,
+                                                             eventName: "click",
+                                                             innerText: suppressedText),
+                       "❌ shouldSendText failed: '\(suppressedText)' found in target_element_inner_text")
         log("✅ shouldSendText (sensitiveLabel suppression) verified")
 
         log("\n🎉 All user interaction events verified end-to-end!")
@@ -480,20 +503,20 @@ final class UserInteractionUITests: XCTestCase {
         log("🧭 Navigating back…")
         let navBar = app.navigationBars.firstMatch
         let backButton = navBar.buttons.firstMatch
-        if backButton.waitForExistence(timeout: 5) {
-            backButton.tap()
-            Thread.sleep(forTimeInterval: shortDelay)
-        }
+        XCTAssertTrue(backButton.waitForExistence(timeout: 5),
+                      "❌ Back button not found — cannot navigate back (wrong screen?)")
+        backButton.tap()
+        Thread.sleep(forTimeInterval: shortDelay)
     }
 
     private func navigateBackToMainMenu() {
         log("🧭 Navigating to main menu…")
         let navBar = app.navigationBars.firstMatch
         let backButton = navBar.buttons.firstMatch
-        if backButton.waitForExistence(timeout: 5) {
-            backButton.tap()
-            Thread.sleep(forTimeInterval: shortDelay)
-        }
+        XCTAssertTrue(backButton.waitForExistence(timeout: 5),
+                      "❌ Back button not found — cannot return to main menu (wrong screen?)")
+        backButton.tap()
+        Thread.sleep(forTimeInterval: shortDelay)
 
         let schemaCell = app.cells.containing(.staticText, identifier: "Schema validation").firstMatch
         XCTAssertTrue(schemaCell.waitForExistence(timeout: elementTimeout),
@@ -662,6 +685,27 @@ final class UserInteractionUITests: XCTestCase {
             guard let eid = ctx["element_id"] as? String, eid == elementId else { continue }
             guard let text = ctx["target_element_inner_text"] as? String, !text.isEmpty else { continue }
             return true
+        }
+        return false
+    }
+
+    /// Returns `true` when any interaction event with the given `eventName` contains
+    /// `innerText` as its `target_element_inner_text` value — indicating that
+    /// `shouldSendText` did NOT suppress the text.
+    ///
+    /// Preferred over `hasInteractionEventWithInnerText(elementId:)` when the
+    /// `element_id` field is unreliable (e.g. identifier set on a UITableViewCell
+    /// rather than the leaf hit-tested view).
+    private func hasInteractionEventWithInnerTextValue(
+        in logs: [[String: Any]],
+        eventName: String,
+        innerText: String
+    ) -> Bool {
+        for entry in logs {
+            guard let ctx = extractInteractionContext(from: entry) else { continue }
+            guard let name = ctx["event_name"] as? String, name == eventName else { continue }
+            guard let text = ctx["target_element_inner_text"] as? String else { continue }
+            if text.contains(innerText) { return true }
         }
         return false
     }
