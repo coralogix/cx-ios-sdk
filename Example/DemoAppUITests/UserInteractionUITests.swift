@@ -309,7 +309,8 @@ final class UserInteractionUITests: XCTestCase {
         navigateToUserActions()
 
         let table = app.tables.firstMatch
-        XCTAssertTrue(table.waitForExistence(timeout: elementTimeout))
+        XCTAssertTrue(table.waitForExistence(timeout: elementTimeout),
+                      "❌ UserActions table not found — cannot generate scroll events for session attribution")
 
         print("🟪 📜 Generating scroll events…")
         table.swipeDown()
@@ -527,27 +528,25 @@ final class UserInteractionUITests: XCTestCase {
 
     private func navigateBack() {
         print("🟪 🧭 Navigating back…")
-        let navBar = app.navigationBars.firstMatch
-        let backButton = navBar.buttons.firstMatch
-        XCTAssertTrue(backButton.waitForExistence(timeout: elementTimeout),
-                      "❌ Back button not found — cannot navigate back (wrong screen?)")
-        backButton.tap()
-        Thread.sleep(forTimeInterval: shortDelay)
+        tapBackButton(failureMessage: "❌ Back button not found — cannot navigate back (wrong screen?)")
     }
 
     private func navigateBackToMainMenu() {
         print("🟪 🧭 Navigating to main menu…")
-        let navBar = app.navigationBars.firstMatch
-        let backButton = navBar.buttons.firstMatch
-        XCTAssertTrue(backButton.waitForExistence(timeout: elementTimeout),
-                      "❌ Back button not found — cannot return to main menu (wrong screen?)")
-        backButton.tap()
-        Thread.sleep(forTimeInterval: shortDelay)
+        tapBackButton(failureMessage: "❌ Back button not found — cannot return to main menu (wrong screen?)")
 
         let schemaCell = app.cells.containing(.staticText, identifier: "Schema validation").firstMatch
         XCTAssertTrue(schemaCell.waitForExistence(timeout: elementTimeout),
                       "❌ Did not return to main menu")
         print("🟪 ✅ Back on main menu")
+    }
+
+    /// Taps the first button in the navigation bar (the system back button) and waits `shortDelay`.
+    private func tapBackButton(failureMessage: String) {
+        let backButton = app.navigationBars.firstMatch.buttons.firstMatch
+        XCTAssertTrue(backButton.waitForExistence(timeout: elementTimeout), failureMessage)
+        backButton.tap()
+        Thread.sleep(forTimeInterval: shortDelay)
     }
 
     private func navigateToSchemaValidation() {
@@ -577,8 +576,9 @@ final class UserInteractionUITests: XCTestCase {
     private func triggerValidation() {
         print("🟪 🔍 Triggering schema validation…")
         let validateButton = app.buttons["Validate Schema"]
-        XCTAssertTrue(validateButton.waitForExistence(timeout: elementTimeout))
-        XCTAssertTrue(validateButton.isEnabled, "Validate button should be enabled")
+        XCTAssertTrue(validateButton.waitForExistence(timeout: elementTimeout),
+                      "❌ 'Validate Schema' button not found on schema validation screen")
+        XCTAssertTrue(validateButton.isEnabled, "❌ 'Validate Schema' button is disabled")
         validateButton.tap()
         Thread.sleep(forTimeInterval: networkDelay)
         print("🟪 ✅ Validation request sent")
