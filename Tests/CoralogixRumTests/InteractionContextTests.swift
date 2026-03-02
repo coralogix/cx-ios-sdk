@@ -376,6 +376,111 @@ final class InteractionContextTests: XCTestCase {
         XCTAssertNil(context.targetElementInnerText)
     }
 
+    // MARK: - TapDataExtractor.extract — shouldSendText delegate
+
+    /// When shouldSendText returns true the inner text must be captured as normal.
+    func testExtract_shouldSendText_returnsTrue_includesInnerText() {
+        let button = UIButton()
+        button.accessibilityLabel = "Submit"
+        let event = TouchEvent(view: button, location: .zero, eventType: .click, scrollDirection: nil)
+
+        let data = TapDataExtractor.extract(from: event, shouldSendText: { _, _ in true })
+
+        XCTAssertEqual(data[Keys.targetElementInnerText.rawValue] as? String, "Submit",
+                       "shouldSendText returning true must allow text capture")
+    }
+
+    /// When shouldSendText returns false the inner text must be suppressed even though
+    /// the SDK would otherwise record it.
+    func testExtract_shouldSendText_returnsFalse_suppressesInnerText() {
+        let button = UIButton()
+        button.accessibilityLabel = "Submit"
+        let event = TouchEvent(view: button, location: .zero, eventType: .click, scrollDirection: nil)
+
+        let data = TapDataExtractor.extract(from: event, shouldSendText: { _, _ in false })
+
+        XCTAssertNil(data[Keys.targetElementInnerText.rawValue],
+                     "shouldSendText returning false must suppress target_element_inner_text")
+    }
+
+    /// With no shouldSendText delegate the inner text must be captured as normal (defaults to true).
+    func testExtract_shouldSendText_nilDelegate_includesInnerText() {
+        let button = UIButton()
+        button.accessibilityLabel = "Submit"
+        let event = TouchEvent(view: button, location: .zero, eventType: .click, scrollDirection: nil)
+
+        let data = TapDataExtractor.extract(from: event)
+
+        XCTAssertEqual(data[Keys.targetElementInnerText.rawValue] as? String, "Submit",
+                       "With no shouldSendText delegate, inner text must be captured as normal")
+    }
+
+    /// The shouldSendText closure must receive the exact view and text that the SDK extracted.
+    func testExtract_shouldSendText_receivesCorrectViewAndText() {
+        let button = UIButton()
+        button.accessibilityLabel = "Confirm Order"
+        let event = TouchEvent(view: button, location: .zero, eventType: .click, scrollDirection: nil)
+
+        var capturedView: UIView?
+        var capturedText: String?
+        _ = TapDataExtractor.extract(from: event, shouldSendText: { view, text in
+            capturedView = view
+            capturedText = text
+            return true
+        })
+
+        XCTAssertTrue(capturedView === button, "shouldSendText must receive the tapped view")
+        XCTAssertEqual(capturedText, "Confirm Order", "shouldSendText must receive the extracted text")
+    }
+
+    // MARK: - TapDataExtractor.extract — resolveTargetName delegate
+
+    /// When resolveTargetName returns a non-nil string it must replace target_element.
+    func testExtract_resolveTargetName_returnsString_overridesTargetElement() {
+        let button = UIButton()
+        let event = TouchEvent(view: button, location: .zero, eventType: .click, scrollDirection: nil)
+
+        let data = TapDataExtractor.extract(from: event, resolveTargetName: { _ in "Login Button" })
+
+        XCTAssertEqual(data[Keys.targetElement.rawValue] as? String, "Login Button",
+                       "resolveTargetName returning a string must override target_element")
+    }
+
+    /// element_classes must always reflect the true UIKit class name, even when
+    /// resolveTargetName overrides target_element.
+    func testExtract_resolveTargetName_elementClassesNeverOverridden() {
+        let button = UIButton()
+        let event = TouchEvent(view: button, location: .zero, eventType: .click, scrollDirection: nil)
+
+        let data = TapDataExtractor.extract(from: event, resolveTargetName: { _ in "My Custom Name" })
+
+        XCTAssertEqual(data[Keys.elementClasses.rawValue] as? String, "UIButton",
+                       "element_classes must always be the UIKit class name, never the resolved custom name")
+        XCTAssertEqual(data[Keys.targetElement.rawValue] as? String, "My Custom Name")
+    }
+
+    /// When resolveTargetName returns nil the SDK must fall back to the UIKit class name.
+    func testExtract_resolveTargetName_returnsNil_fallsBackToClassName() {
+        let button = UIButton()
+        let event = TouchEvent(view: button, location: .zero, eventType: .click, scrollDirection: nil)
+
+        let data = TapDataExtractor.extract(from: event, resolveTargetName: { _ in nil })
+
+        XCTAssertEqual(data[Keys.targetElement.rawValue] as? String, "UIButton",
+                       "resolveTargetName returning nil must fall back to UIKit class name")
+    }
+
+    /// With no resolveTargetName delegate the UIKit class name must be used unchanged.
+    func testExtract_resolveTargetName_nilDelegate_usesClassName() {
+        let button = UIButton()
+        let event = TouchEvent(view: button, location: .zero, eventType: .click, scrollDirection: nil)
+
+        let data = TapDataExtractor.extract(from: event)
+
+        XCTAssertEqual(data[Keys.targetElement.rawValue] as? String, "UIButton",
+                       "With no resolveTargetName delegate, target_element must use UIKit class name")
+    }
+
     // MARK: - ScrollTracker.direction — simulates the .cancelled path
     //
     // UIScrollView / UITableView gesture recognisers *cancel* touches instead of ending them.

@@ -252,6 +252,11 @@ Use `networkExtraConfig` to opt-in to capturing request/response headers and bod
 
 Each `NetworkCaptureRule` matches requests by a **case-insensitive substring** of the absolute URL or by a **regex pattern**, and lets you allowlist which headers to forward and whether to capture bodies.
 ```swift
+// Build regex patterns separately so the throwing init is handled cleanly.
+// For known-good literal patterns you can use try! at development time;
+// for patterns loaded from config use try? and check for nil before adding the rule.
+let ordersPattern = try! NSRegularExpression(pattern: #"checkout/orders/\d+"#)
+
 let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
                                         environment: "ENVIRONMENT",
                                         application: "APP-NAME",
@@ -264,7 +269,7 @@ let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
                                                                resHeaders: ["Content-Type"],
                                                                collectResPayload: true),
                                             // Capture full request and response for URLs matching a regex
-                                            NetworkCaptureRule(urlPattern: try! NSRegularExpression(pattern: "checkout/orders/\\d+"),
+                                            NetworkCaptureRule(urlPattern: ordersPattern,
                                                                collectReqPayload: true,
                                                                collectResPayload: true)
                                         ])

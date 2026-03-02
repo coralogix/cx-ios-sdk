@@ -72,18 +72,6 @@ public struct CoralogixExporterOptions {
     /// Enable event access and modification before sending to Coralogix, supporting content modification, and event discarding.
     var beforeSend: (([String: Any]) -> [String: Any]?)?
 
-    /// Called to resolve a human-readable name for a tapped view, used as `target_element`.
-    ///
-    /// Return a non-nil `String` to override the default UIKit class name for that view.
-    /// Return `nil` to fall back to the resolved class name (e.g. `"UIButton"`).
-    ///
-    /// - Important: This closure is called on the **main thread** on every tap event.
-    ///   Keep the implementation fast and non-blocking (no I/O, no locks, no heavy computation).
-    ///
-    /// - Parameter view: The UIView that was tapped.
-    /// - Returns: A custom target name, or `nil` to use the class-name fallback.
-    public let resolveTargetName: ((UIView) -> String?)?
-
     /// Called before `target_element_inner_text` is recorded for a tapped view.
     ///
     /// Return `true` to allow the text to be captured, `false` to suppress it.
@@ -100,6 +88,18 @@ public struct CoralogixExporterOptions {
     ///   - text: The text that the SDK is about to record.
     /// - Returns: `true` to include the text in the event, `false` to omit it.
     public let shouldSendText: ((UIView, String) -> Bool)?
+
+    /// Called to resolve a human-readable name for a tapped view, used as `target_element`.
+    ///
+    /// Return a non-nil `String` to override the default UIKit class name for that view.
+    /// Return `nil` to fall back to the resolved class name (e.g. `"UIButton"`).
+    ///
+    /// - Important: This closure is called on the **main thread** on every tap event.
+    ///   Keep the implementation fast and non-blocking (no I/O, no locks, no heavy computation).
+    ///
+    /// - Parameter view: The UIView that was tapped.
+    /// - Returns: A custom target name, or `nil` to use the class-name fallback.
+    public let resolveTargetName: ((UIView) -> String?)?
     
     /// Alternative beforeSend for Other Platfoms.
     public var beforeSendCallBack: (([[String: Any]]) -> Void)?
