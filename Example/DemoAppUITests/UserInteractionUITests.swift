@@ -52,9 +52,11 @@ final class UserInteractionUITests: XCTestCase {
         ProcessInfo.processInfo.environment["CONTINUOUS_INTEGRATION"] == "true"
     }
 
-    private var elementTimeout: TimeInterval { isCI ? 15.0 : 10.0 }
-    private var shortDelay: TimeInterval     { isCI ?  2.0 :  1.0 }
-    private var sdkFlushDelay: TimeInterval  { isCI ? 10.0 :  5.0 }
+    private var elementTimeout: TimeInterval  { isCI ? 15.0 : 10.0 }
+    private var shortDelay: TimeInterval      { isCI ?  2.0 :  1.0 }
+    private var sdkFlushDelay: TimeInterval   { isCI ? 10.0 :  5.0 }
+    /// Wait after tapping "Validate Schema" for the backend to fetch and return logs.
+    private var networkDelay: TimeInterval    { isCI ?  8.0 :  3.0 }
 
     // MARK: - Setup / Teardown
 
@@ -557,7 +559,7 @@ final class UserInteractionUITests: XCTestCase {
         XCTAssertTrue(validateButton.waitForExistence(timeout: elementTimeout))
         XCTAssertTrue(validateButton.isEnabled, "Validate button should be enabled")
         validateButton.tap()
-        Thread.sleep(forTimeInterval: 3)
+        Thread.sleep(forTimeInterval: networkDelay)
         log("✅ Validation request sent")
     }
 
