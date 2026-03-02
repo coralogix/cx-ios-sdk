@@ -21,6 +21,16 @@ public class CoralogixRum {
     internal var isNetworkInstrumentationReady = false
     private let notificationCenter = NotificationCenter.default
 
+    /// Closures from `CoralogixExporterOptions` cached once at
+    /// `initializeUserActionsInstrumentation()` to avoid copying the options
+    /// struct on every tap event. The struct gives `let` semantics to each
+    /// closure even though the container itself must be `var` (set post-init).
+    internal struct UserActionsDelegates {
+        let shouldSendText: ((UIView, String) -> Bool)?
+        let resolveTargetName: ((UIView) -> String?)?
+    }
+    internal var userActionsDelegates: UserActionsDelegates?
+
     internal lazy var tracerProvider: () -> Tracer = {
         return OpenTelemetry.instance.tracerProvider.get(
             instrumentationName: Keys.iosSdk.rawValue,

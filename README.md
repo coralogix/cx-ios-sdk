@@ -153,7 +153,7 @@ let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
                                         application: "APP-NAME",
                                         version: "APP-VERSION",
                                         publicKey: "API-KEY",
-                                        sampleRate: 100)
+                                        sessionSampleRate: 100)
 ```
 
 ### Before Send
@@ -235,6 +235,85 @@ These intervals are optimized for battery efficiency while capturing all importa
 - The 700ms frozen frame threshold aligns with ANR detection, providing consistent "unresponsive UI" definition across the SDK
 - Thresholds automatically adapt to display refresh rate (60Hz standard, 120Hz ProMotion)
 - Industry comparison: Apple recommends 250ms, Firebase uses 400ms, Sentry/Coralogix use 700ms (aligned with ANR)
+
+### Enable Swizzling
+Controls whether the SDK automatically swizzles system methods for instrumentation (e.g. `NSURLSession`, view-controller lifecycle). Enabled by default. Set to `false` only if another library conflicts with Coralogix's swizzling.
+```swift
+let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
+                                        environment: "ENVIRONMENT",
+                                        application: "APP-NAME",
+                                        version: "APP-VERSION",
+                                        publicKey: "API-KEY",
+                                        enableSwizzling: false)
+```
+
+### Network Header & Payload Capture
+Use `networkExtraConfig` to opt-in to capturing request/response headers and bodies for specific URLs. By default no headers or payloads are captured.
+
+Each `NetworkCaptureRule` matches requests by a **case-insensitive substring** of the absolute URL or by a **regex pattern**, and lets you allowlist which headers to forward and whether to capture bodies.
+```swift
+// Build regex patterns separately so the throwing init is handled cleanly.
+// For known-good literal patterns you can use try! at development time;
+// for patterns loaded from config use try? and check for nil before adding the rule.
+let ordersPattern = try! NSRegularExpression(pattern: #"checkout/orders/\d+"#)
+
+let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
+                                        environment: "ENVIRONMENT",
+                                        application: "APP-NAME",
+                                        version: "APP-VERSION",
+                                        publicKey: "API-KEY",
+                                        networkExtraConfig: [
+                                            // Capture Authorization header and response body for all /api/ requests
+                                            NetworkCaptureRule(url: "/api/",
+                                                               reqHeaders: ["Authorization", "X-Request-ID"],
+                                                               resHeaders: ["Content-Type"],
+                                                               collectResPayload: true),
+                                            // Capture full request and response for URLs matching a regex
+                                            NetworkCaptureRule(urlPattern: ordersPattern,
+                                                               collectReqPayload: true,
+                                                               collectResPayload: true)
+                                        ])
+```
+
+> **Note:** Payload capture should be used carefully — avoid capturing endpoints that return PII or secrets.
+
+### User Action Text Redaction (`shouldSendText`)
+Called before `target_element_inner_text` is recorded for a tapped view. Return `false` to suppress text capture for sensitive views (e.g. fields showing account numbers or personal data) without disabling text capture globally.
+
+This closure is called on the **main thread** only when the SDK would otherwise record text. Keep it fast and non-blocking.
+```swift
+let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
+                                        environment: "ENVIRONMENT",
+                                        application: "APP-NAME",
+                                        version: "APP-VERSION",
+                                        publicKey: "API-KEY",
+                                        shouldSendText: { view, text in
+                                            // Suppress text for any view tagged as sensitive
+                                            return view.accessibilityIdentifier != "sensitiveLabel"
+                                        })
+```
+
+### Custom Target Element Name (`resolveTargetName`)
+Override the `target_element` field in user action events with a business-friendly name instead of the raw UIKit class name. Return `nil` to fall back to the default class name (e.g. `"UIButton"`).
+
+> **Note:** `resolveTargetName` only affects `target_element`. The `element_classes` field always contains the real UIKit class name (e.g. `"UIButton"`) regardless of what the closure returns, so existing analytics queries and backwards-compatible dashboards that filter on `element_classes` continue to work unchanged.
+
+This closure is called on the **main thread** on every tap event. Keep it fast and non-blocking.
+```swift
+let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
+                                        environment: "ENVIRONMENT",
+                                        application: "APP-NAME",
+                                        version: "APP-VERSION",
+                                        publicKey: "API-KEY",
+                                        resolveTargetName: { view in
+                                            switch view.accessibilityIdentifier {
+                                            case "loginButton":   return "Login Button"
+                                            case "checkoutBtn":   return "Checkout"
+                                            case "addToCartBtn":  return "Add to Cart"
+                                            default:              return nil // use UIKit class name
+                                            }
+                                        })
+```
 
 ### Session Recording
 See the [Session Recording Guide](SessionReplay/Sources/Docs/README.md) for installation steps and examples.

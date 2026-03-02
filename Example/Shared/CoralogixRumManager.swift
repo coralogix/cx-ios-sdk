@@ -7,6 +7,7 @@
 
 import Coralogix
 import Foundation
+import UIKit
 //import os
 
 final class CoralogixRumManager {
@@ -57,6 +58,21 @@ final class CoralogixRumManager {
                                                              .slowFrozenFramesDetector: false,
                                                              .memoryDetector: false,
                                                              .renderingDetector: false],
+                                               shouldSendText: { view, text in
+            // Return false to suppress text capture for a specific view.
+            return view.accessibilityIdentifier != "sensitiveLabel"
+        },
+                                               resolveTargetName: { view in
+            // Map specific views to meaningful business names.
+            // The SDK uses these names as `target_element` in RUM instead of the raw UIKit class.
+            switch view.accessibilityIdentifier {
+            case "loginButton":      return "Login Button"
+            case "checkoutButton":   return "Checkout Button"
+            case "promoCodeField":   return "Promo Code Input"
+            case "profileAvatar":    return "Profile Avatar"
+            default:                 return nil  // nil → SDK falls back to UIKit class name
+            }
+        },
                                                debug: true
         )
 //        let log = OSLog(subsystem: "test.CoralogixTest", category: .pointsOfInterest)
