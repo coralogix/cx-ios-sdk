@@ -387,43 +387,35 @@ final class UserInteractionUITests: XCTestCase {
         // ── Phase 2: resolveTargetName tap ──
         print("🟪 👆 Phase 2: Login button tap (resolveTargetName)…")
         let loginButton = app.buttons["loginButton"].firstMatch
-        if loginButton.waitForExistence(timeout: elementTimeout) {
-            loginButton.tap()
-            Thread.sleep(forTimeInterval: shortDelay)
-        } else {
-            print("🟨  loginButton not found — skipping resolveTargetName sub-test")
-        }
+        XCTAssertTrue(loginButton.waitForExistence(timeout: elementTimeout),
+                      "❌ loginButton not found — check UserActionsViewController.setupResolveTargetNameDemoHeader()")
+        loginButton.tap()
+        Thread.sleep(forTimeInterval: shortDelay)
 
         // ── Phase 3: shouldSendText (sensitiveLabel) ──
         print("🟪 👆 Phase 3: Sensitive label tap (shouldSendText)…")
         let sensitiveCell = app.cells["sensitiveLabel"].firstMatch
-        if sensitiveCell.waitForExistence(timeout: elementTimeout) {
-            sensitiveCell.tap()
-            Thread.sleep(forTimeInterval: shortDelay)
-        } else {
-            print("🟨  sensitiveLabel cell not found — skipping shouldSendText sub-test")
-        }
+        XCTAssertTrue(sensitiveCell.waitForExistence(timeout: elementTimeout),
+                      "❌ sensitiveLabel cell not found — check UserActionsViewController data source")
+        sensitiveCell.tap()
+        Thread.sleep(forTimeInterval: shortDelay)
 
         // ── Phase 4: Swipe events (PageController) ──
         print("🟪 👆 Phase 4: Swipe gestures in PageController…")
         let pageControllerCell = app.staticTexts["Page Controller"].firstMatch
-        if pageControllerCell.waitForExistence(timeout: elementTimeout) {
-            pageControllerCell.tap()
-            Thread.sleep(forTimeInterval: shortDelay)
+        XCTAssertTrue(pageControllerCell.waitForExistence(timeout: elementTimeout),
+                      "❌ 'Page Controller' cell not found — check UserActionsViewController data source")
+        pageControllerCell.tap()
+        Thread.sleep(forTimeInterval: shortDelay)
 
-            let scrollView = app.scrollViews["pageControllerScrollView"].firstMatch
-            if scrollView.waitForExistence(timeout: elementTimeout) {
-                slowSwipe(on: scrollView, direction: .left)
-                Thread.sleep(forTimeInterval: shortDelay)
-                slowSwipe(on: scrollView, direction: .right)
-                Thread.sleep(forTimeInterval: shortDelay)
-            } else {
-                print("🟨  PageController scroll view not found — skipping swipe sub-test")
-            }
-            navigateBack()
-        } else {
-            print("🟨  'Page Controller' cell not found — skipping swipe sub-test")
-        }
+        let scrollView = app.scrollViews["pageControllerScrollView"].firstMatch
+        XCTAssertTrue(scrollView.waitForExistence(timeout: elementTimeout),
+                      "❌ pageControllerScrollView not found — check PageController.setupScrollView()")
+        slowSwipe(on: scrollView, direction: .left)
+        Thread.sleep(forTimeInterval: shortDelay)
+        slowSwipe(on: scrollView, direction: .right)
+        Thread.sleep(forTimeInterval: shortDelay)
+        navigateBack()
 
         // ── Phase 5: Flush + schema validation ──
         print("🟪 \n⏳ Phase 5: Flushing events to backend…")
