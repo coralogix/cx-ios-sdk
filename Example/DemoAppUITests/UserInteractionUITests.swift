@@ -65,7 +65,7 @@ final class UserInteractionUITests: XCTestCase {
         app = XCUIApplication()
         app.launchArguments = ["--uitesting"]
         clearValidationData()
-        log("🚀 Launching app (CI=\(isCI))")
+        print("🟪 🚀 Launching app (CI=\(isCI))")
         app.launch()
     }
 
@@ -74,9 +74,9 @@ final class UserInteractionUITests: XCTestCase {
     /// Scroll a UITableView down then up in the User Actions screen and verify
     /// that the SDK emits two scroll events with the correct directions.
     func testScrollEvents_downAndUp_areCorrectlyCaptured() throws {
-        log("\n========================================")
-        log("🧪 TEST: Scroll events (down + up)")
-        log("========================================\n")
+        print("🟪 \n========================================")
+        print("🟪 🧪 TEST: Scroll events (down + up)")
+        print("🟪 ========================================\n")
 
         // ── Phase 1: Navigate to User Actions ──
         navigateToUserActions()
@@ -88,11 +88,11 @@ final class UserInteractionUITests: XCTestCase {
         let table = app.tables.firstMatch
         XCTAssertTrue(table.waitForExistence(timeout: elementTimeout), "❌ UserActions table should exist")
 
-        log("📜 Performing swipeDown (scroll down)…")
+        print("🟪 📜 Performing swipeDown (scroll down)…")
         table.swipeDown()
         Thread.sleep(forTimeInterval: shortDelay)
 
-        log("📜 Performing swipeUp (scroll up)…")
+        print("🟪 📜 Performing swipeUp (scroll up)…")
         table.swipeUp()
         Thread.sleep(forTimeInterval: shortDelay)
 
@@ -112,7 +112,7 @@ final class UserInteractionUITests: XCTestCase {
         XCTAssertTrue(foundUp,   "❌ Expected a 'scroll' event with direction 'up' in validation data")
 
         if foundDown && foundUp {
-            log("✅ Both scroll directions (down, up) confirmed in backend!")
+            print("🟪 ✅ Both scroll directions (down, up) confirmed in backend!")
         }
     }
 
@@ -121,9 +121,9 @@ final class UserInteractionUITests: XCTestCase {
     /// Swipe left then right on the PageController's paged UIScrollView and verify
     /// the SDK emits two swipe events with directions left and right.
     func testSwipeEvents_leftAndRight_areCorrectlyCaptured() throws {
-        log("\n========================================")
-        log("🧪 TEST: Swipe events (left + right)")
-        log("========================================\n")
+        print("🟪 \n========================================")
+        print("🟪 🧪 TEST: Swipe events (left + right)")
+        print("🟪 ========================================\n")
 
         // ── Phase 1: Navigate to PageController ──
         navigateToUserActions()
@@ -145,11 +145,11 @@ final class UserInteractionUITests: XCTestCase {
         XCTAssertTrue(pageScrollView.waitForExistence(timeout: elementTimeout),
                       "❌ Paged scroll view ('pageControllerScrollView') not found — check PageController.setupScrollView()")
 
-        log("👆 Performing slow swipeLeft (advance page)…")
+        print("🟪 👆 Performing slow swipeLeft (advance page)…")
         slowSwipe(on: pageScrollView, direction: .left)
         Thread.sleep(forTimeInterval: shortDelay)
 
-        log("👆 Performing slow swipeRight (go back)…")
+        print("🟪 👆 Performing slow swipeRight (go back)…")
         slowSwipe(on: pageScrollView, direction: .right)
         Thread.sleep(forTimeInterval: shortDelay)
 
@@ -170,7 +170,7 @@ final class UserInteractionUITests: XCTestCase {
         XCTAssertTrue(foundRight, "❌ Expected a 'swipe' event with direction 'right'")
 
         if foundLeft && foundRight {
-            log("✅ Both swipe directions (left, right) confirmed in backend!")
+            print("🟪 ✅ Both swipe directions (left, right) confirmed in backend!")
         }
     }
 
@@ -181,9 +181,9 @@ final class UserInteractionUITests: XCTestCase {
     /// callback maps accessibilityIdentifier "loginButton" → "Login Button",
     /// so the backend event must have target_element = "Login Button".
     func testResolveTargetName_tapLoginButton_customNameInBackend() throws {
-        log("\n========================================")
-        log("🧪 TEST: resolveTargetName — Login Button")
-        log("========================================\n")
+        print("🟪 \n========================================")
+        print("🟪 🧪 TEST: resolveTargetName — Login Button")
+        print("🟪 ========================================\n")
 
         // ── Phase 1: Navigate to User Actions ──
         navigateToUserActions()
@@ -194,7 +194,7 @@ final class UserInteractionUITests: XCTestCase {
         let loginButton = app.buttons["loginButton"].firstMatch
         XCTAssertTrue(loginButton.waitForExistence(timeout: elementTimeout),
                       "❌ 'loginButton' not found — check UserActionsViewController.setupResolveTargetNameDemoHeader()")
-        log("👆 Tapping loginButton…")
+        print("🟪 👆 Tapping loginButton…")
         loginButton.tap()
         Thread.sleep(forTimeInterval: shortDelay)
 
@@ -217,7 +217,7 @@ final class UserInteractionUITests: XCTestCase {
                       "❌ Expected target_element = 'Login Button' via resolveTargetName callback")
 
         if foundClick && foundCustomName {
-            log("✅ resolveTargetName confirmed — target_element = 'Login Button' in backend!")
+            print("🟪 ✅ resolveTargetName confirmed — target_element = 'Login Button' in backend!")
         }
     }
 
@@ -237,9 +237,9 @@ final class UserInteractionUITests: XCTestCase {
     ///     `target_element_inner_text` (the cell's row title is "Sensitive Label
     ///     (text suppressed)" — if suppression fails, that text would appear).
     func testShouldSendText_sensitiveLabel_noInnerTextInBackend() throws {
-        log("\n========================================")
-        log("🧪 TEST: shouldSendText — sensitiveLabel suppression")
-        log("========================================\n")
+        print("🟪 \n========================================")
+        print("🟪 🧪 TEST: shouldSendText — sensitiveLabel suppression")
+        print("🟪 ========================================\n")
 
         // ── Phase 1: Navigate to User Actions ──
         navigateToUserActions()
@@ -248,7 +248,7 @@ final class UserInteractionUITests: XCTestCase {
         let sensitiveCell = app.cells["sensitiveLabel"].firstMatch
         XCTAssertTrue(sensitiveCell.waitForExistence(timeout: elementTimeout),
                       "❌ 'sensitiveLabel' cell not found")
-        log("👆 Tapping sensitiveLabel cell…")
+        print("🟪 👆 Tapping sensitiveLabel cell…")
         sensitiveCell.tap()
         Thread.sleep(forTimeInterval: shortDelay)
 
@@ -278,7 +278,7 @@ final class UserInteractionUITests: XCTestCase {
         XCTAssertFalse(hasLeakedText,
                        "❌ shouldSendText failed: '\(suppressedText)' found in target_element_inner_text — text was not suppressed")
 
-        log("✅ shouldSendText confirmed — sensitive text not found in any click event")
+        print("🟪 ✅ shouldSendText confirmed — sensitive text not found in any click event")
     }
 
     // MARK: - Test: All interaction events are attributed to the active session
@@ -286,9 +286,9 @@ final class UserInteractionUITests: XCTestCase {
     /// Perform a mix of gestures, then verify that every interaction event
     /// in the validation data shares the same session_id that the SDK reports.
     func testAllInteractionEvents_areAttributedToActiveSession() throws {
-        log("\n========================================")
-        log("🧪 TEST: Session attribution for interaction events")
-        log("========================================\n")
+        print("🟪 \n========================================")
+        print("🟪 🧪 TEST: Session attribution for interaction events")
+        print("🟪 ========================================\n")
 
         // ── Phase 1: Generate a variety of interaction events ──
         navigateToUserActions()
@@ -296,13 +296,16 @@ final class UserInteractionUITests: XCTestCase {
         let table = app.tables.firstMatch
         XCTAssertTrue(table.waitForExistence(timeout: elementTimeout))
 
-        log("📜 Generating scroll events…")
+        print("🟪 📜 Generating scroll events…")
         table.swipeDown()
         Thread.sleep(forTimeInterval: shortDelay)
         table.swipeUp()
         Thread.sleep(forTimeInterval: shortDelay)
 
-        // Navigate to PageController and swipe
+        // Navigate to PageController and add a swipe event to the session.
+        // Using `if` rather than XCTAssertTrue because the swipe is additive —
+        // the session-attribution assertion still holds on scroll-only data.
+        // The warning below makes reduced coverage explicit in CI logs.
         let pageControllerCell = app.staticTexts["Page Controller"].firstMatch
         if pageControllerCell.waitForExistence(timeout: elementTimeout) {
             pageControllerCell.tap()
@@ -310,11 +313,15 @@ final class UserInteractionUITests: XCTestCase {
 
             let scrollView = app.scrollViews["pageControllerScrollView"].firstMatch
             if scrollView.waitForExistence(timeout: elementTimeout) {
-                log("👆 Generating swipe events…")
+                print("🟪 👆 Generating swipe events…")
                 slowSwipe(on: scrollView, direction: .left)
                 Thread.sleep(forTimeInterval: shortDelay)
+            } else {
+                print("🟨  pageControllerScrollView not found — session attribution checked on scroll events only")
             }
             navigateBack()
+        } else {
+            print("🟨  'Page Controller' cell not found — session attribution checked on scroll events only")
         }
 
         // ── Phase 2: Flush + validate ──
@@ -337,7 +344,7 @@ final class UserInteractionUITests: XCTestCase {
         let sessionIds = interactionLogs.compactMap { extractSessionId(from: $0) }
         let uniqueSessionIds = Set(sessionIds)
 
-        log("📊 Found \(interactionLogs.count) interaction log(s) with \(uniqueSessionIds.count) unique session_id(s)")
+        print("🟪 📊 Found \(interactionLogs.count) interaction log(s) with \(uniqueSessionIds.count) unique session_id(s)")
 
         // All events should belong to the same session
         XCTAssertEqual(uniqueSessionIds.count, 1,
@@ -345,7 +352,7 @@ final class UserInteractionUITests: XCTestCase {
         XCTAssertFalse(sessionIds.isEmpty,
                        "❌ No session_id found in any interaction event")
 
-        log("✅ All interaction events share session_id: \(uniqueSessionIds.first ?? "(unknown)")")
+        print("🟪 ✅ All interaction events share session_id: \(uniqueSessionIds.first ?? "(unknown)")")
     }
 
     // MARK: - Compound test (CI-friendly single-run)
@@ -354,12 +361,12 @@ final class UserInteractionUITests: XCTestCase {
     /// a single schema validation covers all events. Preferred in CI to reduce
     /// total wall-clock time.
     func testAllUserInteractionEvents_combinedSchemaValidation() throws {
-        log("\n========================================")
-        log("🧪 TEST: Combined user interaction E2E")
-        log("========================================\n")
+        print("🟪 \n========================================")
+        print("🟪 🧪 TEST: Combined user interaction E2E")
+        print("🟪 ========================================\n")
 
         // ── Phase 1: Scroll events ──
-        log("📜 Phase 1: Scroll gestures…")
+        print("🟪 📜 Phase 1: Scroll gestures…")
         navigateToUserActions()
 
         let table = app.tables.firstMatch
@@ -371,27 +378,27 @@ final class UserInteractionUITests: XCTestCase {
         Thread.sleep(forTimeInterval: shortDelay)
 
         // ── Phase 2: resolveTargetName tap ──
-        log("👆 Phase 2: Login button tap (resolveTargetName)…")
+        print("🟪 👆 Phase 2: Login button tap (resolveTargetName)…")
         let loginButton = app.buttons["loginButton"].firstMatch
         if loginButton.waitForExistence(timeout: elementTimeout) {
             loginButton.tap()
             Thread.sleep(forTimeInterval: shortDelay)
         } else {
-            log("⚠️  loginButton not found — skipping resolveTargetName sub-test")
+            print("🟨  loginButton not found — skipping resolveTargetName sub-test")
         }
 
         // ── Phase 3: shouldSendText (sensitiveLabel) ──
-        log("👆 Phase 3: Sensitive label tap (shouldSendText)…")
+        print("🟪 👆 Phase 3: Sensitive label tap (shouldSendText)…")
         let sensitiveCell = app.cells["sensitiveLabel"].firstMatch
         if sensitiveCell.waitForExistence(timeout: elementTimeout) {
             sensitiveCell.tap()
             Thread.sleep(forTimeInterval: shortDelay)
         } else {
-            log("⚠️  sensitiveLabel cell not found — skipping shouldSendText sub-test")
+            print("🟨  sensitiveLabel cell not found — skipping shouldSendText sub-test")
         }
 
         // ── Phase 4: Swipe events (PageController) ──
-        log("👆 Phase 4: Swipe gestures in PageController…")
+        print("🟪 👆 Phase 4: Swipe gestures in PageController…")
         let pageControllerCell = app.staticTexts["Page Controller"].firstMatch
         if pageControllerCell.waitForExistence(timeout: elementTimeout) {
             pageControllerCell.tap()
@@ -404,19 +411,19 @@ final class UserInteractionUITests: XCTestCase {
                 slowSwipe(on: scrollView, direction: .right)
                 Thread.sleep(forTimeInterval: shortDelay)
             } else {
-                log("⚠️  PageController scroll view not found — skipping swipe sub-test")
+                print("🟨  PageController scroll view not found — skipping swipe sub-test")
             }
             navigateBack()
         } else {
-            log("⚠️  'Page Controller' cell not found — skipping swipe sub-test")
+            print("🟨  'Page Controller' cell not found — skipping swipe sub-test")
         }
 
         // ── Phase 5: Flush + schema validation ──
-        log("\n⏳ Phase 5: Flushing events to backend…")
+        print("🟪 \n⏳ Phase 5: Flushing events to backend…")
         flushAndValidate()
 
         // ── Phase 6: Verify events in backend data ──
-        log("\n🔎 Phase 6: Verifying events in backend data…")
+        print("🟪 \n🔎 Phase 6: Verifying events in backend data…")
         guard let data = readValidationData() else {
             handleMissingValidationData()
             return
@@ -429,19 +436,19 @@ final class UserInteractionUITests: XCTestCase {
                       "❌ Missing scroll event with direction 'down'")
         XCTAssertTrue(hasInteractionEvent(in: data, eventName: "scroll", direction: "up"),
                       "❌ Missing scroll event with direction 'up'")
-        log("✅ Scroll events (down + up) verified")
+        print("🟪 ✅ Scroll events (down + up) verified")
 
         // Swipe: left and right
         XCTAssertTrue(hasInteractionEvent(in: data, eventName: "swipe", direction: "left"),
                       "❌ Missing swipe event with direction 'left'")
         XCTAssertTrue(hasInteractionEvent(in: data, eventName: "swipe", direction: "right"),
                       "❌ Missing swipe event with direction 'right'")
-        log("✅ Swipe events (left + right) verified")
+        print("🟪 ✅ Swipe events (left + right) verified")
 
         // resolveTargetName: target_element = "Login Button"
         XCTAssertTrue(hasInteractionEvent(in: data, eventName: "click", targetElement: "Login Button"),
                       "❌ Missing click event with target_element = 'Login Button' (resolveTargetName)")
-        log("✅ resolveTargetName (Login Button) verified")
+        print("🟪 ✅ resolveTargetName (Login Button) verified")
 
         // shouldSendText: the cell's row title must not appear in any click event
         let suppressedText = "Sensitive Label (text suppressed)"
@@ -449,10 +456,10 @@ final class UserInteractionUITests: XCTestCase {
                                                              eventName: "click",
                                                              innerText: suppressedText),
                        "❌ shouldSendText failed: '\(suppressedText)' found in target_element_inner_text")
-        log("✅ shouldSendText (sensitiveLabel suppression) verified")
+        print("🟪 ✅ shouldSendText (sensitiveLabel suppression) verified")
 
-        log("\n🎉 All user interaction events verified end-to-end!")
-        log("========================================\n")
+        print("🟪 \n🎉 All user interaction events verified end-to-end!")
+        print("🟪 ========================================\n")
     }
 
     // MARK: - Gesture helpers
@@ -493,7 +500,7 @@ final class UserInteractionUITests: XCTestCase {
     // MARK: - Navigation helpers
 
     private func navigateToUserActions() {
-        log("🧭 Navigating to User Actions…")
+        print("🟪 🧭 Navigating to User Actions…")
         let button = app.staticTexts["User actions"].firstMatch
         XCTAssertTrue(button.waitForExistence(timeout: elementTimeout),
                       "❌ 'User actions' cell not found on main menu")
@@ -503,11 +510,11 @@ final class UserInteractionUITests: XCTestCase {
         // Confirm navigation by checking for a known element in the screen
         XCTAssertTrue(app.staticTexts["Page Controller"].waitForExistence(timeout: elementTimeout),
                       "❌ 'Page Controller' not found — may not be on User Actions screen")
-        log("✅ On User Actions screen")
+        print("🟪 ✅ On User Actions screen")
     }
 
     private func navigateBack() {
-        log("🧭 Navigating back…")
+        print("🟪 🧭 Navigating back…")
         let navBar = app.navigationBars.firstMatch
         let backButton = navBar.buttons.firstMatch
         XCTAssertTrue(backButton.waitForExistence(timeout: 5),
@@ -517,7 +524,7 @@ final class UserInteractionUITests: XCTestCase {
     }
 
     private func navigateBackToMainMenu() {
-        log("🧭 Navigating to main menu…")
+        print("🟪 🧭 Navigating to main menu…")
         let navBar = app.navigationBars.firstMatch
         let backButton = navBar.buttons.firstMatch
         XCTAssertTrue(backButton.waitForExistence(timeout: 5),
@@ -528,11 +535,11 @@ final class UserInteractionUITests: XCTestCase {
         let schemaCell = app.cells.containing(.staticText, identifier: "Schema validation").firstMatch
         XCTAssertTrue(schemaCell.waitForExistence(timeout: elementTimeout),
                       "❌ Did not return to main menu")
-        log("✅ Back on main menu")
+        print("🟪 ✅ Back on main menu")
     }
 
     private func navigateToSchemaValidation() {
-        log("🧭 Navigating to Schema validation…")
+        print("🟪 🧭 Navigating to Schema validation…")
         let schemaCell = app.cells.containing(.staticText, identifier: "Schema validation").firstMatch
         XCTAssertTrue(schemaCell.waitForExistence(timeout: elementTimeout),
                       "❌ 'Schema validation' cell not found")
@@ -541,13 +548,13 @@ final class UserInteractionUITests: XCTestCase {
 
         XCTAssertTrue(app.buttons["Validate Schema"].waitForExistence(timeout: elementTimeout),
                       "❌ 'Validate Schema' button not found")
-        log("✅ On Schema validation screen")
+        print("🟪 ✅ On Schema validation screen")
     }
 
     // MARK: - Flush & validate helpers
 
     private func flushAndValidate() {
-        log("⏳ Waiting \(sdkFlushDelay)s for SDK to flush events to backend…")
+        print("🟪 ⏳ Waiting \(sdkFlushDelay)s for SDK to flush events to backend…")
         Thread.sleep(forTimeInterval: sdkFlushDelay)
         navigateBackToMainMenu()
         navigateToSchemaValidation()
@@ -556,25 +563,25 @@ final class UserInteractionUITests: XCTestCase {
     }
 
     private func triggerValidation() {
-        log("🔍 Triggering schema validation…")
+        print("🟪 🔍 Triggering schema validation…")
         let validateButton = app.buttons["Validate Schema"]
         XCTAssertTrue(validateButton.waitForExistence(timeout: elementTimeout))
         XCTAssertTrue(validateButton.isEnabled, "Validate button should be enabled")
         validateButton.tap()
         Thread.sleep(forTimeInterval: networkDelay)
-        log("✅ Validation request sent")
+        print("🟪 ✅ Validation request sent")
     }
 
     private func verifySchemaValidationPassed(file: StaticString = #file, line: UInt = #line) {
-        log("🔍 Checking schema validation result…")
+        print("🟪 🔍 Checking schema validation result…")
         let successLabel = app.staticTexts["All logs are valid! ✅"]
         if !successLabel.waitForExistence(timeout: 5) {
-            let allLabels = app.staticTexts.allElementsBoundByIndex.map { $0.label }
-            print("❌ Schema validation did not pass. Visible labels:")
-            allLabels.forEach { print("   - \($0)") }
-            XCTFail("Schema validation failed — see console for details", file: file, line: line)
+            let visibleLabels = app.staticTexts.allElementsBoundByIndex
+                .map { $0.label }
+                .joined(separator: ", ")
+            XCTFail("Schema validation failed. Visible labels: [\(visibleLabels)]", file: file, line: line)
         } else {
-            log("✅ Schema validation passed!")
+            print("🟪 ✅ Schema validation passed!")
         }
     }
 
@@ -588,7 +595,7 @@ final class UserInteractionUITests: XCTestCase {
         let path = "/tmp/coralogix_validation_response.json"
         guard FileManager.default.fileExists(atPath: path),
               let jsonData = try? Data(contentsOf: URL(fileURLWithPath: path)) else {
-            log("⚠️  Validation file not found at \(path)")
+            print("🟨  Validation file not found at \(path)")
             return nil
         }
 
@@ -599,16 +606,16 @@ final class UserInteractionUITests: XCTestCase {
             for item in wrapped {
                 if let logs = item["logs"] as? [[String: Any]] { all.append(contentsOf: logs) }
             }
-            log("📊 Read \(all.count) log entries (unwrapped from \(wrapped.count) validation objects)")
+            print("🟪 📊 Read \(all.count) log entries (unwrapped from \(wrapped.count) validation objects)")
             return all
         }
 
         if let direct = try? JSONSerialization.jsonObject(with: jsonData) as? [[String: Any]] {
-            log("📊 Read \(direct.count) log entries (direct array)")
+            print("🟪 📊 Read \(direct.count) log entries (direct array)")
             return direct
         }
 
-        log("❌ Failed to parse validation response JSON")
+        print("🟥 Failed to parse validation response JSON")
         return nil
     }
 
@@ -616,7 +623,7 @@ final class UserInteractionUITests: XCTestCase {
         if isCI {
             XCTFail("Validation data file required in CI mode", file: file, line: line)
         } else {
-            log("ℹ️  Local mode — skipping temp-file verification (UI-only pass)")
+            print("🟪 ℹ️  Local mode — skipping temp-file verification (UI-only pass)")
         }
     }
 
@@ -723,7 +730,7 @@ final class UserInteractionUITests: XCTestCase {
             guard let ctx = extractInteractionContext(from: entry) else { return nil }
             return (entry, ctx)
         }
-        log("\n📋 Interaction events found in validation data: \(interactionLogs.count)")
+        print("🟪 \n📋 Interaction events found in validation data: \(interactionLogs.count)")
         for (i, (entry, ctx)) in interactionLogs.enumerated() {
             let name      = ctx["event_name"] as? String ?? "?"
             let dir       = ctx["scroll_direction"] as? String ?? "-"
@@ -732,14 +739,10 @@ final class UserInteractionUITests: XCTestCase {
             let eid       = ctx["element_id"] as? String ?? "-"
             let innerText = ctx["target_element_inner_text"] as? String
             let sessionId = extractSessionId(from: entry) ?? "?"
-            log("   [\(i)] name=\(name) dir=\(dir) target=\(target) classes=\(classes) eid=\(eid) text=\(innerText ?? "-") sid=\(sessionId.prefix(8))…")
+            print("🟪    [\(i)] name=\(name) dir=\(dir) target=\(target) classes=\(classes) eid=\(eid) text=\(innerText ?? "-") sid=\(sessionId.prefix(8))…")
         }
     }
 
-    private func log(_ message: String) {
-        let ts = String(format: "%.2f", Date().timeIntervalSince1970)
-        print("🕐 [\(ts)] \(message)")
-    }
 }
 
 // MARK: - How to Run
