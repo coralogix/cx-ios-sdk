@@ -622,7 +622,11 @@ final class UserInteractionUITests: XCTestCase {
             return direct
         }
 
-        print("🟥 Failed to parse validation response JSON")
+        // The file exists but its content doesn't match either expected shape.
+        // This is always a test-infrastructure error (format change / truncation),
+        // not a "file absent in local mode" situation — fail unconditionally.
+        let preview = String(data: jsonData.prefix(200), encoding: .utf8) ?? "<unreadable>"
+        XCTFail("Failed to parse validation response JSON. File exists but format is unrecognised. Preview: \(preview)")
         return nil
     }
 
