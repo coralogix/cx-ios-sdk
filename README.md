@@ -296,6 +296,8 @@ let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
 ### Custom Target Element Name (`resolveTargetName`)
 Override the `target_element` field in user action events with a business-friendly name instead of the raw UIKit class name. Return `nil` to fall back to the default class name (e.g. `"UIButton"`).
 
+> **Note:** `resolveTargetName` only affects `target_element`. The `element_classes` field always contains the real UIKit class name (e.g. `"UIButton"`) regardless of what the closure returns, so existing analytics queries and backwards-compatible dashboards that filter on `element_classes` continue to work unchanged.
+
 This closure is called on the **main thread** on every tap event. Keep it fast and non-blocking.
 ```swift
 let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
