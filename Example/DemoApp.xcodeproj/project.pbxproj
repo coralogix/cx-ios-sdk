@@ -688,7 +688,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = BT2A743BQ5;
-				INFOPLIST_FILE = Example/DemoAppUITests-Info.plist;
+				INFOPLIST_FILE = DemoAppUITests-Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.1;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.coralogix.DemoAppUITests;
@@ -706,7 +706,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = BT2A743BQ5;
-				INFOPLIST_FILE = Example/DemoAppUITests-Info.plist;
+				INFOPLIST_FILE = DemoAppUITests-Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.1;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.coralogix.DemoAppUITests;
