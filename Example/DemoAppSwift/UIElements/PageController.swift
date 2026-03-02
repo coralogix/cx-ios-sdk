@@ -339,6 +339,18 @@ class PageController: UIViewController, UIScrollViewDelegate {
     // MARK: - UIScrollViewDelegate
 
     func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
+        updateCurrentPage(for: scrollView)
+    }
+
+    func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
+        // When the drag ends without momentum (willDecelerate == false),
+        // scrollViewDidEndDecelerating never fires, so we must update here.
+        if !decelerate {
+            updateCurrentPage(for: scrollView)
+        }
+    }
+
+    private func updateCurrentPage(for scrollView: UIScrollView) {
         let page = Int(round(scrollView.contentOffset.x / scrollView.bounds.width))
         guard pageControl.currentPage != page else { return }
         pageControl.currentPage = page
