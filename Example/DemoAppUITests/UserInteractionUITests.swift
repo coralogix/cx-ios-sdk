@@ -517,7 +517,7 @@ final class UserInteractionUITests: XCTestCase {
         print("🟪 🧭 Navigating back…")
         let navBar = app.navigationBars.firstMatch
         let backButton = navBar.buttons.firstMatch
-        XCTAssertTrue(backButton.waitForExistence(timeout: 5),
+        XCTAssertTrue(backButton.waitForExistence(timeout: elementTimeout),
                       "❌ Back button not found — cannot navigate back (wrong screen?)")
         backButton.tap()
         Thread.sleep(forTimeInterval: shortDelay)
@@ -527,7 +527,7 @@ final class UserInteractionUITests: XCTestCase {
         print("🟪 🧭 Navigating to main menu…")
         let navBar = app.navigationBars.firstMatch
         let backButton = navBar.buttons.firstMatch
-        XCTAssertTrue(backButton.waitForExistence(timeout: 5),
+        XCTAssertTrue(backButton.waitForExistence(timeout: elementTimeout),
                       "❌ Back button not found — cannot return to main menu (wrong screen?)")
         backButton.tap()
         Thread.sleep(forTimeInterval: shortDelay)
@@ -575,7 +575,7 @@ final class UserInteractionUITests: XCTestCase {
     private func verifySchemaValidationPassed(file: StaticString = #file, line: UInt = #line) {
         print("🟪 🔍 Checking schema validation result…")
         let successLabel = app.staticTexts["All logs are valid! ✅"]
-        if !successLabel.waitForExistence(timeout: 5) {
+        if !successLabel.waitForExistence(timeout: networkDelay) {
             let visibleLabels = app.staticTexts.allElementsBoundByIndex
                 .map { $0.label }
                 .joined(separator: ", ")
