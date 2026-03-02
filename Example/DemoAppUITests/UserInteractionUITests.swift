@@ -61,12 +61,19 @@ final class UserInteractionUITests: XCTestCase {
     // MARK: - Setup / Teardown
 
     override func setUpWithError() throws {
+        try super.setUpWithError()
         continueAfterFailure = false
         app = XCUIApplication()
         app.launchArguments = ["--uitesting"]
         clearValidationData()
         print("🟪 🚀 Launching app (CI=\(isCI))")
         app.launch()
+    }
+
+    override func tearDownWithError() throws {
+        app.terminate()
+        app = nil
+        try super.tearDownWithError()
     }
 
     // MARK: - Test: Scroll events (up & down)
