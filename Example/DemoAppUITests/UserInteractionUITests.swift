@@ -717,17 +717,19 @@ final class UserInteractionUITests: XCTestCase {
     // MARK: - Debugging helpers
 
     private func printInteractionEventsSummary(_ logs: [[String: Any]]) {
-        let interactionLogs = logs.filter { extractInteractionContext(from: $0) != nil }
+        let interactionLogs = logs.compactMap { entry -> ([String: Any], [String: Any])? in
+            guard let ctx = extractInteractionContext(from: entry) else { return nil }
+            return (entry, ctx)
+        }
         log("\n📋 Interaction events found in validation data: \(interactionLogs.count)")
-        for (i, entry) in interactionLogs.enumerated() {
-            guard let ctx = extractInteractionContext(from: entry) else { continue }
-            let name       = ctx["event_name"] as? String ?? "?"
-            let dir        = ctx["scroll_direction"] as? String ?? "-"
-            let target     = ctx["target_element"] as? String ?? "?"
-            let classes    = ctx["element_classes"] as? String ?? "?"
-            let eid        = ctx["element_id"] as? String ?? "-"
-            let innerText  = ctx["target_element_inner_text"] as? String
-            let sessionId  = extractSessionId(from: entry) ?? "?"
+        for (i, (entry, ctx)) in interactionLogs.enumerated() {
+            let name      = ctx["event_name"] as? String ?? "?"
+            let dir       = ctx["scroll_direction"] as? String ?? "-"
+            let target    = ctx["target_element"] as? String ?? "?"
+            let classes   = ctx["element_classes"] as? String ?? "?"
+            let eid       = ctx["element_id"] as? String ?? "-"
+            let innerText = ctx["target_element_inner_text"] as? String
+            let sessionId = extractSessionId(from: entry) ?? "?"
             log("   [\(i)] name=\(name) dir=\(dir) target=\(target) classes=\(classes) eid=\(eid) text=\(innerText ?? "-") sid=\(sessionId.prefix(8))…")
         }
     }
