@@ -686,29 +686,13 @@ final class UserInteractionUITests: XCTestCase {
         return false
     }
 
-    /// Returns `true` when a log entry has an interaction_context for the given
-    /// elementId AND a non-empty target_element_inner_text — meaning shouldSendText
-    /// did NOT suppress the text as expected.
-    private func hasInteractionEventWithInnerText(
-        in logs: [[String: Any]],
-        elementId: String
-    ) -> Bool {
-        for entry in logs {
-            guard let ctx = extractInteractionContext(from: entry) else { continue }
-            guard let eid = ctx["element_id"] as? String, eid == elementId else { continue }
-            guard let text = ctx["target_element_inner_text"] as? String, !text.isEmpty else { continue }
-            return true
-        }
-        return false
-    }
-
     /// Returns `true` when any interaction event with the given `eventName` contains
     /// `innerText` as its `target_element_inner_text` value — indicating that
     /// `shouldSendText` did NOT suppress the text.
     ///
-    /// Preferred over `hasInteractionEventWithInnerText(elementId:)` when the
-    /// `element_id` field is unreliable (e.g. identifier set on a UITableViewCell
-    /// rather than the leaf hit-tested view).
+    /// Keyed on `eventName` + literal text value rather than `element_id` because
+    /// `element_id` in the RUM payload maps to the leaf hit-tested view, not the
+    /// UITableViewCell whose `accessibilityIdentifier` was set.
     private func hasInteractionEventWithInnerTextValue(
         in logs: [[String: Any]],
         eventName: String,
