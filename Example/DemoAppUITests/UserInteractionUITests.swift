@@ -93,7 +93,7 @@ final class UserInteractionUITests: XCTestCase {
         // is long enough to scroll. `swipeDown()` moves the finger downward,
         // so the SDK records scroll_direction = "down".
         let table = app.tables.firstMatch
-        XCTAssertTrue(table.waitForExistence(timeout: elementTimeout), "❌ UserActions table should exist")
+        XCTAssertTrue(table.waitForExistence(timeout: elementTimeout), "❌ UserActions table not found")
 
         print("🟪 📜 Performing swipeDown (scroll down)…")
         table.swipeDown()

@@ -11,7 +11,7 @@ class PageController: UIViewController, UIScrollViewDelegate {
 
     // MARK: - Properties
 
-    var scrollView: UIScrollView!
+    private var scrollView: UIScrollView!
     private var pageControl: UIPageControl!
     private var feedbackGenerator: UIImpactFeedbackGenerator?
 
@@ -187,18 +187,36 @@ class PageController: UIViewController, UIScrollViewDelegate {
         card.layer.borderWidth = 1
         card.layer.borderColor = UIColor.white.withAlphaComponent(0.35).cgColor
 
-        // Frosted glass base
+        let (blur, tint) = addGlassLayers(to: card)
+        let (iconView, metricLabel, unitLabel) = addMetricViews(to: card, data: data)
+        let (divider, titleLabel, subtitleLabel) = addLabelViews(to: card, data: data)
+
+        activateCardConstraints(
+            card: card,
+            blur: blur, tint: tint,
+            iconView: iconView,
+            metricLabel: metricLabel, unitLabel: unitLabel,
+            divider: divider,
+            titleLabel: titleLabel, subtitleLabel: subtitleLabel
+        )
+
+        return card
+    }
+
+    private func addGlassLayers(to card: UIView) -> (UIVisualEffectView, UIView) {
         let blur = UIVisualEffectView(effect: UIBlurEffect(style: .systemThinMaterialLight))
         blur.translatesAutoresizingMaskIntoConstraints = false
         card.addSubview(blur)
 
-        // Subtle white glass tint
         let tint = UIView()
         tint.backgroundColor = UIColor.white.withAlphaComponent(0.12)
         tint.translatesAutoresizingMaskIntoConstraints = false
         card.addSubview(tint)
 
-        // ── Icon ──
+        return (blur, tint)
+    }
+
+    private func addMetricViews(to card: UIView, data: PageData) -> (UIImageView, UILabel, UILabel) {
         let iconConfig = UIImage.SymbolConfiguration(pointSize: 44, weight: .semibold)
         let iconView = UIImageView(image: UIImage(systemName: data.icon, withConfiguration: iconConfig))
         iconView.tintColor = .white
@@ -206,7 +224,6 @@ class PageController: UIViewController, UIScrollViewDelegate {
         iconView.translatesAutoresizingMaskIntoConstraints = false
         card.addSubview(iconView)
 
-        // ── Big metric number ──
         let metricLabel = UILabel()
         metricLabel.text = data.metric
         metricLabel.font = UIFont.systemFont(ofSize: 52, weight: .heavy)
@@ -217,7 +234,6 @@ class PageController: UIViewController, UIScrollViewDelegate {
         metricLabel.translatesAutoresizingMaskIntoConstraints = false
         card.addSubview(metricLabel)
 
-        // ── Unit with wide letter-spacing ──
         let unitLabel = UILabel()
         unitLabel.attributedText = NSAttributedString(
             string: data.unit.uppercased(),
@@ -231,13 +247,15 @@ class PageController: UIViewController, UIScrollViewDelegate {
         unitLabel.translatesAutoresizingMaskIntoConstraints = false
         card.addSubview(unitLabel)
 
-        // ── Hairline divider ──
+        return (iconView, metricLabel, unitLabel)
+    }
+
+    private func addLabelViews(to card: UIView, data: PageData) -> (UIView, UILabel, UILabel) {
         let divider = UIView()
         divider.backgroundColor = UIColor.white.withAlphaComponent(0.22)
         divider.translatesAutoresizingMaskIntoConstraints = false
         card.addSubview(divider)
 
-        // ── Title ──
         let titleLabel = UILabel()
         titleLabel.text = data.title
         titleLabel.font = UIFont.systemFont(ofSize: 22, weight: .bold)
@@ -246,7 +264,6 @@ class PageController: UIViewController, UIScrollViewDelegate {
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
         card.addSubview(titleLabel)
 
-        // ── Subtitle ──
         let subtitleLabel = UILabel()
         subtitleLabel.text = data.subtitle
         subtitleLabel.font = UIFont.systemFont(ofSize: 14, weight: .regular)
@@ -255,6 +272,17 @@ class PageController: UIViewController, UIScrollViewDelegate {
         subtitleLabel.translatesAutoresizingMaskIntoConstraints = false
         card.addSubview(subtitleLabel)
 
+        return (divider, titleLabel, subtitleLabel)
+    }
+
+    private func activateCardConstraints(
+        card: UIView,
+        blur: UIVisualEffectView, tint: UIView,
+        iconView: UIImageView,
+        metricLabel: UILabel, unitLabel: UILabel,
+        divider: UIView,
+        titleLabel: UILabel, subtitleLabel: UILabel
+    ) {
         NSLayoutConstraint.activate([
             // Glass layers fill the card
             blur.topAnchor.constraint(equalTo: card.topAnchor),
@@ -299,8 +327,6 @@ class PageController: UIViewController, UIScrollViewDelegate {
             subtitleLabel.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 24),
             subtitleLabel.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -24)
         ])
-
-        return card
     }
 
     // MARK: - Actions
