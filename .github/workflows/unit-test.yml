@@ -1,4 +1,4 @@
-name: iOS SDK CI
+name: Unit Tests
 
 on:
   push:
