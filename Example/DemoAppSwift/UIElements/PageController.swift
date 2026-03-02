@@ -13,7 +13,6 @@ class PageController: UIViewController, UIScrollViewDelegate {
 
     var scrollView: UIScrollView!
     private var pageControl: UIPageControl!
-    private var didLayoutPages = false
     private var feedbackGenerator: UIImpactFeedbackGenerator?
 
     private struct PageData {
@@ -70,14 +69,23 @@ class PageController: UIViewController, UIScrollViewDelegate {
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
-        guard !didLayoutPages, scrollView.bounds.width > 0 else { return }
-        didLayoutPages = true
+        let w = scrollView.bounds.width
+        guard w > 0 else { return }
+        // Rebuild whenever the expected content width doesn't match the current one.
+        // This covers both the initial layout and device rotation (bounds change).
+        let expectedContentWidth = w * CGFloat(pages.count)
+        guard scrollView.contentSize.width != expectedContentWidth else { return }
+
+        let currentPage = pageControl.currentPage
+        scrollView.subviews.forEach { $0.removeFromSuperview() }
         layoutPages()
+        // Restore the visible page after rebuild so rotation feels seamless.
+        scrollView.contentOffset = CGPoint(x: CGFloat(currentPage) * w, y: 0)
     }
 
     // MARK: - Scroll view
 
-    func setupScrollView() {
+    private func setupScrollView() {
         scrollView = UIScrollView()
         scrollView.delegate = self
         scrollView.accessibilityIdentifier = "pageControllerScrollView"
@@ -99,7 +107,7 @@ class PageController: UIViewController, UIScrollViewDelegate {
 
     // MARK: - Page control
 
-    func setupPageControl() {
+    private func setupPageControl() {
         pageControl = UIPageControl()
         pageControl.numberOfPages = pages.count
         pageControl.currentPage = 0

@@ -42,7 +42,7 @@ import XCTest
 
 final class UserInteractionUITests: XCTestCase {
 
-    var app: XCUIApplication!
+    private var app: XCUIApplication!
 
     // MARK: - CI detection
 
@@ -112,6 +112,8 @@ final class UserInteractionUITests: XCTestCase {
             return
         }
 
+        printInteractionEventsSummary(data)
+
         let foundDown = hasInteractionEvent(in: data, eventName: "scroll", direction: "down")
         let foundUp   = hasInteractionEvent(in: data, eventName: "scroll", direction: "up")
 
@@ -170,6 +172,8 @@ final class UserInteractionUITests: XCTestCase {
             return
         }
 
+        printInteractionEventsSummary(data)
+
         let foundLeft  = hasInteractionEvent(in: data, eventName: "swipe", direction: "left")
         let foundRight = hasInteractionEvent(in: data, eventName: "swipe", direction: "right")
 
@@ -213,6 +217,8 @@ final class UserInteractionUITests: XCTestCase {
             handleMissingValidationData()
             return
         }
+
+        printInteractionEventsSummary(data)
 
         // Verify a click event was captured for the loginButton
         let foundClick = hasInteractionEvent(in: data, eventName: "click", elementId: "loginButton")
@@ -267,6 +273,8 @@ final class UserInteractionUITests: XCTestCase {
             handleMissingValidationData()
             return
         }
+
+        printInteractionEventsSummary(data)
 
         // Step 4a: Confirm at least one click event arrived in the backend.
         // Without this positive guard the suppression assertion below would
@@ -347,17 +355,22 @@ final class UserInteractionUITests: XCTestCase {
             return
         }
 
+        printInteractionEventsSummary(data)
+
         // Collect all session_ids from interaction events
         let sessionIds = interactionLogs.compactMap { extractSessionId(from: $0) }
         let uniqueSessionIds = Set(sessionIds)
 
         print("🟪 📊 Found \(interactionLogs.count) interaction log(s) with \(uniqueSessionIds.count) unique session_id(s)")
 
+        // Every interaction event must carry a session_id — compactMap drops nils,
+        // so a count mismatch means at least one event has no session_context at all.
+        XCTAssertEqual(sessionIds.count, interactionLogs.count,
+                       "❌ \(interactionLogs.count - sessionIds.count) interaction event(s) are missing session_id")
+
         // All events should belong to the same session
         XCTAssertEqual(uniqueSessionIds.count, 1,
                        "❌ Expected all interaction events to share one session_id, found: \(uniqueSessionIds)")
-        XCTAssertFalse(sessionIds.isEmpty,
-                       "❌ No session_id found in any interaction event")
 
         print("🟪 ✅ All interaction events share session_id: \(uniqueSessionIds.first ?? "(unknown)")")
     }
