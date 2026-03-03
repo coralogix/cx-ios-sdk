@@ -139,6 +139,31 @@ final class NetworkRequestContextTests: XCTestCase {
                        "responsePayload exactly 1024 chars must not be truncated")
     }
 
+    func testRequestPayload_exactlyAtLimit_notTruncated() {
+        var context = NetworkRequestContext(otel: mockSpanData)
+        context.requestPayload = String(repeating: "z", count: 1024)
+        XCTAssertEqual(context.requestPayload?.count, 1024,
+                       "requestPayload exactly 1024 chars must not be truncated")
+    }
+
+    func testGetDictionary_requestPayload_truncatedValueSerialised() {
+        var context = NetworkRequestContext(otel: mockSpanData)
+        context.requestPayload = String(repeating: "a", count: 2000)
+        let dict = context.getDictionary()
+        let serialised = dict[Keys.requestPayload.rawValue] as? String
+        XCTAssertEqual(serialised?.count, 1024,
+                       "getDictionary must serialise the already-truncated value, not the original")
+    }
+
+    func testGetDictionary_responsePayload_truncatedValueSerialised() {
+        var context = NetworkRequestContext(otel: mockSpanData)
+        context.responsePayload = String(repeating: "b", count: 2000)
+        let dict = context.getDictionary()
+        let serialised = dict[Keys.responsePayload.rawValue] as? String
+        XCTAssertEqual(serialised?.count, 1024,
+                       "getDictionary must serialise the already-truncated value, not the original")
+    }
+
     func testGetDictionary_allCaptureFieldsSet_allIncluded() {
         var context = NetworkRequestContext(otel: mockSpanData)
         context.requestHeaders  = ["Authorization": "Bearer t"]

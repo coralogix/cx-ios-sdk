@@ -21,17 +21,26 @@ struct NetworkRequestContext {
 
     // MARK: - Network capture rule fields (omitted from payload when nil)
 
+    /// Maximum number of Swift `Character`s retained in `requestPayload` / `responsePayload`.
+    /// The backend contract is defined in characters (matching browser SDK behaviour); if it
+    /// ever changes to bytes, replace `String.prefix` with a UTF-8 byte-count truncation.
+    ///
+    /// NOTE: Swift's `didSet` is NOT triggered during `init`, so truncation is only enforced
+    /// on post-init mutations. Any future `init` overload that sets these properties directly
+    /// must call `truncatePayload(_:)` explicitly.
+    private static let payloadMaxLength = 1024
+
     /// Allowlisted request headers captured by a matching `NetworkCaptureRule`.
     var requestHeaders: [String: String]?
     /// Allowlisted response headers captured by a matching `NetworkCaptureRule`.
     var responseHeaders: [String: String]?
-    /// Stringified request body, truncated to 1 024 characters if longer. `nil` when unavailable.
+    /// Stringified request body, truncated to `payloadMaxLength` characters if longer. `nil` when unavailable.
     var requestPayload: String? {
-        didSet { requestPayload = requestPayload.map { String($0.prefix(1024)) } }
+        didSet { requestPayload = requestPayload.map { String($0.prefix(Self.payloadMaxLength)) } }
     }
-    /// Stringified response body, truncated to 1 024 characters if longer. `nil` when unavailable or content-type unsupported.
+    /// Stringified response body, truncated to `payloadMaxLength` characters if longer. `nil` when unavailable or content-type unsupported.
     var responsePayload: String? {
-        didSet { responsePayload = responsePayload.map { String($0.prefix(1024)) } }
+        didSet { responsePayload = responsePayload.map { String($0.prefix(Self.payloadMaxLength)) } }
     }
     
     init(otel: SpanDataProtocol) {
