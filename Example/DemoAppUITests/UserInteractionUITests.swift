@@ -46,11 +46,8 @@ final class UserInteractionUITests: XCTestCase {
 
     // MARK: - CI detection
 
-    private var isCI: Bool {
-        ProcessInfo.processInfo.environment["CI"] == "true" ||
-        ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] == "true" ||
-        ProcessInfo.processInfo.environment["CONTINUOUS_INTEGRATION"] == "true"
-    }
+    /// Captured once per test in `setUpWithError` to avoid repeated environment dictionary lookups.
+    private var isCI = false
 
     private var elementTimeout: TimeInterval  { isCI ? 15.0 : 10.0 }
     private var shortDelay: TimeInterval      { isCI ?  2.0 :  1.0 }
@@ -62,6 +59,8 @@ final class UserInteractionUITests: XCTestCase {
 
     override func setUpWithError() throws {
         try super.setUpWithError()
+        let env = ProcessInfo.processInfo.environment
+        isCI = env["CI"] == "true" || env["GITHUB_ACTIONS"] == "true" || env["CONTINUOUS_INTEGRATION"] == "true"
         continueAfterFailure = false
         app = XCUIApplication()
         app.launchArguments = ["--uitesting"]

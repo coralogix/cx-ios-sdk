@@ -109,3 +109,32 @@ public struct NetworkCaptureRule {
         }
     }
 }
+
+// MARK: - Rule resolution
+
+/// Returns the first rule in `configs` whose URL matcher applies to `requestUrl`
+/// (first-match-wins), or `nil` if no rule matches.
+///
+/// **Caller contract**: when the return value is `nil`, all four capture fields
+/// (`reqHeaders`, `resHeaders`, `collectReqPayload`, `collectResPayload`) must be skipped.
+///
+/// Mirrors the browser SDK helper:
+/// ```js
+/// resolveConfigForUrl(url, configs) {
+///   return configs.find(({ url: configUrl }) =>
+///     configUrl === url || (configUrl instanceof RegExp && configUrl.test(url)));
+/// }
+/// ```
+///
+/// - Parameters:
+///   - requestUrl: The absolute URL string of the outgoing request.
+///   - configs: The ordered array of rules from `CoralogixExporterOptions.networkExtraConfig`.
+/// - Returns: The first matching `NetworkCaptureRule`, or `nil`.
+internal func resolveConfigForUrl(_ requestUrl: String, configs: [NetworkCaptureRule]) -> NetworkCaptureRule? {
+    guard let url = URL(string: requestUrl) else {
+        let preview = String(requestUrl.prefix(100))
+        Log.w("resolveConfigForUrl: '\(preview)' is not a valid URL — skipping rule evaluation.")
+        return nil
+    }
+    return configs.first { $0.matches(url) }
+}

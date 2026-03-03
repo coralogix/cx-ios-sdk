@@ -100,6 +100,79 @@ final class NetworkCaptureRuleTests: XCTestCase {
         XCTAssertTrue(options.networkExtraConfig?.first?.matches(matchingURL) == true)
     }
 
+    // MARK: - resolveConfigForUrl(_:configs:)
+
+    func testResolveConfigForUrl_substringMatch_returnsMatchingRule() throws {
+        let rule = NetworkCaptureRule(url: "api.example.com", collectReqPayload: true)
+        let result = try XCTUnwrap(resolveConfigForUrl("https://api.example.com/users", configs: [rule]))
+        XCTAssertTrue(result.collectReqPayload)
+    }
+
+    func testResolveConfigForUrl_regexMatch_returnsMatchingRule() throws {
+        let pattern = try NSRegularExpression(pattern: "example\\.com/users/\\d+")
+        let rule = NetworkCaptureRule(urlPattern: pattern, collectResPayload: true)
+        let result = try XCTUnwrap(resolveConfigForUrl("https://api.example.com/users/42", configs: [rule]))
+        XCTAssertTrue(result.collectResPayload)
+    }
+
+    func testResolveConfigForUrl_noMatch_returnsNil() {
+        let rule = NetworkCaptureRule(url: "other.com")
+        let result = resolveConfigForUrl("https://api.example.com/users", configs: [rule])
+        XCTAssertNil(result)
+    }
+
+    func testResolveConfigForUrl_emptyConfigs_returnsNil() {
+        let result = resolveConfigForUrl("https://api.example.com/users", configs: [])
+        XCTAssertNil(result)
+    }
+
+    func testResolveConfigForUrl_invalidUrl_returnsNil() {
+        let rule = NetworkCaptureRule(url: "example.com")
+        // "not a url" cannot be parsed as URL — must return nil gracefully.
+        let result = resolveConfigForUrl("not a url ://??", configs: [rule])
+        XCTAssertNil(result)
+    }
+
+    func testResolveConfigForUrl_firstMatchWins_returnsFirstMatchingRule() {
+        let firstRule  = NetworkCaptureRule(url: "example.com", reqHeaders: ["X-First"])
+        let secondRule = NetworkCaptureRule(url: "example.com", reqHeaders: ["X-Second"])
+        let result = resolveConfigForUrl("https://api.example.com/users", configs: [firstRule, secondRule])
+        XCTAssertEqual(result?.reqHeaders, ["X-First"],
+                       "First matching rule should win; second rule must not be returned")
+    }
+
+    func testResolveConfigForUrl_firstMatchWins_nonMatchingRuleBeforeMatchingRule() throws {
+        let nonMatching = NetworkCaptureRule(url: "other.com")
+        let matching    = NetworkCaptureRule(url: "example.com", collectReqPayload: true)
+        let result = try XCTUnwrap(resolveConfigForUrl("https://api.example.com/users", configs: [nonMatching, matching]))
+        XCTAssertTrue(result.collectReqPayload)
+    }
+
+    func testResolveConfigForUrl_captureSettingsPreserved() throws {
+        let rule = NetworkCaptureRule(url: "example.com",
+                                     reqHeaders: ["Authorization", "X-Custom"],
+                                     resHeaders: ["Content-Type"],
+                                     collectReqPayload: true,
+                                     collectResPayload: false)
+        let result = try XCTUnwrap(
+            resolveConfigForUrl("https://api.example.com/endpoint", configs: [rule])
+        )
+        XCTAssertEqual(result.reqHeaders, ["Authorization", "X-Custom"])
+        XCTAssertEqual(result.resHeaders, ["Content-Type"])
+        XCTAssertTrue(result.collectReqPayload)
+        XCTAssertFalse(result.collectResPayload)
+    }
+
+    func testResolveConfigForUrl_mixedRules_regexMatchesWhenSubstringDoesNot() throws {
+        let substringRule = NetworkCaptureRule(url: "other.com")
+        let regexPattern  = try NSRegularExpression(pattern: "example\\.com/v2")
+        let regexRule     = NetworkCaptureRule(urlPattern: regexPattern, collectResPayload: true)
+
+        let result = try XCTUnwrap(resolveConfigForUrl("https://api.example.com/v2/items",
+                                                       configs: [substringRule, regexRule]))
+        XCTAssertTrue(result.collectResPayload)
+    }
+
     // MARK: - Mutual exclusivity
     // Enforced at compile time by the private Matcher enum — each init path sets exactly one
     // case, so no runtime white-box tests are needed here.
