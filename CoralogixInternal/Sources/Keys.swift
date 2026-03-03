@@ -78,6 +78,10 @@ public enum Keys: String {
     case url
     case host
     case responseContentLength = "response_content_length"
+    case requestHeaders = "request_headers"
+    case responseHeaders = "response_headers"
+    case requestPayload = "request_payload"
+    case responsePayload = "response_payload"
     case fragments
     case traceId
     case spanId
