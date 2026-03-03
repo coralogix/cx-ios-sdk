@@ -36,11 +36,15 @@ struct NetworkRequestContext {
     var responseHeaders: [String: String]?
     /// Stringified request body, truncated to `payloadMaxLength` characters if longer. `nil` when unavailable.
     var requestPayload: String? {
-        didSet { requestPayload = requestPayload.map { String($0.prefix(Self.payloadMaxLength)) } }
+        didSet { requestPayload = Self.truncatePayload(requestPayload) }
     }
     /// Stringified response body, truncated to `payloadMaxLength` characters if longer. `nil` when unavailable or content-type unsupported.
     var responsePayload: String? {
-        didSet { responsePayload = responsePayload.map { String($0.prefix(Self.payloadMaxLength)) } }
+        didSet { responsePayload = Self.truncatePayload(responsePayload) }
+    }
+
+    private static func truncatePayload(_ payload: String?) -> String? {
+        payload.map { String($0.prefix(payloadMaxLength)) }
     }
     
     init(otel: SpanDataProtocol) {
