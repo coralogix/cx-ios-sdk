@@ -102,19 +102,17 @@ final class NetworkCaptureRuleTests: XCTestCase {
 
     // MARK: - resolveConfigForUrl(_:configs:)
 
-    func testResolveConfigForUrl_substringMatch_returnsMatchingRule() {
+    func testResolveConfigForUrl_substringMatch_returnsMatchingRule() throws {
         let rule = NetworkCaptureRule(url: "api.example.com", collectReqPayload: true)
-        let result = resolveConfigForUrl("https://api.example.com/users", configs: [rule])
-        XCTAssertNotNil(result)
-        XCTAssertTrue(result?.collectReqPayload == true)
+        let result = try XCTUnwrap(resolveConfigForUrl("https://api.example.com/users", configs: [rule]))
+        XCTAssertTrue(result.collectReqPayload)
     }
 
     func testResolveConfigForUrl_regexMatch_returnsMatchingRule() throws {
         let pattern = try NSRegularExpression(pattern: "example\\.com/users/\\d+")
         let rule = NetworkCaptureRule(urlPattern: pattern, collectResPayload: true)
-        let result = resolveConfigForUrl("https://api.example.com/users/42", configs: [rule])
-        XCTAssertNotNil(result)
-        XCTAssertTrue(result?.collectResPayload == true)
+        let result = try XCTUnwrap(resolveConfigForUrl("https://api.example.com/users/42", configs: [rule]))
+        XCTAssertTrue(result.collectResPayload)
     }
 
     func testResolveConfigForUrl_noMatch_returnsNil() {
@@ -143,12 +141,11 @@ final class NetworkCaptureRuleTests: XCTestCase {
                        "First matching rule should win; second rule must not be returned")
     }
 
-    func testResolveConfigForUrl_firstMatchWins_nonMatchingRuleBeforeMatchingRule() {
+    func testResolveConfigForUrl_firstMatchWins_nonMatchingRuleBeforeMatchingRule() throws {
         let nonMatching = NetworkCaptureRule(url: "other.com")
         let matching    = NetworkCaptureRule(url: "example.com", collectReqPayload: true)
-        let result = resolveConfigForUrl("https://api.example.com/users", configs: [nonMatching, matching])
-        XCTAssertNotNil(result)
-        XCTAssertTrue(result?.collectReqPayload == true)
+        let result = try XCTUnwrap(resolveConfigForUrl("https://api.example.com/users", configs: [nonMatching, matching]))
+        XCTAssertTrue(result.collectReqPayload)
     }
 
     func testResolveConfigForUrl_captureSettingsPreserved() throws {
@@ -171,10 +168,9 @@ final class NetworkCaptureRuleTests: XCTestCase {
         let regexPattern  = try NSRegularExpression(pattern: "example\\.com/v2")
         let regexRule     = NetworkCaptureRule(urlPattern: regexPattern, collectResPayload: true)
 
-        let result = resolveConfigForUrl("https://api.example.com/v2/items",
-                                         configs: [substringRule, regexRule])
-        XCTAssertNotNil(result)
-        XCTAssertTrue(result?.collectResPayload == true)
+        let result = try XCTUnwrap(resolveConfigForUrl("https://api.example.com/v2/items",
+                                                       configs: [substringRule, regexRule]))
+        XCTAssertTrue(result.collectResPayload)
     }
 
     // MARK: - Mutual exclusivity

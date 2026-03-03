@@ -73,6 +73,8 @@ class PageController: UIViewController, UIScrollViewDelegate {
         guard w > 0 else { return }
         // Rebuild whenever the expected content width doesn't match the current one.
         // This covers both the initial layout and device rotation (bounds change).
+        // Both sides are derived from the same scrollView.bounds.width value, so
+        // exact floating-point equality is safe here — no epsilon check needed.
         let expectedContentWidth = w * CGFloat(pages.count)
         guard scrollView.contentSize.width != expectedContentWidth else { return }
 
@@ -139,7 +141,8 @@ class PageController: UIViewController, UIScrollViewDelegate {
     private func buildPageView(index: Int, width: CGFloat, height: CGFloat, data: PageData) -> UIView {
         let container = UIView(frame: CGRect(x: CGFloat(index) * width, y: 0, width: width, height: height))
 
-        // Full-bleed diagonal gradient
+        // Full-bleed diagonal gradient. Frame is set to the passed-in dimensions;
+        // viewDidLayoutSubviews rebuilds all pages on rotation so this stays correct.
         let gradient = CAGradientLayer()
         gradient.frame = container.bounds
         gradient.colors = [data.topColor.cgColor, data.bottomColor.cgColor]

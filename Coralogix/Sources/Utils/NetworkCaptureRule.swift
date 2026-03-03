@@ -130,9 +130,10 @@ public struct NetworkCaptureRule {
 ///   - requestUrl: The absolute URL string of the outgoing request.
 ///   - configs: The ordered array of rules from `CoralogixExporterOptions.networkExtraConfig`.
 /// - Returns: The first matching `NetworkCaptureRule`, or `nil`.
-func resolveConfigForUrl(_ requestUrl: String, configs: [NetworkCaptureRule]) -> NetworkCaptureRule? {
+internal func resolveConfigForUrl(_ requestUrl: String, configs: [NetworkCaptureRule]) -> NetworkCaptureRule? {
     guard let url = URL(string: requestUrl) else {
-        Log.w("resolveConfigForUrl: '\(requestUrl)' is not a valid URL — skipping rule evaluation.")
+        let preview = String(requestUrl.prefix(100))
+        Log.w("resolveConfigForUrl: '\(preview)' is not a valid URL — skipping rule evaluation.")
         return nil
     }
     return configs.first { $0.matches(url) }
