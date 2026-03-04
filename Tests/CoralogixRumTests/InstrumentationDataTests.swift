@@ -111,14 +111,12 @@ final class InstrumentationDataTests: XCTestCase {
         XCTAssertNil(dict[Keys.parentSpanId.rawValue], "parentSpanId should be absent for root spans")
     }
 
-    func testInitializationWithAttributes() {
+    func testInitializationWithAttributes() throws {
         let otelResource = OtelResource(otel: mockSpan)
-        if let elem1 = otelResource.attributes["a"] as? AttributeValue {
-            XCTAssertEqual(elem1.description, "1")
-        }
-        if let elem2 = otelResource.attributes["b"] as? AttributeValue {
-            XCTAssertEqual(elem2.description, "2")
-        }
+        let elem1 = try XCTUnwrap(otelResource.attributes["a"] as? AttributeValue, "attribute 'a' should be an AttributeValue")
+        XCTAssertEqual(elem1.description, "1")
+        let elem2 = try XCTUnwrap(otelResource.attributes["b"] as? AttributeValue, "attribute 'b' should be an AttributeValue")
+        XCTAssertEqual(elem2.description, "2")
     }
 
     func testInitializationWithEmptyAttributes() {
@@ -251,6 +249,16 @@ final class InstrumentationDataTests: XCTestCase {
     func testBuildRumContextAttributes_pageContext_absentWhenNoView() {
         let cxRum = makeCxRum()
         let attrs = OtelSpan(otel: mockSpan, cxRum: cxRum, viewManager: nil).attributes
+
+        XCTAssertNil(attrs["cx_rum.page_context.page_url"])
+        XCTAssertNil(attrs["cx_rum.page_context.page_fragments"])
+    }
+
+    func testBuildRumContextAttributes_pageContext_absentWhenViewManagerHasNoActiveView() {
+        // ViewManager with no view set returns ["view": ""] — page context must still be omitted
+        let emptyViewManager = MockViewManager(keyChain: KeychainManager())
+        let cxRum = makeCxRum()
+        let attrs = OtelSpan(otel: mockSpan, cxRum: cxRum, viewManager: emptyViewManager).attributes
 
         XCTAssertNil(attrs["cx_rum.page_context.page_url"])
         XCTAssertNil(attrs["cx_rum.page_context.page_fragments"])

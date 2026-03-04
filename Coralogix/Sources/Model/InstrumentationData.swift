@@ -72,71 +72,107 @@ struct OtelSpan {
         }
     }
 
+    // MARK: - cx_rum.* attribute key constants
+    // Centralised to prevent silent data loss from typos — a misspelled key would
+    // be silently ignored by the backend with no compile-time warning.
+    private enum AttrKey {
+        static let mobileSdkVersion          = "cx_rum.mobile_sdk.version"
+        static let environment               = "cx_rum.environment"
+        static let platform                  = "cx_rum.platform"
+        static let versionMetadataAppName    = "cx_rum.version_metadata.app_name"
+        static let versionMetadataAppVersion = "cx_rum.version_metadata.app_version"
+        static let labels                    = "cx_rum.labels"
+        static let sessionId                 = "cx_rum.session_context.session_id"
+        static let userId                    = "cx_rum.session_context.user_id"
+        static let userName                  = "cx_rum.session_context.user_name"
+        static let userEmail                 = "cx_rum.session_context.user_email"
+        static let os                        = "cx_rum.session_context.os"
+        static let osVersion                 = "cx_rum.session_context.osVersion"
+        static let device                    = "cx_rum.session_context.device"
+        static let userAgent                 = "cx_rum.session_context.user_agent"
+        static let eventType                 = "cx_rum.event_context.type"
+        static let eventSeverity             = "cx_rum.event_context.severity"
+        static let eventSource               = "cx_rum.event_context.source"
+        static let errorType                 = "cx_rum.error_context.error_type"
+        static let errorMessage              = "cx_rum.error_context.error_message"
+        static let networkUrl                = "cx_rum.network_request_context.url"
+        static let networkMethod             = "cx_rum.network_request_context.method"
+        static let networkStatusCode         = "cx_rum.network_request_context.status_code"
+        static let networkStatusText         = "cx_rum.network_request_context.status_text"
+        static let networkFragments          = "cx_rum.network_request_context.fragments"
+        static let pageUrl                   = "cx_rum.page_context.page_url"
+        static let pageFragments             = "cx_rum.page_context.page_fragments"
+    }
+
     // Mirrors the web SDK's buildRumContextAttributes(), using cx_rum.* prefixed keys.
     // N/A mobile fields (browser, browserVersion, url_blueprint, resource_context) are omitted.
     private static func buildRumContextAttributes(cxRum: CxRum, viewManager: ViewManager?) -> [String: Any] {
         var attrs = [String: Any]()
 
         // Mobile SDK version (browser SDK equivalent: cx_rum.browser_sdk.version)
-        attrs["cx_rum.mobile_sdk.version"] = cxRum.mobileSDK.sdkFramework.version
+        attrs[AttrKey.mobileSdkVersion] = cxRum.mobileSDK.sdkFramework.version
 
         // Environment & platform
         if !cxRum.environment.isEmpty {
-            attrs["cx_rum.environment"] = cxRum.environment
+            attrs[AttrKey.environment] = cxRum.environment
         }
         let platform = (Global.getOs() == Keys.tvos.rawValue) ? Keys.television.rawValue : Keys.mobile.rawValue
-        attrs["cx_rum.platform"] = platform
+        attrs[AttrKey.platform] = platform
 
         // Version metadata
-        attrs["cx_rum.version_metadata.app_name"] = cxRum.versionMetadata.appName
-        attrs["cx_rum.version_metadata.app_version"] = cxRum.versionMetadata.appVersion
+        attrs[AttrKey.versionMetadataAppName]    = cxRum.versionMetadata.appName
+        attrs[AttrKey.versionMetadataAppVersion] = cxRum.versionMetadata.appVersion
 
         // Labels — all customer labels as a single nested map under cx_rum.labels
         if let labels = cxRum.labels, !labels.isEmpty {
-            attrs["cx_rum.labels"] = labels
+            attrs[AttrKey.labels] = labels
         }
 
         // Session context
         if let session = cxRum.sessionContext {
-            attrs["cx_rum.session_context.session_id"] = session.sessionId
-            if !session.userId.isEmpty    { attrs["cx_rum.session_context.user_id"]    = session.userId }
-            if !session.userName.isEmpty  { attrs["cx_rum.session_context.user_name"]  = session.userName }
-            if !session.userEmail.isEmpty { attrs["cx_rum.session_context.user_email"] = session.userEmail }
+            attrs[AttrKey.sessionId] = session.sessionId
+            if !session.userId.isEmpty    { attrs[AttrKey.userId]    = session.userId }
+            if !session.userName.isEmpty  { attrs[AttrKey.userName]  = session.userName }
+            if !session.userEmail.isEmpty { attrs[AttrKey.userEmail] = session.userEmail }
         }
-        attrs["cx_rum.session_context.os"]         = Global.getOs()
-        attrs["cx_rum.session_context.osVersion"]  = Global.osVersionInfo()
-        attrs["cx_rum.session_context.device"]     = Global.getDeviceModel()
-        attrs["cx_rum.session_context.user_agent"] = UserAgentManager.shared.getUserAgent()
+        attrs[AttrKey.os]        = Global.getOs()
+        attrs[AttrKey.osVersion] = Global.osVersionInfo()
+        attrs[AttrKey.device]    = Global.getDeviceModel()
+        attrs[AttrKey.userAgent] = UserAgentManager.shared.getUserAgent()
 
         // Event context
-        attrs["cx_rum.event_context.type"]     = cxRum.eventContext.type.rawValue
-        attrs["cx_rum.event_context.severity"] = cxRum.eventContext.severity
+        attrs[AttrKey.eventType]     = cxRum.eventContext.type.rawValue
+        attrs[AttrKey.eventSeverity] = cxRum.eventContext.severity
         if !cxRum.eventContext.source.isEmpty {
-            attrs["cx_rum.event_context.source"] = cxRum.eventContext.source
+            attrs[AttrKey.eventSource] = cxRum.eventContext.source
         }
 
         // Error context
         if !cxRum.errorContext.errorType.isEmpty {
-            attrs["cx_rum.error_context.error_type"] = cxRum.errorContext.errorType
+            attrs[AttrKey.errorType] = cxRum.errorContext.errorType
         }
         if !cxRum.errorContext.errorMessage.isEmpty {
-            attrs["cx_rum.error_context.error_message"] = cxRum.errorContext.errorMessage
+            attrs[AttrKey.errorMessage] = cxRum.errorContext.errorMessage
         }
 
-        // Network request context (only for network-request events)
+        // Network request context (only for network-request events with a valid URL)
         if cxRum.eventContext.type == .networkRequest {
             let nrc = cxRum.networkRequestContext
-            attrs["cx_rum.network_request_context.url"]         = nrc.url
-            attrs["cx_rum.network_request_context.method"]      = nrc.method
-            attrs["cx_rum.network_request_context.status_code"] = nrc.statusCode
-            attrs["cx_rum.network_request_context.status_text"] = nrc.statusText
-            attrs["cx_rum.network_request_context.fragments"]   = nrc.fragments
+            if !nrc.url.isEmpty {
+                attrs[AttrKey.networkUrl]        = nrc.url
+                attrs[AttrKey.networkMethod]     = nrc.method
+                attrs[AttrKey.networkStatusCode] = nrc.statusCode
+                attrs[AttrKey.networkStatusText] = nrc.statusText
+                attrs[AttrKey.networkFragments]  = nrc.fragments
+            }
         }
 
-        // Page context — iOS uses the visible view-controller name as the page URL
-        if let pageUrl = viewManager?.getDictionary()[Keys.view.rawValue] as? String {
-            attrs["cx_rum.page_context.page_url"]       = pageUrl
-            attrs["cx_rum.page_context.page_fragments"] = pageUrl
+        // Page context — iOS uses the visible view-controller name as the page URL.
+        // Guard against empty string returned when no view is active.
+        if let pageUrl = viewManager?.getDictionary()[Keys.view.rawValue] as? String,
+           !pageUrl.isEmpty {
+            attrs[AttrKey.pageUrl]       = pageUrl
+            attrs[AttrKey.pageFragments] = pageUrl
         }
 
         return attrs
