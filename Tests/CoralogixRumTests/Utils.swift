@@ -42,6 +42,10 @@ class MockSpanData: SpanDataProtocol {
         return self.spanId
     }
     
+    func getParentSpanId() -> String? {
+        return nil
+    }
+    
     func getAttribute(forKey: String) -> Any? {
         let attribute = attributes[forKey] as? AttributeValue
         return attribute?.description
