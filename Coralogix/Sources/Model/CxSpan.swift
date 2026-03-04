@@ -49,7 +49,7 @@ public class CxSpan {
         self.cxRum = cxRum
         
         if cxRum.eventContext.type == CoralogixEventType.networkRequest {
-            self.instrumentationData = InstrumentationData(otel: otel, labels: options.labels)
+            self.instrumentationData = InstrumentationData(otel: otel, cxRum: cxRum, viewManager: viewManager)
         }
     }
     

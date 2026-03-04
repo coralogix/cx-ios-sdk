@@ -15,6 +15,7 @@ protocol SpanDataProtocol {
     func getEndTime() -> TimeInterval?
     func getTraceId() -> String?
     func getSpanId() -> String?
+    func getParentSpanId() -> String?
     func getAttributes() -> [String: Any]?
     func getName() -> String?
     func getKind() -> Int
@@ -32,6 +33,10 @@ extension SpanData: SpanDataProtocol {
     
     func getSpanId() -> String? {
         return self.spanId.hexString
+    }
+    
+    func getParentSpanId() -> String? {
+        return self.parentSpanId?.hexString
     }
     
     func getStatusCode() -> [String: Any] {
