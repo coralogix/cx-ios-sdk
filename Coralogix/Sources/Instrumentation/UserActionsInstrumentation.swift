@@ -151,21 +151,27 @@ extension CoralogixRum {
             return nil
         }
 
-        var result = dictionary
-        result[Keys.targetElement.rawValue] = trimmed
+        // Build payload with all supported interaction_context keys so Flutter/hybrid fields are forwarded.
+        var result: [String: Any] = [
+            Keys.eventName.rawValue: rawEventName,
+            Keys.targetElement.rawValue: trimmed
+        ]
+        if let v = dictionary[Keys.elementClasses.rawValue] { result[Keys.elementClasses.rawValue] = v }
+        if let v = dictionary[Keys.elementId.rawValue] { result[Keys.elementId.rawValue] = v }
+        if let v = dictionary[Keys.targetElementInnerText.rawValue] { result[Keys.targetElementInnerText.rawValue] = v }
+        if let v = dictionary[Keys.attributes.rawValue] { result[Keys.attributes.rawValue] = v }
+        if let v = dictionary[Keys.positionX.rawValue] { result[Keys.positionX.rawValue] = v }
+        if let v = dictionary[Keys.positionY.rawValue] { result[Keys.positionY.rawValue] = v }
 
-        // scroll_direction, when present, must be a String and a known ScrollDirection value; otherwise strip it.
+        // scroll_direction: include only when present and a known ScrollDirection value.
         let scrollKey = Keys.scrollDirection.rawValue
-        guard result[scrollKey] != nil else { return result }
-
-        if let rawDirection = result[scrollKey] as? String,
+        if let rawDirection = dictionary[scrollKey] as? String,
            ScrollDirection(rawValue: rawDirection) != nil {
-            return result
-        }
-        if let rawDirection = result[scrollKey] as? String {
+            result[scrollKey] = rawDirection
+        } else if dictionary[scrollKey] != nil, let rawDirection = dictionary[scrollKey] as? String {
             Log.w("setUserInteraction: unknown scroll_direction '\(rawDirection)' (expected: up | down | left | right) — field ignored")
         }
-        result.removeValue(forKey: scrollKey)
+
         return result
     }
 }

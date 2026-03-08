@@ -248,6 +248,33 @@ final class HybridAPITests: XCTestCase {
         XCTAssertEqual(attrs?["custom"] as? String, "value", "attributes should be preserved as [String: Any] from hybrid bridge")
     }
 
+    /// Asserts that a full Flutter-style payload produces a result containing all interaction_context keys
+    /// so that RUM receives target_element, element_classes, target_element_inner_text, scroll_direction.
+    func testValidateHybridInteraction_forwardsAllFlutterKeysToInteractionContext() {
+        let dict: [String: Any] = [
+            Keys.eventName.rawValue: "click",
+            Keys.targetElement.rawValue: "Card",
+            Keys.elementClasses.rawValue: "Card",
+            Keys.elementId.rawValue: "card_key",
+            Keys.targetElementInnerText.rawValue: "Successful Request",
+            Keys.scrollDirection.rawValue: "down",
+            Keys.attributes.rawValue: ["x": 300.67, "y": 466.33]
+        ]
+
+        let result = coralogixRum.validateHybridInteraction(dict)
+
+        XCTAssertNotNil(result)
+        XCTAssertEqual(result?[Keys.eventName.rawValue] as? String, "click")
+        XCTAssertEqual(result?[Keys.targetElement.rawValue] as? String, "Card")
+        XCTAssertEqual(result?[Keys.elementClasses.rawValue] as? String, "Card")
+        XCTAssertEqual(result?[Keys.elementId.rawValue] as? String, "card_key")
+        XCTAssertEqual(result?[Keys.targetElementInnerText.rawValue] as? String, "Successful Request")
+        XCTAssertEqual(result?[Keys.scrollDirection.rawValue] as? String, "down")
+        let attrs = result?[Keys.attributes.rawValue] as? [String: Any]
+        XCTAssertEqual(attrs?["x"] as? Double, 300.67)
+        XCTAssertEqual(attrs?["y"] as? Double, 466.33)
+    }
+
     // MARK: - validateHybridInteraction: edge cases
 
     func testValidateHybridInteraction_eventNameWrongType_returnsNil() {
