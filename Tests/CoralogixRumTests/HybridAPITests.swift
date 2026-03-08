@@ -233,7 +233,8 @@ final class HybridAPITests: XCTestCase {
         XCTAssertEqual(result?[Keys.targetElementInnerText.rawValue] as? String, "Sign In")
         XCTAssertEqual(result?[Keys.positionX.rawValue] as? Double, 100.0)
         XCTAssertEqual(result?[Keys.positionY.rawValue] as? Double, 200.0)
-        XCTAssertEqual((result?[Keys.attributes.rawValue] as? [String: String])?["custom"], "value")
+        let attrs = result?[Keys.attributes.rawValue] as? [String: Any]
+        XCTAssertEqual(attrs?["custom"] as? String, "value", "attributes should be preserved as [String: Any] from hybrid bridge")
     }
 
     // MARK: - validateHybridInteraction: edge cases
@@ -294,9 +295,7 @@ final class HybridAPITests: XCTestCase {
         // Create SDK in Flutter mode
         let flutterRum = CoralogixRum(options: options, sdkFramework: .flutter(version: "1.0.0"))
 
-        // The SDK should be initialized but userActionsInstrumentation should NOT be active.
-        // We can't directly verify swizzles aren't installed, but we can verify the SDK
-        // initialized without crashing and isInitialized is true.
+        // Swizzles are installed so session replay gets native touches; native user action spans are not emitted (hybrid uses setUserInteraction).
         XCTAssertTrue(CoralogixRum.isInitialized)
 
         flutterRum.shutdown()
@@ -317,7 +316,7 @@ final class HybridAPITests: XCTestCase {
             debug: false
         )
 
-        // Create SDK in React Native mode
+        // Create SDK in React Native mode. Swizzles are installed for session replay; native user action spans are not emitted.
         let rnRum = CoralogixRum(options: options, sdkFramework: .reactNative(version: "2.0.0"))
 
         XCTAssertTrue(CoralogixRum.isInitialized)
