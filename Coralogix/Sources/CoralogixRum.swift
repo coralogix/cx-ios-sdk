@@ -101,6 +101,11 @@ public class CoralogixRum {
         ]
         
         for (type, initializer) in instrumentationMap where options.shouldInitInstrumentation(instrumentation: type) {
+            // In hybrid mode the interaction layer is owned by the hybrid side (Flutter / React Native).
+            // Installing native touch swizzles would double-count every event, so skip them.
+            if type == .userActions && !CoralogixRum.mobileSDK.sdkFramework.isNative {
+                continue
+            }
             initializer()
         }
     }
@@ -283,6 +288,28 @@ public class CoralogixRum {
     public func setApplicationContext(application: String, version: String) {
         guard CoralogixRum.isInitialized else { return }
         self.coralogixExporter?.update(application: application, version: version)
+    }
+
+    /// Reports a user interaction event from a hybrid platform (Flutter / React Native).
+    ///
+    /// Call this from the hybrid bridge when the hybrid side detects an interaction event
+    /// (tap, scroll, swipe). The native `userActions` instrumentation is automatically
+    /// disabled when the SDK is initialised in hybrid mode, so this method is the only
+    /// source of interaction spans in that configuration.
+    ///
+    /// The `dictionary` should contain the same keys that the native instrumentation
+    /// produces internally:
+    /// - `event_name`  (`String`) — `"click"` | `"scroll"` | `"swipe"`
+    /// - `target_element` (`String`) — resolved element name
+    /// - `element_classes` (`String`, optional) — UIKit class name
+    /// - `element_id` (`String`, optional) — accessibility identifier
+    /// - `target_element_inner_text` (`String`, optional) — visible label text
+    /// - `scroll_direction` (`String`, optional) — `"up"` | `"down"` | `"left"` | `"right"`
+    /// - `x` / `y` (`Double`, optional) — screen coordinates
+    /// - `attributes` (`[String: Any]`, optional) — custom attributes
+    public func setUserInteraction(_ dictionary: [String: Any]) {
+        guard CoralogixRum.isInitialized else { return }
+        reportHybridUserInteraction(dictionary)
     }
     
     public func sendBeforeSendData(_ data: [[String: Any]]) {

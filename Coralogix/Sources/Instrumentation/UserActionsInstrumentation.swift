@@ -83,4 +83,62 @@ extension CoralogixRum {
     internal func containsXY(_ dict: [String: Any]) -> Bool {
         return dict[Keys.positionX.rawValue] != nil && dict[Keys.positionY.rawValue] != nil
     }
+
+    // MARK: - Hybrid User Interaction API
+
+    /// Implementation called by `CoralogixRum.setUserInteraction(_:)`.
+    /// Validates the dictionary from the hybrid bridge, then builds a `.userInteraction`
+    /// span and enriches it with user / environment context before handing off to
+    /// `handleUserInteractionEvent`, which serialises the payload and closes the span.
+    internal func reportHybridUserInteraction(_ dictionary: [String: Any]) {
+        guard let validated = validateHybridInteraction(dictionary) else { return }
+
+        var span = makeSpan(event: .userInteraction, source: .console, severity: .info)
+
+        // Attach user and environment context, matching the enrichment applied to network spans.
+        if let options = coralogixExporter?.getOptions() {
+            let userContext = options.userContext
+            span.setAttribute(key: Keys.userId.rawValue, value: userContext?.userId ?? "")
+            span.setAttribute(key: Keys.userName.rawValue, value: userContext?.userName ?? "")
+            span.setAttribute(key: Keys.userEmail.rawValue, value: userContext?.userEmail ?? "")
+            span.setAttribute(key: Keys.environment.rawValue, value: options.environment)
+        }
+
+        handleUserInteractionEvent(validated, span: &span)
+    }
+
+    /// Validates a dictionary received from a hybrid bridge before it is written into a span.
+    ///
+    /// Returns the (possibly sanitised) dictionary on success, or `nil` when a required
+    /// field is missing or carries an unrecognised value — in which case a warning is logged
+    /// and the caller must drop the event.
+    private func validateHybridInteraction(_ dictionary: [String: Any]) -> [String: Any]? {
+        // event_name is required and must be a known InteractionEventName value.
+        guard let rawEventName = dictionary[Keys.eventName.rawValue] as? String else {
+            Log.w("setUserInteraction: missing required key '\(Keys.eventName.rawValue)' — event dropped")
+            return nil
+        }
+        guard InteractionEventName(rawValue: rawEventName) != nil else {
+            Log.w("setUserInteraction: unknown event_name '\(rawEventName)' (expected: click | scroll | swipe) — event dropped")
+            return nil
+        }
+
+        // target_element is required.
+        guard let targetElement = dictionary[Keys.targetElement.rawValue] as? String,
+              !targetElement.isEmpty else {
+            Log.w("setUserInteraction: missing required key '\(Keys.targetElement.rawValue)' — event dropped")
+            return nil
+        }
+
+        // scroll_direction, when present, must be a known ScrollDirection value.
+        if let rawDirection = dictionary[Keys.scrollDirection.rawValue] as? String,
+           ScrollDirection(rawValue: rawDirection) == nil {
+            Log.w("setUserInteraction: unknown scroll_direction '\(rawDirection)' (expected: up | down | left | right) — field ignored")
+            var sanitised = dictionary
+            sanitised.removeValue(forKey: Keys.scrollDirection.rawValue)
+            return sanitised
+        }
+
+        return dictionary
+    }
 }
