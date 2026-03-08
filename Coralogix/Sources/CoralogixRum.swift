@@ -101,8 +101,9 @@ public class CoralogixRum {
         ]
         
         for (type, initializer) in instrumentationMap {
+            // userActions is special: we install touch swizzles for native spans OR for session replay in hybrid
+            // (not just when options.shouldInitInstrumentation(.userActions)), so use Helper instead of the shared path.
             if type == .userActions {
-                // Touch swizzles are needed for (1) native user action spans, or (2) session replay in hybrid.
                 if Helper.shouldInstallTouchSwizzles(options: options, sdkFramework: CoralogixRum.mobileSDK.sdkFramework) {
                     initializer()
                 }
