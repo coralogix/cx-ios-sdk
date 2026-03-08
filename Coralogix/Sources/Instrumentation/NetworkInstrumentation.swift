@@ -162,7 +162,7 @@ extension CoralogixRum {
     /// Validates the hybrid network request dictionary. Returns false when required fields are missing or invalid (event is dropped and a warning is logged).
     private func validateHybridNetworkRequest(_ dictionary: [String: Any]) -> Bool {
         guard let url = dictionary[Keys.url.rawValue] as? String,
-              !url.trimmingCharacters(in: .whitespaces).isEmpty else {
+              !url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             Log.w("setNetworkRequestContext: missing or invalid required key '\(Keys.url.rawValue)' — event dropped")
             return false
         }

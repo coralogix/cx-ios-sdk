@@ -295,12 +295,10 @@ final class HybridAPITests: XCTestCase {
             debug: false
         )
 
-        let flutterRum = CoralogixRum(options: options, sdkFramework: .flutter(version: "1.0.0"))
+        coralogixRum = CoralogixRum(options: options, sdkFramework: .flutter(version: "1.0.0"))
 
         // Swizzles are installed so session replay gets native touches; native user action spans are not emitted (hybrid uses setUserInteraction).
         XCTAssertTrue(CoralogixRum.isInitialized)
-
-        flutterRum.shutdown()
     }
 
     func testHybridMode_reactNative_skipsUserActionsInstrumentation() {
@@ -322,12 +320,10 @@ final class HybridAPITests: XCTestCase {
             debug: false
         )
 
-        let rnRum = CoralogixRum(options: options, sdkFramework: .reactNative(version: "2.0.0"))
+        coralogixRum = CoralogixRum(options: options, sdkFramework: .reactNative(version: "2.0.0"))
 
         // Swizzles are installed for session replay; native user action spans are not emitted.
         XCTAssertTrue(CoralogixRum.isInitialized)
-
-        rnRum.shutdown()
     }
 
     // MARK: - Full dictionary validation scenarios
