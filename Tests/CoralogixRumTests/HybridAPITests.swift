@@ -31,7 +31,7 @@ final class HybridAPITests: XCTestCase {
     }
 
     override func tearDownWithError() throws {
-        coralogixRum.shutdown()
+        coralogixRum?.shutdown()
         coralogixRum = nil
     }
 
@@ -278,6 +278,10 @@ final class HybridAPITests: XCTestCase {
     // MARK: - Hybrid mode auto-disables native userActions
 
     func testHybridMode_flutter_skipsUserActionsInstrumentation() {
+        // Use only the hybrid instance (no second instance from setUp).
+        coralogixRum?.shutdown()
+        coralogixRum = nil
+
         let options = CoralogixExporterOptions(
             coralogixDomain: .US2,
             userContext: nil,
@@ -292,7 +296,6 @@ final class HybridAPITests: XCTestCase {
             debug: false
         )
 
-        // Create SDK in Flutter mode
         let flutterRum = CoralogixRum(options: options, sdkFramework: .flutter(version: "1.0.0"))
 
         // Swizzles are installed so session replay gets native touches; native user action spans are not emitted (hybrid uses setUserInteraction).
@@ -302,6 +305,10 @@ final class HybridAPITests: XCTestCase {
     }
 
     func testHybridMode_reactNative_skipsUserActionsInstrumentation() {
+        // Use only the hybrid instance (no second instance from setUp).
+        coralogixRum?.shutdown()
+        coralogixRum = nil
+
         let options = CoralogixExporterOptions(
             coralogixDomain: .US2,
             userContext: nil,
@@ -316,9 +323,9 @@ final class HybridAPITests: XCTestCase {
             debug: false
         )
 
-        // Create SDK in React Native mode. Swizzles are installed for session replay; native user action spans are not emitted.
         let rnRum = CoralogixRum(options: options, sdkFramework: .reactNative(version: "2.0.0"))
 
+        // Swizzles are installed for session replay; native user action spans are not emitted.
         XCTAssertTrue(CoralogixRum.isInitialized)
 
         rnRum.shutdown()
