@@ -30,11 +30,10 @@ final class SessionReplayUserActionsDecouplingTests: XCTestCase {
             debug: false
         )
         let rum = CoralogixRum(options: options, sdkFramework: .swift)
+        defer { rum.shutdown() }
 
         XCTAssertTrue(rum.shouldEmitUserActionSpan,
                       "Native SDK with userActions enabled must emit user action spans")
-
-        rum.shutdown()
     }
 
     func testShouldEmitUserActionSpan_native_userActionsDisabled_returnsFalse() {
@@ -53,11 +52,10 @@ final class SessionReplayUserActionsDecouplingTests: XCTestCase {
             debug: false
         )
         let rum = CoralogixRum(options: options, sdkFramework: .swift)
+        defer { rum.shutdown() }
 
         XCTAssertFalse(rum.shouldEmitUserActionSpan,
                        "Native SDK with userActions disabled must not emit user action spans (session replay still gets events via swizzles)")
-
-        rum.shutdown()
     }
 
     func testShouldEmitUserActionSpan_native_instrumentationsNil_returnsTrue() {
@@ -76,11 +74,10 @@ final class SessionReplayUserActionsDecouplingTests: XCTestCase {
             debug: false
         )
         let rum = CoralogixRum(options: options, sdkFramework: .swift)
+        defer { rum.shutdown() }
 
         XCTAssertTrue(rum.shouldEmitUserActionSpan,
                       "Native SDK with instrumentations nil (default) must emit user action spans")
-
-        rum.shutdown()
     }
 
     // MARK: - shouldEmitUserActionSpan: hybrid
@@ -101,11 +98,10 @@ final class SessionReplayUserActionsDecouplingTests: XCTestCase {
             debug: false
         )
         let rum = CoralogixRum(options: options, sdkFramework: .flutter(version: "1.0.0"))
+        defer { rum.shutdown() }
 
         XCTAssertFalse(rum.shouldEmitUserActionSpan,
                        "Hybrid (Flutter) must not emit native user action spans to avoid duplicates with setUserInteraction")
-
-        rum.shutdown()
     }
 
     func testShouldEmitUserActionSpan_hybridReactNative_userActionsDisabled_returnsFalse() {
@@ -124,11 +120,10 @@ final class SessionReplayUserActionsDecouplingTests: XCTestCase {
             debug: false
         )
         let rum = CoralogixRum(options: options, sdkFramework: .reactNative(version: "2.0.0"))
+        defer { rum.shutdown() }
 
         XCTAssertFalse(rum.shouldEmitUserActionSpan,
                        "Hybrid (React Native) with userActions off must not emit native spans")
-
-        rum.shutdown()
     }
 
     // MARK: - Initialization: hybrid still gets touch swizzles (session replay)
@@ -152,11 +147,10 @@ final class SessionReplayUserActionsDecouplingTests: XCTestCase {
             debug: false
         )
         let rum = CoralogixRum(options: options, sdkFramework: .flutter(version: "1.0.0"))
+        defer { rum.shutdown() }
 
         XCTAssertTrue(CoralogixRum.isInitialized)
         XCTAssertFalse(rum.shouldEmitUserActionSpan,
                        "Hybrid must not emit native spans even though swizzles are installed for SR")
-
-        rum.shutdown()
     }
 }

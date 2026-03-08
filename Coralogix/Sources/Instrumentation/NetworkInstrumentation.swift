@@ -152,7 +152,7 @@ extension CoralogixRum {
         }
 
         if let statusCode = dictionary[Keys.statusCode.rawValue] as? Int {
-            let logSeverity = statusCode > 400 ? CoralogixLogSeverity.error : CoralogixLogSeverity.info
+            let logSeverity = statusCode >= 400 ? CoralogixLogSeverity.error : CoralogixLogSeverity.info
             span.setAttribute(key: Keys.severity.rawValue, value: AttributeValue.int(logSeverity.rawValue))
         }
 

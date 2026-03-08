@@ -270,9 +270,10 @@ final class HybridAPITests: XCTestCase {
 
         let result = coralogixRum.validateHybridInteraction(dict)
 
-        XCTAssertNotNil(result, "Non-string scroll_direction should pass (it won't match as String)")
-        // The validation checks `as? String` which returns nil for Int, so the field is not stripped
-        // but also not validated. This is acceptable behavior - it gets passed through.
+        XCTAssertNotNil(result, "Non-string scroll_direction should be stripped, not reject the event")
+        XCTAssertNil(result?[Keys.scrollDirection.rawValue], "Non-string scroll_direction must be removed from output")
+        XCTAssertEqual(result?[Keys.eventName.rawValue] as? String, "scroll")
+        XCTAssertEqual(result?[Keys.targetElement.rawValue] as? String, "UIScrollView")
     }
 
     // MARK: - Hybrid mode auto-disables native userActions
