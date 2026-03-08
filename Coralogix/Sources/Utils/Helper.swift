@@ -236,6 +236,7 @@ class Helper {
 
     /// Resolves whether user actions instrumentation is enabled from optional exporter options.
     /// Used to avoid repeating optional chaining and default in multiple call sites.
+    /// When `options` is `nil`, returns `true` (user actions enabled by default).
     internal static func isUserActionsEnabled(options: CoralogixExporterOptions?) -> Bool {
         options.map { $0.shouldInitInstrumentation(instrumentation: .userActions) } ?? true
     }
