@@ -156,22 +156,18 @@ extension CoralogixRum {
         }
 
         // scroll_direction, when present, must be a String and a known ScrollDirection value; otherwise strip it.
-        if dictionary[Keys.scrollDirection.rawValue] != nil {
-            if let rawDirection = dictionary[Keys.scrollDirection.rawValue] as? String {
-                if ScrollDirection(rawValue: rawDirection) == nil {
-                    Log.w("setUserInteraction: unknown scroll_direction '\(rawDirection)' (expected: up | down | left | right) — field ignored")
-                    var sanitised = dictionary
-                    sanitised.removeValue(forKey: Keys.scrollDirection.rawValue)
-                    return sanitised
-                }
-            } else {
-                // Present but not a String (e.g. number from bridge) — strip for consistent payload.
-                var sanitised = dictionary
-                sanitised.removeValue(forKey: Keys.scrollDirection.rawValue)
-                return sanitised
-            }
-        }
+        let scrollKey = Keys.scrollDirection.rawValue
+        guard dictionary[scrollKey] != nil else { return dictionary }
 
-        return dictionary
+        if let rawDirection = dictionary[scrollKey] as? String,
+           ScrollDirection(rawValue: rawDirection) != nil {
+            return dictionary
+        }
+        if let rawDirection = dictionary[scrollKey] as? String {
+            Log.w("setUserInteraction: unknown scroll_direction '\(rawDirection)' (expected: up | down | left | right) — field ignored")
+        }
+        var sanitised = dictionary
+        sanitised.removeValue(forKey: scrollKey)
+        return sanitised
     }
 }
