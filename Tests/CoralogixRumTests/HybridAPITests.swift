@@ -130,6 +130,17 @@ final class HybridAPITests: XCTestCase {
         XCTAssertNil(result, "Whitespace-only target_element must cause validation to return nil")
     }
 
+    func testValidateHybridInteraction_newlineTargetElement_returnsNil() {
+        let dict: [String: Any] = [
+            Keys.eventName.rawValue: "click",
+            Keys.targetElement.rawValue: "\n"
+        ]
+
+        let result = coralogixRum.validateHybridInteraction(dict)
+
+        XCTAssertNil(result, "Newline-only target_element must cause validation to return nil")
+    }
+
     // MARK: - validateHybridInteraction: scroll_direction validation
 
     func testValidateHybridInteraction_validScrollDirection_up_passes() {

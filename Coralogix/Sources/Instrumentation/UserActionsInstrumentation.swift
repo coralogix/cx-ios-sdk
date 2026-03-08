@@ -63,29 +63,31 @@ extension CoralogixRum {
     private func captureSessionReplayEventIfNeeded(_ properties: [String: Any]) {
         guard let sessionReplay = SdkManager.shared.getSessionReplay(),
               let screenshotManager = coralogixExporter?.getScreenshotManager() else { return }
+        _ = captureSessionReplay(properties: properties, screenshotManager: screenshotManager, sessionReplay: sessionReplay)
+    }
+
+    /// Shared path: get next screenshot location, build metadata, capture event; reverts counter on .skippingEvent. Returns (result, location) for callers that need to apply attributes.
+    private func captureSessionReplay(properties: [String: Any], screenshotManager: ScreenshotManager, sessionReplay: SessionReplayInterface) -> (Result<Void, CaptureEventError>, ScreenshotLocation) {
         let screenshotLocation = screenshotManager.nextScreenshotLocation
         let metadata = buildMetadata(properties: properties, screenshotLocation: screenshotLocation)
         let result = sessionReplay.captureEvent(properties: metadata)
         if case .failure(let error) = result, error == .skippingEvent {
             screenshotManager.revertScreenshotCounter()
         }
+        return (result, screenshotLocation)
     }
 
     internal func handleUserInteractionEvent(_ properties: [String: Any],
                                              span: inout any Span,
                                              window: UIWindow? = Global.getKeyWindow()) {
         if let sessionReplay = SdkManager.shared.getSessionReplay(),
-           let screenshotLocation = self.coralogixExporter?.getScreenshotManager().nextScreenshotLocation {
-            let metadata = buildMetadata(properties: properties,
-                                         screenshotLocation: screenshotLocation)
-            let result = sessionReplay.captureEvent(properties: metadata)
+           let screenshotManager = coralogixExporter?.getScreenshotManager() {
+            let (result, screenshotLocation) = captureSessionReplay(properties: properties, screenshotManager: screenshotManager, sessionReplay: sessionReplay)
             switch result {
             case .success:
-                self.applyScreenshotAttributes(screenshotLocation, to: &span)
-            case .failure(let error):
-                if error == .skippingEvent {
-                    self.coralogixExporter?.getScreenshotManager().revertScreenshotCounter()
-                }
+                applyScreenshotAttributes(screenshotLocation, to: &span)
+            case .failure:
+                break
             }
         }
 
@@ -138,26 +140,32 @@ extension CoralogixRum {
             return nil
         }
 
-        // target_element is required and must be a non-empty, non-whitespace string.
-        guard let targetElement = dictionary[Keys.targetElement.rawValue] as? String,
-              !targetElement.trimmingCharacters(in: .whitespaces).isEmpty else {
+        // target_element is required and must be a non-empty string (after trimming whitespace and newlines).
+        guard let targetElement = dictionary[Keys.targetElement.rawValue] as? String else {
+            Log.w("setUserInteraction: missing required key '\(Keys.targetElement.rawValue)' — event dropped")
+            return nil
+        }
+        let trimmed = targetElement.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
             Log.w("setUserInteraction: missing required key '\(Keys.targetElement.rawValue)' — event dropped")
             return nil
         }
 
+        var result = dictionary
+        result[Keys.targetElement.rawValue] = trimmed
+
         // scroll_direction, when present, must be a String and a known ScrollDirection value; otherwise strip it.
         let scrollKey = Keys.scrollDirection.rawValue
-        guard dictionary[scrollKey] != nil else { return dictionary }
+        guard result[scrollKey] != nil else { return result }
 
-        if let rawDirection = dictionary[scrollKey] as? String,
+        if let rawDirection = result[scrollKey] as? String,
            ScrollDirection(rawValue: rawDirection) != nil {
-            return dictionary
+            return result
         }
-        if let rawDirection = dictionary[scrollKey] as? String {
+        if let rawDirection = result[scrollKey] as? String {
             Log.w("setUserInteraction: unknown scroll_direction '\(rawDirection)' (expected: up | down | left | right) — field ignored")
         }
-        var sanitised = dictionary
-        sanitised.removeValue(forKey: scrollKey)
-        return sanitised
+        result.removeValue(forKey: scrollKey)
+        return result
     }
 }
