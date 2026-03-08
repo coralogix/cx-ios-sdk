@@ -62,11 +62,12 @@ extension CoralogixRum {
     /// Used when native touch is detected but we are not emitting a user action span (hybrid or userActions off).
     private func captureSessionReplayEventIfNeeded(_ properties: [String: Any]) {
         guard let sessionReplay = SdkManager.shared.getSessionReplay(),
-              let screenshotLocation = coralogixExporter?.getScreenshotManager().nextScreenshotLocation else { return }
+              let screenshotManager = coralogixExporter?.getScreenshotManager(),
+              let screenshotLocation = screenshotManager.nextScreenshotLocation else { return }
         let metadata = buildMetadata(properties: properties, screenshotLocation: screenshotLocation)
         let result = sessionReplay.captureEvent(properties: metadata)
         if case .failure(let error) = result, error == .skippingEvent {
-            coralogixExporter?.getScreenshotManager().revertScreenshotCounter()
+            screenshotManager.revertScreenshotCounter()
         }
     }
 
