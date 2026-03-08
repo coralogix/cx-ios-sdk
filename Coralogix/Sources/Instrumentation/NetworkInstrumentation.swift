@@ -142,15 +142,6 @@ extension CoralogixRum {
 
         let span = getSpan()
 
-        // Attach user and environment context, matching receivedResponse and setUserInteraction.
-        if let options = coralogixExporter?.getOptions() {
-            let userContext = options.userContext
-            span.setAttribute(key: Keys.userId.rawValue, value: userContext?.userId ?? "")
-            span.setAttribute(key: Keys.userName.rawValue, value: userContext?.userName ?? "")
-            span.setAttribute(key: Keys.userEmail.rawValue, value: userContext?.userEmail ?? "")
-            span.setAttribute(key: Keys.environment.rawValue, value: options.environment)
-        }
-
         if let statusCode = dictionary[Keys.statusCode.rawValue] as? Int {
             let logSeverity = statusCode >= 400 ? CoralogixLogSeverity.error : CoralogixLogSeverity.info
             span.setAttribute(key: Keys.severity.rawValue, value: AttributeValue.int(logSeverity.rawValue))
