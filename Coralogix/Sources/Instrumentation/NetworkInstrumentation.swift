@@ -138,6 +138,8 @@ extension CoralogixRum {
 
     /// Implementation called by `CoralogixRum.setNetworkRequestContext(dictionary:)`.
     internal func reportHybridNetworkRequest(_ dictionary: [String: Any]) {
+        guard validateHybridNetworkRequest(dictionary) else { return }
+
         let span = getSpan()
 
         // Attach user and environment context, matching receivedResponse and setUserInteraction.
@@ -164,6 +166,16 @@ extension CoralogixRum {
         span.setAttribute(key: Keys.customSpanId.rawValue, value: dictionary[Keys.customSpanId.rawValue] as? String ?? "")
         span.setAttribute(key: Keys.customTraceId.rawValue, value: dictionary[Keys.customTraceId.rawValue] as? String ?? "")
         span.end()
+    }
+
+    /// Validates the hybrid network request dictionary. Returns false when required fields are missing or invalid (event is dropped and a warning is logged).
+    private func validateHybridNetworkRequest(_ dictionary: [String: Any]) -> Bool {
+        guard let url = dictionary[Keys.url.rawValue] as? String,
+              !url.trimmingCharacters(in: .whitespaces).isEmpty else {
+            Log.w("setNetworkRequestContext: missing or invalid required key '\(Keys.url.rawValue)' — event dropped")
+            return false
+        }
+        return true
     }
 
     private func getSpan() -> any Span {
