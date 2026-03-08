@@ -100,13 +100,15 @@ public class CoralogixRum {
             (.anr, self.initializeANRInstrumentation)
         ]
         
-        for (type, initializer) in instrumentationMap where options.shouldInitInstrumentation(instrumentation: type) {
-            // In hybrid mode the interaction layer is owned by the hybrid side (Flutter / React Native).
-            // Installing native touch swizzles would double-count every event, so skip them.
-            if type == .userActions && !CoralogixRum.mobileSDK.sdkFramework.isNative {
-                continue
+        for (type, initializer) in instrumentationMap {
+            if type == .userActions {
+                // Touch swizzles are needed for (1) native user action spans, or (2) session replay in hybrid.
+                if Helper.shouldInstallTouchSwizzles(options: options, sdkFramework: CoralogixRum.mobileSDK.sdkFramework) {
+                    initializer()
+                }
+            } else if options.shouldInitInstrumentation(instrumentation: type) {
+                initializer()
             }
-            initializer()
         }
     }
     

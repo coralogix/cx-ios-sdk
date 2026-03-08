@@ -41,18 +41,40 @@ extension CoralogixRum {
     }
 
     private func processInteractionEvent(_ properties: [String: Any]) {
-        var span = makeSpan(event: .userInteraction, source: .console, severity: .info)
-        handleUserInteractionEvent(properties, span: &span)
+        if shouldEmitUserActionSpan {
+            var span = makeSpan(event: .userInteraction, source: .console, severity: .info)
+            handleUserInteractionEvent(properties, span: &span)
+        } else {
+            // Hybrid or userActions disabled: still feed session replay from native touches.
+            captureSessionReplayEventIfNeeded(properties)
+        }
     }
-    
+
+    /// When true, native touch events produce RUM user_interaction spans.
+    /// When false (hybrid or instrumentations[.userActions] == false), we still install swizzles
+    /// so session replay can capture clicks; we just don't emit spans (hybrid uses setUserInteraction).
+    /// - Note: `internal` for unit testing.
+    internal var shouldEmitUserActionSpan: Bool {
+        Helper.shouldEmitUserActionSpan(options: coralogixExporter?.getOptions(), sdkFramework: CoralogixRum.mobileSDK.sdkFramework)
+    }
+
+    /// Feeds session replay with interaction metadata (screenshot + properties). No RUM span.
+    /// Used when native touch is detected but we are not emitting a user action span (hybrid or userActions off).
+    private func captureSessionReplayEventIfNeeded(_ properties: [String: Any]) {
+        guard let sessionReplay = SdkManager.shared.getSessionReplay(),
+              let screenshotLocation = coralogixExporter?.getScreenshotManager().nextScreenshotLocation else { return }
+        let metadata = buildMetadata(properties: properties, screenshotLocation: screenshotLocation)
+        let result = sessionReplay.captureEvent(properties: metadata)
+        if case .failure(let error) = result, error == .skippingEvent {
+            coralogixExporter?.getScreenshotManager().revertScreenshotCounter()
+        }
+    }
+
     internal func handleUserInteractionEvent(_ properties: [String: Any],
                                              span: inout any Span,
                                              window: UIWindow? = Global.getKeyWindow()) {
-       
         if let sessionReplay = SdkManager.shared.getSessionReplay(),
            let screenshotLocation = self.coralogixExporter?.getScreenshotManager().nextScreenshotLocation {
-            // Don't capture screenshot here - let SessionReplay capture it
-            // so that mask regions (e.g., Flutter widgets) are applied
             let metadata = buildMetadata(properties: properties,
                                          screenshotLocation: screenshotLocation)
             let result = sessionReplay.captureEvent(properties: metadata)
@@ -65,7 +87,7 @@ extension CoralogixRum {
                 }
             }
         }
-        
+
         span.setAttribute(
             key: Keys.tapObject.rawValue,
             value: Helper.convertDictionayToJsonString(dict: properties)

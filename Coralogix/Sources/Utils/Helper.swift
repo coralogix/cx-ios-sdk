@@ -231,4 +231,23 @@ class Helper {
         }
         return mergedLabels.isEmpty ? nil : mergedLabels
     }
+
+    // MARK: - User actions / session replay decoupling
+
+    /// Resolves whether user actions instrumentation is enabled from optional exporter options.
+    /// Used to avoid repeating optional chaining and default in multiple call sites.
+    internal static func isUserActionsEnabled(options: CoralogixExporterOptions?) -> Bool {
+        options.map { $0.shouldInitInstrumentation(instrumentation: .userActions) } ?? true
+    }
+
+    /// Returns whether native touch events should produce RUM user_interaction spans.
+    /// `false` when hybrid (spans come from setUserInteraction) or when instrumentations[.userActions] is false.
+    internal static func shouldEmitUserActionSpan(options: CoralogixExporterOptions?, sdkFramework: SdkFramework) -> Bool {
+        isUserActionsEnabled(options: options) && sdkFramework.isNative
+    }
+
+    /// Returns whether touch swizzles should be installed (for native spans and/or session replay in hybrid).
+    internal static func shouldInstallTouchSwizzles(options: CoralogixExporterOptions?, sdkFramework: SdkFramework) -> Bool {
+        isUserActionsEnabled(options: options) || !sdkFramework.isNative
+    }
 }
