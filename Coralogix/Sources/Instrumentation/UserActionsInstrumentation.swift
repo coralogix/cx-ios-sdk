@@ -112,7 +112,9 @@ extension CoralogixRum {
     /// Returns the (possibly sanitised) dictionary on success, or `nil` when a required
     /// field is missing or carries an unrecognised value — in which case a warning is logged
     /// and the caller must drop the event.
-    private func validateHybridInteraction(_ dictionary: [String: Any]) -> [String: Any]? {
+    ///
+    /// - Note: `internal` visibility to allow unit testing.
+    internal func validateHybridInteraction(_ dictionary: [String: Any]) -> [String: Any]? {
         // event_name is required and must be a known InteractionEventName value.
         guard let rawEventName = dictionary[Keys.eventName.rawValue] as? String else {
             Log.w("setUserInteraction: missing required key '\(Keys.eventName.rawValue)' — event dropped")
@@ -123,9 +125,9 @@ extension CoralogixRum {
             return nil
         }
 
-        // target_element is required.
+        // target_element is required and must be a non-empty, non-whitespace string.
         guard let targetElement = dictionary[Keys.targetElement.rawValue] as? String,
-              !targetElement.isEmpty else {
+              !targetElement.trimmingCharacters(in: .whitespaces).isEmpty else {
             Log.w("setUserInteraction: missing required key '\(Keys.targetElement.rawValue)' — event dropped")
             return nil
         }

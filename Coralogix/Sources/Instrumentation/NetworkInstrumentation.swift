@@ -134,14 +134,26 @@ extension CoralogixRum {
         span.setAttribute(key: Keys.environment.rawValue, value: options.environment)
     }
     
-    public func setNetworkRequestContext(dictionary: [String: Any]) {
-        let span = self.getSpan()
-        
+    // MARK: - Hybrid Network API
+
+    /// Implementation called by `CoralogixRum.setNetworkRequestContext(dictionary:)`.
+    internal func reportHybridNetworkRequest(_ dictionary: [String: Any]) {
+        let span = getSpan()
+
+        // Attach user and environment context, matching receivedResponse and setUserInteraction.
+        if let options = coralogixExporter?.getOptions() {
+            let userContext = options.userContext
+            span.setAttribute(key: Keys.userId.rawValue, value: userContext?.userId ?? "")
+            span.setAttribute(key: Keys.userName.rawValue, value: userContext?.userName ?? "")
+            span.setAttribute(key: Keys.userEmail.rawValue, value: userContext?.userEmail ?? "")
+            span.setAttribute(key: Keys.environment.rawValue, value: options.environment)
+        }
+
         if let statusCode = dictionary[Keys.statusCode.rawValue] as? Int {
-            let logSeverity = statusCode > 400 ?  CoralogixLogSeverity.error : CoralogixLogSeverity.info
+            let logSeverity = statusCode > 400 ? CoralogixLogSeverity.error : CoralogixLogSeverity.info
             span.setAttribute(key: Keys.severity.rawValue, value: AttributeValue.int(logSeverity.rawValue))
         }
-        
+
         span.setAttribute(key: SemanticAttributes.httpUrl.rawValue, value: dictionary[Keys.url.rawValue] as? String ?? "")
         span.setAttribute(key: SemanticAttributes.netPeerName.rawValue, value: dictionary[Keys.host.rawValue] as? String ?? "")
         span.setAttribute(key: SemanticAttributes.httpMethod.rawValue, value: dictionary[Keys.method.rawValue] as? String ?? "")
@@ -153,7 +165,7 @@ extension CoralogixRum {
         span.setAttribute(key: Keys.customTraceId.rawValue, value: dictionary[Keys.customTraceId.rawValue] as? String ?? "")
         span.end()
     }
-    
+
     private func getSpan() -> any Span {
         return makeSpan(event: .networkRequest, source: .fetch, severity: .info)
     }

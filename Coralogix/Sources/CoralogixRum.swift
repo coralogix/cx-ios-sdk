@@ -290,6 +290,16 @@ public class CoralogixRum {
         self.coralogixExporter?.update(application: application, version: version)
     }
 
+    /// Reports a network request from a hybrid platform (Flutter / React Native).
+    ///
+    /// Call this from the hybrid bridge when the hybrid side completes an HTTP request.
+    /// The dictionary should contain: `url`, `host`, `method`, `status_code`, `fragments`,
+    /// `schema`, `http_response_body_size`; optional `custom_span_id`, `custom_trace_id`.
+    public func setNetworkRequestContext(dictionary: [String: Any]) {
+        guard CoralogixRum.isInitialized else { return }
+        reportHybridNetworkRequest(dictionary)
+    }
+
     /// Reports a user interaction event from a hybrid platform (Flutter / React Native).
     ///
     /// Call this from the hybrid bridge when the hybrid side detects an interaction event
