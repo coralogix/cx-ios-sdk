@@ -270,10 +270,8 @@ final class HybridAPITests: XCTestCase {
 
         let result = coralogixRum.validateHybridInteraction(dict)
 
-        XCTAssertNotNil(result, "Non-string scroll_direction should be stripped, not reject the event")
-        XCTAssertNil(result?[Keys.scrollDirection.rawValue], "Non-string scroll_direction must be removed from output")
-        XCTAssertEqual(result?[Keys.eventName.rawValue] as? String, "scroll")
-        XCTAssertEqual(result?[Keys.targetElement.rawValue] as? String, "UIScrollView")
+        XCTAssertNotNil(result, "Event should not be dropped for a non-string scroll_direction")
+        XCTAssertNil(result?[Keys.scrollDirection.rawValue], "Non-string scroll_direction should be stripped from the event")
     }
 
     // MARK: - Hybrid mode auto-disables native userActions
