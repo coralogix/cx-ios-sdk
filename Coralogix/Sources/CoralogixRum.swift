@@ -100,8 +100,16 @@ public class CoralogixRum {
             (.anr, self.initializeANRInstrumentation)
         ]
         
-        for (type, initializer) in instrumentationMap where options.shouldInitInstrumentation(instrumentation: type) {
-            initializer()
+        for (type, initializer) in instrumentationMap {
+            // userActions is special: we install touch swizzles for native spans OR for session replay in hybrid
+            // (not just when options.shouldInitInstrumentation(.userActions)), so use Helper instead of the shared path.
+            if type == .userActions {
+                if Helper.shouldInstallTouchSwizzles(options: options, sdkFramework: CoralogixRum.mobileSDK.sdkFramework) {
+                    initializer()
+                }
+            } else if options.shouldInitInstrumentation(instrumentation: type) {
+                initializer()
+            }
         }
     }
     
@@ -283,6 +291,38 @@ public class CoralogixRum {
     public func setApplicationContext(application: String, version: String) {
         guard CoralogixRum.isInitialized else { return }
         self.coralogixExporter?.update(application: application, version: version)
+    }
+
+    /// Reports a network request from a hybrid platform (Flutter / React Native).
+    ///
+    /// Call this from the hybrid bridge when the hybrid side completes an HTTP request.
+    /// The dictionary should contain: `url`, `host`, `method`, `status_code`, `fragments`,
+    /// `schema`, `http_response_body_size`; optional `custom_span_id`, `custom_trace_id`.
+    public func setNetworkRequestContext(dictionary: [String: Any]) {
+        guard CoralogixRum.isInitialized else { return }
+        reportHybridNetworkRequest(dictionary)
+    }
+
+    /// Reports a user interaction event from a hybrid platform (Flutter / React Native).
+    ///
+    /// Call this from the hybrid bridge when the hybrid side detects an interaction event
+    /// (tap, scroll, swipe). The native `userActions` instrumentation is automatically
+    /// disabled when the SDK is initialised in hybrid mode, so this method is the only
+    /// source of interaction spans in that configuration.
+    ///
+    /// The `dictionary` should contain the same keys that the native instrumentation
+    /// produces internally:
+    /// - `event_name`  (`String`) — `"click"` | `"scroll"` | `"swipe"`
+    /// - `target_element` (`String`) — resolved element name
+    /// - `element_classes` (`String`, optional) — UIKit class name
+    /// - `element_id` (`String`, optional) — accessibility identifier
+    /// - `target_element_inner_text` (`String`, optional) — visible label text
+    /// - `scroll_direction` (`String`, optional) — `"up"` | `"down"` | `"left"` | `"right"`
+    /// - `x` / `y` (`Double`, optional) — screen coordinates
+    /// - `attributes` (`[String: Any]`, optional) — custom attributes
+    public func setUserInteraction(_ dictionary: [String: Any]) {
+        guard CoralogixRum.isInitialized else { return }
+        reportHybridUserInteraction(dictionary)
     }
     
     public func sendBeforeSendData(_ data: [[String: Any]]) {

@@ -41,31 +41,56 @@ extension CoralogixRum {
     }
 
     private func processInteractionEvent(_ properties: [String: Any]) {
-        var span = makeSpan(event: .userInteraction, source: .console, severity: .info)
-        handleUserInteractionEvent(properties, span: &span)
+        if shouldEmitUserActionSpan {
+            var span = makeSpan(event: .userInteraction, source: .console, severity: .info)
+            handleUserInteractionEvent(properties, span: &span)
+        } else {
+            // Hybrid or userActions disabled: still feed session replay from native touches.
+            captureSessionReplayEventIfNeeded(properties)
+        }
     }
-    
+
+    /// When true, native touch events produce RUM user_interaction spans.
+    /// When false (hybrid or instrumentations[.userActions] == false), we still install swizzles
+    /// so session replay can capture clicks; we just don't emit spans (hybrid uses setUserInteraction).
+    /// - Note: `internal` for unit testing.
+    internal var shouldEmitUserActionSpan: Bool {
+        Helper.shouldEmitUserActionSpan(options: coralogixExporter?.getOptions(), sdkFramework: CoralogixRum.mobileSDK.sdkFramework)
+    }
+
+    /// Feeds session replay with interaction metadata (screenshot + properties). No RUM span.
+    /// Used when native touch is detected but we are not emitting a user action span (hybrid or userActions off).
+    private func captureSessionReplayEventIfNeeded(_ properties: [String: Any]) {
+        guard let sessionReplay = SdkManager.shared.getSessionReplay(),
+              let screenshotManager = coralogixExporter?.getScreenshotManager() else { return }
+        _ = captureSessionReplay(properties: properties, screenshotManager: screenshotManager, sessionReplay: sessionReplay)
+    }
+
+    /// Shared path: get next screenshot location, build metadata, capture event; reverts counter on .skippingEvent. Returns (result, location) for callers that need to apply attributes.
+    private func captureSessionReplay(properties: [String: Any], screenshotManager: ScreenshotManager, sessionReplay: SessionReplayInterface) -> (Result<Void, CaptureEventError>, ScreenshotLocation) {
+        let screenshotLocation = screenshotManager.nextScreenshotLocation
+        let metadata = buildMetadata(properties: properties, screenshotLocation: screenshotLocation)
+        let result = sessionReplay.captureEvent(properties: metadata)
+        if case .failure(let error) = result, error == .skippingEvent {
+            screenshotManager.revertScreenshotCounter()
+        }
+        return (result, screenshotLocation)
+    }
+
     internal func handleUserInteractionEvent(_ properties: [String: Any],
                                              span: inout any Span,
                                              window: UIWindow? = Global.getKeyWindow()) {
-       
         if let sessionReplay = SdkManager.shared.getSessionReplay(),
-           let screenshotLocation = self.coralogixExporter?.getScreenshotManager().nextScreenshotLocation {
-            // Don't capture screenshot here - let SessionReplay capture it
-            // so that mask regions (e.g., Flutter widgets) are applied
-            let metadata = buildMetadata(properties: properties,
-                                         screenshotLocation: screenshotLocation)
-            let result = sessionReplay.captureEvent(properties: metadata)
+           let screenshotManager = coralogixExporter?.getScreenshotManager() {
+            let (result, screenshotLocation) = captureSessionReplay(properties: properties, screenshotManager: screenshotManager, sessionReplay: sessionReplay)
             switch result {
             case .success:
-                self.applyScreenshotAttributes(screenshotLocation, to: &span)
-            case .failure(let error):
-                if error == .skippingEvent {
-                    self.coralogixExporter?.getScreenshotManager().revertScreenshotCounter()
-                }
+                applyScreenshotAttributes(screenshotLocation, to: &span)
+            case .failure:
+                break
             }
         }
-        
+
         span.setAttribute(
             key: Keys.tapObject.rawValue,
             value: Helper.convertDictionayToJsonString(dict: properties)
@@ -82,5 +107,71 @@ extension CoralogixRum {
     
     internal func containsXY(_ dict: [String: Any]) -> Bool {
         return dict[Keys.positionX.rawValue] != nil && dict[Keys.positionY.rawValue] != nil
+    }
+
+    // MARK: - Hybrid User Interaction API
+
+    /// Implementation called by `CoralogixRum.setUserInteraction(_:)`.
+    /// Validates the dictionary from the hybrid bridge, then builds a `.userInteraction`
+    /// span (user/environment context is added by makeSpan via addUserMetadata) and
+    /// hands off to `handleUserInteractionEvent`, which serialises the payload and closes the span.
+    internal func reportHybridUserInteraction(_ dictionary: [String: Any]) {
+        guard let validated = validateHybridInteraction(dictionary) else { return }
+
+        var span = makeSpan(event: .userInteraction, source: .console, severity: .info)
+        handleUserInteractionEvent(validated, span: &span)
+    }
+
+    /// Validates a dictionary received from a hybrid bridge before it is written into a span.
+    ///
+    /// Returns the (possibly sanitised) dictionary on success, or `nil` when a required
+    /// field is missing or carries an unrecognised value — in which case a warning is logged
+    /// and the caller must drop the event.
+    ///
+    /// - Note: `internal` visibility to allow unit testing.
+    internal func validateHybridInteraction(_ dictionary: [String: Any]) -> [String: Any]? {
+        // event_name is required and must be a known InteractionEventName value.
+        guard let rawEventName = dictionary[Keys.eventName.rawValue] as? String else {
+            Log.w("setUserInteraction: missing required key '\(Keys.eventName.rawValue)' — event dropped")
+            return nil
+        }
+        guard InteractionEventName(rawValue: rawEventName) != nil else {
+            Log.w("setUserInteraction: unknown event_name '\(rawEventName)' (expected: click | scroll | swipe) — event dropped")
+            return nil
+        }
+
+        // target_element is required and must be a non-empty string (after trimming whitespace and newlines).
+        guard let targetElement = dictionary[Keys.targetElement.rawValue] as? String else {
+            Log.w("setUserInteraction: missing required key '\(Keys.targetElement.rawValue)' — event dropped")
+            return nil
+        }
+        let trimmed = targetElement.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            Log.w("setUserInteraction: missing required key '\(Keys.targetElement.rawValue)' — event dropped")
+            return nil
+        }
+
+        // Build payload with all supported interaction_context keys so Flutter/hybrid fields are forwarded.
+        var result: [String: Any] = [
+            Keys.eventName.rawValue: rawEventName,
+            Keys.targetElement.rawValue: trimmed
+        ]
+        if let v = dictionary[Keys.elementClasses.rawValue] { result[Keys.elementClasses.rawValue] = v }
+        if let v = dictionary[Keys.elementId.rawValue] { result[Keys.elementId.rawValue] = v }
+        if let v = dictionary[Keys.targetElementInnerText.rawValue] { result[Keys.targetElementInnerText.rawValue] = v }
+        if let v = dictionary[Keys.attributes.rawValue] { result[Keys.attributes.rawValue] = v }
+        if let v = dictionary[Keys.positionX.rawValue] { result[Keys.positionX.rawValue] = v }
+        if let v = dictionary[Keys.positionY.rawValue] { result[Keys.positionY.rawValue] = v }
+
+        // scroll_direction: include only when present and a known ScrollDirection value.
+        let scrollKey = Keys.scrollDirection.rawValue
+        if let rawDirection = dictionary[scrollKey] as? String,
+           ScrollDirection(rawValue: rawDirection) != nil {
+            result[scrollKey] = rawDirection
+        } else if dictionary[scrollKey] != nil, let rawDirection = dictionary[scrollKey] as? String {
+            Log.w("setUserInteraction: unknown scroll_direction '\(rawDirection)' (expected: up | down | left | right) — field ignored")
+        }
+
+        return result
     }
 }

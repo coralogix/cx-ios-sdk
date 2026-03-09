@@ -134,14 +134,19 @@ extension CoralogixRum {
         span.setAttribute(key: Keys.environment.rawValue, value: options.environment)
     }
     
-    public func setNetworkRequestContext(dictionary: [String: Any]) {
-        let span = self.getSpan()
-        
+    // MARK: - Hybrid Network API
+
+    /// Implementation called by `CoralogixRum.setNetworkRequestContext(dictionary:)`.
+    internal func reportHybridNetworkRequest(_ dictionary: [String: Any]) {
+        guard validateHybridNetworkRequest(dictionary) else { return }
+
+        let span = getSpan()
+
         if let statusCode = dictionary[Keys.statusCode.rawValue] as? Int {
-            let logSeverity = statusCode > 400 ?  CoralogixLogSeverity.error : CoralogixLogSeverity.info
+            let logSeverity = statusCode >= 400 ? CoralogixLogSeverity.error : CoralogixLogSeverity.info
             span.setAttribute(key: Keys.severity.rawValue, value: AttributeValue.int(logSeverity.rawValue))
         }
-        
+
         span.setAttribute(key: SemanticAttributes.httpUrl.rawValue, value: dictionary[Keys.url.rawValue] as? String ?? "")
         span.setAttribute(key: SemanticAttributes.netPeerName.rawValue, value: dictionary[Keys.host.rawValue] as? String ?? "")
         span.setAttribute(key: SemanticAttributes.httpMethod.rawValue, value: dictionary[Keys.method.rawValue] as? String ?? "")
@@ -153,7 +158,17 @@ extension CoralogixRum {
         span.setAttribute(key: Keys.customTraceId.rawValue, value: dictionary[Keys.customTraceId.rawValue] as? String ?? "")
         span.end()
     }
-    
+
+    /// Validates the hybrid network request dictionary. Returns false when required fields are missing or invalid (event is dropped and a warning is logged).
+    private func validateHybridNetworkRequest(_ dictionary: [String: Any]) -> Bool {
+        guard let url = dictionary[Keys.url.rawValue] as? String,
+              !url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            Log.w("setNetworkRequestContext: missing or invalid required key '\(Keys.url.rawValue)' — event dropped")
+            return false
+        }
+        return true
+    }
+
     private func getSpan() -> any Span {
         return makeSpan(event: .networkRequest, source: .fetch, severity: .info)
     }
