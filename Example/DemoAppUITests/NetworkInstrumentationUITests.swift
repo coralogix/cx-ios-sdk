@@ -426,7 +426,8 @@ final class NetworkInstrumentationUITests: XCTestCase {
         }
         
         XCTFail("No network log for URL containing '\(urlPattern)' had both non-empty request_headers and response_headers. " +
-                "Check that NetworkCaptureRule is configured and request is stored before logResponse.", file: file, line: line)
+                "Check that NetworkCaptureRule is configured and request is stored before logResponse. " +
+                "Inspect /tmp/coralogix_validation_response.json for actual network_request_context shape.", file: file, line: line)
     }
     
     // MARK: - Test Cases
