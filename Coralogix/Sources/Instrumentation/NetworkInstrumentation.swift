@@ -59,14 +59,20 @@ extension CoralogixRum {
                 return self?.shouldAddTraceParent(to: request, options: options) ?? false
             },
             shouldCollectResponsePayload: { request in
-                guard let configs = options.networkExtraConfig, !configs.isEmpty else { return false }
-                return resolveConfigForUrl(request.url?.absoluteString ?? "", configs: configs)?.collectResPayload ?? false
+                Self.shouldCollectResponsePayload(for: request, options: options)
             },
             receivedResponse: self.receivedResponse
         )
         self.sessionInstrumentation = URLSessionInstrumentation(configuration: configuration)
     }
     
+    /// Returns whether response body should be buffered for this request (rule-based; used for collectResPayload).
+    private static func shouldCollectResponsePayload(for request: URLRequest, options: CoralogixExporterOptions) -> Bool {
+        guard let configs = options.networkExtraConfig, !configs.isEmpty else { return false }
+        let urlString = request.url?.absoluteString ?? ""
+        return resolveConfigForUrl(urlString, configs: configs)?.collectResPayload ?? false
+    }
+
     internal func shouldAddTraceParent(to request: URLRequest, options: CoralogixExporterOptions) -> Bool {
         guard let requestURLString = request.url?.absoluteString else {
             return false
@@ -117,7 +123,9 @@ extension CoralogixRum {
         if let ns = dataOrFile as? NSData { return ns as Data }
         guard let any = dataOrFile else { return nil }
         var current: Any = any
-        for _ in 0 ..< 5 {
+        // Unwrap up to this many optional levels (covers known completion-handler shapes when Data? is passed as Any?).
+        let maxOptionalUnwrapDepth = 5
+        for _ in 0 ..< maxOptionalUnwrapDepth {
             if let d = current as? Data { return d }
             if let ns = current as? NSData { return ns as Data }
             let mirror = Mirror(reflecting: current)

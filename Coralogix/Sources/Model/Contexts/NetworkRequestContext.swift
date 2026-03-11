@@ -91,7 +91,8 @@ struct NetworkRequestContext {
            let dict = Helper.convertJsonStringToDict(jsonString: raw) {
             self.responseHeaders = dict.mapValues { $0 as? String ?? String(describing: $0) }
         }
-        // Network capture: payloads set on span by receivedResponse (CX-33233/CX-33234)
+        // Network capture: payloads set on span by receivedResponse (CX-33233/CX-33234).
+        // Cap applied here explicitly; didSet is not run during init.
         self.requestPayload = otel.getAttribute(forKey: Keys.requestPayload.rawValue) as? String
         self.responsePayload = Self.capResponsePayload(otel.getAttribute(forKey: Keys.responsePayload.rawValue) as? String)
     }

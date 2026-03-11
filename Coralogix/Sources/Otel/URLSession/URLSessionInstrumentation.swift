@@ -84,7 +84,7 @@ public class URLSessionInstrumentation {
     /// Returns and removes accumulated response body for the task (rule-based capture). Returns nil if none.
     private func takeResponseBody(forTaskId taskId: String) -> Data? {
         var data: Data?
-        captureQueue.sync(flags: .barrier) {
+        captureQueue.sync {
             data = responseBodyStore.removeValue(forKey: taskId)
         }
         return data
@@ -1115,6 +1115,7 @@ public class URLSessionInstrumentation {
                     self.responseBodyStore[taskId]?.reserveCapacity(Int(response.expectedContentLength))
                 }
             }
+            // completionHandler is invoked by the original delegate after the swizzle returns.
             return
         }
         guard configuration.shouldRecordPayload?(session) ?? false else { return }
