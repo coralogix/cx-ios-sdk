@@ -57,7 +57,7 @@ final class SpanUploader {
             status = .success
             
             if let data = jsonDataCopy {
-                self?.logJSON(from: data, prettyPrint: false)
+                self?.logJSON(from: data, prettyPrint: true)
             }
         }
 

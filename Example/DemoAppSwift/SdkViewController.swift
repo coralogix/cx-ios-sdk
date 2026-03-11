@@ -49,6 +49,12 @@ final class SdkViewController: UITableViewController {
             subtitle: "Send custom metric data",
             systemImageName: "gauge.with.dots.needle.67percent",
             key: .sendCustomMeasurement
+        ),
+        .init(
+            title: "Test Session Sampler",
+            subtitle: "Run sampler trials with a chosen rate (0–100%)",
+            systemImageName: "percent",
+            key: .testSessionSampler
         )
     ]
 
@@ -147,11 +153,50 @@ final class SdkViewController: UITableViewController {
         case .sendCustomMeasurement:
             CoralogixRumManager.shared.sdk.sendCustomMeasurement(name: "LSD", value: 43.0)
 
+        case .testSessionSampler:
+            showSessionSamplerTest()
+
         default:
             break
         }
 
         tableView.deselectRow(at: indexPath, animated: true)
+    }
+
+    // MARK: - Session Sampler Test
+
+    private func showSessionSamplerTest() {
+        let alert = UIAlertController(
+            title: "Test Session Sampler",
+            message: "Enter sample rate (0–100). We'll run 1000 trials and show how many would initialize.",
+            preferredStyle: .alert
+        )
+        alert.addTextField { textField in
+            textField.placeholder = "50"
+            textField.keyboardType = .numberPad
+            textField.text = "50"
+        }
+        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        alert.addAction(UIAlertAction(title: "Run 1000 trials", style: .default) { [weak self] _ in
+            guard let self = self,
+                  let text = alert.textFields?.first?.text,
+                  let rate = Int(text) else { return }
+            let clampedRate = max(0, min(100, rate))
+            let sampler = SDKSampler(sampleRate: clampedRate)
+            var initialized = 0
+            for _ in 0..<1000 {
+                if sampler.shouldInitialized() { initialized += 1 }
+            }
+            let dropped = 1000 - initialized
+            let resultAlert = UIAlertController(
+                title: "Sampler result",
+                message: "At \(clampedRate)%: \(initialized) would initialize, \(dropped) would not (\(String(format: "%.1f", Double(initialized) / 10))% sampled).",
+                preferredStyle: .alert
+            )
+            resultAlert.addAction(UIAlertAction(title: "OK", style: .default))
+            self.present(resultAlert, animated: true)
+        })
+        present(alert, animated: true)
     }
 
     // MARK: - Toast

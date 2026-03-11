@@ -57,6 +57,25 @@ public class URLSessionInstrumentation {
         }
         return spans
     }
+
+    /// Returns the stored URLRequest for the given task id, if any (used for network capture header filtering).
+    internal func getRequest(forTaskId taskId: String) -> URLRequest? {
+        var request: URLRequest?
+        queue.sync {
+            request = requestMap[taskId]?.request
+        }
+        return request
+    }
+
+    /// Stores the request for the task so it can be read at response time (e.g. for header capture).
+    internal func storeRequest(_ request: URLRequest, forTaskId taskId: String) {
+        queue.sync(flags: .barrier) {
+            if requestMap[taskId] == nil {
+                requestMap[taskId] = NetworkRequestState()
+            }
+            requestMap[taskId]?.setRequest(request)
+        }
+    }
     
     public init(configuration: URLSessionInstrumentationConfiguration) {
         self._configuration = configuration
@@ -516,11 +535,13 @@ public class URLSessionInstrumentation {
                 if let request = argument as? URLRequest, objc_getAssociatedObject(argument, &idKey) == nil {
                     let instrumentedRequest = URLSessionLogger.processAndLogRequest(request, sessionTaskId: sessionTaskId, instrumentation: self, shouldInjectHeaders: true)
                     task = castedIMP(session, selector, instrumentedRequest ?? request, completionBlock)
+                    self.storeRequest(instrumentedRequest ?? request, forTaskId: sessionTaskId)
                 } else {
                     task = castedIMP(session, selector, argument, completionBlock)
                     if objc_getAssociatedObject(argument, &idKey) == nil,
                        let currentRequest = task.currentRequest {
                         URLSessionLogger.processAndLogRequest(currentRequest, sessionTaskId: sessionTaskId, instrumentation: self, shouldInjectHeaders: false)
+                        self.storeRequest(currentRequest, forTaskId: sessionTaskId)
                     }
                 }
                 self.setIdKey(value: sessionTaskId, for: task)
@@ -587,7 +608,7 @@ public class URLSessionInstrumentation {
                 
                 let processedRequest = URLSessionLogger.processAndLogRequest(request, sessionTaskId: sessionTaskId, instrumentation: self, shouldInjectHeaders: true)
                 task = castedIMP(session, selector, processedRequest ?? request, argument, completionBlock)
-                
+                self.storeRequest(processedRequest ?? request, forTaskId: sessionTaskId)
                 self.setIdKey(value: sessionTaskId, for: task)
                 return task
             }
@@ -847,9 +868,7 @@ public class URLSessionInstrumentation {
         var requestState: NetworkRequestState?
         queue.sync(flags: .barrier) {
             requestState = requestMap[taskId]
-            if requestState != nil {
-                requestMap[taskId] = nil
-            }
+            // Do not remove from map yet — logResponse calls getRequest(forTaskId:) so request headers can be captured in receivedResponse
         }
         
         // Log with basic data available from task
@@ -865,6 +884,11 @@ public class URLSessionInstrumentation {
             Log.testLog("[URLSessionInstrumentation] Fallback logging response for taskId: \(taskId), status: \(status)")
             #endif
             URLSessionLogger.logResponse(response, dataOrFile: requestState?.dataProcessed, instrumentation: self, sessionTaskId: taskId)
+        }
+        
+        // Clean up after logging so receivedResponse had a chance to read the request for header capture
+        queue.sync(flags: .barrier) {
+            requestMap[taskId] = nil
         }
     }
     
@@ -1072,9 +1096,7 @@ public class URLSessionInstrumentation {
         var requestState: NetworkRequestState?
         queue.sync(flags: .barrier) {
             requestState = requestMap[taskId]
-            if requestState != nil {
-                requestMap[taskId] = nil
-            }
+            // Do not remove from map yet — logResponse/logError need getRequest(forTaskId:) for request header capture
         }
         if let error = error {
             let status = (task.response as? HTTPURLResponse)?.statusCode ?? 0
@@ -1090,6 +1112,10 @@ public class URLSessionInstrumentation {
             URLSessionLogger.logResponse(response, dataOrFile: requestState?.dataProcessed, instrumentation: self, sessionTaskId: taskId)
         }
         
+        // Clean up after logging so receivedResponse had a chance to read the request for header capture
+        queue.sync(flags: .barrier) {
+            requestMap[taskId] = nil
+        }
         // Mark as logged to prevent duplicate in setState: fallback
         objc_setAssociatedObject(task, &Self.loggedKey, true, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
     }
@@ -1108,10 +1134,7 @@ public class URLSessionInstrumentation {
         var requestState: NetworkRequestState?
         queue.sync(flags: .barrier) {
             requestState = requestMap[taskId]
-            
-            if requestState?.request != nil {
-                requestMap[taskId] = nil
-            }
+            // Do not remove from map yet — logResponse/logError need getRequest(forTaskId:) for request header capture
         }
         
         guard requestState?.request != nil else {
@@ -1132,6 +1155,10 @@ public class URLSessionInstrumentation {
             URLSessionLogger.logResponse(response, dataOrFile: requestState?.dataProcessed, instrumentation: self, sessionTaskId: taskId)
         }
         
+        // Clean up after logging so receivedResponse had a chance to read the request for header capture
+        queue.sync(flags: .barrier) {
+            requestMap[taskId] = nil
+        }
         // Mark as logged to prevent duplicate in setState: fallback
         objc_setAssociatedObject(task, &Self.loggedKey, true, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
     }

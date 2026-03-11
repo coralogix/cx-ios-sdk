@@ -386,6 +386,67 @@ final class NetworkInstrumentationUITests: XCTestCase {
         }
     }
     
+    /// Verifies that at least one network log in `validationData` has both `request_headers` and `response_headers`
+    /// (i.e. NetworkCaptureRule was applied and header capture is working).
+    /// Optionally narrows by `expectedPath` (URL must contain it) and/or `expectedHeaderKeys` (each key must appear in request or response headers).
+    private func verifyNetworkLogHasCaptureHeaders(
+        validationData: [[String: Any]],
+        urlPattern: String,
+        expectedPath: String? = nil,
+        expectedHeaderKeys: [String]? = nil,
+        file: StaticString = #file,
+        line: UInt = #line
+    ) {
+        let requestHeadersKey = "request_headers"
+        let responseHeadersKey = "response_headers"
+        
+        for logEntry in validationData {
+            var networkContext: [String: Any]?
+            if let context = logEntry["network_request_context"] as? [String: Any] {
+                networkContext = context
+            } else if let text = logEntry["text"] as? [String: Any],
+                      let cxRum = text["cx_rum"] as? [String: Any],
+                      let context = cxRum["network_request_context"] as? [String: Any] {
+                networkContext = context
+            } else if let body = logEntry["body"] as? [String: Any],
+                      let context = body["network_request_context"] as? [String: Any] {
+                networkContext = context
+            }
+            
+            guard let context = networkContext,
+                  let url = context["url"] as? String,
+                  url.contains(urlPattern) else {
+                continue
+            }
+            if let path = expectedPath, !url.contains(path) {
+                continue
+            }
+            
+            guard let req = context[requestHeadersKey] as? [String: String], !req.isEmpty,
+                  let res = context[responseHeadersKey] as? [String: String], !res.isEmpty else {
+                continue
+            }
+            if let keys = expectedHeaderKeys {
+                let reqKeysLower = Set(req.keys.map { $0.lowercased() })
+                let resKeysLower = Set(res.keys.map { $0.lowercased() })
+                let hasAllKeys = keys.allSatisfy { key in
+                    let k = key.lowercased()
+                    return reqKeysLower.contains(k) || resKeysLower.contains(k)
+                }
+                if !hasAllKeys { continue }
+            }
+            print("✅ Found network log with request_headers and response_headers: \(url.prefix(60))...")
+            return
+        }
+        
+        var hint = "URL containing '\(urlPattern)'"
+        if let path = expectedPath { hint += ", path '\(path)'" }
+        if let keys = expectedHeaderKeys, !keys.isEmpty { hint += ", header keys \(keys)" }
+        XCTFail("No network log for \(hint) had both non-empty request_headers and response_headers. " +
+                "Check that NetworkCaptureRule is configured and request is stored before logResponse. " +
+                "Inspect /tmp/coralogix_validation_response.json for actual network_request_context shape.", file: file, line: line)
+    }
+    
     // MARK: - Test Cases
     
     /// Comprehensive test: Trigger all network requests and validate via backend schema
@@ -435,6 +496,9 @@ final class NetworkInstrumentationUITests: XCTestCase {
         // 12. Async/Await example
         tapNetworkOption("Async/Await example", waitTime: 3)
         
+        // 13. Request with header/payload capture (hits jsonplaceholder with NetworkCaptureRule; ensures request_headers + response_headers in log)
+        tapNetworkOption("Request with header/payload capture", waitTime: 3)
+        
         // Wait for SDK to batch and send all data to backend
         print("\n⏳ Phase 2: Waiting for SDK to send data to backend (8 seconds)...")
         print("   (Need time for 11 requests to be batched and sent)")
@@ -472,6 +536,16 @@ final class NetworkInstrumentationUITests: XCTestCase {
         ]
         
         verifyExpectedRequests(expectedRequests)
+        
+        // Verify the exact demo request (header/payload capture) has request_headers and response_headers
+        if let validationData = readValidationData() {
+            verifyNetworkLogHasCaptureHeaders(
+                validationData: validationData,
+                urlPattern: "jsonplaceholder.typicode.com",
+                expectedPath: "posts",
+                expectedHeaderKeys: ["X-Demo-Header", "Content-Type"]
+            )
+        }
         
         print("\n✅ SUCCESS: All network instrumentation validated end-to-end!")
         print("========================================\n")

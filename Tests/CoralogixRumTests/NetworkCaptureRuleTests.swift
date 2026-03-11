@@ -173,6 +173,52 @@ final class NetworkCaptureRuleTests: XCTestCase {
         XCTAssertTrue(result.collectResPayload)
     }
 
+    // MARK: - filterHeaders(_:allowlist:) (CX-33233)
+
+    func testFilterHeaders_allowlistHit_includesHeaderWithConfigKeyCasing() {
+        let headers = ["Content-Type": "application/json", "X-Other": "ignored"]
+        let allowlist = ["Content-Type"]
+        let result = NetworkCaptureRule.filterHeaders(headers, allowlist: allowlist)
+        XCTAssertEqual(result, ["Content-Type": "application/json"],
+                       "Output key must use allowlist (config) casing")
+    }
+
+    func testFilterHeaders_allowlistMiss_excludesHeader() {
+        let headers = ["Authorization": "Bearer x", "X-Custom": "y"]
+        let allowlist = ["Content-Type"]
+        let result = NetworkCaptureRule.filterHeaders(headers, allowlist: allowlist)
+        XCTAssertTrue(result.isEmpty)
+    }
+
+    func testFilterHeaders_caseInsensitive_matchAndPreserveConfigCasing() {
+        let headers = ["content-type": "application/json"]
+        let allowlist = ["Content-Type"]
+        let result = NetworkCaptureRule.filterHeaders(headers, allowlist: allowlist)
+        XCTAssertEqual(result["Content-Type"], "application/json",
+                       "Comparison case-insensitive; output key must be config key (Content-Type)")
+    }
+
+    func testFilterHeaders_emptyAllowlist_returnsEmpty() {
+        let headers = ["Content-Type": "application/json"]
+        let result = NetworkCaptureRule.filterHeaders(headers, allowlist: [])
+        XCTAssertTrue(result.isEmpty)
+    }
+
+    func testFilterHeaders_emptyHeaders_returnsEmpty() {
+        let result = NetworkCaptureRule.filterHeaders([:], allowlist: ["Content-Type"])
+        XCTAssertTrue(result.isEmpty)
+    }
+
+    func testFilterHeaders_multiple_onlyAllowlistedIncluded() {
+        let headers = ["Content-Type": "application/json", "Authorization": "Bearer t", "Accept": "application/json"]
+        let allowlist = ["Content-Type", "Accept"]
+        let result = NetworkCaptureRule.filterHeaders(headers, allowlist: allowlist)
+        XCTAssertEqual(result.count, 2)
+        XCTAssertEqual(result["Content-Type"], "application/json")
+        XCTAssertEqual(result["Accept"], "application/json")
+        XCTAssertNil(result["Authorization"])
+    }
+
     // MARK: - Mutual exclusivity
     // Enforced at compile time by the private Matcher enum — each init path sets exactly one
     // case, so no runtime white-box tests are needed here.

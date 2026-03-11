@@ -118,7 +118,8 @@ class URLSessionLogger {
                               value: AttributeValue.int(contentLength))
         }
 
-        instrumentation.configuration.receivedResponse?(response, dataOrFile, span)
+        let request = instrumentation.getRequest(forTaskId: sessionTaskId)
+        instrumentation.configuration.receivedResponse?(response, dataOrFile, span, request)
         span.end()
     }
 

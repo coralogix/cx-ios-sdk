@@ -17,3 +17,7 @@ Example/envs.swift
 
 # Ignore tech debt documentation
 tech-debt/
+
+# Jira MCP patched package (unpacked from npm; commit package/build/ so patch is in repo)
+package/node_modules/
+mcp-devtools-jira-0.2.6.tgz

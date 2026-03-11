@@ -94,6 +94,37 @@ public struct NetworkCaptureRule {
         self.collectResPayload = collectResPayload
     }
 
+    // MARK: - Header filtering
+
+    /// Returns only headers whose name (case-insensitive) is in the allowlist.
+    /// Output keys use the allowlist's casing (config key casing), not the request/response casing.
+    ///
+    /// - Parameters:
+    ///   - headers: Full header dictionary (e.g. from `URLRequest.allHTTPHeaderFields` or normalized `HTTPURLResponse.allHeaderFields`).
+    ///   - allowlist: Header names to keep (e.g. `rule.reqHeaders!` or `rule.resHeaders!`).
+    /// - Returns: Filtered dictionary; empty when no headers match. Only include in payload when non-empty.
+    internal static func filterHeaders(_ headers: [String: String], allowlist: [String]) -> [String: String] {
+        var filtered: [String: String] = [:]
+        for (key, value) in headers {
+            if let configKey = allowlist.first(where: { $0.lowercased() == key.lowercased() }) {
+                filtered[configKey] = value
+            }
+        }
+        return filtered
+    }
+
+    /// Converts `HTTPURLResponse.allHeaderFields` ([AnyHashable: Any]) to [String: String] for use with `filterHeaders`.
+    /// Multiple headers with the same name (e.g. multiple `Set-Cookie`) collapse to a single entry; the last value is used.
+    internal static func responseHeadersDictionary(from response: HTTPURLResponse) -> [String: String] {
+        var result: [String: String] = [:]
+        for (key, value) in response.allHeaderFields {
+            let k = (key as? String) ?? String(describing: key)
+            let v = (value as? String) ?? String(describing: value)
+            result[k] = v
+        }
+        return result
+    }
+
     // MARK: - Internal matching
 
     /// Returns `true` when this rule applies to the given request URL.

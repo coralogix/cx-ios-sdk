@@ -93,7 +93,13 @@ final class NetworkViewController: UITableViewController {
         .init(title: "Async/Await with SSL Pinning",
               subtitle: "async/await + custom delegate",
               systemImageName: "lock.shield",
-              key: .asyncAwaitWithSSLPinning)
+              key: .asyncAwaitWithSSLPinning),
+        .init(
+            title: "Request with header/payload capture",
+            subtitle: "GET to jsonplaceholder; headers & payload captured per NetworkCaptureRule",
+            systemImageName: "list.bullet.rectangle",
+            key: .requestWithHeaderCapture
+        )
     ]
 
     // MARK: - Init
@@ -207,7 +213,10 @@ final class NetworkViewController: UITableViewController {
         
         case .asyncAwaitWithSSLPinning:
             NetworkSim.callAsyncAwaitWithSSLPinning()
-        
+
+        case .requestWithHeaderCapture:
+            NetworkSim.sendRequestWithHeaderCapture()
+
         default:
             break
         }
