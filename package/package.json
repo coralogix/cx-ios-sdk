@@ -11,7 +11,7 @@
   ],
   "type": "module",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "1.6.1",
+    "@modelcontextprotocol/sdk": "1.26.0",
     "qs": "^6.12.0",
     "zod": "^3.22.4",
     "@mcp-devtools/http-client": "0.1.3"
