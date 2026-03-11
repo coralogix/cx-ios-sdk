@@ -21,7 +21,7 @@ public struct URLSessionInstrumentationConfiguration {
                 shouldInjectTracingHeaders: ((URLRequest) -> (Bool)?)? = nil,
                 injectCustomHeaders: ((inout URLRequest, (any Span)?) -> Void)? = nil,
                 createdRequest: ((URLRequest, any Span) -> Void)? = nil,
-                receivedResponse: ((URLResponse, DataOrFile?, any Span) -> Void)? = nil,
+                receivedResponse: ((URLResponse, DataOrFile?, any Span, URLRequest?) -> Void)? = nil,
                 receivedError: ((Error, DataOrFile?, HTTPStatus, any Span) -> Void)? = nil,
                 delegateClassesToInstrument: [AnyClass]? = nil,
                 tracer: Tracer? = nil) {
@@ -68,8 +68,9 @@ public struct URLSessionInstrumentationConfiguration {
     ///  Called before the span is created, it allows to add extra information to the Span
     public var createdRequest: ((URLRequest, any Span) -> Void)?
 
-    ///  Called before the span is ended, it allows to add extra information to the Span
-    public var receivedResponse: ((URLResponse, DataOrFile?, any Span) -> Void)?
+    ///  Called before the span is ended, it allows to add extra information to the Span.
+    ///  The optional URLRequest is the original request (when available) for use in network capture (e.g. header filtering).
+    public var receivedResponse: ((URLResponse, DataOrFile?, any Span, URLRequest?) -> Void)?
 
     ///  Called before the span is ended, it allows to add extra information to the Span
     public var receivedError: ((Error, DataOrFile?, HTTPStatus, any Span) -> Void)?
