@@ -25,7 +25,7 @@ final class AsyncAwaitNetworkInstrumentationTests: XCTestCase {
             shouldInstrument: { _ in true },
             shouldInjectTracingHeaders: { _ in true },
             createdRequest: { _, _ in },
-            receivedResponse: { _, _, _, _ in },
+            receivedResponse: { _, _, _, _ in }, // 4th param: optional URLRequest for header capture
             receivedError: { _, _, _, _ in },
             delegateClassesToInstrument: nil
         )
