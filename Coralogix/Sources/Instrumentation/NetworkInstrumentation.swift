@@ -136,8 +136,10 @@ extension CoralogixRum {
         // Network capture: allowlisted request/response headers when a rule matches (CX-33233)
         guard let configs = options.networkExtraConfig, !configs.isEmpty else { return }
         let requestUrl = request?.url?.absoluteString ?? (response as? HTTPURLResponse)?.url?.absoluteString ?? ""
+        // Empty or invalid requestUrl → resolveConfigForUrl returns nil; no header capture.
         guard let rule = resolveConfigForUrl(requestUrl, configs: configs) else { return }
 
+        // Request headers (allowlisted by rule.reqHeaders)
         if let reqHeaders = rule.reqHeaders, let req = request, let allReq = req.allHTTPHeaderFields, !allReq.isEmpty {
             let filtered = NetworkCaptureRule.filterHeaders(allReq, allowlist: reqHeaders)
             if !filtered.isEmpty {
@@ -146,6 +148,7 @@ extension CoralogixRum {
                 span.setAttribute(key: Keys.requestHeaders.rawValue, value: AttributeValue.string(json))
             }
         }
+        // Response headers (allowlisted by rule.resHeaders)
         if let resHeaders = rule.resHeaders, let httpResponse = response as? HTTPURLResponse {
             let allRes = NetworkCaptureRule.responseHeadersDictionary(from: httpResponse)
             let filtered = NetworkCaptureRule.filterHeaders(allRes, allowlist: resHeaders)
