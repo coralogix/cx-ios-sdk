@@ -386,6 +386,49 @@ final class NetworkInstrumentationUITests: XCTestCase {
         }
     }
     
+    /// Verifies that at least one network log matching `urlPattern` contains both `request_headers` and `response_headers`
+    /// (i.e. NetworkCaptureRule was applied and header capture is working).
+    private func verifyNetworkLogHasCaptureHeaders(
+        validationData: [[String: Any]],
+        urlPattern: String,
+        file: StaticString = #file,
+        line: UInt = #line
+    ) {
+        let requestHeadersKey = "request_headers"
+        let responseHeadersKey = "response_headers"
+        
+        for logEntry in validationData {
+            var networkContext: [String: Any]?
+            if let context = logEntry["network_request_context"] as? [String: Any] {
+                networkContext = context
+            } else if let text = logEntry["text"] as? [String: Any],
+                      let cxRum = text["cx_rum"] as? [String: Any],
+                      let context = cxRum["network_request_context"] as? [String: Any] {
+                networkContext = context
+            } else if let body = logEntry["body"] as? [String: Any],
+                      let context = body["network_request_context"] as? [String: Any] {
+                networkContext = context
+            }
+            
+            guard let context = networkContext,
+                  let url = context["url"] as? String,
+                  url.contains(urlPattern) else {
+                continue
+            }
+            
+            let reqHeaders = context[requestHeadersKey] as? [String: String]
+            let resHeaders = context[responseHeadersKey] as? [String: String]
+            if reqHeaders != nil, !(reqHeaders?.isEmpty ?? true),
+               resHeaders != nil, !(resHeaders?.isEmpty ?? true) {
+                print("✅ Found network log with request_headers and response_headers: \(url.prefix(60))...")
+                return
+            }
+        }
+        
+        XCTFail("No network log for URL containing '\(urlPattern)' had both non-empty request_headers and response_headers. " +
+                "Check that NetworkCaptureRule is configured and request is stored before logResponse.", file: file, line: line)
+    }
+    
     // MARK: - Test Cases
     
     /// Comprehensive test: Trigger all network requests and validate via backend schema
@@ -435,6 +478,9 @@ final class NetworkInstrumentationUITests: XCTestCase {
         // 12. Async/Await example
         tapNetworkOption("Async/Await example", waitTime: 3)
         
+        // 13. Request with header/payload capture (hits jsonplaceholder with NetworkCaptureRule; ensures request_headers + response_headers in log)
+        tapNetworkOption("Request with header/payload capture", waitTime: 3)
+        
         // Wait for SDK to batch and send all data to backend
         print("\n⏳ Phase 2: Waiting for SDK to send data to backend (8 seconds)...")
         print("   (Need time for 11 requests to be batched and sent)")
@@ -472,6 +518,14 @@ final class NetworkInstrumentationUITests: XCTestCase {
         ]
         
         verifyExpectedRequests(expectedRequests)
+        
+        // Verify at least one network log has request_headers and response_headers (NetworkCaptureRule header capture)
+        if let validationData = readValidationData() {
+            verifyNetworkLogHasCaptureHeaders(
+                validationData: validationData,
+                urlPattern: "jsonplaceholder.typicode.com"
+            )
+        }
         
         print("\n✅ SUCCESS: All network instrumentation validated end-to-end!")
         print("========================================\n")

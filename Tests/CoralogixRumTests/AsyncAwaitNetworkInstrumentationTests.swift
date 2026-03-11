@@ -25,7 +25,7 @@ final class AsyncAwaitNetworkInstrumentationTests: XCTestCase {
             shouldInstrument: { _ in true },
             shouldInjectTracingHeaders: { _ in true },
             createdRequest: { _, _ in },
-            receivedResponse: { _, _, _ in },
+            receivedResponse: { _, _, _, _ in },
             receivedError: { _, _, _, _ in },
             delegateClassesToInstrument: nil
         )
@@ -50,6 +50,30 @@ final class AsyncAwaitNetworkInstrumentationTests: XCTestCase {
         // Verify that startedRequestSpans is accessible (means instrumentation is working)
         let spans = instrumentation.startedRequestSpans
         XCTAssertNotNil(spans, "Started request spans should be accessible")
+    }
+
+    // MARK: - Request map (header capture)
+
+    /// When a request is stored for a taskId, getRequest(forTaskId:) returns it so receivedResponse can capture request_headers.
+    func testStoreRequest_getRequest_returnsStoredRequest() throws {
+        let url = try XCTUnwrap(URL(string: "https://api.example.com/endpoint"))
+        var request = URLRequest(url: url)
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer token", forHTTPHeaderField: "Authorization")
+        let taskId = "test-task-\(UUID().uuidString)"
+
+        instrumentation.storeRequest(request, forTaskId: taskId)
+
+        let retrieved = instrumentation.getRequest(forTaskId: taskId)
+        XCTAssertNotNil(retrieved, "Stored request must be returned by getRequest(forTaskId:) for header capture")
+        XCTAssertEqual(retrieved?.url?.absoluteString, url.absoluteString)
+        XCTAssertEqual(retrieved?.allHTTPHeaderFields?["Content-Type"], "application/json")
+        XCTAssertEqual(retrieved?.allHTTPHeaderFields?["Authorization"], "Bearer token")
+    }
+
+    /// getRequest(forTaskId:) returns nil for unknown taskId.
+    func testGetRequest_unknownTaskId_returnsNil() {
+        XCTAssertNil(instrumentation.getRequest(forTaskId: "nonexistent-id"))
     }
     
     // MARK: - Integration Tests (Require Console Verification)
