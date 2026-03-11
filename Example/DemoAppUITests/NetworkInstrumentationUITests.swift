@@ -427,8 +427,11 @@ final class NetworkInstrumentationUITests: XCTestCase {
                 continue
             }
             if let keys = expectedHeaderKeys {
+                let reqKeysLower = Set(req.keys.map { $0.lowercased() })
+                let resKeysLower = Set(res.keys.map { $0.lowercased() })
                 let hasAllKeys = keys.allSatisfy { key in
-                    req[key] != nil || res[key] != nil
+                    let k = key.lowercased()
+                    return reqKeysLower.contains(k) || resKeysLower.contains(k)
                 }
                 if !hasAllKeys { continue }
             }
