@@ -120,9 +120,7 @@ extension CoralogixRum {
         }
         
         guard let options else {
-#if DEBUG
-            assertionFailure("CoralogixExporterOptions unexpectedly nil during network response handling") // 🆕
-#endif
+            Log.w("[Coralogix] CoralogixExporterOptions unexpectedly nil during network response handling — skipping span enrichment")
             return
         }
         
