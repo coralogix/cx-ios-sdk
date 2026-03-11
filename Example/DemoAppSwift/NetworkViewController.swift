@@ -95,8 +95,8 @@ final class NetworkViewController: UITableViewController {
               systemImageName: "lock.shield",
               key: .asyncAwaitWithSSLPinning),
         .init(
-            title: "Request with header/payload capture",
-            subtitle: "GET to jsonplaceholder; headers & payload captured per NetworkCaptureRule",
+            title: "Header & response body capture",
+            subtitle: "GET + POST to jsonplaceholder; request/response headers + response_payload in RUM (CX-33234)",
             systemImageName: "list.bullet.rectangle",
             key: .requestWithHeaderCapture
         )

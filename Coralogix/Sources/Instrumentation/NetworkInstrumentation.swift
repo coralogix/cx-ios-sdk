@@ -111,6 +111,23 @@ extension CoralogixRum {
 
     }
     
+    /// Extracts `Data` from `DataOrFile?` (Any?). Handles direct `Data`, nested optionals, and NSData (ObjC bridge).
+    private static func responseData(from dataOrFile: DataOrFile?) -> Data? {
+        if let d = dataOrFile as? Data { return d }
+        if let ns = dataOrFile as? NSData { return ns as Data }
+        guard let any = dataOrFile else { return nil }
+        var current: Any = any
+        for _ in 0 ..< 5 {
+            if let d = current as? Data { return d }
+            if let ns = current as? NSData { return ns as Data }
+            let mirror = Mirror(reflecting: current)
+            guard mirror.displayStyle == .optional, let child = mirror.children.first?.value else { break }
+            current = child
+        }
+        if let d = current as? Data { return d }
+        return (current as? NSData) as Data?
+    }
+
     private func receivedResponse(response: URLResponse, data: DataOrFile?, span: any Span, request: URLRequest?) {
         if let httpResponse = response as? HTTPURLResponse {
             let statusCode = httpResponse.statusCode
@@ -161,12 +178,24 @@ extension CoralogixRum {
             }
         }
         // Response body (CX-33234): stringify by content-type, 1024-char limit (drop if over, no truncation)
-        if rule.collectResPayload, let responseData = data as? Data, let httpResponse = response as? HTTPURLResponse {
+        // dataOrFile can be Data or Optional(Data) depending on completion-handler signature, so we unwrap.
+        if rule.collectResPayload, let responseData = Self.responseData(from: data), let httpResponse = response as? HTTPURLResponse {
             let headers = NetworkCaptureRule.responseHeadersDictionary(from: httpResponse)
             let contentType = headers.first { $0.key.lowercased() == "content-type" }?.value
             if let payload = NetworkCaptureRule.stringifyBody(data: responseData, contentType: contentType) {
                 span.setAttribute(key: Keys.responsePayload.rawValue, value: AttributeValue.string(payload))
+                #if DEBUG
+                Log.d("[Coralogix] response_payload set on span (\(payload.count) chars). In RUM: open the network event → network_request_context.response_payload")
+                #endif
+            } else {
+                #if DEBUG
+                Log.d("[Coralogix] response_payload skipped: stringifyBody returned nil (contentType: \(contentType ?? "nil"), dataLen: \(responseData.count))")
+                #endif
             }
+        } else if rule.collectResPayload {
+            #if DEBUG
+            Log.d("[Coralogix] response_payload skipped: no Data (type: \(type(of: data))) or response not HTTPURLResponse")
+            #endif
         }
     }
     
