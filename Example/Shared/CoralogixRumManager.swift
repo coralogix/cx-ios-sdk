@@ -58,6 +58,13 @@ final class CoralogixRumManager {
                                                              .slowFrozenFramesDetector: false,
                                                              .memoryDetector: false,
                                                              .renderingDetector: false],
+                                               networkExtraConfig: [
+                                                NetworkCaptureRule(url: "jsonplaceholder.typicode.com",
+                                                                   reqHeaders: ["Content-Type", "Accept", "X-Demo-Header"],
+                                                                   resHeaders: ["Content-Type", "X-Request-Id"],
+                                                                   collectReqPayload: true,
+                                                                   collectResPayload: true)
+                                               ],
                                                shouldSendText: { view, text in
             // Return false to suppress text capture for a specific view.
             return view.accessibilityIdentifier != "sensitiveLabel"

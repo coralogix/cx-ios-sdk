@@ -107,7 +107,7 @@ extension CoralogixRum {
 
     }
     
-    private func receivedResponse(response: URLResponse, data: DataOrFile?, span: any Span) {
+    private func receivedResponse(response: URLResponse, data: DataOrFile?, span: any Span, request: URLRequest?) {
         if let httpResponse = response as? HTTPURLResponse {
             let statusCode = httpResponse.statusCode
             let logSeverity = statusCode > 400 ?  CoralogixLogSeverity.error : CoralogixLogSeverity.info
@@ -132,6 +132,29 @@ extension CoralogixRum {
         span.setAttribute(key: Keys.userName.rawValue, value: userContext?.userName ?? "")
         span.setAttribute(key: Keys.userEmail.rawValue, value: userContext?.userEmail ?? "")
         span.setAttribute(key: Keys.environment.rawValue, value: options.environment)
+
+        // Network capture: allowlisted request/response headers when a rule matches (CX-33233)
+        guard let configs = options.networkExtraConfig, !configs.isEmpty else { return }
+        let requestUrl = request?.url?.absoluteString ?? (response as? HTTPURLResponse)?.url?.absoluteString ?? ""
+        guard let rule = resolveConfigForUrl(requestUrl, configs: configs) else { return }
+
+        if let reqHeaders = rule.reqHeaders, let req = request, let allReq = req.allHTTPHeaderFields, !allReq.isEmpty {
+            let filtered = NetworkCaptureRule.filterHeaders(allReq, allowlist: reqHeaders)
+            if !filtered.isEmpty {
+                let dictAny = Dictionary(uniqueKeysWithValues: filtered.map { ($0.key, $0.value as Any) })
+                let json = Helper.convertDictionayToJsonString(dict: dictAny)
+                span.setAttribute(key: Keys.requestHeaders.rawValue, value: AttributeValue.string(json))
+            }
+        }
+        if let resHeaders = rule.resHeaders, let httpResponse = response as? HTTPURLResponse {
+            let allRes = NetworkCaptureRule.responseHeadersDictionary(from: httpResponse)
+            let filtered = NetworkCaptureRule.filterHeaders(allRes, allowlist: resHeaders)
+            if !filtered.isEmpty {
+                let dictAny = Dictionary(uniqueKeysWithValues: filtered.map { ($0.key, $0.value as Any) })
+                let json = Helper.convertDictionayToJsonString(dict: dictAny)
+                span.setAttribute(key: Keys.responseHeaders.rawValue, value: AttributeValue.string(json))
+            }
+        }
     }
     
     // MARK: - Hybrid Network API

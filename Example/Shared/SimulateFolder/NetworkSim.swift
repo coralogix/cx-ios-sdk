@@ -41,10 +41,31 @@ class NetworkSim {
         task.resume()
     }
     
+    /// Sends a GET and a POST to jsonplaceholder.typicode.com with custom headers so you can
+    /// verify in RUM that NetworkCaptureRule (networkExtraConfig) captures req/res headers and payload.
+    static func sendRequestWithHeaderCapture() {
+        let getUrl = URL(string: "https://jsonplaceholder.typicode.com/posts/1")!
+        var getRequest = URLRequest(url: getUrl)
+        getRequest.setValue("application/json", forHTTPHeaderField: "Accept")
+        getRequest.setValue("demo-header-value", forHTTPHeaderField: "X-Demo-Header")
+
+        URLSession.shared.dataTask(with: getRequest) { _, _, _ in }.resume()
+
+        var postRequest = URLRequest(url: URL(string: url)!)
+        postRequest.httpMethod = "POST"
+        postRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        postRequest.setValue("application/json", forHTTPHeaderField: "Accept")
+        postRequest.setValue("demo-post", forHTTPHeaderField: "X-Demo-Header")
+        let body: [String: Any] = ["title": "Header capture test", "body": "Verify in RUM", "userId": 1]
+        postRequest.httpBody = try? JSONSerialization.data(withJSONObject: body)
+
+        URLSession.shared.dataTask(with: postRequest) { _, _, _ in }.resume()
+    }
+
     static func sendSuccesfullRequest() {
         let url = URL(string: url)!
         let request = URLRequest(url: url)
-        
+
         let task = URLSession.shared.dataTask(with: request) { data, response, error in
             if let error = error {
                 print("GET Request Error:", error)

@@ -75,6 +75,16 @@ struct NetworkRequestContext {
         }
         
         self.statusText = otel.getStatusText()
+
+        // Network capture: allowlisted headers (CX-33233) stored as JSON on the span
+        if let raw = otel.getAttribute(forKey: Keys.requestHeaders.rawValue) as? String,
+           let dict = Helper.convertJsonStringToDict(jsonString: raw) {
+            self.requestHeaders = dict.mapValues { $0 as? String ?? String(describing: $0) }
+        }
+        if let raw = otel.getAttribute(forKey: Keys.responseHeaders.rawValue) as? String,
+           let dict = Helper.convertJsonStringToDict(jsonString: raw) {
+            self.responseHeaders = dict.mapValues { $0 as? String ?? String(describing: $0) }
+        }
     }
     
     func getDictionary() -> [String: Any] {
