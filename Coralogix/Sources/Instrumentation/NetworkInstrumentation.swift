@@ -193,7 +193,7 @@ extension CoralogixRum {
             if let payload = NetworkCaptureRule.stringifyBody(data: responseData, contentType: contentType) {
                 span.setAttribute(key: Keys.responsePayload.rawValue, value: AttributeValue.string(payload))
                 #if DEBUG
-                Log.d("[Coralogix] response_payload set on span (\(payload.count) chars). In RUM: open the network event → network_request_context.response_payload")
+                Log.d("[Coralogix] response_payload set on span (\(payload.count) chars). See network_request_context.response_payload in RUM.")
                 #endif
             } else {
                 #if DEBUG
