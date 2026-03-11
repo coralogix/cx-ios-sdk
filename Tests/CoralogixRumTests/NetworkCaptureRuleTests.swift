@@ -227,6 +227,13 @@ final class NetworkCaptureRuleTests: XCTestCase {
         XCTAssertEqual(result, "{\"a\":1,\"b\":2}")
     }
 
+    /// Regression: stringifyJSON must not canonicalize key order (no .sortedKeys); original key order retained.
+    func testStringifyBody_applicationJson_preservesKeyOrder() {
+        let data = "{\"b\":2,\"a\":1}".data(using: .utf8)!
+        let result = NetworkCaptureRule.stringifyBody(data: data, contentType: "application/json")
+        XCTAssertEqual(result, "{\"b\":2,\"a\":1}", "Key order should be preserved")
+    }
+
     func testStringifyBody_applicationJsonWithCharset_returnsCompactJson() {
         let data = "{\"x\":\"hello\"}".data(using: .utf8)!
         let result = NetworkCaptureRule.stringifyBody(data: data, contentType: "application/json; charset=utf-8")

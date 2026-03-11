@@ -176,7 +176,7 @@ public struct NetworkCaptureRule {
     /// Top-level JSON fragments (true, 123, "ok", null) are accepted via .fragmentsAllowed on parse.
     private static func stringifyJSON(data: Data) -> String? {
         guard let obj = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]),
-              let serialized = try? JSONSerialization.data(withJSONObject: obj, options: [.sortedKeys, .fragmentsAllowed]),
+              let serialized = try? JSONSerialization.data(withJSONObject: obj, options: [.fragmentsAllowed]),
               let str = String(data: serialized, encoding: .utf8) else {
             return nil
         }
