@@ -416,13 +416,12 @@ final class NetworkInstrumentationUITests: XCTestCase {
                 continue
             }
             
-            let reqHeaders = context[requestHeadersKey] as? [String: String]
-            let resHeaders = context[responseHeadersKey] as? [String: String]
-            if reqHeaders != nil, !(reqHeaders?.isEmpty ?? true),
-               resHeaders != nil, !(resHeaders?.isEmpty ?? true) {
-                print("✅ Found network log with request_headers and response_headers: \(url.prefix(60))...")
-                return
+            guard let req = context[requestHeadersKey] as? [String: String], !req.isEmpty,
+                  let res = context[responseHeadersKey] as? [String: String], !res.isEmpty else {
+                continue
             }
+            print("✅ Found network log with request_headers and response_headers: \(url.prefix(60))...")
+            return
         }
         
         XCTFail("No network log for URL containing '\(urlPattern)' had both non-empty request_headers and response_headers. " +
