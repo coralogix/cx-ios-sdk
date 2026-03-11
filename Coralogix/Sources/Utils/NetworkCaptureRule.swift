@@ -114,6 +114,7 @@ public struct NetworkCaptureRule {
     }
 
     /// Converts `HTTPURLResponse.allHeaderFields` ([AnyHashable: Any]) to [String: String] for use with `filterHeaders`.
+    /// Multiple headers with the same name (e.g. multiple `Set-Cookie`) collapse to a single entry; the last value is used.
     internal static func responseHeadersDictionary(from response: HTTPURLResponse) -> [String: String] {
         var result: [String: String] = [:]
         for (key, value) in response.allHeaderFields {
