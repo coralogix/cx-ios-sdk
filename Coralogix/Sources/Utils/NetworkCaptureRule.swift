@@ -173,8 +173,9 @@ public struct NetworkCaptureRule {
     }
 
     /// Parses data as JSON and re-serializes to a compact JSON string. Returns nil on parse/serialize failure.
+    /// Top-level JSON fragments (true, 123, "ok", null) are accepted via .fragmentsAllowed on parse.
     private static func stringifyJSON(data: Data) -> String? {
-        guard let obj = try? JSONSerialization.jsonObject(with: data),
+        guard let obj = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]),
               let serialized = try? JSONSerialization.data(withJSONObject: obj, options: [.sortedKeys, .fragmentsAllowed]),
               let str = String(data: serialized, encoding: .utf8) else {
             return nil

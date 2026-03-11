@@ -233,6 +233,21 @@ final class NetworkCaptureRuleTests: XCTestCase {
         XCTAssertEqual(result, "{\"x\":\"hello\"}")
     }
 
+    /// Regression: top-level JSON fragments must be accepted (parse uses .fragmentsAllowed), not rejected as invalid JSON.
+    func testStringifyBody_applicationJson_topLevelFragments_preserved() {
+        let cases: [(String, String)] = [
+            ("true", "true"),
+            ("123", "123"),
+            ("\"ok\"", "\"ok\""),
+            ("null", "null"),
+        ]
+        for (input, expected) in cases {
+            let data = input.data(using: .utf8)!
+            let result = NetworkCaptureRule.stringifyBody(data: data, contentType: "application/json")
+            XCTAssertEqual(result, expected, "Fragment '\(input)' should be preserved")
+        }
+    }
+
     func testStringifyBody_textPlain_returnsUtf8String() {
         let data = "Hello, world".data(using: .utf8)!
         let result = NetworkCaptureRule.stringifyBody(data: data, contentType: "text/plain")
