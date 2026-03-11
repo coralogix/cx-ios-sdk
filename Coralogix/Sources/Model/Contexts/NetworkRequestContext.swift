@@ -38,13 +38,19 @@ struct NetworkRequestContext {
     var requestPayload: String? {
         didSet { requestPayload = Self.truncatePayload(requestPayload) }
     }
-    /// Stringified response body, truncated to `payloadMaxLength` characters if longer. `nil` when unavailable or content-type unsupported.
+    /// Stringified response body. Never truncated: if > `payloadMaxLength` the payload is dropped (CX-33234).
     var responsePayload: String? {
-        didSet { responsePayload = Self.truncatePayload(responsePayload) }
+        didSet { responsePayload = Self.capResponsePayload(responsePayload) }
     }
 
     private static func truncatePayload(_ payload: String?) -> String? {
         payload.map { String($0.prefix(payloadMaxLength)) }
+    }
+
+    /// Drops response payload when over limit (no truncation per CX-33234).
+    private static func capResponsePayload(_ payload: String?) -> String? {
+        guard let p = payload, p.count <= payloadMaxLength else { return nil }
+        return p
     }
     
     init(otel: SpanDataProtocol) {
@@ -85,6 +91,9 @@ struct NetworkRequestContext {
            let dict = Helper.convertJsonStringToDict(jsonString: raw) {
             self.responseHeaders = dict.mapValues { $0 as? String ?? String(describing: $0) }
         }
+        // Network capture: payloads set on span by receivedResponse (CX-33233/CX-33234)
+        self.requestPayload = otel.getAttribute(forKey: Keys.requestPayload.rawValue) as? String
+        self.responsePayload = Self.capResponsePayload(otel.getAttribute(forKey: Keys.responsePayload.rawValue) as? String)
     }
     
     func getDictionary() -> [String: Any] {

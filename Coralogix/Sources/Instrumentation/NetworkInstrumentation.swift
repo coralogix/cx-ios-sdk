@@ -58,6 +58,10 @@ extension CoralogixRum {
             shouldInjectTracingHeaders: { [weak self] request in
                 return self?.shouldAddTraceParent(to: request, options: options) ?? false
             },
+            shouldCollectResponsePayload: { request in
+                guard let configs = options.networkExtraConfig, !configs.isEmpty else { return false }
+                return resolveConfigForUrl(request.url?.absoluteString ?? "", configs: configs)?.collectResPayload ?? false
+            },
             receivedResponse: self.receivedResponse
         )
         self.sessionInstrumentation = URLSessionInstrumentation(configuration: configuration)
@@ -154,6 +158,14 @@ extension CoralogixRum {
                 let dictAny = Dictionary(uniqueKeysWithValues: filtered.map { ($0.key, $0.value as Any) })
                 let json = Helper.convertDictionayToJsonString(dict: dictAny)
                 span.setAttribute(key: Keys.responseHeaders.rawValue, value: AttributeValue.string(json))
+            }
+        }
+        // Response body (CX-33234): stringify by content-type, 1024-char limit (drop if over, no truncation)
+        if rule.collectResPayload, let responseData = data as? Data, let httpResponse = response as? HTTPURLResponse {
+            let headers = NetworkCaptureRule.responseHeadersDictionary(from: httpResponse)
+            let contentType = headers.first { $0.key.lowercased() == "content-type" }?.value
+            if let payload = NetworkCaptureRule.stringifyBody(data: responseData, contentType: contentType) {
+                span.setAttribute(key: Keys.responsePayload.rawValue, value: AttributeValue.string(payload))
             }
         }
     }

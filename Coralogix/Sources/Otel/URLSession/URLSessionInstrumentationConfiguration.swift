@@ -19,6 +19,7 @@ public struct URLSessionInstrumentationConfiguration {
                 nameSpan: ((URLRequest) -> (String)?)? = nil,
                 spanCustomization: ((URLRequest, SpanBuilder) -> Void)? = nil,
                 shouldInjectTracingHeaders: ((URLRequest) -> (Bool)?)? = nil,
+                shouldCollectResponsePayload: ((URLRequest) -> Bool)? = nil,
                 injectCustomHeaders: ((inout URLRequest, (any Span)?) -> Void)? = nil,
                 createdRequest: ((URLRequest, any Span) -> Void)? = nil,
                 receivedResponse: ((URLResponse, DataOrFile?, any Span, URLRequest?) -> Void)? = nil,
@@ -28,6 +29,7 @@ public struct URLSessionInstrumentationConfiguration {
         self.shouldRecordPayload = shouldRecordPayload
         self.shouldInstrument = shouldInstrument
         self.shouldInjectTracingHeaders = shouldInjectTracingHeaders
+        self.shouldCollectResponsePayload = shouldCollectResponsePayload
         self.injectCustomHeaders = injectCustomHeaders
         self.nameSpan = nameSpan
         self.spanCustomization = spanCustomization
@@ -49,6 +51,10 @@ public struct URLSessionInstrumentationConfiguration {
     /// Implement this callback if you want the session to record payload data, false by default.
     /// This callback is only necessary when using session delegate
     public var shouldRecordPayload: ((URLSession) -> (Bool)?)?
+
+    /// When non-nil and returning true for a request, response body is buffered (delegate path) and stringified for capture.
+    /// Used for rule-based response payload capture (e.g. NetworkCaptureRule.collectResPayload). Prefer over speculative buffering.
+    public var shouldCollectResponsePayload: ((URLRequest) -> Bool)?
 
     /// Implement this callback to filter which requests you want to inject headers to follow the trace,
     /// also must implement it if you want to inject custom headers

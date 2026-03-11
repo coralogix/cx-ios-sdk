@@ -125,6 +125,63 @@ public struct NetworkCaptureRule {
         return result
     }
 
+    // MARK: - Response body stringification (CX-33234)
+
+    /// Maximum character count for response payload. If stringified body exceeds this, return `nil` (drop entire payload, no truncation).
+    private static let maxResponsePayloadCharacters = 1024
+
+    /// Content-Type values that are stringified as UTF-8 text (no JSON re-serialization).
+    private static let textMimeTypes: Set<String> = [
+        "text/plain", "text/html", "text/css",
+        "application/javascript", "application/xml"
+    ]
+
+    /// Stringifies response body for capture. Only supports types that can be safely represented as text.
+    ///
+    /// - **application/json**: Parsed with `JSONSerialization` and re-serialized to compact JSON.
+    /// - **text/plain, text/html, text/css, application/javascript, application/xml**: Decoded as UTF-8.
+    /// - **Other / binary**: Returns `nil` (do not attempt to decode).
+    ///
+    /// If the result would exceed `maxResponsePayloadCharacters`, returns `nil` (drop entire payload; no truncation).
+    /// - Parameters:
+    ///   - data: Raw response body data.
+    ///   - contentType: Value of the `Content-Type` response header (e.g. `"application/json; charset=utf-8"`).
+    /// - Returns: Stringified body, or `nil` when unsupported type, decode failure, or length > 1024.
+    internal static func stringifyBody(data: Data, contentType: String?) -> String? {
+        let type = normalizedContentType(contentType)
+        let result: String?
+        if type == "application/json" {
+            result = stringifyJSON(data: data)
+        } else if Self.textMimeTypes.contains(type) {
+            result = String(data: data, encoding: .utf8)
+        } else {
+            result = nil
+        }
+        guard let body = result, body.count <= maxResponsePayloadCharacters else {
+            return nil
+        }
+        return body
+    }
+
+    /// Extracts the MIME type (lowercased) from a Content-Type header, e.g. "application/json; charset=utf-8" → "application/json".
+    private static func normalizedContentType(_ raw: String?) -> String {
+        guard let raw = raw?.trimmingCharacters(in: .whitespaces), !raw.isEmpty else {
+            return ""
+        }
+        let parts = raw.split(separator: ";", maxSplits: 1, omittingEmptySubsequences: false)
+        return parts.first.map { String($0).lowercased().trimmingCharacters(in: .whitespaces) } ?? ""
+    }
+
+    /// Parses data as JSON and re-serializes to a compact JSON string. Returns nil on parse/serialize failure.
+    private static func stringifyJSON(data: Data) -> String? {
+        guard let obj = try? JSONSerialization.jsonObject(with: data),
+              let serialized = try? JSONSerialization.data(withJSONObject: obj, options: [.sortedKeys, .fragmentsAllowed]),
+              let str = String(data: serialized, encoding: .utf8) else {
+            return nil
+        }
+        return str
+    }
+
     // MARK: - Internal matching
 
     /// Returns `true` when this rule applies to the given request URL.

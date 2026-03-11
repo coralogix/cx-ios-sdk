@@ -118,11 +118,12 @@ final class NetworkRequestContextTests: XCTestCase {
                        "requestPayload exceeding 1024 chars must be truncated to exactly 1024")
     }
 
-    func testResponsePayload_truncatedTo1024Chars() {
+    /// Response payload over 1024 chars is dropped (no truncation) per CX-33234 / browser SDK contract.
+    func testResponsePayload_over1024_dropped() {
         var context = NetworkRequestContext(otel: mockSpanData)
         context.responsePayload = String(repeating: "b", count: 1500)
-        XCTAssertEqual(context.responsePayload?.count, 1024,
-                       "responsePayload exceeding 1024 chars must be truncated to exactly 1024")
+        XCTAssertNil(context.responsePayload,
+                     "responsePayload exceeding 1024 chars must be dropped, not truncated")
     }
 
     func testRequestPayload_underLimit_notTruncated() {
@@ -155,13 +156,13 @@ final class NetworkRequestContextTests: XCTestCase {
                        "getDictionary must serialise the already-truncated value, not the original")
     }
 
-    func testGetDictionary_responsePayload_truncatedValueSerialised() {
+    /// Response payload over 1024 chars is dropped; getDictionary must not include response_payload (CX-33234).
+    func testGetDictionary_responsePayload_over1024_omitted() {
         var context = NetworkRequestContext(otel: mockSpanData)
         context.responsePayload = String(repeating: "b", count: 2000)
         let dict = context.getDictionary()
-        let serialised = dict[Keys.responsePayload.rawValue] as? String
-        XCTAssertEqual(serialised?.count, 1024,
-                       "getDictionary must serialise the already-truncated value, not the original")
+        XCTAssertNil(dict[Keys.responsePayload.rawValue],
+                     "responsePayload over 1024 must be dropped; key must be absent in getDictionary")
     }
 
     func testGetDictionary_allCaptureFieldsSet_allIncluded() {
