@@ -67,7 +67,7 @@ Identify if your app project contains an `AppDelegate` file or a `SceneDelegate`
                                                ignoreUrls: [],
                                                ignoreErrors: [],
                                                labels: ["String" : Any],
-                                               sampleRate: 100,
+                                               sessionSampleRate: 100,
                                                debug: false)
         self.coralogixRum = CoralogixRum(options: options)
         
@@ -92,7 +92,7 @@ Identify if your app project contains an `AppDelegate` file or a `SceneDelegate`
 
      init() {
         let domain = CoralogixDomain.US2
-        let options = CoralogixExporterOptions(coralogixDomain: doamin,
+        let options = CoralogixExporterOptions(coralogixDomain: domain,
                                                userContext: nil,
                                                environment: "ENVIRONMENT",
                                                application: "APP-NAME",
@@ -101,7 +101,7 @@ Identify if your app project contains an `AppDelegate` file or a `SceneDelegate`
                                                ignoreUrls: [],
                                                ignoreErrors: [],
                                                labels: ["String" : Any],
-                                               sampleRate: 100,
+                                               sessionSampleRate: 100,
                                                debug: false)
             self.coralogixRum = CoralogixRum(options: options)
             
@@ -138,7 +138,7 @@ Identify if your app project contains an `AppDelegate` file or a `SceneDelegate`
                                                ignoreUrls: [],
                                                ignoreErrors: [],
                                                labels: ["String" : Any],
-                                               sampleRate: 100,
+                                               sessionSampleRate: 100,
                                                debug: false)
             self.coralogixRum = CoralogixRum(options: options)
             
