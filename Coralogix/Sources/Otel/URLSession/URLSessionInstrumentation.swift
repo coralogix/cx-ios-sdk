@@ -85,6 +85,7 @@ public class URLSessionInstrumentation {
     }
 
     /// Returns and removes accumulated response body for the task (rule-based capture). Returns nil if none.
+    /// Private (unlike internal storeRequest/getRequest) — only used by logResponse/logError; tests don't need it.
     private func takeResponseBody(forTaskId taskId: String) -> Data? {
         var data: Data?
         captureQueue.sync {
