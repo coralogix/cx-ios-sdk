@@ -219,6 +219,76 @@ final class NetworkCaptureRuleTests: XCTestCase {
         XCTAssertNil(result["Authorization"])
     }
 
+    // MARK: - stringifyBody (CX-33234)
+
+    func testStringifyBody_applicationJson_returnsCompactJson() {
+        let data = "{\"a\":1,\"b\":2}".data(using: .utf8)!
+        let result = NetworkCaptureRule.stringifyBody(data: data, contentType: "application/json")
+        XCTAssertEqual(result, "{\"a\":1,\"b\":2}")
+    }
+
+    /// Regression: stringifyJSON must not canonicalize key order (no .sortedKeys); original key order retained.
+    func testStringifyBody_applicationJson_preservesKeyOrder() {
+        let data = "{\"b\":2,\"a\":1}".data(using: .utf8)!
+        let result = NetworkCaptureRule.stringifyBody(data: data, contentType: "application/json")
+        XCTAssertEqual(result, "{\"b\":2,\"a\":1}", "Key order should be preserved")
+    }
+
+    func testStringifyBody_applicationJsonWithCharset_returnsCompactJson() {
+        let data = "{\"x\":\"hello\"}".data(using: .utf8)!
+        let result = NetworkCaptureRule.stringifyBody(data: data, contentType: "application/json; charset=utf-8")
+        XCTAssertEqual(result, "{\"x\":\"hello\"}")
+    }
+
+    /// Regression: top-level JSON fragments must be accepted (parse uses .fragmentsAllowed), not rejected as invalid JSON.
+    func testStringifyBody_applicationJson_topLevelFragments_preserved() {
+        let cases: [(String, String)] = [
+            ("true", "true"),
+            ("123", "123"),
+            ("\"ok\"", "\"ok\""),
+            ("null", "null"),
+        ]
+        for (input, expected) in cases {
+            let data = input.data(using: .utf8)!
+            let result = NetworkCaptureRule.stringifyBody(data: data, contentType: "application/json")
+            XCTAssertEqual(result, expected, "Fragment '\(input)' should be preserved")
+        }
+    }
+
+    func testStringifyBody_textPlain_returnsUtf8String() {
+        let data = "Hello, world".data(using: .utf8)!
+        let result = NetworkCaptureRule.stringifyBody(data: data, contentType: "text/plain")
+        XCTAssertEqual(result, "Hello, world")
+    }
+
+    func testStringifyBody_textHtml_returnsUtf8String() {
+        let data = "<html></html>".data(using: .utf8)!
+        let result = NetworkCaptureRule.stringifyBody(data: data, contentType: "text/html")
+        XCTAssertEqual(result, "<html></html>")
+    }
+
+    func testStringifyBody_unsupportedType_returnsNil() {
+        let data = Data([0x00, 0x01, 0xFF])
+        XCTAssertNil(NetworkCaptureRule.stringifyBody(data: data, contentType: "application/octet-stream"))
+        XCTAssertNil(NetworkCaptureRule.stringifyBody(data: data, contentType: "image/png"))
+        XCTAssertNil(NetworkCaptureRule.stringifyBody(data: data, contentType: nil))
+    }
+
+    func testStringifyBody_over1024Characters_returnsNil() {
+        let long = String(repeating: "x", count: 1025)
+        let data = long.data(using: .utf8)!
+        let result = NetworkCaptureRule.stringifyBody(data: data, contentType: "text/plain")
+        XCTAssertNil(result)
+    }
+
+    func testStringifyBody_exactly1024Characters_returnsString() {
+        let exact = String(repeating: "a", count: 1024)
+        let data = exact.data(using: .utf8)!
+        let result = NetworkCaptureRule.stringifyBody(data: data, contentType: "text/plain")
+        XCTAssertEqual(result?.count, 1024)
+        XCTAssertEqual(result, exact)
+    }
+
     // MARK: - Mutual exclusivity
     // Enforced at compile time by the private Matcher enum — each init path sets exactly one
     // case, so no runtime white-box tests are needed here.

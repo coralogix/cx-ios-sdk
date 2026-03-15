@@ -63,11 +63,17 @@ var labels: [String: Any]?
 ```
 Sets labels that are added to every Span. This is an optional property.
 
-### sampleRate
+### sessionSampleRate (init parameter)
 ```swift
-let sampleRate: Int?
+sessionSampleRate: Int = 100  // percent 0–100
 ```
-Sets sample rate, value between `0.0` and `100.0`, where `0.0` means SDK will not initialized and `100.0` means ALL events will be sent.
+Session sampling: percentage of sessions that initialize the SDK. `0` means the SDK will not initialize; `100` means all sessions are sampled. Stored internally via `sdkSampler`.
+
+### networkExtraConfig
+```swift
+var networkExtraConfig: [NetworkCaptureRule]?
+```
+Per-URL rules for capturing request/response headers and body payloads for matching network requests. `nil` (default) disables all such capture. Each rule specifies a URL matcher (substring or regex), optional allowlists for `reqHeaders`/`resHeaders`, and optional `collectReqPayload`/`collectResPayload`. Response bodies are stringified by content-type (e.g. JSON, text) and capped at 1024 characters; file URLs (download tasks) are read with a size cap. See `NetworkCaptureRule` for initializers and behavior.
 
 ### mobileVitalsFPSSamplingRate
 ```swift
@@ -85,7 +91,7 @@ Provide the full URL string to ignore a specific request:
 ```swift
 ignoreUrl: ["https://jsonplaceholder.typicode.com/posts"]
 ```
-This will ignore only the exact URL above — it won’t match any variations like query parameters or sub-paths.
+This will ignore only the exact URL above — it won't match any variations like query parameters or sub-paths.
 
 2. Regex Pattern
 Use a regex string to match a broader pattern. For example, to ignore any URL containing /posts, such as:
@@ -104,5 +110,5 @@ ignoreUrl: [#"/posts(/\d+)?(\?.*?)?"#]
 
 This pattern matches /posts, /posts/ID, and optional query parameters.
 
-⚠️ Regex patterns must follow Swift’s raw string literal syntax (#""#) when defined in code.
+⚠️ Regex patterns must follow Swift's raw string literal syntax (#""#) when defined in code.
 

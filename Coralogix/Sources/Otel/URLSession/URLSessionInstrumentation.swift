@@ -27,6 +27,11 @@ private var idKey: Void?
 
 public class URLSessionInstrumentation {
     private var requestMap = [String: NetworkRequestState]()
+    /// Response body chunks keyed by task ID. Only populated when shouldCollectResponsePayload(request) is true (CX-33234).
+    /// Accumulated size is capped at `maxResponseBodyStoreBytes` to avoid unbounded memory (wrong expectedContentLength or streaming).
+    private var responseBodyStore = [String: Data]()
+    /// Max bytes to buffer per task for response body capture; aligned with downstream 1024-char limit (avoid unbounded growth).
+    private static let maxResponseBodyStoreBytes = 64 * 1024
     
     private var _configuration: URLSessionInstrumentationConfiguration
     public var configuration: URLSessionInstrumentationConfiguration {
@@ -34,6 +39,8 @@ public class URLSessionInstrumentation {
     }
     
     private let queue = DispatchQueue(label: "io.opentelemetry.ddnetworkinstrumentation", attributes: .concurrent)
+    /// Serial queue for response body interception store (CX-33234).
+    private let captureQueue = DispatchQueue(label: "com.coralogix.network-capture")
     private let configurationQueue = DispatchQueue(label: "io.opentelemetry.configuration")
     
     static var instrumentedKey = "io.opentelemetry.instrumentedCall"
@@ -68,6 +75,7 @@ public class URLSessionInstrumentation {
     }
 
     /// Stores the request for the task so it can be read at response time (e.g. for header capture).
+    /// Last write per taskId wins; callers should pass the instrumented/processed request when available.
     internal func storeRequest(_ request: URLRequest, forTaskId taskId: String) {
         queue.sync(flags: .barrier) {
             if requestMap[taskId] == nil {
@@ -76,7 +84,24 @@ public class URLSessionInstrumentation {
             requestMap[taskId]?.setRequest(request)
         }
     }
-    
+
+    /// Returns and removes accumulated response body for the task (rule-based capture). Returns nil if none.
+    /// Private (unlike internal storeRequest/getRequest) — only used by logResponse/logError; tests don't need it.
+    private func takeResponseBody(forTaskId taskId: String) -> Data? {
+        var data: Data?
+        captureQueue.sync {
+            data = responseBodyStore.removeValue(forKey: taskId)
+        }
+        return data
+    }
+
+    /// Whether response payload should be buffered for this task. Uses request when available, else response URL (rule resolution consistent with receivedResponse).
+    private func shouldBufferResponsePayload(request: URLRequest?, responseURL: URL?) -> Bool {
+        let candidate = request ?? responseURL.map { URLRequest(url: $0) }
+        guard let candidate else { return false }
+        return configuration.shouldCollectResponsePayload?(candidate) == true
+    }
+
     public init(configuration: URLSessionInstrumentationConfiguration) {
         self._configuration = configuration
         
@@ -871,19 +896,20 @@ public class URLSessionInstrumentation {
             // Do not remove from map yet — logResponse calls getRequest(forTaskId:) so request headers can be captured in receivedResponse
         }
         
+        let responseData = takeResponseBody(forTaskId: taskId) ?? requestState?.dataProcessed
         // Log with basic data available from task
         if let error = task.error {
             let status = (task.response as? HTTPURLResponse)?.statusCode ?? 0
             #if DEBUG
             Log.testLog("[URLSessionInstrumentation] Fallback logging error for taskId: \(taskId), status: \(status)")
             #endif
-            URLSessionLogger.logError(error, dataOrFile: requestState?.dataProcessed, statusCode: status, instrumentation: self, sessionTaskId: taskId)
+            URLSessionLogger.logError(error, dataOrFile: responseData, statusCode: status, instrumentation: self, sessionTaskId: taskId)
         } else if let response = task.response {
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
             #if DEBUG
             Log.testLog("[URLSessionInstrumentation] Fallback logging response for taskId: \(taskId), status: \(status)")
             #endif
-            URLSessionLogger.logResponse(response, dataOrFile: requestState?.dataProcessed, instrumentation: self, sessionTaskId: taskId)
+            URLSessionLogger.logResponse(response, dataOrFile: responseData, instrumentation: self, sessionTaskId: taskId)
         }
         
         // Clean up after logging so receivedResponse had a chance to read the request for header capture
@@ -1055,11 +1081,34 @@ public class URLSessionInstrumentation {
     
     // URLSessionTask methods
     private func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
-        guard configuration.shouldRecordPayload?(session) ?? false else { return }
         guard let taskId = objc_getAssociatedObject(dataTask, &idKey) as? String else {
             return
         }
+        var request: URLRequest?
+        queue.sync {
+            request = requestMap[taskId]?.request
+        }
         let dataCopy = data
+        let shouldBuffer = shouldBufferResponsePayload(request: request, responseURL: dataTask.response?.url)
+        if shouldBuffer {
+            captureQueue.async(flags: .barrier) {
+                let existing = self.responseBodyStore[taskId] ?? Data()
+                let newCount = existing.count + dataCopy.count
+                if newCount > Self.maxResponseBodyStoreBytes {
+                    self.responseBodyStore.removeValue(forKey: taskId)
+                    return
+                }
+                if self.responseBodyStore[taskId] == nil {
+                    self.responseBodyStore[taskId] = Data()
+                }
+                self.responseBodyStore[taskId]?.append(dataCopy)
+            }
+            return
+        }
+        if request == nil, configuration.shouldCollectResponsePayload != nil {
+            Log.d("[URLSessionInstrumentation] didReceive data: request nil for taskId \(taskId), response payload capture skipped (timing?)")
+        }
+        guard configuration.shouldRecordPayload?(session) ?? false else { return }
         queue.async(flags: .barrier) {
             if (self.requestMap[taskId]?.request) != nil {
                 self.createRequestState(for: taskId)
@@ -1072,10 +1121,28 @@ public class URLSessionInstrumentation {
     }
     
     private func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive response: URLResponse, completionHandler: @escaping (URLSession.ResponseDisposition) -> Void) {
-        guard configuration.shouldRecordPayload?(session) ?? false else { return }
         guard let taskId = objc_getAssociatedObject(dataTask, &idKey) as? String else {
             return
         }
+        var request: URLRequest?
+        queue.sync {
+            request = requestMap[taskId]?.request
+        }
+        let shouldBuffer = shouldBufferResponsePayload(request: request, responseURL: response.url)
+        if shouldBuffer {
+            captureQueue.async(flags: .barrier) {
+                if self.responseBodyStore[taskId] == nil {
+                    self.responseBodyStore[taskId] = Data()
+                }
+                if response.expectedContentLength >= 0 {
+                    let cap = min(Int(response.expectedContentLength), Self.maxResponseBodyStoreBytes)
+                    self.responseBodyStore[taskId]?.reserveCapacity(cap)
+                }
+            }
+            // completionHandler is invoked by the original delegate after the swizzle returns.
+            return
+        }
+        guard configuration.shouldRecordPayload?(session) ?? false else { return }
         queue.async(flags: .barrier) {
             if (self.requestMap[taskId]?.request) != nil {
                 self.createRequestState(for: taskId)
@@ -1098,18 +1165,19 @@ public class URLSessionInstrumentation {
             requestState = requestMap[taskId]
             // Do not remove from map yet — logResponse/logError need getRequest(forTaskId:) for request header capture
         }
+        let responseData = takeResponseBody(forTaskId: taskId) ?? requestState?.dataProcessed
         if let error = error {
             let status = (task.response as? HTTPURLResponse)?.statusCode ?? 0
             #if DEBUG
             Log.testLog("[URLSessionInstrumentation] Logging error for taskId: \(taskId), status: \(status)")
             #endif
-            URLSessionLogger.logError(error, dataOrFile: requestState?.dataProcessed, statusCode: status, instrumentation: self, sessionTaskId: taskId)
+            URLSessionLogger.logError(error, dataOrFile: responseData, statusCode: status, instrumentation: self, sessionTaskId: taskId)
         } else if let response = task.response {
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
             #if DEBUG
             Log.testLog("[URLSessionInstrumentation] Logging response for taskId: \(taskId), status: \(status)")
             #endif
-            URLSessionLogger.logResponse(response, dataOrFile: requestState?.dataProcessed, instrumentation: self, sessionTaskId: taskId)
+            URLSessionLogger.logResponse(response, dataOrFile: responseData, instrumentation: self, sessionTaskId: taskId)
         }
         
         // Clean up after logging so receivedResponse had a chance to read the request for header capture
@@ -1141,18 +1209,19 @@ public class URLSessionInstrumentation {
             return
         }
         
+        let responseData = takeResponseBody(forTaskId: taskId) ?? requestState?.dataProcessed
         /// Code for instrumenting collection should be written here
         if let error = task.error {
             let status = (task.response as? HTTPURLResponse)?.statusCode ?? 0
             #if DEBUG
             Log.testLog("[URLSessionInstrumentation] Logging error for taskId: \(taskId), status: \(status)")
             #endif
-            URLSessionLogger.logError(error, dataOrFile: requestState?.dataProcessed, statusCode: status, instrumentation: self, sessionTaskId: taskId)
+            URLSessionLogger.logError(error, dataOrFile: responseData, statusCode: status, instrumentation: self, sessionTaskId: taskId)
         } else if let response = task.response {
             #if DEBUG
             Log.testLog("[URLSessionInstrumentation] Logging response for taskId: \(taskId), status: \((response as? HTTPURLResponse)?.statusCode ?? 0)")
             #endif
-            URLSessionLogger.logResponse(response, dataOrFile: requestState?.dataProcessed, instrumentation: self, sessionTaskId: taskId)
+            URLSessionLogger.logResponse(response, dataOrFile: responseData, instrumentation: self, sessionTaskId: taskId)
         }
         
         // Clean up after logging so receivedResponse had a chance to read the request for header capture

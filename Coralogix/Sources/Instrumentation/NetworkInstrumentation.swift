@@ -58,11 +58,21 @@ extension CoralogixRum {
             shouldInjectTracingHeaders: { [weak self] request in
                 return self?.shouldAddTraceParent(to: request, options: options) ?? false
             },
+            shouldCollectResponsePayload: { request in
+                Self.shouldCollectResponsePayload(for: request, options: options)
+            },
             receivedResponse: self.receivedResponse
         )
         self.sessionInstrumentation = URLSessionInstrumentation(configuration: configuration)
     }
     
+    /// Returns whether response body should be buffered for this request (rule-based; used for collectResPayload).
+    private static func shouldCollectResponsePayload(for request: URLRequest, options: CoralogixExporterOptions) -> Bool {
+        guard let configs = options.networkExtraConfig, !configs.isEmpty else { return false }
+        let urlString = request.url?.absoluteString ?? ""
+        return resolveConfigForUrl(urlString, configs: configs)?.collectResPayload ?? false
+    }
+
     internal func shouldAddTraceParent(to request: URLRequest, options: CoralogixExporterOptions) -> Bool {
         guard let requestURLString = request.url?.absoluteString else {
             return false
@@ -155,6 +165,20 @@ extension CoralogixRum {
                 let json = Helper.convertDictionayToJsonString(dict: dictAny)
                 span.setAttribute(key: Keys.responseHeaders.rawValue, value: AttributeValue.string(json))
             }
+        }
+        // Response body (CX-33234): stringify by content-type, 1024-char limit (drop if over, no truncation)
+        // dataOrFile can be Data or Optional(Data) depending on completion-handler signature, so we unwrap.
+        if rule.collectResPayload, let responseData = NetworkCaptureRule.responseData(from: data), let httpResponse = response as? HTTPURLResponse {
+            let headers = NetworkCaptureRule.responseHeadersDictionary(from: httpResponse)
+            let contentType = headers.first { $0.key.lowercased() == "content-type" }?.value
+            if let payload = NetworkCaptureRule.stringifyBody(data: responseData, contentType: contentType) {
+                span.setAttribute(key: Keys.responsePayload.rawValue, value: AttributeValue.string(payload))
+                Log.d("[Coralogix] response_payload set on span (\(payload.count) chars). See network_request_context.response_payload in RUM.")
+            } else {
+                Log.d("[Coralogix] response_payload skipped: stringifyBody returned nil (contentType: \(contentType ?? "nil"), dataLen: \(responseData.count))")
+            }
+        } else if rule.collectResPayload {
+            Log.d("[Coralogix] response_payload skipped: no Data (type: \(type(of: data))) or response not HTTPURLResponse")
         }
     }
     

@@ -18,6 +18,6 @@ Example/envs.swift
 # Ignore tech debt documentation
 tech-debt/
 
-# Jira MCP patched package (unpacked from npm; commit package/build/ so patch is in repo)
-package/node_modules/
+# Jira MCP package (not part of iOS SDK; keep local only)
+package/
 mcp-devtools-jira-0.2.6.tgz

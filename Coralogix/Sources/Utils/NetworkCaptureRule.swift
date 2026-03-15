@@ -125,6 +125,101 @@ public struct NetworkCaptureRule {
         return result
     }
 
+    // MARK: - Response body stringification (CX-33234)
+
+    /// Maximum character count for response payload. If stringified body exceeds this, return `nil` (drop entire payload, no truncation).
+    private static let maxResponsePayloadCharacters = 1024
+
+    /// Max bytes to read from a file URL for response payload (aligns with URLSessionInstrumentation buffer cap).
+    private static let maxFilePayloadBytes = 64 * 1024
+
+    /// Content-Type values that are stringified as UTF-8 text (no JSON re-serialization).
+    private static let textMimeTypes: Set<String> = [
+        "text/plain", "text/html", "text/css", "text/xml",
+        "application/javascript", "application/xml"
+    ]
+
+    /// Stringifies response body for capture. Only supports types that can be safely represented as text.
+    ///
+    /// - **application/json**: Returned as the original UTF-8 string (wire order preserved) by `stringifyJSON`;
+    ///   that function validates well-formed JSON then returns the payload unchanged rather than re-serializing.
+    /// - **text/plain, text/html, text/css, text/xml, application/javascript, application/xml**: Decoded as UTF-8.
+    /// - **Other / binary**: Returns `nil` (do not attempt to decode).
+    ///
+    /// If the result would exceed `maxResponsePayloadCharacters`, returns `nil` (drop entire payload; no truncation).
+    /// - Parameters:
+    ///   - data: Raw response body data.
+    ///   - contentType: Value of the `Content-Type` response header (e.g. `"application/json; charset=utf-8"`).
+    /// - Returns: Stringified body, or `nil` when unsupported type, decode failure, or length > 1024.
+    /// Extracts `Data` from response payload (Any?). Unwraps optional containers (e.g. Optional<Data>), then handles `Data`, NSData (ObjC bridge), and file URLs (download tasks); file reads are capped.
+    internal static func responseData(from dataOrFile: Any?) -> Data? {
+        guard let value = dataOrFile else { return nil }
+        var current: Any = value
+        let maxOptionalDepth = 5
+        for _ in 0..<maxOptionalDepth {
+            let mirror = Mirror(reflecting: current)
+            guard mirror.displayStyle == .optional, let child = mirror.children.first?.value else { break }
+            current = child
+        }
+        return (current as? Data) ?? (current as? NSData).map { $0 as Data } ?? dataFromFileURL(current)
+    }
+
+    internal static func stringifyBody(data: Data, contentType: String?) -> String? {
+        let type = normalizedContentType(contentType)
+        let result: String?
+        if type == "application/json" {
+            result = stringifyJSON(data: data)
+        } else if Self.textMimeTypes.contains(type) {
+            result = String(data: data, encoding: .utf8)
+        } else {
+            result = nil
+        }
+        guard let body = result, body.count <= maxResponsePayloadCharacters else {
+            return nil
+        }
+        return body
+    }
+
+    /// If `value` is a file URL, loads and returns its data (capped); otherwise nil.
+    private static func dataFromFileURL(_ value: Any) -> Data? {
+        let url = (value as? URL) ?? (value as? NSURL).map { $0 as URL }
+        guard let url, url.isFileURL else { return nil }
+        return loadFileData(from: url, maxBytes: maxFilePayloadBytes)
+    }
+
+    /// Loads up to `maxBytes` from a file URL. Returns nil on failure or if not a file URL.
+    private static func loadFileData(from url: URL, maxBytes: Int) -> Data? {
+        guard url.isFileURL else { return nil }
+        do {
+            let handle = try FileHandle(forReadingFrom: url)
+            defer { try? handle.close() }
+            return handle.readData(ofLength: maxBytes)
+        } catch {
+            Log.w("[Coralogix] Failed to read file for response payload: \(url.path): \(error)")
+            return nil
+        }
+    }
+
+    /// Extracts the MIME type (lowercased) from a Content-Type header, e.g. "application/json; charset=utf-8" → "application/json".
+    private static func normalizedContentType(_ raw: String?) -> String {
+        guard let raw = raw?.trimmingCharacters(in: .whitespaces), !raw.isEmpty else {
+            return ""
+        }
+        let parts = raw.split(separator: ";", maxSplits: 1, omittingEmptySubsequences: false)
+        return parts.first.map { String($0).lowercased().trimmingCharacters(in: .whitespaces) } ?? ""
+    }
+
+    /// Validates that data is well-formed JSON (including top-level fragments) and returns the original
+    /// UTF-8 string to preserve wire order. Returns nil on parse failure or invalid UTF-8.
+    /// Avoids JSONSerialization re-serialization so object key order is deterministic across platforms.
+    private static func stringifyJSON(data: Data) -> String? {
+        guard (try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])) != nil,
+              let str = String(data: data, encoding: .utf8) else {
+            return nil
+        }
+        return str
+    }
+
     // MARK: - Internal matching
 
     /// Returns `true` when this rule applies to the given request URL.
