@@ -186,7 +186,7 @@ public struct NetworkCaptureRule {
         do {
             let handle = try FileHandle(forReadingFrom: url)
             defer { try? handle.close() }
-            return handle.readData(upToCount: maxBytes)
+            return handle.readData(ofLength: maxBytes)
         } catch {
             Log.w("[Coralogix] Failed to read file for response payload: \(url.path): \(error)")
             return nil
