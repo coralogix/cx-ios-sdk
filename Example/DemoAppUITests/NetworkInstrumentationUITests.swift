@@ -116,12 +116,16 @@ final class NetworkInstrumentationUITests: XCTestCase {
     private func tapNetworkOption(_ optionName: String, waitTime: TimeInterval = 2.5) {
         print("📡 Triggering: \(optionName)")
         let button = app.staticTexts[optionName]
+        let table = app.tables.firstMatch
         
-        if !button.waitForExistence(timeout: 5) {
-            print("⚠️ Button '\(optionName)' not found, scrolling...")
-            // Try scrolling to find the button
-            app.tables.firstMatch.swipeUp()
-            Thread.sleep(forTimeInterval: 1)
+        // Scroll until the option is visible (last rows e.g. "Header & response body capture" may be off-screen)
+        var attempts = 0
+        let maxScrollAttempts = 6
+        while !button.waitForExistence(timeout: 2) && attempts < maxScrollAttempts {
+            print("⚠️ Button '\(optionName)' not visible, scrolling...")
+            table.swipeUp()
+            Thread.sleep(forTimeInterval: 0.5)
+            attempts += 1
         }
         
         XCTAssertTrue(button.exists, "Button '\(optionName)' should exist")
@@ -496,8 +500,8 @@ final class NetworkInstrumentationUITests: XCTestCase {
         // 12. Async/Await example
         tapNetworkOption("Async/Await example", waitTime: 3)
         
-        // 13. Request with header/payload capture (hits jsonplaceholder with NetworkCaptureRule; ensures request_headers + response_headers in log)
-        tapNetworkOption("Request with header/payload capture", waitTime: 3)
+        // 13. Header & response body capture (hits jsonplaceholder with NetworkCaptureRule; ensures request_headers + response_headers in log)
+        tapNetworkOption("Header & response body capture", waitTime: 3)
         
         // Wait for SDK to batch and send all data to backend
         print("\n⏳ Phase 2: Waiting for SDK to send data to backend (8 seconds)...")
@@ -537,7 +541,7 @@ final class NetworkInstrumentationUITests: XCTestCase {
         
         verifyExpectedRequests(expectedRequests)
         
-        // Verify the exact demo request (header/payload capture) has request_headers and response_headers
+        // Verify the exact demo request (header & response body capture) has request_headers and response_headers
         if let validationData = readValidationData() {
             verifyNetworkLogHasCaptureHeaders(
                 validationData: validationData,
