@@ -117,12 +117,6 @@ extension CoralogixRum {
 
     }
     
-    /// Extracts `Data` from `DataOrFile?` (Any?). Handles direct `Data` and NSData (ObjC bridge).
-    private static func responseData(from dataOrFile: DataOrFile?) -> Data? {
-        guard let value = dataOrFile else { return nil }
-        return (value as? Data) ?? (value as? NSData).map { $0 as Data }
-    }
-
     private func receivedResponse(response: URLResponse, data: DataOrFile?, span: any Span, request: URLRequest?) {
         if let httpResponse = response as? HTTPURLResponse {
             let statusCode = httpResponse.statusCode
@@ -174,7 +168,7 @@ extension CoralogixRum {
         }
         // Response body (CX-33234): stringify by content-type, 1024-char limit (drop if over, no truncation)
         // dataOrFile can be Data or Optional(Data) depending on completion-handler signature, so we unwrap.
-        if rule.collectResPayload, let responseData = Self.responseData(from: data), let httpResponse = response as? HTTPURLResponse {
+        if rule.collectResPayload, let responseData = NetworkCaptureRule.responseData(from: data), let httpResponse = response as? HTTPURLResponse {
             let headers = NetworkCaptureRule.responseHeadersDictionary(from: httpResponse)
             let contentType = headers.first { $0.key.lowercased() == "content-type" }?.value
             if let payload = NetworkCaptureRule.stringifyBody(data: responseData, contentType: contentType) {

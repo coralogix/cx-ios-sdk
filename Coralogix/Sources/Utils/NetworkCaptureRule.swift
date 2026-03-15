@@ -130,6 +130,9 @@ public struct NetworkCaptureRule {
     /// Maximum character count for response payload. If stringified body exceeds this, return `nil` (drop entire payload, no truncation).
     private static let maxResponsePayloadCharacters = 1024
 
+    /// Max bytes to read from a file URL for response payload (aligns with URLSessionInstrumentation buffer cap).
+    private static let maxFilePayloadBytes = 64 * 1024
+
     /// Content-Type values that are stringified as UTF-8 text (no JSON re-serialization).
     private static let textMimeTypes: Set<String> = [
         "text/plain", "text/html", "text/css", "text/xml",
@@ -148,6 +151,12 @@ public struct NetworkCaptureRule {
     ///   - data: Raw response body data.
     ///   - contentType: Value of the `Content-Type` response header (e.g. `"application/json; charset=utf-8"`).
     /// - Returns: Stringified body, or `nil` when unsupported type, decode failure, or length > 1024.
+    /// Extracts `Data` from response payload (Any?). Handles `Data`, NSData (ObjC bridge), and file URLs (download tasks); file reads are capped.
+    internal static func responseData(from dataOrFile: Any?) -> Data? {
+        guard let value = dataOrFile else { return nil }
+        return (value as? Data) ?? (value as? NSData).map { $0 as Data } ?? dataFromFileURL(value)
+    }
+
     internal static func stringifyBody(data: Data, contentType: String?) -> String? {
         let type = normalizedContentType(contentType)
         let result: String?
@@ -162,6 +171,26 @@ public struct NetworkCaptureRule {
             return nil
         }
         return body
+    }
+
+    /// If `value` is a file URL, loads and returns its data (capped); otherwise nil.
+    private static func dataFromFileURL(_ value: Any) -> Data? {
+        let url = (value as? URL) ?? (value as? NSURL).map { $0 as URL }
+        guard let url, url.isFileURL else { return nil }
+        return loadFileData(from: url, maxBytes: maxFilePayloadBytes)
+    }
+
+    /// Loads up to `maxBytes` from a file URL. Returns nil on failure or if not a file URL.
+    private static func loadFileData(from url: URL, maxBytes: Int) -> Data? {
+        guard url.isFileURL else { return nil }
+        do {
+            let handle = try FileHandle(forReadingFrom: url)
+            defer { try? handle.close() }
+            return handle.readData(upToCount: maxBytes)
+        } catch {
+            Log.w("[Coralogix] Failed to read file for response payload: \(url.path): \(error)")
+            return nil
+        }
     }
 
     /// Extracts the MIME type (lowercased) from a Content-Type header, e.g. "application/json; charset=utf-8" → "application/json".
