@@ -132,7 +132,7 @@ public struct NetworkCaptureRule {
 
     /// Content-Type values that are stringified as UTF-8 text (no JSON re-serialization).
     private static let textMimeTypes: Set<String> = [
-        "text/plain", "text/html", "text/css",
+        "text/plain", "text/html", "text/css", "text/xml",
         "application/javascript", "application/xml"
     ]
 
@@ -140,7 +140,7 @@ public struct NetworkCaptureRule {
     ///
     /// - **application/json**: Returned as the original UTF-8 string (wire order preserved) by `stringifyJSON`;
     ///   that function validates well-formed JSON then returns the payload unchanged rather than re-serializing.
-    /// - **text/plain, text/html, text/css, application/javascript, application/xml**: Decoded as UTF-8.
+    /// - **text/plain, text/html, text/css, text/xml, application/javascript, application/xml**: Decoded as UTF-8.
     /// - **Other / binary**: Returns `nil` (do not attempt to decode).
     ///
     /// If the result would exceed `maxResponsePayloadCharacters`, returns `nil` (drop entire payload; no truncation).

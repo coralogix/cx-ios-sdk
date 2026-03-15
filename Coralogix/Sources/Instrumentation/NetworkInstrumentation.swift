@@ -117,23 +117,13 @@ extension CoralogixRum {
 
     }
     
-    /// Extracts `Data` from `DataOrFile?` (Any?). Handles direct `Data`, nested optionals, and NSData (ObjC bridge).
+    /// Extracts `Data` from `DataOrFile?` (Any?). Handles direct `Data`, one level of optional, and NSData (ObjC bridge).
     private static func responseData(from dataOrFile: DataOrFile?) -> Data? {
         if let d = dataOrFile as? Data { return d }
         if let ns = dataOrFile as? NSData { return ns as Data }
-        guard let any = dataOrFile else { return nil }
-        var current: Any = any
-        // Unwrap up to this many optional levels (covers known completion-handler shapes when Data? is passed as Any?).
-        let maxOptionalUnwrapDepth = 5
-        for _ in 0 ..< maxOptionalUnwrapDepth {
-            if let d = current as? Data { return d }
-            if let ns = current as? NSData { return ns as Data }
-            let mirror = Mirror(reflecting: current)
-            guard mirror.displayStyle == .optional, let child = mirror.children.first?.value else { break }
-            current = child
-        }
-        if let d = current as? Data { return d }
-        return (current as? NSData) as Data?
+        if case let x? = dataOrFile as? Data? { return x }
+        if case let x? = dataOrFile as? NSData? { return x as Data }
+        return nil
     }
 
     private func receivedResponse(response: URLResponse, data: DataOrFile?, span: any Span, request: URLRequest?) {
