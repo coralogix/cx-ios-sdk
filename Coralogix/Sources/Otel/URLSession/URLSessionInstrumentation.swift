@@ -75,6 +75,7 @@ public class URLSessionInstrumentation {
     }
 
     /// Stores the request for the task so it can be read at response time (e.g. for header capture).
+    /// Last write per taskId wins; callers should pass the instrumented/processed request when available.
     internal func storeRequest(_ request: URLRequest, forTaskId taskId: String) {
         queue.sync(flags: .barrier) {
             if requestMap[taskId] == nil {
