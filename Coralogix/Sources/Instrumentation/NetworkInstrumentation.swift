@@ -173,18 +173,12 @@ extension CoralogixRum {
             let contentType = headers.first { $0.key.lowercased() == "content-type" }?.value
             if let payload = NetworkCaptureRule.stringifyBody(data: responseData, contentType: contentType) {
                 span.setAttribute(key: Keys.responsePayload.rawValue, value: AttributeValue.string(payload))
-                #if DEBUG
                 Log.d("[Coralogix] response_payload set on span (\(payload.count) chars). See network_request_context.response_payload in RUM.")
-                #endif
             } else {
-                #if DEBUG
                 Log.d("[Coralogix] response_payload skipped: stringifyBody returned nil (contentType: \(contentType ?? "nil"), dataLen: \(responseData.count))")
-                #endif
             }
         } else if rule.collectResPayload {
-            #if DEBUG
             Log.d("[Coralogix] response_payload skipped: no Data (type: \(type(of: data))) or response not HTTPURLResponse")
-            #endif
         }
     }
     
