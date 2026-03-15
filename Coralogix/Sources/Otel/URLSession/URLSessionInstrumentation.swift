@@ -97,13 +97,9 @@ public class URLSessionInstrumentation {
 
     /// Whether response payload should be buffered for this task. Uses request when available, else response URL (rule resolution consistent with receivedResponse).
     private func shouldBufferResponsePayload(request: URLRequest?, responseURL: URL?) -> Bool {
-        if let req = request {
-            return configuration.shouldCollectResponsePayload?(req) == true
-        }
-        if let url = responseURL {
-            return configuration.shouldCollectResponsePayload?(URLRequest(url: url)) == true
-        }
-        return false
+        let candidate = request ?? responseURL.map { URLRequest(url: $0) }
+        guard let candidate else { return false }
+        return configuration.shouldCollectResponsePayload?(candidate) == true
     }
 
     public init(configuration: URLSessionInstrumentationConfiguration) {
