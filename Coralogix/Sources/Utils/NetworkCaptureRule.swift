@@ -151,10 +151,17 @@ public struct NetworkCaptureRule {
     ///   - data: Raw response body data.
     ///   - contentType: Value of the `Content-Type` response header (e.g. `"application/json; charset=utf-8"`).
     /// - Returns: Stringified body, or `nil` when unsupported type, decode failure, or length > 1024.
-    /// Extracts `Data` from response payload (Any?). Handles `Data`, NSData (ObjC bridge), and file URLs (download tasks); file reads are capped.
+    /// Extracts `Data` from response payload (Any?). Unwraps optional containers (e.g. Optional<Data>), then handles `Data`, NSData (ObjC bridge), and file URLs (download tasks); file reads are capped.
     internal static func responseData(from dataOrFile: Any?) -> Data? {
         guard let value = dataOrFile else { return nil }
-        return (value as? Data) ?? (value as? NSData).map { $0 as Data } ?? dataFromFileURL(value)
+        var current: Any = value
+        let maxOptionalDepth = 5
+        for _ in 0..<maxOptionalDepth {
+            let mirror = Mirror(reflecting: current)
+            guard mirror.displayStyle == .optional, let child = mirror.children.first?.value else { break }
+            current = child
+        }
+        return (current as? Data) ?? (current as? NSData).map { $0 as Data } ?? dataFromFileURL(current)
     }
 
     internal static func stringifyBody(data: Data, contentType: String?) -> String? {
