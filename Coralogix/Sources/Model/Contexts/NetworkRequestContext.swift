@@ -48,6 +48,8 @@ struct NetworkRequestContext {
     }
 
     /// Drops response payload when over limit (no truncation per CX-33234).
+    /// Double-gate: `NetworkCaptureRule.stringifyBody` already drops payloads > 1024 chars before they
+    /// reach the span; this is a safety net for direct attribute assignments.
     private static func capResponsePayload(_ payload: String?) -> String? {
         guard let p = payload, p.count <= payloadMaxLength else { return nil }
         return p

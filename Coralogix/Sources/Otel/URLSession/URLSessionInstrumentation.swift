@@ -28,7 +28,10 @@ private var idKey: Void?
 public class URLSessionInstrumentation {
     private var requestMap = [String: NetworkRequestState]()
     /// Response body chunks keyed by task ID. Only populated when shouldCollectResponsePayload(request) is true (CX-33234).
+    /// Accumulated size is capped at `maxResponseBodyStoreBytes` to avoid unbounded memory (wrong expectedContentLength or streaming).
     private var responseBodyStore = [String: Data]()
+    /// Max bytes to buffer per task for response body capture; aligned with downstream 1024-char limit (avoid unbounded growth).
+    private static let maxResponseBodyStoreBytes = 64 * 1024
     
     private var _configuration: URLSessionInstrumentationConfiguration
     public var configuration: URLSessionInstrumentationConfiguration {
@@ -1079,6 +1082,12 @@ public class URLSessionInstrumentation {
         let dataCopy = data
         if let req = request, configuration.shouldCollectResponsePayload?(req) == true {
             captureQueue.async(flags: .barrier) {
+                let existing = self.responseBodyStore[taskId] ?? Data()
+                let newCount = existing.count + dataCopy.count
+                if newCount > Self.maxResponseBodyStoreBytes {
+                    self.responseBodyStore.removeValue(forKey: taskId)
+                    return
+                }
                 if self.responseBodyStore[taskId] == nil {
                     self.responseBodyStore[taskId] = Data()
                 }
@@ -1112,7 +1121,8 @@ public class URLSessionInstrumentation {
                     self.responseBodyStore[taskId] = Data()
                 }
                 if response.expectedContentLength >= 0 {
-                    self.responseBodyStore[taskId]?.reserveCapacity(Int(response.expectedContentLength))
+                    let cap = min(Int(response.expectedContentLength), Self.maxResponseBodyStoreBytes)
+                    self.responseBodyStore[taskId]?.reserveCapacity(cap)
                 }
             }
             // completionHandler is invoked by the original delegate after the swizzle returns.

@@ -138,7 +138,8 @@ public struct NetworkCaptureRule {
 
     /// Stringifies response body for capture. Only supports types that can be safely represented as text.
     ///
-    /// - **application/json**: Parsed with `JSONSerialization` and re-serialized to compact JSON.
+    /// - **application/json**: Returned as the original UTF-8 string (wire order preserved) by `stringifyJSON`;
+    ///   that function validates well-formed JSON then returns the payload unchanged rather than re-serializing.
     /// - **text/plain, text/html, text/css, application/javascript, application/xml**: Decoded as UTF-8.
     /// - **Other / binary**: Returns `nil` (do not attempt to decode).
     ///
