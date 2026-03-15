@@ -122,7 +122,7 @@ extension CoralogixRum {
         if let d = dataOrFile as? Data { return d }
         if let ns = dataOrFile as? NSData { return ns as Data }
         if case let x? = dataOrFile as? Data? { return x }
-        if case let x? = dataOrFile as? NSData? { return x as Data }
+        if let opt = dataOrFile as? NSData?, let x = opt { return Data(referencing: x) }
         return nil
     }
 

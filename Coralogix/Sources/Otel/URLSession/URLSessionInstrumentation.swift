@@ -94,7 +94,18 @@ public class URLSessionInstrumentation {
         }
         return data
     }
-    
+
+    /// Whether response payload should be buffered for this task. Uses request when available, else response URL (rule resolution consistent with receivedResponse).
+    private func shouldBufferResponsePayload(request: URLRequest?, responseURL: URL?) -> Bool {
+        if let req = request {
+            return configuration.shouldCollectResponsePayload?(req) == true
+        }
+        if let url = responseURL {
+            return configuration.shouldCollectResponsePayload?(URLRequest(url: url)) == true
+        }
+        return false
+    }
+
     public init(configuration: URLSessionInstrumentationConfiguration) {
         self._configuration = configuration
         
@@ -1082,7 +1093,8 @@ public class URLSessionInstrumentation {
             request = requestMap[taskId]?.request
         }
         let dataCopy = data
-        if let req = request, configuration.shouldCollectResponsePayload?(req) == true {
+        let shouldBuffer = shouldBufferResponsePayload(request: request, responseURL: dataTask.response?.url)
+        if shouldBuffer {
             captureQueue.async(flags: .barrier) {
                 let existing = self.responseBodyStore[taskId] ?? Data()
                 let newCount = existing.count + dataCopy.count
@@ -1120,7 +1132,8 @@ public class URLSessionInstrumentation {
         queue.sync {
             request = requestMap[taskId]?.request
         }
-        if let req = request, configuration.shouldCollectResponsePayload?(req) == true {
+        let shouldBuffer = shouldBufferResponsePayload(request: request, responseURL: response.url)
+        if shouldBuffer {
             captureQueue.async(flags: .barrier) {
                 if self.responseBodyStore[taskId] == nil {
                     self.responseBodyStore[taskId] = Data()
