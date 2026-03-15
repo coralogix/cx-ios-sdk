@@ -1095,6 +1095,9 @@ public class URLSessionInstrumentation {
             }
             return
         }
+        if request == nil, configuration.shouldCollectResponsePayload != nil {
+            Log.d("[URLSessionInstrumentation] didReceive data: request nil for taskId \(taskId), response payload capture skipped (timing?)")
+        }
         guard configuration.shouldRecordPayload?(session) ?? false else { return }
         queue.async(flags: .barrier) {
             if (self.requestMap[taskId]?.request) != nil {
