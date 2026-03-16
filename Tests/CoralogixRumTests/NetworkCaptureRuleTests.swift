@@ -289,6 +289,15 @@ final class NetworkCaptureRuleTests: XCTestCase {
         XCTAssertEqual(result, exact)
     }
 
+    /// Empty body: JSON is invalid so returns nil; text/plain decodes to empty string (CX-33237).
+    func testStringifyBody_emptyBodyData() {
+        let empty = Data()
+        XCTAssertNil(NetworkCaptureRule.stringifyBody(data: empty, contentType: "application/json"),
+                    "Empty data is not valid JSON — must return nil")
+        XCTAssertEqual(NetworkCaptureRule.stringifyBody(data: empty, contentType: "text/plain"), "",
+                       "Empty UTF-8 data with text/plain must return empty string")
+    }
+
     // MARK: - readRequestBody (CX-33235)
 
     func testReadRequestBody_httpBody_returnsBodyAndSameRequest() throws {

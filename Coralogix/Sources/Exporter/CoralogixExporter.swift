@@ -86,7 +86,11 @@ public class CoralogixExporter: SpanExporter {
         self.spanUploader.upload(data, endPoint: self.endPoint)
     }
     
+    /// Test-only: when set, invoked with spans at the start of export (for integration tests). Not used in production.
+    static var testExportCallback: (([SpanData]) -> Void)?
+
     public func export(spans: [SpanData], explicitTimeout: TimeInterval?) -> SpanExporterResultCode {
+        Self.testExportCallback?(spans)
         if self.sessionManager.isIdle {
             Log.d("[SDK] Skipping export, session is idle")
             return .success
