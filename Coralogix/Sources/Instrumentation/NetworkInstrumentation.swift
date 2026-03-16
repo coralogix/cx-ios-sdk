@@ -201,13 +201,17 @@ extension CoralogixRum {
         let span = getSpan()
 
         let statusCodeInt = coerceToInt(dictionary[Keys.statusCode.rawValue])
-        let logSeverity: CoralogixLogSeverity = (statusCodeInt ?? 0) >= 400 ? .error : .info
-        span.setAttribute(key: Keys.severity.rawValue, value: AttributeValue.int(logSeverity.rawValue))
+        if let status = statusCodeInt {
+            let logSeverity: CoralogixLogSeverity = status >= 400 ? .error : .info
+            span.setAttribute(key: Keys.severity.rawValue, value: AttributeValue.int(logSeverity.rawValue))
+        }
 
         span.setAttribute(key: SemanticAttributes.httpUrl.rawValue, value: dictionary[Keys.url.rawValue] as? String ?? "")
         span.setAttribute(key: SemanticAttributes.netPeerName.rawValue, value: dictionary[Keys.host.rawValue] as? String ?? "")
         span.setAttribute(key: SemanticAttributes.httpMethod.rawValue, value: dictionary[Keys.method.rawValue] as? String ?? "")
-        span.setAttribute(key: SemanticAttributes.httpStatusCode.rawValue, value: statusCodeInt ?? 0)
+        if let status = statusCodeInt {
+            span.setAttribute(key: SemanticAttributes.httpStatusCode.rawValue, value: status)
+        }
         span.setAttribute(key: SemanticAttributes.httpResponseBodySize.rawValue, value: dictionary[Keys.httpResponseBodySize.rawValue] as? Int ?? 0)
         span.setAttribute(key: SemanticAttributes.httpTarget.rawValue, value: dictionary[Keys.fragments.rawValue] as? String ?? "")
         span.setAttribute(key: SemanticAttributes.httpScheme.rawValue, value: dictionary[Keys.schema.rawValue] as? String ?? "")
@@ -231,12 +235,27 @@ extension CoralogixRum {
     }
 
     /// Coerces hybrid payload value (Int, Double, NSNumber, String) to Int for status_code.
+    /// Returns nil for non-numeric or out-of-range (outside 100...599) values.
     private func coerceToInt(_ value: Any?) -> Int? {
         guard let value else { return nil }
-        if let i = value as? Int { return i }
-        if let d = value as? Double { return Int(d) }
-        if let n = value as? NSNumber { return n.intValue }
-        if let s = value as? String { return Int(s) }
-        return nil
+        let raw: Int
+        if let i = value as? Int {
+            raw = i
+        } else if let d = value as? Double, d.isFinite {
+            raw = Int(d)
+        } else if let n = value as? NSNumber {
+            raw = n.intValue
+        } else if let s = value as? String {
+            if let i = Int(s) {
+                raw = i
+            } else if let d = Double(s), d.isFinite {
+                raw = Int(d)
+            } else {
+                return nil
+            }
+        } else {
+            return nil
+        }
+        return (100...599).contains(raw) ? raw : nil
     }
 }
