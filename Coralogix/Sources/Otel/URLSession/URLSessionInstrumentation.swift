@@ -325,7 +325,22 @@ public class URLSessionInstrumentation {
         let (_, requestForSending) = NetworkCaptureRule.readRequestBody(from: request)
         return requestForSending
     }
-    
+
+    /// Centralized request capture and logging for all swizzled URLSession request paths. Caller must pass the returned request to the original IMP, then call `setIdKey(value:sessionTaskId, for: task)` and `storeRequest(requestToUse, forTaskId: sessionTaskId)`.
+    /// Pass `existingSessionTaskId` when the task id is already in scope (e.g. async path where the completion wrapper closes over it); otherwise a new id is generated.
+    private func prepareAndLogRequest(_ request: URLRequest, injectHeaders: Bool, existingSessionTaskId: String? = nil) -> (sessionTaskId: String, requestToUse: URLRequest) {
+        let sessionTaskId = existingSessionTaskId ?? UUID().uuidString
+        let requestForCapture = prepareRequestForPayloadCapture(request)
+        let instrumentedRequest = URLSessionLogger.processAndLogRequest(
+            requestForCapture,
+            sessionTaskId: sessionTaskId,
+            instrumentation: self,
+            shouldInjectHeaders: injectHeaders
+        )
+        let requestToUse = instrumentedRequest ?? requestForCapture
+        return (sessionTaskId, requestToUse)
+    }
+
     @discardableResult
     private func instrumentRequest(
         _ request: URLRequest,
@@ -439,19 +454,10 @@ public class URLSessionInstrumentation {
                 guard let instrumentation = self else {
                     return imp(session, #selector(URLSession.uploadTask(with:from:)), request, data)
                 }
-                
-                let sessionTaskId = UUID().uuidString
-                let requestForCapture = instrumentation.prepareRequestForPayloadCapture(request)
-                let instrumentedRequest = URLSessionLogger.processAndLogRequest(
-                    requestForCapture,
-                    sessionTaskId: sessionTaskId,
-                    instrumentation: instrumentation,
-                    shouldInjectHeaders: true
-                )
-                
-                let task = imp(session, #selector(URLSession.uploadTask(with:from:)), instrumentedRequest ?? requestForCapture, data)
+                let (sessionTaskId, requestToUse) = instrumentation.prepareAndLogRequest(request, injectHeaders: true)
+                let task = imp(session, #selector(URLSession.uploadTask(with:from:)), requestToUse, data)
                 instrumentation.setIdKey(value: sessionTaskId, for: task)
-                instrumentation.storeRequest(instrumentedRequest ?? requestForCapture, forTaskId: sessionTaskId)
+                instrumentation.storeRequest(requestToUse, forTaskId: sessionTaskId)
                 return task
             }
             let swizzledIMP = imp_implementationWithBlock(block)
@@ -471,19 +477,10 @@ public class URLSessionInstrumentation {
                 guard let instrumentation = self else {
                     return imp(session, #selector(URLSession.uploadTask(with:fromFile:)), request, fileURL)
                 }
-                
-                let sessionTaskId = UUID().uuidString
-                let requestForCapture = instrumentation.prepareRequestForPayloadCapture(request)
-                let instrumentedRequest = URLSessionLogger.processAndLogRequest(
-                    requestForCapture,
-                    sessionTaskId: sessionTaskId,
-                    instrumentation: instrumentation,
-                    shouldInjectHeaders: true
-                )
-                
-                let task = imp(session, #selector(URLSession.uploadTask(with:fromFile:)), instrumentedRequest ?? requestForCapture, fileURL)
+                let (sessionTaskId, requestToUse) = instrumentation.prepareAndLogRequest(request, injectHeaders: true)
+                let task = imp(session, #selector(URLSession.uploadTask(with:fromFile:)), requestToUse, fileURL)
                 instrumentation.setIdKey(value: sessionTaskId, for: task)
-                instrumentation.storeRequest(instrumentedRequest ?? requestForCapture, forTaskId: sessionTaskId)
+                instrumentation.storeRequest(requestToUse, forTaskId: sessionTaskId)
                 return task
             }
             let swizzledIMP = imp_implementationWithBlock(block)
@@ -572,10 +569,9 @@ public class URLSessionInstrumentation {
                 }
                 
                 if let request = argument as? URLRequest, objc_getAssociatedObject(argument, &idKey) == nil {
-                    let requestForCapture = self.prepareRequestForPayloadCapture(request)
-                    let instrumentedRequest = URLSessionLogger.processAndLogRequest(requestForCapture, sessionTaskId: sessionTaskId, instrumentation: self, shouldInjectHeaders: true)
-                    task = castedIMP(session, selector, instrumentedRequest ?? requestForCapture, completionBlock)
-                    self.storeRequest(instrumentedRequest ?? requestForCapture, forTaskId: sessionTaskId)
+                    let (_, requestToUse) = self.prepareAndLogRequest(request, injectHeaders: true, existingSessionTaskId: sessionTaskId)
+                    task = castedIMP(session, selector, requestToUse, completionBlock)
+                    self.storeRequest(requestToUse, forTaskId: sessionTaskId)
                     objc_setAssociatedObject(task, &Self.hasCompletionHandlerKey, true, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
                 } else {
                     task = castedIMP(session, selector, argument, completionBlock)
@@ -651,12 +647,11 @@ public class URLSessionInstrumentation {
                     completionBlock = completionWrapper
                 }
                 
-                let requestForCapture = self.prepareRequestForPayloadCapture(request)
-                let processedRequest = URLSessionLogger.processAndLogRequest(requestForCapture, sessionTaskId: sessionTaskId, instrumentation: self, shouldInjectHeaders: true)
-                task = castedIMP(session, selector, processedRequest ?? requestForCapture, argument, completionBlock)
-                self.storeRequest(processedRequest ?? requestForCapture, forTaskId: sessionTaskId)
+                let (sid, requestToUse) = self.prepareAndLogRequest(request, injectHeaders: true, existingSessionTaskId: sessionTaskId)
+                task = castedIMP(session, selector, requestToUse, argument, completionBlock)
+                self.storeRequest(requestToUse, forTaskId: sid)
                 objc_setAssociatedObject(task, &Self.hasCompletionHandlerKey, true, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
-                self.setIdKey(value: sessionTaskId, for: task)
+                self.setIdKey(value: sid, for: task)
                 return task
             }
             let swizzledIMP = imp_implementationWithBlock(unsafeBitCast(block, to: AnyObject.self))
@@ -667,7 +662,7 @@ public class URLSessionInstrumentation {
             }
         }
     }
-    
+
     private static var resumeSwizzleKey: UInt8 = 0
     
     private func injectIntoNSURLSessionTaskResume() {
