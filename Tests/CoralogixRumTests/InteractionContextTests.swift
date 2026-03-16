@@ -13,6 +13,16 @@ final class InteractionContextTests: XCTestCase {
 
     // MARK: - Helpers
 
+    /// Extracts numeric value from [String: Any] (handles Double, Int, CGFloat, NSNumber).
+    private func asDouble(_ value: Any?) -> Double? {
+        guard let value else { return nil }
+        if let d = value as? Double { return d }
+        if let i = value as? Int { return Double(i) }
+        if let c = value as? CGFloat { return Double(c) }
+        if let n = value as? NSNumber { return n.doubleValue }
+        return nil
+    }
+
     private func makeSpan(tapObject: [String: Any]) -> SpanDataProtocol {
         let now = Date()
         return MockSpanData(
@@ -334,8 +344,8 @@ final class InteractionContextTests: XCTestCase {
 
         XCTAssertEqual(data[Keys.eventName.rawValue] as? String, "swipe")
         XCTAssertEqual(data[Keys.scrollDirection.rawValue] as? String, "left")
-        XCTAssertEqual(data[Keys.positionX.rawValue] as? CGFloat, 42)
-        XCTAssertEqual(data[Keys.positionY.rawValue] as? CGFloat, 84)
+        XCTAssertEqual(asDouble(data[Keys.positionX.rawValue]), 42.0)
+        XCTAssertEqual(asDouble(data[Keys.positionY.rawValue]), 84.0)
     }
 
     /// TapDataExtractor.extract must emit scroll_direction for all four swipe directions.
