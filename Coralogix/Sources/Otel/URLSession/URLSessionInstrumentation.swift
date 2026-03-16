@@ -536,19 +536,20 @@ public class URLSessionInstrumentation {
                 if completionBlock != nil {
                     if objc_getAssociatedObject(argument, &idKey) == nil {
                         let completionWrapper: (Any?, URLResponse?, Error?) -> Void = { object, response, error in
+                            let drained = self.takeResponseBody(forTaskId: sessionTaskId)
+                            let body = object ?? drained
                             if error != nil {
                                 let status = (response as? HTTPURLResponse)?.statusCode ?? 0
                                 #if DEBUG
                                 Log.testLog("[URLSessionInstrumentation] Logging error for taskId: \(sessionTaskId), status: \(status)")
                                 #endif
-                                URLSessionLogger.logError(error!, dataOrFile: object ?? self.takeResponseBody(forTaskId: sessionTaskId), statusCode: status, instrumentation: self, sessionTaskId: sessionTaskId)
+                                URLSessionLogger.logError(error!, dataOrFile: body, statusCode: status, instrumentation: self, sessionTaskId: sessionTaskId)
                             } else {
                                 if let response = response {
                                     let status = (response as? HTTPURLResponse)?.statusCode ?? 0
                                     #if DEBUG
                                     Log.testLog("[URLSessionInstrumentation] Logging response for taskId: \(sessionTaskId), status: \(status)")
                                     #endif
-                                    let body = object ?? self.takeResponseBody(forTaskId: sessionTaskId)
                                     URLSessionLogger.logResponse(response, dataOrFile: body, instrumentation: self, sessionTaskId: sessionTaskId)
                                 }
                             }
@@ -616,7 +617,8 @@ public class URLSessionInstrumentation {
                 var completionBlock = completion
                 if objc_getAssociatedObject(argument, &idKey) == nil {
                     let completionWrapper: (Any?, URLResponse?, Error?) -> Void = { object, response, error in
-                        let body = object ?? self.takeResponseBody(forTaskId: sessionTaskId)
+                        let drained = self.takeResponseBody(forTaskId: sessionTaskId)
+                        let body = object ?? drained
                         if error != nil {
                             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
                             #if DEBUG
