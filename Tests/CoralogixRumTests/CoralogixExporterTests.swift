@@ -423,6 +423,129 @@ final class CoralogixExporterTests: XCTestCase {
         XCTAssertEqual(result, coralogixRum.coralogixExporter?.endPoint)
     }
 
+    // MARK: - beforeSendCallBack tests (CX-32889)
+
+    /// Helper: creates a SpanData that survives the full export pipeline
+    /// (filtering, encoding, CxSpan creation).
+    private func makeValidSpanData() -> SpanData {
+        let attributes: [String: AttributeValue] = [
+            Keys.severity.rawValue: AttributeValue("3"),
+            Keys.eventType.rawValue: AttributeValue("log"),
+            Keys.source.rawValue: AttributeValue("console"),
+            Keys.environment.rawValue: AttributeValue("prod"),
+            Keys.userId.rawValue: AttributeValue("12345"),
+            Keys.userName.rawValue: AttributeValue("John Doe"),
+            Keys.userEmail.rawValue: AttributeValue("john.doe@example.com"),
+            Keys.sessionId.rawValue: AttributeValue("session_001"),
+            Keys.sessionCreationDate.rawValue: AttributeValue("1609459200"),
+            SemanticAttributes.httpUrl.rawValue: AttributeValue("https://example.com/api/data")
+        ]
+        let span = SpanData(traceId: TraceId.random(),
+                            spanId: SpanId.random(),
+                            name: "testSpan",
+                            kind: .client,
+                            startTime: Date(),
+                            attributes: attributes,
+                            endTime: Date(),
+                            hasEnded: true)
+        return span
+    }
+
+    func test_export_invokesBeforeSendCallBack_forFlutter() {
+        // Flutter/ReactNative: when beforeSendCallBack is set, spans go to
+        // the callback (platform channel) instead of the native uploader.
+        let expectation = expectation(description: "beforeSendCallBack should be invoked")
+        var receivedSpans: [[String: Any]]?
+
+        var opts = CoralogixExporterOptions(coralogixDomain: .US2,
+                                            userContext: nil,
+                                            environment: "PROD",
+                                            application: "TestApp-iOS",
+                                            version: "1.0",
+                                            publicKey: "token",
+                                            ignoreUrls: [],
+                                            ignoreErrors: [],
+                                            labels: ["item": "banana"],
+                                            debug: true)
+        opts.beforeSendCallBack = { spans in
+            receivedSpans = spans
+            expectation.fulfill()
+        }
+        let rum = CoralogixRum(options: opts, sdkFramework: .flutter(version: "1.0.0"))
+        guard let exporter = rum.coralogixExporter else {
+            XCTFail("Exporter should not be nil")
+            return
+        }
+
+        let span = makeValidSpanData()
+        let result = exporter.export(spans: [span], explicitTimeout: nil)
+
+        waitForExpectations(timeout: 5)
+        XCTAssertEqual(result, .success, "Export should return .success when beforeSendCallBack handles spans")
+        XCTAssertNotNil(receivedSpans, "Callback should receive spans")
+        XCTAssertFalse(receivedSpans?.isEmpty ?? true, "Callback should receive non-empty spans array")
+    }
+
+    func test_export_uploadsDirectly_whenFlutterAndBeforeSendCallBackIsNil() {
+        // Previously, Flutter/ReactNative exports without a beforeSendCallBack
+        // would silently drop spans. Verify this no longer happens.
+        let opts = CoralogixExporterOptions(coralogixDomain: .US2,
+                                            userContext: nil,
+                                            environment: "PROD",
+                                            application: "TestApp-iOS",
+                                            version: "1.0",
+                                            publicKey: "token",
+                                            ignoreUrls: [],
+                                            ignoreErrors: [],
+                                            labels: ["item": "banana"],
+                                            debug: true)
+        // beforeSendCallBack is nil (default)
+        let rum = CoralogixRum(options: opts, sdkFramework: .flutter(version: "1.0.0"))
+        guard let exporter = rum.coralogixExporter else {
+            XCTFail("Exporter should not be nil")
+            return
+        }
+
+        let span = makeValidSpanData()
+        let result = exporter.export(spans: [span], explicitTimeout: nil)
+
+        // Previously spans were silently dropped (no callback, no upload). Now we must reach
+        // spanUploader.upload(). Assert .success to verify spans reached the upload path.
+        // (Upload may return .failure on network error in CI; if flaky, consider mocking the uploader.)
+        XCTAssertEqual(result, .success, "Span must reach upload path; no silent drop when beforeSendCallBack is nil")
+    }
+
+    func test_export_nativeBypassesBeforeSendCallBack() {
+        // Native (Swift) clients must always upload via spanUploader,
+        // even when beforeSendCallBack is set, so the exporter contract is preserved.
+        var callbackInvoked = false
+
+        var opts = CoralogixExporterOptions(coralogixDomain: .US2,
+                                            userContext: nil,
+                                            environment: "PROD",
+                                            application: "TestApp-iOS",
+                                            version: "1.0",
+                                            publicKey: "token",
+                                            ignoreUrls: [],
+                                            ignoreErrors: [],
+                                            labels: ["item": "banana"],
+                                            debug: true)
+        opts.beforeSendCallBack = { _ in
+            callbackInvoked = true
+        }
+        // Default sdkFramework is .swift (native)
+        let rum = CoralogixRum(options: opts)
+        guard let exporter = rum.coralogixExporter else {
+            XCTFail("Exporter should not be nil")
+            return
+        }
+
+        let span = makeValidSpanData()
+        _ = exporter.export(spans: [span], explicitTimeout: nil)
+
+        XCTAssertFalse(callbackInvoked, "Native clients must not route spans through beforeSendCallBack")
+    }
+
     override func tearDown() {
         super.tearDown()
     }
