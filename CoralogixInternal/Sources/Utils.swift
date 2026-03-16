@@ -137,9 +137,15 @@ public enum Global: String {
     }
 
     /// Overload for contexts where a live `UITouch` is unavailable (e.g. gesture recogniser callbacks).
+    /// x/y are rounded to 2 decimal places for consistent RUM payloads.
     public static func updateLocation(tapData: inout [String: Any], location: CGPoint) {
-        tapData[Keys.positionX.rawValue] = location.x
-        tapData[Keys.positionY.rawValue] = location.y
+        tapData[Keys.positionX.rawValue] = roundToTwoDecimals(location.x)
+        tapData[Keys.positionY.rawValue] = roundToTwoDecimals(location.y)
+    }
+
+    /// Rounds a CGFloat/Double to 2 decimal places (e.g. 62.04064556 → 62.04).
+    public static func roundToTwoDecimals(_ value: CGFloat) -> Double {
+        (Double(value) * 100).rounded() / 100
     }
     
     public static func rects(from regions: [[String: Any]]) -> [CGRect] {

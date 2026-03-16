@@ -159,9 +159,9 @@ extension CoralogixRum {
         if let v = dictionary[Keys.elementClasses.rawValue] { result[Keys.elementClasses.rawValue] = v }
         if let v = dictionary[Keys.elementId.rawValue] { result[Keys.elementId.rawValue] = v }
         if let v = dictionary[Keys.targetElementInnerText.rawValue] { result[Keys.targetElementInnerText.rawValue] = v }
-        if let v = dictionary[Keys.attributes.rawValue] { result[Keys.attributes.rawValue] = v }
-        if let v = dictionary[Keys.positionX.rawValue] { result[Keys.positionX.rawValue] = v }
-        if let v = dictionary[Keys.positionY.rawValue] { result[Keys.positionY.rawValue] = v }
+        if let v = dictionary[Keys.attributes.rawValue] { result[Keys.attributes.rawValue] = Self.attributesWithRoundedCoordinates(v, depth: 0, maxDepth: 10) }
+        if let v = dictionary[Keys.positionX.rawValue] { result[Keys.positionX.rawValue] = Self.roundCoordinateForRum(v) }
+        if let v = dictionary[Keys.positionY.rawValue] { result[Keys.positionY.rawValue] = Self.roundCoordinateForRum(v) }
 
         // scroll_direction: include only when present and a known ScrollDirection value.
         let scrollKey = Keys.scrollDirection.rawValue
@@ -173,5 +173,33 @@ extension CoralogixRum {
         }
 
         return result
+    }
+
+    /// Rounds a numeric coordinate to 2 decimal places for RUM (e.g. 62.04064556 → 62.04). Returns value unchanged if not numeric.
+    private static func roundCoordinateForRum(_ value: Any) -> Any {
+        guard let double = value as? Double else {
+            if let int = value as? Int { return Global.roundToTwoDecimals(CGFloat(int)) }
+            if let n = value as? NSNumber { return Global.roundToTwoDecimals(CGFloat(n.doubleValue)) }
+            return value
+        }
+        return Global.roundToTwoDecimals(CGFloat(double))
+    }
+
+    /// If value is [String: Any], returns a copy with "x" and "y" (positionX/positionY) rounded to 2 decimals at this level and in any nested [String: Any]; otherwise returns value as-is.
+    /// Recursion is capped at `maxDepth` to avoid stack overflow on deeply nested input.
+    private static func attributesWithRoundedCoordinates(_ value: Any, depth: Int, maxDepth: Int) -> Any {
+        guard let dict = value as? [String: Any] else { return value }
+        if depth >= maxDepth { return value }
+        var out: [String: Any] = [:]
+        for (key, val) in dict {
+            if let nested = val as? [String: Any] {
+                out[key] = attributesWithRoundedCoordinates(nested, depth: depth + 1, maxDepth: maxDepth)
+            } else {
+                out[key] = val
+            }
+        }
+        if let x = out[Keys.positionX.rawValue] { out[Keys.positionX.rawValue] = roundCoordinateForRum(x) }
+        if let y = out[Keys.positionY.rawValue] { out[Keys.positionY.rawValue] = roundCoordinateForRum(y) }
+        return out
     }
 }

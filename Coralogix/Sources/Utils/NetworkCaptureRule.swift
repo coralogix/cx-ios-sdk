@@ -125,13 +125,32 @@ public struct NetworkCaptureRule {
         return result
     }
 
-    // MARK: - Response body stringification (CX-33234)
+    // MARK: - Payload limits (shared for request and response)
 
-    /// Maximum character count for response payload. If stringified body exceeds this, return `nil` (drop entire payload, no truncation).
-    private static let maxResponsePayloadCharacters = 1024
+    /// Maximum character count for captured request or response body. If stringified body exceeds this, the payload is dropped (no truncation).
+    private static let maxPayloadCharacters = 1024
+    /// Max bytes to read when loading a body (request stream or response file). Avoids unbounded memory.
+    private static let maxPayloadBytes = 64 * 1024
 
-    /// Max bytes to read from a file URL for response payload (aligns with URLSessionInstrumentation buffer cap).
-    private static let maxFilePayloadBytes = 64 * 1024
+    // MARK: - Request body capture (CX-33235)
+
+    /// Reads the request body for capture when possible without mutating the request that will be sent.
+    /// - Parameter request: The request to read from.
+    /// - Returns: Body as `Data` for logging (if available) and the request to use for sending. When the request has
+    ///   `httpBody`, returns that data and the same request. When it has `httpBodyStream`, returns `(nil, request)` so
+    ///   the stream is not consumed and the sender can send the full stream; streamed bodies are not captured to avoid
+    ///   truncating uploads. When both are nil, returns `(nil, request)`.
+    internal static func readRequestBody(from request: URLRequest) -> (data: Data?, requestForSending: URLRequest) {
+        if let body = request.httpBody {
+            return (body, request)
+        }
+        if request.httpBodyStream != nil {
+            return (nil, request)
+        }
+        return (nil, request)
+    }
+
+    // MARK: - Body stringification (request and response, CX-33234 / CX-33235)
 
     /// Content-Type values that are stringified as UTF-8 text (no JSON re-serialization).
     private static let textMimeTypes: Set<String> = [
@@ -139,18 +158,34 @@ public struct NetworkCaptureRule {
         "application/javascript", "application/xml"
     ]
 
-    /// Stringifies response body for capture. Only supports types that can be safely represented as text.
+    /// Stringifies body data for capture (request or response). Only supports types that can be safely represented as text.
     ///
     /// - **application/json**: Returned as the original UTF-8 string (wire order preserved) by `stringifyJSON`;
     ///   that function validates well-formed JSON then returns the payload unchanged rather than re-serializing.
     /// - **text/plain, text/html, text/css, text/xml, application/javascript, application/xml**: Decoded as UTF-8.
     /// - **Other / binary**: Returns `nil` (do not attempt to decode).
     ///
-    /// If the result would exceed `maxResponsePayloadCharacters`, returns `nil` (drop entire payload; no truncation).
+    /// If the result would exceed `maxPayloadCharacters`, returns `nil` (drop entire payload; no truncation).
     /// - Parameters:
-    ///   - data: Raw response body data.
-    ///   - contentType: Value of the `Content-Type` response header (e.g. `"application/json; charset=utf-8"`).
+    ///   - data: Raw body data (request or response).
+    ///   - contentType: Value of the `Content-Type` header (e.g. `"application/json; charset=utf-8"`).
     /// - Returns: Stringified body, or `nil` when unsupported type, decode failure, or length > 1024.
+    internal static func stringifyBody(data: Data, contentType: String?) -> String? {
+        let type = normalizedContentType(contentType)
+        let result: String?
+        if type == "application/json" {
+            result = stringifyJSON(data: data)
+        } else if Self.textMimeTypes.contains(type) {
+            result = String(data: data, encoding: .utf8)
+        } else {
+            result = nil
+        }
+        guard let body = result, body.count <= maxPayloadCharacters else {
+            return nil
+        }
+        return body
+    }
+
     /// Extracts `Data` from response payload (Any?). Unwraps optional containers (e.g. Optional<Data>), then handles `Data`, NSData (ObjC bridge), and file URLs (download tasks); file reads are capped.
     internal static func responseData(from dataOrFile: Any?) -> Data? {
         guard let value = dataOrFile else { return nil }
@@ -164,27 +199,11 @@ public struct NetworkCaptureRule {
         return (current as? Data) ?? (current as? NSData).map { $0 as Data } ?? dataFromFileURL(current)
     }
 
-    internal static func stringifyBody(data: Data, contentType: String?) -> String? {
-        let type = normalizedContentType(contentType)
-        let result: String?
-        if type == "application/json" {
-            result = stringifyJSON(data: data)
-        } else if Self.textMimeTypes.contains(type) {
-            result = String(data: data, encoding: .utf8)
-        } else {
-            result = nil
-        }
-        guard let body = result, body.count <= maxResponsePayloadCharacters else {
-            return nil
-        }
-        return body
-    }
-
     /// If `value` is a file URL, loads and returns its data (capped); otherwise nil.
     private static func dataFromFileURL(_ value: Any) -> Data? {
         let url = (value as? URL) ?? (value as? NSURL).map { $0 as URL }
         guard let url, url.isFileURL else { return nil }
-        return loadFileData(from: url, maxBytes: maxFilePayloadBytes)
+        return loadFileData(from: url, maxBytes: maxPayloadBytes)
     }
 
     /// Loads up to `maxBytes` from a file URL. Returns nil on failure or if not a file URL.

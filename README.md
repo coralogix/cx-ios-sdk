@@ -275,7 +275,7 @@ let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
                                         ])
 ```
 
-> **Note:** Payload capture should be used carefully — avoid capturing endpoints that return PII or secrets.
+> **Note:** Only allowlist URLs and header names you are comfortable logging. Avoid capturing `Authorization` or other sensitive headers unless intentional. Body and header capture should not be used for endpoints that return or send PII or secrets. Request and response bodies over 1024 characters are **dropped** (not truncated) and do not appear in RUM.
 
 ### User Action Text Redaction (`shouldSendText`)
 Called before `target_element_inner_text` is recorded for a tapped view. Return `false` to suppress text capture for sensitive views (e.g. fields showing account numbers or personal data) without disabling text capture globally.
