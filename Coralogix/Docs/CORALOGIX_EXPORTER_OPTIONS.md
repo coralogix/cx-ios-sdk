@@ -73,7 +73,7 @@ Session sampling: percentage of sessions that initialize the SDK. `0` means the 
 ```swift
 var networkExtraConfig: [NetworkCaptureRule]?
 ```
-Per-URL rules for capturing request/response headers and body payloads for matching network requests. `nil` (default) disables all such capture. Each rule specifies a URL matcher (substring or regex), optional allowlists for `reqHeaders`/`resHeaders`, and optional `collectReqPayload`/`collectResPayload`. Response bodies are stringified by content-type (e.g. JSON, text) and capped at 1024 characters; file URLs (download tasks) are read with a size cap. See `NetworkCaptureRule` for initializers and behavior.
+Per-URL rules for capturing request/response headers and body payloads for matching network requests. `nil` (default) disables all such capture. Each rule specifies a URL matcher (substring or regex), optional allowlists for `reqHeaders`/`resHeaders`, and optional `collectReqPayload`/`collectResPayload`. Only allowlisted header names appear in RUM; only allowlist URLs and headers you are comfortable logging (e.g. avoid `Authorization` unless intentional). Bodies are stringified by content-type (e.g. JSON, text); those over 1024 characters are **dropped**, not truncated. File URLs (download tasks) are read with a size cap. See `NetworkCaptureRule` for initializers and behavior.
 
 ### mobileVitalsFPSSamplingRate
 ```swift

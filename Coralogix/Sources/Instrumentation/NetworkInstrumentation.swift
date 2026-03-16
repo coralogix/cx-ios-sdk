@@ -61,6 +61,9 @@ extension CoralogixRum {
             shouldCollectResponsePayload: { request in
                 Self.shouldCollectResponsePayload(for: request, options: options)
             },
+            shouldCollectRequestPayload: { request in
+                Self.shouldCollectRequestPayload(for: request, options: options)
+            },
             receivedResponse: self.receivedResponse
         )
         self.sessionInstrumentation = URLSessionInstrumentation(configuration: configuration)
@@ -71,6 +74,13 @@ extension CoralogixRum {
         guard let configs = options.networkExtraConfig, !configs.isEmpty else { return false }
         let urlString = request.url?.absoluteString ?? ""
         return resolveConfigForUrl(urlString, configs: configs)?.collectResPayload ?? false
+    }
+
+    /// Returns whether request body should be captured for this request (rule-based; used for collectReqPayload).
+    private static func shouldCollectRequestPayload(for request: URLRequest, options: CoralogixExporterOptions) -> Bool {
+        guard let configs = options.networkExtraConfig, !configs.isEmpty else { return false }
+        let urlString = request.url?.absoluteString ?? ""
+        return resolveConfigForUrl(urlString, configs: configs)?.collectReqPayload ?? false
     }
 
     internal func shouldAddTraceParent(to request: URLRequest, options: CoralogixExporterOptions) -> Bool {
@@ -190,15 +200,18 @@ extension CoralogixRum {
 
         let span = getSpan()
 
-        if let statusCode = dictionary[Keys.statusCode.rawValue] as? Int {
-            let logSeverity = statusCode >= 400 ? CoralogixLogSeverity.error : CoralogixLogSeverity.info
+        let statusCodeInt = coerceToInt(dictionary[Keys.statusCode.rawValue])
+        if let status = statusCodeInt {
+            let logSeverity: CoralogixLogSeverity = status >= 400 ? .error : .info
             span.setAttribute(key: Keys.severity.rawValue, value: AttributeValue.int(logSeverity.rawValue))
         }
 
         span.setAttribute(key: SemanticAttributes.httpUrl.rawValue, value: dictionary[Keys.url.rawValue] as? String ?? "")
         span.setAttribute(key: SemanticAttributes.netPeerName.rawValue, value: dictionary[Keys.host.rawValue] as? String ?? "")
         span.setAttribute(key: SemanticAttributes.httpMethod.rawValue, value: dictionary[Keys.method.rawValue] as? String ?? "")
-        span.setAttribute(key: SemanticAttributes.httpStatusCode.rawValue, value: dictionary[Keys.statusCode.rawValue] as? Int ?? 0)
+        if let status = statusCodeInt {
+            span.setAttribute(key: SemanticAttributes.httpStatusCode.rawValue, value: status)
+        }
         span.setAttribute(key: SemanticAttributes.httpResponseBodySize.rawValue, value: dictionary[Keys.httpResponseBodySize.rawValue] as? Int ?? 0)
         span.setAttribute(key: SemanticAttributes.httpTarget.rawValue, value: dictionary[Keys.fragments.rawValue] as? String ?? "")
         span.setAttribute(key: SemanticAttributes.httpScheme.rawValue, value: dictionary[Keys.schema.rawValue] as? String ?? "")
@@ -219,5 +232,30 @@ extension CoralogixRum {
 
     private func getSpan() -> any Span {
         return makeSpan(event: .networkRequest, source: .fetch, severity: .info)
+    }
+
+    /// Coerces hybrid payload value (Int, Double, NSNumber, String) to Int for status_code.
+    /// Returns nil for non-numeric or out-of-range (outside 100...599) values.
+    private func coerceToInt(_ value: Any?) -> Int? {
+        guard let value else { return nil }
+        let raw: Int
+        if let i = value as? Int {
+            raw = i
+        } else if let d = value as? Double, d.isFinite {
+            raw = Int(d)
+        } else if let n = value as? NSNumber {
+            raw = n.intValue
+        } else if let s = value as? String {
+            if let i = Int(s) {
+                raw = i
+            } else if let d = Double(s), d.isFinite {
+                raw = Int(d)
+            } else {
+                return nil
+            }
+        } else {
+            return nil
+        }
+        return (100...599).contains(raw) ? raw : nil
     }
 }
