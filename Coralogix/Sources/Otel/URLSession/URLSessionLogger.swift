@@ -31,7 +31,7 @@ class URLSessionLogger {
     #endif // os(iOS) && !targetEnvironment(macCatalyst)
 
     /// This methods creates a Span for a request, and optionally injects tracing headers, returns a  new request if it was needed to create a new one to add the tracing headers
-    @discardableResult static func processAndLogRequest(_ request: URLRequest, sessionTaskId: String, instrumentation: URLSessionInstrumentation, shouldInjectHeaders: Bool) -> URLRequest? {
+    @discardableResult static func processAndLogRequest(_ request: URLRequest, sessionTaskId: String, instrumentation: URLSessionInstrumentation, shouldInjectHeaders: Bool, preCapturedRequestBody: Data? = nil) -> URLRequest? {
         guard instrumentation.configuration.shouldInstrument?(request) ?? true else {
             return nil
         }
@@ -81,8 +81,10 @@ class URLSessionLogger {
         }
 
         // Request body capture (CX-33235): stringify and set request_payload when rule has collectReqPayload; 1024-char limit in stringifyBody.
+        // Use preCapturedRequestBody when provided (e.g. from prepareAndLogRequest) since request.httpBody may be nil after URLSession/URLProtocol handling.
+        let bodyData = preCapturedRequestBody ?? request.httpBody
         if instrumentation.configuration.shouldCollectRequestPayload?(request) == true,
-           let bodyData = request.httpBody {
+           let bodyData {
             let contentType = request.allHTTPHeaderFields?.first { $0.key.lowercased() == "content-type" }?.value
             if let payload = NetworkCaptureRule.stringifyBody(data: bodyData, contentType: contentType) {
                 span.setAttribute(key: Keys.requestPayload.rawValue, value: payload)

@@ -166,13 +166,6 @@ extension CoralogixRum {
                 span.setAttribute(key: Keys.requestHeaders.rawValue, value: AttributeValue.string(json))
             }
         }
-        // Request body (CX-33235): when rule has collectReqPayload and stored request has httpBody
-        if rule.collectReqPayload, let req = request, let bodyData = req.httpBody {
-            let contentType = req.allHTTPHeaderFields?.first { $0.key.lowercased() == "content-type" }?.value
-            if let payload = NetworkCaptureRule.stringifyBody(data: bodyData, contentType: contentType) {
-                span.setAttribute(key: Keys.requestPayload.rawValue, value: AttributeValue.string(payload))
-            }
-        }
         // Response headers (allowlisted by rule.resHeaders)
         if let resHeaders = rule.resHeaders, let httpResponse = response as? HTTPURLResponse {
             let allRes = NetworkCaptureRule.responseHeadersDictionary(from: httpResponse)

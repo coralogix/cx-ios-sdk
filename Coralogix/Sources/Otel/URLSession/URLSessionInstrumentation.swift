@@ -319,25 +319,20 @@ public class URLSessionInstrumentation {
         configuration.shouldInjectTracingHeaders?(request) ?? true
     }
 
-    /// When collectReqPayload is true, returns the request suitable for sending (readRequestBody returns the original request so streamed uploads are not truncated; only httpBody is used for capture). Otherwise returns the request unchanged (CX-33235).
-    private func prepareRequestForPayloadCapture(_ request: URLRequest) -> URLRequest {
-        guard configuration.shouldCollectRequestPayload?(request) == true else { return request }
-        let (_, requestForSending) = NetworkCaptureRule.readRequestBody(from: request)
-        return requestForSending
-    }
-
     /// Centralized request capture and logging for all swizzled URLSession request paths. Caller must pass the returned request to the original IMP, then call `setIdKey(value:sessionTaskId, for: task)` and `storeRequest(requestToUse, forTaskId: sessionTaskId)`.
     /// Pass `existingSessionTaskId` when the task id is already in scope (e.g. async path where the completion wrapper closes over it); otherwise a new id is generated.
+    /// Captures request body via readRequestBody before any consumption; passes preCapturedBody so processAndLogRequest can set request_payload even when request.httpBody is nil later.
     private func prepareAndLogRequest(_ request: URLRequest, injectHeaders: Bool, existingSessionTaskId: String? = nil) -> (sessionTaskId: String, requestToUse: URLRequest) {
         let sessionTaskId = existingSessionTaskId ?? UUID().uuidString
-        let requestForCapture = prepareRequestForPayloadCapture(request)
+        let (preCapturedBody, requestForSending) = NetworkCaptureRule.readRequestBody(from: request)
         let instrumentedRequest = URLSessionLogger.processAndLogRequest(
-            requestForCapture,
+            requestForSending,
             sessionTaskId: sessionTaskId,
             instrumentation: self,
-            shouldInjectHeaders: injectHeaders
+            shouldInjectHeaders: injectHeaders,
+            preCapturedRequestBody: preCapturedBody
         )
-        let requestToUse = instrumentedRequest ?? requestForCapture
+        let requestToUse = instrumentedRequest ?? requestForSending
         return (sessionTaskId, requestToUse)
     }
 
@@ -345,13 +340,15 @@ public class URLSessionInstrumentation {
     private func instrumentRequest(
         _ request: URLRequest,
         sessionTaskId: String,
-        injectHeaders: Bool
+        injectHeaders: Bool,
+        preCapturedRequestBody: Data? = nil
     ) -> URLRequest? {
         URLSessionLogger.processAndLogRequest(
             request,
             sessionTaskId: sessionTaskId,
             instrumentation: self,
-            shouldInjectHeaders: injectHeaders
+            shouldInjectHeaders: injectHeaders,
+            preCapturedRequestBody: preCapturedRequestBody
         )
     }
     
@@ -404,11 +401,11 @@ public class URLSessionInstrumentation {
         case .urlRequest:
             // Signature expects NSURLRequest*
             if let originalReq = coerceToRequest(argument) {
-                let requestForCapture = prepareRequestForPayloadCapture(originalReq)
-                let inject = shouldInject(for: requestForCapture)
-                let instrumented = instrumentRequest(requestForCapture, sessionTaskId: sessionTaskId, injectHeaders: inject)
-                // Use instrumented if available, else request used for capture
-                return (instrumented ?? requestForCapture) as NSURLRequest
+                let (preCapturedBody, requestForSending) = NetworkCaptureRule.readRequestBody(from: originalReq)
+                let inject = shouldInject(for: requestForSending)
+                let instrumented = instrumentRequest(requestForSending, sessionTaskId: sessionTaskId, injectHeaders: inject, preCapturedRequestBody: preCapturedBody)
+                // Use instrumented if available, else request used for sending
+                return (instrumented ?? requestForSending) as NSURLRequest
             }
             // Fallback: forward as-is
             return argument
