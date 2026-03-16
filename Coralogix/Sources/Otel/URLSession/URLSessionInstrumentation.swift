@@ -401,11 +401,9 @@ public class URLSessionInstrumentation {
         case .urlRequest:
             // Signature expects NSURLRequest*
             if let originalReq = coerceToRequest(argument) {
-                let (preCapturedBody, requestForSending) = NetworkCaptureRule.readRequestBody(from: originalReq)
-                let inject = shouldInject(for: requestForSending)
-                let instrumented = instrumentRequest(requestForSending, sessionTaskId: sessionTaskId, injectHeaders: inject, preCapturedRequestBody: preCapturedBody)
-                // Use instrumented if available, else request used for sending
-                return (instrumented ?? requestForSending) as NSURLRequest
+                let inject = shouldInject(for: originalReq)
+                let (_, requestToUse) = prepareAndLogRequest(originalReq, injectHeaders: inject, existingSessionTaskId: sessionTaskId)
+                return requestToUse as NSURLRequest
             }
             // Fallback: forward as-is
             return argument
