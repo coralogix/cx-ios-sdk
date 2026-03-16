@@ -185,12 +185,19 @@ extension CoralogixRum {
         return Global.roundToTwoDecimals(CGFloat(double))
     }
 
-    /// If value is [String: Any], returns a copy with "x" and "y" rounded to 2 decimals; otherwise returns value as-is.
+    /// If value is [String: Any], returns a copy with "x" and "y" (positionX/positionY) rounded to 2 decimals at this level and in any nested [String: Any]; otherwise returns value as-is.
     private static func attributesWithRoundedCoordinates(_ value: Any) -> Any {
         guard let dict = value as? [String: Any] else { return value }
-        var out = dict
-        if let x = dict[Keys.positionX.rawValue] { out[Keys.positionX.rawValue] = roundCoordinateForRum(x) }
-        if let y = dict[Keys.positionY.rawValue] { out[Keys.positionY.rawValue] = roundCoordinateForRum(y) }
+        var out: [String: Any] = [:]
+        for (key, val) in dict {
+            if let nested = val as? [String: Any] {
+                out[key] = attributesWithRoundedCoordinates(nested)
+            } else {
+                out[key] = val
+            }
+        }
+        if let x = out[Keys.positionX.rawValue] { out[Keys.positionX.rawValue] = roundCoordinateForRum(x) }
+        if let y = out[Keys.positionY.rawValue] { out[Keys.positionY.rawValue] = roundCoordinateForRum(y) }
         return out
     }
 }
