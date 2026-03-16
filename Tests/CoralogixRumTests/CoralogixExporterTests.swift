@@ -440,7 +440,7 @@ final class CoralogixExporterTests: XCTestCase {
             Keys.sessionCreationDate.rawValue: AttributeValue("1609459200"),
             SemanticAttributes.httpUrl.rawValue: AttributeValue("https://example.com/api/data")
         ]
-        var span = SpanData(traceId: TraceId.random(),
+        let span = SpanData(traceId: TraceId.random(),
                             spanId: SpanId.random(),
                             name: "testSpan",
                             kind: .client,
@@ -481,7 +481,7 @@ final class CoralogixExporterTests: XCTestCase {
         waitForExpectations(timeout: 5)
         XCTAssertEqual(result, .success, "Export should return .success when beforeSendCallBack handles spans")
         XCTAssertNotNil(receivedSpans, "Callback should receive spans")
-        XCTAssertFalse(receivedSpans!.isEmpty, "Callback should receive non-empty spans array")
+        XCTAssertFalse(receivedSpans?.isEmpty ?? true, "Callback should receive non-empty spans array")
     }
 
     func test_export_doesNotDropSpans_whenBeforeSendCallBackIsNil() {
@@ -507,14 +507,10 @@ final class CoralogixExporterTests: XCTestCase {
         let span = makeValidSpanData()
         let result = exporter.export(spans: [span], explicitTimeout: nil)
 
-        // The upload may fail due to network in tests, but it should NOT
-        // return .failure from the early "no spans" check. The span must
-        // survive filtering and encoding, proving it was not silently dropped.
-        // We verify the exporter attempted to process the spans by checking
-        // that encodeSpans produced output (if it didn't, we'd get .success
-        // from the isEmpty check, not .failure).
-        // Any result other than the old silent .failure at the switch fallthrough is acceptable.
-        XCTAssertNotNil(result, "Export should return a valid result code")
+        // Previously spans were silently dropped (no callback, no upload). Now we must reach
+        // spanUploader.upload(). Assert .success to verify spans reached the upload path.
+        // (Upload may return .failure on network error in CI; if flaky, consider mocking the uploader.)
+        XCTAssertEqual(result, .success, "Span must reach upload path; no silent drop when beforeSendCallBack is nil")
     }
 
     override func tearDown() {
