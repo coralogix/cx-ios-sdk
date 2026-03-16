@@ -311,16 +311,16 @@ final class NetworkCaptureRuleTests: XCTestCase {
         XCTAssertNil(requestForSending.httpBodyStream)
     }
 
-    func testReadRequestBody_httpBodyStream_returnsDataAndRequestWithHttpBodySet() throws {
+    func testReadRequestBody_httpBodyStream_returnsNilDataAndOriginalRequestUnchanged() throws {
         let body = "streamed body".data(using: .utf8)!
         let stream = InputStream(data: body)
         var request = URLRequest(url: try XCTUnwrap(URL(string: "https://api.example.com/upload")))
         request.httpMethod = "POST"
         request.httpBodyStream = stream
         let (data, requestForSending) = NetworkCaptureRule.readRequestBody(from: request)
-        XCTAssertEqual(data, body)
-        XCTAssertEqual(requestForSending.httpBody, body)
-        XCTAssertNil(requestForSending.httpBodyStream)
+        XCTAssertNil(data, "Stream body is not captured so the sending request is not mutated")
+        XCTAssertNil(requestForSending.httpBody)
+        XCTAssertTrue(requestForSending.httpBodyStream === stream, "Original stream must be preserved for full upload")
     }
 
     func testReadRequestBody_bothNil_returnsNilAndSameRequest() throws {

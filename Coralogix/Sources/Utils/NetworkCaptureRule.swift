@@ -134,42 +134,20 @@ public struct NetworkCaptureRule {
 
     // MARK: - Request body capture (CX-33235)
 
-    /// Reads the request body for capture. Handles `httpBody` (direct) and `httpBodyStream` (read then re-wrap).
+    /// Reads the request body for capture when possible without mutating the request that will be sent.
     /// - Parameter request: The request to read from.
-    /// - Returns: Body as `Data` and a request to use for sending. If `httpBodyStream` was set, the returned request
-    ///   is a mutable copy with `httpBody` set and `httpBodyStream` cleared so the original request can still be sent.
-    ///   If both body and stream are nil, returns `(nil, request)`.
+    /// - Returns: Body as `Data` for logging (if available) and the request to use for sending. When the request has
+    ///   `httpBody`, returns that data and the same request. When it has `httpBodyStream`, returns `(nil, request)` so
+    ///   the stream is not consumed and the sender can send the full stream; streamed bodies are not captured to avoid
+    ///   truncating uploads. When both are nil, returns `(nil, request)`.
     internal static func readRequestBody(from request: URLRequest) -> (data: Data?, requestForSending: URLRequest) {
         if let body = request.httpBody {
             return (body, request)
         }
-        guard let stream = request.httpBodyStream else {
+        if request.httpBodyStream != nil {
             return (nil, request)
         }
-        let data = readStreamToData(stream, maxBytes: maxPayloadBytes)
-        guard let data else { return (nil, request) }
-        guard let mutable = (request as NSURLRequest).mutableCopy() as? NSMutableURLRequest else {
-            return (data, request)
-        }
-        mutable.httpBody = data
-        mutable.httpBodyStream = nil
-        return (data, mutable as URLRequest)
-    }
-
-    /// Reads an InputStream into Data, up to maxBytes. Does not close the stream.
-    private static func readStreamToData(_ stream: InputStream, maxBytes: Int) -> Data? {
-        stream.open()
-        defer { stream.close() }
-        var data = Data()
-        let bufferSize = 4096
-        let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: bufferSize)
-        defer { buffer.deallocate() }
-        while data.count < maxBytes {
-            let read = stream.read(buffer, maxLength: bufferSize)
-            if read <= 0 { break }
-            data.append(buffer, count: read)
-        }
-        return data.isEmpty ? nil : data
+        return (nil, request)
     }
 
     // MARK: - Body stringification (request and response, CX-33234 / CX-33235)

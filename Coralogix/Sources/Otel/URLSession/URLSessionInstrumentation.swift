@@ -319,7 +319,7 @@ public class URLSessionInstrumentation {
         configuration.shouldInjectTracingHeaders?(request) ?? true
     }
 
-    /// When collectReqPayload is true and the request has httpBodyStream, reads the stream into Data and returns a request with httpBody set so the body can be captured and the request still sent. Otherwise returns the request unchanged (CX-33235).
+    /// When collectReqPayload is true, returns the request suitable for sending (readRequestBody returns the original request so streamed uploads are not truncated; only httpBody is used for capture). Otherwise returns the request unchanged (CX-33235).
     private func prepareRequestForPayloadCapture(_ request: URLRequest) -> URLRequest {
         guard configuration.shouldCollectRequestPayload?(request) == true else { return request }
         let (_, requestForSending) = NetworkCaptureRule.readRequestBody(from: request)
