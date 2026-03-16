@@ -78,6 +78,26 @@ class SessionManagerTests: XCTestCase {
         XCTAssertEqual(sessionManager.getErrorCount(), 1)
     }
 
+    // MARK: - BUGV2-5379: decrementErrorCounter
+
+    func testDecrementErrorCounter_reducesCountByOne() {
+        sessionManager.incrementErrorCounter()
+        sessionManager.incrementErrorCounter()
+        sessionManager.decrementErrorCounter()
+        XCTAssertEqual(sessionManager.getErrorCount(), 1)
+    }
+
+    func testDecrementErrorCounter_doesNotGoBelowZero() {
+        sessionManager.decrementErrorCounter()
+        XCTAssertEqual(sessionManager.getErrorCount(), 0, "errorCount must not go negative")
+    }
+
+    func testDecrementErrorCounter_incrementThenDecrementEqualsZero() {
+        sessionManager.incrementErrorCounter()
+        sessionManager.decrementErrorCounter()
+        XCTAssertEqual(sessionManager.getErrorCount(), 0)
+    }
+
     func testResetClearsData() {
         sessionManager.incrementClickCounter()
         sessionManager.incrementErrorCounter()

@@ -389,14 +389,15 @@ final class CoralogixExporterTests: XCTestCase {
         let coralogixRum = CoralogixRum(options: options!)
         
         // When
-        let result = coralogixRum.coralogixExporter?.spanUploader.resolvedUrlString(endPoint: endPoint)
-        
+        let uploader = coralogixRum.coralogixExporter?.spanUploader as? SpanUploader
+        let result = uploader?.resolvedUrlString(endPoint: endPoint)
+
         // Then
         guard let result = result else {
             XCTFail("URL should not be nil")
             return
         }
-        
+
         XCTAssertTrue(result.contains(proxyUrl))
         XCTAssertTrue(result.contains("cxforward="))
         XCTAssertTrue(result.contains(CoralogixDomain.US2.rawValue))
@@ -417,7 +418,8 @@ final class CoralogixExporterTests: XCTestCase {
                                           debug: true)
         let coralogixRum = CoralogixRum(options: options!)
         // When
-        let result = coralogixRum.coralogixExporter?.spanUploader.resolvedUrlString(endPoint: endPoint)
+        let uploader = coralogixRum.coralogixExporter?.spanUploader as? SpanUploader
+        let result = uploader?.resolvedUrlString(endPoint: endPoint)
 
         // Then
         XCTAssertEqual(result, coralogixRum.coralogixExporter?.endPoint)
@@ -488,7 +490,8 @@ final class CoralogixExporterTests: XCTestCase {
 
     func test_export_uploadsDirectly_whenFlutterAndBeforeSendCallBackIsNil() {
         // Previously, Flutter/ReactNative exports without a beforeSendCallBack
-        // would silently drop spans. Verify this no longer happens.
+        // would silently drop spans. Verify this no longer happens by injecting
+        // a mock uploader that records invocation without making network calls.
         let opts = CoralogixExporterOptions(coralogixDomain: .US2,
                                             userContext: nil,
                                             environment: "PROD",
@@ -506,13 +509,15 @@ final class CoralogixExporterTests: XCTestCase {
             return
         }
 
+        let mockUploader = MockSpanUploader()
+        exporter.spanUploader = mockUploader
+
         let span = makeValidSpanData()
         let result = exporter.export(spans: [span], explicitTimeout: nil)
 
-        // Previously spans were silently dropped (no callback, no upload). Now we must reach
-        // spanUploader.upload(). Assert .success to verify spans reached the upload path.
-        // (Upload may return .failure on network error in CI; if flaky, consider mocking the uploader.)
-        XCTAssertEqual(result, .success, "Span must reach upload path; no silent drop when beforeSendCallBack is nil")
+        XCTAssertTrue(mockUploader.uploadCalled, "spanUploader.upload must be invoked when beforeSendCallBack is nil")
+        XCTAssertFalse(mockUploader.uploadedSpans.isEmpty, "Upload should receive non-empty spans")
+        XCTAssertEqual(result, .success, "Export should return .success from mock uploader")
     }
 
     func test_export_nativeBypassesBeforeSendCallBack() {
@@ -546,7 +551,160 @@ final class CoralogixExporterTests: XCTestCase {
         XCTAssertFalse(callbackInvoked, "Native clients must not route spans through beforeSendCallBack")
     }
 
+    // MARK: - BUGV2-5379: beforeSend severity change must adjust errorCount
+
+    private func makeErrorSpanData() -> SpanData {
+        let attributes: [String: AttributeValue] = [
+            Keys.severity.rawValue: AttributeValue("5"),
+            Keys.eventType.rawValue: AttributeValue("error"),
+            Keys.source.rawValue: AttributeValue("console"),
+            Keys.environment.rawValue: AttributeValue("prod"),
+            Keys.userId.rawValue: AttributeValue("12345"),
+            Keys.userName.rawValue: AttributeValue("John Doe"),
+            Keys.userEmail.rawValue: AttributeValue("john.doe@example.com"),
+            Keys.sessionId.rawValue: AttributeValue("session_001"),
+            Keys.sessionCreationDate.rawValue: AttributeValue("1609459200"),
+            SemanticAttributes.httpUrl.rawValue: AttributeValue("https://example.com/api/data")
+        ]
+        return SpanData(traceId: TraceId.random(),
+                        spanId: SpanId.random(),
+                        name: "errorSpan",
+                        kind: .client,
+                        startTime: Date(),
+                        attributes: attributes,
+                        endTime: Date(),
+                        hasEnded: true)
+    }
+
+    func test_beforeSend_errorDowngradedToInfo_decrementsErrorCount() {
+        var opts = CoralogixExporterOptions(coralogixDomain: .US2,
+                                            userContext: nil,
+                                            environment: "PROD",
+                                            application: "TestApp-iOS",
+                                            version: "1.0",
+                                            publicKey: "token",
+                                            ignoreUrls: [],
+                                            ignoreErrors: [],
+                                            labels: [:],
+                                            debug: true)
+        opts.beforeSend = { cxRum in
+            var modified = cxRum
+            if var eventContext = modified[Keys.eventContext.rawValue] as? [String: Any] {
+                eventContext[Keys.severity.rawValue] = CoralogixLogSeverity.info.rawValue
+                modified[Keys.eventContext.rawValue] = eventContext
+            }
+            return modified
+        }
+        let rum = CoralogixRum(options: opts)
+        guard let exporter = rum.coralogixExporter else { return XCTFail("Exporter nil") }
+
+        let encoded = exporter.encodeSpans(spans: [makeErrorSpanData()])
+
+        XCTAssertFalse(encoded.isEmpty, "Span should not be dropped")
+        XCTAssertEqual(exporter.getSessionManager().getErrorCount(), 0,
+                       "errorCount should be 0 after beforeSend downgrades Error to Info")
+    }
+
+    func test_beforeSend_errorDowngraded_updatesSnapshotContextErrorCount() {
+        var opts = CoralogixExporterOptions(coralogixDomain: .US2,
+                                            userContext: nil,
+                                            environment: "PROD",
+                                            application: "TestApp-iOS",
+                                            version: "1.0",
+                                            publicKey: "token",
+                                            ignoreUrls: [],
+                                            ignoreErrors: [],
+                                            labels: [:],
+                                            debug: true)
+        opts.beforeSend = { cxRum in
+            var modified = cxRum
+            if var eventContext = modified[Keys.eventContext.rawValue] as? [String: Any] {
+                eventContext[Keys.severity.rawValue] = CoralogixLogSeverity.info.rawValue
+                modified[Keys.eventContext.rawValue] = eventContext
+            }
+            return modified
+        }
+        let rum = CoralogixRum(options: opts)
+        guard let exporter = rum.coralogixExporter else { return XCTFail("Exporter nil") }
+
+        let encoded = exporter.encodeSpans(spans: [makeErrorSpanData()])
+
+        guard let span = encoded.first,
+              let textDict = span[Keys.text.rawValue] as? [String: Any],
+              let cxRumDict = textDict[Keys.cxRum.rawValue] as? [String: Any],
+              let snapshotDict = cxRumDict[Keys.snapshotContext.rawValue] as? [String: Any],
+              let errorCount = snapshotDict[Keys.errorCount.rawValue] as? Int else {
+            return XCTFail("snapshotContext not found in encoded span")
+        }
+        XCTAssertEqual(errorCount, 0,
+                       "snapshotContext.errorCount should reflect the decremented count")
+    }
+
+    func test_beforeSend_errorSpanDropped_decrementsErrorCount() {
+        var opts = CoralogixExporterOptions(coralogixDomain: .US2,
+                                            userContext: nil,
+                                            environment: "PROD",
+                                            application: "TestApp-iOS",
+                                            version: "1.0",
+                                            publicKey: "token",
+                                            ignoreUrls: [],
+                                            ignoreErrors: [],
+                                            labels: [:],
+                                            debug: true)
+        opts.beforeSend = { _ in return nil }
+        let rum = CoralogixRum(options: opts)
+        guard let exporter = rum.coralogixExporter else { return XCTFail("Exporter nil") }
+
+        let encoded = exporter.encodeSpans(spans: [makeErrorSpanData()])
+
+        XCTAssertTrue(encoded.isEmpty, "Dropped span should produce empty result")
+        XCTAssertEqual(exporter.getSessionManager().getErrorCount(), 0,
+                       "errorCount should be 0 after error span is dropped by beforeSend")
+    }
+
+    func test_beforeSend_nonErrorUpgradedToError_incrementsErrorCount() {
+        var opts = CoralogixExporterOptions(coralogixDomain: .US2,
+                                            userContext: nil,
+                                            environment: "PROD",
+                                            application: "TestApp-iOS",
+                                            version: "1.0",
+                                            publicKey: "token",
+                                            ignoreUrls: [],
+                                            ignoreErrors: [],
+                                            labels: [:],
+                                            debug: true)
+        opts.beforeSend = { cxRum in
+            var modified = cxRum
+            if var eventContext = modified[Keys.eventContext.rawValue] as? [String: Any] {
+                eventContext[Keys.severity.rawValue] = CoralogixLogSeverity.error.rawValue
+                modified[Keys.eventContext.rawValue] = eventContext
+            }
+            return modified
+        }
+        let rum = CoralogixRum(options: opts)
+        guard let exporter = rum.coralogixExporter else { return XCTFail("Exporter nil") }
+
+        let encoded = exporter.encodeSpans(spans: [makeValidSpanData()])
+
+        XCTAssertFalse(encoded.isEmpty, "Span should not be dropped")
+        XCTAssertEqual(exporter.getSessionManager().getErrorCount(), 1,
+                       "errorCount should be 1 after beforeSend upgrades non-Error to Error")
+    }
+
     override func tearDown() {
         super.tearDown()
+    }
+}
+
+// MARK: - Test Doubles
+
+private class MockSpanUploader: SpanUploading {
+    var uploadCalled = false
+    var uploadedSpans: [[String: Any]] = []
+
+    func upload(_ spans: [[String: Any]], endPoint: String) -> SpanExporterResultCode {
+        uploadCalled = true
+        uploadedSpans = spans
+        return .success
     }
 }

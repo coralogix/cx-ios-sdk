@@ -17,6 +17,7 @@ public class CxSpan {
     var instrumentationData: InstrumentationData?
     var beforeSend: (([String: Any]) -> [String: Any]?)?
     let viewManager: ViewManager?
+    weak var sessionManager: SessionManager?
     
     init?(otel: SpanDataProtocol,
           versionMetadata: VersionMetadata,
@@ -31,6 +32,7 @@ public class CxSpan {
         self.versionMetadata = versionMetadata
         self.subsystemName = Keys.cxRum.rawValue
         self.beforeSend = options.beforeSend
+        self.sessionManager = sessionManager
         if let severity = otel.getAttribute(forKey: Keys.severity.rawValue) as? String {
             self.severity = Int(severity) ?? 0
         }
@@ -65,14 +67,30 @@ public class CxSpan {
             if let editableCxRum = self.beforeSend?(subsetOfCxRum) {
                 let mergedDict = mergeDictionaries(original: originalCxRum, editable: editableCxRum)
                 result[Keys.text.rawValue] = [Keys.cxRum.rawValue: mergedDict]
-                
+
                 // Sync severity from editableCxRum to CxSpan's top-level severity
                 if let eventContext = editableCxRum[Keys.eventContext.rawValue] as? [String: Any],
                    let newSeverity = eventContext[Keys.severity.rawValue] as? Int {
                     result[Keys.severity.rawValue] = newSeverity
+
+                    // BUGV2-5379: adjust errorCount when beforeSend changes severity across the Error boundary
+                    let errorSeverity = CoralogixLogSeverity.error.rawValue
+                    let wasError = self.cxRum.eventContext.severity == errorSeverity
+                    let isNowError = newSeverity == errorSeverity
+                    if wasError && !isNowError {
+                        sessionManager?.decrementErrorCounter()
+                        updateSnapshotErrorCount(in: &result)
+                    } else if !wasError && isNowError {
+                        sessionManager?.incrementErrorCounter()
+                        updateSnapshotErrorCount(in: &result)
+                    }
                 }
             } else {
-                return nil // editableCxRum is nil we need to drop that span
+                // BUGV2-5379: span dropped by beforeSend — undo error increment if it was an Error
+                if self.cxRum.eventContext.severity == CoralogixLogSeverity.error.rawValue {
+                    sessionManager?.decrementErrorCounter()
+                }
+                return nil
             }
         } else {
             result[Keys.text.rawValue] = [Keys.cxRum.rawValue: originalCxRum]
@@ -119,6 +137,18 @@ public class CxSpan {
         return mergedDict
     }
     
+    private func updateSnapshotErrorCount(in result: inout [String: Any]) {
+        guard var textDict = result[Keys.text.rawValue] as? [String: Any],
+              var cxRumDict = textDict[Keys.cxRum.rawValue] as? [String: Any],
+              var snapshotDict = cxRumDict[Keys.snapshotContext.rawValue] as? [String: Any] else {
+            return
+        }
+        snapshotDict[Keys.errorCount.rawValue] = sessionManager?.getErrorCount() ?? 0
+        cxRumDict[Keys.snapshotContext.rawValue] = snapshotDict
+        textDict[Keys.cxRum.rawValue] = cxRumDict
+        result[Keys.text.rawValue] = textDict
+    }
+
     func createSubsetOfCxRum(from originalCxRum: [String: Any]) -> [String: Any] {
         var editableCxRum = originalCxRum
         // Remove sessionCreationDate and sessionId form sessionContext
