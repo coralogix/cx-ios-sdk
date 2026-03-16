@@ -98,12 +98,13 @@ final class NetworkCaptureIntegrationTests: XCTestCase {
     }
 
     /// Waits for a network span matching the URL to appear in capturedSpans (flushes and polls briefly).
+    /// Note: Uses short polling intervals; on slow CI, pass a larger timeout if tests are flaky.
     func waitForNetworkSpan(urlContains: String, timeout: TimeInterval = 5) -> SpanData? {
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
             forceFlush()
             if let span = findNetworkSpan(urlContains: urlContains) { return span }
-            Thread.sleep(forTimeInterval: 0.2)
+            Thread.sleep(forTimeInterval: 0.1)
         }
         return nil
     }
