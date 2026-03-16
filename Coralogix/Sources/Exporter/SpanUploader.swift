@@ -8,7 +8,12 @@
 import Foundation
 import CoralogixInternal
 
-final class SpanUploader {
+protocol SpanUploading {
+    @discardableResult
+    func upload(_ spans: [[String: Any]], endPoint: String) -> SpanExporterResultCode
+}
+
+final class SpanUploader: SpanUploading {
     private let options: CoralogixExporterOptions
     
     init(options: CoralogixExporterOptions) {

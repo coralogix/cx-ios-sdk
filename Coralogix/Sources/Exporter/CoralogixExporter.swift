@@ -14,7 +14,7 @@ public class CoralogixExporter: SpanExporter {
     private var networkManager: NetworkProtocol
     private var metricsManager: MetricsManager
     private var screenshotManager = ScreenshotManager()
-    lazy var spanUploader = SpanUploader(options: self.options)
+    lazy var spanUploader: SpanUploading = SpanUploader(options: self.options)
 
     private let spanProcessingQueue = DispatchQueue(label: Keys.queueSpanProcessingQueue.rawValue)
     
