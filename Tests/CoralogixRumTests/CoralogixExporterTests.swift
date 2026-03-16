@@ -451,7 +451,9 @@ final class CoralogixExporterTests: XCTestCase {
         return span
     }
 
-    func test_export_invokesBeforeSendCallBack_whenSet() {
+    func test_export_invokesBeforeSendCallBack_forFlutter() {
+        // Flutter/ReactNative: when beforeSendCallBack is set, spans go to
+        // the callback (platform channel) instead of the native uploader.
         let expectation = expectation(description: "beforeSendCallBack should be invoked")
         var receivedSpans: [[String: Any]]?
 
@@ -469,7 +471,7 @@ final class CoralogixExporterTests: XCTestCase {
             receivedSpans = spans
             expectation.fulfill()
         }
-        let rum = CoralogixRum(options: opts)
+        let rum = CoralogixRum(options: opts, sdkFramework: .flutter(version: "1.0.0"))
         guard let exporter = rum.coralogixExporter else {
             XCTFail("Exporter should not be nil")
             return
@@ -484,7 +486,7 @@ final class CoralogixExporterTests: XCTestCase {
         XCTAssertFalse(receivedSpans?.isEmpty ?? true, "Callback should receive non-empty spans array")
     }
 
-    func test_export_doesNotDropSpans_whenBeforeSendCallBackIsNil() {
+    func test_export_uploadsDirectly_whenFlutterAndBeforeSendCallBackIsNil() {
         // Previously, Flutter/ReactNative exports without a beforeSendCallBack
         // would silently drop spans. Verify this no longer happens.
         let opts = CoralogixExporterOptions(coralogixDomain: .US2,
@@ -511,6 +513,37 @@ final class CoralogixExporterTests: XCTestCase {
         // spanUploader.upload(). Assert .success to verify spans reached the upload path.
         // (Upload may return .failure on network error in CI; if flaky, consider mocking the uploader.)
         XCTAssertEqual(result, .success, "Span must reach upload path; no silent drop when beforeSendCallBack is nil")
+    }
+
+    func test_export_nativeBypassesBeforeSendCallBack() {
+        // Native (Swift) clients must always upload via spanUploader,
+        // even when beforeSendCallBack is set, so the exporter contract is preserved.
+        var callbackInvoked = false
+
+        var opts = CoralogixExporterOptions(coralogixDomain: .US2,
+                                            userContext: nil,
+                                            environment: "PROD",
+                                            application: "TestApp-iOS",
+                                            version: "1.0",
+                                            publicKey: "token",
+                                            ignoreUrls: [],
+                                            ignoreErrors: [],
+                                            labels: ["item": "banana"],
+                                            debug: true)
+        opts.beforeSendCallBack = { _ in
+            callbackInvoked = true
+        }
+        // Default sdkFramework is .swift (native)
+        let rum = CoralogixRum(options: opts)
+        guard let exporter = rum.coralogixExporter else {
+            XCTFail("Exporter should not be nil")
+            return
+        }
+
+        let span = makeValidSpanData()
+        _ = exporter.export(spans: [span], explicitTimeout: nil)
+
+        XCTAssertFalse(callbackInvoked, "Native clients must not route spans through beforeSendCallBack")
     }
 
     override func tearDown() {

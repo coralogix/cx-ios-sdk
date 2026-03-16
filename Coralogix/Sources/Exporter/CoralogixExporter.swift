@@ -119,7 +119,8 @@ public class CoralogixExporter: SpanExporter {
                 return .success
             }
             
-            if let callback = self.options.beforeSendCallBack {
+            let sdk = CoralogixRum.mobileSDK.sdkFramework
+            if !sdk.isNative, let callback = self.options.beforeSendCallBack {
                 let clonedSpans = cxSpansDictionary.deepCopy()
                 callback(clonedSpans)
                 return .success
