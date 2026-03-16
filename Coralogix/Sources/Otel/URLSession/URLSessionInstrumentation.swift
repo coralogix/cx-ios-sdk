@@ -46,6 +46,7 @@ public class URLSessionInstrumentation {
     static var instrumentedKey = "io.opentelemetry.instrumentedCall"
     private static var delegateSwizzleKey: UInt8 = 0
     private static var loggedKey: UInt8 = 0  // Deduplication flag for hybrid approach
+    private static var hasCompletionHandlerKey: UInt8 = 0  // Task created with completion handler — delegate must not log (completion has body)
     private static var setStateSwizzleKey: UInt8 = 0
     
     // Thread-safe swizzling lock - protects against concurrent swizzle attempts
@@ -546,14 +547,15 @@ public class URLSessionInstrumentation {
                                 #if DEBUG
                                 Log.testLog("[URLSessionInstrumentation] Logging error for taskId: \(sessionTaskId), status: \(status)")
                                 #endif
-                                URLSessionLogger.logError(error!, dataOrFile: object, statusCode: status, instrumentation: self, sessionTaskId: sessionTaskId)
+                                URLSessionLogger.logError(error!, dataOrFile: object ?? self.takeResponseBody(forTaskId: sessionTaskId), statusCode: status, instrumentation: self, sessionTaskId: sessionTaskId)
                             } else {
                                 if let response = response {
                                     let status = (response as? HTTPURLResponse)?.statusCode ?? 0
                                     #if DEBUG
                                     Log.testLog("[URLSessionInstrumentation] Logging response for taskId: \(sessionTaskId), status: \(status)")
                                     #endif
-                                    URLSessionLogger.logResponse(response, dataOrFile: object, instrumentation: self, sessionTaskId: sessionTaskId)
+                                    let body = object ?? self.takeResponseBody(forTaskId: sessionTaskId)
+                                    URLSessionLogger.logResponse(response, dataOrFile: body, instrumentation: self, sessionTaskId: sessionTaskId)
                                 }
                             }
                             // Mark as logged to prevent duplicate in setState: fallback
@@ -574,12 +576,16 @@ public class URLSessionInstrumentation {
                     let instrumentedRequest = URLSessionLogger.processAndLogRequest(requestForCapture, sessionTaskId: sessionTaskId, instrumentation: self, shouldInjectHeaders: true)
                     task = castedIMP(session, selector, instrumentedRequest ?? requestForCapture, completionBlock)
                     self.storeRequest(instrumentedRequest ?? requestForCapture, forTaskId: sessionTaskId)
+                    objc_setAssociatedObject(task, &Self.hasCompletionHandlerKey, true, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
                 } else {
                     task = castedIMP(session, selector, argument, completionBlock)
                     if objc_getAssociatedObject(argument, &idKey) == nil,
                        let currentRequest = task.currentRequest {
                         URLSessionLogger.processAndLogRequest(currentRequest, sessionTaskId: sessionTaskId, instrumentation: self, shouldInjectHeaders: false)
                         self.storeRequest(currentRequest, forTaskId: sessionTaskId)
+                    }
+                    if completionBlock != nil {
+                        objc_setAssociatedObject(task, &Self.hasCompletionHandlerKey, true, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
                     }
                 }
                 self.setIdKey(value: sessionTaskId, for: task)
@@ -617,19 +623,20 @@ public class URLSessionInstrumentation {
                 var completionBlock = completion
                 if objc_getAssociatedObject(argument, &idKey) == nil {
                     let completionWrapper: (Any?, URLResponse?, Error?) -> Void = { object, response, error in
+                        let body = object ?? self.takeResponseBody(forTaskId: sessionTaskId)
                         if error != nil {
                             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
                             #if DEBUG
                             Log.testLog("[URLSessionInstrumentation] Logging error for taskId: \(sessionTaskId), status: \(status)")
                             #endif
-                            URLSessionLogger.logError(error!, dataOrFile: object, statusCode: status, instrumentation: self, sessionTaskId: sessionTaskId)
+                            URLSessionLogger.logError(error!, dataOrFile: body, statusCode: status, instrumentation: self, sessionTaskId: sessionTaskId)
                         } else {
                             if let response = response {
                                 let status = (response as? HTTPURLResponse)?.statusCode ?? 0
                                 #if DEBUG
                                 Log.testLog("[URLSessionInstrumentation] Logging response for taskId: \(sessionTaskId), status: \(status)")
                                 #endif
-                                URLSessionLogger.logResponse(response, dataOrFile: object, instrumentation: self, sessionTaskId: sessionTaskId)
+                                URLSessionLogger.logResponse(response, dataOrFile: body, instrumentation: self, sessionTaskId: sessionTaskId)
                             }
                         }
                         // Mark as logged to prevent duplicate in setState: fallback
@@ -648,6 +655,7 @@ public class URLSessionInstrumentation {
                 let processedRequest = URLSessionLogger.processAndLogRequest(requestForCapture, sessionTaskId: sessionTaskId, instrumentation: self, shouldInjectHeaders: true)
                 task = castedIMP(session, selector, processedRequest ?? requestForCapture, argument, completionBlock)
                 self.storeRequest(processedRequest ?? requestForCapture, forTaskId: sessionTaskId)
+                objc_setAssociatedObject(task, &Self.hasCompletionHandlerKey, true, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
                 self.setIdKey(value: sessionTaskId, for: task)
                 return task
             }
@@ -903,7 +911,9 @@ public class URLSessionInstrumentation {
         guard let taskId = objc_getAssociatedObject(task, &idKey) as? String else {
             return // Task not tracked by us
         }
-        
+        if objc_getAssociatedObject(task, &Self.hasCompletionHandlerKey) != nil {
+            return // Completion handler will log (with response body); avoid logging here without body
+        }
         var requestState: NetworkRequestState?
         queue.sync(flags: .barrier) {
             requestState = requestMap[taskId]
@@ -1173,7 +1183,9 @@ public class URLSessionInstrumentation {
         guard let taskId = objc_getAssociatedObject(task, &idKey) as? String else {
             return
         }
-    
+        if objc_getAssociatedObject(task, &Self.hasCompletionHandlerKey) != nil {
+            return
+        }
         var requestState: NetworkRequestState?
         queue.sync(flags: .barrier) {
             requestState = requestMap[taskId]
@@ -1222,7 +1234,9 @@ public class URLSessionInstrumentation {
         guard requestState?.request != nil else {
             return
         }
-        
+        if objc_getAssociatedObject(task, &Self.hasCompletionHandlerKey) != nil {
+            return
+        }
         let responseData = takeResponseBody(forTaskId: taskId) ?? requestState?.dataProcessed
         /// Code for instrumenting collection should be written here
         if let error = task.error {

@@ -100,6 +100,10 @@ struct OtelSpan {
         static let networkStatusCode         = "cx_rum.network_request_context.status_code"
         static let networkStatusText         = "cx_rum.network_request_context.status_text"
         static let networkFragments          = "cx_rum.network_request_context.fragments"
+        static let networkRequestHeaders     = "cx_rum.network_request_context.request_headers"
+        static let networkResponseHeaders    = "cx_rum.network_request_context.response_headers"
+        static let networkRequestPayload     = "cx_rum.network_request_context.request_payload"
+        static let networkResponsePayload    = "cx_rum.network_request_context.response_payload"
         static let pageUrl                   = "cx_rum.page_context.page_url"
         static let pageFragments             = "cx_rum.page_context.page_fragments"
     }
@@ -164,6 +168,10 @@ struct OtelSpan {
                 attrs[AttrKey.networkStatusCode] = nrc.statusCode
                 attrs[AttrKey.networkStatusText] = nrc.statusText
                 attrs[AttrKey.networkFragments]  = nrc.fragments
+                if let v = nrc.requestHeaders  { attrs[AttrKey.networkRequestHeaders]  = v }
+                if let v = nrc.responseHeaders { attrs[AttrKey.networkResponseHeaders] = v }
+                if let v = nrc.requestPayload  { attrs[AttrKey.networkRequestPayload]  = v }
+                if let v = nrc.responsePayload { attrs[AttrKey.networkResponsePayload] = v }
             }
         }
 
