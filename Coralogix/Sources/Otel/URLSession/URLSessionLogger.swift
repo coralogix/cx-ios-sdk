@@ -4,6 +4,7 @@
  */
 
 import Foundation
+import CoralogixInternal
 // 
 import os.log
 
@@ -77,6 +78,15 @@ class URLSessionLogger {
         let span = spanBuilder.startSpan()
         runningSpansQueue.sync {
             runningSpans[sessionTaskId] = span
+        }
+
+        // Request body capture (CX-33235): stringify and set request_payload when rule has collectReqPayload; 1024-char limit in stringifyBody.
+        if instrumentation.configuration.shouldCollectRequestPayload?(request) == true,
+           let bodyData = request.httpBody {
+            let contentType = request.allHTTPHeaderFields?["Content-Type"]
+            if let payload = NetworkCaptureRule.stringifyBody(data: bodyData, contentType: contentType) {
+                span.setAttribute(key: Keys.requestPayload.rawValue, value: payload)
+            }
         }
 
         var returnRequest: URLRequest?

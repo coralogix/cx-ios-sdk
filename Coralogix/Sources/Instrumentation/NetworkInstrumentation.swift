@@ -61,6 +61,9 @@ extension CoralogixRum {
             shouldCollectResponsePayload: { request in
                 Self.shouldCollectResponsePayload(for: request, options: options)
             },
+            shouldCollectRequestPayload: { request in
+                Self.shouldCollectRequestPayload(for: request, options: options)
+            },
             receivedResponse: self.receivedResponse
         )
         self.sessionInstrumentation = URLSessionInstrumentation(configuration: configuration)
@@ -71,6 +74,13 @@ extension CoralogixRum {
         guard let configs = options.networkExtraConfig, !configs.isEmpty else { return false }
         let urlString = request.url?.absoluteString ?? ""
         return resolveConfigForUrl(urlString, configs: configs)?.collectResPayload ?? false
+    }
+
+    /// Returns whether request body should be captured for this request (rule-based; used for collectReqPayload).
+    private static func shouldCollectRequestPayload(for request: URLRequest, options: CoralogixExporterOptions) -> Bool {
+        guard let configs = options.networkExtraConfig, !configs.isEmpty else { return false }
+        let urlString = request.url?.absoluteString ?? ""
+        return resolveConfigForUrl(urlString, configs: configs)?.collectReqPayload ?? false
     }
 
     internal func shouldAddTraceParent(to request: URLRequest, options: CoralogixExporterOptions) -> Bool {

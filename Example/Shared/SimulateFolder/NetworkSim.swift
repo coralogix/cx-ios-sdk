@@ -41,8 +41,8 @@ class NetworkSim {
         task.resume()
     }
     
-    /// Sends a GET and a POST to jsonplaceholder.typicode.com (matches NetworkCaptureRule with collectResPayload).
-    /// In RUM you should see: request_headers, response_headers, and response_payload (stringified JSON, ≤1024 chars).
+    /// Sends a GET and a POST to jsonplaceholder.typicode.com (matches NetworkCaptureRule with collectReqPayload + collectResPayload).
+    /// In RUM you should see: request_headers, response_headers, request_payload (POST body, ≤1024 chars), and response_payload (stringified JSON, ≤1024 chars).
     static func sendRequestWithHeaderCapture() {
         let getUrl = URL(string: "https://jsonplaceholder.typicode.com/posts/1")!
         var getRequest = URLRequest(url: getUrl)

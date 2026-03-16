@@ -96,7 +96,7 @@ final class NetworkViewController: UITableViewController {
               key: .asyncAwaitWithSSLPinning),
         .init(
             title: "Header & response body capture",
-            subtitle: "GET + POST to jsonplaceholder; request/response headers + response_payload in RUM (CX-33234)",
+            subtitle: "GET + POST to jsonplaceholder; request/response headers + request_payload + response_payload in RUM (CX-33234/CX-33235)",
             systemImageName: "list.bullet.rectangle",
             key: .requestWithHeaderCapture
         )

@@ -393,16 +393,19 @@ final class NetworkInstrumentationUITests: XCTestCase {
     /// Verifies that at least one network log in `validationData` has both `request_headers` and `response_headers`
     /// (i.e. NetworkCaptureRule was applied and header capture is working).
     /// Optionally narrows by `expectedPath` (URL must contain it) and/or `expectedHeaderKeys` (each key must appear in request or response headers).
+    /// When `requireRequestPayload` is true, the same log must also have non-empty `request_payload` (CX-33235).
     private func verifyNetworkLogHasCaptureHeaders(
         validationData: [[String: Any]],
         urlPattern: String,
         expectedPath: String? = nil,
         expectedHeaderKeys: [String]? = nil,
+        requireRequestPayload: Bool = false,
         file: StaticString = #file,
         line: UInt = #line
     ) {
         let requestHeadersKey = "request_headers"
         let responseHeadersKey = "response_headers"
+        let requestPayloadKey = "request_payload"
         
         for logEntry in validationData {
             var networkContext: [String: Any]?
@@ -439,13 +442,21 @@ final class NetworkInstrumentationUITests: XCTestCase {
                 }
                 if !hasAllKeys { continue }
             }
-            print("✅ Found network log with request_headers and response_headers: \(url.prefix(60))...")
+            if requireRequestPayload {
+                guard let payload = context[requestPayloadKey] as? String, !payload.isEmpty else {
+                    continue // e.g. GET has headers but no body; keep looking for a log with request_payload (POST)
+                }
+                print("✅ Found network log with request_headers, response_headers, and request_payload: \(url.prefix(60))...")
+            } else {
+                print("✅ Found network log with request_headers and response_headers: \(url.prefix(60))...")
+            }
             return
         }
         
         var hint = "URL containing '\(urlPattern)'"
         if let path = expectedPath { hint += ", path '\(path)'" }
         if let keys = expectedHeaderKeys, !keys.isEmpty { hint += ", header keys \(keys)" }
+        if requireRequestPayload { hint += ", and non-empty request_payload" }
         XCTFail("No network log for \(hint) had both non-empty request_headers and response_headers. " +
                 "Check that NetworkCaptureRule is configured and request is stored before logResponse. " +
                 "Inspect /tmp/coralogix_validation_response.json for actual network_request_context shape.", file: file, line: line)
@@ -541,13 +552,14 @@ final class NetworkInstrumentationUITests: XCTestCase {
         
         verifyExpectedRequests(expectedRequests)
         
-        // Verify the exact demo request (header & response body capture) has request_headers and response_headers
+        // Verify the exact demo request (header & response body capture) has request_headers, response_headers, and request_payload (CX-33235)
         if let validationData = readValidationData() {
             verifyNetworkLogHasCaptureHeaders(
                 validationData: validationData,
                 urlPattern: "jsonplaceholder.typicode.com",
                 expectedPath: "posts",
-                expectedHeaderKeys: ["X-Demo-Header", "Content-Type"]
+                expectedHeaderKeys: ["X-Demo-Header", "Content-Type"],
+                requireRequestPayload: true
             )
         }
         

@@ -289,6 +289,40 @@ final class NetworkCaptureRuleTests: XCTestCase {
         XCTAssertEqual(result, exact)
     }
 
+    // MARK: - readRequestBody (CX-33235)
+
+    func testReadRequestBody_httpBody_returnsBodyAndSameRequest() throws {
+        let body = "{\"foo\":1}".data(using: .utf8)!
+        var request = URLRequest(url: try XCTUnwrap(URL(string: "https://api.example.com/post")))
+        request.httpMethod = "POST"
+        request.httpBody = body
+        let (data, requestForSending) = NetworkCaptureRule.readRequestBody(from: request)
+        XCTAssertEqual(data, body)
+        XCTAssertTrue(requestForSending.httpBody == body)
+        XCTAssertNil(requestForSending.httpBodyStream)
+    }
+
+    func testReadRequestBody_httpBodyStream_returnsDataAndRequestWithHttpBodySet() throws {
+        let body = "streamed body".data(using: .utf8)!
+        let stream = InputStream(data: body)
+        var request = URLRequest(url: try XCTUnwrap(URL(string: "https://api.example.com/upload")))
+        request.httpMethod = "POST"
+        request.httpBodyStream = stream
+        let (data, requestForSending) = NetworkCaptureRule.readRequestBody(from: request)
+        XCTAssertEqual(data, body)
+        XCTAssertEqual(requestForSending.httpBody, body)
+        XCTAssertNil(requestForSending.httpBodyStream)
+    }
+
+    func testReadRequestBody_bothNil_returnsNilAndSameRequest() throws {
+        var request = URLRequest(url: try XCTUnwrap(URL(string: "https://api.example.com/get")))
+        request.httpMethod = "GET"
+        let (data, requestForSending) = NetworkCaptureRule.readRequestBody(from: request)
+        XCTAssertNil(data)
+        XCTAssertNil(requestForSending.httpBody)
+        XCTAssertNil(requestForSending.httpBodyStream)
+    }
+
     // MARK: - Mutual exclusivity
     // Enforced at compile time by the private Matcher enum — each init path sets exactly one
     // case, so no runtime white-box tests are needed here.
