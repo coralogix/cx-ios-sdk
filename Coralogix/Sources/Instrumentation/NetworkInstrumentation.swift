@@ -201,7 +201,7 @@ extension CoralogixRum {
         let span = getSpan()
 
         let statusCodeInt = coerceToInt(dictionary[Keys.statusCode.rawValue])
-        let logSeverity: CoralogixLogSeverity = (statusCodeInt != nil && statusCodeInt! >= 400) ? .error : .info
+        let logSeverity: CoralogixLogSeverity = (statusCodeInt ?? 0) >= 400 ? .error : .info
         span.setAttribute(key: Keys.severity.rawValue, value: AttributeValue.int(logSeverity.rawValue))
 
         span.setAttribute(key: SemanticAttributes.httpUrl.rawValue, value: dictionary[Keys.url.rawValue] as? String ?? "")
