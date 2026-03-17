@@ -64,11 +64,20 @@ extension CoralogixRum {
             shouldCollectRequestPayload: { request in
                 Self.shouldCollectRequestPayload(for: request, options: options)
             },
-            receivedResponse: self.receivedResponse
+            receivedResponse: self.receivedResponse,
+            delegateClassesToInstrument: Self.urlSessionDelegateClassesForReactNative()
         )
         self.sessionInstrumentation = URLSessionInstrumentation(configuration: configuration)
     }
     
+    /// React Native uses `RCTHTTPRequestHandler` as its `NSURLSessionDataDelegate` and does not use the
+    /// completion-handler API, so response body is only available if this delegate class is instrumented.
+    /// Returns the class in an array when present at runtime (safe no-op in non–React Native apps).
+    private static func urlSessionDelegateClassesForReactNative() -> [AnyClass]? {
+        guard let cls = NSClassFromString("RCTHTTPRequestHandler") else { return nil }
+        return [cls]
+    }
+
     /// Returns whether response body should be buffered for this request (rule-based; used for collectResPayload).
     private static func shouldCollectResponsePayload(for request: URLRequest, options: CoralogixExporterOptions) -> Bool {
         guard let configs = options.networkExtraConfig, !configs.isEmpty else { return false }
