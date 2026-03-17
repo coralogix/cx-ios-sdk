@@ -167,6 +167,7 @@ extension CoralogixRum {
         guard let rule = resolveConfigForUrl(requestUrl, configs: configs) else { return }
 
         // Request headers (allowlisted by rule.reqHeaders)
+        Log.d("[Coralogix] DEBUG reqHeaders: request=\(request == nil ? "nil" : "non-nil"), allHTTPHeaderFields=\(request?.allHTTPHeaderFields?.description ?? "nil"), rule.reqHeaders=\(rule.reqHeaders?.description ?? "nil")")
         if let reqHeaders = rule.reqHeaders, let req = request, let allReq = req.allHTTPHeaderFields, !allReq.isEmpty {
             let filtered = NetworkCaptureRule.filterHeaders(allReq, allowlist: reqHeaders)
             if !filtered.isEmpty {
