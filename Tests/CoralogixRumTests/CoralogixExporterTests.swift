@@ -887,6 +887,71 @@ final class CoralogixExporterTests: XCTestCase {
                        "Severity should fall back to the original value when key is absent")
     }
 
+    /// beforeSend removes eventContext entirely and expresses the severity change via a
+    /// top-level "severity" key. The counter and snapshotContext must still be adjusted.
+    func test_beforeSend_removesEventContext_topLevelSeverityUsed_counterAdjusted() {
+        var opts = CoralogixExporterOptions(coralogixDomain: .US2,
+                                            userContext: nil,
+                                            environment: "PROD",
+                                            application: "TestApp-iOS",
+                                            version: "1.0",
+                                            publicKey: "token",
+                                            ignoreUrls: [],
+                                            ignoreErrors: [],
+                                            labels: [:],
+                                            debug: true)
+        // Downgrade error → info by removing eventContext and setting top-level severity
+        opts.beforeSend = { cxRum in
+            var modified = cxRum
+            modified.removeValue(forKey: Keys.eventContext.rawValue)
+            modified[Keys.severity.rawValue] = CoralogixLogSeverity.info.rawValue
+            return modified
+        }
+        let rum = CoralogixRum(options: opts)
+        guard let exporter = rum.coralogixExporter else { return XCTFail("Exporter nil") }
+
+        let encoded = exporter.encodeSpans(spans: [makeErrorSpanData()])
+
+        XCTAssertFalse(encoded.isEmpty, "Span should not be dropped")
+        // Error was decremented because severity crossed the Error boundary downward
+        XCTAssertEqual(exporter.getSessionManager().getErrorCount(), 0,
+                       "errorCount should be decremented when top-level severity downgrades from Error")
+        // Top-level severity reflects the new value
+        XCTAssertEqual(encoded.first?[Keys.severity.rawValue] as? Int,
+                       CoralogixLogSeverity.info.rawValue,
+                       "Top-level severity should reflect the top-level override from beforeSend")
+    }
+
+    /// beforeSend removes eventContext entirely with no severity key at all.
+    /// The fallback keeps the original severity and no counter adjustment fires.
+    func test_beforeSend_removesEventContextNoSeverity_fallsBackToOriginalNoCountChange() {
+        var opts = CoralogixExporterOptions(coralogixDomain: .US2,
+                                            userContext: nil,
+                                            environment: "PROD",
+                                            application: "TestApp-iOS",
+                                            version: "1.0",
+                                            publicKey: "token",
+                                            ignoreUrls: [],
+                                            ignoreErrors: [],
+                                            labels: [:],
+                                            debug: true)
+        opts.beforeSend = { cxRum in
+            var modified = cxRum
+            modified.removeValue(forKey: Keys.eventContext.rawValue)
+            // No severity key — fallback path should preserve original severity
+            return modified
+        }
+        let rum = CoralogixRum(options: opts)
+        guard let exporter = rum.coralogixExporter else { return XCTFail("Exporter nil") }
+
+        let encoded = exporter.encodeSpans(spans: [makeErrorSpanData()])
+
+        XCTAssertFalse(encoded.isEmpty, "Span should not be dropped")
+        // Original was Error(5); no change → counter stays at 1
+        XCTAssertEqual(exporter.getSessionManager().getErrorCount(), 1,
+                       "errorCount must be unchanged when eventContext and severity are both absent")
+    }
+
     override func tearDown() {
         super.tearDown()
     }

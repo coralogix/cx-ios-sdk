@@ -79,47 +79,49 @@ public class CxSpan {
                 // parseSeverity accepts Int or numeric String (matching the OTEL init path)
                 // and falls back to the original value so a missing/unparseable severity
                 // is treated as "no change" rather than silently skipping reconciliation.
-                if let eventContext = editableCxRum[Keys.eventContext.rawValue] as? [String: Any] {
-                    let newSeverity = CxSpan.parseSeverity(
-                        eventContext[Keys.severity.rawValue],
-                        fallback: self.cxRum.eventContext.severity
-                    )
+                //
+                // Priority: eventContext[severity] → top-level editableCxRum[severity] → original.
+                // This covers the case where beforeSend removes eventContext entirely but
+                // still sets a top-level severity key.
+                let editableEventContext = editableCxRum[Keys.eventContext.rawValue] as? [String: Any]
+                let severitySource = editableEventContext?[Keys.severity.rawValue]
+                    ?? editableCxRum[Keys.severity.rawValue]
+                let newSeverity = CxSpan.parseSeverity(severitySource, fallback: self.cxRum.eventContext.severity)
 
-                    // Only write when the value actually changed to avoid a no-op overwrite
-                    // (e.g. when beforeSend returns an eventContext without a severity key,
-                    // parseSeverity returns the original value via fallback).
-                    if newSeverity != self.cxRum.eventContext.severity {
-                        result[Keys.severity.rawValue] = newSeverity
+                // Only write when the value actually changed to avoid a no-op overwrite
+                // (e.g. when beforeSend returns an eventContext without a severity key,
+                // parseSeverity returns the original value via fallback).
+                if newSeverity != self.cxRum.eventContext.severity {
+                    result[Keys.severity.rawValue] = newSeverity
+                }
+
+                // Write the normalised Int back into mergedDict so that
+                // text.cxRum.eventContext.severity matches the top-level severity.
+                if var ecDict = mergedDict[Keys.eventContext.rawValue] as? [String: Any] {
+                    ecDict[Keys.severity.rawValue] = newSeverity
+                    mergedDict[Keys.eventContext.rawValue] = ecDict
+                }
+
+                // Assign mergedDict before updateSnapshotErrorCount, which re-assigns
+                // result[Keys.text.rawValue] to patch snapshotContext.errorCount in place.
+                result[Keys.text.rawValue] = [Keys.cxRum.rawValue: mergedDict]
+
+                // BUGV2-5379: adjust errorCount when beforeSend changes severity across the Error boundary.
+                // Runs unconditionally so the counter stays correct even when beforeSend removes
+                // eventContext and expresses the severity change at the top level instead.
+                // Capture sessionManager once so the counter mutation and the getErrorCount()
+                // read inside updateSnapshotErrorCount see the same object (closes the TOCTOU
+                // window that the weak var would otherwise leave open).
+                let errorSeverity = CoralogixLogSeverity.error.rawValue
+                let wasError = self.cxRum.eventContext.severity == errorSeverity
+                let isNowError = newSeverity == errorSeverity
+                if wasError != isNowError, let sm = sessionManager {
+                    if wasError {
+                        sm.decrementErrorCounter()
+                    } else {
+                        sm.incrementErrorCounter()
                     }
-
-                    // Write the normalised Int back into mergedDict so that
-                    // text.cxRum.eventContext.severity matches the top-level severity.
-                    if var ecDict = mergedDict[Keys.eventContext.rawValue] as? [String: Any] {
-                        ecDict[Keys.severity.rawValue] = newSeverity
-                        mergedDict[Keys.eventContext.rawValue] = ecDict
-                    }
-
-                    // Assign mergedDict before updateSnapshotErrorCount, which re-assigns
-                    // result[Keys.text.rawValue] to patch snapshotContext.errorCount in place.
-                    result[Keys.text.rawValue] = [Keys.cxRum.rawValue: mergedDict]
-
-                    // BUGV2-5379: adjust errorCount when beforeSend changes severity across the Error boundary.
-                    // Capture sessionManager once so the counter mutation and the getErrorCount()
-                    // read inside updateSnapshotErrorCount see the same object (closes the TOCTOU
-                    // window that the weak var would otherwise leave open).
-                    let errorSeverity = CoralogixLogSeverity.error.rawValue
-                    let wasError = self.cxRum.eventContext.severity == errorSeverity
-                    let isNowError = newSeverity == errorSeverity
-                    if wasError != isNowError, let sm = sessionManager {
-                        if wasError {
-                            sm.decrementErrorCounter()
-                        } else {
-                            sm.incrementErrorCounter()
-                        }
-                        updateSnapshotErrorCount(in: &result, sessionManager: sm)
-                    }
-                } else {
-                    result[Keys.text.rawValue] = [Keys.cxRum.rawValue: mergedDict]
+                    updateSnapshotErrorCount(in: &result, sessionManager: sm)
                 }
             } else {
                 // BUGV2-5379: span dropped by beforeSend — undo error increment if it was an Error
