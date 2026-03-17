@@ -65,10 +65,10 @@ public class CxSpan {
         if beforeSend != nil {
             let subsetOfCxRum = self.createSubsetOfCxRum(from: originalCxRum)
             if let editableCxRum = self.beforeSend?(subsetOfCxRum) {
-                let mergedDict = mergeDictionaries(original: originalCxRum, editable: editableCxRum)
-                result[Keys.text.rawValue] = [Keys.cxRum.rawValue: mergedDict]
+                var mergedDict = mergeDictionaries(original: originalCxRum, editable: editableCxRum)
 
-                // Sync severity from editableCxRum to CxSpan's top-level severity.
+                // Sync severity from editableCxRum to both the top-level field and
+                // mergedDict[eventContext][severity] so they remain consistent.
                 // parseSeverity accepts Int or numeric String (matching the OTEL init path)
                 // and falls back to the original value so a missing/unparseable severity
                 // is treated as "no change" rather than silently skipping reconciliation.
@@ -78,6 +78,15 @@ public class CxSpan {
                         fallback: self.cxRum.eventContext.severity
                     )
                     result[Keys.severity.rawValue] = newSeverity
+
+                    // Write the normalised Int back into mergedDict so that
+                    // text.cxRum.eventContext.severity matches the top-level severity.
+                    if var ecDict = mergedDict[Keys.eventContext.rawValue] as? [String: Any] {
+                        ecDict[Keys.severity.rawValue] = newSeverity
+                        mergedDict[Keys.eventContext.rawValue] = ecDict
+                    }
+
+                    result[Keys.text.rawValue] = [Keys.cxRum.rawValue: mergedDict]
 
                     // BUGV2-5379: adjust errorCount when beforeSend changes severity across the Error boundary
                     let errorSeverity = CoralogixLogSeverity.error.rawValue
@@ -90,6 +99,8 @@ public class CxSpan {
                         sessionManager?.incrementErrorCounter()
                         updateSnapshotErrorCount(in: &result)
                     }
+                } else {
+                    result[Keys.text.rawValue] = [Keys.cxRum.rawValue: mergedDict]
                 }
             } else {
                 // BUGV2-5379: span dropped by beforeSend — undo error increment if it was an Error

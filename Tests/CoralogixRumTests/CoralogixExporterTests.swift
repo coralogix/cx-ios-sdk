@@ -763,10 +763,20 @@ final class CoralogixExporterTests: XCTestCase {
         let encoded = exporter.encodeSpans(spans: [makeErrorSpanData()])
 
         XCTAssertFalse(encoded.isEmpty, "Span should not be dropped")
-        // Severity must be written as Int in the top-level result
+
+        // Top-level severity must be the normalised Int
         XCTAssertEqual(encoded.first?[Keys.severity.rawValue] as? Int,
                        CoralogixLogSeverity.info.rawValue,
-                       "Severity should be normalised to Int in the emitted span")
+                       "Top-level severity should be normalised to Int")
+
+        // text.cxRum.eventContext.severity must also be the normalised Int (not the raw String)
+        let nestedSeverity = (encoded.first?[Keys.text.rawValue] as? [String: Any])
+            .flatMap { $0[Keys.cxRum.rawValue] as? [String: Any] }
+            .flatMap { $0[Keys.eventContext.rawValue] as? [String: Any] }
+            .flatMap { $0[Keys.severity.rawValue] as? Int }
+        XCTAssertEqual(nestedSeverity, CoralogixLogSeverity.info.rawValue,
+                       "text.cxRum.eventContext.severity should match the normalised Int, not the raw String")
+
         XCTAssertEqual(exporter.getSessionManager().getErrorCount(), 0,
                        "errorCount should be decremented when severity String is normalised")
     }
