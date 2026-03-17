@@ -241,15 +241,15 @@ extension CoralogixRum {
         let raw: Int
         if let i = value as? Int {
             raw = i
-        } else if let d = value as? Double, d.isFinite {
-            raw = Int(d)
+        } else if let d = value as? Double, let i = Int(exactly: d) {
+            raw = i
         } else if let n = value as? NSNumber {
             raw = n.intValue
         } else if let s = value as? String {
             if let i = Int(s) {
                 raw = i
-            } else if let d = Double(s), d.isFinite {
-                raw = Int(d)
+            } else if let d = Double(s), let i = Int(exactly: d) {
+                raw = i
             } else {
                 return nil
             }

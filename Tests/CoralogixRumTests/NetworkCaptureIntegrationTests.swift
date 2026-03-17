@@ -173,6 +173,8 @@ final class NetworkCaptureIntegrationTests: XCTestCase {
         performRequest(url: url, method: "POST", body: body.data(using: .utf8), headers: ["Content-Type": "application/json"])
         let span = try XCTUnwrap(waitForNetworkSpan(urlContains: "capturetest"))
         let payload = span.attributes[Keys.requestPayload.rawValue]?.description
+        XCTAssertNotNil(payload, "request_payload must be set for POST with collectReqPayload: true")
+        XCTAssertEqual(payload, body, "request_payload must match the original request body")
     }
 
     func test_collectReqPayload_largeBody_requestPayloadAbsent() throws {

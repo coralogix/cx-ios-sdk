@@ -77,7 +77,13 @@ public class CxSpan {
                         eventContext[Keys.severity.rawValue],
                         fallback: self.cxRum.eventContext.severity
                     )
-                    result[Keys.severity.rawValue] = newSeverity
+
+                    // Only write when the value actually changed to avoid a no-op overwrite
+                    // (e.g. when beforeSend returns an eventContext without a severity key,
+                    // parseSeverity returns the original value via fallback).
+                    if newSeverity != self.cxRum.eventContext.severity {
+                        result[Keys.severity.rawValue] = newSeverity
+                    }
 
                     // Write the normalised Int back into mergedDict so that
                     // text.cxRum.eventContext.severity matches the top-level severity.
@@ -86,18 +92,24 @@ public class CxSpan {
                         mergedDict[Keys.eventContext.rawValue] = ecDict
                     }
 
+                    // Assign mergedDict before updateSnapshotErrorCount, which re-assigns
+                    // result[Keys.text.rawValue] to patch snapshotContext.errorCount in place.
                     result[Keys.text.rawValue] = [Keys.cxRum.rawValue: mergedDict]
 
-                    // BUGV2-5379: adjust errorCount when beforeSend changes severity across the Error boundary
+                    // BUGV2-5379: adjust errorCount when beforeSend changes severity across the Error boundary.
+                    // Capture sessionManager once so the counter mutation and the getErrorCount()
+                    // read inside updateSnapshotErrorCount see the same object (closes the TOCTOU
+                    // window that the weak var would otherwise leave open).
                     let errorSeverity = CoralogixLogSeverity.error.rawValue
                     let wasError = self.cxRum.eventContext.severity == errorSeverity
                     let isNowError = newSeverity == errorSeverity
-                    if wasError && !isNowError {
-                        sessionManager?.decrementErrorCounter()
-                        updateSnapshotErrorCount(in: &result)
-                    } else if !wasError && isNowError {
-                        sessionManager?.incrementErrorCounter()
-                        updateSnapshotErrorCount(in: &result)
+                    if wasError != isNowError, let sm = sessionManager {
+                        if wasError {
+                            sm.decrementErrorCounter()
+                        } else {
+                            sm.incrementErrorCounter()
+                        }
+                        updateSnapshotErrorCount(in: &result, sessionManager: sm)
                     }
                 } else {
                     result[Keys.text.rawValue] = [Keys.cxRum.rawValue: mergedDict]
@@ -163,7 +175,7 @@ public class CxSpan {
         return fallback
     }
 
-    private func updateSnapshotErrorCount(in result: inout [String: Any]) {
+    private func updateSnapshotErrorCount(in result: inout [String: Any], sessionManager: SessionManager) {
         guard var textDict = result[Keys.text.rawValue] as? [String: Any],
               var cxRumDict = textDict[Keys.cxRum.rawValue] as? [String: Any] else {
             return
@@ -171,7 +183,7 @@ public class CxSpan {
         // Fall back to an empty dict if snapshotContext is absent, NSNull, or a non-dict type,
         // so errorCount is always written after beforeSend runs.
         var snapshotDict = (cxRumDict[Keys.snapshotContext.rawValue] as? [String: Any]) ?? [:]
-        snapshotDict[Keys.errorCount.rawValue] = sessionManager?.getErrorCount() ?? 0
+        snapshotDict[Keys.errorCount.rawValue] = sessionManager.getErrorCount()
         cxRumDict[Keys.snapshotContext.rawValue] = snapshotDict
         textDict[Keys.cxRum.rawValue] = cxRumDict
         result[Keys.text.rawValue] = textDict

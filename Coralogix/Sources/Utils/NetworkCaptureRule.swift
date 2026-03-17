@@ -144,9 +144,6 @@ public struct NetworkCaptureRule {
         if let body = request.httpBody {
             return (body, request)
         }
-        if request.httpBodyStream != nil {
-            return (nil, request)
-        }
         return (nil, request)
     }
 
