@@ -131,6 +131,7 @@ class URLSessionLogger {
         }
 
         let request = instrumentation.getRequest(forTaskId: sessionTaskId)
+        Log.d("[URLSession DEBUG] logResponse: sessionTaskId=\(sessionTaskId), request=\(request == nil ? "nil" : "non-nil"), url=\(response.url?.absoluteString ?? "nil")")
         instrumentation.configuration.receivedResponse?(response, dataOrFile, span, request)
         span.end()
     }
