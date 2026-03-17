@@ -733,6 +733,80 @@ final class CoralogixExporterTests: XCTestCase {
                        "errorCount should be 1 after beforeSend upgrades non-Error to Error")
     }
 
+    // MARK: - Severity normalisation (String / missing)
+
+    /// beforeSend returns severity as a numeric String instead of Int.
+    /// The cast `as? Int` would fail, so the old code silently skipped the decrement.
+    func test_beforeSend_severityAsString_isNormalisedAndCountAdjusted() {
+        var opts = CoralogixExporterOptions(coralogixDomain: .US2,
+                                            userContext: nil,
+                                            environment: "PROD",
+                                            application: "TestApp-iOS",
+                                            version: "1.0",
+                                            publicKey: "token",
+                                            ignoreUrls: [],
+                                            ignoreErrors: [],
+                                            labels: [:],
+                                            debug: true)
+        opts.beforeSend = { cxRum in
+            var modified = cxRum
+            if var eventContext = modified[Keys.eventContext.rawValue] as? [String: Any] {
+                // Supply severity as String "3" rather than Int 3
+                eventContext[Keys.severity.rawValue] = "\(CoralogixLogSeverity.info.rawValue)"
+                modified[Keys.eventContext.rawValue] = eventContext
+            }
+            return modified
+        }
+        let rum = CoralogixRum(options: opts)
+        guard let exporter = rum.coralogixExporter else { return XCTFail("Exporter nil") }
+
+        let encoded = exporter.encodeSpans(spans: [makeErrorSpanData()])
+
+        XCTAssertFalse(encoded.isEmpty, "Span should not be dropped")
+        // Severity must be written as Int in the top-level result
+        XCTAssertEqual(encoded.first?[Keys.severity.rawValue] as? Int,
+                       CoralogixLogSeverity.info.rawValue,
+                       "Severity should be normalised to Int in the emitted span")
+        XCTAssertEqual(exporter.getSessionManager().getErrorCount(), 0,
+                       "errorCount should be decremented when severity String is normalised")
+    }
+
+    /// beforeSend returns an eventContext without a severity key.
+    /// The fallback keeps the original severity, so no error-count adjustment should fire.
+    func test_beforeSend_severityKeyAbsent_fallsBackToOriginalAndNoCountChange() {
+        var opts = CoralogixExporterOptions(coralogixDomain: .US2,
+                                            userContext: nil,
+                                            environment: "PROD",
+                                            application: "TestApp-iOS",
+                                            version: "1.0",
+                                            publicKey: "token",
+                                            ignoreUrls: [],
+                                            ignoreErrors: [],
+                                            labels: [:],
+                                            debug: true)
+        opts.beforeSend = { cxRum in
+            var modified = cxRum
+            if var eventContext = modified[Keys.eventContext.rawValue] as? [String: Any] {
+                eventContext.removeValue(forKey: Keys.severity.rawValue)
+                modified[Keys.eventContext.rawValue] = eventContext
+            }
+            return modified
+        }
+        let rum = CoralogixRum(options: opts)
+        guard let exporter = rum.coralogixExporter else { return XCTFail("Exporter nil") }
+
+        let encoded = exporter.encodeSpans(spans: [makeErrorSpanData()])
+
+        XCTAssertFalse(encoded.isEmpty, "Span should not be dropped")
+        // Original was Error(5), no change → errorCount stays at 1
+        XCTAssertEqual(exporter.getSessionManager().getErrorCount(), 1,
+                       "errorCount should be unchanged when severity key is absent in beforeSend result")
+        // Top-level severity should reflect the fallback (original) value
+        XCTAssertEqual(encoded.first?[Keys.severity.rawValue] as? Int,
+                       CoralogixLogSeverity.error.rawValue,
+                       "Severity should fall back to the original value when key is absent")
+    }
+
     override func tearDown() {
         super.tearDown()
     }

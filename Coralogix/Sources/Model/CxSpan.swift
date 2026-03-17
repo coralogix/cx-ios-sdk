@@ -68,9 +68,15 @@ public class CxSpan {
                 let mergedDict = mergeDictionaries(original: originalCxRum, editable: editableCxRum)
                 result[Keys.text.rawValue] = [Keys.cxRum.rawValue: mergedDict]
 
-                // Sync severity from editableCxRum to CxSpan's top-level severity
-                if let eventContext = editableCxRum[Keys.eventContext.rawValue] as? [String: Any],
-                   let newSeverity = eventContext[Keys.severity.rawValue] as? Int {
+                // Sync severity from editableCxRum to CxSpan's top-level severity.
+                // parseSeverity accepts Int or numeric String (matching the OTEL init path)
+                // and falls back to the original value so a missing/unparseable severity
+                // is treated as "no change" rather than silently skipping reconciliation.
+                if let eventContext = editableCxRum[Keys.eventContext.rawValue] as? [String: Any] {
+                    let newSeverity = CxSpan.parseSeverity(
+                        eventContext[Keys.severity.rawValue],
+                        fallback: self.cxRum.eventContext.severity
+                    )
                     result[Keys.severity.rawValue] = newSeverity
 
                     // BUGV2-5379: adjust errorCount when beforeSend changes severity across the Error boundary
@@ -137,6 +143,15 @@ public class CxSpan {
         return mergedDict
     }
     
+    /// Normalizes a severity value supplied by beforeSend into an Int.
+    /// Accepts Int directly or a numeric String (matching the OTEL attribute initializer path).
+    /// Returns `fallback` when the value is nil, non-numeric, or an unrecognised type.
+    private static func parseSeverity(_ value: Any?, fallback: Int) -> Int {
+        if let intVal = value as? Int { return intVal }
+        if let strVal = value as? String, let parsed = Int(strVal) { return parsed }
+        return fallback
+    }
+
     private func updateSnapshotErrorCount(in result: inout [String: Any]) {
         guard var textDict = result[Keys.text.rawValue] as? [String: Any],
               var cxRumDict = textDict[Keys.cxRum.rawValue] as? [String: Any] else {
