@@ -109,6 +109,11 @@ class URLSessionLogger {
 
     /// This methods ends a Span when a response arrives
     static func logResponse(_ response: URLResponse, dataOrFile: Any?, instrumentation: URLSessionInstrumentation, sessionTaskId: String) {
+        // Read the request before removing the span to avoid a race condition where a concurrent
+        // caller (e.g. didCompleteWithError) clears requestMap after getting span=nil and returning
+        // early, but before our getRequest call inside logResponse executes.
+        let request = instrumentation.getRequest(forTaskId: sessionTaskId)
+
         var span: (any Span)!
         runningSpansQueue.sync {
             span = runningSpans.removeValue(forKey: sessionTaskId)
@@ -120,7 +125,7 @@ class URLSessionLogger {
         }
 
         let statusCode = httpResponse.statusCode
-        span.setAttribute(key: SemanticAttributes.httpStatusCode.rawValue, 
+        span.setAttribute(key: SemanticAttributes.httpStatusCode.rawValue,
                           value: AttributeValue.int(statusCode))
         span.status = statusForStatusCode(code: statusCode)
 
@@ -130,8 +135,6 @@ class URLSessionLogger {
                               value: AttributeValue.int(contentLength))
         }
 
-        let request = instrumentation.getRequest(forTaskId: sessionTaskId)
-        Log.d("[URLSession DEBUG] logResponse: sessionTaskId=\(sessionTaskId), request=\(request == nil ? "nil" : "non-nil"), url=\(response.url?.absoluteString ?? "nil")")
         instrumentation.configuration.receivedResponse?(response, dataOrFile, span, request)
         span.end()
     }

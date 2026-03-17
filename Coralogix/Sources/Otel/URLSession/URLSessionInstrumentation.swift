@@ -1289,7 +1289,6 @@ public class URLSessionInstrumentation {
           }
             self.requestMap[taskId]?.setRequest(request)
         }
-        Log.d("[URLSession DEBUG] urlSessionTaskWillResume: taskId=\(taskId), url=\(request.url?.absoluteString ?? "nil"), headers=\(request.allHTTPHeaderFields?.description ?? "nil")")
 
         // Handle iOS 15+ async/await - detect and set up delegate for completion tracking
         if #available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, *) {
