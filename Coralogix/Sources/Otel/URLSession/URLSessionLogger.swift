@@ -135,7 +135,11 @@ class URLSessionLogger {
                               value: AttributeValue.int(contentLength))
         }
 
-        instrumentation.configuration.receivedResponse?(response, dataOrFile, span, request)
+        // Winner of the span race takes the response body from the rule-based store.
+        // This prevents a race where a concurrent caller pre-takes the body before the
+        // span winner is determined, causing one path to have the span and the other the data.
+        let effectiveData: Any? = instrumentation.takeResponseBody(forTaskId: sessionTaskId) ?? dataOrFile
+        instrumentation.configuration.receivedResponse?(response, effectiveData, span, request)
         span.end()
     }
 

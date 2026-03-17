@@ -87,8 +87,9 @@ public class URLSessionInstrumentation {
     }
 
     /// Returns and removes accumulated response body for the task (rule-based capture). Returns nil if none.
-    /// Private (unlike internal storeRequest/getRequest) — only used by logResponse/logError; tests don't need it.
-    private func takeResponseBody(forTaskId taskId: String) -> Data? {
+    /// Internal so URLSessionLogger can call it after winning the span race, avoiding a race where a
+    /// concurrent caller pre-takes the body before the span winner is known.
+    internal func takeResponseBody(forTaskId taskId: String) -> Data? {
         var data: Data?
         captureQueue.sync {
             data = responseBodyStore.removeValue(forKey: taskId)
@@ -912,7 +913,7 @@ public class URLSessionInstrumentation {
             // Do not remove from map yet — logResponse calls getRequest(forTaskId:) so request headers can be captured in receivedResponse
         }
         
-        let responseData = takeResponseBody(forTaskId: taskId) ?? requestState?.dataProcessed
+        let responseData = requestState?.dataProcessed
         // Log with basic data available from task
         if let error = task.error {
             let status = (task.response as? HTTPURLResponse)?.statusCode ?? 0
@@ -1183,7 +1184,7 @@ public class URLSessionInstrumentation {
             requestState = requestMap[taskId]
             // Do not remove from map yet — logResponse/logError need getRequest(forTaskId:) for request header capture
         }
-        let responseData = takeResponseBody(forTaskId: taskId) ?? requestState?.dataProcessed
+        let responseData = requestState?.dataProcessed
         if let error = error {
             let status = (task.response as? HTTPURLResponse)?.statusCode ?? 0
             #if DEBUG
@@ -1197,7 +1198,7 @@ public class URLSessionInstrumentation {
             #endif
             URLSessionLogger.logResponse(response, dataOrFile: responseData, instrumentation: self, sessionTaskId: taskId)
         }
-        
+
         // Clean up after logging so receivedResponse had a chance to read the request for header capture
         queue.sync(flags: .barrier) {
             requestMap[taskId] = nil
@@ -1205,7 +1206,7 @@ public class URLSessionInstrumentation {
         // Mark as logged to prevent duplicate in setState: fallback
         objc_setAssociatedObject(task, &Self.loggedKey, true, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
     }
-    
+
     private func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didBecome downloadTask: URLSessionDownloadTask) {
         guard let taskId = objc_getAssociatedObject(dataTask, &idKey) as? String else {
             return
@@ -1229,7 +1230,7 @@ public class URLSessionInstrumentation {
         if objc_getAssociatedObject(task, &Self.hasCompletionHandlerKey) != nil {
             return
         }
-        let responseData = takeResponseBody(forTaskId: taskId) ?? requestState?.dataProcessed
+        let responseData = requestState?.dataProcessed
         /// Code for instrumenting collection should be written here
         if let error = task.error {
             let status = (task.response as? HTTPURLResponse)?.statusCode ?? 0
