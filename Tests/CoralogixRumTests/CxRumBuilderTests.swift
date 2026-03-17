@@ -16,19 +16,23 @@ class MockSessionManager: SessionManager {
     var hasRec = false
     
     var incrementErrorCounterCallCount = 0
-    
+    var decrementErrorCounterCallCount = 0
+
     override func getErrorCount() -> Int { return errorCount }
     override var lastSnapshotEventTime: Date? {
         get { return lastSnapshotTime }
         set { lastSnapshotTime = newValue }
     }
-    
+
     override func incrementErrorCounter() {
         incrementErrorCounterCallCount += 1
         errorCount += 1
     }
-    
-    // Add other overrides as needed, returning default values
+
+    override func decrementErrorCounter() {
+        decrementErrorCounterCallCount += 1
+        if errorCount > 0 { errorCount -= 1 }
+    }
 }
 
 class MockViewManager: ViewManager {

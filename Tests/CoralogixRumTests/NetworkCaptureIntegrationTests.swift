@@ -98,25 +98,38 @@ final class NetworkCaptureIntegrationTests: XCTestCase {
     }
 
     /// Waits for a network span matching the URL to appear in capturedSpans (flushes and polls briefly).
+    /// When `requiringRequestPayload` is true, only returns a span that has request_payload (avoids flaky picks).
     /// Note: Uses short polling intervals; on slow CI, pass a larger timeout if tests are flaky.
-    func waitForNetworkSpan(urlContains: String, timeout: TimeInterval = 5) -> SpanData? {
+    func waitForNetworkSpan(urlContains: String, requiringRequestPayload: Bool = false, timeout: TimeInterval = 5) -> SpanData? {
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
             forceFlush()
-            if let span = findNetworkSpan(urlContains: urlContains) { return span }
+            if let span = findNetworkSpan(urlContains: urlContains, requiringRequestPayload: requiringRequestPayload) {
+                return span
+            }
             Thread.sleep(forTimeInterval: 0.1)
         }
         return nil
     }
 
     func findNetworkSpan(urlContains: String) -> SpanData? {
+        findNetworkSpan(urlContains: urlContains, requiringRequestPayload: false)
+    }
+
+    /// Finds a network span matching the URL. When `requiringRequestPayload` is true, only returns a span that has
+    /// request_payload set — avoids picking a span from another swizzle layer that lacks capture (flaky in CI).
+    func findNetworkSpan(urlContains: String, requiringRequestPayload: Bool) -> SpanData? {
         captureLock.lock()
         defer { captureLock.unlock() }
         return capturedSpans.first { span in
             let type = span.attributes[Keys.eventType.rawValue]?.description ?? ""
             guard type.contains(CoralogixEventType.networkRequest.rawValue) else { return false }
             guard let url = span.attributes[SemanticAttributes.httpUrl.rawValue]?.description else { return false }
-            return url.contains(urlContains)
+            guard url.contains(urlContains) else { return false }
+            if requiringRequestPayload {
+                return span.attributes[Keys.requestPayload.rawValue] != nil
+            }
+            return true
         }
     }
 
@@ -171,8 +184,13 @@ final class NetworkCaptureIntegrationTests: XCTestCase {
         CaptureTestURLProtocol.stub = (201, ["Content-Type": "application/json"], "{}".data(using: .utf8)!)
         startSDK(rules: [NetworkCaptureRule(url: "capturetest://integration", collectReqPayload: true)])
         performRequest(url: url, method: "POST", body: body.data(using: .utf8), headers: ["Content-Type": "application/json"])
-        let span = try XCTUnwrap(waitForNetworkSpan(urlContains: "capturetest"))
+        // Require request_payload so we pick our instrumentation's span (avoids flaky pick from other swizzle layers)
+        let span = try XCTUnwrap(
+            waitForNetworkSpan(urlContains: "/api/post", requiringRequestPayload: true),
+            "No span with request_payload for POST — either capture failed or wrong span was chosen (swizzle layers)"
+        )
         let payload = span.attributes[Keys.requestPayload.rawValue]?.description
+        XCTAssertEqual(payload, body, "request_payload must match the original request body")
     }
 
     func test_collectReqPayload_largeBody_requestPayloadAbsent() throws {

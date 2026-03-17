@@ -79,6 +79,12 @@ public class SessionManager {
     public func incrementErrorCounter() {
         errorCount += 1
     }
+
+    public func decrementErrorCounter() {
+        if errorCount > 0 {
+            errorCount -= 1
+        }
+    }
     
     public func incrementClickCounter() {
         clickCount += 1
