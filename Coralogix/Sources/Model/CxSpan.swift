@@ -139,10 +139,12 @@ public class CxSpan {
     
     private func updateSnapshotErrorCount(in result: inout [String: Any]) {
         guard var textDict = result[Keys.text.rawValue] as? [String: Any],
-              var cxRumDict = textDict[Keys.cxRum.rawValue] as? [String: Any],
-              var snapshotDict = cxRumDict[Keys.snapshotContext.rawValue] as? [String: Any] else {
+              var cxRumDict = textDict[Keys.cxRum.rawValue] as? [String: Any] else {
             return
         }
+        // Fall back to an empty dict if snapshotContext is absent, NSNull, or a non-dict type,
+        // so errorCount is always written after beforeSend runs.
+        var snapshotDict = (cxRumDict[Keys.snapshotContext.rawValue] as? [String: Any]) ?? [:]
         snapshotDict[Keys.errorCount.rawValue] = sessionManager?.getErrorCount() ?? 0
         cxRumDict[Keys.snapshotContext.rawValue] = snapshotDict
         textDict[Keys.cxRum.rawValue] = cxRumDict

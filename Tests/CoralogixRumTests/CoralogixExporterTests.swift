@@ -662,6 +662,48 @@ final class CoralogixExporterTests: XCTestCase {
                        "errorCount should be 0 after error span is dropped by beforeSend")
     }
 
+    /// Covers the case where the original span had no snapshotContext (non-error, non-navigation,
+    /// < 1 minute since last snapshot) and beforeSend upgrades severity to Error.
+    /// updateSnapshotErrorCount must create snapshotContext rather than bailing out.
+    func test_beforeSend_nonErrorUpgradedToError_writesSnapshotContextWhenAbsent() {
+        var opts = CoralogixExporterOptions(coralogixDomain: .US2,
+                                            userContext: nil,
+                                            environment: "PROD",
+                                            application: "TestApp-iOS",
+                                            version: "1.0",
+                                            publicKey: "token",
+                                            ignoreUrls: [],
+                                            ignoreErrors: [],
+                                            labels: [:],
+                                            debug: true)
+        opts.beforeSend = { cxRum in
+            var modified = cxRum
+            if var eventContext = modified[Keys.eventContext.rawValue] as? [String: Any] {
+                eventContext[Keys.severity.rawValue] = CoralogixLogSeverity.error.rawValue
+                modified[Keys.eventContext.rawValue] = eventContext
+            }
+            return modified
+        }
+        let rum = CoralogixRum(options: opts)
+        guard let exporter = rum.coralogixExporter else { return XCTFail("Exporter nil") }
+
+        // Seed lastSnapshotEventTime so the 1-minute condition is false — ensures no snapshot
+        // is produced during build, giving us a span without snapshotContext in originalCxRum.
+        exporter.getSessionManager().lastSnapshotEventTime = Date()
+
+        let encoded = exporter.encodeSpans(spans: [makeValidSpanData()])
+
+        guard let span = encoded.first,
+              let textDict = span[Keys.text.rawValue] as? [String: Any],
+              let cxRumDict = textDict[Keys.cxRum.rawValue] as? [String: Any],
+              let snapshotDict = cxRumDict[Keys.snapshotContext.rawValue] as? [String: Any],
+              let errorCount = snapshotDict[Keys.errorCount.rawValue] as? Int else {
+            return XCTFail("snapshotContext.errorCount should be written even when originalCxRum had no snapshotContext")
+        }
+        XCTAssertEqual(errorCount, 1,
+                       "snapshotContext.errorCount must reflect the incremented count when beforeSend upgrades to Error")
+    }
+
     func test_beforeSend_nonErrorUpgradedToError_incrementsErrorCount() {
         var opts = CoralogixExporterOptions(coralogixDomain: .US2,
                                             userContext: nil,
