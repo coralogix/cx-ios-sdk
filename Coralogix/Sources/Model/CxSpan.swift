@@ -67,6 +67,13 @@ public class CxSpan {
             if let editableCxRum = self.beforeSend?(subsetOfCxRum) {
                 var mergedDict = mergeDictionaries(original: originalCxRum, editable: editableCxRum)
 
+                // snapshotContext is stripped from the editable subset before beforeSend is called,
+                // but a callback could still inject it into the returned dict, causing mergeDictionaries
+                // to deep-merge corrupted counts into our internal value.
+                // Always restore from originalCxRum so errorCount/viewCount cannot be tampered with.
+                // Assigning nil removes the key when the original had no snapshot (no-snapshot spans).
+                mergedDict[Keys.snapshotContext.rawValue] = originalCxRum[Keys.snapshotContext.rawValue]
+
                 // Sync severity from editableCxRum to both the top-level field and
                 // mergedDict[eventContext][severity] so they remain consistent.
                 // parseSeverity accepts Int or numeric String (matching the OTEL init path)

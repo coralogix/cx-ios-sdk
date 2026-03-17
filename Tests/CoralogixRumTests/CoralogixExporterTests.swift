@@ -733,6 +733,76 @@ final class CoralogixExporterTests: XCTestCase {
                        "errorCount should be 1 after beforeSend upgrades non-Error to Error")
     }
 
+    // MARK: - snapshotContext tamper protection
+
+    /// beforeSend injects a snapshotContext with a fabricated errorCount.
+    /// The emitted span must contain the SDK-built value, not the injected one.
+    func test_beforeSend_cannotOverrideSnapshotContext_fabricatedInjection() {
+        var opts = CoralogixExporterOptions(coralogixDomain: .US2,
+                                            userContext: nil,
+                                            environment: "PROD",
+                                            application: "TestApp-iOS",
+                                            version: "1.0",
+                                            publicKey: "token",
+                                            ignoreUrls: [],
+                                            ignoreErrors: [],
+                                            labels: [:],
+                                            debug: true)
+        opts.beforeSend = { cxRum in
+            var tampered = cxRum
+            tampered[Keys.snapshotContext.rawValue] = [Keys.errorCount.rawValue: 999]
+            return tampered
+        }
+        let rum = CoralogixRum(options: opts)
+        guard let exporter = rum.coralogixExporter else { return XCTFail("Exporter nil") }
+
+        let encoded = exporter.encodeSpans(spans: [makeErrorSpanData()])
+
+        let errorCount = (encoded.first?[Keys.text.rawValue] as? [String: Any])
+            .flatMap { $0[Keys.cxRum.rawValue] as? [String: Any] }
+            .flatMap { $0[Keys.snapshotContext.rawValue] as? [String: Any] }
+            .flatMap { $0[Keys.errorCount.rawValue] as? Int }
+        XCTAssertNotEqual(errorCount, 999,
+                          "beforeSend must not be able to overwrite snapshotContext.errorCount")
+        XCTAssertEqual(errorCount, 1,
+                       "snapshotContext.errorCount must reflect the SDK-built value")
+    }
+
+    /// beforeSend receives a subset that already has a 'snapshotContext' key re-added
+    /// and mutates a nested field. The SDK-built snapshot must survive unchanged.
+    func test_beforeSend_cannotMutateSnapshotContextFields() {
+        var opts = CoralogixExporterOptions(coralogixDomain: .US2,
+                                            userContext: nil,
+                                            environment: "PROD",
+                                            application: "TestApp-iOS",
+                                            version: "1.0",
+                                            publicKey: "token",
+                                            ignoreUrls: [],
+                                            ignoreErrors: [],
+                                            labels: [:],
+                                            debug: true)
+        opts.beforeSend = { cxRum in
+            var tampered = cxRum
+            // Attempt partial mutation: inject a snapshotContext dict that only sets errorCount
+            tampered[Keys.snapshotContext.rawValue] = [
+                Keys.errorCount.rawValue: 0,
+                Keys.viewCount.rawValue: 0
+            ]
+            return tampered
+        }
+        let rum = CoralogixRum(options: opts)
+        guard let exporter = rum.coralogixExporter else { return XCTFail("Exporter nil") }
+
+        let encoded = exporter.encodeSpans(spans: [makeErrorSpanData()])
+
+        let snapshotDict = (encoded.first?[Keys.text.rawValue] as? [String: Any])
+            .flatMap { $0[Keys.cxRum.rawValue] as? [String: Any] }
+            .flatMap { $0[Keys.snapshotContext.rawValue] as? [String: Any] }
+        let errorCount = snapshotDict.flatMap { $0[Keys.errorCount.rawValue] as? Int }
+        XCTAssertEqual(errorCount, 1,
+                       "Partial snapshotContext injection must not corrupt errorCount")
+    }
+
     // MARK: - Severity normalisation (String / missing)
 
     /// beforeSend returns severity as a numeric String instead of Int.
