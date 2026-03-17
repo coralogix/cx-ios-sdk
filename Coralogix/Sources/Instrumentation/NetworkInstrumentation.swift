@@ -236,15 +236,15 @@ extension CoralogixRum {
 
     /// Coerces hybrid payload value (Int, Double, NSNumber, String) to Int for status_code.
     /// Returns nil for non-numeric or out-of-range (outside 100...599) values.
-    private func coerceToInt(_ value: Any?) -> Int? {
+    internal func coerceToInt(_ value: Any?) -> Int? {
         guard let value else { return nil }
         let raw: Int
         if let i = value as? Int {
             raw = i
         } else if let d = value as? Double, let i = Int(exactly: d) {
             raw = i
-        } else if let n = value as? NSNumber {
-            raw = n.intValue
+        } else if let n = value as? NSNumber, let i = Int(exactly: n.doubleValue) {
+            raw = i
         } else if let s = value as? String {
             if let i = Int(s) {
                 raw = i

@@ -96,3 +96,67 @@ final class AsyncAwaitNetworkInstrumentationTests: XCTestCase {
     // Option 3: Mock Exporter
     // Create test-specific exporter that captures instead of sending
 }
+
+// MARK: - coerceToInt unit tests
+
+final class CoerceToIntTests: XCTestCase {
+    private var sut: CoralogixRum!
+
+    override func setUp() {
+        super.setUp()
+        let opts = CoralogixExporterOptions(coralogixDomain: .US2,
+                                            userContext: nil,
+                                            environment: "test",
+                                            application: "TestApp",
+                                            version: "1.0",
+                                            publicKey: "token",
+                                            ignoreUrls: [],
+                                            ignoreErrors: [],
+                                            labels: [:],
+                                            debug: false)
+        sut = CoralogixRum(options: opts)
+    }
+
+    override func tearDown() {
+        sut = nil
+        super.tearDown()
+    }
+
+    // NSNumber wrapping a true integer: preserved as-is
+    func test_coerceToInt_nsNumberInteger_returnsValue() {
+        XCTAssertEqual(sut.coerceToInt(NSNumber(value: 200)), 200)
+        XCTAssertEqual(sut.coerceToInt(NSNumber(value: 404)), 404)
+        XCTAssertEqual(sut.coerceToInt(NSNumber(value: 599)), 599)
+    }
+
+    // NSNumber with a fractional part: must be rejected (same as Double/String paths)
+    func test_coerceToInt_nsNumberFractional_returnsNil() {
+        XCTAssertNil(sut.coerceToInt(NSNumber(value: 200.5)),
+                     "NSNumber(200.5) must be rejected — fractional values are not exact integers")
+        XCTAssertNil(sut.coerceToInt(NSNumber(value: 404.1)))
+    }
+
+    // NSNumber out of representable Int range: must not trap and must return nil
+    func test_coerceToInt_nsNumberOutOfIntRange_returnsNil() {
+        // 1e20 > Int64.max; Int(exactly:) returns nil so no runtime trap occurs
+        XCTAssertNil(sut.coerceToInt(NSNumber(value: 1e20)))
+    }
+
+    // NSNumber outside the 100...599 status-code window: filtered by range check
+    func test_coerceToInt_nsNumberOutOfStatusRange_returnsNil() {
+        XCTAssertNil(sut.coerceToInt(NSNumber(value: 99)))
+        XCTAssertNil(sut.coerceToInt(NSNumber(value: 600)))
+        XCTAssertNil(sut.coerceToInt(NSNumber(value: 0)))
+    }
+
+    // Sanity-check the other branches are unaffected
+    func test_coerceToInt_otherTypes_behavesCorrectly() {
+        XCTAssertEqual(sut.coerceToInt(200),    200)   // Int
+        XCTAssertEqual(sut.coerceToInt(200.0),  200)   // Double exact
+        XCTAssertNil(sut.coerceToInt(200.5))           // Double fractional
+        XCTAssertEqual(sut.coerceToInt("201"),  201)   // String Int
+        XCTAssertNil(sut.coerceToInt("200.5"))         // String fractional Double
+        XCTAssertNil(sut.coerceToInt("abc"))           // String non-numeric
+        XCTAssertNil(sut.coerceToInt(nil))             // nil
+    }
+}
