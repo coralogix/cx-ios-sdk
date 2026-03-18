@@ -87,9 +87,10 @@ public class URLSessionInstrumentation {
     }
 
     /// Returns and removes accumulated response body for the task (rule-based capture). Returns nil if none.
-    /// Internal so URLSessionLogger can call it after winning the span race, avoiding a race where a
-    /// concurrent caller pre-takes the body before the span winner is known.
-    /// Delegate/setState paths no longer call this; only the span winner (logResponse) consumes the store.
+    /// Called by delegate/setState paths (didCompleteWithError, setState, didFinishCollecting) so the body
+    /// is passed to logResponse/logError and delivered on both success and error. URLSessionLogger.logResponse
+    /// also calls this only when dataOrFile is nil (e.g. delegate-only path that didn't pre-drain), to avoid
+    /// redundant sync when the caller already passed the body.
     internal func takeResponseBody(forTaskId taskId: String) -> Data? {
         var data: Data?
         captureQueue.sync {
