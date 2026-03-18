@@ -914,7 +914,7 @@ public class URLSessionInstrumentation {
             // Do not remove from map yet — logResponse calls getRequest(forTaskId:) so request headers can be captured in receivedResponse
         }
         
-        let responseData = requestState?.dataProcessed
+        let responseData = takeResponseBody(forTaskId: taskId) ?? requestState?.dataProcessed
         // Log with basic data available from task
         if let error = task.error {
             let status = (task.response as? HTTPURLResponse)?.statusCode ?? 0
@@ -1185,7 +1185,7 @@ public class URLSessionInstrumentation {
             requestState = requestMap[taskId]
             // Do not remove from map yet — logResponse/logError need getRequest(forTaskId:) for request header capture
         }
-        let responseData = requestState?.dataProcessed
+        let responseData = takeResponseBody(forTaskId: taskId) ?? requestState?.dataProcessed
         if let error = error {
             let status = (task.response as? HTTPURLResponse)?.statusCode ?? 0
             #if DEBUG
@@ -1231,7 +1231,7 @@ public class URLSessionInstrumentation {
         if objc_getAssociatedObject(task, &Self.hasCompletionHandlerKey) != nil {
             return
         }
-        let responseData = requestState?.dataProcessed
+        let responseData = takeResponseBody(forTaskId: taskId) ?? requestState?.dataProcessed
         /// Code for instrumenting collection should be written here
         if let error = task.error {
             let status = (task.response as? HTTPURLResponse)?.statusCode ?? 0
