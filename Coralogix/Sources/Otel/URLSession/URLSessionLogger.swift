@@ -107,8 +107,13 @@ class URLSessionLogger {
         return returnRequest
     }
 
-    /// This methods ends a Span when a response arrives
+    /// This method ends a Span when a response arrives
     static func logResponse(_ response: URLResponse, dataOrFile: Any?, instrumentation: URLSessionInstrumentation, sessionTaskId: String) {
+        // Read the request before removing the span to avoid a race condition where a concurrent
+        // caller (e.g. didCompleteWithError) clears requestMap after getting span=nil and returning
+        // early, but before our getRequest call inside logResponse executes.
+        let request = instrumentation.getRequest(forTaskId: sessionTaskId)
+
         var span: (any Span)!
         runningSpansQueue.sync {
             span = runningSpans.removeValue(forKey: sessionTaskId)
@@ -120,7 +125,7 @@ class URLSessionLogger {
         }
 
         let statusCode = httpResponse.statusCode
-        span.setAttribute(key: SemanticAttributes.httpStatusCode.rawValue, 
+        span.setAttribute(key: SemanticAttributes.httpStatusCode.rawValue,
                           value: AttributeValue.int(statusCode))
         span.status = statusForStatusCode(code: statusCode)
 
@@ -130,8 +135,10 @@ class URLSessionLogger {
                               value: AttributeValue.int(contentLength))
         }
 
-        let request = instrumentation.getRequest(forTaskId: sessionTaskId)
-        instrumentation.configuration.receivedResponse?(response, dataOrFile, span, request)
+        // Use caller-supplied body when present; otherwise take from rule-based store (e.g. delegate-only path).
+        // Prefer dataOrFile first to avoid redundant captureQueue.sync when completion-handler or delegate already passed body.
+        let effectiveData = dataOrFile ?? instrumentation.takeResponseBody(forTaskId: sessionTaskId)
+        instrumentation.configuration.receivedResponse?(response, effectiveData, span, request)
         span.end()
     }
 

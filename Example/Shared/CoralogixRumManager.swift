@@ -59,7 +59,7 @@ final class CoralogixRumManager {
                                                              .memoryDetector: false,
                                                              .renderingDetector: false],
                                                networkExtraConfig: [
-                                                NetworkCaptureRule(url: "jsonplaceholder.typicode.com",
+                                                NetworkCaptureRule(url: "https://jsonplaceholder.typicode.com/posts",
                                                                    reqHeaders: ["Content-Type", "Accept", "X-Demo-Header"],
                                                                    resHeaders: ["Content-Type", "X-Request-Id"],
                                                                    collectReqPayload: true,

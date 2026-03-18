@@ -87,8 +87,11 @@ public class URLSessionInstrumentation {
     }
 
     /// Returns and removes accumulated response body for the task (rule-based capture). Returns nil if none.
-    /// Private (unlike internal storeRequest/getRequest) — only used by logResponse/logError; tests don't need it.
-    private func takeResponseBody(forTaskId taskId: String) -> Data? {
+    /// Called by delegate/setState paths (didCompleteWithError, setState, didFinishCollecting) so the body
+    /// is passed to logResponse/logError and delivered on both success and error. URLSessionLogger.logResponse
+    /// also calls this only when dataOrFile is nil (e.g. delegate-only path that didn't pre-drain), to avoid
+    /// redundant sync when the caller already passed the body.
+    internal func takeResponseBody(forTaskId taskId: String) -> Data? {
         var data: Data?
         captureQueue.sync {
             data = responseBodyStore.removeValue(forKey: taskId)
@@ -1197,7 +1200,7 @@ public class URLSessionInstrumentation {
             #endif
             URLSessionLogger.logResponse(response, dataOrFile: responseData, instrumentation: self, sessionTaskId: taskId)
         }
-        
+
         // Clean up after logging so receivedResponse had a chance to read the request for header capture
         queue.sync(flags: .barrier) {
             requestMap[taskId] = nil
@@ -1205,7 +1208,7 @@ public class URLSessionInstrumentation {
         // Mark as logged to prevent duplicate in setState: fallback
         objc_setAssociatedObject(task, &Self.loggedKey, true, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
     }
-    
+
     private func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didBecome downloadTask: URLSessionDownloadTask) {
         guard let taskId = objc_getAssociatedObject(dataTask, &idKey) as? String else {
             return
