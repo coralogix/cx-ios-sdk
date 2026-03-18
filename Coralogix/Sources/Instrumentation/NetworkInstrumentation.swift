@@ -73,6 +73,7 @@ extension CoralogixRum {
     /// React Native uses `RCTHTTPRequestHandler` as its `NSURLSessionDataDelegate` and does not use the
     /// completion-handler API, so response body is only available if this delegate class is instrumented.
     /// Returns the class in an array when present at runtime (safe no-op in non–React Native apps).
+    /// - Note: Class name is fixed; if React Native renames this class in a future version, this integration will no-op until updated.
     private static func urlSessionDelegateClassesForReactNative() -> [AnyClass]? {
         guard let cls = NSClassFromString("RCTHTTPRequestHandler") else { return nil }
         return [cls]

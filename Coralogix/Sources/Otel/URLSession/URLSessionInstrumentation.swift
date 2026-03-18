@@ -89,6 +89,7 @@ public class URLSessionInstrumentation {
     /// Returns and removes accumulated response body for the task (rule-based capture). Returns nil if none.
     /// Internal so URLSessionLogger can call it after winning the span race, avoiding a race where a
     /// concurrent caller pre-takes the body before the span winner is known.
+    /// Delegate/setState paths no longer call this; only the span winner (logResponse) consumes the store.
     internal func takeResponseBody(forTaskId taskId: String) -> Data? {
         var data: Data?
         captureQueue.sync {

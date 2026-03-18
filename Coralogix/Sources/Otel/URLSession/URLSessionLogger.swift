@@ -107,7 +107,7 @@ class URLSessionLogger {
         return returnRequest
     }
 
-    /// This methods ends a Span when a response arrives
+    /// This method ends a Span when a response arrives
     static func logResponse(_ response: URLResponse, dataOrFile: Any?, instrumentation: URLSessionInstrumentation, sessionTaskId: String) {
         // Read the request before removing the span to avoid a race condition where a concurrent
         // caller (e.g. didCompleteWithError) clears requestMap after getting span=nil and returning
