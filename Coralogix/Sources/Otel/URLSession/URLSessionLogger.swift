@@ -135,10 +135,9 @@ class URLSessionLogger {
                               value: AttributeValue.int(contentLength))
         }
 
-        // Winner of the span race takes the response body from the rule-based store.
-        // This prevents a race where a concurrent caller pre-takes the body before the
-        // span winner is determined, causing one path to have the span and the other the data.
-        let effectiveData: Any? = instrumentation.takeResponseBody(forTaskId: sessionTaskId) ?? dataOrFile
+        // Use caller-supplied body when present; otherwise take from rule-based store (e.g. delegate-only path).
+        // Prefer dataOrFile first to avoid redundant captureQueue.sync when completion-handler or delegate already passed body.
+        let effectiveData = dataOrFile ?? instrumentation.takeResponseBody(forTaskId: sessionTaskId)
         instrumentation.configuration.receivedResponse?(response, effectiveData, span, request)
         span.end()
     }
