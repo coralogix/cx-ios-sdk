@@ -228,10 +228,20 @@ extension CoralogixRum {
         span.setAttribute(key: Keys.customSpanId.rawValue, value: dictionary[Keys.customSpanId.rawValue] as? String ?? "")
         span.setAttribute(key: Keys.customTraceId.rawValue, value: dictionary[Keys.customTraceId.rawValue] as? String ?? "")
 
-        if let reqHeaders = dictionary[Keys.requestHeaders.rawValue] as? String, !reqHeaders.isEmpty {
+        if let reqHeaders = dictionary[Keys.requestHeaders.rawValue] as? [String: Any] {
+            let json = Helper.convertDictionayToJsonString(dict: reqHeaders)
+            if !json.isEmpty {
+                span.setAttribute(key: Keys.requestHeaders.rawValue, value: AttributeValue.string(json))
+            }
+        } else if let reqHeaders = dictionary[Keys.requestHeaders.rawValue] as? String, !reqHeaders.isEmpty {
             span.setAttribute(key: Keys.requestHeaders.rawValue, value: AttributeValue.string(reqHeaders))
         }
-        if let resHeaders = dictionary[Keys.responseHeaders.rawValue] as? String, !resHeaders.isEmpty {
+        if let resHeaders = dictionary[Keys.responseHeaders.rawValue] as? [String: Any] {
+            let json = Helper.convertDictionayToJsonString(dict: resHeaders)
+            if !json.isEmpty {
+                span.setAttribute(key: Keys.responseHeaders.rawValue, value: AttributeValue.string(json))
+            }
+        } else if let resHeaders = dictionary[Keys.responseHeaders.rawValue] as? String, !resHeaders.isEmpty {
             span.setAttribute(key: Keys.responseHeaders.rawValue, value: AttributeValue.string(resHeaders))
         }
         if let reqPayload = dictionary[Keys.requestPayload.rawValue] as? String, !reqPayload.isEmpty {
