@@ -8,11 +8,11 @@ import Foundation
 /// Implementation for the Span class that records trace events.
 public class RecordEventsReadableSpan: ReadableSpan, Hashable {
     public func hash(into hasher: inout Hasher) {
-        hasher.combine(ObjectIdentifier(self))
+        hasher.combine(context.spanId)
     }
 
     public static func == (lhs: RecordEventsReadableSpan, rhs: RecordEventsReadableSpan) -> Bool {
-        return lhs === rhs
+        return lhs.context.spanId == rhs.context.spanId
     }
 
     public var isRecording = true
