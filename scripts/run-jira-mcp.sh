@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
-# Run patched Jira MCP (uses /rest/api/3/search/jql)
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR/../package" && exec node build/index.js
+# Runs the official CocoaPods-style Jira MCP (npm: mcp-jira-cloud).
+# Configure Cursor ~/.cursor/mcp.json with command "npx", args ["-y","mcp-jira-cloud@4"],
+# and env: JIRA_BASE_URL, JIRA_EMAIL, JIRA_API_TOKEN (see Atlassian API tokens).
+# This script is optional; you can point MCP directly at npx as above.
+exec npx -y mcp-jira-cloud@4 "$@"
