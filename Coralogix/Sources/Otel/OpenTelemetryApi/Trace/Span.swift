@@ -8,7 +8,7 @@ import Foundation
 /// An interface that represents a span. It has an associated SpanContext.
 /// Spans are created by the SpanBuilder.startSpan method.
 /// Span must be ended by calling end().
-public protocol Span: AnyObject, CustomStringConvertible, Hashable {
+public protocol Span: AnyObject, CustomStringConvertible, Equatable {
     /// Type of span.
     /// Can be used to specify additional relationships between spans in addition to a parent/child relationship.
     var kind: SpanKind { get }
@@ -70,10 +70,6 @@ public protocol Span: AnyObject, CustomStringConvertible, Hashable {
 }
 
 public extension Span {
-    func hash(into hasher: inout Hasher) {
-        hasher.combine(context.spanId)
-    }
-
     static func == (lhs: Self, rhs: Self) -> Bool {
         return lhs.context.spanId == rhs.context.spanId
     }
