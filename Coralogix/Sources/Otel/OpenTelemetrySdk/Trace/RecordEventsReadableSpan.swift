@@ -6,7 +6,15 @@
 import Foundation
 
 /// Implementation for the Span class that records trace events.
-public class RecordEventsReadableSpan: ReadableSpan {
+public class RecordEventsReadableSpan: ReadableSpan, Hashable {
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(ObjectIdentifier(self))
+    }
+
+    public static func == (lhs: RecordEventsReadableSpan, rhs: RecordEventsReadableSpan) -> Bool {
+        return lhs === rhs
+    }
+
     public var isRecording = true
 
     fileprivate let internalStatusQueue = DispatchQueue(label: "org.opentelemetry.RecordEventsReadableSpan.internalStatusQueue", attributes: .concurrent)
