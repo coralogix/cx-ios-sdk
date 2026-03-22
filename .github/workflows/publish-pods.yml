@@ -42,10 +42,19 @@ jobs:
       # Set up CocoaPods Trunk authentication
       - name: Authenticate with CocoaPods Trunk
         run: |
-           set -euo pipefail
-           test -n "${COCOAPODS_TRUNK_TOKEN:-}" || { echo "Missing COCOAPODS_TRUNK_TOKEN"; exit 1; }
-           echo "Validating CocoaPods Trunk token..."
-           pod trunk me || { echo "Invalid or missing COCOAPODS_TRUNK_TOKEN"; exit 1; }
+          set -euo pipefail
+          if [ -z "${COCOAPODS_TRUNK_TOKEN:-}" ]; then
+            echo "::error::COCOAPODS_TRUNK_TOKEN secret is missing. Add it in Settings → Secrets and variables → Actions."
+            echo "See .github/COCOAPODS_TRUNK_SETUP.md for step-by-step setup."
+            exit 1
+          fi
+          echo "Validating CocoaPods Trunk token..."
+          if ! pod trunk me; then
+            echo "::error::CocoaPods Trunk token is invalid or unverified. Update the COCOAPODS_TRUNK_TOKEN secret."
+            echo "Fix: run 'pod trunk register EMAIL Name', verify the email link, then get the token from ~/.netrc and set it in GitHub Secrets."
+            echo "See .github/COCOAPODS_TRUNK_SETUP.md for full instructions."
+            exit 1
+          fi
 
       # Push CoralogixInternal.podspec
       - name: Push CoralogixInternal.podspec
@@ -66,7 +75,7 @@ jobs:
               
               # Wait for CoralogixInternal to become available
               echo "⏳ Waiting for CoralogixInternal to be available in CocoaPods Specs..."
-              timeout=900
+              timeout=1800
               elapsed=0
               until pod search CoralogixInternal | grep -q "CoralogixInternal"; do
                 if [ "$elapsed" -ge "$timeout" ]; then
