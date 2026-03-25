@@ -184,6 +184,24 @@ final class ErrorContextTests: XCTestCase {
         XCTAssertEqual("obfuscated", dictionary[Keys.stackTraceType.rawValue] as? String)
     }
 
+    func testSymbolicatedFrameDoesNotEmitArchOrBuildId() {
+        let frames: [[String: Any]] = [
+            ["functionName": "throwExceptionInDart", "fileName": "package:coralogix_sdk/main.dart", "lineNumber": 134, "columnNumber": 5]
+        ]
+        mockSpanData = MockSpanData(attributes: [
+            Keys.errorMessage.rawValue: AttributeValue("state error try catch"),
+            Keys.stackTrace.rawValue: AttributeValue(Helper.convertArrayToJsonString(array: frames)),
+            Keys.stackTraceType.rawValue: AttributeValue("symbolicated")
+        ])
+        let errorStruct = ErrorContext(otel: mockSpanData)
+        let dictionary = errorStruct.getDictionary()
+
+        XCTAssertEqual("symbolicated", dictionary[Keys.stackTraceType.rawValue] as? String)
+        XCTAssertNil(dictionary[Keys.arch.rawValue], "arch should be absent for symbolicated frames")
+        XCTAssertNil(dictionary[Keys.buildId.rawValue], "build_id should be absent for symbolicated frames")
+        XCTAssertNil(dictionary[Keys.code.rawValue], "code should be absent in Flutter error path")
+    }
+
     func testNewFieldsOmittedWhenNil() {
         mockSpanData = MockSpanData(attributes: [
             Keys.errorMessage.rawValue: AttributeValue("Some error"),
