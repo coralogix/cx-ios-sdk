@@ -150,8 +150,6 @@ final class ErrorContextTests: XCTestCase {
         let frames = [frame]
         mockSpanData = MockSpanData(attributes: [
             Keys.errorMessage.rawValue: AttributeValue("StateError: state error try catch"),
-            Keys.code.rawValue: AttributeValue("0"),
-            Keys.domain.rawValue: AttributeValue(""),
             Keys.stackTrace.rawValue: AttributeValue(Helper.convertArrayToJsonString(array: frames)),
             Keys.arch.rawValue: AttributeValue("arm64"),
             Keys.buildId.rawValue: AttributeValue("e4f372b4e5cb2ba87653648d9c509cb1"),
@@ -166,6 +164,7 @@ final class ErrorContextTests: XCTestCase {
         }
         XCTAssertEqual(1, stackTrace.count)
         XCTAssertEqual("0x00000000003da15f", stackTrace[0][Keys.virt.rawValue] as? String)
+        XCTAssertNil(dictionary[Keys.code.rawValue], "code should not be present in obfuscated Flutter error")
     }
 
     func testNewFieldsPresentWhenSet() {
