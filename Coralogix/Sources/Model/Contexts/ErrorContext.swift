@@ -24,8 +24,8 @@ struct ErrorContext {
     let baseAddress: String
     let arch: String
     var isCrash: Bool = false
-    var buildId: String?
-    var stackTraceType: String?
+    let buildId: String?
+    let stackTraceType: String?
 
     init(otel: SpanDataProtocol) {
         self.domain = otel.getAttribute(forKey: Keys.domain.rawValue) as? String ?? ""
