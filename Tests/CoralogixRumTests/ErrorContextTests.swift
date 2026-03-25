@@ -167,6 +167,24 @@ final class ErrorContextTests: XCTestCase {
         XCTAssertNil(dictionary[Keys.code.rawValue], "code should not be present in obfuscated Flutter error")
     }
 
+    func testObfuscatedDefaultStackTraceType_propagatesToDictionary() {
+        // The public reportError(obfuscatedStackTrace:) defaults stackTraceType to Keys.obfuscated.rawValue.
+        // This test locks down the constant's string value and verifies it roundtrips through ErrorContext,
+        // so that changing the constant or removing the default will break this test.
+        XCTAssertEqual(Keys.obfuscated.rawValue, "obfuscated",
+                       "Keys.obfuscated rawValue must stay \"obfuscated\" — it is the default for the public obfuscated reportError API")
+        mockSpanData = MockSpanData(attributes: [
+            Keys.errorMessage.rawValue: AttributeValue("crash"),
+            Keys.stackTrace.rawValue: AttributeValue(Helper.convertArrayToJsonString(array: [[Keys.virt.rawValue: "0x1234"]])),
+            Keys.stackTraceType.rawValue: AttributeValue(Keys.obfuscated.rawValue)
+        ])
+        let errorStruct = ErrorContext(otel: mockSpanData)
+        let dictionary = errorStruct.getDictionary()
+
+        XCTAssertEqual(dictionary[Keys.stackTraceType.rawValue] as? String, "obfuscated",
+                       "stackTraceType must be serialized with the obfuscated default value")
+    }
+
     func testNewFieldsPresentWhenSet() {
         mockSpanData = MockSpanData(attributes: [
             Keys.errorMessage.rawValue: AttributeValue("StateError"),
