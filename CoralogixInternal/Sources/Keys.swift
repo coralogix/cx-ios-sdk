@@ -153,6 +153,9 @@ public enum Keys: String {
     case click
     case errorMessage = "error_message"
     case isCrash = "is_crash"
+    case buildId = "build_id"
+    case stackTraceType = "stack_trace_type"
+    case virt
     case tvos
     case television
     case mobileVitalsContext = "mobile_vitals_context"

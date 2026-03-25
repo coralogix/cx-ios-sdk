@@ -24,7 +24,9 @@ struct ErrorContext {
     let baseAddress: String
     let arch: String
     var isCrash: Bool = false
-    
+    var buildId: String?
+    var stackTraceType: String?
+
     init(otel: SpanDataProtocol) {
         self.domain = otel.getAttribute(forKey: Keys.domain.rawValue) as? String ?? ""
         self.code = otel.getAttribute(forKey: Keys.code.rawValue) as? String ?? ""
@@ -60,6 +62,8 @@ struct ErrorContext {
         }
         self.baseAddress = otel.getAttribute(forKey: Keys.baseAddress.rawValue) as? String ?? ""
         self.arch = otel.getAttribute(forKey: Keys.arch.rawValue) as? String ?? ""
+        self.buildId = otel.getAttribute(forKey: Keys.buildId.rawValue) as? String
+        self.stackTraceType = otel.getAttribute(forKey: Keys.stackTraceType.rawValue) as? String
         self.errorType = otel.getAttribute(forKey: Keys.errorType.rawValue) as? String ?? ""
         if let anr = otel.getAttribute(forKey: Keys.mobileVitalsType.rawValue) as? String {
             self.errorType = anr
@@ -105,11 +109,23 @@ struct ErrorContext {
             if let stackTrace = self.stackTrace {
                 errorContext[Keys.originalStackTrace.rawValue] = stackTrace
             }
-            
+
             if !self.errorType.isEmpty {
                 errorContext[Keys.errorType.rawValue] = errorType
             }
-            
+
+            if !self.arch.isEmpty {
+                errorContext[Keys.arch.rawValue] = self.arch
+            }
+
+            if let buildId = self.buildId {
+                errorContext[Keys.buildId.rawValue] = buildId
+            }
+
+            if let stackTraceType = self.stackTraceType {
+                errorContext[Keys.stackTraceType.rawValue] = stackTraceType
+            }
+
             errorContext[Keys.isCrash.rawValue] = self.isCrash
         }
         return errorContext

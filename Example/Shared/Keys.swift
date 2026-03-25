@@ -31,6 +31,8 @@ enum Keys: String {
     case modalPresentation = "Modal Presentation"
     case segmentedCollectionView = "Segmented / Collection"
     case simulateANR = "Simulate ANR"
+    case sendFlutterSymbolicatedError = "Flutter Symbolicated Error"
+    case sendFlutterObfuscatedError = "Flutter Obfuscated Error"
     case succesfullAlamofire = "✅ Succesfull Alamofire Request"
     case failureAlamofire = "❌ Failure Alamofire Request"
     case sessionReplay = "Session Replay"

@@ -55,7 +55,7 @@ extension CoralogixRum {
         self.log(severity: CoralogixLogSeverity.error, message: message, data: data)
     }
     
-    //MARK: - Used By Flutter
+    //MARK: - Used By Flutter (symbolicated)
     func reportErrorWith(message: String, stackTrace: String?) {
         let stackTraceJson = stackTrace.flatMap {
             let stackTraceArray = Helper.parseStackTrace($0)
@@ -63,31 +63,57 @@ extension CoralogixRum {
         }
         reportErrorInternal(message: message, stackTraceJson: stackTraceJson)
     }
-    
+
+    //MARK: - Used By Flutter (obfuscated)
+    func reportErrorWith(message: String,
+                         obfuscatedStackTrace: [String],
+                         arch: String?,
+                         buildId: String?,
+                         stackTraceType: String?) {
+        let frames: [[String: Any]] = obfuscatedStackTrace.map { [Keys.virt.rawValue: $0] }
+        let stackTraceJson = Helper.convertArrayToJsonString(array: frames)
+        reportErrorInternal(message: message,
+                            stackTraceJson: stackTraceJson,
+                            arch: arch,
+                            buildId: buildId,
+                            stackTraceType: stackTraceType)
+    }
+
     //MARK: - Used By React Native
     func reportErrorWith(message: String,
                          stackTrace: [[String: Any]],
                          errorType: String?,
-                         isCrash: Bool = false) {
+                         isCrash: Bool = false,
+                         arch: String? = nil,
+                         buildId: String? = nil,
+                         stackTraceType: String? = nil) {
         let stackTraceJson = Helper.convertArrayToJsonString(array: stackTrace)
         reportErrorInternal(message: message,
                             stackTraceJson: stackTraceJson,
                             errorType: errorType,
-                            isCrash: isCrash)
+                            isCrash: isCrash,
+                            arch: arch,
+                            buildId: buildId,
+                            stackTraceType: stackTraceType)
     }
-    
+
     private func reportErrorInternal(message: String,
                                      stackTraceJson: String?,
                                      errorType: String? = nil,
-                                     isCrash: Bool = false) {
+                                     isCrash: Bool = false,
+                                     arch: String? = nil,
+                                     buildId: String? = nil,
+                                     stackTraceType: String? = nil) {
         guard isErrorsEnabled else { return }
         self.writeError(
             domain: "",
-            code: 0,
             message: message,
             stackTraceJson: stackTraceJson,
             errorType: errorType,
-            isCrash: isCrash
+            isCrash: isCrash,
+            arch: arch,
+            buildId: buildId,
+            stackTraceType: stackTraceType
         )
     }
 
@@ -137,14 +163,17 @@ extension CoralogixRum {
         return sessionReplay.captureEvent(properties: location.toProperties())
     }
     
-    private func writeError(domain: String, code: Int, message: String,
+    private func writeError(domain: String, code: Int? = nil, message: String,
                             userInfo: [String: Any]? = nil,
                             stackTraceJson: String? = nil,
                             errorType: String? = nil,
-                            isCrash: Bool = false) {
+                            isCrash: Bool = false,
+                            arch: String? = nil,
+                            buildId: String? = nil,
+                            stackTraceType: String? = nil) {
         var span = makeSpan(event: .error, source: .console, severity: .error)
         span.setAttribute(key: Keys.domain.rawValue, value: domain)
-        span.setAttribute(key: Keys.code.rawValue, value: code)
+        if let code { span.setAttribute(key: Keys.code.rawValue, value: code) }
         span.setAttribute(key: Keys.errorMessage.rawValue, value: message)
         span.setAttribute(key: Keys.isCrash.rawValue, value: isCrash)
         if let errorType { span.setAttribute(key: Keys.errorType.rawValue, value: errorType) }
@@ -152,6 +181,9 @@ extension CoralogixRum {
         if let userInfo, !userInfo.isEmpty {
             span.setAttribute(key: Keys.userInfo.rawValue, value: Helper.convertDictionayToJsonString(dict: userInfo))
         }
+        if let arch { span.setAttribute(key: Keys.arch.rawValue, value: arch) }
+        if let buildId { span.setAttribute(key: Keys.buildId.rawValue, value: buildId) }
+        if let stackTraceType { span.setAttribute(key: Keys.stackTraceType.rawValue, value: stackTraceType) }
         recordScreenshotForSpan(to: &span)
         span.end()
     }

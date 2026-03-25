@@ -66,6 +66,18 @@ final class ErrorViewController: UITableViewController {
             subtitle: "Application Not Responding",
             systemImageName: "hourglass",
             key: .simulateANR
+        ),
+        .init(
+            title: "Flutter Symbolicated Error",
+            subtitle: "Simulate readable Dart stack trace",
+            systemImageName: "curlybraces",
+            key: .sendFlutterSymbolicatedError
+        ),
+        .init(
+            title: "Flutter Obfuscated Error",
+            subtitle: "Simulate obfuscated Dart stack trace (virt addresses)",
+            systemImageName: "eye.slash",
+            key: .sendFlutterObfuscatedError
         )
     ]
 
@@ -164,6 +176,12 @@ final class ErrorViewController: UITableViewController {
 
         case .simulateANR:
             ErrorSim.simulateANR()
+
+        case .sendFlutterSymbolicatedError:
+            ErrorSim.sendFlutterSymbolicatedError()
+
+        case .sendFlutterObfuscatedError:
+            ErrorSim.sendFlutterObfuscatedError()
 
         default:
             break

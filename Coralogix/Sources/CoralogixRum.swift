@@ -224,12 +224,42 @@ public class CoralogixRum {
     public func reportError(message: String,
                             stackTrace: [[String: Any]],
                             errorType: String?,
-                            isCrash: Bool = false) {
+                            isCrash: Bool = false,
+                            arch: String? = nil,
+                            buildId: String? = nil,
+                            stackTraceType: String? = nil) {
         guard CoralogixRum.isInitialized else { return }
         self.reportErrorWith(message: message,
                              stackTrace: stackTrace,
                              errorType: errorType,
-                             isCrash: isCrash)
+                             isCrash: isCrash,
+                             arch: arch,
+                             buildId: buildId,
+                             stackTraceType: stackTraceType)
+    }
+
+    /// Reports a Dart obfuscated error from Flutter.
+    ///
+    /// Use when the Dart stack trace is not symbolicated — pass raw virtual addresses
+    /// extracted from the obfuscated crash output.
+    ///
+    /// - Parameters:
+    ///   - message: The error message.
+    ///   - obfuscatedStackTrace: Array of virtual address strings (e.g. `["0x00000000003da15f", ...]`).
+    ///   - arch: The CPU architecture (e.g. `"arm64"`).
+    ///   - buildId: The Dart snapshot build ID used for symbolication.
+    ///   - stackTraceType: The stack trace type (e.g. `"obfuscated"`).
+    public func reportError(message: String,
+                            obfuscatedStackTrace: [String],
+                            arch: String? = nil,
+                            buildId: String? = nil,
+                            stackTraceType: String? = nil) {
+        guard CoralogixRum.isInitialized else { return }
+        self.reportErrorWith(message: message,
+                             obfuscatedStackTrace: obfuscatedStackTrace,
+                             arch: arch,
+                             buildId: buildId,
+                             stackTraceType: stackTraceType)
     }
     
     public func reportMobileVitalsMeasurement(type: String, metrics: [HybridMetric]) {

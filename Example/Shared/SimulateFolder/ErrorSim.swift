@@ -51,6 +51,41 @@ class ErrorSim {
     static func simulateANR() {
         sleep(10)
     }
+
+    // Simulates a Flutter error with a symbolicated (readable) Dart stack trace.
+    // This is the format produced by a non-obfuscated Flutter/Dart app.
+    static func sendFlutterSymbolicatedError() {
+        let frames: [[String: Any]] = [
+            ["functionName": "throwExceptionInDart", "fileName": "package:coralogix_sdk/main.dart", "lineNumber": 134, "columnNumber": 5],
+            ["functionName": "_MyAppState.build.<anonymous closure>", "fileName": "package:coralogix_sdk/main.dart", "lineNumber": 121, "columnNumber": 32],
+            ["functionName": "_InkResponseState.handleTap", "fileName": "package:flutter/src/material/ink_well.dart", "lineNumber": 1171, "columnNumber": 21],
+            ["functionName": "GestureRecognizer.invokeCallback", "fileName": "package:flutter/src/gestures/recognizer.dart", "lineNumber": 344, "columnNumber": 24],
+            ["functionName": "TapGestureRecognizer.handleTapUp", "fileName": "package:flutter/src/gestures/tap.dart", "lineNumber": 652, "columnNumber": 11]
+        ]
+        CoralogixRumManager.shared.sdk.reportError(
+            message: "state error try catch",
+            stackTrace: frames,
+            errorType: "FlutterError",
+            stackTraceType: "symbolicated"
+        )
+    }
+
+    // Simulates a Flutter error with an obfuscated Dart stack trace.
+    // This is the format produced when the Flutter app is built with --obfuscate --split-debug-info.
+    // Only virtual addresses are available; symbolication requires the app's debug symbols + build_id.
+    static func sendFlutterObfuscatedError() {
+        CoralogixRumManager.shared.sdk.reportError(
+            message: "StateError: state error try catch",
+            obfuscatedStackTrace: [
+                "0x00000000003da15f",
+                "0x000000000022d923",
+                "0x000000000025bf87"
+            ],
+            arch: "arm64",
+            buildId: "e4f372b4e5cb2ba87653648d9c509cb1",
+            stackTraceType: "obfuscated"
+        )
+    }
     
     enum CustomError: Error {
         case invalidInput
