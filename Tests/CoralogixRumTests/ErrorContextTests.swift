@@ -168,21 +168,23 @@ final class ErrorContextTests: XCTestCase {
     }
 
     func testObfuscatedDefaultStackTraceType_propagatesToDictionary() {
-        // The public reportError(obfuscatedStackTrace:) defaults stackTraceType to Keys.obfuscated.rawValue.
-        // This test locks down the constant's string value and verifies it roundtrips through ErrorContext,
-        // so that changing the constant or removing the default will break this test.
+        // Locks down the string value of Keys.obfuscated — this constant is used as the default
+        // for the public reportError(obfuscatedStackTrace:) API parameter. If the constant is
+        // renamed or changed, this assertion catches it.
         XCTAssertEqual(Keys.obfuscated.rawValue, "obfuscated",
                        "Keys.obfuscated rawValue must stay \"obfuscated\" — it is the default for the public obfuscated reportError API")
+
+        // When stackTraceType is absent from the span (i.e. the caller omits it), ErrorContext
+        // must NOT inject a default — the default belongs to the public API layer, not ErrorContext.
         mockSpanData = MockSpanData(attributes: [
             Keys.errorMessage.rawValue: AttributeValue("crash"),
-            Keys.stackTrace.rawValue: AttributeValue(Helper.convertArrayToJsonString(array: [[Keys.virt.rawValue: "0x1234"]])),
-            Keys.stackTraceType.rawValue: AttributeValue(Keys.obfuscated.rawValue)
+            Keys.stackTrace.rawValue: AttributeValue(Helper.convertArrayToJsonString(array: [[Keys.virt.rawValue: "0x1234"]]))
         ])
         let errorStruct = ErrorContext(otel: mockSpanData)
         let dictionary = errorStruct.getDictionary()
 
-        XCTAssertEqual(dictionary[Keys.stackTraceType.rawValue] as? String, "obfuscated",
-                       "stackTraceType must be serialized with the obfuscated default value")
+        XCTAssertNil(dictionary[Keys.stackTraceType.rawValue],
+                     "ErrorContext must not inject a stackTraceType default — that is the public API's responsibility")
     }
 
     func testNewFieldsPresentWhenSet() {

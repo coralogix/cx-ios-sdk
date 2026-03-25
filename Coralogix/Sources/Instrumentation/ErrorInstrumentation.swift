@@ -183,7 +183,7 @@ extension CoralogixRum {
         if let userInfo, !userInfo.isEmpty {
             span.setAttribute(key: Keys.userInfo.rawValue, value: Helper.convertDictionayToJsonString(dict: userInfo))
         }
-        if let arch { span.setAttribute(key: Keys.arch.rawValue, value: arch) }
+        if let arch, !arch.isEmpty { span.setAttribute(key: Keys.arch.rawValue, value: arch) }
         if let buildId { span.setAttribute(key: Keys.buildId.rawValue, value: buildId) }
         if let stackTraceType { span.setAttribute(key: Keys.stackTraceType.rawValue, value: stackTraceType) }
         recordScreenshotForSpan(to: &span)
