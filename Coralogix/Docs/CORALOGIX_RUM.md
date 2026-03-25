@@ -206,6 +206,57 @@ Reports an error to Coralogix using a custom message and optional data.
 * message: A string describing the error.
 * data: An optional dictionary containing additional data related to the error.
 
+### reportError (hybrid stack trace)
+```swift
+public func reportError(message: String,
+                        stackTrace: [[String: Any]],
+                        errorType: String?,
+                        isCrash: Bool = false,
+                        arch: String? = nil,
+                        buildId: String? = nil,
+                        stackTraceType: String? = nil)
+```
+Reports an error from a hybrid framework (React Native, Flutter symbolicated) using a pre-parsed stack trace. Each frame is a dictionary with keys such as `functionName`, `fileName`, `lineNumber`, and `columnNumber`.
+
+#### Parameters
+* message: A string describing the error.
+* stackTrace: An array of frame dictionaries.
+* errorType: An optional string identifying the error type (e.g. `"FlutterError"`).
+* isCrash: Whether the error was fatal. Defaults to `false`.
+* arch: Optional CPU architecture string (e.g. `"arm64"`).
+* buildId: Optional build identifier used for symbolication.
+* stackTraceType: Optional stack trace type label (e.g. `"symbolicated"`).
+
+### reportError (obfuscated Flutter stack trace)
+```swift
+public func reportError(message: String,
+                        obfuscatedStackTrace: [String],
+                        arch: String? = nil,
+                        buildId: String? = nil,
+                        stackTraceType: String? = Keys.obfuscated.rawValue)
+```
+Reports a Dart obfuscated error from Flutter. Use this when the stack trace contains raw virtual addresses produced by a `--obfuscate --split-debug-info` build. The server uses `arch` and `buildId` together with the app's debug symbols to symbolicate the addresses.
+
+#### Parameters
+* message: A string describing the error.
+* obfuscatedStackTrace: An array of virtual address strings (e.g. `["0x00000000003da15f", ...]`). May be empty — the error is still reported with its message and metadata.
+* arch: Optional CPU architecture string (e.g. `"arm64"`).
+* buildId: The Dart snapshot build ID required for symbolication.
+* stackTraceType: The stack trace type label. Defaults to `"obfuscated"`.
+
+#### Example
+```swift
+coralogixRum.reportError(
+    message: "StateError: bad state",
+    obfuscatedStackTrace: [
+        "0x00000000003da15f",
+        "0x000000000022d923"
+    ],
+    arch: "arm64",
+    buildId: "e4f372b4e5cb2ba87653648d9c509cb1"
+)
+```
+
 ### log
 ```swift
 public func log(severity: CoralogixLogSeverity, message: String, data: [String: Any]?)
