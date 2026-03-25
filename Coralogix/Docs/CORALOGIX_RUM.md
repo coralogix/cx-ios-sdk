@@ -241,7 +241,7 @@ Reports a Dart obfuscated error from Flutter. Use this when the stack trace cont
 * message: A string describing the error.
 * obfuscatedStackTrace: An array of virtual address strings (e.g. `["0x00000000003da15f", ...]`). May be empty — the error is still reported with its message and metadata.
 * arch: Optional CPU architecture string (e.g. `"arm64"`).
-* buildId: The Dart snapshot build ID required for symbolication.
+* buildId: Optional build identifier used to symbolicate the addresses on the server.
 * stackTraceType: The stack trace type label. Defaults to `"obfuscated"`.
 
 #### Example

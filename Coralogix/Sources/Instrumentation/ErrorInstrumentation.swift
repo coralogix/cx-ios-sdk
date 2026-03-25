@@ -70,7 +70,6 @@ extension CoralogixRum {
                          arch: String?,
                          buildId: String?,
                          stackTraceType: String?) {
-        guard isErrorsEnabled else { return }
         let frames: [[String: Any]] = obfuscatedStackTrace.map { [Keys.virt.rawValue: $0] }
         let stackTraceJson = Helper.convertArrayToJsonString(array: frames)
         reportErrorInternal(message: message,
@@ -183,8 +182,10 @@ extension CoralogixRum {
             span.setAttribute(key: Keys.userInfo.rawValue, value: Helper.convertDictionayToJsonString(dict: userInfo))
         }
         if let arch, !arch.isEmpty { span.setAttribute(key: Keys.arch.rawValue, value: arch) }
-        if let buildId { span.setAttribute(key: Keys.buildId.rawValue, value: buildId) }
-        if let stackTraceType { span.setAttribute(key: Keys.stackTraceType.rawValue, value: stackTraceType) }
+        if let buildId, !buildId.isEmpty { span.setAttribute(key: Keys.buildId.rawValue, value: buildId) }
+        if let stackTraceType, !stackTraceType.isEmpty { span.setAttribute(key: Keys.stackTraceType.rawValue, value: stackTraceType) }
+        // Note: hybrid error paths (Flutter/RN) intentionally omit the code attribute — there is
+        // no meaningful error code in these contexts. Native paths pass an explicit code when relevant.
         recordScreenshotForSpan(to: &span)
         span.end()
     }
