@@ -71,7 +71,6 @@ extension CoralogixRum {
                          buildId: String?,
                          stackTraceType: String?) {
         guard isErrorsEnabled else { return }
-        guard !obfuscatedStackTrace.isEmpty else { return }
         let frames: [[String: Any]] = obfuscatedStackTrace.map { [Keys.virt.rawValue: $0] }
         let stackTraceJson = Helper.convertArrayToJsonString(array: frames)
         reportErrorInternal(message: message,
