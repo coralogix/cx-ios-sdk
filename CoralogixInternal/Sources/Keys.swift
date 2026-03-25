@@ -156,6 +156,7 @@ public enum Keys: String {
     case buildId = "build_id"
     case stackTraceType = "stack_trace_type"
     case virt = "virt"
+    case obfuscated = "obfuscated"
     case tvos
     case television
     case mobileVitalsContext = "mobile_vitals_context"

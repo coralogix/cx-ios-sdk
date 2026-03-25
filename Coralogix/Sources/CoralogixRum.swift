@@ -253,7 +253,7 @@ public class CoralogixRum {
                             obfuscatedStackTrace: [String],
                             arch: String? = nil,
                             buildId: String? = nil,
-                            stackTraceType: String? = nil) {
+                            stackTraceType: String? = Keys.obfuscated.rawValue) {
         guard CoralogixRum.isInitialized else { return }
         self.reportErrorWith(message: message,
                              obfuscatedStackTrace: obfuscatedStackTrace,
