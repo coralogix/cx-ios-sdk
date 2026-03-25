@@ -55,7 +55,7 @@ extension CoralogixRum {
         self.log(severity: CoralogixLogSeverity.error, message: message, data: data)
     }
     
-    //MARK: - Used By Flutter (symbolicated)
+    // MARK: - Used By Flutter (symbolicated)
     func reportErrorWith(message: String, stackTrace: String?) {
         let stackTraceJson = stackTrace.flatMap {
             let stackTraceArray = Helper.parseStackTrace($0)
@@ -64,7 +64,7 @@ extension CoralogixRum {
         reportErrorInternal(message: message, stackTraceJson: stackTraceJson)
     }
 
-    //MARK: - Used By Flutter (obfuscated)
+    // MARK: - Used By Flutter (obfuscated)
     func reportErrorWith(message: String,
                          obfuscatedStackTrace: [String],
                          arch: String?,
@@ -81,7 +81,7 @@ extension CoralogixRum {
                             stackTraceType: stackTraceType)
     }
 
-    //MARK: - Used By React Native
+    // MARK: - Used By React Native
     func reportErrorWith(message: String,
                          stackTrace: [[String: Any]],
                          errorType: String?,
