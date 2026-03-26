@@ -143,6 +143,132 @@ final class ErrorContextTests: XCTestCase {
         XCTAssertEqual(dictionary[Keys.crashTimestamp.rawValue] as? String, "1625097600")
     }
     
+    // MARK: - Obfuscated Dart frame serialization
+
+    func testObfuscatedFrameSerializesWithVirtKey() {
+        let frame: [String: Any] = [Keys.virt.rawValue: "0x00000000003da15f"]
+        let frames = [frame]
+        mockSpanData = MockSpanData(attributes: [
+            Keys.errorMessage.rawValue: AttributeValue("StateError: state error try catch"),
+            Keys.stackTrace.rawValue: AttributeValue(Helper.convertArrayToJsonString(array: frames)),
+            Keys.arch.rawValue: AttributeValue("arm64"),
+            Keys.buildId.rawValue: AttributeValue("e4f372b4e5cb2ba87653648d9c509cb1"),
+            Keys.stackTraceType.rawValue: AttributeValue("obfuscated")
+        ])
+        let errorStruct = ErrorContext(otel: mockSpanData)
+        let dictionary = errorStruct.getDictionary()
+
+        guard let stackTrace = dictionary[Keys.originalStackTrace.rawValue] as? [[String: Any]] else {
+            XCTFail("original_stacktrace should be present")
+            return
+        }
+        XCTAssertEqual(1, stackTrace.count)
+        XCTAssertEqual("0x00000000003da15f", stackTrace[0][Keys.virt.rawValue] as? String)
+        XCTAssertNil(dictionary[Keys.code.rawValue], "code should not be present in obfuscated Flutter error")
+    }
+
+    func testObfuscatedDefaultStackTraceType_propagatesToDictionary() {
+        // Locks down the string value of Keys.obfuscated — this constant is used as the default
+        // for the public reportError(obfuscatedStackTrace:) API parameter. If the constant is
+        // renamed or changed, this assertion catches it.
+        XCTAssertEqual(Keys.obfuscated.rawValue, "obfuscated",
+                       "Keys.obfuscated rawValue must stay \"obfuscated\" — it is the default for the public obfuscated reportError API")
+
+        // When stackTraceType is absent from the span (i.e. the caller omits it), ErrorContext
+        // must NOT inject a default — the default belongs to the public API layer, not ErrorContext.
+        mockSpanData = MockSpanData(attributes: [
+            Keys.errorMessage.rawValue: AttributeValue("crash"),
+            Keys.stackTrace.rawValue: AttributeValue(Helper.convertArrayToJsonString(array: [[Keys.virt.rawValue: "0x1234"]]))
+        ])
+        let errorStruct = ErrorContext(otel: mockSpanData)
+        let dictionary = errorStruct.getDictionary()
+
+        XCTAssertNil(dictionary[Keys.stackTraceType.rawValue],
+                     "ErrorContext must not inject a stackTraceType default — that is the public API's responsibility")
+    }
+
+    func testNewFieldsPresentWhenSet() {
+        mockSpanData = MockSpanData(attributes: [
+            Keys.errorMessage.rawValue: AttributeValue("StateError"),
+            Keys.code.rawValue: AttributeValue("0"),
+            Keys.domain.rawValue: AttributeValue(""),
+            Keys.arch.rawValue: AttributeValue("arm64"),
+            Keys.buildId.rawValue: AttributeValue("e4f372b4e5cb2ba87653648d9c509cb1"),
+            Keys.stackTraceType.rawValue: AttributeValue("obfuscated")
+        ])
+        let errorStruct = ErrorContext(otel: mockSpanData)
+        let dictionary = errorStruct.getDictionary()
+
+        XCTAssertEqual("arm64", dictionary[Keys.arch.rawValue] as? String)
+        XCTAssertEqual("e4f372b4e5cb2ba87653648d9c509cb1", dictionary[Keys.buildId.rawValue] as? String)
+        XCTAssertEqual("obfuscated", dictionary[Keys.stackTraceType.rawValue] as? String)
+    }
+
+    func testSymbolicatedFrameDoesNotEmitArchOrBuildId() {
+        let frames: [[String: Any]] = [
+            ["functionName": "throwExceptionInDart", "fileName": "package:coralogix_sdk/main.dart", "lineNumber": 134, "columnNumber": 5]
+        ]
+        mockSpanData = MockSpanData(attributes: [
+            Keys.errorMessage.rawValue: AttributeValue("state error try catch"),
+            Keys.stackTrace.rawValue: AttributeValue(Helper.convertArrayToJsonString(array: frames)),
+            Keys.stackTraceType.rawValue: AttributeValue("symbolicated")
+        ])
+        let errorStruct = ErrorContext(otel: mockSpanData)
+        let dictionary = errorStruct.getDictionary()
+
+        XCTAssertEqual("symbolicated", dictionary[Keys.stackTraceType.rawValue] as? String)
+        XCTAssertNil(dictionary[Keys.arch.rawValue], "arch should be absent for symbolicated frames")
+        XCTAssertNil(dictionary[Keys.buildId.rawValue], "build_id should be absent for symbolicated frames")
+        XCTAssertNil(dictionary[Keys.code.rawValue], "code should be absent in Flutter error path")
+    }
+
+    func testNewFieldsOmittedWhenNil() {
+        mockSpanData = MockSpanData(attributes: [
+            Keys.errorMessage.rawValue: AttributeValue("Some error"),
+            Keys.code.rawValue: AttributeValue("0"),
+            Keys.domain.rawValue: AttributeValue("")
+        ])
+        let errorStruct = ErrorContext(otel: mockSpanData)
+        let dictionary = errorStruct.getDictionary()
+
+        XCTAssertNil(dictionary[Keys.buildId.rawValue])
+        XCTAssertNil(dictionary[Keys.stackTraceType.rawValue])
+        XCTAssertNil(dictionary[Keys.arch.rawValue])
+    }
+
+    func testNativeCrashPathUnaffected() {
+        var threads = [String]()
+        var result = [[String: Any]]()
+        var frameObj = [String: Any]()
+        frameObj[Keys.frameNumber.rawValue] = "0"
+        frameObj[Keys.binary.rawValue] = "DemoAppSwift"
+        frameObj[Keys.functionAddressCalled.rawValue] = "0x0000000104b31f94"
+        frameObj[Keys.base.rawValue] = "_$s12DemoAppSwift8CrashSimC"
+        frameObj[Keys.offset.rawValue] = "224"
+        result.append(frameObj)
+        threads.append(Helper.convertArrayToJsonString(array: result))
+
+        mockSpanData = MockSpanData(attributes: [
+            Keys.threads.rawValue: AttributeValue(Helper.convertArrayOfStringToJsonString(array: threads)),
+            Keys.exceptionType.rawValue: AttributeValue("EXC_BAD_ACCESS"),
+            Keys.crashTimestamp.rawValue: AttributeValue("1625097600"),
+            Keys.processName.rawValue: AttributeValue("DemoApp"),
+            Keys.applicationIdentifier.rawValue: AttributeValue("com.myapp"),
+            Keys.triggeredByThread.rawValue: AttributeValue("0"),
+            Keys.baseAddress.rawValue: AttributeValue("0x1000000"),
+            Keys.arch.rawValue: AttributeValue("arm64")
+        ])
+        let errorStruct = ErrorContext(otel: mockSpanData)
+        let dictionary = errorStruct.getDictionary()
+
+        // Crash path still emits arch and baseAddress at the top level
+        XCTAssertEqual("arm64", dictionary[Keys.arch.rawValue] as? String)
+        XCTAssertEqual("0x1000000", dictionary[Keys.baseAddress.rawValue] as? String)
+        // And does NOT emit buildId / stackTraceType (they were never set)
+        XCTAssertNil(dictionary[Keys.buildId.rawValue])
+        XCTAssertNil(dictionary[Keys.stackTraceType.rawValue])
+    }
+
     func testGetDictionaryWithoutStackTrace() {
         mockSpanData = MockSpanData(attributes: [
             Keys.domain.rawValue: AttributeValue("com.example.error"),
