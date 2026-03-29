@@ -37,6 +37,8 @@ public class URLSessionInstrumentation {
     /// Used by the React Native hybrid path to retrieve natively-injected headers (e.g. traceparent)
     /// which are invisible to the JS interceptor. Capped at maxNativeHeadersEntries to bound memory.
     private var nativeRequestHeadersByUrl = [String: [String: String]]()
+    /// Tracks insertion order for FIFO eviction — oldest key is at index 0.
+    private var nativeRequestHeadersKeyOrder = [String]()
     private static let maxNativeHeadersEntries = 100
     
     private var _configuration: URLSessionInstrumentationConfiguration
@@ -95,8 +97,14 @@ public class URLSessionInstrumentation {
             // The hybrid span is reported after the native task ends, so requestMap is already
             // cleared by then — this store survives the cleanup.
             if let url = request.url?.absoluteString, let headers = request.allHTTPHeaderFields, !headers.isEmpty {
-                if nativeRequestHeadersByUrl.count >= Self.maxNativeHeadersEntries {
-                    nativeRequestHeadersByUrl.removeAll()
+                if nativeRequestHeadersByUrl[url] == nil {
+                    // New URL: evict the oldest entry first if at capacity (FIFO).
+                    if nativeRequestHeadersByUrl.count >= Self.maxNativeHeadersEntries,
+                       let oldest = nativeRequestHeadersKeyOrder.first {
+                        nativeRequestHeadersByUrl.removeValue(forKey: oldest)
+                        nativeRequestHeadersKeyOrder.removeFirst()
+                    }
+                    nativeRequestHeadersKeyOrder.append(url)
                 }
                 nativeRequestHeadersByUrl[url] = headers
             }
