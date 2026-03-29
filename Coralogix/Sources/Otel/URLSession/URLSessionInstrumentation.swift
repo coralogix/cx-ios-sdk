@@ -406,6 +406,9 @@ public class URLSessionInstrumentation {
             if let originalReq = coerceToRequest(argument) {
                 let inject = shouldInject(for: originalReq)
                 let (_, requestToUse) = prepareAndLogRequest(originalReq, injectHeaders: inject, existingSessionTaskId: sessionTaskId)
+                // Store now so receivedResponse can read injected headers (e.g. traceparent).
+                // The resume swizzle only stores when requestMap is still empty, so this wins.
+                storeRequest(requestToUse, forTaskId: sessionTaskId)
                 return requestToUse as NSURLRequest
             }
             // Fallback: forward as-is
@@ -1285,13 +1288,15 @@ public class URLSessionInstrumentation {
           injectHeadersIntoTask(task, request: instrumentedRequest)
         }
         
-        // Store request for tracking — use instrumented request so injected headers
-        // (e.g. traceparent) are visible when receivedResponse captures reqHeaders.
+        // Store request for tracking — only when not already stored by the factory path.
+        // The factory path (bridgedArgumentForFactory) stores the instrumented request
+        // (with traceparent in allHTTPHeaderFields); the resume path falls back here only
+        // for tasks that were not created through the factory swizzle (e.g. async/await).
         queue.sync(flags: .barrier) {
             if self.requestMap[taskId] == nil {
                 self.requestMap[taskId] = NetworkRequestState()
-          }
-            self.requestMap[taskId]?.setRequest(instrumentedRequest ?? request)
+                self.requestMap[taskId]?.setRequest(request)
+            }
         }
 
         // Handle iOS 15+ async/await - detect and set up delegate for completion tracking
