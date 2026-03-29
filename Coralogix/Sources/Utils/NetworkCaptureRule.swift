@@ -254,29 +254,40 @@ public struct NetworkCaptureRule {
 
 // MARK: - Rule resolution
 
-/// Returns the first rule in `configs` whose URL matcher applies to `requestUrl`
-/// (first-match-wins), or `nil` if no rule matches.
+/// Returns a merged `NetworkCaptureRule` combining **all** rules in `configs` that match `requestUrl`,
+/// or `nil` if no rule matches.
 ///
-/// **Caller contract**: when the return value is `nil`, all four capture fields
-/// (`reqHeaders`, `resHeaders`, `collectReqPayload`, `collectResPayload`) must be skipped.
+/// Merge semantics (union/OR across all matching rules):
+/// - `reqHeaders` / `resHeaders`: union of allowlists from every matching rule; `nil` when all matching rules have `nil`.
+/// - `collectReqPayload` / `collectResPayload`: `true` if any matching rule enables it.
 ///
-/// Mirrors the browser SDK helper:
-/// ```js
-/// resolveConfigForUrl(url, configs) {
-///   return configs.find(({ url: configUrl }) =>
-///     configUrl === url || (configUrl instanceof RegExp && configUrl.test(url)));
-/// }
-/// ```
+/// This means you can have a broad rule that captures payloads and a narrow rule that adds extra
+/// headers — both will be applied to any URL they match.
 ///
 /// - Parameters:
 ///   - requestUrl: The absolute URL string of the outgoing request.
 ///   - configs: The ordered array of rules from `CoralogixExporterOptions.networkExtraConfig`.
-/// - Returns: The first matching `NetworkCaptureRule`, or `nil`.
+/// - Returns: A merged `NetworkCaptureRule`, or `nil` when no rule matches.
 internal func resolveConfigForUrl(_ requestUrl: String, configs: [NetworkCaptureRule]) -> NetworkCaptureRule? {
     guard let url = URL(string: requestUrl) else {
         let preview = String(requestUrl.prefix(100))
         Log.w("resolveConfigForUrl: '\(preview)' is not a valid URL — skipping rule evaluation.")
         return nil
     }
-    return configs.first { $0.matches(url) }
+    let matching = configs.filter { $0.matches(url) }
+    guard !matching.isEmpty else { return nil }
+    guard matching.count > 1 else { return matching[0] }
+
+    // Merge: union headers, OR booleans
+    let allReqHeaders = matching.compactMap { $0.reqHeaders }.flatMap { $0 }
+    let allResHeaders = matching.compactMap { $0.resHeaders }.flatMap { $0 }
+    let mergedReqHeaders: [String]? = allReqHeaders.isEmpty ? nil : Array(Set(allReqHeaders))
+    let mergedResHeaders: [String]? = allResHeaders.isEmpty ? nil : Array(Set(allResHeaders))
+    let collectReq = matching.contains { $0.collectReqPayload }
+    let collectRes = matching.contains { $0.collectResPayload }
+    return NetworkCaptureRule(url: requestUrl,
+                              reqHeaders: mergedReqHeaders,
+                              resHeaders: mergedResHeaders,
+                              collectReqPayload: collectReq,
+                              collectResPayload: collectRes)
 }
