@@ -77,7 +77,7 @@ jobs:
               echo "⏳ Waiting for CoralogixInternal to be available in CocoaPods Specs..."
               timeout=1800
               elapsed=0
-              until pod search CoralogixInternal | grep -q "CoralogixInternal"; do
+              until pod trunk info CoralogixInternal | grep -q "${TAG_RAW}"; do
                 if [ "$elapsed" -ge "$timeout" ]; then
                   echo "❌ Timeout: CoralogixInternal not available after $timeout seconds."
                   exit 1
@@ -86,7 +86,9 @@ jobs:
                 sleep 30
                 elapsed=$((elapsed + 30))
               done
-              echo "✅ CoralogixInternal is now available!"
+              echo "✅ CoralogixInternal is now available on trunk. Updating local CDN cache..."
+              pod repo update
+              echo "✅ Local CDN cache updated."
             else
               if echo "$push_output" | grep -q "Unable to accept duplicate entry"; then
                 echo "⚠️ Duplicate entry detected for CoralogixInternal, skipping to next phase..."
