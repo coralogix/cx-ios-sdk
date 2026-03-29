@@ -611,7 +611,93 @@ final class CoralogixRumTests: XCTestCase {
         let result = coralogixRum.shouldAddTraceParent(to: request, options: mockOptions)
         XCTAssertTrue(result)
     }
-    
+
+    // MARK: - traceParentInHeader: "enabled" key (React Native bridge compatibility)
+
+    /// Regression: RN bridge sends "enabled" (with 'd') but native historically read only "enable".
+    /// Both must now be accepted.
+    func testShouldReturnFalse_WhenTracingDisabled_UsingEnabledKey() {
+        let request = URLRequest(url: URL(string: "https://example.com")!)
+        let mockOptions = CoralogixExporterOptions(
+            coralogixDomain: .US2,
+            userContext: nil,
+            environment: "PROD",
+            application: "TestApp-iOS",
+            version: "1.0",
+            publicKey: "token",
+            ignoreUrls: [],
+            ignoreErrors: [],
+            sessionSampleRate: 100,
+            traceParentInHeader: ["enabled": false],
+            debug: true
+        )
+        let coralogixRum = CoralogixRum(options: mockOptions)
+        let result = coralogixRum.shouldAddTraceParent(to: request, options: mockOptions)
+        XCTAssertFalse(result, "enabled: false (RN key) must disable traceparent injection")
+    }
+
+    func testShouldReturnTrue_WhenNoAllowedUrlsDefined_UsingEnabledKey() {
+        let request = URLRequest(url: URL(string: "https://random.com")!)
+        let mockOptions = CoralogixExporterOptions(
+            coralogixDomain: .US2,
+            userContext: nil,
+            environment: "PROD",
+            application: "TestApp-iOS",
+            version: "1.0",
+            publicKey: "token",
+            ignoreUrls: [],
+            ignoreErrors: [],
+            sessionSampleRate: 100,
+            traceParentInHeader: ["enabled": true],
+            debug: true
+        )
+        let coralogixRum = CoralogixRum(options: mockOptions)
+        let result = coralogixRum.shouldAddTraceParent(to: request, options: mockOptions)
+        XCTAssertTrue(result, "enabled: true (RN key) with no allowedTracingUrls must allow all URLs")
+    }
+
+    func testShouldReturnTrue_WhenAllowedUrlsMatch_UsingEnabledKey() {
+        let request = URLRequest(url: URL(string: "https://allowed.com/path")!)
+        let mockOptions = CoralogixExporterOptions(
+            coralogixDomain: .US2,
+            userContext: nil,
+            environment: "PROD",
+            application: "TestApp-iOS",
+            version: "1.0",
+            publicKey: "token",
+            ignoreUrls: [],
+            ignoreErrors: [],
+            sessionSampleRate: 100,
+            traceParentInHeader: ["enabled": true,
+                                  "options": ["allowedTracingUrls": ["https://allowed.com/path"]]],
+            debug: true
+        )
+        let coralogixRum = CoralogixRum(options: mockOptions)
+        let result = coralogixRum.shouldAddTraceParent(to: request, options: mockOptions)
+        XCTAssertTrue(result, "enabled: true (RN key) with matching allowedTracingUrls must return true")
+    }
+
+    /// When both "enable" and "enabled" are present, "enable" (checked first) wins.
+    func testTraceParent_EnableKeyTakesPrecedenceOverEnabledKey() {
+        let request = URLRequest(url: URL(string: "https://example.com")!)
+        let mockOptions = CoralogixExporterOptions(
+            coralogixDomain: .US2,
+            userContext: nil,
+            environment: "PROD",
+            application: "TestApp-iOS",
+            version: "1.0",
+            publicKey: "token",
+            ignoreUrls: [],
+            ignoreErrors: [],
+            sessionSampleRate: 100,
+            traceParentInHeader: ["enable": true, "enabled": false],
+            debug: true
+        )
+        let coralogixRum = CoralogixRum(options: mockOptions)
+        let result = coralogixRum.shouldAddTraceParent(to: request, options: mockOptions)
+        XCTAssertTrue(result, "\"enable\" key must take precedence when both keys are present")
+    }
+
     func testSetView() {
         let mockOptions = CoralogixExporterOptions(
             coralogixDomain: .US2,

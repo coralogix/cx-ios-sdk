@@ -17,7 +17,8 @@ internal struct TraceParentInHeader {
             Log.e("[TraceParentInHeader missing params]")
             return
         }
-        enable = params[Keys.enable.rawValue] as? Bool ?? false
+        // Accept both "enable" (native) and "enabled" (React Native bridge) for compatibility
+        enable = params[Keys.enable.rawValue] as? Bool ?? params["enabled"] as? Bool ?? false
         let options = params[Keys.options.rawValue] as? [String: Any]
         allowedTracingUrls = options?[Keys.allowedTracingUrls.rawValue] as? [String]
     }

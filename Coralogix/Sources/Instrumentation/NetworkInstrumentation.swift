@@ -228,17 +228,48 @@ extension CoralogixRum {
         span.setAttribute(key: Keys.customSpanId.rawValue, value: dictionary[Keys.customSpanId.rawValue] as? String ?? "")
         span.setAttribute(key: Keys.customTraceId.rawValue, value: dictionary[Keys.customTraceId.rawValue] as? String ?? "")
 
-        if let reqHeaders = dictionary[Keys.requestHeaders.rawValue] as? [String: Any] {
-            let json = Helper.convertDictionayToJsonString(dict: reqHeaders)
-            if !json.isEmpty {
+        let requestUrl = dictionary[Keys.url.rawValue] as? String ?? ""
+        var options: CoralogixExporterOptions?
+        CoralogixRum.exporterQueue.sync { options = self.options }
+        let configs = options?.networkExtraConfig
+        let rule = configs.flatMap { resolveConfigForUrl(requestUrl, configs: $0) }
+
+        // Request headers: merge JS-visible headers with natively-stored headers (which include
+        // traceparent injected by URLSession instrumentation — invisible to the JS interceptor).
+        // Native headers win on conflicts (e.g. traceparent); then filter by reqHeaders allowlist.
+        let nativeReqHeaders = sessionInstrumentation?.nativeRequestHeaders(forUrl: requestUrl)
+        var mergedReqHeaders = (dictionary[Keys.requestHeaders.rawValue] as? [String: Any])?.compactMapValues { $0 as? String } ?? [:]
+        if let native = nativeReqHeaders {
+            mergedReqHeaders.merge(native) { _, nativeValue in nativeValue }
+        }
+        if !mergedReqHeaders.isEmpty {
+            let filtered: [String: String]
+            if let allowlist = rule?.reqHeaders {
+                filtered = NetworkCaptureRule.filterHeaders(mergedReqHeaders, allowlist: allowlist)
+            } else {
+                filtered = mergedReqHeaders
+            }
+            if !filtered.isEmpty {
+                let dictAny = Dictionary(uniqueKeysWithValues: filtered.map { ($0.key, $0.value as Any) })
+                let json = Helper.convertDictionayToJsonString(dict: dictAny)
                 span.setAttribute(key: Keys.requestHeaders.rawValue, value: AttributeValue.string(json))
             }
         } else if let reqHeaders = dictionary[Keys.requestHeaders.rawValue] as? String, !reqHeaders.isEmpty {
             span.setAttribute(key: Keys.requestHeaders.rawValue, value: AttributeValue.string(reqHeaders))
         }
-        if let resHeaders = dictionary[Keys.responseHeaders.rawValue] as? [String: Any] {
-            let json = Helper.convertDictionayToJsonString(dict: resHeaders)
-            if !json.isEmpty {
+
+        // Response headers: filter by the rule's resHeaders allowlist when a rule is configured.
+        if let resHeadersDict = dictionary[Keys.responseHeaders.rawValue] as? [String: Any] {
+            let allRes = resHeadersDict.compactMapValues { $0 as? String }
+            let filtered: [String: String]
+            if let allowlist = rule?.resHeaders {
+                filtered = NetworkCaptureRule.filterHeaders(allRes, allowlist: allowlist)
+            } else {
+                filtered = allRes
+            }
+            if !filtered.isEmpty {
+                let dictAny = Dictionary(uniqueKeysWithValues: filtered.map { ($0.key, $0.value as Any) })
+                let json = Helper.convertDictionayToJsonString(dict: dictAny)
                 span.setAttribute(key: Keys.responseHeaders.rawValue, value: AttributeValue.string(json))
             }
         } else if let resHeaders = dictionary[Keys.responseHeaders.rawValue] as? String, !resHeaders.isEmpty {

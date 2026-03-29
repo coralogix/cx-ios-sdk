@@ -32,6 +32,14 @@ public class URLSessionInstrumentation {
     private var responseBodyStore = [String: Data]()
     /// Max bytes to buffer per task for response body capture; aligned with downstream 1024-char limit (avoid unbounded growth).
     private static let maxResponseBodyStoreBytes = 64 * 1024
+
+    /// Request headers keyed by absolute URL, populated when an instrumented request is stored.
+    /// Used by the React Native hybrid path to retrieve natively-injected headers (e.g. traceparent)
+    /// which are invisible to the JS interceptor. Capped at maxNativeHeadersEntries to bound memory.
+    private var nativeRequestHeadersByUrl = [String: [String: String]]()
+    /// Tracks insertion order for FIFO eviction — oldest key is at index 0.
+    private var nativeRequestHeadersKeyOrder = [String]()
+    private static let maxNativeHeadersEntries = 100
     
     private var _configuration: URLSessionInstrumentationConfiguration
     public var configuration: URLSessionInstrumentationConfiguration {
@@ -76,14 +84,61 @@ public class URLSessionInstrumentation {
     }
 
     /// Stores the request for the task so it can be read at response time (e.g. for header capture).
-    /// Last write per taskId wins; callers should pass the instrumented/processed request when available.
-    internal func storeRequest(_ request: URLRequest, forTaskId taskId: String) {
+    /// - Parameters:
+    ///   - ifAbsent: When `true`, skips the write if a request is already stored for `taskId` (atomic check-and-set inside the barrier). Use this when the factory path may have already stored a better (instrumented) request and you don't want to overwrite it.
+    /// Also populates `nativeRequestHeadersByUrl` so the hybrid path can look up injected headers by URL.
+    internal func storeRequest(_ request: URLRequest, forTaskId taskId: String, ifAbsent: Bool = false) {
         queue.sync(flags: .barrier) {
             if requestMap[taskId] == nil {
                 requestMap[taskId] = NetworkRequestState()
+            } else if ifAbsent {
+                return  // already stored by factory path — do not overwrite
             }
             requestMap[taskId]?.setRequest(request)
+
+            // Keep a URL-keyed copy of the headers for the hybrid path (RN/Flutter).
+            // The hybrid span is reported after the native task ends, so requestMap is already
+            // cleared by then — this store survives the cleanup.
+            if let url = request.url?.absoluteString, let headers = request.allHTTPHeaderFields, !headers.isEmpty {
+                if nativeRequestHeadersByUrl[url] == nil {
+                    // New URL: evict the oldest entry first if at capacity (FIFO).
+                    if nativeRequestHeadersByUrl.count >= Self.maxNativeHeadersEntries,
+                       let oldest = nativeRequestHeadersKeyOrder.first {
+                        nativeRequestHeadersByUrl.removeValue(forKey: oldest)
+                        nativeRequestHeadersKeyOrder.removeFirst()
+                    }
+                    nativeRequestHeadersKeyOrder.append(url)
+                }
+                nativeRequestHeadersByUrl[url] = headers
+            }
         }
+    }
+
+    /// Re-indexes native headers under the final (post-redirect) URL when it differs from the original.
+    /// Called from URLSessionLogger.logResponse so the hybrid path can look up by the URL the JS bridge reports.
+    internal func indexNativeHeadersForRedirectIfNeeded(originalUrl: String?, responseUrl: String?) {
+        guard let originalUrl, let responseUrl, originalUrl != responseUrl else { return }
+        queue.sync(flags: .barrier) {
+            guard let headers = nativeRequestHeadersByUrl[originalUrl],
+                  nativeRequestHeadersByUrl[responseUrl] == nil else { return }
+            if nativeRequestHeadersByUrl.count >= Self.maxNativeHeadersEntries,
+               let oldest = nativeRequestHeadersKeyOrder.first {
+                nativeRequestHeadersByUrl.removeValue(forKey: oldest)
+                nativeRequestHeadersKeyOrder.removeFirst()
+            }
+            nativeRequestHeadersByUrl[responseUrl] = headers
+            nativeRequestHeadersKeyOrder.append(responseUrl)
+        }
+    }
+
+    /// Returns natively-stored request headers for the given absolute URL, or nil if none recorded.
+    /// Used by the hybrid path (React Native / Flutter) to obtain headers invisible to the JS interceptor.
+    internal func nativeRequestHeaders(forUrl url: String) -> [String: String]? {
+        var headers: [String: String]?
+        queue.sync {
+            headers = nativeRequestHeadersByUrl[url]
+        }
+        return headers
     }
 
     /// Returns and removes accumulated response body for the task (rule-based capture). Returns nil if none.
@@ -406,6 +461,9 @@ public class URLSessionInstrumentation {
             if let originalReq = coerceToRequest(argument) {
                 let inject = shouldInject(for: originalReq)
                 let (_, requestToUse) = prepareAndLogRequest(originalReq, injectHeaders: inject, existingSessionTaskId: sessionTaskId)
+                // Store now so receivedResponse can read injected headers (e.g. traceparent).
+                // The resume swizzle only stores when requestMap is still empty, so this wins.
+                storeRequest(requestToUse, forTaskId: sessionTaskId)
                 return requestToUse as NSURLRequest
             }
             // Fallback: forward as-is
@@ -1285,13 +1343,14 @@ public class URLSessionInstrumentation {
           injectHeadersIntoTask(task, request: instrumentedRequest)
         }
         
-        // Store request for tracking
-        queue.sync(flags: .barrier) {
-            if self.requestMap[taskId] == nil {
-                self.requestMap[taskId] = NetworkRequestState()
-          }
-            self.requestMap[taskId]?.setRequest(request)
-        }
+        // Store request for tracking — only when not already stored by the factory path.
+        // The factory path (bridgedArgumentForFactory) stores the instrumented request
+        // (with traceparent in allHTTPHeaderFields); the resume path falls back here only
+        // for tasks that were not created through the factory swizzle (e.g. async/await).
+        // Store instrumentedRequest when available so traceparent is captured in reqHeaders.
+        // ifAbsent: true makes the check-and-set atomic inside the barrier, preventing a race
+        // where the resume path overwrites a factory-stored instrumented request (with traceparent).
+        storeRequest(instrumentedRequest ?? request, forTaskId: taskId, ifAbsent: true)
 
         // Handle iOS 15+ async/await - detect and set up delegate for completion tracking
         if #available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, *) {
@@ -1348,16 +1407,9 @@ public class URLSessionInstrumentation {
     ///   - task: The URLSessionTask to modify
     ///   - request: The instrumented request with headers to inject
     private func injectHeadersIntoTask(_ task: URLSessionTask, request: URLRequest) {
-        // Scenario A: currentRequest is already mutable (rare but possible)
-        if let mutableRequest = task.currentRequest as? NSMutableURLRequest {
-            // Easy case - modify directly
-            for (key, value) in request.allHTTPHeaderFields ?? [:] {
-                mutableRequest.setValue(value, forHTTPHeaderField: key)
-            }
-            return
-        }
-        
-        // Scenario B: Use private setCurrentRequest: selector (industry-standard approach)
+        // Always use setCurrentRequest: to inject headers.
+        // task.currentRequest returns a copy — mutating NSMutableURLRequest in-place has no effect
+        // on what the task actually sends. setCurrentRequest: is the only way to push the change back.
         let setCurrentRequestSelector = NSSelectorFromString("setCurrentRequest:")
         guard task.responds(to: setCurrentRequestSelector) else {
             // Task doesn't support setCurrentRequest: - headers won't be injected

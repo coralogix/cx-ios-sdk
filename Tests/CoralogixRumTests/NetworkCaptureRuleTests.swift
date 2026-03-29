@@ -133,18 +133,78 @@ final class NetworkCaptureRuleTests: XCTestCase {
         XCTAssertNil(result)
     }
 
-    func testResolveConfigForUrl_firstMatchWins_returnsFirstMatchingRule() {
-        let firstRule  = NetworkCaptureRule(url: "example.com", reqHeaders: ["X-First"])
-        let secondRule = NetworkCaptureRule(url: "example.com", reqHeaders: ["X-Second"])
-        let result = resolveConfigForUrl("https://api.example.com/users", configs: [firstRule, secondRule])
-        XCTAssertEqual(result?.reqHeaders, ["X-First"],
-                       "First matching rule should win; second rule must not be returned")
-    }
-
-    func testResolveConfigForUrl_firstMatchWins_nonMatchingRuleBeforeMatchingRule() throws {
+    func testResolveConfigForUrl_nonMatchingRuleBeforeMatchingRule_returnsMatchingRule() throws {
         let nonMatching = NetworkCaptureRule(url: "other.com")
         let matching    = NetworkCaptureRule(url: "example.com", collectReqPayload: true)
         let result = try XCTUnwrap(resolveConfigForUrl("https://api.example.com/users", configs: [nonMatching, matching]))
+        XCTAssertTrue(result.collectReqPayload)
+    }
+
+    // MARK: - resolveConfigForUrl — merge semantics (multiple matching rules)
+
+    func testResolveConfigForUrl_multipleMatchingRules_mergesReqHeaders() {
+        let broadRule    = NetworkCaptureRule(url: "example.com",   reqHeaders: ["Content-Type", "Accept"])
+        let specificRule = NetworkCaptureRule(url: "example.com/v2", reqHeaders: ["traceparent", "X-Custom"])
+        let result = resolveConfigForUrl("https://api.example.com/v2/items", configs: [broadRule, specificRule])
+        let merged = Set(result?.reqHeaders ?? [])
+        XCTAssertEqual(merged, ["Content-Type", "Accept", "traceparent", "X-Custom"],
+                       "reqHeaders from all matching rules must be unioned")
+    }
+
+    func testResolveConfigForUrl_multipleMatchingRules_mergesResHeaders() {
+        let ruleA = NetworkCaptureRule(url: "example.com", resHeaders: ["Content-Type"])
+        let ruleB = NetworkCaptureRule(url: "example.com", resHeaders: ["X-Request-Id"])
+        let result = resolveConfigForUrl("https://api.example.com/data", configs: [ruleA, ruleB])
+        let merged = Set(result?.resHeaders ?? [])
+        XCTAssertEqual(merged, ["Content-Type", "X-Request-Id"])
+    }
+
+    func testResolveConfigForUrl_multipleMatchingRules_collectPayloadTrueIfAnyRuleEnablesIt() {
+        let noPayload  = NetworkCaptureRule(url: "example.com",   collectResPayload: false)
+        let hasPayload = NetworkCaptureRule(url: "example.com/v2", collectResPayload: true)
+        let result = resolveConfigForUrl("https://api.example.com/v2/items", configs: [noPayload, hasPayload])
+        XCTAssertTrue(result?.collectResPayload == true,
+                      "collectResPayload must be true when any matching rule enables it")
+    }
+
+    func testResolveConfigForUrl_multipleMatchingRules_collectPayloadFalseWhenNoRuleEnablesIt() {
+        let ruleA = NetworkCaptureRule(url: "example.com",   collectResPayload: false)
+        let ruleB = NetworkCaptureRule(url: "example.com/v2", collectResPayload: false)
+        let result = resolveConfigForUrl("https://api.example.com/v2/items", configs: [ruleA, ruleB])
+        XCTAssertFalse(result?.collectResPayload == true)
+    }
+
+    func testResolveConfigForUrl_multipleMatchingRules_allNilReqHeaders_mergedIsNil() {
+        let ruleA = NetworkCaptureRule(url: "example.com")   // reqHeaders: nil
+        let ruleB = NetworkCaptureRule(url: "example.com/v2") // reqHeaders: nil
+        let result = resolveConfigForUrl("https://api.example.com/v2/items", configs: [ruleA, ruleB])
+        XCTAssertNil(result?.reqHeaders,
+                     "Merged reqHeaders must be nil when all matching rules have nil reqHeaders")
+    }
+
+    /// Regression: broad rule (no traceparent) + specific rule (with traceparent) — merged allowlist must include traceparent.
+    /// This is the RN hybrid scenario: Rule 1 matches the host broadly, Rule 5 matches the specific path and adds traceparent.
+    func testResolveConfigForUrl_broadAndSpecificRule_traceparentIncludedInMergedAllowlist() {
+        let broadRule    = NetworkCaptureRule(url: "jsonplaceholder.typicode.com",
+                                             reqHeaders: ["content-type", "accept"],
+                                             collectResPayload: true)
+        let specificRule = NetworkCaptureRule(url: "jsonplaceholder.typicode.com/posts/1",
+                                             reqHeaders: ["accept", "traceparent"],
+                                             collectResPayload: false)
+        let result = resolveConfigForUrl("https://jsonplaceholder.typicode.com/posts/1", configs: [broadRule, specificRule])
+        let merged = Set(result?.reqHeaders ?? [])
+        XCTAssertTrue(merged.contains("traceparent"),
+                      "traceparent must appear in the merged allowlist even if only the specific rule lists it")
+        XCTAssertTrue(result?.collectResPayload == true,
+                      "collectResPayload must be true because the broad rule enables it")
+    }
+
+    func testResolveConfigForUrl_singleMatchingRule_returnedUnchanged() throws {
+        let rule = NetworkCaptureRule(url: "example.com",
+                                     reqHeaders: ["Authorization"],
+                                     collectReqPayload: true)
+        let result = try XCTUnwrap(resolveConfigForUrl("https://api.example.com/users", configs: [rule]))
+        XCTAssertEqual(result.reqHeaders, ["Authorization"])
         XCTAssertTrue(result.collectReqPayload)
     }
 
