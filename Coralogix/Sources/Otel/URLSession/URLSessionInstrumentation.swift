@@ -1381,16 +1381,9 @@ public class URLSessionInstrumentation {
     ///   - task: The URLSessionTask to modify
     ///   - request: The instrumented request with headers to inject
     private func injectHeadersIntoTask(_ task: URLSessionTask, request: URLRequest) {
-        // Scenario A: currentRequest is already mutable (rare but possible)
-        if let mutableRequest = task.currentRequest as? NSMutableURLRequest {
-            // Easy case - modify directly
-            for (key, value) in request.allHTTPHeaderFields ?? [:] {
-                mutableRequest.setValue(value, forHTTPHeaderField: key)
-            }
-            return
-        }
-        
-        // Scenario B: Use private setCurrentRequest: selector (industry-standard approach)
+        // Always use setCurrentRequest: to inject headers.
+        // task.currentRequest returns a copy — mutating NSMutableURLRequest in-place has no effect
+        // on what the task actually sends. setCurrentRequest: is the only way to push the change back.
         let setCurrentRequestSelector = NSSelectorFromString("setCurrentRequest:")
         guard task.responds(to: setCurrentRequestSelector) else {
             // Task doesn't support setCurrentRequest: - headers won't be injected
