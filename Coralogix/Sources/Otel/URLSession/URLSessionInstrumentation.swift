@@ -1319,11 +1319,9 @@ public class URLSessionInstrumentation {
         // The factory path (bridgedArgumentForFactory) stores the instrumented request
         // (with traceparent in allHTTPHeaderFields); the resume path falls back here only
         // for tasks that were not created through the factory swizzle (e.g. async/await).
-        queue.sync(flags: .barrier) {
-            if self.requestMap[taskId] == nil {
-                self.requestMap[taskId] = NetworkRequestState()
-                self.requestMap[taskId]?.setRequest(request)
-            }
+        // Store instrumentedRequest when available so traceparent is captured in reqHeaders.
+        if requestMap[taskId] == nil {
+            storeRequest(instrumentedRequest ?? request, forTaskId: taskId)
         }
 
         // Handle iOS 15+ async/await - detect and set up delegate for completion tracking
