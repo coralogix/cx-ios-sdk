@@ -84,12 +84,15 @@ public class URLSessionInstrumentation {
     }
 
     /// Stores the request for the task so it can be read at response time (e.g. for header capture).
-    /// Last write per taskId wins; callers should pass the instrumented/processed request when available.
+    /// - Parameters:
+    ///   - ifAbsent: When `true`, skips the write if a request is already stored for `taskId` (atomic check-and-set inside the barrier). Use this when the factory path may have already stored a better (instrumented) request and you don't want to overwrite it.
     /// Also populates `nativeRequestHeadersByUrl` so the hybrid path can look up injected headers by URL.
-    internal func storeRequest(_ request: URLRequest, forTaskId taskId: String) {
+    internal func storeRequest(_ request: URLRequest, forTaskId taskId: String, ifAbsent: Bool = false) {
         queue.sync(flags: .barrier) {
             if requestMap[taskId] == nil {
                 requestMap[taskId] = NetworkRequestState()
+            } else if ifAbsent {
+                return  // already stored by factory path — do not overwrite
             }
             requestMap[taskId]?.setRequest(request)
 
@@ -1345,9 +1348,9 @@ public class URLSessionInstrumentation {
         // (with traceparent in allHTTPHeaderFields); the resume path falls back here only
         // for tasks that were not created through the factory swizzle (e.g. async/await).
         // Store instrumentedRequest when available so traceparent is captured in reqHeaders.
-        if requestMap[taskId] == nil {
-            storeRequest(instrumentedRequest ?? request, forTaskId: taskId)
-        }
+        // ifAbsent: true makes the check-and-set atomic inside the barrier, preventing a race
+        // where the resume path overwrites a factory-stored instrumented request (with traceparent).
+        storeRequest(instrumentedRequest ?? request, forTaskId: taskId, ifAbsent: true)
 
         // Handle iOS 15+ async/await - detect and set up delegate for completion tracking
         if #available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, *) {
