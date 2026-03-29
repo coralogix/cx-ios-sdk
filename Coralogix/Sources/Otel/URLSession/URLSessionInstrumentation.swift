@@ -32,6 +32,12 @@ public class URLSessionInstrumentation {
     private var responseBodyStore = [String: Data]()
     /// Max bytes to buffer per task for response body capture; aligned with downstream 1024-char limit (avoid unbounded growth).
     private static let maxResponseBodyStoreBytes = 64 * 1024
+
+    /// Request headers keyed by absolute URL, populated when an instrumented request is stored.
+    /// Used by the React Native hybrid path to retrieve natively-injected headers (e.g. traceparent)
+    /// which are invisible to the JS interceptor. Capped at maxNativeHeadersEntries to bound memory.
+    private var nativeRequestHeadersByUrl = [String: [String: String]]()
+    private static let maxNativeHeadersEntries = 100
     
     private var _configuration: URLSessionInstrumentationConfiguration
     public var configuration: URLSessionInstrumentationConfiguration {
@@ -77,13 +83,34 @@ public class URLSessionInstrumentation {
 
     /// Stores the request for the task so it can be read at response time (e.g. for header capture).
     /// Last write per taskId wins; callers should pass the instrumented/processed request when available.
+    /// Also populates `nativeRequestHeadersByUrl` so the hybrid path can look up injected headers by URL.
     internal func storeRequest(_ request: URLRequest, forTaskId taskId: String) {
         queue.sync(flags: .barrier) {
             if requestMap[taskId] == nil {
                 requestMap[taskId] = NetworkRequestState()
             }
             requestMap[taskId]?.setRequest(request)
+
+            // Keep a URL-keyed copy of the headers for the hybrid path (RN/Flutter).
+            // The hybrid span is reported after the native task ends, so requestMap is already
+            // cleared by then — this store survives the cleanup.
+            if let url = request.url?.absoluteString, let headers = request.allHTTPHeaderFields, !headers.isEmpty {
+                if nativeRequestHeadersByUrl.count >= Self.maxNativeHeadersEntries {
+                    nativeRequestHeadersByUrl.removeAll()
+                }
+                nativeRequestHeadersByUrl[url] = headers
+            }
         }
+    }
+
+    /// Returns natively-stored request headers for the given absolute URL, or nil if none recorded.
+    /// Used by the hybrid path (React Native / Flutter) to obtain headers invisible to the JS interceptor.
+    internal func nativeRequestHeaders(forUrl url: String) -> [String: String]? {
+        var headers: [String: String]?
+        queue.sync {
+            headers = nativeRequestHeadersByUrl[url]
+        }
+        return headers
     }
 
     /// Returns and removes accumulated response body for the task (rule-based capture). Returns nil if none.
