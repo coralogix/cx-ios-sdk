@@ -111,6 +111,23 @@ public class URLSessionInstrumentation {
         }
     }
 
+    /// Re-indexes native headers under the final (post-redirect) URL when it differs from the original.
+    /// Called from URLSessionLogger.logResponse so the hybrid path can look up by the URL the JS bridge reports.
+    internal func indexNativeHeadersForRedirectIfNeeded(originalUrl: String?, responseUrl: String?) {
+        guard let originalUrl, let responseUrl, originalUrl != responseUrl else { return }
+        queue.sync(flags: .barrier) {
+            guard let headers = nativeRequestHeadersByUrl[originalUrl],
+                  nativeRequestHeadersByUrl[responseUrl] == nil else { return }
+            if nativeRequestHeadersByUrl.count >= Self.maxNativeHeadersEntries,
+               let oldest = nativeRequestHeadersKeyOrder.first {
+                nativeRequestHeadersByUrl.removeValue(forKey: oldest)
+                nativeRequestHeadersKeyOrder.removeFirst()
+            }
+            nativeRequestHeadersByUrl[responseUrl] = headers
+            nativeRequestHeadersKeyOrder.append(responseUrl)
+        }
+    }
+
     /// Returns natively-stored request headers for the given absolute URL, or nil if none recorded.
     /// Used by the hybrid path (React Native / Flutter) to obtain headers invisible to the JS interceptor.
     internal func nativeRequestHeaders(forUrl url: String) -> [String: String]? {
