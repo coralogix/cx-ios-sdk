@@ -1285,12 +1285,13 @@ public class URLSessionInstrumentation {
           injectHeadersIntoTask(task, request: instrumentedRequest)
         }
         
-        // Store request for tracking
+        // Store request for tracking — use instrumented request so injected headers
+        // (e.g. traceparent) are visible when receivedResponse captures reqHeaders.
         queue.sync(flags: .barrier) {
             if self.requestMap[taskId] == nil {
                 self.requestMap[taskId] = NetworkRequestState()
           }
-            self.requestMap[taskId]?.setRequest(request)
+            self.requestMap[taskId]?.setRequest(instrumentedRequest ?? request)
         }
 
         // Handle iOS 15+ async/await - detect and set up delegate for completion tracking
