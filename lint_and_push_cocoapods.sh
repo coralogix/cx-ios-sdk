@@ -38,13 +38,18 @@ if [[ "$push_internal" =~ ^[Yy]$ ]]; then
   if [ $push_exit_code -eq 0 ]; then
     echo "✅ $INTERNAL pushed!"
     
-    # Wait for CoralogixInternal to become available
-    echo "⏳ Waiting for $INTERNAL to be available in CocoaPods Specs..."
-    until pod search CoralogixInternal | grep -q "CoralogixInternal"; do
-      echo "⏳ $INTERNAL not yet available, waiting 30 seconds..."
+    # Wait for CoralogixInternal to be visible on trunk, then refresh local CDN cache.
+    # pod trunk info queries trunk directly (authoritative); pod repo update syncs
+    # the local CDN cache so dependent podspecs can resolve the new version during validation.
+    VERSION=$(grep "spec.version" "$INTERNAL" | head -1 | sed "s/.*'\(.*\)'.*/\1/")
+    echo "⏳ Waiting for $INTERNAL $VERSION to appear on trunk..."
+    until pod trunk info CoralogixInternal | grep -q "$VERSION"; do
+      echo "⏳ $INTERNAL $VERSION not yet on trunk, waiting 30 seconds..."
       sleep 30
     done
-    echo "✅ $INTERNAL is now available!"
+    echo "✅ $INTERNAL $VERSION is on trunk. Updating local CDN cache..."
+    pod repo update
+    echo "✅ Local CDN cache updated."
   else
     if echo "$push_output" | grep -q "Unable to accept duplicate entry"; then
       echo "⚠️ Duplicate entry detected for $INTERNAL, skipping to next phase..."

@@ -86,7 +86,9 @@ jobs:
                 sleep 30
                 elapsed=$((elapsed + 30))
               done
-              echo "✅ CoralogixInternal is now available!"
+              echo "✅ CoralogixInternal is now available on trunk. Updating local CDN cache..."
+              pod repo update
+              echo "✅ Local CDN cache updated."
             else
               if echo "$push_output" | grep -q "Unable to accept duplicate entry"; then
                 echo "⚠️ Duplicate entry detected for CoralogixInternal, skipping to next phase..."
