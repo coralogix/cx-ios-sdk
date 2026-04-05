@@ -75,6 +75,7 @@
 		E6FD68F82D01D5570066BDE8 /* CreditCardInputCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6FD68F72D01D5570066BDE8 /* CreditCardInputCell.swift */; };
 		E6FDDA2D2DF176DC0005F274 /* ClockViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6FDDA2C2DF176DC0005F274 /* ClockViewController.swift */; };
 		E6FDDA2E2DF176DC0005F275 /* SchemaValidationViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6FDDA312DF176DC0005F275 /* SchemaValidationViewController.swift */; };
+		E6C359522F04000510035951 /* CustomSpansViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6C359512F04000510035951 /* CustomSpansViewController.swift */; };
 		E6FDDA2F2DF176DC0005F274 /* ClockViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6FDDA2C2DF176DC0005F274 /* ClockViewController.swift */; };
 /* End PBXBuildFile section */
 
@@ -167,6 +168,7 @@
 		E6FD68F72D01D5570066BDE8 /* CreditCardInputCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreditCardInputCell.swift; sourceTree = "<group>"; };
 		E6FDDA2C2DF176DC0005F274 /* ClockViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClockViewController.swift; sourceTree = "<group>"; };
 		E6FDDA312DF176DC0005F275 /* SchemaValidationViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SchemaValidationViewController.swift; sourceTree = "<group>"; };
+		E6C359512F04000510035951 /* CustomSpansViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomSpansViewController.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -313,6 +315,7 @@
 				E674E7F72CD7C6480041784E /* SessionReplayViewController.swift */,
 				E6FDDA2C2DF176DC0005F274 /* ClockViewController.swift */,
 				E6FDDA312DF176DC0005F275 /* SchemaValidationViewController.swift */,
+				E6C359512F04000510035951 /* CustomSpansViewController.swift */,
 				E6E515FD2EBB8644008EC19A /* MaskViewController.swift */,
 				E6B60A052DB4EAAC003AD35D /* Assets.xcassets */,
 				E68681AA2BFA279500B127E7 /* Main.storyboard */,
@@ -614,6 +617,7 @@
 				E66938532C7489050002335F /* SdkViewController.swift in Sources */,
 				E6FDDA2D2DF176DC0005F274 /* ClockViewController.swift in Sources */,
 				E6FDDA2E2DF176DC0005F275 /* SchemaValidationViewController.swift in Sources */,
+				E6C359522F04000510035951 /* CustomSpansViewController.swift in Sources */,
 				E669384F2C747E860002335F /* CustomView.swift in Sources */,
 				E6E515FE2EBB8644008EC19A /* MaskViewController.swift in Sources */,
 				E66938572C74A8830002335F /* UserActionsViewController.swift in Sources */,

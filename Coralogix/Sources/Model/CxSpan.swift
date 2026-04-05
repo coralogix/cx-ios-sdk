@@ -12,7 +12,7 @@ public class CxSpan {
     let applicationName: String
     let subsystemName: String
     let isErrorWithStacktrace: Bool = false
-    var severity: Int = 0
+    var severity: Int
     var cxRum: CxRum
     var instrumentationData: InstrumentationData?
     var beforeSend: (([String: Any]) -> [String: Any]?)?
@@ -33,9 +33,6 @@ public class CxSpan {
         self.subsystemName = Keys.cxRum.rawValue
         self.beforeSend = options.beforeSend
         self.sessionManager = sessionManager
-        if let severity = otel.getAttribute(forKey: Keys.severity.rawValue) as? String {
-            self.severity = Int(severity) ?? 0
-        }
 
         let rumBuilder = CxRumBuilder(otel: otel,
                                       versionMetadata: versionMetadata,
@@ -49,6 +46,7 @@ public class CxSpan {
             return nil
         }
         self.cxRum = cxRum
+        self.severity = cxRum.eventContext.severity
         
         if cxRum.eventContext.type == CoralogixEventType.networkRequest {
             self.instrumentationData = InstrumentationData(otel: otel, cxRum: cxRum, viewManager: viewManager)

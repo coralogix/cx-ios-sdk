@@ -10,7 +10,8 @@ import CoralogixInternal
 struct EventContext {
     var type: CoralogixEventType = .unknown
     let source: String
-    var severity: Int = 0
+    /// Default **info** (3) when the span omits `severity` or it is not a valid integer (matches top-level log `severity`).
+    var severity: Int = CoralogixLogSeverity.info.rawValue
     
     init(otel: SpanDataProtocol) {
         if let type = otel.getAttribute(forKey: Keys.eventType.rawValue) as? String {
@@ -19,8 +20,9 @@ struct EventContext {
         
         self.source = otel.getAttribute(forKey: Keys.source.rawValue) as? String ?? ""
         
-        if let severity = otel.getAttribute(forKey: Keys.severity.rawValue) as? String {
-            self.severity = Int(severity) ?? 0
+        if let severityStr = otel.getAttribute(forKey: Keys.severity.rawValue) as? String,
+           let parsed = Int(severityStr) {
+            self.severity = parsed
         }
     }
     

@@ -64,4 +64,5 @@ enum Keys: String {
     case unregisterMaskRegion = "Unregister mask region"
     case testSessionSampler   = "Test Session Sampler"
     case requestWithHeaderCapture = "Request with header/payload capture"
+    case customSpans = "Custom Spans"
 }

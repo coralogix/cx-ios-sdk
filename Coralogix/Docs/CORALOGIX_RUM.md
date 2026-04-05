@@ -308,6 +308,34 @@ coralogixIntegration.log(severity: .error, message: "A critical error occurred",
 coralogixIntegration.shutdown()
 ```
 
+## Custom spans (manual tracing)
+
+The Custom Spans API mirrors the Coralogix Browser SDK naming (`startCustomSpan`, `endSpan`, not `startChildSpan` / `end`).
+
+### Types
+
+- `CoralogixIgnoredInstrument` — `.networkRequests`, `.userInteractions`, `.errors` (values are reserved for future behavior when combining auto-instrumentation with custom traces).
+- `CoralogixCustomTracer` — from `getCustomTracer(ignoredInstruments:)`.
+- `CoralogixGlobalSpan` — root span from `startGlobalSpan(name:labels:)`; exposes `span`, `withContext(_:)`, `startCustomSpan(name:labels:)`, `endSpan()`.
+- `CoralogixCustomSpan` — nested span; exposes `span`, `endSpan()`, `setAttribute`, `addEvent`, `setStatus`.
+
+### Example
+
+```swift
+let tracer = coralogixRum.getCustomTracer(ignoredInstruments: [.networkRequests])
+guard let global = tracer.startGlobalSpan(name: "checkout", labels: ["step": "payment"]) else { return }
+
+global.withContext {
+    let child = global.startCustomSpan(name: "authorize")
+    child.setAttribute(key: "result", value: "ok")
+    child.endSpan()
+}
+
+global.endSpan()
+```
+
+`startGlobalSpan` returns `nil` if the SDK did not finish initialization (for example, sampling disabled the SDK).
+
 ## About Method Swizzling and SwiftUI Modifiers
 ### Method Swizzling
 Method swizzling is a technique used in Objective-C and Swift that allows the changing of the implementation of an existing selector at runtime. This can be used to inject custom behavior into existing methods without altering the original code. However, method swizzling can lead to maintenance challenges and unpredictable behavior, especially with system APIs.

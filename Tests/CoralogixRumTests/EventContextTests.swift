@@ -50,6 +50,16 @@ final class EventContextTests: XCTestCase {
         XCTAssertEqual(context.type, CoralogixEventType.unknown)
     }
     
+    func testEventContextMissingSeverityDefaultsToInfo() {
+        let attributes: [String: Any] = [
+            Keys.eventType.rawValue: AttributeValue("log"),
+            Keys.source.rawValue: AttributeValue("code")
+        ]
+        let mockSpanData = MockSpanData(attributes: attributes)
+        let context = EventContext(otel: mockSpanData)
+        XCTAssertEqual(context.severity, CoralogixLogSeverity.info.rawValue)
+    }
+
     func testEventContextWithMalformedData() {
         // Mock data with a non-integer severity value
         let attributes: [String: Any] = [
@@ -62,8 +72,8 @@ final class EventContextTests: XCTestCase {
         // Initialize EventContext
         let context = EventContext(otel: mockSpanData)
         
-        // Severity should fallback to 0
-        XCTAssertEqual(context.severity, 0)
+        // Unparseable severity falls back to info (3), same as a missing attribute
+        XCTAssertEqual(context.severity, CoralogixLogSeverity.info.rawValue)
     }
     
     func testGetDictionary() {
