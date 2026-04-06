@@ -20,15 +20,21 @@ final class CustomSpansViewController: UITableViewController {
     private lazy var items: [DemoItem] = [
         DemoItem(
             title: "Simple global + child spans",
-            subtitle: "Labels, attributes, event, status, endSpan",
+            subtitle: "Global becomes active OTel context; child shares traceId; then endSpan",
             systemImageName: "point.3.connected.trianglepath.dotted",
             action: { [weak self] in self?.runSimpleFlow(useIgnoredTracer: false) }
         ),
         DemoItem(
             title: "withContext + GET request",
-            subtitle: "Sets active span, then starts jsonplaceholder GET",
+            subtitle: "Global already active; withContext wraps GET (propagation while global open)",
             systemImageName: "network",
             action: { [weak self] in self?.runWithContextNetwork() }
+        ),
+        DemoItem(
+            title: "Second startGlobalSpan rejected",
+            subtitle: "Only one global at a time; second call returns nil until first endSpan",
+            systemImageName: "exclamationmark.triangle",
+            action: { [weak self] in self?.runSecondGlobalRejectedDemo() }
         ),
         DemoItem(
             title: "Tracer with ignoredInstruments",
@@ -107,6 +113,31 @@ final class CustomSpansViewController: UITableViewController {
         child.endSpan()
         global.endSpan()
         presentToast(useIgnoredTracer ? "Finished (ignored-instruments tracer)" : "Finished simple flow")
+    }
+
+    private func runSecondGlobalRejectedDemo() {
+        let rum = CoralogixRumManager.shared.sdk
+        guard rum.isInitialized else {
+            presentToast("SDK not initialized")
+            return
+        }
+        let tracer = rum.getCustomTracer()
+        guard let first = tracer.startGlobalSpan(name: "demo.custom.first_global") else {
+            presentToast("Unexpected: first startGlobalSpan failed")
+            return
+        }
+        if tracer.startGlobalSpan(name: "demo.custom.should_fail") != nil {
+            presentToast("Bug: second startGlobalSpan should return nil")
+            first.endSpan()
+            return
+        }
+        first.endSpan()
+        guard let after = tracer.startGlobalSpan(name: "demo.custom.after_end") else {
+            presentToast("Unexpected: global after endSpan should succeed")
+            return
+        }
+        after.endSpan()
+        presentToast("OK: 2nd global rejected; new global after endSpan works")
     }
 
     private func runWithContextNetwork() {
