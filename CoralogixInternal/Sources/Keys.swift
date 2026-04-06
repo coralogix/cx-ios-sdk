@@ -141,6 +141,18 @@ public enum Keys: String {
     case endTime
     case status
     case kind
+    /// OTLP-shaped mirror keys on `instrumentation_data.otelSpan` (Browser `mapCxSpanToOtlpSpan` / Tracing extractors).
+    case otlpTraceId = "trace_id"
+    case otlpSpanId = "span_id"
+    case otlpParentSpanId = "parent_span_id"
+    case otlpStartTimeUnixNano = "start_time_unix_nano"
+    case otlpEndTimeUnixNano = "end_time_unix_nano"
+    case otlpKindString = "kind_string"
+    case otlpStatus = "status_otlp"
+    case otlpSpanKindClient = "SPAN_KIND_CLIENT"
+    case otlpStatusCodeUnset = "STATUS_CODE_UNSET"
+    case otlpStatusCodeOk = "STATUS_CODE_OK"
+    case otlpStatusCodeError = "STATUS_CODE_ERROR"
     case tapName
     case tapCount
     case tapAttributes

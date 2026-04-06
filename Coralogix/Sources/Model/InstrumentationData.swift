@@ -185,7 +185,32 @@ struct OtelSpan {
 
         return attrs
     }
-    
+
+    /// Matches Browser `timestampToNanosString` (concat of epoch seconds + 9-digit nanos) for Tracing extractors.
+    private static func otlpUnixNanoString(hrTime: [UInt64]) -> String {
+        guard hrTime.count >= 2 else { return "0" }
+        let sec = hrTime[0]
+        let nanos = hrTime[1]
+        return "\(sec)" + String(format: "%09llu", nanos)
+    }
+
+    /// Browser `mapStatusCodeToOtlp` (traces-exporter.utils.ts).
+    private static func otlpStatusCode(from statusDict: [String: Any]) -> [String: Any] {
+        let raw = statusDict[Keys.code.rawValue]
+        let code: Int = {
+            if let i = raw as? Int { return i }
+            if let s = raw as? String, let i = Int(s) { return i }
+            return 0
+        }()
+        let name: String
+        switch code {
+        case 1: name = Keys.otlpStatusCodeOk.rawValue
+        case 2: name = Keys.otlpStatusCodeError.rawValue
+        default: name = Keys.otlpStatusCodeUnset.rawValue
+        }
+        return [Keys.code.rawValue: name]
+    }
+
     func getDictionary() -> [String: Any] {
         var result = [String: Any]()
         result[Keys.spanId.rawValue] = self.spanId
@@ -199,6 +224,18 @@ struct OtelSpan {
         result[Keys.kind.rawValue] = self.kind
         result[Keys.duration.rawValue] = self.duration
         if let sessionId = self.sessionId { result[Keys.keySessionId.rawValue] = sessionId }
+
+        // OTLP-shaped duplicates (Browser mapCxSpanToOtlpSpan) — Tracing may only read these from RUM logs.
+        result[Keys.otlpTraceId.rawValue] = self.traceId
+        result[Keys.otlpSpanId.rawValue] = self.spanId
+        if let parentSpanId = self.parentSpanId {
+            result[Keys.otlpParentSpanId.rawValue] = parentSpanId
+        }
+        result[Keys.otlpStartTimeUnixNano.rawValue] = Self.otlpUnixNanoString(hrTime: self.startTime)
+        result[Keys.otlpEndTimeUnixNano.rawValue] = Self.otlpUnixNanoString(hrTime: self.endTime)
+        result[Keys.otlpKindString.rawValue] = Keys.otlpSpanKindClient.rawValue
+        result[Keys.otlpStatus.rawValue] = Self.otlpStatusCode(from: self.status)
+
         return result
     }
 }

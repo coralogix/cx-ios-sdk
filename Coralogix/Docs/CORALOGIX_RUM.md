@@ -316,7 +316,7 @@ Only **one** global custom span may exist at a time (same as the Browser SDK). `
 
 **Label merge (CX-35953, Browser parity):** Labels from `CoralogixRum` init / `setLabels` (SDK level), then `startGlobalSpan(name:labels:)`, then `startCustomSpan(name:labels:)`—each step overrides the same key from the previous. The merged map is stored on the span as a JSON string attribute **`custom_labels`**, same as the Browser SDK’s `setCustomLabelsForSpan` / `getCustomMergedLabels`. RUM `text.cx_rum.labels` is built from SDK options merged with that attribute (see `Helper.getLabels`).
 
-**Tracing:** Each exported custom-span log also includes **`instrumentation_data`** with **`otelSpan`** (name, trace/span/parent ids, times, attributes), matching the Browser SDK path used by `buildExporterPayload` / `tracesExporter` so the event can appear in Coralogix **Tracing**, not only RUM Logs.
+**Tracing:** Each exported custom-span log includes **`instrumentation_data.otelSpan`** with mobile fields plus **OTLP-style mirrors** used by the Browser trace converter (`trace_id`, `span_id`, `parent_span_id`, `start_time_unix_nano`, `end_time_unix_nano`, `kind_string`, `status_otlp`). The Browser SDK also sends a **separate** OTLP payload via optional `tracesExporter`; iOS only uses the RUM logs endpoint. If spans still do not appear under **Tracing**, confirm with Coralogix that your account indexes `instrumentation_data` from **mobile** RUM (pipeline may differ from web).
 
 ### Types
 
