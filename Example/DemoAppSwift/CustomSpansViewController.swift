@@ -103,66 +103,34 @@ final class CustomSpansViewController: UITableViewController {
         navigationItem.title = "Custom Spans"
         navigationController?.navigationBar.prefersLargeTitles = false
         tableView.register(UITableViewCell.self, forCellReuseIdentifier: "cell")
+        tableView.register(UITableViewCell.self, forCellReuseIdentifier: "introCell")
         tableView.rowHeight = UITableView.automaticDimension
-        tableView.estimatedRowHeight = 100
-        installIntroHeader()
+        // Long subtitles; estimates far below real height break UITableView content sizing (gaps / clipped rows).
+        tableView.estimatedRowHeight = 220
     }
 
-    override func viewDidLayoutSubviews() {
-        super.viewDidLayoutSubviews()
-        layoutIntroHeaderIfNeeded()
-    }
-
-    private func installIntroHeader() {
-        let container = UIView()
-        container.backgroundColor = .clear
-        let label = UILabel()
-        label.translatesAutoresizingMaskIntoConstraints = false
-        label.numberOfLines = 0
-        label.attributedText = Self.introAttributedText
-        container.addSubview(label)
-        NSLayoutConstraint.activate([
-            label.topAnchor.constraint(equalTo: container.topAnchor, constant: 12),
-            label.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 20),
-            label.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -20),
-            label.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: 8)
-        ])
-        tableView.tableHeaderView = container
-        layoutIntroHeaderIfNeeded()
-    }
-
-    /// Avoid reassigning `tableHeaderView` every layout pass (that froze navigation).
-    private var introHeaderLaidOutSize: CGSize = .zero
-
-    private func layoutIntroHeaderIfNeeded() {
-        guard let header = tableView.tableHeaderView else { return }
-        let width = tableView.bounds.width
-        guard width > 0 else { return }
-
-        header.frame = CGRect(x: 0, y: 0, width: width, height: 0)
-        header.layoutIfNeeded()
-
-        let height = header.systemLayoutSizeFitting(
-            CGSize(width: width, height: 0),
-            withHorizontalFittingPriority: .required,
-            verticalFittingPriority: .fittingSizeLevel
-        ).height
-
-        if abs(introHeaderLaidOutSize.width - width) < 0.5, abs(introHeaderLaidOutSize.height - height) < 0.5 {
-            return
-        }
-        introHeaderLaidOutSize = CGSize(width: width, height: height)
-        header.frame = CGRect(x: 0, y: 0, width: width, height: height)
-        tableView.tableHeaderView = header
-    }
-
-    override func numberOfSections(in tableView: UITableView) -> Int { 1 }
+    override func numberOfSections(in tableView: UITableView) -> Int { 2 }
 
     override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        items.count
+        section == 0 ? 1 : items.count
+    }
+
+    override func tableView(_ tableView: UITableView, titleForHeaderInSection section: Int) -> String? {
+        section == 1 ? "Demos" : nil
     }
 
     override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+        if indexPath.section == 0 {
+            let cell = tableView.dequeueReusableCell(withIdentifier: "introCell", for: indexPath)
+            cell.selectionStyle = .none
+            cell.accessoryType = .none
+            var config = UIListContentConfiguration.cell()
+            config.attributedText = Self.introAttributedText
+            config.textProperties.numberOfLines = 0
+            cell.contentConfiguration = config
+            return cell
+        }
+
         let item = items[indexPath.row]
         let cell = tableView.dequeueReusableCell(withIdentifier: "cell", for: indexPath)
         var config = UIListContentConfiguration.subtitleCell()
@@ -180,6 +148,7 @@ final class CustomSpansViewController: UITableViewController {
 
     override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
         tableView.deselectRow(at: indexPath, animated: true)
+        guard indexPath.section == 1 else { return }
         items[indexPath.row].action()
     }
 

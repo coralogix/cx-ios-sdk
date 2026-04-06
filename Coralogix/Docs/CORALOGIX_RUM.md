@@ -310,7 +310,7 @@ coralogixIntegration.shutdown()
 
 ## Custom spans (manual tracing)
 
-The Custom Spans API mirrors the Coralogix Browser SDK naming (`startCustomSpan`, `endSpan`, not `startChildSpan` / `end`). Exported RUM matches the browser: `event_context.type` is **`custom-span`**, with **`source`** `code` and **info** severity (unless you override attributes on the underlying OTel span).
+The Custom Spans API mirrors the Coralogix Browser SDK naming (`startCustomSpan`, `endSpan`, not `startChildSpan` / `end`). Exported RUM matches the browser: `event_context.type` is **`custom-span`**, with **`source`** `code` and **info** severity (unless you override attributes on the underlying OTel span). Nested spans receive the same session and user metadata as the global span so each ended span can be encoded for RUM export.
 
 Only **one** global custom span may exist at a time (same as the Browser SDK). `startGlobalSpan` registers it as the **active OpenTelemetry span**, so auto-instrumented spans and network propagation can share the same `traceId` until `endSpan()` (which restores the prior active context). `withContext` is a no-op when the global span is already active. `shutdown()` clears a leaked global registration.
 

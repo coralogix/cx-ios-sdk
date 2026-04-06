@@ -78,6 +78,29 @@ final class CoralogixCustomSpansTests: XCTestCase {
         XCTAssertEqual(childData.attributes[Keys.severity.rawValue], .int(CoralogixLogSeverity.info.rawValue))
     }
 
+    /// Nested custom spans must carry session/user attributes so `SessionContext` succeeds during export (otherwise the child is dropped and only the global appears in RUM).
+    func testStartCustomSpanIncludesSessionMetadataLikeGlobal() {
+        let rum = CoralogixRum(options: options!)
+        let tracer = rum.getCustomTracer()
+        guard let global = tracer.startGlobalSpan(name: "g") else {
+            return XCTFail("Expected global span")
+        }
+        guard let globalData = (global.span as? ReadableSpan)?.toSpanData() else {
+            return XCTFail("Expected ReadableSpan")
+        }
+        let child = global.startCustomSpan(name: "c")
+        guard let childData = (child.span as? ReadableSpan)?.toSpanData() else {
+            return XCTFail("Expected ReadableSpan")
+        }
+        XCTAssertEqual(childData.attributes[Keys.sessionId.rawValue], globalData.attributes[Keys.sessionId.rawValue])
+        XCTAssertEqual(
+            childData.attributes[Keys.sessionCreationDate.rawValue],
+            globalData.attributes[Keys.sessionCreationDate.rawValue]
+        )
+        child.endSpan()
+        global.endSpan()
+    }
+
     func testStartGlobalSpanAppliesNameLabelsAndSessionMetadata() {
         let rum = CoralogixRum(options: options!)
         let tracer = rum.getCustomTracer()

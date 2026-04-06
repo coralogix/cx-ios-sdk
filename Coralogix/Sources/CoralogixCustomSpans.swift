@@ -121,7 +121,7 @@ public final class CoralogixCustomTracer {
             otelSpan.end()
             return nil
         }
-        return CoralogixGlobalSpan(span: otelSpan, tracer: tracer)
+        return CoralogixGlobalSpan(span: otelSpan, tracer: tracer, rum: rum)
     }
 }
 
@@ -129,10 +129,12 @@ public final class CoralogixCustomTracer {
 public final class CoralogixGlobalSpan {
     public let span: any Span
     private let tracer: Tracer
+    private weak var rum: CoralogixRum?
 
-    internal init(span: any Span, tracer: Tracer) {
+    internal init(span: any Span, tracer: Tracer, rum: CoralogixRum) {
         self.span = span
         self.tracer = tracer
+        self.rum = rum
     }
 
     private func isRegisteredGlobalActiveInOTel() -> Bool {
@@ -168,6 +170,7 @@ public final class CoralogixGlobalSpan {
         let builder = spanBuilderWithLabels(baseBuilder, labels: labels)
         var child = builder.startSpan()
         stampCoralogixCustomSpanRUM(on: &child)
+        rum?.enrichCustomSpanMetadata(to: &child)
         return CoralogixCustomSpan(span: child)
     }
 
