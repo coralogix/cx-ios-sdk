@@ -17,28 +17,74 @@ final class CustomSpansViewController: UITableViewController {
         let action: () -> Void
     }
 
+    /// Shown above the list so the demos make sense without reading SDK docs.
+    private static let introAttributedText: NSAttributedString = {
+        let body = UIFont.preferredFont(forTextStyle: .footnote)
+        let bold = UIFontDescriptor.preferredFontDescriptor(withTextStyle: .footnote)
+            .withSymbolicTraits(.traitBold)
+        let boldFont = bold.map { UIFont(descriptor: $0, size: 0) } ?? body
+
+        let s = NSMutableAttributedString()
+        func add(_ text: String, font: UIFont) {
+            s.append(NSAttributedString(string: text, attributes: [.font: font, .foregroundColor: UIColor.secondaryLabel]))
+        }
+
+        add("What you’re looking at\n", font: boldFont)
+        add(
+            "Custom spans are manual RUM spans (exported like the Browser SDK, type custom-span). "
+                + "A global span is the “root” for a flow; nested spans are children. "
+                + "Only one global may exist at a time.\n\n",
+            font: body
+        )
+        add("Why “global” matters\n", font: boldFont)
+        add(
+            "startGlobalSpan registers that span as OpenTelemetry’s active context. "
+                + "Auto-instrumentation (e.g. URLSession) can then use the same traceId until you call endSpan(), "
+                + "which restores the previous active span.\n\n",
+            font: body
+        )
+        add("withContext\n", font: boldFont)
+        add(
+            "Runs a closure while the global is the logical “current” span. "
+                + "If the global is already the active OTel span (right after startGlobalSpan), the SDK does not swap context—it just runs your code.\n\n",
+            font: body
+        )
+        add("Tap a row below to run a scripted sequence; check Coralogix for span names and the shared trace.",
+            font: body
+        )
+        return s
+    }()
+
     private lazy var items: [DemoItem] = [
         DemoItem(
             title: "Simple global + child spans",
-            subtitle: "Global becomes active OTel context; child shares traceId; then endSpan",
+            subtitle:
+                "Simulates a small user flow: startGlobalSpan → startCustomSpan (child) → set attribute, event, status → end child → end global. "
+                + "You should see two custom-span events on one trace in Coralogix.",
             systemImageName: "point.3.connected.trianglepath.dotted",
             action: { [weak self] in self?.runSimpleFlow(useIgnoredTracer: false) }
         ),
         DemoItem(
             title: "withContext + GET request",
-            subtitle: "Global already active; withContext wraps GET (propagation while global open)",
+            subtitle:
+                "Simulates doing work (here a demo GET) while the global span is open. "
+                + "Shows that withContext is safe when the global is already active; the HTTP span should still relate to the same trace as the global.",
             systemImageName: "network",
             action: { [weak self] in self?.runWithContextNetwork() }
         ),
         DemoItem(
             title: "Second startGlobalSpan rejected",
-            subtitle: "Only one global at a time; second call returns nil until first endSpan",
+            subtitle:
+                "Simulates the Browser rule: with a global still open, a second startGlobalSpan returns nil (no second root). "
+                + "After endSpan(), a new global can start—proves the slot was released.",
             systemImageName: "exclamationmark.triangle",
             action: { [weak self] in self?.runSecondGlobalRejectedDemo() }
         ),
         DemoItem(
             title: "Tracer with ignoredInstruments",
-            subtitle: "getCustomTracer(ignoredInstruments: [.networkRequests, .errors])",
+            subtitle:
+                "Same span sequence as the first row, but using getCustomTracer(ignoredInstruments: [.networkRequests, .errors]). "
+                + "Today this matches the default tracer; the set is reserved for future control over how auto-instrumentation joins custom context.",
             systemImageName: "eye.slash",
             action: { [weak self] in self?.runSimpleFlow(useIgnoredTracer: true) }
         )
@@ -57,6 +103,57 @@ final class CustomSpansViewController: UITableViewController {
         navigationItem.title = "Custom Spans"
         navigationController?.navigationBar.prefersLargeTitles = false
         tableView.register(UITableViewCell.self, forCellReuseIdentifier: "cell")
+        tableView.rowHeight = UITableView.automaticDimension
+        tableView.estimatedRowHeight = 100
+        installIntroHeader()
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        layoutIntroHeaderIfNeeded()
+    }
+
+    private func installIntroHeader() {
+        let container = UIView()
+        container.backgroundColor = .clear
+        let label = UILabel()
+        label.translatesAutoresizingMaskIntoConstraints = false
+        label.numberOfLines = 0
+        label.attributedText = Self.introAttributedText
+        container.addSubview(label)
+        NSLayoutConstraint.activate([
+            label.topAnchor.constraint(equalTo: container.topAnchor, constant: 12),
+            label.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 20),
+            label.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -20),
+            label.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: 8)
+        ])
+        tableView.tableHeaderView = container
+        layoutIntroHeaderIfNeeded()
+    }
+
+    /// Avoid reassigning `tableHeaderView` every layout pass (that froze navigation).
+    private var introHeaderLaidOutSize: CGSize = .zero
+
+    private func layoutIntroHeaderIfNeeded() {
+        guard let header = tableView.tableHeaderView else { return }
+        let width = tableView.bounds.width
+        guard width > 0 else { return }
+
+        header.frame = CGRect(x: 0, y: 0, width: width, height: 0)
+        header.layoutIfNeeded()
+
+        let height = header.systemLayoutSizeFitting(
+            CGSize(width: width, height: 0),
+            withHorizontalFittingPriority: .required,
+            verticalFittingPriority: .fittingSizeLevel
+        ).height
+
+        if abs(introHeaderLaidOutSize.width - width) < 0.5, abs(introHeaderLaidOutSize.height - height) < 0.5 {
+            return
+        }
+        introHeaderLaidOutSize = CGSize(width: width, height: height)
+        header.frame = CGRect(x: 0, y: 0, width: width, height: height)
+        tableView.tableHeaderView = header
     }
 
     override func numberOfSections(in tableView: UITableView) -> Int { 1 }
@@ -75,6 +172,7 @@ final class CustomSpansViewController: UITableViewController {
         config.imageProperties.preferredSymbolConfiguration =
             UIImage.SymbolConfiguration(pointSize: 20, weight: .medium)
         config.secondaryTextProperties.color = .secondaryLabel
+        config.secondaryTextProperties.numberOfLines = 0
         cell.contentConfiguration = config
         cell.accessoryType = .none
         return cell
