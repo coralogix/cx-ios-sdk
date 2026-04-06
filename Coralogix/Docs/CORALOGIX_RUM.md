@@ -310,7 +310,7 @@ coralogixIntegration.shutdown()
 
 ## Custom spans (manual tracing)
 
-The Custom Spans API mirrors the Coralogix Browser SDK naming (`startCustomSpan`, `endSpan`, not `startChildSpan` / `end`).
+The Custom Spans API mirrors the Coralogix Browser SDK naming (`startCustomSpan`, `endSpan`, not `startChildSpan` / `end`). Exported RUM matches the browser: `event_context.type` is **`custom-span`**, with **`source`** `code` and **info** severity (unless you override attributes on the underlying OTel span).
 
 ### Types
 

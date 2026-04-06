@@ -6,6 +6,14 @@
 //
 
 import Foundation
+import CoralogixInternal
+
+/// Browser SDK sets `EVENT_TYPE` to `custom-span` on global and nested custom spans (`coralogix-rum.ts`).
+private func stampCoralogixCustomSpanRUM(on span: inout any Span) {
+    span.setAttribute(key: Keys.eventType.rawValue, value: CoralogixEventType.customSpan.rawValue)
+    span.setAttribute(key: Keys.source.rawValue, value: Keys.code.rawValue)
+    span.setAttribute(key: Keys.severity.rawValue, value: AttributeValue.int(CoralogixLogSeverity.info.rawValue))
+}
 
 /// Auto-instrumentation categories that may be excluded from custom-tracer context behavior in future releases.
 public enum CoralogixIgnoredInstrument: Hashable {
@@ -39,6 +47,7 @@ public final class CoralogixCustomTracer {
             }
         }
         var otelSpan = builder.startSpan()
+        stampCoralogixCustomSpanRUM(on: &otelSpan)
         rum.enrichCustomSpanMetadata(to: &otelSpan)
         return CoralogixGlobalSpan(span: otelSpan, tracer: tracer)
     }
@@ -75,7 +84,8 @@ public final class CoralogixGlobalSpan {
                 builder = builder.setAttribute(key: key, value: value)
             }
         }
-        let child = builder.startSpan()
+        var child = builder.startSpan()
+        stampCoralogixCustomSpanRUM(on: &child)
         return CoralogixCustomSpan(span: child)
     }
 

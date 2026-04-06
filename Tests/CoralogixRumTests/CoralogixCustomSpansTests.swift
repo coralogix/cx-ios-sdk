@@ -55,6 +55,28 @@ final class CoralogixCustomSpansTests: XCTestCase {
         XCTAssertNil(tracer.startGlobalSpan(name: "root"))
     }
 
+    func testCustomSpansStampEventTypeSourceSeverityLikeBrowserSdk() {
+        let rum = CoralogixRum(options: options!)
+        let tracer = rum.getCustomTracer()
+        guard let global = tracer.startGlobalSpan(name: "g") else {
+            return XCTFail("Expected global span")
+        }
+        guard let globalData = (global.span as? ReadableSpan)?.toSpanData() else {
+            return XCTFail("Expected ReadableSpan")
+        }
+        XCTAssertEqual(globalData.attributes[Keys.eventType.rawValue], .string(CoralogixEventType.customSpan.rawValue))
+        XCTAssertEqual(globalData.attributes[Keys.source.rawValue], .string(Keys.code.rawValue))
+        XCTAssertEqual(globalData.attributes[Keys.severity.rawValue], .int(CoralogixLogSeverity.info.rawValue))
+
+        let child = global.startCustomSpan(name: "c")
+        guard let childData = (child.span as? ReadableSpan)?.toSpanData() else {
+            return XCTFail("Expected ReadableSpan")
+        }
+        XCTAssertEqual(childData.attributes[Keys.eventType.rawValue], .string(CoralogixEventType.customSpan.rawValue))
+        XCTAssertEqual(childData.attributes[Keys.source.rawValue], .string(Keys.code.rawValue))
+        XCTAssertEqual(childData.attributes[Keys.severity.rawValue], .int(CoralogixLogSeverity.info.rawValue))
+    }
+
     func testStartGlobalSpanAppliesNameLabelsAndSessionMetadata() {
         let rum = CoralogixRum(options: options!)
         let tracer = rum.getCustomTracer()

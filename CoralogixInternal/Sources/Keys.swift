@@ -281,5 +281,7 @@ public enum CoralogixEventType: String {
     case lifeCycle = "life-cycle"
     case screenshot
     case customMeasurement = "custom-measurement"
+    /// Manual spans from `getCustomTracer()` (parity with Browser SDK `CoralogixEventType.CUSTOM_SPAN`).
+    case customSpan = "custom-span"
     case unknown
 }
