@@ -120,7 +120,55 @@ final class SpanTests: XCTestCase {
             XCTAssertNotNil(dict[Keys.instrumentationData.rawValue])
         }
     }
-    
+
+    /// Custom spans include `instrumentation_data.otelSpan` like the Browser SDK so Coralogix Tracing can ingest them.
+    func testInitializationWithInstrumentationDataForCustomSpan() {
+        guard let options = options else { return XCTFail("Failed to load options") }
+
+        mockSpanData = MockSpanData(
+            attributes: [
+                Keys.severity.rawValue: AttributeValue("3"),
+                Keys.eventType.rawValue: AttributeValue(CoralogixEventType.customSpan.rawValue),
+                Keys.source.rawValue: AttributeValue(Keys.code.rawValue),
+                Keys.environment.rawValue: AttributeValue("prod"),
+                Keys.userId.rawValue: AttributeValue("12345"),
+                Keys.userName.rawValue: AttributeValue("John Doe"),
+                Keys.userEmail.rawValue: AttributeValue("john.doe@example.com"),
+                Keys.sessionId.rawValue: AttributeValue("session_001"),
+                Keys.sessionCreationDate.rawValue: AttributeValue(1609459200)
+            ],
+            startTime: statTime,
+            endTime: endTime,
+            spanId: "20",
+            traceId: "30",
+            name: "demo.custom.global",
+            kind: 1,
+            statusCode: ["status": "ok"],
+            resources: ["a": AttributeValue("1"), "b": AttributeValue("2"), "c": AttributeValue("3")]
+        )
+
+        guard let cxSpan = CxSpan(
+            otel: mockSpanData,
+            versionMetadata: mockVersionMetadata,
+            sessionManager: mockSessionManager,
+            networkManager: mockNetworkManager,
+            viewManager: mockViewManager,
+            metricsManager: mockCxMetricsManager,
+            options: options
+        ) else {
+            return XCTFail("CxSpan init failed")
+        }
+        XCTAssertNotNil(cxSpan.instrumentationData)
+        guard let dict = cxSpan.getDictionary(),
+              let inst = dict[Keys.instrumentationData.rawValue] as? [String: Any],
+              let otelSpan = inst[Keys.otelSpan.rawValue] as? [String: Any] else {
+            return XCTFail("Expected instrumentation_data.otelSpan on custom-span log")
+        }
+        XCTAssertEqual(otelSpan[Keys.name.rawValue] as? String, "demo.custom.global")
+        XCTAssertEqual(otelSpan[Keys.traceId.rawValue] as? String, "30")
+        XCTAssertEqual(otelSpan[Keys.spanId.rawValue] as? String, "20")
+    }
+
 //    func testGetDictionary() {
 //        guard let options = options else { return XCTFail("Failed to load options") }
 //

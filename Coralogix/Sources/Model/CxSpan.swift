@@ -48,7 +48,8 @@ public class CxSpan {
         self.cxRum = cxRum
         self.severity = cxRum.eventContext.severity
         
-        if cxRum.eventContext.type == CoralogixEventType.networkRequest {
+        // `instrumentation_data.otelSpan` enables Tracing ingestion (Browser: traces-exporter + markSpanAsOtelToSend).
+        if cxRum.eventContext.type == .networkRequest || cxRum.eventContext.type == .customSpan {
             self.instrumentationData = InstrumentationData(otel: otel, cxRum: cxRum, viewManager: viewManager)
         }
     }
@@ -146,7 +147,7 @@ public class CxSpan {
     }
     
     private func addInstrumentationData(to result: inout [String: Any]) {
-        if cxRum.eventContext.type == CoralogixEventType.networkRequest,
+        if cxRum.eventContext.type == .networkRequest || cxRum.eventContext.type == .customSpan,
            let instrumentationData = self.instrumentationData?.getDictionary() {
             result[Keys.instrumentationData.rawValue] = instrumentationData
         }
