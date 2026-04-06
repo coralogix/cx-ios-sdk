@@ -308,6 +308,7 @@ public class CoralogixRum {
     }
     
     public func shutdown() {
+        CoralogixCustomGlobalSpanRegistry.shared.teardownIfNeeded()
         CoralogixRum.isInitialized = false
         self.coralogixExporter?.shutdown(explicitTimeout: nil)
         self.removeNotification()

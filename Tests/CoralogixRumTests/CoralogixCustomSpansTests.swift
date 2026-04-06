@@ -22,6 +22,7 @@ final class CoralogixCustomSpansTests: XCTestCase {
     }
 
     override func tearDownWithError() throws {
+        CoralogixCustomGlobalSpanRegistry.shared.teardownIfNeeded()
         options = nil
         CoralogixRum.isInitialized = false
         RunLoop.main.run(until: Date().addingTimeInterval(0.05))
@@ -113,14 +114,59 @@ final class CoralogixCustomSpansTests: XCTestCase {
         guard let global = tracer.startGlobalSpan(name: "ctx") else {
             return XCTFail("Expected global span")
         }
+        XCTAssertTrue(
+            (OpenTelemetry.instance.contextProvider.activeSpan as AnyObject?) === (global.span as AnyObject),
+            "startGlobalSpan must register the span as active OTel context"
+        )
         let before = OpenTelemetry.instance.contextProvider.activeSpan
         global.withContext {
-            XCTAssertTrue(OpenTelemetry.instance.contextProvider.activeSpan === global.span)
+            XCTAssertTrue(
+                (OpenTelemetry.instance.contextProvider.activeSpan as AnyObject?) === (global.span as AnyObject),
+                "withContext must keep global as active when it already was"
+            )
         }
         XCTAssertEqual(
             OpenTelemetry.instance.contextProvider.activeSpan?.context.spanId,
             before?.context.spanId
         )
+        global.endSpan()
+    }
+
+    func testSecondStartGlobalSpanReturnsNilUntilFirstEnds() {
+        let rum = CoralogixRum(options: options!)
+        let tracer = rum.getCustomTracer()
+        guard let first = tracer.startGlobalSpan(name: "first") else {
+            return XCTFail("Expected first global span")
+        }
+        XCTAssertNil(tracer.startGlobalSpan(name: "second"))
+        first.endSpan()
+        guard let third = tracer.startGlobalSpan(name: "third") else {
+            return XCTFail("Expected new global after first ended")
+        }
+        third.endSpan()
+    }
+
+    func testEndSpanRestoresPreviousActiveSpan() {
+        let rum = CoralogixRum(options: options!)
+        let tracer = rum.tracerProvider()
+        var markerBuilder = tracer.spanBuilder(spanName: "marker")
+        _ = markerBuilder.setActive(true)
+        let marker = markerBuilder.startSpan()
+        XCTAssertTrue(
+            (OpenTelemetry.instance.contextProvider.activeSpan as AnyObject?) === (marker as AnyObject)
+        )
+        guard let global = rum.getCustomTracer().startGlobalSpan(name: "global") else {
+            return XCTFail("Expected global span")
+        }
+        XCTAssertTrue(
+            (OpenTelemetry.instance.contextProvider.activeSpan as AnyObject?) === (global.span as AnyObject)
+        )
+        global.endSpan()
+        XCTAssertTrue(
+            (OpenTelemetry.instance.contextProvider.activeSpan as AnyObject?) === (marker as AnyObject),
+            "endSpan must restore OTel context from before startGlobalSpan"
+        )
+        marker.end()
     }
 
     func testCustomSpanSetStatusAndEndSpan() {

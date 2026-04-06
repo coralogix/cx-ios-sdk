@@ -8,11 +8,83 @@
 import Foundation
 import CoralogixInternal
 
+// MARK: - Global span registry (CX-35952, Browser `window.__globalSpan__` equivalent)
+
+/// Process-wide active custom global span and the OTel context to restore after `endSpan()`.
+final class CoralogixCustomGlobalSpanRegistry {
+    static let shared = CoralogixCustomGlobalSpanRegistry()
+
+    private let lock = NSLock()
+    private weak var registeredGlobal: (any Span)?
+    private weak var spanActiveBeforeGlobal: (any Span)?
+
+    private init() {}
+
+    /// Ends the span and re-activates the OTel context from before `startGlobalSpan()` (single implementation for `endSpan` / `shutdown` / tests).
+    private static func endGlobalSpanAndRestorePrevious(_ span: any Span, previous: (any Span)?) {
+        span.end()
+        if let previous {
+            OpenTelemetry.instance.contextProvider.setActiveSpan(previous)
+        }
+    }
+
+    /// Returns `false` if a global custom span is already registered (second `startGlobalSpan` is ignored, like the Browser SDK).
+    func registerGlobalSpan(_ span: any Span) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        if registeredGlobal != nil {
+            return false
+        }
+        spanActiveBeforeGlobal = OpenTelemetry.instance.contextProvider.activeSpan
+        registeredGlobal = span
+        OpenTelemetry.instance.contextProvider.setActiveSpan(span)
+        return true
+    }
+
+    /// Ends the registry entry for this span: clears state, ends the span, restores previous active context. Returns `false` if `span` is not the registered global.
+    func endGlobalSpanIfMatches(_ span: any Span) -> Bool {
+        lock.lock()
+        let isMatch = (registeredGlobal as AnyObject?) === (span as AnyObject)
+        let previous = spanActiveBeforeGlobal
+        if isMatch {
+            registeredGlobal = nil
+            spanActiveBeforeGlobal = nil
+        }
+        lock.unlock()
+        guard isMatch else {
+            return false
+        }
+        Self.endGlobalSpanAndRestorePrevious(span, previous: previous)
+        return true
+    }
+
+    /// Clears any registered global custom span (`shutdown` and unit tests). Ends the span if still active and restores the pre-global OTel context.
+    internal func teardownIfNeeded() {
+        lock.lock()
+        let g = registeredGlobal
+        let previous = spanActiveBeforeGlobal
+        registeredGlobal = nil
+        spanActiveBeforeGlobal = nil
+        lock.unlock()
+        guard let g else { return }
+        Self.endGlobalSpanAndRestorePrevious(g, previous: previous)
+    }
+}
+
 /// Browser SDK sets `EVENT_TYPE` to `custom-span` on global and nested custom spans (`coralogix-rum.ts`).
 private func stampCoralogixCustomSpanRUM(on span: inout any Span) {
     span.setAttribute(key: Keys.eventType.rawValue, value: CoralogixEventType.customSpan.rawValue)
     span.setAttribute(key: Keys.source.rawValue, value: Keys.code.rawValue)
     span.setAttribute(key: Keys.severity.rawValue, value: AttributeValue.int(CoralogixLogSeverity.info.rawValue))
+}
+
+private func spanBuilderWithLabels(_ builder: any SpanBuilder, labels: [String: String]?) -> any SpanBuilder {
+    guard let labels else { return builder }
+    var b = builder
+    for (key, value) in labels {
+        b = b.setAttribute(key: key, value: value)
+    }
+    return b
 }
 
 /// Auto-instrumentation categories that may be excluded from custom-tracer context behavior in future releases.
@@ -40,15 +112,15 @@ public final class CoralogixCustomTracer {
             return nil
         }
         let tracer = rum.tracerProvider()
-        var builder = tracer.spanBuilder(spanName: name).setNoParent()
-        if let labels {
-            for (key, value) in labels {
-                builder = builder.setAttribute(key: key, value: value)
-            }
-        }
+        let builder = spanBuilderWithLabels(tracer.spanBuilder(spanName: name).setNoParent(), labels: labels)
         var otelSpan = builder.startSpan()
         stampCoralogixCustomSpanRUM(on: &otelSpan)
         rum.enrichCustomSpanMetadata(to: &otelSpan)
+        guard CoralogixCustomGlobalSpanRegistry.shared.registerGlobalSpan(otelSpan) else {
+            Log.w("Global custom span already active — startGlobalSpan ignored; ending orphan span")
+            otelSpan.end()
+            return nil
+        }
         return CoralogixGlobalSpan(span: otelSpan, tracer: tracer)
     }
 }
@@ -63,8 +135,16 @@ public final class CoralogixGlobalSpan {
         self.tracer = tracer
     }
 
-    /// Runs `work` with this span installed as the active span for OpenTelemetry context (e.g. outbound trace propagation).
+    private func isRegisteredGlobalActiveInOTel() -> Bool {
+        let active = OpenTelemetry.instance.contextProvider.activeSpan
+        return (active as AnyObject?) === (span as AnyObject)
+    }
+
+    /// Runs `work` with this span as the active OTel context. If it is already active (after `startGlobalSpan`), runs `work` without removing it from context.
     public func withContext<R>(_ work: () throws -> R) rethrows -> R {
+        if isRegisteredGlobalActiveInOTel() {
+            return try work()
+        }
         let previous = OpenTelemetry.instance.contextProvider.activeSpan
         OpenTelemetry.instance.contextProvider.setActiveSpan(span)
         defer {
@@ -76,21 +156,27 @@ public final class CoralogixGlobalSpan {
         return try work()
     }
 
-    /// Starts a child span of this global span.
+    /// Starts a child span while the global span is the OTel active span (same trace/parent as Browser `context.with(global, …)`).
     public func startCustomSpan(name: String, labels: [String: String]? = nil) -> CoralogixCustomSpan {
-        var builder = tracer.spanBuilder(spanName: name).setParent(span)
-        if let labels {
-            for (key, value) in labels {
-                builder = builder.setAttribute(key: key, value: value)
-            }
+        let baseBuilder: any SpanBuilder
+        if isRegisteredGlobalActiveInOTel() {
+            baseBuilder = tracer.spanBuilder(spanName: name)
+        } else {
+            Log.w("startCustomSpan: global span is not active; using explicit parent — prefer calling before endSpan()")
+            baseBuilder = tracer.spanBuilder(spanName: name).setParent(span)
         }
+        let builder = spanBuilderWithLabels(baseBuilder, labels: labels)
         var child = builder.startSpan()
         stampCoralogixCustomSpanRUM(on: &child)
         return CoralogixCustomSpan(span: child)
     }
 
-    /// Ends this span (`Span.end()`).
+    /// Ends this global span and restores the OTel active context from before `startGlobalSpan()`.
     public func endSpan() {
+        if CoralogixCustomGlobalSpanRegistry.shared.endGlobalSpanIfMatches(span) {
+            return
+        }
+        Log.w("endSpan() on global span that was not registered; ending span without registry restore")
         span.end()
     }
 }
