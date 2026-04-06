@@ -314,6 +314,8 @@ The Custom Spans API mirrors the Coralogix Browser SDK naming (`startCustomSpan`
 
 Only **one** global custom span may exist at a time (same as the Browser SDK). `startGlobalSpan` registers it as the **active OpenTelemetry span**, so auto-instrumented spans and network propagation can share the same `traceId` until `endSpan()` (which restores the prior active context). `withContext` is a no-op when the global span is already active. `shutdown()` clears a leaked global registration.
 
+**Label merge (CX-35953, Browser parity):** Labels from `CoralogixRum` init / `setLabels` (SDK level), then `startGlobalSpan(name:labels:)`, then `startCustomSpan(name:labels:)`—each step overrides the same key from the previous. The merged map is stored on the span as a JSON string attribute **`custom_labels`**, same as the Browser SDK’s `setCustomLabelsForSpan` / `getCustomMergedLabels`. RUM `text.cx_rum.labels` is built from SDK options merged with that attribute (see `Helper.getLabels`).
+
 ### Types
 
 - `CoralogixIgnoredInstrument` — `.networkRequests`, `.userInteractions`, `.errors` (values are reserved for future behavior when combining auto-instrumentation with custom traces).

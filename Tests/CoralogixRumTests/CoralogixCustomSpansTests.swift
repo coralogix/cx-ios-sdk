@@ -112,8 +112,57 @@ final class CoralogixCustomSpansTests: XCTestCase {
         }
         let data = readable.toSpanData()
         XCTAssertEqual(data.name, "checkout")
-        XCTAssertEqual(data.attributes["flow"], .string("standard"))
+        guard case let .string(json)? = data.attributes[Keys.customLabels.rawValue],
+              let dict = Helper.convertJsonStringToDict(jsonString: json) else {
+            return XCTFail("Expected custom_labels JSON on span")
+        }
+        XCTAssertEqual(dict["flow"] as? String, "standard")
         XCTAssertNotNil(data.attributes[Keys.sessionId.rawValue])
+    }
+
+    /// CX-35953: SDK `labels` → `startGlobalSpan` labels → `startCustomSpan` labels (each level overrides on key clash).
+    func testCustomSpanLabelsThreeLevelMergeIntoCustomLabelsJSON() {
+        let opts = CoralogixExporterOptions(
+            coralogixDomain: CoralogixDomain.US2,
+            userContext: nil,
+            environment: "PROD",
+            application: "TestApp-CustomSpans",
+            version: "1.0",
+            publicKey: "token",
+            ignoreUrls: [],
+            ignoreErrors: [],
+            labels: ["tier": "sdk", "onlySdk": "1"],
+            sessionSampleRate: 100,
+            debug: true
+        )
+        let rum = CoralogixRum(options: opts)
+        let tracer = rum.getCustomTracer()
+        guard let global = tracer.startGlobalSpan(name: "g", labels: ["tier": "global", "fromGlobal": "yes"]) else {
+            return XCTFail("Expected global span")
+        }
+        guard let globalJson = (global.span as? ReadableSpan)?.toSpanData().attributes[Keys.customLabels.rawValue],
+              case let .string(globalStr) = globalJson,
+              let globalDict = Helper.convertJsonStringToDict(jsonString: globalStr)
+        else {
+            return XCTFail("Expected global custom_labels")
+        }
+        XCTAssertEqual(globalDict["tier"] as? String, "global")
+        XCTAssertEqual(globalDict["onlySdk"] as? String, "1")
+        XCTAssertEqual(globalDict["fromGlobal"] as? String, "yes")
+
+        let child = global.startCustomSpan(name: "c", labels: ["tier": "child", "fromChild": "c"])
+        guard let childJson = (child.span as? ReadableSpan)?.toSpanData().attributes[Keys.customLabels.rawValue],
+              case let .string(childStr) = childJson,
+              let childDict = Helper.convertJsonStringToDict(jsonString: childStr)
+        else {
+            return XCTFail("Expected child custom_labels")
+        }
+        XCTAssertEqual(childDict["tier"] as? String, "child")
+        XCTAssertEqual(childDict["onlySdk"] as? String, "1")
+        XCTAssertEqual(childDict["fromGlobal"] as? String, "yes")
+        XCTAssertEqual(childDict["fromChild"] as? String, "c")
+        child.endSpan()
+        global.endSpan()
     }
 
     func testStartCustomSpanIsChildOfGlobalSpan() {

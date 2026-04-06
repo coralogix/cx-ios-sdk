@@ -78,13 +78,27 @@ private func stampCoralogixCustomSpanRUM(on span: inout any Span) {
     span.setAttribute(key: Keys.severity.rawValue, value: AttributeValue.int(CoralogixLogSeverity.info.rawValue))
 }
 
-private func spanBuilderWithLabels(_ builder: any SpanBuilder, labels: [String: String]?) -> any SpanBuilder {
-    guard let labels else { return builder }
-    var b = builder
-    for (key, value) in labels {
-        b = b.setAttribute(key: key, value: value)
+// MARK: - Custom span labels (CX-35953, Browser `getCustomMergedLabels` / `setCustomLabelsForSpan`)
+
+/// Merge order: `base` (SDK-level `[String: Any]`) then `layer` (`[String: String]` wins on key collision).
+private func mergingCustomLabelLayer(into base: [String: Any], _ layer: [String: String]?) -> [String: Any] {
+    guard let layer, !layer.isEmpty else { return base }
+    var out = base
+    for (key, value) in layer {
+        out[key] = value
     }
-    return b
+    return out
+}
+
+/// Writes Browser-parity `custom_labels` JSON on the span for RUM (`Helper.getLabels` / Explorer).
+private func setMergedCustomLabelsJSON(merged: [String: Any], on span: inout any Span) {
+    guard !merged.isEmpty else { return }
+    let json = Helper.convertDictionayToJsonString(dict: merged)
+    guard !json.isEmpty else {
+        Log.w("Custom span labels could not be JSON-encoded — custom_labels attribute omitted")
+        return
+    }
+    span.setAttribute(key: Keys.customLabels.rawValue, value: json)
 }
 
 /// Auto-instrumentation categories that may be excluded from custom-tracer context behavior in future releases.
@@ -112,16 +126,23 @@ public final class CoralogixCustomTracer {
             return nil
         }
         let tracer = rum.tracerProvider()
-        let builder = spanBuilderWithLabels(tracer.spanBuilder(spanName: name).setNoParent(), labels: labels)
-        var otelSpan = builder.startSpan()
+        let sdkLabels = rum.labels ?? [:]
+        let mergedSdkAndGlobal = mergingCustomLabelLayer(into: sdkLabels, labels)
+        var otelSpan = tracer.spanBuilder(spanName: name).setNoParent().startSpan()
         stampCoralogixCustomSpanRUM(on: &otelSpan)
         rum.enrichCustomSpanMetadata(to: &otelSpan)
+        setMergedCustomLabelsJSON(merged: mergedSdkAndGlobal, on: &otelSpan)
         guard CoralogixCustomGlobalSpanRegistry.shared.registerGlobalSpan(otelSpan) else {
             Log.w("Global custom span already active — startGlobalSpan ignored; ending orphan span")
             otelSpan.end()
             return nil
         }
-        return CoralogixGlobalSpan(span: otelSpan, tracer: tracer, rum: rum)
+        return CoralogixGlobalSpan(
+            span: otelSpan,
+            tracer: tracer,
+            rum: rum,
+            mergedSdkAndGlobalLabels: mergedSdkAndGlobal
+        )
     }
 }
 
@@ -130,11 +151,19 @@ public final class CoralogixGlobalSpan {
     public let span: any Span
     private let tracer: Tracer
     private weak var rum: CoralogixRum?
+    /// Snapshot of SDK ∪ global labels at `startGlobalSpan` time; child spans merge child keys on top (CX-35953).
+    private let mergedSdkAndGlobalLabels: [String: Any]
 
-    internal init(span: any Span, tracer: Tracer, rum: CoralogixRum) {
+    internal init(
+        span: any Span,
+        tracer: Tracer,
+        rum: CoralogixRum,
+        mergedSdkAndGlobalLabels: [String: Any]
+    ) {
         self.span = span
         self.tracer = tracer
         self.rum = rum
+        self.mergedSdkAndGlobalLabels = mergedSdkAndGlobalLabels
     }
 
     private func isRegisteredGlobalActiveInOTel() -> Bool {
@@ -167,10 +196,11 @@ public final class CoralogixGlobalSpan {
             Log.w("startCustomSpan: global span is not active; using explicit parent — prefer calling before endSpan()")
             baseBuilder = tracer.spanBuilder(spanName: name).setParent(span)
         }
-        let builder = spanBuilderWithLabels(baseBuilder, labels: labels)
-        var child = builder.startSpan()
+        let mergedAllLevels = mergingCustomLabelLayer(into: mergedSdkAndGlobalLabels, labels)
+        var child = baseBuilder.startSpan()
         stampCoralogixCustomSpanRUM(on: &child)
         rum?.enrichCustomSpanMetadata(to: &child)
+        setMergedCustomLabelsJSON(merged: mergedAllLevels, on: &child)
         return CoralogixCustomSpan(span: child)
     }
 
