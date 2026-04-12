@@ -10,8 +10,8 @@ import Foundation
 
 /// Root structure for OTLP traces export request.
 /// Groups spans by resource and instrumentation scope.
-struct OtlpTracesData: Encodable {
-    let resourceSpans: [OtlpResourceSpans]
+public struct OtlpTracesData: Encodable {
+    public let resourceSpans: [OtlpResourceSpans]
     
     enum CodingKeys: String, CodingKey {
         case resourceSpans = "resource_spans"
@@ -19,10 +19,10 @@ struct OtlpTracesData: Encodable {
 }
 
 /// A collection of spans from a resource.
-struct OtlpResourceSpans: Encodable {
-    let resource: OtlpResource
-    let scopeSpans: [OtlpScopeSpans]
-    let schemaUrl: String?
+public struct OtlpResourceSpans: Encodable {
+    public let resource: OtlpResource
+    public let scopeSpans: [OtlpScopeSpans]
+    public let schemaUrl: String?
     
     enum CodingKeys: String, CodingKey {
         case resource
@@ -30,7 +30,7 @@ struct OtlpResourceSpans: Encodable {
         case schemaUrl = "schema_url"
     }
     
-    func encode(to encoder: Encoder) throws {
+    public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(resource, forKey: .resource)
         try container.encode(scopeSpans, forKey: .scopeSpans)
@@ -41,15 +41,15 @@ struct OtlpResourceSpans: Encodable {
 }
 
 /// Resource information with attributes.
-struct OtlpResource: Encodable {
-    let attributes: [OtlpKeyValue]
+public struct OtlpResource: Encodable {
+    public let attributes: [OtlpKeyValue]
 }
 
 /// A collection of spans from an instrumentation scope.
-struct OtlpScopeSpans: Encodable {
-    let scope: OtlpInstrumentationScope
-    let spans: [OtlpSpan]
-    let schemaUrl: String?
+public struct OtlpScopeSpans: Encodable {
+    public let scope: OtlpInstrumentationScope
+    public let spans: [OtlpSpan]
+    public let schemaUrl: String?
     
     enum CodingKeys: String, CodingKey {
         case scope
@@ -57,7 +57,7 @@ struct OtlpScopeSpans: Encodable {
         case schemaUrl = "schema_url"
     }
     
-    func encode(to encoder: Encoder) throws {
+    public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(scope, forKey: .scope)
         try container.encode(spans, forKey: .spans)
@@ -68,11 +68,11 @@ struct OtlpScopeSpans: Encodable {
 }
 
 /// Instrumentation scope (library) information.
-struct OtlpInstrumentationScope: Encodable {
-    let name: String
-    let version: String?
+public struct OtlpInstrumentationScope: Encodable {
+    public let name: String
+    public let version: String?
     
-    func encode(to encoder: Encoder) throws {
+    public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(name, forKey: .name)
         if let version = version, !version.isEmpty {
@@ -87,22 +87,22 @@ struct OtlpInstrumentationScope: Encodable {
 }
 
 /// A span representing a trace segment.
-struct OtlpSpan: Encodable {
-    let traceId: String
-    let spanId: String
-    let parentSpanId: String?
-    let traceState: String?
-    let name: String
-    let kind: OtlpSpanKind
-    let startTimeUnixNano: String
-    let endTimeUnixNano: String
-    let attributes: [OtlpKeyValue]
-    let events: [OtlpSpanEvent]
-    let links: [OtlpSpanLink]
-    let status: OtlpStatus
-    let droppedAttributesCount: UInt32
-    let droppedEventsCount: UInt32
-    let droppedLinksCount: UInt32
+public struct OtlpSpan: Encodable {
+    public let traceId: String
+    public let spanId: String
+    public let parentSpanId: String?
+    public let traceState: String?
+    public let name: String
+    public let kind: OtlpSpanKind
+    public let startTimeUnixNano: String
+    public let endTimeUnixNano: String
+    public let attributes: [OtlpKeyValue]
+    public let events: [OtlpSpanEvent]
+    public let links: [OtlpSpanLink]
+    public let status: OtlpStatus
+    public let droppedAttributesCount: UInt32
+    public let droppedEventsCount: UInt32
+    public let droppedLinksCount: UInt32
     
     enum CodingKeys: String, CodingKey {
         case traceId = "trace_id"
@@ -122,7 +122,7 @@ struct OtlpSpan: Encodable {
         case droppedLinksCount = "dropped_links_count"
     }
     
-    func encode(to encoder: Encoder) throws {
+    public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(traceId, forKey: .traceId)
         try container.encode(spanId, forKey: .spanId)
@@ -159,7 +159,7 @@ struct OtlpSpan: Encodable {
 }
 
 /// OTLP span kind values as defined in the spec.
-enum OtlpSpanKind: String, Encodable {
+public enum OtlpSpanKind: String, Encodable {
     case unspecified = "SPAN_KIND_UNSPECIFIED"
     case `internal` = "SPAN_KIND_INTERNAL"
     case server = "SPAN_KIND_SERVER"
@@ -167,7 +167,7 @@ enum OtlpSpanKind: String, Encodable {
     case producer = "SPAN_KIND_PRODUCER"
     case consumer = "SPAN_KIND_CONSUMER"
     
-    init(from spanKind: SpanKind) {
+    public init(from spanKind: SpanKind) {
         switch spanKind {
         case .internal:
             self = .internal
@@ -184,11 +184,11 @@ enum OtlpSpanKind: String, Encodable {
 }
 
 /// Span event (timed annotation).
-struct OtlpSpanEvent: Encodable {
-    let timeUnixNano: String
-    let name: String
-    let attributes: [OtlpKeyValue]
-    let droppedAttributesCount: UInt32
+public struct OtlpSpanEvent: Encodable {
+    public let timeUnixNano: String
+    public let name: String
+    public let attributes: [OtlpKeyValue]
+    public let droppedAttributesCount: UInt32
     
     enum CodingKeys: String, CodingKey {
         case timeUnixNano = "time_unix_nano"
@@ -197,7 +197,7 @@ struct OtlpSpanEvent: Encodable {
         case droppedAttributesCount = "dropped_attributes_count"
     }
     
-    func encode(to encoder: Encoder) throws {
+    public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(timeUnixNano, forKey: .timeUnixNano)
         try container.encode(name, forKey: .name)
@@ -211,12 +211,12 @@ struct OtlpSpanEvent: Encodable {
 }
 
 /// Span link to another span context.
-struct OtlpSpanLink: Encodable {
-    let traceId: String
-    let spanId: String
-    let traceState: String?
-    let attributes: [OtlpKeyValue]
-    let droppedAttributesCount: UInt32
+public struct OtlpSpanLink: Encodable {
+    public let traceId: String
+    public let spanId: String
+    public let traceState: String?
+    public let attributes: [OtlpKeyValue]
+    public let droppedAttributesCount: UInt32
     
     enum CodingKeys: String, CodingKey {
         case traceId = "trace_id"
@@ -226,7 +226,7 @@ struct OtlpSpanLink: Encodable {
         case droppedAttributesCount = "dropped_attributes_count"
     }
     
-    func encode(to encoder: Encoder) throws {
+    public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(traceId, forKey: .traceId)
         try container.encode(spanId, forKey: .spanId)
@@ -243,11 +243,11 @@ struct OtlpSpanLink: Encodable {
 }
 
 /// OTLP status with code and optional message.
-struct OtlpStatus: Encodable {
-    let code: OtlpStatusCode
-    let message: String?
+public struct OtlpStatus: Encodable {
+    public let code: OtlpStatusCode
+    public let message: String?
     
-    func encode(to encoder: Encoder) throws {
+    public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(code.rawValue, forKey: .code)
         if let message = message, !message.isEmpty {
@@ -262,12 +262,12 @@ struct OtlpStatus: Encodable {
 }
 
 /// OTLP status codes as defined in the spec.
-enum OtlpStatusCode: String, Encodable {
+public enum OtlpStatusCode: String, Encodable {
     case unset = "STATUS_CODE_UNSET"
     case ok = "STATUS_CODE_OK"
     case error = "STATUS_CODE_ERROR"
     
-    init(from status: Status) {
+    public init(from status: Status) {
         switch status {
         case .ok:
             self = .ok
@@ -280,13 +280,13 @@ enum OtlpStatusCode: String, Encodable {
 }
 
 /// Key-value pair for attributes using OTLP AnyValue structure.
-struct OtlpKeyValue: Encodable {
-    let key: String
-    let value: OtlpAnyValue
+public struct OtlpKeyValue: Encodable {
+    public let key: String
+    public let value: OtlpAnyValue
 }
 
 /// OTLP AnyValue that can hold different types.
-enum OtlpAnyValue: Encodable {
+public enum OtlpAnyValue: Encodable {
     case stringValue(String)
     case boolValue(Bool)
     case intValue(Int64)
@@ -303,7 +303,7 @@ enum OtlpAnyValue: Encodable {
         case kvlistValue = "kvlist_value"
     }
     
-    func encode(to encoder: Encoder) throws {
+    public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         switch self {
         case .stringValue(let value):
@@ -321,7 +321,7 @@ enum OtlpAnyValue: Encodable {
         }
     }
     
-    init(from attributeValue: AttributeValue) {
+    public init(from attributeValue: AttributeValue) {
         switch attributeValue {
         case .string(let value):
             self = .stringValue(value)

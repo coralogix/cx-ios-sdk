@@ -952,6 +952,200 @@ final class CoralogixExporterTests: XCTestCase {
                        "errorCount must be unchanged when eventContext and severity are both absent")
     }
 
+    // MARK: - tracesExporter tests (CX-35959)
+
+    func test_tracesExporter_callbackInvokedWithOtlpData() {
+        let expectation = expectation(description: "tracesExporter callback should be invoked")
+        var receivedData: CoralogixTraceExporterData?
+
+        let opts = CoralogixExporterOptions(
+            coralogixDomain: .US2,
+            userContext: nil,
+            environment: "PROD",
+            application: "TestApp-iOS",
+            version: "1.0",
+            publicKey: "token",
+            ignoreUrls: [],
+            ignoreErrors: [],
+            labels: [:],
+            tracesExporter: { data in
+                receivedData = data
+                expectation.fulfill()
+            },
+            debug: true
+        )
+        let rum = CoralogixRum(options: opts)
+        guard let exporter = rum.coralogixExporter else {
+            return XCTFail("Exporter should not be nil")
+        }
+
+        let mockUploader = MockSpanUploader()
+        exporter.spanUploader = mockUploader
+
+        let span = makeValidSpanData()
+        _ = exporter.export(spans: [span], explicitTimeout: nil)
+
+        waitForExpectations(timeout: 5)
+        XCTAssertNotNil(receivedData, "Callback should receive CoralogixTraceExporterData")
+        XCTAssertGreaterThan(receivedData?.spanCount ?? 0, 0, "Should have at least one span")
+        XCTAssertNotNil(receivedData?.jsonData, "JSON data should be available")
+    }
+
+    func test_tracesExporter_stripsInstrumentationDataFromUpload() {
+        let opts = CoralogixExporterOptions(
+            coralogixDomain: .US2,
+            userContext: nil,
+            environment: "PROD",
+            application: "TestApp-iOS",
+            version: "1.0",
+            publicKey: "token",
+            ignoreUrls: [],
+            ignoreErrors: [],
+            labels: [:],
+            tracesExporter: { _ in },
+            debug: true
+        )
+        let rum = CoralogixRum(options: opts)
+        guard let exporter = rum.coralogixExporter else {
+            return XCTFail("Exporter should not be nil")
+        }
+
+        let mockUploader = MockSpanUploader()
+        exporter.spanUploader = mockUploader
+
+        // Create a network-request span which normally includes instrumentation_data
+        let attributes: [String: AttributeValue] = [
+            Keys.severity.rawValue: AttributeValue("3"),
+            Keys.eventType.rawValue: AttributeValue("network-request"),
+            Keys.source.rawValue: AttributeValue("fetch"),
+            Keys.environment.rawValue: AttributeValue("prod"),
+            Keys.userId.rawValue: AttributeValue("12345"),
+            Keys.userName.rawValue: AttributeValue("John Doe"),
+            Keys.userEmail.rawValue: AttributeValue("john.doe@example.com"),
+            Keys.sessionId.rawValue: AttributeValue("session_001"),
+            Keys.sessionCreationDate.rawValue: AttributeValue("1609459200"),
+            SemanticAttributes.httpUrl.rawValue: AttributeValue("https://example.com/api/data")
+        ]
+        let span = SpanData(
+            traceId: TraceId.random(),
+            spanId: SpanId.random(),
+            name: "networkSpan",
+            kind: .client,
+            startTime: Date(),
+            attributes: attributes,
+            endTime: Date(),
+            hasEnded: true
+        )
+        _ = exporter.export(spans: [span], explicitTimeout: nil)
+
+        // Verify instrumentation_data is stripped
+        XCTAssertTrue(mockUploader.uploadCalled, "Upload should be called")
+        for spanDict in mockUploader.uploadedSpans {
+            XCTAssertNil(spanDict[Keys.instrumentationData.rawValue],
+                         "instrumentation_data should be stripped when tracesExporter is set")
+        }
+    }
+
+    func test_tracesExporter_notSet_preservesInstrumentationData() {
+        let opts = CoralogixExporterOptions(
+            coralogixDomain: .US2,
+            userContext: nil,
+            environment: "PROD",
+            application: "TestApp-iOS",
+            version: "1.0",
+            publicKey: "token",
+            ignoreUrls: [],
+            ignoreErrors: [],
+            labels: [:],
+            tracesExporter: nil,  // Not set
+            debug: true
+        )
+        let rum = CoralogixRum(options: opts)
+        guard let exporter = rum.coralogixExporter else {
+            return XCTFail("Exporter should not be nil")
+        }
+
+        let mockUploader = MockSpanUploader()
+        exporter.spanUploader = mockUploader
+
+        // Create a network-request span which normally includes instrumentation_data
+        let attributes: [String: AttributeValue] = [
+            Keys.severity.rawValue: AttributeValue("3"),
+            Keys.eventType.rawValue: AttributeValue("network-request"),
+            Keys.source.rawValue: AttributeValue("fetch"),
+            Keys.environment.rawValue: AttributeValue("prod"),
+            Keys.userId.rawValue: AttributeValue("12345"),
+            Keys.userName.rawValue: AttributeValue("John Doe"),
+            Keys.userEmail.rawValue: AttributeValue("john.doe@example.com"),
+            Keys.sessionId.rawValue: AttributeValue("session_001"),
+            Keys.sessionCreationDate.rawValue: AttributeValue("1609459200"),
+            SemanticAttributes.httpUrl.rawValue: AttributeValue("https://example.com/api/data")
+        ]
+        let span = SpanData(
+            traceId: TraceId.random(),
+            spanId: SpanId.random(),
+            name: "networkSpan",
+            kind: .client,
+            startTime: Date(),
+            attributes: attributes,
+            endTime: Date(),
+            hasEnded: true
+        )
+        _ = exporter.export(spans: [span], explicitTimeout: nil)
+
+        // Verify instrumentation_data is preserved
+        XCTAssertTrue(mockUploader.uploadCalled, "Upload should be called")
+        let hasInstrumentationData = mockUploader.uploadedSpans.contains { spanDict in
+            spanDict[Keys.instrumentationData.rawValue] != nil
+        }
+        XCTAssertTrue(hasInstrumentationData,
+                      "instrumentation_data should be preserved when tracesExporter is NOT set")
+    }
+
+    func test_tracesExporter_jsonDataContainsOtlpStructure() {
+        var receivedJsonString: String?
+        let expectation = expectation(description: "tracesExporter callback invoked")
+
+        let opts = CoralogixExporterOptions(
+            coralogixDomain: .US2,
+            userContext: nil,
+            environment: "PROD",
+            application: "TestApp-iOS",
+            version: "1.0",
+            publicKey: "token",
+            ignoreUrls: [],
+            ignoreErrors: [],
+            labels: [:],
+            tracesExporter: { data in
+                receivedJsonString = data.jsonString
+                expectation.fulfill()
+            },
+            debug: true
+        )
+        let rum = CoralogixRum(options: opts)
+        guard let exporter = rum.coralogixExporter else {
+            return XCTFail("Exporter should not be nil")
+        }
+
+        let mockUploader = MockSpanUploader()
+        exporter.spanUploader = mockUploader
+
+        let span = makeValidSpanData()
+        _ = exporter.export(spans: [span], explicitTimeout: nil)
+
+        waitForExpectations(timeout: 5)
+
+        XCTAssertNotNil(receivedJsonString, "JSON string should be available")
+        XCTAssertTrue(receivedJsonString?.contains("resource_spans") ?? false,
+                      "JSON should contain OTLP resource_spans structure")
+        XCTAssertTrue(receivedJsonString?.contains("scope_spans") ?? false,
+                      "JSON should contain OTLP scope_spans structure")
+        XCTAssertTrue(receivedJsonString?.contains("trace_id") ?? false,
+                      "JSON should contain trace_id field")
+        XCTAssertTrue(receivedJsonString?.contains("span_id") ?? false,
+                      "JSON should contain span_id field")
+    }
+
     override func tearDown() {
         super.tearDown()
     }
