@@ -132,14 +132,14 @@ final class GlobalSpanPropagationIntegrationTests: XCTestCase {
         }
         defer { global.endSpan() }
 
-        guard let globalReadable = global.span as? ReadableSpan else {
+        guard let globalReadable = global.span as? any ReadableSpan else {
             return XCTFail("Expected ReadableSpan")
         }
         let globalData = globalReadable.toSpanData()
 
         var span = r.makeSpan(event: .userInteraction, source: .console, severity: .info)
         defer { span.end() }
-        guard let readable = span as? ReadableSpan else {
+        guard let readable = span as? any ReadableSpan else {
             return XCTFail("Expected ReadableSpan")
         }
         let data = readable.toSpanData()
@@ -156,7 +156,7 @@ final class GlobalSpanPropagationIntegrationTests: XCTestCase {
         }
         defer { global.endSpan() }
 
-        guard let globalReadable = global.span as? ReadableSpan else {
+        guard let globalReadable = global.span as? any ReadableSpan else {
             return XCTFail("Expected ReadableSpan")
         }
         let globalData = globalReadable.toSpanData()
@@ -180,7 +180,7 @@ final class GlobalSpanPropagationIntegrationTests: XCTestCase {
         }
         defer { global.endSpan() }
 
-        guard let globalReadable = global.span as? ReadableSpan else {
+        guard let globalReadable = global.span as? any ReadableSpan else {
             return XCTFail("Expected ReadableSpan")
         }
         let globalData = globalReadable.toSpanData()
@@ -210,7 +210,7 @@ final class GlobalSpanPropagationIntegrationTests: XCTestCase {
         }
         defer { global.endSpan() }
 
-        guard let globalReadable = global.span as? ReadableSpan else {
+        guard let globalReadable = global.span as? any ReadableSpan else {
             return XCTFail("Expected ReadableSpan")
         }
         let globalData = globalReadable.toSpanData()
@@ -219,7 +219,7 @@ final class GlobalSpanPropagationIntegrationTests: XCTestCase {
         DispatchQueue.global(qos: .userInitiated).async {
             var span = r.makeSpan(event: .userInteraction, source: .console, severity: .info)
             defer { span.end() }
-            guard let readable = span as? ReadableSpan else {
+            guard let readable = span as? any ReadableSpan else {
                 XCTFail("Expected ReadableSpan")
                 exp.fulfill()
                 return
@@ -245,7 +245,7 @@ final class GlobalSpanPropagationIntegrationTests: XCTestCase {
         }
         defer { global.endSpan() }
 
-        guard let globalReadable = global.span as? ReadableSpan else {
+        guard let globalReadable = global.span as? any ReadableSpan else {
             return XCTFail("Expected ReadableSpan")
         }
         let globalData = globalReadable.toSpanData()
@@ -271,7 +271,7 @@ final class GlobalSpanPropagationIntegrationTests: XCTestCase {
         }
         defer { global.endSpan() }
 
-        guard let globalReadable = global.span as? ReadableSpan else {
+        guard let globalReadable = global.span as? any ReadableSpan else {
             return XCTFail("Expected ReadableSpan")
         }
         let globalData = globalReadable.toSpanData()
@@ -296,7 +296,7 @@ final class GlobalSpanPropagationIntegrationTests: XCTestCase {
         }
         defer { global.endSpan() }
 
-        guard let globalReadable = global.span as? ReadableSpan else {
+        guard let globalReadable = global.span as? any ReadableSpan else {
             return XCTFail("Expected ReadableSpan")
         }
         let globalData = globalReadable.toSpanData()
@@ -320,14 +320,14 @@ final class GlobalSpanPropagationIntegrationTests: XCTestCase {
         }
         defer { global.endSpan() }
 
-        guard let globalReadable = global.span as? ReadableSpan else {
+        guard let globalReadable = global.span as? any ReadableSpan else {
             return XCTFail("Expected ReadableSpan")
         }
         let globalData = globalReadable.toSpanData()
 
         var span = r.makeSpan(event: .userInteraction, source: .console, severity: .info)
         defer { span.end() }
-        guard let readable = span as? ReadableSpan else {
+        guard let readable = span as? any ReadableSpan else {
             return XCTFail("Expected ReadableSpan")
         }
         let data = readable.toSpanData()
@@ -344,14 +344,14 @@ final class GlobalSpanPropagationIntegrationTests: XCTestCase {
         }
         defer { global.endSpan() }
 
-        guard let globalReadable = global.span as? ReadableSpan else {
+        guard let globalReadable = global.span as? any ReadableSpan else {
             return XCTFail("Expected ReadableSpan")
         }
         let globalData = globalReadable.toSpanData()
 
         var span = r.makeSpan(event: .error, source: .console, severity: .error)
         defer { span.end() }
-        guard let readable = span as? ReadableSpan else {
+        guard let readable = span as? any ReadableSpan else {
             return XCTFail("Expected ReadableSpan")
         }
         let data = readable.toSpanData()
@@ -369,14 +369,14 @@ final class GlobalSpanPropagationIntegrationTests: XCTestCase {
         }
         defer { global.endSpan() }
 
-        guard let globalReadable = global.span as? ReadableSpan else {
+        guard let globalReadable = global.span as? any ReadableSpan else {
             return XCTFail("Expected ReadableSpan")
         }
         let globalData = globalReadable.toSpanData()
 
         var span = r.makeSpan(event: .userInteraction, source: .console, severity: .info)
         defer { span.end() }
-        guard let readable = span as? ReadableSpan else {
+        guard let readable = span as? any ReadableSpan else {
             return XCTFail("Expected ReadableSpan")
         }
         let data = readable.toSpanData()

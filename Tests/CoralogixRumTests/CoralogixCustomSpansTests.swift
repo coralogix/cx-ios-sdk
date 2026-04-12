@@ -307,7 +307,7 @@ final class CoralogixCustomSpansTests: XCTestCase {
         }
         let globalData = globalReadable.toSpanData()
 
-        var span = rum.makeSpan(event: .userInteraction, source: .console, severity: .info)
+        let span = rum.makeSpan(event: .userInteraction, source: .console, severity: .info)
         defer { span.end() }
         guard let readable = span as? any ReadableSpan else {
             return XCTFail("Expected ReadableSpan")
@@ -330,7 +330,7 @@ final class CoralogixCustomSpansTests: XCTestCase {
         }
         let globalData = globalReadable.toSpanData()
 
-        var span = rum.makeSpan(event: .navigation, source: .console, severity: .info)
+        let span = rum.makeSpan(event: .navigation, source: .console, severity: .info)
         defer { span.end() }
         guard let readable = span as? any ReadableSpan else {
             return XCTFail("Expected ReadableSpan")
