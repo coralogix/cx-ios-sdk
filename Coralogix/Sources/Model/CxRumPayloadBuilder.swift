@@ -40,6 +40,7 @@ struct CxRumPayloadBuilder {
         addPlatform(to: &result)
         addDeviceContext(to: &result)
         addDeviceState(to: &result)
+        addOtelResource(to: &result)
     }
     
     private mutating func addConditionalContexts(to result: inout [String: Any]) {
@@ -120,6 +121,13 @@ struct CxRumPayloadBuilder {
 
     private func addDeviceState(to result: inout [String: Any]) {
         result[Keys.deviceState.rawValue] = rum.deviceState.getDictionary()
+    }
+
+    private func addOtelResource(to result: inout [String: Any]) {
+        let dict = rum.otelResource.getDictionary()
+        if let attrs = dict[Keys.attributes.rawValue] as? [String: Any], !attrs.isEmpty {
+            result[Keys.otelResource.rawValue] = dict
+        }
     }
     
     private func addErrorContext(to result: inout [String: Any]) {
