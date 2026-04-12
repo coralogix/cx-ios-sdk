@@ -89,8 +89,7 @@ class CxRumBuilder {
                      screenShotContext: ScreenshotContext(otel: otel),
                      internalContext: internalContext,
                      measurementContext: MeasurementContext(otel: otel),
-                     fingerPrint: FingerprintManager(using: KeychainManager()).fingerprint,
-                     otelResource: OtelResource(otel: otel)
+                     fingerPrint: FingerprintManager(using: KeychainManager()).fingerprint
         )
     }
     

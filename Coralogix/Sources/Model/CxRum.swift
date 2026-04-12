@@ -31,5 +31,4 @@ struct CxRum {
     let internalContext: InternalContext?
     let measurementContext: MeasurementContext?
     let fingerPrint: String
-    let otelResource: OtelResource
 }
