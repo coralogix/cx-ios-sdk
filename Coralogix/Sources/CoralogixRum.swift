@@ -470,7 +470,9 @@ public class CoralogixRum {
         case .networkRequest: return .networkRequests
         case .userInteraction: return .userInteractions
         case .error: return .errors
-        default: return nil
+        default:
+            // Event types without a mapping never use `ignoredInstruments`; they follow the global parent policy in `applyAutoInstrumentationParentPolicy`.
+            return nil
         }
     }
 

@@ -12,6 +12,8 @@ final class CustomSpansViewController: UITableViewController {
 
     /// CX-35956: `getCustomTracer()` succeeds only once per SDK session; reuse for all rows.
     private var cachedCustomTracer: CoralogixCustomTracer?
+    /// Whether the cached tracer was created with `ignoredInstruments: [.networkRequests, .errors]` (`true`) or `[]` (`false`).
+    private var cachedTracerPreferIgnored: Bool?
 
     private struct DemoItem {
         let title: String
@@ -159,7 +161,14 @@ final class CustomSpansViewController: UITableViewController {
 
     /// First successful `getCustomTracer` wins for the session (CX-35956). If another row already obtained a tracer with a different `ignoredInstruments`, that tracer is reused.
     private func tracerForSession(preferIgnored: Bool) -> CoralogixCustomTracer? {
-        if let c = cachedCustomTracer { return c }
+        if let c = cachedCustomTracer {
+            if let cachedPref = cachedTracerPreferIgnored, cachedPref != preferIgnored {
+                presentToast(
+                    "Reusing the tracer from an earlier demo — ignored-instruments setting differs. Relaunch the app to switch tracer configuration."
+                )
+            }
+            return c
+        }
         let rum = CoralogixRumManager.shared.sdk
         let t: CoralogixCustomTracer?
         if preferIgnored {
@@ -172,6 +181,7 @@ final class CustomSpansViewController: UITableViewController {
             return nil
         }
         cachedCustomTracer = tracer
+        cachedTracerPreferIgnored = preferIgnored
         return tracer
     }
 
