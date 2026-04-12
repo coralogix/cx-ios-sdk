@@ -28,6 +28,12 @@ case US2 = "https://ingress.us2.rum-ingress-coralogix.com"
 ```
 Represents the US2 region (us-west-2, Oregon).
 
+### US3
+```swift
+case US3 = "https://ingress.us3.rum-ingress-coralogix.com"
+```
+Represents the US3 region.
+
 ### AP1
 ```swift
 case AP1 = "https://ingress.ap1.rum-ingress-coralogix.com"
