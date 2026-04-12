@@ -305,6 +305,7 @@ public enum CoralogixDomain: String {
     case EU2 = "https://ingress.eu2.rum-ingress-coralogix.com" // eu-north-1 (Stockholm)
     case US1 = "https://ingress.us1.rum-ingress-coralogix.com" // us-east-2 (Ohio)
     case US2 = "https://ingress.us2.rum-ingress-coralogix.com" // us-west-2 (Oregon)
+    case US3 = "https://ingress.us3.rum-ingress-coralogix.com"
     case AP1 = "https://ingress.ap1.rum-ingress-coralogix.com" // ap-south-1 (Mumbai)
     case AP2 = "https://ingress.ap2.rum-ingress-coralogix.com" // ap-southeast-1 (Singapore)
     case AP3 = "https://ingress.ap3.rum-ingress-coralogix.com" // ap-southeast-3 (Jakarta)
@@ -320,6 +321,8 @@ public enum CoralogixDomain: String {
             return "US1"
         case .US2:
             return "US2"
+        case .US3:
+            return "US3"
         case .AP1:
             return "AP1"
         case .AP2:
