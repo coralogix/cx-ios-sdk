@@ -23,6 +23,7 @@ final class CoralogixCustomGlobalSpanRegistry {
     /// Ends the span and re-activates the OTel context from before `startGlobalSpan()` (single implementation for `endSpan` / `shutdown` / tests).
     private static func endGlobalSpanAndRestorePrevious(_ span: any Span, previous: (any Span)?) {
         span.end()
+        OpenTelemetry.instance.contextProvider.removeContextForSpan(span)
         if let previous {
             OpenTelemetry.instance.contextProvider.setActiveSpan(previous)
         }
