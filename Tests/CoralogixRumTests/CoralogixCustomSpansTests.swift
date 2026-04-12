@@ -230,6 +230,63 @@ final class CoralogixCustomSpansTests: XCTestCase {
         global.endSpan()
     }
 
+    /// CX-35957: When another span is active, `withContext` restores global as active so nested `startCustomSpan` inherits global trace/parent.
+    func testWithContextChildSpanInheritsGlobalTraceWhenGlobalWasNotActive() {
+        let rum = CoralogixRum(options: options!)
+        let tracer = rum.tracerProvider()
+        guard let customTracer = rum.getCustomTracer() else {
+            return XCTFail("Expected custom tracer")
+        }
+        guard let global = customTracer.startGlobalSpan(name: "g") else {
+            return XCTFail("Expected global span")
+        }
+        guard let globalData = (global.span as? any ReadableSpan)?.toSpanData() else {
+            return XCTFail("Expected ReadableSpan")
+        }
+        let markerBuilder = tracer.spanBuilder(spanName: "marker")
+        _ = markerBuilder.setActive(true)
+        let marker = markerBuilder.startSpan()
+        XCTAssertFalse(
+            (OpenTelemetry.instance.contextProvider.activeSpan as AnyObject?) === (global.span as AnyObject),
+            "Precondition: marker span must replace global as OTel active span"
+        )
+        global.withContext {
+            let child = global.startCustomSpan(name: "inside_ctx")
+            defer { child.endSpan() }
+            guard let childData = (child.span as? any ReadableSpan)?.toSpanData() else {
+                XCTFail("Expected ReadableSpan")
+                return
+            }
+            XCTAssertEqual(childData.traceId, globalData.traceId)
+            XCTAssertEqual(childData.parentSpanId, globalData.spanId)
+        }
+        marker.end()
+        global.endSpan()
+    }
+
+    /// CX-35957: After `endSpan()` on a global, the next `startGlobalSpan` is a new root with a new trace id.
+    func testNewGlobalSpanAfterEndGetsFreshTraceId() {
+        let rum = CoralogixRum(options: options!)
+        guard let customTracer = rum.getCustomTracer() else {
+            return XCTFail("Expected custom tracer")
+        }
+        guard let first = customTracer.startGlobalSpan(name: "first") else {
+            return XCTFail("Expected first global")
+        }
+        guard let firstData = (first.span as? any ReadableSpan)?.toSpanData() else {
+            return XCTFail("Expected ReadableSpan")
+        }
+        first.endSpan()
+        guard let second = customTracer.startGlobalSpan(name: "second") else {
+            return XCTFail("Expected second global after first ended")
+        }
+        defer { second.endSpan() }
+        guard let secondData = (second.span as? any ReadableSpan)?.toSpanData() else {
+            return XCTFail("Expected ReadableSpan")
+        }
+        XCTAssertNotEqual(firstData.traceId, secondData.traceId, "New global span must not reuse ended global's trace id")
+    }
+
     func testSecondStartGlobalSpanReturnsNilUntilFirstEnds() {
         let rum = CoralogixRum(options: options!)
         guard let tracer = rum.getCustomTracer() else {

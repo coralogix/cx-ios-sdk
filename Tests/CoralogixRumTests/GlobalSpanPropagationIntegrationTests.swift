@@ -8,6 +8,8 @@
 //    context is empty on async work (explicit `setParent(global)`).
 //  - CX-35955: `ignoredInstruments` on the tracer passed to `startGlobalSpan` — matching instruments use `setNoParent()`
 //    (fresh trace for network / makeSpan userInteraction / error).
+//  - CX-35957: Outgoing `traceparent` on instrumented URLSession requests matches the global trace id when a global
+//    custom span is active (and trace propagation is enabled).
 //
 
 import XCTest
@@ -18,7 +20,18 @@ import CoralogixInternal
 
 private final class PropagationTestURLProtocol: URLProtocol {
     static var stub: (status: Int, headers: [String: String], body: Data)?
+    /// Last outgoing request seen by the stub (for CX-35957 `traceparent` assertions).
+    static var lastRequest: URLRequest?
+    static var lastTraceparentHeader: String?
     static let scheme = "proptest"
+
+    private static func traceparent(from request: URLRequest) -> String? {
+        guard let fields = request.allHTTPHeaderFields else { return nil }
+        for (key, value) in fields where key.lowercased() == "traceparent" {
+            return value
+        }
+        return nil
+    }
 
     override class func canInit(with request: URLRequest) -> Bool {
         request.url?.scheme == scheme
@@ -27,6 +40,8 @@ private final class PropagationTestURLProtocol: URLProtocol {
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
     override func startLoading() {
+        Self.lastRequest = request
+        Self.lastTraceparentHeader = Self.traceparent(from: request)
         guard let stub = Self.stub else {
             client?.urlProtocol(self, didFailWithError: NSError(domain: "PropagationTest", code: -1, userInfo: nil))
             return
@@ -53,6 +68,8 @@ final class GlobalSpanPropagationIntegrationTests: XCTestCase {
     override func setUpWithError() throws {
         try super.setUpWithError()
         capturedSpans = []
+        PropagationTestURLProtocol.lastRequest = nil
+        PropagationTestURLProtocol.lastTraceparentHeader = nil
         URLProtocol.registerClass(PropagationTestURLProtocol.self)
         CoralogixExporter.testExportCallback = { [weak self] spans in
             self?.captureLock.lock()
@@ -67,7 +84,12 @@ final class GlobalSpanPropagationIntegrationTests: XCTestCase {
         CoralogixRum.isInitialized = false
         CoralogixRum.resetCustomTracerIssuanceForTesting()
         CoralogixExporter.testExportCallback = nil
-        capturedSpans = []
+        captureLock.lock()
+        capturedSpans.removeAll(keepingCapacity: false)
+        captureLock.unlock()
+        PropagationTestURLProtocol.stub = nil
+        PropagationTestURLProtocol.lastRequest = nil
+        PropagationTestURLProtocol.lastTraceparentHeader = nil
         URLProtocol.unregisterClass(PropagationTestURLProtocol.self)
         try super.tearDownWithError()
     }
@@ -176,6 +198,42 @@ final class GlobalSpanPropagationIntegrationTests: XCTestCase {
         let net = try XCTUnwrap(waitForNetworkSpan(urlContains: "cx35954"), "Exported network span must appear")
         XCTAssertEqual(net.traceId, globalData.traceId, "Network span must use global trace id")
         XCTAssertEqual(net.parentSpanId, globalData.spanId, "Network span parent must be global span id")
+    }
+
+    /// W3C `traceparent`: `version-traceid-spanid-flags` — trace id is 32 lowercase hex chars (CX-35957).
+    private func traceIdHexFromTraceparentHeader(_ header: String?) -> String? {
+        guard let header else { return nil }
+        let parts = header.split(separator: "-", omittingEmptySubsequences: false)
+        guard parts.count >= 2, parts[1].count == 32 else { return nil }
+        return String(parts[1])
+    }
+
+    func testGlobalSpan_networkRequest_traceparentHeaderMatchesGlobalTraceId() throws {
+        PropagationTestURLProtocol.stub = (200, ["Content-Type": "application/json"], Data("{}".utf8))
+        startRUM()
+        let sdk = try XCTUnwrap(rum)
+        guard let tracer = sdk.getCustomTracer() else {
+            return XCTFail("Expected custom tracer")
+        }
+        guard let global = tracer.startGlobalSpan(name: "traceparent.flow") else {
+            return XCTFail("Expected global span")
+        }
+        defer { global.endSpan() }
+
+        guard let globalReadable = global.span as? any ReadableSpan else {
+            return XCTFail("Expected ReadableSpan")
+        }
+        let globalTraceHex = globalReadable.toSpanData().traceId.hexString
+
+        let url = try XCTUnwrap(URL(string: "\(Self.baseURL)/traceparent"))
+        let exp = expectation(description: "request")
+        URLSession.shared.dataTask(with: url) { _, _, _ in exp.fulfill() }.resume()
+        wait(for: [exp], timeout: 5)
+
+        let header = PropagationTestURLProtocol.lastTraceparentHeader
+        XCTAssertNotNil(header, "Instrumented request should include traceparent when propagation is enabled (CX-35957)")
+        let headerTraceHex = traceIdHexFromTraceparentHeader(header)
+        XCTAssertEqual(headerTraceHex, globalTraceHex, "traceparent trace id must match the active global span's trace id")
     }
 
     func testGlobalSpan_networkRequest_fromBackgroundQueue_sharesTraceAndParent() throws {
