@@ -75,9 +75,12 @@ class URLSessionLogger {
         }
         instrumentation.configuration.spanCustomization?(request, spanBuilder)
 
-        // CX-35954: OTel active context can be empty on async queues while a global span is still registered.
-        if OpenTelemetry.instance.contextProvider.activeSpan == nil,
-           let global = CoralogixCustomGlobalSpanRegistry.shared.registeredGlobalForAutoInstrumentationParent() {
+        // CX-35955: ignored `.networkRequests` → fresh trace (no global parent), including traceparent.
+        if CoralogixCustomGlobalSpanRegistry.shared.shouldBreakTraceInheritance(for: .networkRequests) {
+            _ = spanBuilder.setNoParent()
+        } else if OpenTelemetry.instance.contextProvider.activeSpan == nil,
+                  let global = CoralogixCustomGlobalSpanRegistry.shared.registeredGlobalForAutoInstrumentationParent() {
+            // CX-35954: OTel active context can be empty on async queues while a global span is still registered.
             _ = spanBuilder.setParent(global)
         }
 

@@ -202,4 +202,104 @@ final class GlobalSpanPropagationIntegrationTests: XCTestCase {
         }
         wait(for: [exp], timeout: 3)
     }
+
+    // MARK: - CX-35955 ignoredInstruments (break trace inheritance)
+
+    func testIgnoredInstruments_networkRequests_networkSpanUsesSeparateTrace() throws {
+        PropagationTestURLProtocol.stub = (200, [:], Data())
+        startRUM()
+        let r = try XCTUnwrap(rum)
+        let tracer = r.getCustomTracer(ignoredInstruments: [.networkRequests])
+        guard let global = tracer.startGlobalSpan(name: "ignored.net") else {
+            return XCTFail("Expected global span")
+        }
+        defer { global.endSpan() }
+
+        guard let globalReadable = global.span as? ReadableSpan else {
+            return XCTFail("Expected ReadableSpan")
+        }
+        let globalData = globalReadable.toSpanData()
+
+        let url = try XCTUnwrap(URL(string: "\(Self.baseURL)/ignored-net"))
+        let exp = expectation(description: "request")
+        URLSession.shared.dataTask(with: url) { _, _, _ in exp.fulfill() }.resume()
+        wait(for: [exp], timeout: 5)
+
+        let net = try XCTUnwrap(waitForNetworkSpan(urlContains: "ignored-net"))
+        XCTAssertNotEqual(net.traceId, globalData.traceId, "Ignored network must not share global trace id (CX-35955)")
+        XCTAssertNil(net.parentSpanId, "Ignored network span must be a root span")
+    }
+
+    func testIgnoredInstruments_userInteractions_makeSpanUsesSeparateTrace() throws {
+        startRUM()
+        let r = try XCTUnwrap(rum)
+        let tracer = r.getCustomTracer(ignoredInstruments: [.userInteractions])
+        guard let global = tracer.startGlobalSpan(name: "ignored.ui") else {
+            return XCTFail("Expected global span")
+        }
+        defer { global.endSpan() }
+
+        guard let globalReadable = global.span as? ReadableSpan else {
+            return XCTFail("Expected ReadableSpan")
+        }
+        let globalData = globalReadable.toSpanData()
+
+        var span = r.makeSpan(event: .userInteraction, source: .console, severity: .info)
+        defer { span.end() }
+        guard let readable = span as? ReadableSpan else {
+            return XCTFail("Expected ReadableSpan")
+        }
+        let data = readable.toSpanData()
+        XCTAssertNotEqual(data.traceId, globalData.traceId)
+        XCTAssertNil(data.parentSpanId)
+    }
+
+    func testIgnoredInstruments_errors_makeSpanUsesSeparateTrace() throws {
+        startRUM()
+        let r = try XCTUnwrap(rum)
+        let tracer = r.getCustomTracer(ignoredInstruments: [.errors])
+        guard let global = tracer.startGlobalSpan(name: "ignored.err") else {
+            return XCTFail("Expected global span")
+        }
+        defer { global.endSpan() }
+
+        guard let globalReadable = global.span as? ReadableSpan else {
+            return XCTFail("Expected ReadableSpan")
+        }
+        let globalData = globalReadable.toSpanData()
+
+        var span = r.makeSpan(event: .error, source: .console, severity: .error)
+        defer { span.end() }
+        guard let readable = span as? ReadableSpan else {
+            return XCTFail("Expected ReadableSpan")
+        }
+        let data = readable.toSpanData()
+        XCTAssertNotEqual(data.traceId, globalData.traceId)
+        XCTAssertNil(data.parentSpanId)
+    }
+
+    /// When only network is ignored, user-interaction auto spans must still inherit the global trace.
+    func testIgnoredInstruments_networkOnly_userInteractionStillInheritsGlobal() throws {
+        startRUM()
+        let r = try XCTUnwrap(rum)
+        let tracer = r.getCustomTracer(ignoredInstruments: [.networkRequests])
+        guard let global = tracer.startGlobalSpan(name: "partial") else {
+            return XCTFail("Expected global span")
+        }
+        defer { global.endSpan() }
+
+        guard let globalReadable = global.span as? ReadableSpan else {
+            return XCTFail("Expected ReadableSpan")
+        }
+        let globalData = globalReadable.toSpanData()
+
+        var span = r.makeSpan(event: .userInteraction, source: .console, severity: .info)
+        defer { span.end() }
+        guard let readable = span as? ReadableSpan else {
+            return XCTFail("Expected ReadableSpan")
+        }
+        let data = readable.toSpanData()
+        XCTAssertEqual(data.traceId, globalData.traceId)
+        XCTAssertEqual(data.parentSpanId, globalData.spanId)
+    }
 }

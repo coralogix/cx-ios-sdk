@@ -374,7 +374,7 @@ public class CoralogixRum {
 
     /// Returns a tracer for manual custom spans (API naming aligned with the Coralogix Browser SDK: `startCustomSpan`, `endSpan`).
     ///
-    /// - Parameter ignoredInstruments: Reserved for future use (filtering auto-instrumentation interaction with custom trace context).
+    /// - Parameter ignoredInstruments: When starting a global span via this tracer, listed instruments do not inherit that global trace (CX-35955); auto spans for those types use `setNoParent()`.
     public func getCustomTracer(ignoredInstruments: Set<CoralogixIgnoredInstrument> = []) -> CoralogixCustomTracer {
         CoralogixCustomTracer(rum: self, ignoredInstruments: ignoredInstruments)
     }
@@ -430,11 +430,23 @@ public class CoralogixRum {
         print(coralogixText)
     }
     
+    /// Maps auto-instrumented `CoralogixEventType` values to `CoralogixIgnoredInstrument` (CX-35955).
+    private static func ignoredInstrument(forAutoSpanEvent event: CoralogixEventType) -> CoralogixIgnoredInstrument? {
+        switch event {
+        case .networkRequest: return .networkRequests
+        case .userInteraction: return .userInteractions
+        case .error: return .errors
+        default: return nil
+        }
+    }
+
     internal func makeSpan(event: CoralogixEventType, source: Keys, severity: CoralogixLogSeverity) -> any Span {
         var builder = tracerProvider().spanBuilder(spanName: Keys.iosSdk.rawValue)
-        // CX-35954: same as URLSessionLogger — parent under registered global when activeSpan is nil (async / different activity).
-        if OpenTelemetry.instance.contextProvider.activeSpan == nil,
-           let global = CoralogogixCustomGlobalSpanRegistry.shared.registeredGlobalForAutoInstrumentationParent() {
+        if let ignored = Self.ignoredInstrument(forAutoSpanEvent: event),
+           CoralogixCustomGlobalSpanRegistry.shared.shouldBreakTraceInheritance(for: ignored) {
+            _ = builder.setNoParent()
+        } else if OpenTelemetry.instance.contextProvider.activeSpan == nil,
+                  let global = CoralogixCustomGlobalSpanRegistry.shared.registeredGlobalForAutoInstrumentationParent() {
             _ = builder.setParent(global)
         }
         var span = builder.startSpan()
