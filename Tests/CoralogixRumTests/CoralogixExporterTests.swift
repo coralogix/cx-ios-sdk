@@ -1146,6 +1146,48 @@ final class CoralogixExporterTests: XCTestCase {
                       "JSON should contain span_id field")
     }
 
+    func test_tracesExporter_notCalled_whenNil() {
+        // Verify callback is NOT invoked when tracesExporter is nil (existing behavior)
+        var callbackInvoked = false
+
+        let opts = CoralogixExporterOptions(
+            coralogixDomain: .US2,
+            userContext: nil,
+            environment: "PROD",
+            application: "TestApp-iOS",
+            version: "1.0",
+            publicKey: "token",
+            ignoreUrls: [],
+            ignoreErrors: [],
+            labels: [:],
+            tracesExporter: nil,  // Explicitly nil
+            debug: true
+        )
+        let rum = CoralogixRum(options: opts)
+        guard let exporter = rum.coralogixExporter else {
+            return XCTFail("Exporter should not be nil")
+        }
+
+        let mockUploader = MockSpanUploader()
+        exporter.spanUploader = mockUploader
+
+        let span = makeValidSpanData()
+        _ = exporter.export(spans: [span], explicitTimeout: nil)
+
+        // Give some time for any async callback to fire (it shouldn't)
+        let exp = expectation(description: "Wait for potential callback")
+        exp.isInverted = true  // We expect this to NOT be fulfilled
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            if callbackInvoked {
+                exp.fulfill()
+            }
+        }
+        waitForExpectations(timeout: 1)
+
+        XCTAssertFalse(callbackInvoked, "Callback should NOT be invoked when tracesExporter is nil")
+        XCTAssertTrue(mockUploader.uploadCalled, "Regular upload should still happen")
+    }
+
     override func tearDown() {
         super.tearDown()
     }
