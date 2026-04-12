@@ -40,6 +40,14 @@ public class CoralogixRum {
     
     static var isInitialized = false
     static var mobileSDK: MobileSDK = MobileSDK()
+
+    /// CX-35956: `getCustomTracer()` may succeed only once per SDK lifecycle (`shutdown()` clears).
+    private static var customTracerIssued = false
+
+    /// Resets CX-35956 singleton state when tests reinitialize the SDK in-process without calling `shutdown()`.
+    internal static func resetCustomTracerIssuanceForTesting() {
+        customTracerIssued = false
+    }
     
     public init(
         options: CoralogixExporterOptions,
@@ -312,6 +320,7 @@ public class CoralogixRum {
     
     public func shutdown() {
         CoralogixCustomGlobalSpanRegistry.shared.teardownIfNeeded()
+        CoralogixRum.customTracerIssued = false
         CoralogixRum.isInitialized = false
         self.coralogixExporter?.shutdown(explicitTimeout: nil)
         self.removeNotification()
@@ -374,9 +383,34 @@ public class CoralogixRum {
 
     /// Returns a tracer for manual custom spans (API naming aligned with the Coralogix Browser SDK: `startCustomSpan`, `endSpan`).
     ///
+    /// CX-35956: Returns `nil` when the SDK is not initialized, `traceParentInHeader` is not configured with `enable: true`,
+    /// or a custom tracer was already obtained (singleton until `shutdown()`).
+    ///
     /// - Parameter ignoredInstruments: When starting a global span via this tracer, listed instruments do not inherit that global trace (CX-35955); auto spans for those types use `setNoParent()`.
-    public func getCustomTracer(ignoredInstruments: Set<CoralogixIgnoredInstrument> = []) -> CoralogixCustomTracer {
-        CoralogixCustomTracer(rum: self, ignoredInstruments: ignoredInstruments)
+    public func getCustomTracer(ignoredInstruments: Set<CoralogixIgnoredInstrument> = []) -> CoralogixCustomTracer? {
+        guard CoralogixRum.isInitialized else {
+            Log.w("Coralogix RUM is not initialized — getCustomTracer unavailable")
+            return nil
+        }
+        guard let opts = self.options else {
+            Log.w("traceParentInHeader must be enabled to use custom tracer")
+            return nil
+        }
+        guard let tpDict = opts.traceParentInHeader else {
+            Log.w("traceParentInHeader must be enabled to use custom tracer")
+            return nil
+        }
+        let traceParent = TraceParentInHeader(params: tpDict)
+        guard traceParent.enable else {
+            Log.w("traceParentInHeader must be enabled to use custom tracer")
+            return nil
+        }
+        guard !CoralogixRum.customTracerIssued else {
+            Log.w("Custom tracer already exists")
+            return nil
+        }
+        CoralogixRum.customTracerIssued = true
+        return CoralogixCustomTracer(rum: self, ignoredInstruments: ignoredInstruments)
     }
     
     // MARK: - Spans & Attributes

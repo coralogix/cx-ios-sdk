@@ -65,6 +65,7 @@ final class GlobalSpanPropagationIntegrationTests: XCTestCase {
         CoralogixCustomGlobalSpanRegistry.shared.teardownIfNeeded()
         rum = nil
         CoralogixRum.isInitialized = false
+        CoralogixRum.resetCustomTracerIssuanceForTesting()
         CoralogixExporter.testExportCallback = nil
         capturedSpans = []
         URLProtocol.unregisterClass(PropagationTestURLProtocol.self)
@@ -84,6 +85,7 @@ final class GlobalSpanPropagationIntegrationTests: XCTestCase {
             labels: [:],
             sessionSampleRate: 100,
             instrumentations: [.network: true],
+            traceParentInHeader: [Keys.enable.rawValue: true],
             networkExtraConfig: [NetworkCaptureRule(url: Self.baseURL)],
             debug: true
         )
@@ -126,7 +128,9 @@ final class GlobalSpanPropagationIntegrationTests: XCTestCase {
     func testGlobalSpan_makeSpan_sameThread_userInteraction_inheritsGlobal() throws {
         startRUM()
         let r = try XCTUnwrap(rum)
-        let tracer = r.getCustomTracer()
+        guard let tracer = r.getCustomTracer() else {
+            return XCTFail("Expected custom tracer")
+        }
         guard let global = tracer.startGlobalSpan(name: "ui.main") else {
             return XCTFail("Expected global span")
         }
@@ -150,7 +154,10 @@ final class GlobalSpanPropagationIntegrationTests: XCTestCase {
     func testGlobalSpan_networkRequest_sameThread_sharesTraceAndParent() throws {
         PropagationTestURLProtocol.stub = (200, ["Content-Type": "application/json"], Data("{}".utf8))
         startRUM()
-        let tracer = try XCTUnwrap(rum).getCustomTracer()
+        let sdk = try XCTUnwrap(rum)
+        guard let tracer = sdk.getCustomTracer() else {
+            return XCTFail("Expected custom tracer")
+        }
         guard let global = tracer.startGlobalSpan(name: "flow.root") else {
             return XCTFail("Expected global span")
         }
@@ -174,7 +181,10 @@ final class GlobalSpanPropagationIntegrationTests: XCTestCase {
     func testGlobalSpan_networkRequest_fromBackgroundQueue_sharesTraceAndParent() throws {
         PropagationTestURLProtocol.stub = (200, [:], Data())
         startRUM()
-        let tracer = try XCTUnwrap(rum).getCustomTracer()
+        let sdk = try XCTUnwrap(rum)
+        guard let tracer = sdk.getCustomTracer() else {
+            return XCTFail("Expected custom tracer")
+        }
         guard let global = tracer.startGlobalSpan(name: "flow.async") else {
             return XCTFail("Expected global span")
         }
@@ -204,7 +214,9 @@ final class GlobalSpanPropagationIntegrationTests: XCTestCase {
     func testGlobalSpan_makeSpanOnBackgroundQueue_userInteraction_parentsUnderGlobal() throws {
         startRUM()
         let r = try XCTUnwrap(rum)
-        let tracer = r.getCustomTracer()
+        guard let tracer = r.getCustomTracer() else {
+            return XCTFail("Expected custom tracer")
+        }
         guard let global = tracer.startGlobalSpan(name: "ui.flow") else {
             return XCTFail("Expected global span")
         }
@@ -239,7 +251,9 @@ final class GlobalSpanPropagationIntegrationTests: XCTestCase {
         PropagationTestURLProtocol.stub = (200, [:], Data())
         startRUM()
         let r = try XCTUnwrap(rum)
-        let tracer = r.getCustomTracer(ignoredInstruments: [.userInteractions])
+        guard let tracer = r.getCustomTracer(ignoredInstruments: [.userInteractions]) else {
+            return XCTFail("Expected custom tracer")
+        }
         guard let global = tracer.startGlobalSpan(name: "partial-net") else {
             return XCTFail("Expected global span")
         }
@@ -265,7 +279,9 @@ final class GlobalSpanPropagationIntegrationTests: XCTestCase {
         PropagationTestURLProtocol.stub = (200, [:], Data())
         startRUM()
         let r = try XCTUnwrap(rum)
-        let tracer = r.getCustomTracer(ignoredInstruments: [.errors])
+        guard let tracer = r.getCustomTracer(ignoredInstruments: [.errors]) else {
+            return XCTFail("Expected custom tracer")
+        }
         guard let global = tracer.startGlobalSpan(name: "partial-err") else {
             return XCTFail("Expected global span")
         }
@@ -290,7 +306,9 @@ final class GlobalSpanPropagationIntegrationTests: XCTestCase {
         PropagationTestURLProtocol.stub = (200, [:], Data())
         startRUM()
         let r = try XCTUnwrap(rum)
-        let tracer = r.getCustomTracer(ignoredInstruments: [.networkRequests])
+        guard let tracer = r.getCustomTracer(ignoredInstruments: [.networkRequests]) else {
+            return XCTFail("Expected custom tracer")
+        }
         guard let global = tracer.startGlobalSpan(name: "ignored.net") else {
             return XCTFail("Expected global span")
         }
@@ -314,7 +332,9 @@ final class GlobalSpanPropagationIntegrationTests: XCTestCase {
     func testIgnoredInstruments_userInteractions_makeSpanUsesSeparateTrace() throws {
         startRUM()
         let r = try XCTUnwrap(rum)
-        let tracer = r.getCustomTracer(ignoredInstruments: [.userInteractions])
+        guard let tracer = r.getCustomTracer(ignoredInstruments: [.userInteractions]) else {
+            return XCTFail("Expected custom tracer")
+        }
         guard let global = tracer.startGlobalSpan(name: "ignored.ui") else {
             return XCTFail("Expected global span")
         }
@@ -338,7 +358,9 @@ final class GlobalSpanPropagationIntegrationTests: XCTestCase {
     func testIgnoredInstruments_errors_makeSpanUsesSeparateTrace() throws {
         startRUM()
         let r = try XCTUnwrap(rum)
-        let tracer = r.getCustomTracer(ignoredInstruments: [.errors])
+        guard let tracer = r.getCustomTracer(ignoredInstruments: [.errors]) else {
+            return XCTFail("Expected custom tracer")
+        }
         guard let global = tracer.startGlobalSpan(name: "ignored.err") else {
             return XCTFail("Expected global span")
         }
@@ -363,7 +385,9 @@ final class GlobalSpanPropagationIntegrationTests: XCTestCase {
     func testIgnoredInstruments_networkOnly_userInteractionStillInheritsGlobal() throws {
         startRUM()
         let r = try XCTUnwrap(rum)
-        let tracer = r.getCustomTracer(ignoredInstruments: [.networkRequests])
+        guard let tracer = r.getCustomTracer(ignoredInstruments: [.networkRequests]) else {
+            return XCTFail("Expected custom tracer")
+        }
         guard let global = tracer.startGlobalSpan(name: "partial") else {
             return XCTFail("Expected global span")
         }

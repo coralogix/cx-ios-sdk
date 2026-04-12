@@ -10,6 +10,9 @@ import Coralogix
 
 final class CustomSpansViewController: UITableViewController {
 
+    /// CX-35956: `getCustomTracer()` succeeds only once per SDK session; reuse for all rows.
+    private var cachedCustomTracer: CoralogixCustomTracer?
+
     private struct DemoItem {
         let title: String
         let subtitle: String
@@ -154,18 +157,31 @@ final class CustomSpansViewController: UITableViewController {
 
     // MARK: - Demos
 
+    /// First successful `getCustomTracer` wins for the session (CX-35956). If another row already obtained a tracer with a different `ignoredInstruments`, that tracer is reused.
+    private func tracerForSession(preferIgnored: Bool) -> CoralogixCustomTracer? {
+        if let c = cachedCustomTracer { return c }
+        let rum = CoralogixRumManager.shared.sdk
+        let t: CoralogixCustomTracer?
+        if preferIgnored {
+            t = rum.getCustomTracer(ignoredInstruments: [.networkRequests, .errors])
+        } else {
+            t = rum.getCustomTracer()
+        }
+        guard let tracer = t else {
+            presentToast("Custom tracer unavailable — set traceParentInHeader with enable: true in SDK options.")
+            return nil
+        }
+        cachedCustomTracer = tracer
+        return tracer
+    }
+
     private func runSimpleFlow(useIgnoredTracer: Bool) {
         let rum = CoralogixRumManager.shared.sdk
         guard rum.isInitialized else {
             presentToast("SDK not initialized")
             return
         }
-        let tracer: CoralogixCustomTracer
-        if useIgnoredTracer {
-            tracer = rum.getCustomTracer(ignoredInstruments: [.networkRequests, .errors])
-        } else {
-            tracer = rum.getCustomTracer()
-        }
+        guard let tracer = tracerForSession(preferIgnored: useIgnoredTracer) else { return }
         guard let global = tracer.startGlobalSpan(
             name: "demo.custom.global",
             labels: ["demo.screen": "CustomSpans"]
@@ -188,7 +204,7 @@ final class CustomSpansViewController: UITableViewController {
             presentToast("SDK not initialized")
             return
         }
-        let tracer = rum.getCustomTracer()
+        guard let tracer = tracerForSession(preferIgnored: false) else { return }
         guard let first = tracer.startGlobalSpan(name: "demo.custom.first_global") else {
             presentToast("Unexpected: first startGlobalSpan failed")
             return
@@ -213,7 +229,8 @@ final class CustomSpansViewController: UITableViewController {
             presentToast("SDK not initialized")
             return
         }
-        guard let global = rum.getCustomTracer().startGlobalSpan(
+        guard let tracer = tracerForSession(preferIgnored: false) else { return }
+        guard let global = tracer.startGlobalSpan(
             name: "demo.custom.with_context",
             labels: ["demo.flow": "network"]
         ) else {

@@ -154,7 +154,7 @@ public final class CoralogixCustomTracer {
         rum.addRumCorrelationMetadata(to: &otelSpan)
         setMergedCustomLabelsJSON(merged: mergedSdkAndGlobal, on: &otelSpan)
         guard CoralogixCustomGlobalSpanRegistry.shared.registerGlobalSpan(otelSpan, ignoredInstruments: ignoredInstruments) else {
-            Log.w("Global custom span already active — startGlobalSpan ignored; ending orphan span")
+            Log.w("Global span already exists")
             otelSpan.end()
             return nil
         }

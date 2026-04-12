@@ -17,6 +17,7 @@ final class CoralogixCustomSpansTests: XCTestCase {
             ignoreErrors: [],
             labels: [:],
             sessionSampleRate: 100,
+            traceParentInHeader: [Keys.enable.rawValue: true],
             debug: true
         )
     }
@@ -25,13 +26,16 @@ final class CoralogixCustomSpansTests: XCTestCase {
         CoralogixCustomGlobalSpanRegistry.shared.teardownIfNeeded()
         options = nil
         CoralogixRum.isInitialized = false
+        CoralogixRum.resetCustomTracerIssuanceForTesting()
         RunLoop.main.run(until: Date().addingTimeInterval(0.05))
     }
 
     func testGetCustomTracerPreservesIgnoredInstruments() {
         let rum = CoralogixRum(options: options!)
         let instruments: Set<CoralogixIgnoredInstrument> = [.networkRequests, .errors]
-        let tracer = rum.getCustomTracer(ignoredInstruments: instruments)
+        guard let tracer = rum.getCustomTracer(ignoredInstruments: instruments) else {
+            return XCTFail("Expected custom tracer")
+        }
         XCTAssertEqual(tracer.ignoredInstruments, instruments)
     }
 
@@ -52,13 +56,14 @@ final class CoralogixCustomSpansTests: XCTestCase {
         )
         let rum = CoralogixRum(options: offOptions)
         XCTAssertFalse(rum.isInitialized)
-        let tracer = rum.getCustomTracer()
-        XCTAssertNil(tracer.startGlobalSpan(name: "root"))
+        XCTAssertNil(rum.getCustomTracer())
     }
 
     func testCustomSpansStampEventTypeSourceSeverityLikeBrowserSdk() {
         let rum = CoralogixRum(options: options!)
-        let tracer = rum.getCustomTracer()
+        guard let tracer = rum.getCustomTracer() else {
+            return XCTFail("Expected custom tracer")
+        }
         guard let global = tracer.startGlobalSpan(name: "g") else {
             return XCTFail("Expected global span")
         }
@@ -85,7 +90,9 @@ final class CoralogixCustomSpansTests: XCTestCase {
     /// Nested custom spans must carry session/user attributes so `SessionContext` succeeds during export (otherwise the child is dropped and only the global appears in RUM).
     func testStartCustomSpanIncludesSessionMetadataLikeGlobal() {
         let rum = CoralogixRum(options: options!)
-        let tracer = rum.getCustomTracer()
+        guard let tracer = rum.getCustomTracer() else {
+            return XCTFail("Expected custom tracer")
+        }
         guard let global = tracer.startGlobalSpan(name: "g") else {
             return XCTFail("Expected global span")
         }
@@ -107,7 +114,9 @@ final class CoralogixCustomSpansTests: XCTestCase {
 
     func testStartGlobalSpanAppliesNameLabelsAndSessionMetadata() {
         let rum = CoralogixRum(options: options!)
-        let tracer = rum.getCustomTracer()
+        guard let tracer = rum.getCustomTracer() else {
+            return XCTFail("Expected custom tracer")
+        }
         guard let global = tracer.startGlobalSpan(name: "checkout", labels: ["flow": "standard"]) else {
             return XCTFail("Expected global span")
         }
@@ -139,10 +148,13 @@ final class CoralogixCustomSpansTests: XCTestCase {
             ignoreErrors: [],
             labels: ["tier": "sdk", "onlySdk": "1"],
             sessionSampleRate: 100,
+            traceParentInHeader: [Keys.enable.rawValue: true],
             debug: true
         )
         let rum = CoralogixRum(options: opts)
-        let tracer = rum.getCustomTracer()
+        guard let tracer = rum.getCustomTracer() else {
+            return XCTFail("Expected custom tracer")
+        }
         guard let global = tracer.startGlobalSpan(name: "g", labels: ["tier": "global", "fromGlobal": "yes"]) else {
             return XCTFail("Expected global span")
         }
@@ -173,7 +185,9 @@ final class CoralogixCustomSpansTests: XCTestCase {
 
     func testStartCustomSpanIsChildOfGlobalSpan() {
         let rum = CoralogixRum(options: options!)
-        let tracer = rum.getCustomTracer()
+        guard let tracer = rum.getCustomTracer() else {
+            return XCTFail("Expected custom tracer")
+        }
         guard let global = tracer.startGlobalSpan(name: "parent") else {
             return XCTFail("Expected global span")
         }
@@ -192,7 +206,9 @@ final class CoralogixCustomSpansTests: XCTestCase {
 
     func testWithContextSetsActiveSpan() {
         let rum = CoralogixRum(options: options!)
-        let tracer = rum.getCustomTracer()
+        guard let tracer = rum.getCustomTracer() else {
+            return XCTFail("Expected custom tracer")
+        }
         guard let global = tracer.startGlobalSpan(name: "ctx") else {
             return XCTFail("Expected global span")
         }
@@ -216,7 +232,9 @@ final class CoralogixCustomSpansTests: XCTestCase {
 
     func testSecondStartGlobalSpanReturnsNilUntilFirstEnds() {
         let rum = CoralogixRum(options: options!)
-        let tracer = rum.getCustomTracer()
+        guard let tracer = rum.getCustomTracer() else {
+            return XCTFail("Expected custom tracer")
+        }
         guard let first = tracer.startGlobalSpan(name: "first") else {
             return XCTFail("Expected first global span")
         }
@@ -237,7 +255,10 @@ final class CoralogixCustomSpansTests: XCTestCase {
         XCTAssertTrue(
             (OpenTelemetry.instance.contextProvider.activeSpan as AnyObject?) === (marker as AnyObject)
         )
-        guard let global = rum.getCustomTracer().startGlobalSpan(name: "global") else {
+        guard let tracerForGlobal = rum.getCustomTracer() else {
+            return XCTFail("Expected custom tracer")
+        }
+        guard let global = tracerForGlobal.startGlobalSpan(name: "global") else {
             return XCTFail("Expected global span")
         }
         XCTAssertTrue(
@@ -253,7 +274,9 @@ final class CoralogixCustomSpansTests: XCTestCase {
 
     func testCustomSpanSetStatusAndEndSpan() {
         let rum = CoralogixRum(options: options!)
-        let tracer = rum.getCustomTracer()
+        guard let tracer = rum.getCustomTracer() else {
+            return XCTFail("Expected custom tracer")
+        }
         guard let global = tracer.startGlobalSpan(name: "g") else {
             return XCTFail("Expected global span")
         }
@@ -264,12 +287,68 @@ final class CoralogixCustomSpansTests: XCTestCase {
         global.endSpan()
     }
 
+    // MARK: - CX-35956 (getCustomTracer guards)
+
+    func testGetCustomTracer_nilWhenTraceParentNotConfigured() {
+        let opts = CoralogixExporterOptions(
+            coralogixDomain: CoralogixDomain.US2,
+            userContext: nil,
+            environment: "PROD",
+            application: "TestApp",
+            version: "1.0",
+            publicKey: "token",
+            ignoreUrls: [],
+            ignoreErrors: [],
+            labels: [:],
+            sessionSampleRate: 100,
+            debug: true
+        )
+        let rum = CoralogixRum(options: opts)
+        XCTAssertNil(rum.getCustomTracer())
+    }
+
+    func testGetCustomTracer_nilWhenTraceParentEnableFalse() {
+        let opts = CoralogixExporterOptions(
+            coralogixDomain: CoralogixDomain.US2,
+            userContext: nil,
+            environment: "PROD",
+            application: "TestApp",
+            version: "1.0",
+            publicKey: "token",
+            ignoreUrls: [],
+            ignoreErrors: [],
+            labels: [:],
+            sessionSampleRate: 100,
+            traceParentInHeader: [Keys.enable.rawValue: false],
+            debug: true
+        )
+        let rum = CoralogixRum(options: opts)
+        XCTAssertNil(rum.getCustomTracer())
+    }
+
+    func testGetCustomTracer_singletonSecondCallReturnsNil() {
+        let rum = CoralogixRum(options: options!)
+        XCTAssertNotNil(rum.getCustomTracer())
+        XCTAssertNil(rum.getCustomTracer())
+    }
+
+    func testGetCustomTracer_availableAgainAfterShutdown() {
+        let rum = CoralogixRum(options: options!)
+        XCTAssertNotNil(rum.getCustomTracer())
+        XCTAssertNil(rum.getCustomTracer())
+        rum.shutdown()
+        let rum2 = CoralogixRum(options: options!)
+        XCTAssertNotNil(rum2.getCustomTracer())
+    }
+
     // MARK: - CX-35954 / CX-35955 (registry + makeSpan parent policy)
 
     /// Registry exposes ignored flags only while a global span from that tracer is active.
     func testRegistry_shouldBreakTraceInheritance_matchesIgnoredInstrumentsOnGlobalSpan() {
         let rum = CoralogixRum(options: options!)
-        let tracer = rum.getCustomTracer(ignoredInstruments: [.errors, .networkRequests])
+        guard let tracer = rum.getCustomTracer(ignoredInstruments: [.errors, .networkRequests]) else {
+            return XCTFail("Expected custom tracer")
+        }
         XCTAssertFalse(
             CoralogixCustomGlobalSpanRegistry.shared.shouldBreakTraceInheritance(for: .errors),
             "No global yet — nothing ignored for propagation"
@@ -285,7 +364,9 @@ final class CoralogixCustomSpansTests: XCTestCase {
 
     func testRegistry_shouldBreakTraceInheritance_falseAfterGlobalEnds() {
         let rum = CoralogixRum(options: options!)
-        let tracer = rum.getCustomTracer(ignoredInstruments: [.userInteractions])
+        guard let tracer = rum.getCustomTracer(ignoredInstruments: [.userInteractions]) else {
+            return XCTFail("Expected custom tracer")
+        }
         guard let global = tracer.startGlobalSpan(name: "g") else {
             return XCTFail("Expected global span")
         }
@@ -297,7 +378,9 @@ final class CoralogixCustomSpansTests: XCTestCase {
     /// CX-35955: `makeSpan` for an ignored event type uses `setNoParent()` — new trace, no parent.
     func testMakeSpan_ignoredUserInteraction_breaksGlobalTrace() {
         let rum = CoralogixRum(options: options!)
-        let tracer = rum.getCustomTracer(ignoredInstruments: [.userInteractions])
+        guard let tracer = rum.getCustomTracer(ignoredInstruments: [.userInteractions]) else {
+            return XCTFail("Expected custom tracer")
+        }
         guard let global = tracer.startGlobalSpan(name: "g") else {
             return XCTFail("Expected global span")
         }
@@ -320,7 +403,9 @@ final class CoralogixCustomSpansTests: XCTestCase {
     /// CX-35954: event types not listed in `ignoredInstruments` still parent under the global when it is the active span (default OTel current span).
     func testMakeSpan_navigationWithGlobalActive_inheritsGlobalTrace() {
         let rum = CoralogixRum(options: options!)
-        let tracer = rum.getCustomTracer(ignoredInstruments: [.networkRequests])
+        guard let tracer = rum.getCustomTracer(ignoredInstruments: [.networkRequests]) else {
+            return XCTFail("Expected custom tracer")
+        }
         guard let global = tracer.startGlobalSpan(name: "g") else {
             return XCTFail("Expected global span")
         }
