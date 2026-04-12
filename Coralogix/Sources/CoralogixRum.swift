@@ -393,7 +393,7 @@ public class CoralogixRum {
             return nil
         }
         guard let opts = self.options else {
-            Log.w("traceParentInHeader must be enabled to use custom tracer")
+            Log.w("getCustomTracer unavailable — exporter options missing (SDK may not be fully initialized)")
             return nil
         }
         guard let tpDict = opts.traceParentInHeader else {
