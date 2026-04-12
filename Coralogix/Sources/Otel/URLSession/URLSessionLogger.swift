@@ -75,6 +75,12 @@ class URLSessionLogger {
         }
         instrumentation.configuration.spanCustomization?(request, spanBuilder)
 
+        // CX-35954: OTel active context can be empty on async queues while a global span is still registered.
+        if OpenTelemetry.instance.contextProvider.activeSpan == nil,
+           let global = CoralogixCustomGlobalSpanRegistry.shared.registeredGlobalForAutoInstrumentationParent() {
+            _ = spanBuilder.setParent(global)
+        }
+
         let span = spanBuilder.startSpan()
         runningSpansQueue.sync {
             runningSpans[sessionTaskId] = span

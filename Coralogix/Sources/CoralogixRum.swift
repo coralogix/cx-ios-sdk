@@ -431,7 +431,13 @@ public class CoralogixRum {
     }
     
     internal func makeSpan(event: CoralogixEventType, source: Keys, severity: CoralogixLogSeverity) -> any Span {
-        var span = tracerProvider().spanBuilder(spanName: Keys.iosSdk.rawValue).startSpan()
+        var builder = tracerProvider().spanBuilder(spanName: Keys.iosSdk.rawValue)
+        // CX-35954: same as URLSessionLogger — parent under registered global when activeSpan is nil (async / different activity).
+        if OpenTelemetry.instance.contextProvider.activeSpan == nil,
+           let global = CoralogogixCustomGlobalSpanRegistry.shared.registeredGlobalForAutoInstrumentationParent() {
+            _ = builder.setParent(global)
+        }
+        var span = builder.startSpan()
         span.setAttribute(key: Keys.eventType.rawValue, value: event.rawValue)
         span.setAttribute(key: Keys.source.rawValue, value: source.rawValue)
         span.setAttribute(key: Keys.severity.rawValue, value: AttributeValue.int(severity.rawValue))

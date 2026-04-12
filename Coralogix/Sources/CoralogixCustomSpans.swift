@@ -59,6 +59,13 @@ final class CoralogixCustomGlobalSpanRegistry {
         return true
     }
 
+    /// When `OpenTelemetry.instance.contextProvider.activeSpan` is `nil` (e.g. URLSession callback or `DispatchQueue` work on another activity) but a global custom span is still registered, auto-instrumented spans should parent under that span so traceId / parentSpanId match the global trace (CX-35954).
+    internal func registeredGlobalForAutoInstrumentationParent() -> (any Span)? {
+        lock.lock()
+        defer { lock.unlock() }
+        return registeredGlobal
+    }
+
     /// Clears any registered global custom span (`shutdown` and unit tests). Ends the span if still active and restores the pre-global OTel context.
     internal func teardownIfNeeded() {
         lock.lock()
