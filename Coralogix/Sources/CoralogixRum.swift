@@ -440,15 +440,23 @@ public class CoralogixRum {
         }
     }
 
-    internal func makeSpan(event: CoralogixEventType, source: Keys, severity: CoralogixLogSeverity) -> any Span {
-        var builder = tracerProvider().spanBuilder(spanName: Keys.iosSdk.rawValue)
-        if let ignored = Self.ignoredInstrument(forAutoSpanEvent: event),
+    /// CX-35955: opt out of global trace when this event type is in the active global's `ignoredInstruments`.
+    /// CX-35954: when OTel has no active span but a global is registered, parent explicitly under the global (async / other activity).
+    private static func applyAutoInstrumentationParentPolicy(builder: SpanBuilder, event: CoralogixEventType) {
+        if let ignored = ignoredInstrument(forAutoSpanEvent: event),
            CoralogixCustomGlobalSpanRegistry.shared.shouldBreakTraceInheritance(for: ignored) {
             _ = builder.setNoParent()
-        } else if OpenTelemetry.instance.contextProvider.activeSpan == nil,
-                  let global = CoralogixCustomGlobalSpanRegistry.shared.registeredGlobalForAutoInstrumentationParent() {
+            return
+        }
+        if OpenTelemetry.instance.contextProvider.activeSpan == nil,
+           let global = CoralogixCustomGlobalSpanRegistry.shared.registeredGlobalForAutoInstrumentationParent() {
             _ = builder.setParent(global)
         }
+    }
+
+    internal func makeSpan(event: CoralogixEventType, source: Keys, severity: CoralogixLogSeverity) -> any Span {
+        let builder = tracerProvider().spanBuilder(spanName: Keys.iosSdk.rawValue)
+        Self.applyAutoInstrumentationParentPolicy(builder: builder, event: event)
         var span = builder.startSpan()
         span.setAttribute(key: Keys.eventType.rawValue, value: event.rawValue)
         span.setAttribute(key: Keys.source.rawValue, value: source.rawValue)

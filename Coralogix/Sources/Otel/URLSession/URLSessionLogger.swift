@@ -30,6 +30,19 @@ class URLSessionLogger {
         }()
     #endif // os(iOS) && !targetEnvironment(macCatalyst)
 
+    /// CX-35955: when `.networkRequests` is ignored for the active global, start a new trace (`traceparent` matches).
+    /// CX-35954: when OTel has no active span but a global is registered, parent under the global (async URLSession work).
+    private static func applyNetworkAutoInstrumentationParentPolicy(to spanBuilder: SpanBuilder) {
+        if CoralogixCustomGlobalSpanRegistry.shared.shouldBreakTraceInheritance(for: .networkRequests) {
+            _ = spanBuilder.setNoParent()
+            return
+        }
+        if OpenTelemetry.instance.contextProvider.activeSpan == nil,
+           let global = CoralogixCustomGlobalSpanRegistry.shared.registeredGlobalForAutoInstrumentationParent() {
+            _ = spanBuilder.setParent(global)
+        }
+    }
+
     /// This methods creates a Span for a request, and optionally injects tracing headers, returns a  new request if it was needed to create a new one to add the tracing headers
     @discardableResult static func processAndLogRequest(_ request: URLRequest, sessionTaskId: String, instrumentation: URLSessionInstrumentation, shouldInjectHeaders: Bool, preCapturedRequestBody: Data? = nil) -> URLRequest? {
         guard instrumentation.configuration.shouldInstrument?(request) ?? true else {
@@ -74,15 +87,7 @@ class URLSessionLogger {
             spanBuilder.setAttribute(key: $0.key, value: $0.value)
         }
         instrumentation.configuration.spanCustomization?(request, spanBuilder)
-
-        // CX-35955: ignored `.networkRequests` → fresh trace (no global parent), including traceparent.
-        if CoralogixCustomGlobalSpanRegistry.shared.shouldBreakTraceInheritance(for: .networkRequests) {
-            _ = spanBuilder.setNoParent()
-        } else if OpenTelemetry.instance.contextProvider.activeSpan == nil,
-                  let global = CoralogixCustomGlobalSpanRegistry.shared.registeredGlobalForAutoInstrumentationParent() {
-            // CX-35954: OTel active context can be empty on async queues while a global span is still registered.
-            _ = spanBuilder.setParent(global)
-        }
+        Self.applyNetworkAutoInstrumentationParentPolicy(to: spanBuilder)
 
         let span = spanBuilder.startSpan()
         runningSpansQueue.sync {

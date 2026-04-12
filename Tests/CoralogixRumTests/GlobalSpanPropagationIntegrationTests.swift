@@ -2,9 +2,12 @@
 //  GlobalSpanPropagationIntegrationTests.swift
 //  CoralogixRumTests
 //
-//  CX-35954: Auto-instrumented spans (network, user interaction via makeSpan) must share
-//  traceId with an active global span and use parentSpanId = global span id — including
-//  when OTel active context is empty on async queues (registry fallback).
+//  Integration coverage for custom global span + auto-instrumentation:
+//  - CX-35954: `registeredGlobalForAutoInstrumentationParent()` + `URLSessionLogger.applyNetworkAutoInstrumentationParentPolicy`
+//    / `CoralogixRum.applyAutoInstrumentationParentPolicy` — same trace when global is active or when active OTel
+//    context is empty on async work (explicit `setParent(global)`).
+//  - CX-35955: `ignoredInstruments` on the tracer passed to `startGlobalSpan` — matching instruments use `setNoParent()`
+//    (fresh trace for network / makeSpan userInteraction / error).
 //
 
 import XCTest
@@ -116,7 +119,31 @@ final class GlobalSpanPropagationIntegrationTests: XCTestCase {
         return nil
     }
 
-    // MARK: - CX-35954
+    // MARK: - CX-35954 (inherit global trace)
+
+    func testGlobalSpan_makeSpan_sameThread_userInteraction_inheritsGlobal() throws {
+        startRUM()
+        let r = try XCTUnwrap(rum)
+        let tracer = r.getCustomTracer()
+        guard let global = tracer.startGlobalSpan(name: "ui.main") else {
+            return XCTFail("Expected global span")
+        }
+        defer { global.endSpan() }
+
+        guard let globalReadable = global.span as? ReadableSpan else {
+            return XCTFail("Expected ReadableSpan")
+        }
+        let globalData = globalReadable.toSpanData()
+
+        var span = r.makeSpan(event: .userInteraction, source: .console, severity: .info)
+        defer { span.end() }
+        guard let readable = span as? ReadableSpan else {
+            return XCTFail("Expected ReadableSpan")
+        }
+        let data = readable.toSpanData()
+        XCTAssertEqual(data.traceId, globalData.traceId, "Same-thread UI span should parent via active OTel context (CX-35954)")
+        XCTAssertEqual(data.parentSpanId, globalData.spanId)
+    }
 
     func testGlobalSpan_networkRequest_sameThread_sharesTraceAndParent() throws {
         PropagationTestURLProtocol.stub = (200, ["Content-Type": "application/json"], Data("{}".utf8))
@@ -203,7 +230,59 @@ final class GlobalSpanPropagationIntegrationTests: XCTestCase {
         wait(for: [exp], timeout: 3)
     }
 
-    // MARK: - CX-35955 ignoredInstruments (break trace inheritance)
+    // MARK: - CX-35955 (ignoredInstruments → setNoParent for matching auto spans)
+
+    /// Only `.userInteractions` is ignored — URLSession network spans must still join the global trace.
+    func testIgnoredInstruments_userInteractionsOnly_networkStillInheritsGlobal() throws {
+        PropagationTestURLProtocol.stub = (200, [:], Data())
+        startRUM()
+        let r = try XCTUnwrap(rum)
+        let tracer = r.getCustomTracer(ignoredInstruments: [.userInteractions])
+        guard let global = tracer.startGlobalSpan(name: "partial-net") else {
+            return XCTFail("Expected global span")
+        }
+        defer { global.endSpan() }
+
+        guard let globalReadable = global.span as? ReadableSpan else {
+            return XCTFail("Expected ReadableSpan")
+        }
+        let globalData = globalReadable.toSpanData()
+
+        let url = try XCTUnwrap(URL(string: "\(Self.baseURL)/ui-ignored-net"))
+        let exp = expectation(description: "request")
+        URLSession.shared.dataTask(with: url) { _, _, _ in exp.fulfill() }.resume()
+        wait(for: [exp], timeout: 5)
+
+        let net = try XCTUnwrap(waitForNetworkSpan(urlContains: "ui-ignored-net"))
+        XCTAssertEqual(net.traceId, globalData.traceId, "Network must still inherit global when only userInteractions is ignored (CX-35955)")
+        XCTAssertEqual(net.parentSpanId, globalData.spanId)
+    }
+
+    /// Only `.errors` is ignored — network must still inherit global.
+    func testIgnoredInstruments_errorsOnly_networkStillInheritsGlobal() throws {
+        PropagationTestURLProtocol.stub = (200, [:], Data())
+        startRUM()
+        let r = try XCTUnwrap(rum)
+        let tracer = r.getCustomTracer(ignoredInstruments: [.errors])
+        guard let global = tracer.startGlobalSpan(name: "partial-err") else {
+            return XCTFail("Expected global span")
+        }
+        defer { global.endSpan() }
+
+        guard let globalReadable = global.span as? ReadableSpan else {
+            return XCTFail("Expected ReadableSpan")
+        }
+        let globalData = globalReadable.toSpanData()
+
+        let url = try XCTUnwrap(URL(string: "\(Self.baseURL)/err-ignored-net"))
+        let exp = expectation(description: "request")
+        URLSession.shared.dataTask(with: url) { _, _, _ in exp.fulfill() }.resume()
+        wait(for: [exp], timeout: 5)
+
+        let net = try XCTUnwrap(waitForNetworkSpan(urlContains: "err-ignored-net"))
+        XCTAssertEqual(net.traceId, globalData.traceId)
+        XCTAssertEqual(net.parentSpanId, globalData.spanId)
+    }
 
     func testIgnoredInstruments_networkRequests_networkSpanUsesSeparateTrace() throws {
         PropagationTestURLProtocol.stub = (200, [:], Data())

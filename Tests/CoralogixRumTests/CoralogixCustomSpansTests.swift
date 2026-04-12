@@ -263,4 +263,80 @@ final class CoralogixCustomSpansTests: XCTestCase {
         custom.endSpan()
         global.endSpan()
     }
+
+    // MARK: - CX-35954 / CX-35955 (registry + makeSpan parent policy)
+
+    /// Registry exposes ignored flags only while a global span from that tracer is active.
+    func testRegistry_shouldBreakTraceInheritance_matchesIgnoredInstrumentsOnGlobalSpan() {
+        let rum = CoralogixRum(options: options!)
+        let tracer = rum.getCustomTracer(ignoredInstruments: [.errors, .networkRequests])
+        XCTAssertFalse(
+            CoralogixCustomGlobalSpanRegistry.shared.shouldBreakTraceInheritance(for: .errors),
+            "No global yet — nothing ignored for propagation"
+        )
+        guard let global = tracer.startGlobalSpan(name: "g") else {
+            return XCTFail("Expected global span")
+        }
+        defer { global.endSpan() }
+        XCTAssertTrue(CoralogixCustomGlobalSpanRegistry.shared.shouldBreakTraceInheritance(for: .errors))
+        XCTAssertTrue(CoralogixCustomGlobalSpanRegistry.shared.shouldBreakTraceInheritance(for: .networkRequests))
+        XCTAssertFalse(CoralogixCustomGlobalSpanRegistry.shared.shouldBreakTraceInheritance(for: .userInteractions))
+    }
+
+    func testRegistry_shouldBreakTraceInheritance_falseAfterGlobalEnds() {
+        let rum = CoralogixRum(options: options!)
+        let tracer = rum.getCustomTracer(ignoredInstruments: [.userInteractions])
+        guard let global = tracer.startGlobalSpan(name: "g") else {
+            return XCTFail("Expected global span")
+        }
+        XCTAssertTrue(CoralogixCustomGlobalSpanRegistry.shared.shouldBreakTraceInheritance(for: .userInteractions))
+        global.endSpan()
+        XCTAssertFalse(CoralogixCustomGlobalSpanRegistry.shared.shouldBreakTraceInheritance(for: .userInteractions))
+    }
+
+    /// CX-35955: `makeSpan` for an ignored event type uses `setNoParent()` — new trace, no parent.
+    func testMakeSpan_ignoredUserInteraction_breaksGlobalTrace() {
+        let rum = CoralogixRum(options: options!)
+        let tracer = rum.getCustomTracer(ignoredInstruments: [.userInteractions])
+        guard let global = tracer.startGlobalSpan(name: "g") else {
+            return XCTFail("Expected global span")
+        }
+        defer { global.endSpan() }
+        guard let globalReadable = global.span as? any ReadableSpan else {
+            return XCTFail("Expected ReadableSpan")
+        }
+        let globalData = globalReadable.toSpanData()
+
+        var span = rum.makeSpan(event: .userInteraction, source: .console, severity: .info)
+        defer { span.end() }
+        guard let readable = span as? any ReadableSpan else {
+            return XCTFail("Expected ReadableSpan")
+        }
+        let data = readable.toSpanData()
+        XCTAssertNotEqual(data.traceId, globalData.traceId)
+        XCTAssertNil(data.parentSpanId)
+    }
+
+    /// CX-35954: event types not listed in `ignoredInstruments` still parent under the global when it is the active span (default OTel current span).
+    func testMakeSpan_navigationWithGlobalActive_inheritsGlobalTrace() {
+        let rum = CoralogixRum(options: options!)
+        let tracer = rum.getCustomTracer(ignoredInstruments: [.networkRequests])
+        guard let global = tracer.startGlobalSpan(name: "g") else {
+            return XCTFail("Expected global span")
+        }
+        defer { global.endSpan() }
+        guard let globalReadable = global.span as? any ReadableSpan else {
+            return XCTFail("Expected ReadableSpan")
+        }
+        let globalData = globalReadable.toSpanData()
+
+        var span = rum.makeSpan(event: .navigation, source: .console, severity: .info)
+        defer { span.end() }
+        guard let readable = span as? any ReadableSpan else {
+            return XCTFail("Expected ReadableSpan")
+        }
+        let data = readable.toSpanData()
+        XCTAssertEqual(data.traceId, globalData.traceId)
+        XCTAssertEqual(data.parentSpanId, globalData.spanId)
+    }
 }
