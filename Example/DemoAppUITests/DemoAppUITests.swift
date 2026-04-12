@@ -35,6 +35,34 @@ final class DemoAppUITests: XCTestCase {
         let timestamp = String(format: "%.2f", Date().timeIntervalSince1970)
         print("🕐 [\(timestamp)] \(message)")
     }
+
+    /// Taps a row on the Network instrumentation table. Scrolls like `NetworkInstrumentationUITests.tapNetworkOption`
+    /// so CI (large titles / long lists / iOS 18) still finds the label.
+    private func tapNetworkInstrumentationRow(titled optionName: String, waitAfterTap: TimeInterval) {
+        let table = app.tables.firstMatch
+        XCTAssertTrue(table.waitForExistence(timeout: elementTimeout), "❌ Network instrumentation table not found")
+
+        let byLabel = app.staticTexts[optionName]
+        var attempts = 0
+        let maxScrollAttempts = 8
+        while !byLabel.waitForExistence(timeout: 1.5) && attempts < maxScrollAttempts {
+            table.swipeUp()
+            Thread.sleep(forTimeInterval: 0.4)
+            attempts += 1
+        }
+
+        if byLabel.exists {
+            byLabel.tap()
+        } else {
+            let cell = table.cells.containing(NSPredicate(format: "label CONTAINS[c] %@", optionName)).firstMatch
+            XCTAssertTrue(
+                cell.waitForExistence(timeout: elementTimeout),
+                "❌ '\(optionName)' row not found (staticText or cell label)"
+            )
+            cell.tap()
+        }
+        Thread.sleep(forTimeInterval: waitAfterTap)
+    }
     
     override func setUpWithError() throws {
         continueAfterFailure = false
@@ -59,18 +87,9 @@ final class DemoAppUITests: XCTestCase {
         XCTAssertTrue(networkButtonExists, "❌ 'Network instrumentation' button not found")
         networkInstrumentationButton.tap()
         Thread.sleep(forTimeInterval: shortDelay)  // Wait for navigation
-        
-        let failingNetworkButton = app.staticTexts["Failing network request"].firstMatch
-        let failingButtonExists = failingNetworkButton.waitForExistence(timeout: elementTimeout)
-        XCTAssertTrue(failingButtonExists, "❌ 'Failing network request' button not found")
-        failingNetworkButton.tap()
-        Thread.sleep(forTimeInterval: networkDelay)  // Wait for network request
-        
-        let successfulNetworkButton = app.staticTexts["Successful network request"].firstMatch
-        let successfulButtonExists = successfulNetworkButton.waitForExistence(timeout: elementTimeout)
-        XCTAssertTrue(successfulButtonExists, "❌ 'Successful network request' button not found")
-        successfulNetworkButton.tap()
-        Thread.sleep(forTimeInterval: networkDelay)  // Wait for network request
+
+        tapNetworkInstrumentationRow(titled: "Failing network request", waitAfterTap: networkDelay)
+        tapNetworkInstrumentationRow(titled: "Successful network request", waitAfterTap: networkDelay)
         
         // Navigate back using navigation bar back button
         let navBar = app.navigationBars.firstMatch
@@ -99,7 +118,7 @@ final class DemoAppUITests: XCTestCase {
         Thread.sleep(forTimeInterval: shortDelay)  // Wait for event processing
         
         let logErrorButton = app.staticTexts["Log Error"].firstMatch
-        let logErrorButtonExists = messageDataErrorButton.waitForExistence(timeout: elementTimeout)
+        let logErrorButtonExists = logErrorButton.waitForExistence(timeout: elementTimeout)
         XCTAssertTrue(logErrorButtonExists, "❌ 'Log Error' button not found")
         logErrorButton.tap()
         Thread.sleep(forTimeInterval: shortDelay)  // Wait for event processing
