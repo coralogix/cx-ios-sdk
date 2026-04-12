@@ -162,7 +162,7 @@ final class CustomSpansViewController: UITableViewController {
     /// First successful `getCustomTracer` wins for the session (CX-35956). If another row already obtained a tracer with a different `ignoredInstruments`, that tracer is reused.
     private func tracerForSession(preferIgnored: Bool) -> CoralogixCustomTracer? {
         if let c = cachedCustomTracer {
-            if let cachedPref = cachedTracerPreferIgnored, cachedPref != preferIgnored {
+            if (cachedTracerPreferIgnored ?? false) != preferIgnored {
                 presentToast(
                     "Reusing the tracer from an earlier demo — ignored-instruments setting differs. Relaunch the app to switch tracer configuration."
                 )

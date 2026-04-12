@@ -43,9 +43,13 @@ public class CoralogixRum {
 
     /// CX-35956: `getCustomTracer()` may succeed only once per SDK lifecycle (`shutdown()` clears).
     private static var customTracerIssued = false
+    /// Serializes check-and-set for `customTracerIssued` so concurrent `getCustomTracer()` calls cannot both succeed.
+    private static let customTracerIssuanceLock = NSLock()
 
     /// Resets CX-35956 singleton state when tests reinitialize the SDK in-process without calling `shutdown()`.
     internal static func resetCustomTracerIssuanceForTesting() {
+        customTracerIssuanceLock.lock()
+        defer { customTracerIssuanceLock.unlock() }
         customTracerIssued = false
     }
     
@@ -320,7 +324,9 @@ public class CoralogixRum {
     
     public func shutdown() {
         CoralogixCustomGlobalSpanRegistry.shared.teardownIfNeeded()
+        Self.customTracerIssuanceLock.lock()
         CoralogixRum.customTracerIssued = false
+        Self.customTracerIssuanceLock.unlock()
         CoralogixRum.isInitialized = false
         self.coralogixExporter?.shutdown(explicitTimeout: nil)
         self.removeNotification()
@@ -384,7 +390,7 @@ public class CoralogixRum {
     /// Returns a tracer for manual custom spans (API naming aligned with the Coralogix Browser SDK: `startCustomSpan`, `endSpan`).
     ///
     /// CX-35956: Returns `nil` when the SDK is not initialized, `traceParentInHeader` is not configured with `enable: true`,
-    /// or a custom tracer was already obtained (singleton until `shutdown()`).
+    /// or a custom tracer was already obtained (singleton until `shutdown()`). The issuance check is locked so concurrent calls cannot both obtain a tracer.
     ///
     /// - Parameter ignoredInstruments: When starting a global span via this tracer, listed instruments do not inherit that global trace (CX-35955); auto spans for those types use `setNoParent()`.
     public func getCustomTracer(ignoredInstruments: Set<CoralogixIgnoredInstrument> = []) -> CoralogixCustomTracer? {
@@ -405,6 +411,8 @@ public class CoralogixRum {
             Log.w("traceParentInHeader must be enabled to use custom tracer")
             return nil
         }
+        Self.customTracerIssuanceLock.lock()
+        defer { Self.customTracerIssuanceLock.unlock() }
         guard !CoralogixRum.customTracerIssued else {
             Log.w("Custom tracer already exists")
             return nil
