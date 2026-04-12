@@ -120,9 +120,12 @@ public class CoralogixRum {
             return
         }
         
-        let resource = Resource(attributes: [
+        // Merge with the default Resource so the OTel SDK fields
+        // (telemetry.sdk.name, telemetry.sdk.language, telemetry.sdk.version)
+        // are preserved alongside service.name.
+        let resource = Resource().merging(other: Resource(attributes: [
             ResourceAttributes.serviceName.rawValue: .string(applicationName)
-        ])
+        ]))
         
         let spanProcessor = BatchSpanProcessor(
             spanExporter: exporter,
