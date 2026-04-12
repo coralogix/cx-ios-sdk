@@ -130,7 +130,7 @@ public final class CoralogixCustomTracer {
         let mergedSdkAndGlobal = mergingCustomLabelLayer(into: sdkLabels, labels)
         var otelSpan = tracer.spanBuilder(spanName: name).setNoParent().startSpan()
         stampCoralogixCustomSpanRUM(on: &otelSpan)
-        rum.enrichCustomSpanMetadata(to: &otelSpan)
+        rum.addRumCorrelationMetadata(to: &otelSpan)
         setMergedCustomLabelsJSON(merged: mergedSdkAndGlobal, on: &otelSpan)
         guard CoralogixCustomGlobalSpanRegistry.shared.registerGlobalSpan(otelSpan) else {
             Log.w("Global custom span already active — startGlobalSpan ignored; ending orphan span")
@@ -199,7 +199,7 @@ public final class CoralogixGlobalSpan {
         let mergedAllLevels = mergingCustomLabelLayer(into: mergedSdkAndGlobalLabels, labels)
         var child = baseBuilder.startSpan()
         stampCoralogixCustomSpanRUM(on: &child)
-        rum?.enrichCustomSpanMetadata(to: &child)
+        rum?.addRumCorrelationMetadata(to: &child)
         setMergedCustomLabelsJSON(merged: mergedAllLevels, on: &child)
         return CoralogixCustomSpan(span: child)
     }
