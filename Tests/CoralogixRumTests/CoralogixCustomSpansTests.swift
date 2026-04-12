@@ -62,7 +62,7 @@ final class CoralogixCustomSpansTests: XCTestCase {
         guard let global = tracer.startGlobalSpan(name: "g") else {
             return XCTFail("Expected global span")
         }
-        guard let globalData = (global.span as? ReadableSpan)?.toSpanData() else {
+        guard let globalData = (global.span as? any ReadableSpan)?.toSpanData() else {
             return XCTFail("Expected ReadableSpan")
         }
         XCTAssertEqual(globalData.attributes[Keys.eventType.rawValue], .string(CoralogixEventType.customSpan.rawValue))
@@ -70,7 +70,7 @@ final class CoralogixCustomSpansTests: XCTestCase {
         XCTAssertEqual(globalData.attributes[Keys.severity.rawValue], .int(CoralogixLogSeverity.info.rawValue))
 
         let child = global.startCustomSpan(name: "c")
-        guard let childData = (child.span as? ReadableSpan)?.toSpanData() else {
+        guard let childData = (child.span as? any ReadableSpan)?.toSpanData() else {
             return XCTFail("Expected ReadableSpan")
         }
         XCTAssertEqual(childData.attributes[Keys.eventType.rawValue], .string(CoralogixEventType.customSpan.rawValue))
@@ -85,11 +85,11 @@ final class CoralogixCustomSpansTests: XCTestCase {
         guard let global = tracer.startGlobalSpan(name: "g") else {
             return XCTFail("Expected global span")
         }
-        guard let globalData = (global.span as? ReadableSpan)?.toSpanData() else {
+        guard let globalData = (global.span as? any ReadableSpan)?.toSpanData() else {
             return XCTFail("Expected ReadableSpan")
         }
         let child = global.startCustomSpan(name: "c")
-        guard let childData = (child.span as? ReadableSpan)?.toSpanData() else {
+        guard let childData = (child.span as? any ReadableSpan)?.toSpanData() else {
             return XCTFail("Expected ReadableSpan")
         }
         XCTAssertEqual(childData.attributes[Keys.sessionId.rawValue], globalData.attributes[Keys.sessionId.rawValue])
@@ -107,7 +107,7 @@ final class CoralogixCustomSpansTests: XCTestCase {
         guard let global = tracer.startGlobalSpan(name: "checkout", labels: ["flow": "standard"]) else {
             return XCTFail("Expected global span")
         }
-        guard let readable = global.span as? ReadableSpan else {
+        guard let readable = global.span as? any ReadableSpan else {
             return XCTFail("Expected ReadableSpan")
         }
         let data = readable.toSpanData()
@@ -140,7 +140,7 @@ final class CoralogixCustomSpansTests: XCTestCase {
         guard let global = tracer.startGlobalSpan(name: "g", labels: ["tier": "global", "fromGlobal": "yes"]) else {
             return XCTFail("Expected global span")
         }
-        guard let globalJson = (global.span as? ReadableSpan)?.toSpanData().attributes[Keys.customLabels.rawValue],
+        guard let globalJson = (global.span as? any ReadableSpan)?.toSpanData().attributes[Keys.customLabels.rawValue],
               case let .string(globalStr) = globalJson,
               let globalDict = Helper.convertJsonStringToDict(jsonString: globalStr)
         else {
@@ -151,7 +151,7 @@ final class CoralogixCustomSpansTests: XCTestCase {
         XCTAssertEqual(globalDict["fromGlobal"] as? String, "yes")
 
         let child = global.startCustomSpan(name: "c", labels: ["tier": "child", "fromChild": "c"])
-        guard let childJson = (child.span as? ReadableSpan)?.toSpanData().attributes[Keys.customLabels.rawValue],
+        guard let childJson = (child.span as? any ReadableSpan)?.toSpanData().attributes[Keys.customLabels.rawValue],
               case let .string(childStr) = childJson,
               let childDict = Helper.convertJsonStringToDict(jsonString: childStr)
         else {
@@ -172,7 +172,7 @@ final class CoralogixCustomSpansTests: XCTestCase {
             return XCTFail("Expected global span")
         }
         let custom = global.startCustomSpan(name: "child")
-        guard let childReadable = custom.span as? ReadableSpan else {
+        guard let childReadable = custom.span as? any ReadableSpan else {
             return XCTFail("Expected ReadableSpan")
         }
         let childData = childReadable.toSpanData()
@@ -221,7 +221,7 @@ final class CoralogixCustomSpansTests: XCTestCase {
     func testEndSpanRestoresPreviousActiveSpan() {
         let rum = CoralogixRum(options: options!)
         let tracer = rum.tracerProvider()
-        var markerBuilder = tracer.spanBuilder(spanName: "marker")
+        let markerBuilder = tracer.spanBuilder(spanName: "marker")
         _ = markerBuilder.setActive(true)
         let marker = markerBuilder.startSpan()
         XCTAssertTrue(
