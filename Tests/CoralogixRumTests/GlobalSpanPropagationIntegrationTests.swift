@@ -83,9 +83,9 @@ final class GlobalSpanPropagationIntegrationTests: XCTestCase {
             ignoreErrors: [],
             labels: [:],
             sessionSampleRate: 100,
-            debug: true,
             instrumentations: [.network: true],
-            networkExtraConfig: [NetworkCaptureRule(url: Self.baseURL)]
+            networkExtraConfig: [NetworkCaptureRule(url: Self.baseURL)],
+            debug: true
         )
     }
 
@@ -104,7 +104,9 @@ final class GlobalSpanPropagationIntegrationTests: XCTestCase {
         while Date() < deadline {
             forceFlush()
             captureLock.lock()
-            let match = capturedSpans.first { span in
+            // URLSession instrumentation may emit more than one client span per request (factory + resume paths).
+            // Assert against the last matching export for this URL so we validate the span built with final parent policy.
+            let match = capturedSpans.last { span in
                 let type = span.attributes[Keys.eventType.rawValue]?.description ?? ""
                 guard type.contains(CoralogixEventType.networkRequest.rawValue) else { return false }
                 guard let url = span.attributes[SemanticAttributes.httpUrl.rawValue]?.description else { return false }

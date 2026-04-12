@@ -118,10 +118,12 @@ final class NetworkCaptureIntegrationTests: XCTestCase {
 
     /// Finds a network span matching the URL. When `requiringRequestPayload` is true, only returns a span that has
     /// request_payload set — avoids picking a span from another swizzle layer that lacks capture (flaky in CI).
+    /// Prefers the **last** match: URLSession instrumentation may emit more than one client span per request (factory + resume);
+    /// the later export usually reflects the span after response handling (e.g. `response_payload`).
     func findNetworkSpan(urlContains: String, requiringRequestPayload: Bool) -> SpanData? {
         captureLock.lock()
         defer { captureLock.unlock() }
-        return capturedSpans.first { span in
+        return capturedSpans.last { span in
             let type = span.attributes[Keys.eventType.rawValue]?.description ?? ""
             guard type.contains(CoralogixEventType.networkRequest.rawValue) else { return false }
             guard let url = span.attributes[SemanticAttributes.httpUrl.rawValue]?.description else { return false }
@@ -157,7 +159,7 @@ final class NetworkCaptureIntegrationTests: XCTestCase {
             NetworkCaptureRule(urlPattern: pattern, collectResPayload: true)
         ])
         performRequest(url: url)
-        let span = try XCTUnwrap(waitForNetworkSpan(urlContains: "capturetest"), "Network span for regex-matched URL must be exported")
+        let span = try XCTUnwrap(waitForNetworkSpan(urlContains: "/v2/orders/1"), "Network span for regex-matched URL must be exported")
         let payload = span.attributes[Keys.responsePayload.rawValue]?.description
         if let p = payload {
             XCTAssertEqual(p, json, "When response payload is captured it must match stub body")
