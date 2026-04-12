@@ -71,6 +71,11 @@ final class UserInteractionUITests: XCTestCase {
 
     override func tearDownWithError() throws {
         app.terminate()
+        // Give the OS time to fully wind down the process before the next
+        // test's setUp calls app.launch(), which internally terminates any
+        // running instance — without this gap, launch() can fail with
+        // "Failed to terminate <bundle-id>" on slow CI machines.
+        Thread.sleep(forTimeInterval: isCI ? 3.0 : 1.0)
         app = nil
         try super.tearDownWithError()
     }

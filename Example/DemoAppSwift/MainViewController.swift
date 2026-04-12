@@ -33,6 +33,12 @@ final class MainViewController: UITableViewController {
             key: .sdkFunctions
         ),
         .init(
+            title: "Custom spans",
+            subtitle: "Manual global & nested spans (Browser API parity)",
+            systemImageName: "timeline.selection",
+            key: .customSpans
+        ),
+        .init(
             title: "User actions",
             subtitle: "Buttons, screens & custom events",
             systemImageName: "hand.tap",
@@ -239,6 +245,8 @@ final class MainViewController: UITableViewController {
             vc = ErrorViewController()
         case .sdkFunctions:
             vc = SdkViewController()
+        case .customSpans:
+            vc = CustomSpansViewController()
         case .userActionsInstumentation:
             vc = UserActionsViewController()
         case .sessionReplay:

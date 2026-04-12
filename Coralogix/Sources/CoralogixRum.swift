@@ -308,6 +308,7 @@ public class CoralogixRum {
     }
     
     public func shutdown() {
+        CoralogixCustomGlobalSpanRegistry.shared.teardownIfNeeded()
         CoralogixRum.isInitialized = false
         self.coralogixExporter?.shutdown(explicitTimeout: nil)
         self.removeNotification()
@@ -367,6 +368,13 @@ public class CoralogixRum {
         span.setAttribute(key: Keys.value.rawValue, value: value)
         span.end()
     }
+
+    /// Returns a tracer for manual custom spans (API naming aligned with the Coralogix Browser SDK: `startCustomSpan`, `endSpan`).
+    ///
+    /// - Parameter ignoredInstruments: Reserved for future use (filtering auto-instrumentation interaction with custom trace context).
+    public func getCustomTracer(ignoredInstruments: Set<CoralogixIgnoredInstrument> = []) -> CoralogixCustomTracer {
+        CoralogixCustomTracer(rum: self, ignoredInstruments: ignoredInstruments)
+    }
     
     // MARK: - Spans & Attributes
     internal var options: CoralogixExporterOptions? { return self.coralogixExporter?.getOptions() }
@@ -377,6 +385,30 @@ public class CoralogixRum {
         span.setAttribute(key: Keys.userName.rawValue, value: options.userContext?.userName ?? "")
         span.setAttribute(key: Keys.userEmail.rawValue, value: options.userContext?.userEmail ?? "")
         span.setAttribute(key: Keys.environment.rawValue, value: options.environment)
+    }
+
+    /// Current and previous session IDs plus user and environment — shared by `makeSpan` and manual custom spans.
+    internal func addRumCorrelationMetadata(to span: inout any Span) {
+        addSessionAndPrevSessionMetadata(to: &span)
+        addUserMetadata(to: &span)
+    }
+
+    private func addSessionAndPrevSessionMetadata(to span: inout any Span) {
+        if let sessionMetadata = self.coralogixExporter?.getSessionManager().sessionMetadata {
+            span.setAttribute(key: Keys.sessionCreationDate.rawValue, value: String(Int(sessionMetadata.sessionCreationDate)))
+            span.setAttribute(key: Keys.sessionId.rawValue, value: sessionMetadata.sessionId)
+        }
+        if let prevSessionMetadata = self.coralogixExporter?.getSessionManager().getPrevSessionMetadata() {
+            if let prevPid = prevSessionMetadata.oldPid {
+                span.setAttribute(key: Keys.prevPid.rawValue, value: prevPid)
+            }
+            if let prevSessionId = prevSessionMetadata.oldSessionId {
+                span.setAttribute(key: Keys.prevSessionId.rawValue, value: prevSessionId)
+            }
+            if let prevSessionCreationDate = prevSessionMetadata.oldSessionTimeInterval {
+                span.setAttribute(key: Keys.prevSessionCreationDate.rawValue, value: String(Int(prevSessionCreationDate)))
+            }
+        }
     }
     
     private func displayCoralogixWord() {
@@ -400,25 +432,7 @@ public class CoralogixRum {
         span.setAttribute(key: Keys.eventType.rawValue, value: event.rawValue)
         span.setAttribute(key: Keys.source.rawValue, value: source.rawValue)
         span.setAttribute(key: Keys.severity.rawValue, value: AttributeValue.int(severity.rawValue))
-        
-        if let sessionMetadata = self.coralogixExporter?.getSessionManager().sessionMetadata {
-            span.setAttribute(key: Keys.sessionCreationDate.rawValue, value: String(Int(sessionMetadata.sessionCreationDate)))
-            span.setAttribute(key: Keys.sessionId.rawValue, value: sessionMetadata.sessionId)
-        }
-        
-        if let prevSessionMetadata = self.coralogixExporter?.getSessionManager().getPrevSessionMetadata() {
-            if let prevPid = prevSessionMetadata.oldPid {
-                span.setAttribute(key: Keys.prevPid.rawValue, value: prevPid)
-            }
-            if let prevSessionId = prevSessionMetadata.oldSessionId {
-                span.setAttribute(key: Keys.prevSessionId.rawValue, value: prevSessionId)
-            }
-            if let prevSessionCreationDate = prevSessionMetadata.oldSessionTimeInterval {
-                span.setAttribute(key: Keys.prevSessionCreationDate.rawValue, value: String(Int(prevSessionCreationDate)))
-            }
-        }
-        
-        self.addUserMetadata(to: &span)
+        addRumCorrelationMetadata(to: &span)
         return span
     }
 }

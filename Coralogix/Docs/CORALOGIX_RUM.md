@@ -308,6 +308,40 @@ coralogixIntegration.log(severity: .error, message: "A critical error occurred",
 coralogixIntegration.shutdown()
 ```
 
+## Custom spans (manual tracing)
+
+The Custom Spans API mirrors the Coralogix Browser SDK naming (`startCustomSpan`, `endSpan`, not `startChildSpan` / `end`). Exported RUM matches the browser: `event_context.type` is **`custom-span`**, with **`source`** `code` and **info** severity (unless you override attributes on the underlying OTel span). Nested spans receive the same session and user metadata as the global span so each ended span can be encoded for RUM export.
+
+Only **one** global custom span may exist at a time (same as the Browser SDK). `startGlobalSpan` registers it as the **active OpenTelemetry span**, so auto-instrumented spans and network propagation can share the same `traceId` until `endSpan()` (which restores the prior active context). `withContext` is a no-op when the global span is already active. `shutdown()` clears a leaked global registration.
+
+**Label merge (CX-35953, Browser parity):** Labels from `CoralogixRum` init / `setLabels` (SDK level), then `startGlobalSpan(name:labels:)`, then `startCustomSpan(name:labels:)`—each step overrides the same key from the previous. The merged map is stored on the span as a JSON string attribute **`custom_labels`**, same as the Browser SDK’s `setCustomLabelsForSpan` / `getCustomMergedLabels`. RUM `text.cx_rum.labels` is built from SDK options merged with that attribute (see `Helper.getLabels`).
+
+**Tracing:** Each exported custom-span log includes **`instrumentation_data.otelSpan`** with mobile fields plus **OTLP-style mirrors** used by the Browser trace converter (`trace_id`, `span_id`, `parent_span_id`, `start_time_unix_nano`, `end_time_unix_nano`, `kind_string`, `status_otlp`). The Browser SDK also sends a **separate** OTLP payload via optional `tracesExporter`; iOS only uses the RUM logs endpoint. If spans still do not appear under **Tracing**, confirm with Coralogix that your account indexes `instrumentation_data` from **mobile** RUM (pipeline may differ from web).
+
+### Types
+
+- `CoralogixIgnoredInstrument` — `.networkRequests`, `.userInteractions`, `.errors` (values are reserved for future behavior when combining auto-instrumentation with custom traces).
+- `CoralogixCustomTracer` — from `getCustomTracer(ignoredInstruments:)`.
+- `CoralogixGlobalSpan` — root span from `startGlobalSpan(name:labels:)`; exposes `span`, `withContext(_:)`, `startCustomSpan(name:labels:)`, `endSpan()`.
+- `CoralogixCustomSpan` — nested span; exposes `span`, `endSpan()`, `setAttribute`, `addEvent`, `setStatus`.
+
+### Example
+
+```swift
+let tracer = coralogixRum.getCustomTracer(ignoredInstruments: [.networkRequests])
+guard let global = tracer.startGlobalSpan(name: "checkout", labels: ["step": "payment"]) else { return }
+
+global.withContext {
+    let child = global.startCustomSpan(name: "authorize")
+    child.setAttribute(key: "result", value: "ok")
+    child.endSpan()
+}
+
+global.endSpan()
+```
+
+`startGlobalSpan` returns `nil` if the SDK did not finish initialization (for example, sampling disabled the SDK).
+
 ## About Method Swizzling and SwiftUI Modifiers
 ### Method Swizzling
 Method swizzling is a technique used in Objective-C and Swift that allows the changing of the implementation of an existing selector at runtime. This can be used to inject custom behavior into existing methods without altering the original code. However, method swizzling can lead to maintenance challenges and unpredictable behavior, especially with system APIs.

@@ -109,6 +109,16 @@ final class InstrumentationDataTests: XCTestCase {
         XCTAssertNotNil(dict[Keys.duration.rawValue])
         XCTAssertEqual(dict[Keys.keySessionId.rawValue] as? String, "session_001")
         XCTAssertNil(dict[Keys.parentSpanId.rawValue], "parentSpanId should be absent for root spans")
+
+        XCTAssertEqual(dict[Keys.otlpTraceId.rawValue] as? String, "trace123")
+        XCTAssertEqual(dict[Keys.otlpSpanId.rawValue] as? String, "span123")
+        XCTAssertEqual(dict[Keys.otlpKindString.rawValue] as? String, Keys.otlpSpanKindClient.rawValue)
+        XCTAssertNotNil(dict[Keys.otlpStartTimeUnixNano.rawValue] as? String)
+        XCTAssertNotNil(dict[Keys.otlpEndTimeUnixNano.rawValue] as? String)
+        XCTAssertEqual(
+            (dict[Keys.otlpStatus.rawValue] as? [String: Any])?[Keys.code.rawValue] as? String,
+            Keys.otlpStatusCodeUnset.rawValue
+        )
     }
 
     func testInitializationWithAttributes() throws {
