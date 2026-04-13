@@ -340,9 +340,11 @@ public enum OtlpAnyValue: Encodable {
         case .doubleArray(let values):
             self = .arrayValue(values.map { .doubleValue($0) })
         case .set(let attributeSet):
-            let kvPairs = attributeSet.labels.map { key, value in
-                OtlpKeyValue(key: key, value: OtlpAnyValue(from: value))
-            }
+            let kvPairs = attributeSet.labels
+                .sorted { $0.key < $1.key }
+                .map { key, value in
+                    OtlpKeyValue(key: key, value: OtlpAnyValue(from: value))
+                }
             self = .kvlistValue(kvPairs)
         }
     }

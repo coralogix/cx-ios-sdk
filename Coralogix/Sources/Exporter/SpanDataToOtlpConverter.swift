@@ -136,9 +136,11 @@ struct SpanDataToOtlpConverter {
     }
     
     private static func convertAttributes(_ attributes: [String: AttributeValue]) -> [OtlpKeyValue] {
-        return attributes.map { key, value in
-            OtlpKeyValue(key: key, value: OtlpAnyValue(from: value))
-        }
+        return attributes
+            .sorted { $0.key < $1.key }
+            .map { key, value in
+                OtlpKeyValue(key: key, value: OtlpAnyValue(from: value))
+            }
     }
     
     // MARK: - Base64 Encoding
