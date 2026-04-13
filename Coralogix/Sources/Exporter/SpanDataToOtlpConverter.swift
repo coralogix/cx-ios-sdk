@@ -163,8 +163,13 @@ struct SpanDataToOtlpConverter {
     
     /// Converts a Date to Unix nanoseconds as a String.
     /// OTLP requires timestamps as strings to preserve precision.
+    /// Dates before Unix epoch (1970) are clamped to 0.
     static func dateToUnixNanoString(_ date: Date) -> String {
-        let nanos = UInt64(date.timeIntervalSince1970 * 1_000_000_000)
+        let timeInterval = date.timeIntervalSince1970
+        guard timeInterval >= 0 else {
+            return "0"
+        }
+        let nanos = UInt64(timeInterval * 1_000_000_000)
         return String(nanos)
     }
     
