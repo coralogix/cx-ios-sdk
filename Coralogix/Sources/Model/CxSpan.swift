@@ -174,13 +174,15 @@ public class CxSpan {
         return mergedDict
     }
     
+    /// Valid severity range (CoralogixLogSeverity: debug=1 through critical=6).
+    private static let validSeverityRange = 1...6
+
     /// Normalizes a severity value supplied by beforeSend into an Int.
     /// Accepts Int directly or a numeric String (matching the OTEL attribute initializer path).
-    /// Returns `fallback` when the value is nil, non-numeric, or an unrecognised type.
+    /// Returns `fallback` when the value is nil, non-numeric, out of valid range (1-6), or an unrecognised type.
     private static func parseSeverity(_ value: Any?, fallback: Int) -> Int {
-        if let intVal = value as? Int { return intVal }
-        if let strVal = value as? String, let parsed = Int(strVal) { return parsed }
-        return fallback
+        let parsed = (value as? Int) ?? (value as? String).flatMap(Int.init)
+        return parsed.flatMap { validSeverityRange.contains($0) ? $0 : nil } ?? fallback
     }
 
     private func updateSnapshotErrorCount(in result: inout [String: Any], sessionManager: SessionManager) {
