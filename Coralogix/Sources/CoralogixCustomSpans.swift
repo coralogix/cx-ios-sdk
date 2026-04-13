@@ -48,7 +48,7 @@ final class CoralogixCustomGlobalSpanRegistry {
     /// Ends the registry entry for this span: clears state, ends the span, restores previous active context. Returns `false` if `span` is not the registered global.
     func endGlobalSpanIfMatches(_ span: any Span) -> Bool {
         lock.lock()
-        let isMatch = (registeredGlobal as AnyObject?) === (span as AnyObject)
+        let isMatch = registeredGlobal?.context.spanId == span.context.spanId
         let previous = spanActiveBeforeGlobal
         if isMatch {
             registeredGlobal = nil
@@ -189,7 +189,7 @@ public final class CoralogixGlobalSpan {
 
     private func isRegisteredGlobalActiveInOTel() -> Bool {
         let active = OpenTelemetry.instance.contextProvider.activeSpan
-        return (active as AnyObject?) === (span as AnyObject)
+        return active?.context.spanId == span.context.spanId
     }
 
     /// Runs `work` with this span as the active OTel context. If it is already active (after `startGlobalSpan`), runs `work` without removing it from context.
