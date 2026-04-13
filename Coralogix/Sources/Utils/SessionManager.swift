@@ -50,6 +50,7 @@ public class SessionManager {
     private let idleInterval: TimeInterval = 15 * 60  // 15 minutes in seconds
     private var errorCount: Int = 0
     private var clickCount: Int = 0
+    private let countersLock = NSLock()
     public var sessionChangedCallback: ((String) -> Void)?
     public var sessionEndedCallback: (() -> Void)?
     public var hasRecording: Bool = false
@@ -77,16 +78,22 @@ public class SessionManager {
     }
     
     public func incrementErrorCounter() {
+        countersLock.lock()
+        defer { countersLock.unlock() }
         errorCount += 1
     }
 
     public func decrementErrorCounter() {
+        countersLock.lock()
+        defer { countersLock.unlock() }
         if errorCount > 0 {
             errorCount -= 1
         }
     }
     
     public func incrementClickCounter() {
+        countersLock.lock()
+        defer { countersLock.unlock() }
         clickCount += 1
     }
     
@@ -95,10 +102,14 @@ public class SessionManager {
     }
     
     public func getErrorCount() -> Int {
+        countersLock.lock()
+        defer { countersLock.unlock() }
         return errorCount
     }
     
     public func getClickCount() -> Int {
+        countersLock.lock()
+        defer { countersLock.unlock() }
         return clickCount
     }
     
@@ -120,8 +131,10 @@ public class SessionManager {
     }
     
     public func reset() {
+        countersLock.lock()
         self.errorCount = 0
         self.clickCount = 0
+        countersLock.unlock()
         self.hasRecording = false
     }
     
