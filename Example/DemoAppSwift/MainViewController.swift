@@ -67,6 +67,12 @@ final class MainViewController: UITableViewController {
             subtitle: "Hide sensitive on-screen data",
             systemImageName: "eye.slash",
             key: .maskUI
+        ),
+        .init(
+            title: "Traces Exporter",
+            subtitle: "Test OTLP trace export callback",
+            systemImageName: "arrow.up.doc",
+            key: .tracesExporter
         )
     ]
 
@@ -257,6 +263,8 @@ final class MainViewController: UITableViewController {
             vc = SchemaValidationViewController()
         case .maskUI:
             vc = MaskViewController()
+        case .tracesExporter:
+            vc = TracesExporterViewController()
         default:
             showToast("Not implemented for this menu item")
             return

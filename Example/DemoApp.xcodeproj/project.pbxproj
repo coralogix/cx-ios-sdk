@@ -77,6 +77,7 @@
 		E6FDDA2E2DF176DC0005F275 /* SchemaValidationViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6FDDA312DF176DC0005F275 /* SchemaValidationViewController.swift */; };
 		E6C359522F04000510035951 /* CustomSpansViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6C359512F04000510035951 /* CustomSpansViewController.swift */; };
 		E6FDDA2F2DF176DC0005F274 /* ClockViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6FDDA2C2DF176DC0005F274 /* ClockViewController.swift */; };
+		E6TRACES012F0C000010035951 /* TracesExporterViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6TRACES002F0C000010035951 /* TracesExporterViewController.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -169,6 +170,7 @@
 		E6FDDA2C2DF176DC0005F274 /* ClockViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClockViewController.swift; sourceTree = "<group>"; };
 		E6FDDA312DF176DC0005F275 /* SchemaValidationViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SchemaValidationViewController.swift; sourceTree = "<group>"; };
 		E6C359512F04000510035951 /* CustomSpansViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomSpansViewController.swift; sourceTree = "<group>"; };
+		E6TRACES002F0C000010035951 /* TracesExporterViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TracesExporterViewController.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -316,6 +318,7 @@
 				E6FDDA2C2DF176DC0005F274 /* ClockViewController.swift */,
 				E6FDDA312DF176DC0005F275 /* SchemaValidationViewController.swift */,
 				E6C359512F04000510035951 /* CustomSpansViewController.swift */,
+				E6TRACES002F0C000010035951 /* TracesExporterViewController.swift */,
 				E6E515FD2EBB8644008EC19A /* MaskViewController.swift */,
 				E6B60A052DB4EAAC003AD35D /* Assets.xcassets */,
 				E68681AA2BFA279500B127E7 /* Main.storyboard */,
@@ -618,6 +621,7 @@
 				E6FDDA2D2DF176DC0005F274 /* ClockViewController.swift in Sources */,
 				E6FDDA2E2DF176DC0005F275 /* SchemaValidationViewController.swift in Sources */,
 				E6C359522F04000510035951 /* CustomSpansViewController.swift in Sources */,
+				E6TRACES012F0C000010035951 /* TracesExporterViewController.swift in Sources */,
 				E669384F2C747E860002335F /* CustomView.swift in Sources */,
 				E6E515FE2EBB8644008EC19A /* MaskViewController.swift in Sources */,
 				E66938572C74A8830002335F /* UserActionsViewController.swift in Sources */,

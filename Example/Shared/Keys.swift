@@ -65,4 +65,5 @@ enum Keys: String {
     case testSessionSampler   = "Test Session Sampler"
     case requestWithHeaderCapture = "Request with header/payload capture"
     case customSpans = "Custom Spans"
+    case tracesExporter = "Traces Exporter"
 }
