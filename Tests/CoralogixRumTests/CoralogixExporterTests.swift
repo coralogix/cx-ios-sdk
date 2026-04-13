@@ -1147,9 +1147,8 @@ final class CoralogixExporterTests: XCTestCase {
     }
 
     func test_tracesExporter_notCalled_whenNil() {
-        // Verify callback is NOT invoked when tracesExporter is nil (existing behavior)
-        var callbackInvoked = false
-
+        // Verify that when tracesExporter is nil, export still works normally
+        // (no callback to invoke, but upload should proceed)
         let opts = CoralogixExporterOptions(
             coralogixDomain: .US2,
             userContext: nil,
@@ -1172,20 +1171,11 @@ final class CoralogixExporterTests: XCTestCase {
         exporter.spanUploader = mockUploader
 
         let span = makeValidSpanData()
-        _ = exporter.export(spans: [span], explicitTimeout: nil)
+        let result = exporter.export(spans: [span], explicitTimeout: nil)
 
-        // Give some time for any async callback to fire (it shouldn't)
-        let exp = expectation(description: "Wait for potential callback")
-        exp.isInverted = true  // We expect this to NOT be fulfilled
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            if callbackInvoked {
-                exp.fulfill()
-            }
-        }
-        waitForExpectations(timeout: 1)
-
-        XCTAssertFalse(callbackInvoked, "Callback should NOT be invoked when tracesExporter is nil")
-        XCTAssertTrue(mockUploader.uploadCalled, "Regular upload should still happen")
+        // Verify export succeeds and upload is called (normal behavior when tracesExporter is nil)
+        XCTAssertEqual(result, .success, "Export should succeed")
+        XCTAssertTrue(mockUploader.uploadCalled, "Regular upload should still happen when tracesExporter is nil")
     }
 
     override func tearDown() {
