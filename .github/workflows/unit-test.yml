@@ -88,7 +88,7 @@ jobs:
           # Check for test results
           if grep -q "TEST SUCCEEDED" test-output.log; then
             echo "✅ Tests passed!"
-          elif grep -q "Executed [0-9]* tests, with 0 failures" test-output.log; then
+          elif grep -Eq "Executed [1-9][0-9]* tests, with 0 failures" test-output.log; then
             echo "✅ Tests passed!"
           else
             echo "❌ Tests failed"

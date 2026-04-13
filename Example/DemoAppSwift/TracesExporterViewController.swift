@@ -332,7 +332,10 @@ final class TracesExporterViewController: UIViewController {
         
         appendLog("Creating custom span...")
         
-        let tracer = rum.getCustomTracer()
+        guard let tracer = rum.getCustomTracer() else {
+            showToast("Failed to get custom tracer")
+            return
+        }
         guard let global = tracer.startGlobalSpan(
             name: "traces-exporter-test.global",
             labels: ["test.source": "TracesExporterViewController"]
