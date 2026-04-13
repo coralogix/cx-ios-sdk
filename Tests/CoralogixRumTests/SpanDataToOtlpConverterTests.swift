@@ -293,10 +293,10 @@ final class SpanDataToOtlpConverterTests: XCTestCase {
     // MARK: - Grouping Tests
     
     func testGroupSpansByResource() {
-        var resource1 = Resource(attributes: [
+        let resource1 = Resource(attributes: [
             ResourceAttributes.serviceName.rawValue: .string("service-a")
         ])
-        var resource2 = Resource(attributes: [
+        let resource2 = Resource(attributes: [
             ResourceAttributes.serviceName.rawValue: .string("service-b")
         ])
         
@@ -316,9 +316,9 @@ final class SpanDataToOtlpConverterTests: XCTestCase {
         let scope1 = InstrumentationScopeInfo(name: "scope-a", version: "1.0.0")
         let scope2 = InstrumentationScopeInfo(name: "scope-b", version: "2.0.0")
         
-        var span1 = createTestSpanData(name: "span1", instrumentationScope: scope1)
-        var span2 = createTestSpanData(name: "span2", instrumentationScope: scope1)
-        var span3 = createTestSpanData(name: "span3", instrumentationScope: scope2)
+        let span1 = createTestSpanData(name: "span1", instrumentationScope: scope1)
+        let span2 = createTestSpanData(name: "span2", instrumentationScope: scope1)
+        let span3 = createTestSpanData(name: "span3", instrumentationScope: scope2)
         
         let result = SpanDataToOtlpConverter.convert(spans: [span1, span2, span3])
         

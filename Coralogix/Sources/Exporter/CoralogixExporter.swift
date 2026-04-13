@@ -112,9 +112,14 @@ public class CoralogixExporter: SpanExporter {
         let uniqueSpans = uniqueSpansDict.compactMap { $0.value.first }
 
         if !uniqueSpans.isEmpty {
+            // Capture tracesExporter once to avoid repeated optional checks
+            let tracesExporterCallback = self.options.tracesExporter
+            
             // Invoke tracesExporter callback if configured (on current background thread)
             // This is called before encoding to CxSpan to provide raw SpanData for OTLP conversion.
-            if let tracesExporter = self.options.tracesExporter {
+            // Note: If the callback crashes, it will crash the export pipeline. Users should
+            // handle their own errors within the callback.
+            if let tracesExporter = tracesExporterCallback {
                 let exporterData = CoralogixTraceExporterData(spans: uniqueSpans)
                 tracesExporter(exporterData)
             }
@@ -129,7 +134,7 @@ public class CoralogixExporter: SpanExporter {
             // When tracesExporter is set, strip instrumentation_data from RUM payload
             // to avoid sending duplicate OTel data (mirrors browser SDK behavior).
             let finalSpansDictionary: [[String: Any]]
-            if self.options.tracesExporter != nil {
+            if tracesExporterCallback != nil {
                 finalSpansDictionary = cxSpansDictionary.map { stripInstrumentationData(from: $0) }
             } else {
                 finalSpansDictionary = cxSpansDictionary
