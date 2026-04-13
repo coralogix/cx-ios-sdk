@@ -233,10 +233,23 @@ struct OtelSpan {
         }
         result[Keys.otlpStartTimeUnixNano.rawValue] = Self.otlpUnixNanoString(hrTime: self.startTime)
         result[Keys.otlpEndTimeUnixNano.rawValue] = Self.otlpUnixNanoString(hrTime: self.endTime)
-        result[Keys.otlpKindString.rawValue] = Keys.otlpSpanKindClient.rawValue
+        result[Keys.otlpKindString.rawValue] = Self.otlpSpanKindString(from: self.kind)
         result[Keys.otlpStatus.rawValue] = Self.otlpStatusCode(from: self.status)
 
         return result
+    }
+
+    /// Maps OpenTelemetry SpanKind integer to OTLP kind string.
+    /// SpanKind values: 0=INTERNAL, 1=SERVER, 2=CLIENT, 3=PRODUCER, 4=CONSUMER
+    private static func otlpSpanKindString(from kind: Int) -> String {
+        switch kind {
+        case 0: return Keys.otlpSpanKindInternal.rawValue
+        case 1: return Keys.otlpSpanKindServer.rawValue
+        case 2: return Keys.otlpSpanKindClient.rawValue
+        case 3: return Keys.otlpSpanKindProducer.rawValue
+        case 4: return Keys.otlpSpanKindConsumer.rawValue
+        default: return Keys.otlpSpanKindUnspecified.rawValue
+        }
     }
 }
 

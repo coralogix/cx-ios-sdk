@@ -272,6 +272,11 @@ public struct NetworkCaptureRule {
 /// This means you can have a broad rule that captures payloads and a narrow rule that adds extra
 /// headers — both will be applied to any URL they match.
 ///
+/// - Important: **Breaking behavior change from v2.4.x**: Prior versions used first-match-wins semantics
+///   (matching the browser SDK). This version merges all matching rules. If you relied on rule ordering
+///   to have a specific rule "win" for a given URL, review your configuration as all matching rules now
+///   contribute their settings.
+///
 /// - Parameters:
 ///   - requestUrl: The absolute URL string of the outgoing request.
 ///   - configs: The ordered array of rules from `CoralogixExporterOptions.networkExtraConfig`.

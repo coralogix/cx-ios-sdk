@@ -153,6 +153,11 @@ struct SpanDataToOtlpConverter {
     
     /// Encodes a TraceId (16 bytes) to Base64 string.
     /// TraceId is stored as two UInt64 values (idHi, idLo) in big-endian order.
+    ///
+    /// - Note: Base64 encoding is correct per the OTLP proto3 JSON specification for `bytes` fields.
+    ///   However, some OTLP receivers (Jaeger, Zipkin, OTel Collector JSON endpoint) expect lowercase
+    ///   hex strings instead. If interoperability with such backends is needed, consider adding a
+    ///   hex encoding option via `CoralogixTraceExporterData` configuration.
     static func encodeTraceIdToBase64(_ traceId: TraceId) -> String {
         var bytes = [UInt8](repeating: 0, count: TraceId.size)
         traceId.copyBytesTo(dest: &bytes, destOffset: 0)
@@ -161,6 +166,8 @@ struct SpanDataToOtlpConverter {
     
     /// Encodes a SpanId (8 bytes) to Base64 string.
     /// SpanId is stored as a single UInt64 in big-endian order.
+    ///
+    /// - Note: See `encodeTraceIdToBase64` for Base64 vs hex interoperability considerations.
     static func encodeSpanIdToBase64(_ spanId: SpanId) -> String {
         var bytes = [UInt8](repeating: 0, count: SpanId.size)
         spanId.copyBytesTo(dest: &bytes, destOffset: 0)
@@ -172,6 +179,11 @@ struct SpanDataToOtlpConverter {
     /// Converts a Date to Unix nanoseconds as a String.
     /// OTLP requires timestamps as strings to preserve precision.
     /// Dates before Unix epoch (1970) are clamped to 0.
+    ///
+    /// - Note: Due to Double's 53-bit mantissa, timestamps at current epoch (~2026) have a
+    ///   representable granularity of ~256 nanoseconds. This is acceptable for RUM telemetry
+    ///   where sub-microsecond precision is not required. iOS `Date` itself typically only
+    ///   provides microsecond precision from system clocks.
     static func dateToUnixNanoString(_ date: Date) -> String {
         let timeInterval = date.timeIntervalSince1970
         guard timeInterval >= 0 else {

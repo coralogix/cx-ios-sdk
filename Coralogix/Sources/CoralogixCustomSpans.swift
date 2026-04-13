@@ -46,6 +46,12 @@ final class CoralogixCustomGlobalSpanRegistry {
     }
 
     /// Ends the registry entry for this span: clears state, ends the span, restores previous active context. Returns `false` if `span` is not the registered global.
+    ///
+    /// - Note: The lock is intentionally released before calling `span.end()` to avoid potential
+    ///   deadlocks if span end callbacks attempt to access the registry. This creates a small race
+    ///   window where another thread could call `startGlobalSpan` between unlock and `span.end()`,
+    ///   but this is acceptable given the low probability and limited impact (context restoration
+    ///   order may be slightly off in that edge case).
     func endGlobalSpanIfMatches(_ span: any Span) -> Bool {
         lock.lock()
         let isMatch = registeredGlobal?.context.spanId == span.context.spanId
@@ -172,12 +178,16 @@ public final class CoralogixCustomTracer {
 /// - Note: This class holds a weak reference to `CoralogixRum`. If the SDK is deallocated while
 ///   a global span is still in use, `startCustomSpan` will still work but RUM correlation metadata
 ///   will not be added to child spans.
+/// - Important: If this object is deallocated without calling `endSpan()`, the span will be
+///   automatically ended and the OTel context restored as a safety net. Always prefer explicit `endSpan()`.
 public final class CoralogixGlobalSpan {
     public let span: any Span
     private let tracer: Tracer
     private weak var rum: CoralogixRum?
     /// Snapshot of SDK ∪ global labels at `startGlobalSpan` time; child spans merge child keys on top (CX-35953).
     private let mergedSdkAndGlobalLabels: [String: Any]
+    /// Tracks whether `endSpan()` was called to avoid double-ending in `deinit`.
+    private var hasEnded = false
 
     internal init(
         span: any Span,
@@ -191,12 +201,23 @@ public final class CoralogixGlobalSpan {
         self.mergedSdkAndGlobalLabels = mergedSdkAndGlobalLabels
     }
 
+    deinit {
+        guard !hasEnded else { return }
+        Log.w("CoralogixGlobalSpan deallocated without endSpan() — ending span automatically")
+        _ = CoralogixCustomGlobalSpanRegistry.shared.endGlobalSpanIfMatches(span)
+    }
+
     private func isRegisteredGlobalActiveInOTel() -> Bool {
         let active = OpenTelemetry.instance.contextProvider.activeSpan
         return active?.context.spanId == span.context.spanId
     }
 
     /// Runs `work` with this span as the active OTel context. If it is already active (after `startGlobalSpan`), runs `work` without removing it from context.
+    ///
+    /// - Important: This method uses thread-local context storage and is **not compatible with Swift
+    ///   concurrency** (`async`/`await`). Calling this inside an `async` function or across actor hops
+    ///   will silently fail to propagate the span context to child spans. For async code, manually pass
+    ///   the span reference and use `setParent()` on child span builders.
     public func withContext<R>(_ work: () throws -> R) rethrows -> R {
         if isRegisteredGlobalActiveInOTel() {
             return try work()
@@ -231,6 +252,7 @@ public final class CoralogixGlobalSpan {
 
     /// Ends this global span and restores the OTel active context from before `startGlobalSpan()`.
     public func endSpan() {
+        hasEnded = true
         if CoralogixCustomGlobalSpanRegistry.shared.endGlobalSpanIfMatches(span) {
             return
         }
