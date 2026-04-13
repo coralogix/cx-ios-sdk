@@ -8,6 +8,14 @@
 import Foundation
 import CoralogixInternal
 
+private extension Array where Element: Hashable {
+    /// Returns array with duplicates removed, preserving the order of first occurrences.
+    func uniqued() -> [Element] {
+        var seen = Set<Element>()
+        return filter { seen.insert($0).inserted }
+    }
+}
+
 /// A per-URL rule that controls which headers and payloads the SDK captures for matching network requests.
 ///
 /// Mirrors the browser SDK's `NetworkExtraConfig` interface:
@@ -278,11 +286,11 @@ internal func resolveConfigForUrl(_ requestUrl: String, configs: [NetworkCapture
     guard !matching.isEmpty else { return nil }
     guard matching.count > 1 else { return matching[0] }
 
-    // Merge: union headers, OR booleans
+    // Merge: union headers (preserving insertion order), OR booleans
     let allReqHeaders = matching.compactMap { $0.reqHeaders }.flatMap { $0 }
     let allResHeaders = matching.compactMap { $0.resHeaders }.flatMap { $0 }
-    let mergedReqHeaders: [String]? = allReqHeaders.isEmpty ? nil : Array(Set(allReqHeaders))
-    let mergedResHeaders: [String]? = allResHeaders.isEmpty ? nil : Array(Set(allResHeaders))
+    let mergedReqHeaders: [String]? = allReqHeaders.isEmpty ? nil : allReqHeaders.uniqued()
+    let mergedResHeaders: [String]? = allResHeaders.isEmpty ? nil : allResHeaders.uniqued()
     let collectReq = matching.contains { $0.collectReqPayload }
     let collectRes = matching.contains { $0.collectResPayload }
     return NetworkCaptureRule(url: requestUrl,
