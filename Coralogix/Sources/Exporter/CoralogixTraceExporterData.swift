@@ -18,16 +18,21 @@ public struct CoralogixTraceExporterData {
     /// The OTLP-formatted traces data containing resource spans grouped by resource and scope.
     public let tracesData: OtlpTracesData
     
+    /// Cached JSON data to avoid re-encoding on multiple accesses.
+    private let _jsonData: Data?
+    
     /// JSON-encoded representation of the traces data.
     /// Returns `nil` if encoding fails.
+    /// This value is cached and computed only once.
     public var jsonData: Data? {
-        return SpanDataToOtlpConverter.toJSON(tracesData)
+        return _jsonData
     }
     
     /// JSON string representation of the traces data.
     /// Returns `nil` if encoding fails.
+    /// This value is derived from `jsonData` and benefits from caching.
     public var jsonString: String? {
-        guard let data = jsonData else { return nil }
+        guard let data = _jsonData else { return nil }
         return String(data: data, encoding: .utf8)
     }
     
@@ -42,10 +47,12 @@ public struct CoralogixTraceExporterData {
     
     internal init(tracesData: OtlpTracesData) {
         self.tracesData = tracesData
+        self._jsonData = SpanDataToOtlpConverter.toJSON(tracesData)
     }
     
     internal init(spans: [SpanData]) {
         self.tracesData = SpanDataToOtlpConverter.convert(spans: spans)
+        self._jsonData = SpanDataToOtlpConverter.toJSON(self.tracesData)
     }
 }
 
