@@ -77,11 +77,21 @@ final class TracesExporterViewController: UIViewController {
         return button
     }()
     
+    private lazy var copyFullLogButton: UIButton = {
+        let button = UIButton(type: .system)
+        button.translatesAutoresizingMaskIntoConstraints = false
+        button.setTitle("Copy Full Log to Clipboard", for: .normal)
+        button.titleLabel?.font = .preferredFont(forTextStyle: .footnote)
+        button.addTarget(self, action: #selector(copyFullLog), for: .touchUpInside)
+        return button
+    }()
+    
     // MARK: - State
     
     private static var isTracesExporterEnabled = false
     private static var totalSpansReceived = 0
     private static var logMessages: [String] = []
+    private static var fullJsonLogs: [String] = []
     
     // MARK: - Lifecycle
     
@@ -103,13 +113,21 @@ final class TracesExporterViewController: UIViewController {
         title = "Traces Exporter"
         view.backgroundColor = .systemBackground
         
+        let buttonStackView = UIStackView(arrangedSubviews: [
+            clearLogButton,
+            copyFullLogButton
+        ])
+        buttonStackView.axis = .horizontal
+        buttonStackView.spacing = 20
+        buttonStackView.distribution = .equalCentering
+        
         let stackView = UIStackView(arrangedSubviews: [
             statusLabel,
             spanCountLabel,
             reinitButton,
             triggerNetworkButton,
             triggerCustomSpanButton,
-            clearLogButton
+            buttonStackView
         ])
         stackView.translatesAutoresizingMaskIntoConstraints = false
         stackView.axis = .vertical
@@ -237,8 +255,13 @@ final class TracesExporterViewController: UIViewController {
                 }
                 
                 if let jsonString = data.jsonString {
+                    Self.fullJsonLogs.append(jsonString)
+                    if Self.fullJsonLogs.count > 50 {
+                        Self.fullJsonLogs.removeFirst()
+                    }
+                    
                     let truncated = jsonString.count > 500 
-                        ? String(jsonString.prefix(500)) + "... (truncated)"
+                        ? String(jsonString.prefix(500)) + "... (truncated, use 'Copy Full Log' for complete JSON)"
                         : jsonString
                     logMessage += "\nJSON Preview:\n\(truncated)"
                 }
@@ -315,10 +338,33 @@ final class TracesExporterViewController: UIViewController {
     
     @objc private func clearLog() {
         Self.logMessages.removeAll()
+        Self.fullJsonLogs.removeAll()
         Self.totalSpansReceived = 0
         updateLog()
         updateStatus()
         showToast("Log cleared")
+    }
+    
+    @objc private func copyFullLog() {
+        guard !Self.fullJsonLogs.isEmpty else {
+            showToast("No OTLP data to copy")
+            return
+        }
+        
+        var fullLog = "=== Traces Exporter Full Log ===\n"
+        fullLog += "Total spans received: \(Self.totalSpansReceived)\n"
+        fullLog += "Total exports: \(Self.fullJsonLogs.count)\n"
+        fullLog += "Generated at: \(ISO8601DateFormatter().string(from: Date()))\n"
+        fullLog += "\n"
+        
+        for (index, json) in Self.fullJsonLogs.enumerated() {
+            fullLog += "=== Export #\(index + 1) ===\n"
+            fullLog += json
+            fullLog += "\n\n"
+        }
+        
+        UIPasteboard.general.string = fullLog
+        showToast("Full log copied to clipboard (\(Self.fullJsonLogs.count) exports)")
     }
     
     // MARK: - Toast
