@@ -168,6 +168,10 @@ public final class CoralogixCustomTracer {
 }
 
 /// A root custom span created via `CoralogixCustomTracer.startGlobalSpan(name:labels:)`.
+///
+/// - Note: This class holds a weak reference to `CoralogixRum`. If the SDK is deallocated while
+///   a global span is still in use, `startCustomSpan` will still work but RUM correlation metadata
+///   will not be added to child spans.
 public final class CoralogixGlobalSpan {
     public let span: any Span
     private let tracer: Tracer
