@@ -37,7 +37,8 @@ struct SpanDataToOtlpConverter {
             
             let scopeSpans: [OtlpScopeSpans] = sortedScopeKeys.compactMap { scopeKey in
                 guard let scopedSpans = groupedByScope[scopeKey] else { return nil }
-                let otlpSpans = scopedSpans.map { convertSpan($0) }
+                let sortedSpans = scopedSpans.sorted { spanSortKey($0) < spanSortKey($1) }
+                let otlpSpans = sortedSpans.map { convertSpan($0) }
                 let scope = scopedSpans.first?.instrumentationScope ?? InstrumentationScopeInfo()
                 
                 return OtlpScopeSpans(
@@ -229,5 +230,11 @@ struct SpanDataToOtlpConverter {
         let version = scope.version ?? ""
         let schema = scope.schemaUrl ?? ""
         return "\(scope.name)|\(version)|\(schema)"
+    }
+    
+    /// Creates a stable sort key for a span using traceId + spanId.
+    /// Ensures deterministic ordering of spans within a scope group.
+    private static func spanSortKey(_ span: SpanData) -> String {
+        return "\(span.traceId.hexString)\(span.spanId.hexString)"
     }
 }
