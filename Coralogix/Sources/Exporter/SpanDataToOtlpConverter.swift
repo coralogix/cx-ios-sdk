@@ -28,10 +28,15 @@ struct SpanDataToOtlpConverter {
     static func convert(spans: [SpanData]) -> OtlpTracesData {
         let groupedByResource = groupSpansByResource(spans: spans)
         
-        let resourceSpans = groupedByResource.map { resourceKey, resourceSpans -> OtlpResourceSpans in
-            let groupedByScope = groupSpansByScope(spans: resourceSpans)
+        let sortedResourceKeys = groupedByResource.keys.sorted()
+        let resourceSpans: [OtlpResourceSpans] = sortedResourceKeys.compactMap { resourceKey in
+            guard let resourceSpans = groupedByResource[resourceKey] else { return nil }
             
-            let scopeSpans = groupedByScope.map { scopeKey, scopedSpans -> OtlpScopeSpans in
+            let groupedByScope = groupSpansByScope(spans: resourceSpans)
+            let sortedScopeKeys = groupedByScope.keys.sorted()
+            
+            let scopeSpans: [OtlpScopeSpans] = sortedScopeKeys.compactMap { scopeKey in
+                guard let scopedSpans = groupedByScope[scopeKey] else { return nil }
                 let otlpSpans = scopedSpans.map { convertSpan($0) }
                 let scope = scopedSpans.first?.instrumentationScope ?? InstrumentationScopeInfo()
                 
@@ -49,12 +54,12 @@ struct SpanDataToOtlpConverter {
             
             return OtlpResourceSpans(
                 resource: convertResource(resource),
-                scopeSpans: Array(scopeSpans),
+                scopeSpans: scopeSpans,
                 schemaUrl: nil
             )
         }
         
-        return OtlpTracesData(resourceSpans: Array(resourceSpans))
+        return OtlpTracesData(resourceSpans: resourceSpans)
     }
     
     /// Converts OtlpTracesData to JSON Data.
@@ -219,8 +224,10 @@ struct SpanDataToOtlpConverter {
         return "\(serviceName)|\(sortedAttrs)"
     }
     
-    /// Creates a unique key for an instrumentation scope.
+    /// Creates a unique key for an instrumentation scope (name, version, and schema URL).
     private static func scopeKey(for scope: InstrumentationScopeInfo) -> String {
-        return "\(scope.name)|\(scope.version ?? "")"
+        let version = scope.version ?? ""
+        let schema = scope.schemaUrl ?? ""
+        return "\(scope.name)|\(version)|\(schema)"
     }
 }

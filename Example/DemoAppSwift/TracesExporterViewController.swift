@@ -242,8 +242,7 @@ final class TracesExporterViewController: UIViewController {
             ],
             collectIPData: true,
             tracesExporter: { [weak self] data in
-                Self.totalSpansReceived += data.spanCount
-                
+                // Callback runs on the exporter background queue; build the message off the main thread.
                 var logMessage = "Received \(data.spanCount) span(s)\n"
                 logMessage += "Resource spans: \(data.tracesData.resourceSpans.count)\n"
                 
@@ -265,18 +264,25 @@ final class TracesExporterViewController: UIViewController {
                 }
                 
                 if let jsonString = data.jsonString {
-                    Self.fullJsonLogs.append(jsonString)
-                    if Self.fullJsonLogs.count > 50 {
-                        Self.fullJsonLogs.removeFirst()
-                    }
-                    
-                    let truncated = jsonString.count > 500 
+                    let truncated = jsonString.count > 500
                         ? String(jsonString.prefix(500)) + "... (truncated, use 'Copy Full Log' for complete JSON)"
                         : jsonString
                     logMessage += "\nJSON Preview:\n\(truncated)"
                 }
                 
-                self?.appendLog(logMessage)
+                // Static state and appendLog must match clearLog / copyFullLog / validateOtlpStructure (main thread).
+                DispatchQueue.main.async { [weak self] in
+                    Self.totalSpansReceived += data.spanCount
+                    
+                    if let jsonString = data.jsonString {
+                        Self.fullJsonLogs.append(jsonString)
+                        if Self.fullJsonLogs.count > 50 {
+                            Self.fullJsonLogs.removeFirst()
+                        }
+                    }
+                    
+                    self?.appendLog(logMessage)
+                }
             },
             debug: true
         )

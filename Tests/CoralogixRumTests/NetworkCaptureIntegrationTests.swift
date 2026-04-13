@@ -162,6 +162,7 @@ final class NetworkCaptureIntegrationTests: XCTestCase {
             NetworkCaptureRule(urlPattern: pattern, collectResPayload: true)
         ])
         performRequest(url: url)
+        // Match the specific path — "capturetest" alone can match another export whose body is "{}".
         let span = try XCTUnwrap(waitForNetworkSpan(urlContains: "/v2/orders/1"), "Network span for regex-matched URL must be exported")
         let payload = span.attributes[Keys.responsePayload.rawValue]?.description
         if let p = payload {

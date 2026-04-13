@@ -326,6 +326,44 @@ final class SpanDataToOtlpConverterTests: XCTestCase {
         XCTAssertEqual(result.resourceSpans[0].scopeSpans.count, 2, "Should have 2 scope groups")
     }
     
+    /// Same name/version but different schema URLs must not be merged into one scope_spans entry.
+    func testGroupSpansByScopeSeparatesDifferentSchemaUrl() {
+        let scopeA = InstrumentationScopeInfo(name: "my-lib", version: "1.0.0", schemaUrl: "https://example.com/schema-a")
+        let scopeB = InstrumentationScopeInfo(name: "my-lib", version: "1.0.0", schemaUrl: "https://example.com/schema-b")
+        
+        let span1 = createTestSpanData(name: "s1", instrumentationScope: scopeA)
+        let span2 = createTestSpanData(name: "s2", instrumentationScope: scopeB)
+        
+        let result = SpanDataToOtlpConverter.convert(spans: [span1, span2])
+        
+        XCTAssertEqual(result.resourceSpans.count, 1)
+        XCTAssertEqual(result.resourceSpans[0].scopeSpans.count, 2, "Different schema_url must produce separate scope_spans")
+        let schemaUrls = Set(result.resourceSpans[0].scopeSpans.compactMap { $0.schemaUrl })
+        XCTAssertEqual(schemaUrls.count, 2)
+    }
+    
+    /// Output order must not depend on input span order (stable resource_spans / scope_spans).
+    func testConvertProducesIdenticalJSONRegardlessOfSpanOrder() {
+        let resource1 = Resource(attributes: [
+            ResourceAttributes.serviceName.rawValue: .string("service-a")
+        ])
+        let resource2 = Resource(attributes: [
+            ResourceAttributes.serviceName.rawValue: .string("service-b")
+        ])
+        let scope1 = InstrumentationScopeInfo(name: "scope-z", version: "1.0.0")
+        let scope2 = InstrumentationScopeInfo(name: "scope-y", version: "1.0.0")
+        
+        let spanA = createTestSpanData(name: "a", resource: resource1, instrumentationScope: scope1)
+        let spanB = createTestSpanData(name: "b", resource: resource2, instrumentationScope: scope2)
+        
+        guard let json1 = SpanDataToOtlpConverter.toJSON(spans: [spanA, spanB]),
+              let json2 = SpanDataToOtlpConverter.toJSON(spans: [spanB, spanA]) else {
+            XCTFail("JSON encoding should succeed")
+            return
+        }
+        XCTAssertEqual(json1, json2)
+    }
+    
     // MARK: - JSON Serialization Tests
     
     func testToJSON() {

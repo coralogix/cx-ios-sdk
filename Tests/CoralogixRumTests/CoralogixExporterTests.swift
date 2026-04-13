@@ -957,6 +957,7 @@ final class CoralogixExporterTests: XCTestCase {
     func test_tracesExporter_callbackInvokedWithOtlpData() {
         let expectation = expectation(description: "tracesExporter callback should be invoked")
         var receivedData: CoralogixTraceExporterData?
+        var didFulfill = false
 
         let opts = CoralogixExporterOptions(
             coralogixDomain: .US2,
@@ -970,7 +971,11 @@ final class CoralogixExporterTests: XCTestCase {
             labels: [:],
             tracesExporter: { data in
                 receivedData = data
-                expectation.fulfill()
+                // Export may run more than once (e.g. batch processor + explicit export); assert first callback only.
+                if !didFulfill {
+                    didFulfill = true
+                    expectation.fulfill()
+                }
             },
             debug: true
         )
@@ -1105,6 +1110,7 @@ final class CoralogixExporterTests: XCTestCase {
     func test_tracesExporter_jsonDataContainsOtlpStructure() {
         var receivedJsonString: String?
         let expectation = expectation(description: "tracesExporter callback invoked")
+        var didFulfill = false
 
         let opts = CoralogixExporterOptions(
             coralogixDomain: .US2,
@@ -1118,7 +1124,10 @@ final class CoralogixExporterTests: XCTestCase {
             labels: [:],
             tracesExporter: { data in
                 receivedJsonString = data.jsonString
-                expectation.fulfill()
+                if !didFulfill {
+                    didFulfill = true
+                    expectation.fulfill()
+                }
             },
             debug: true
         )
@@ -1179,6 +1188,9 @@ final class CoralogixExporterTests: XCTestCase {
     }
 
     override func tearDown() {
+        #if DEBUG
+        CoralogixExporter.testExportCallback = nil
+        #endif
         super.tearDown()
     }
 }
