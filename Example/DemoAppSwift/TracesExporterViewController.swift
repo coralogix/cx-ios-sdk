@@ -80,9 +80,18 @@ final class TracesExporterViewController: UIViewController {
     private lazy var copyFullLogButton: UIButton = {
         let button = UIButton(type: .system)
         button.translatesAutoresizingMaskIntoConstraints = false
-        button.setTitle("Copy Full Log to Clipboard", for: .normal)
+        button.setTitle("Copy Full Log", for: .normal)
         button.titleLabel?.font = .preferredFont(forTextStyle: .footnote)
         button.addTarget(self, action: #selector(copyFullLog), for: .touchUpInside)
+        return button
+    }()
+    
+    private lazy var validateOtlpButton: UIButton = {
+        let button = UIButton(type: .system)
+        button.translatesAutoresizingMaskIntoConstraints = false
+        button.setTitle("Validate OTLP", for: .normal)
+        button.titleLabel?.font = .preferredFont(forTextStyle: .footnote)
+        button.addTarget(self, action: #selector(validateOtlpStructure), for: .touchUpInside)
         return button
     }()
     
@@ -115,10 +124,11 @@ final class TracesExporterViewController: UIViewController {
         
         let buttonStackView = UIStackView(arrangedSubviews: [
             clearLogButton,
-            copyFullLogButton
+            copyFullLogButton,
+            validateOtlpButton
         ])
         buttonStackView.axis = .horizontal
-        buttonStackView.spacing = 20
+        buttonStackView.spacing = 16
         buttonStackView.distribution = .equalCentering
         
         let stackView = UIStackView(arrangedSubviews: [
@@ -365,6 +375,232 @@ final class TracesExporterViewController: UIViewController {
         
         UIPasteboard.general.string = fullLog
         showToast("Full log copied to clipboard (\(Self.fullJsonLogs.count) exports)")
+    }
+    
+    @objc private func validateOtlpStructure() {
+        guard !Self.fullJsonLogs.isEmpty else {
+            showValidationResult(title: "No Data", message: "No OTLP data to validate. Generate some spans first.")
+            return
+        }
+        
+        var results: [String] = []
+        var totalPassed = 0
+        var totalFailed = 0
+        
+        for (index, jsonString) in Self.fullJsonLogs.enumerated() {
+            let validation = validateSingleExport(jsonString, exportIndex: index + 1)
+            results.append(validation.report)
+            totalPassed += validation.passed
+            totalFailed += validation.failed
+        }
+        
+        let summary = """
+        === OTLP Validation Summary ===
+        
+        Exports validated: \(Self.fullJsonLogs.count)
+        Total checks passed: \(totalPassed)
+        Total checks failed: \(totalFailed)
+        
+        \(results.joined(separator: "\n\n"))
+        """
+        
+        let title = totalFailed == 0 ? "✅ All Validations Passed" : "⚠️ Some Validations Failed"
+        showValidationResult(title: title, message: summary)
+    }
+    
+    private struct ValidationResult {
+        let report: String
+        let passed: Int
+        let failed: Int
+    }
+    
+    private func validateSingleExport(_ jsonString: String, exportIndex: Int) -> ValidationResult {
+        var checks: [(name: String, passed: Bool, detail: String)] = []
+        
+        guard let jsonData = jsonString.data(using: .utf8) else {
+            return ValidationResult(
+                report: "Export #\(exportIndex): ❌ Invalid UTF-8 encoding",
+                passed: 0,
+                failed: 1
+            )
+        }
+        
+        guard let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] else {
+            return ValidationResult(
+                report: "Export #\(exportIndex): ❌ Invalid JSON",
+                passed: 0,
+                failed: 1
+            )
+        }
+        checks.append(("Valid JSON", true, ""))
+        
+        guard let resourceSpans = json["resource_spans"] as? [[String: Any]] else {
+            checks.append(("Has resource_spans", false, "Missing or invalid resource_spans array"))
+            return buildReport(exportIndex: exportIndex, checks: checks)
+        }
+        checks.append(("Has resource_spans", true, "\(resourceSpans.count) resource(s)"))
+        
+        for (rIdx, resourceSpan) in resourceSpans.enumerated() {
+            if let resource = resourceSpan["resource"] as? [String: Any],
+               let _ = resource["attributes"] as? [[String: Any]] {
+                checks.append(("Resource[\(rIdx)] has attributes", true, ""))
+            } else {
+                checks.append(("Resource[\(rIdx)] has attributes", false, "Missing resource.attributes"))
+            }
+            
+            guard let scopeSpans = resourceSpan["scope_spans"] as? [[String: Any]] else {
+                checks.append(("Resource[\(rIdx)] has scope_spans", false, "Missing scope_spans"))
+                continue
+            }
+            checks.append(("Resource[\(rIdx)] has scope_spans", true, "\(scopeSpans.count) scope(s)"))
+            
+            for (sIdx, scopeSpan) in scopeSpans.enumerated() {
+                if let scope = scopeSpan["scope"] as? [String: Any],
+                   let _ = scope["name"] as? String {
+                    checks.append(("Scope[\(rIdx)][\(sIdx)] has name", true, ""))
+                } else {
+                    checks.append(("Scope[\(rIdx)][\(sIdx)] has name", false, "Missing scope.name"))
+                }
+                
+                guard let spans = scopeSpan["spans"] as? [[String: Any]] else {
+                    checks.append(("Scope[\(rIdx)][\(sIdx)] has spans", false, "Missing spans array"))
+                    continue
+                }
+                checks.append(("Scope[\(rIdx)][\(sIdx)] has spans", true, "\(spans.count) span(s)"))
+                
+                for (spanIdx, span) in spans.enumerated() {
+                    let spanChecks = validateSpan(span, path: "Span[\(rIdx)][\(sIdx)][\(spanIdx)]")
+                    checks.append(contentsOf: spanChecks)
+                }
+            }
+        }
+        
+        return buildReport(exportIndex: exportIndex, checks: checks)
+    }
+    
+    private func validateSpan(_ span: [String: Any], path: String) -> [(name: String, passed: Bool, detail: String)] {
+        var checks: [(name: String, passed: Bool, detail: String)] = []
+        
+        if let traceId = span["trace_id"] as? String {
+            let (valid, detail) = validateBase64(traceId, expectedBytes: 16)
+            checks.append(("\(path) trace_id", valid, detail))
+        } else {
+            checks.append(("\(path) trace_id", false, "Missing"))
+        }
+        
+        if let spanId = span["span_id"] as? String {
+            let (valid, detail) = validateBase64(spanId, expectedBytes: 8)
+            checks.append(("\(path) span_id", valid, detail))
+        } else {
+            checks.append(("\(path) span_id", false, "Missing"))
+        }
+        
+        if let name = span["name"] as? String, !name.isEmpty {
+            checks.append(("\(path) name", true, "'\(name)'"))
+        } else {
+            checks.append(("\(path) name", false, "Missing or empty"))
+        }
+        
+        if let kind = span["kind"] as? String {
+            let validKinds = ["SPAN_KIND_UNSPECIFIED", "SPAN_KIND_INTERNAL", "SPAN_KIND_SERVER", 
+                              "SPAN_KIND_CLIENT", "SPAN_KIND_PRODUCER", "SPAN_KIND_CONSUMER"]
+            let valid = validKinds.contains(kind)
+            checks.append(("\(path) kind", valid, valid ? kind : "Invalid: \(kind)"))
+        } else {
+            checks.append(("\(path) kind", false, "Missing"))
+        }
+        
+        if let startTime = span["start_time_unix_nano"] as? String {
+            let valid = UInt64(startTime) != nil
+            checks.append(("\(path) start_time", valid, valid ? "Valid nanoseconds" : "Invalid format"))
+        } else {
+            checks.append(("\(path) start_time", false, "Missing"))
+        }
+        
+        if let endTime = span["end_time_unix_nano"] as? String {
+            let valid = UInt64(endTime) != nil
+            checks.append(("\(path) end_time", valid, valid ? "Valid nanoseconds" : "Invalid format"))
+        } else {
+            checks.append(("\(path) end_time", false, "Missing"))
+        }
+        
+        if let status = span["status"] as? [String: Any],
+           let code = status["code"] as? String {
+            let validCodes = ["STATUS_CODE_UNSET", "STATUS_CODE_OK", "STATUS_CODE_ERROR"]
+            let valid = validCodes.contains(code)
+            checks.append(("\(path) status.code", valid, valid ? code : "Invalid: \(code)"))
+        } else {
+            checks.append(("\(path) status.code", false, "Missing"))
+        }
+        
+        return checks
+    }
+    
+    private func validateBase64(_ string: String, expectedBytes: Int) -> (valid: Bool, detail: String) {
+        guard let data = Data(base64Encoded: string) else {
+            return (false, "Invalid Base64")
+        }
+        if data.count == expectedBytes {
+            return (true, "\(expectedBytes) bytes")
+        } else {
+            return (false, "Expected \(expectedBytes) bytes, got \(data.count)")
+        }
+    }
+    
+    private func buildReport(exportIndex: Int, checks: [(name: String, passed: Bool, detail: String)]) -> ValidationResult {
+        let passed = checks.filter { $0.passed }.count
+        let failed = checks.filter { !$0.passed }.count
+        
+        var report = "--- Export #\(exportIndex) ---\n"
+        report += "Passed: \(passed), Failed: \(failed)\n"
+        
+        for check in checks {
+            let icon = check.passed ? "✅" : "❌"
+            let detail = check.detail.isEmpty ? "" : " (\(check.detail))"
+            report += "\(icon) \(check.name)\(detail)\n"
+        }
+        
+        return ValidationResult(report: report, passed: passed, failed: failed)
+    }
+    
+    private func showValidationResult(title: String, message: String) {
+        let alert = UIAlertController(title: title, message: nil, preferredStyle: .alert)
+        
+        let textView = UITextView()
+        textView.text = message
+        textView.isEditable = false
+        textView.font = .monospacedSystemFont(ofSize: 10, weight: .regular)
+        textView.backgroundColor = .clear
+        textView.translatesAutoresizingMaskIntoConstraints = false
+        
+        let containerView = UIView()
+        containerView.addSubview(textView)
+        containerView.translatesAutoresizingMaskIntoConstraints = false
+        
+        NSLayoutConstraint.activate([
+            textView.topAnchor.constraint(equalTo: containerView.topAnchor),
+            textView.bottomAnchor.constraint(equalTo: containerView.bottomAnchor),
+            textView.leadingAnchor.constraint(equalTo: containerView.leadingAnchor),
+            textView.trailingAnchor.constraint(equalTo: containerView.trailingAnchor),
+            containerView.heightAnchor.constraint(equalToConstant: 300)
+        ])
+        
+        alert.view.addSubview(containerView)
+        containerView.translatesAutoresizingMaskIntoConstraints = false
+        
+        NSLayoutConstraint.activate([
+            containerView.topAnchor.constraint(equalTo: alert.view.topAnchor, constant: 50),
+            containerView.leadingAnchor.constraint(equalTo: alert.view.leadingAnchor, constant: 10),
+            containerView.trailingAnchor.constraint(equalTo: alert.view.trailingAnchor, constant: -10),
+            alert.view.heightAnchor.constraint(greaterThanOrEqualToConstant: 400)
+        ])
+        
+        alert.addAction(UIAlertAction(title: "Copy Report", style: .default) { _ in
+            UIPasteboard.general.string = message
+        })
+        alert.addAction(UIAlertAction(title: "OK", style: .cancel))
+        
+        present(alert, animated: true)
     }
     
     // MARK: - Toast
