@@ -52,6 +52,7 @@ final class CoralogixRumManager {
 //        },
                                                enableSwizzling: true,
                                                proxyUrl: Envs.PROXY_URL.rawValue, // remove if not need to use proxy
+                                               traceParentInHeader: ["enable": true],
                                                mobileVitals:[.cpuDetector: false,
                                                              .warmDetector: false,
                                                              .coldDetector: false,

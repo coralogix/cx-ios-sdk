@@ -60,7 +60,10 @@ final class NetworkCaptureIntegrationTests: XCTestCase {
         rum = nil
         CoralogixRum.isInitialized = false
         CoralogixExporter.testExportCallback = nil
-        capturedSpans = []
+        captureLock.lock()
+        capturedSpans.removeAll(keepingCapacity: false)
+        captureLock.unlock()
+        CaptureTestURLProtocol.stub = nil
         URLProtocol.unregisterClass(CaptureTestURLProtocol.self)
         try super.tearDownWithError()
     }
@@ -118,10 +121,12 @@ final class NetworkCaptureIntegrationTests: XCTestCase {
 
     /// Finds a network span matching the URL. When `requiringRequestPayload` is true, only returns a span that has
     /// request_payload set — avoids picking a span from another swizzle layer that lacks capture (flaky in CI).
+    /// Prefers the **last** match: URLSession instrumentation may emit more than one client span per request (factory + resume);
+    /// the later export usually reflects the span after response handling (e.g. `response_payload`).
     func findNetworkSpan(urlContains: String, requiringRequestPayload: Bool) -> SpanData? {
         captureLock.lock()
         defer { captureLock.unlock() }
-        return capturedSpans.first { span in
+        return capturedSpans.last { span in
             let type = span.attributes[Keys.eventType.rawValue]?.description ?? ""
             guard type.contains(CoralogixEventType.networkRequest.rawValue) else { return false }
             guard let url = span.attributes[SemanticAttributes.httpUrl.rawValue]?.description else { return false }
@@ -157,7 +162,7 @@ final class NetworkCaptureIntegrationTests: XCTestCase {
             NetworkCaptureRule(urlPattern: pattern, collectResPayload: true)
         ])
         performRequest(url: url)
-        let span = try XCTUnwrap(waitForNetworkSpan(urlContains: "capturetest"), "Network span for regex-matched URL must be exported")
+        let span = try XCTUnwrap(waitForNetworkSpan(urlContains: "/v2/orders/1"), "Network span for regex-matched URL must be exported")
         let payload = span.attributes[Keys.responsePayload.rawValue]?.description
         if let p = payload {
             XCTAssertEqual(p, json, "When response payload is captured it must match stub body")
@@ -199,7 +204,12 @@ final class NetworkCaptureIntegrationTests: XCTestCase {
         CaptureTestURLProtocol.stub = (200, [:], Data())
         startSDK(rules: [NetworkCaptureRule(url: "capturetest://integration", collectReqPayload: true)])
         performRequest(url: url, method: "POST", body: largeBody.data(using: .utf8), headers: ["Content-Type": "text/plain"])
-        let span = try XCTUnwrap(waitForNetworkSpan(urlContains: "capturetest"))
+        // Match the specific path — `urlContains: "capturetest"` is too broad: a late export from another
+        // integration URL (e.g. previous test) can be the *last* matching span and make this flaky on CI.
+        let span = try XCTUnwrap(
+            waitForNetworkSpan(urlContains: "/api/large", timeout: 15),
+            "Network span for POST /api/large must be exported"
+        )
         let payload = span.attributes[Keys.requestPayload.rawValue]?.description
         XCTAssertNil(payload, "Request body over 1024 chars must be absent")
     }
@@ -222,7 +232,7 @@ final class NetworkCaptureIntegrationTests: XCTestCase {
         CaptureTestURLProtocol.stub = (200, ["Content-Type": "image/png"], Data([0x89, 0x50, 0x4E, 0x47]))
         startSDK(rules: [NetworkCaptureRule(url: "capturetest://integration", collectResPayload: true)])
         performRequest(url: url)
-        let span = try XCTUnwrap(waitForNetworkSpan(urlContains: "capturetest"))
+        let span = try XCTUnwrap(waitForNetworkSpan(urlContains: "/image.png"), "Network span for image request must be exported")
         let payload = span.attributes[Keys.responsePayload.rawValue]?.description
         XCTAssertNil(payload, "Binary (image/png) must not be stringified")
     }
@@ -235,7 +245,7 @@ final class NetworkCaptureIntegrationTests: XCTestCase {
         CaptureTestURLProtocol.stub = (200, ["Content-Type": "application/json", "X-Secret": "no"], "{}".data(using: .utf8)!)
         startSDK(rules: [NetworkCaptureRule(url: "capturetest://integration", reqHeaders: ["Accept"], resHeaders: ["Content-Type"])])
         performRequest(url: url, headers: ["Accept": "application/json", "Authorization": "Bearer x"])
-        let span = try XCTUnwrap(waitForNetworkSpan(urlContains: "capturetest"), "Network span must be exported")
+        let span = try XCTUnwrap(waitForNetworkSpan(urlContains: "/sec"), "Network span must be exported")
         let reqJson = span.attributes[Keys.requestHeaders.rawValue]?.description ?? ""
         let resJson = span.attributes[Keys.responseHeaders.rawValue]?.description ?? ""
         if !reqJson.isEmpty {

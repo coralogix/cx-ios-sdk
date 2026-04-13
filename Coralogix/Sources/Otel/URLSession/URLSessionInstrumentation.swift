@@ -612,6 +612,10 @@ public class URLSessionInstrumentation {
                                     URLSessionLogger.logResponse(response, dataOrFile: body, instrumentation: self, sessionTaskId: sessionTaskId)
                                 }
                             }
+                            // Clean up requestMap to prevent memory leak
+                            self.queue.sync(flags: .barrier) {
+                                self.requestMap[sessionTaskId] = nil
+                            }
                             // Mark as logged to prevent duplicate in setState: fallback
                             objc_setAssociatedObject(task, &Self.loggedKey, true, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
                             
@@ -692,6 +696,10 @@ public class URLSessionInstrumentation {
                                 #endif
                                 URLSessionLogger.logResponse(response, dataOrFile: body, instrumentation: self, sessionTaskId: sessionTaskId)
                             }
+                        }
+                        // Clean up requestMap to prevent memory leak
+                        self.queue.sync(flags: .barrier) {
+                            self.requestMap[sessionTaskId] = nil
                         }
                         // Mark as logged to prevent duplicate in setState: fallback
                         objc_setAssociatedObject(task, &Self.loggedKey, true, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)

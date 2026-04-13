@@ -40,6 +40,18 @@ public class CoralogixRum {
     
     static var isInitialized = false
     static var mobileSDK: MobileSDK = MobileSDK()
+
+    /// CX-35956: `getCustomTracer()` may succeed only once per SDK lifecycle (`shutdown()` clears).
+    private static var customTracerIssued = false
+    /// Serializes check-and-set for `customTracerIssued` so concurrent `getCustomTracer()` calls cannot both succeed.
+    private static let customTracerIssuanceLock = NSLock()
+
+    /// Resets CX-35956 singleton state when tests reinitialize the SDK in-process without calling `shutdown()`.
+    internal static func resetCustomTracerIssuanceForTesting() {
+        customTracerIssuanceLock.lock()
+        defer { customTracerIssuanceLock.unlock() }
+        customTracerIssued = false
+    }
     
     public init(
         options: CoralogixExporterOptions,
@@ -312,6 +324,9 @@ public class CoralogixRum {
     
     public func shutdown() {
         CoralogixCustomGlobalSpanRegistry.shared.teardownIfNeeded()
+        Self.customTracerIssuanceLock.lock()
+        CoralogixRum.customTracerIssued = false
+        Self.customTracerIssuanceLock.unlock()
         CoralogixRum.isInitialized = false
         self.coralogixExporter?.shutdown(explicitTimeout: nil)
         self.removeNotification()
@@ -374,9 +389,36 @@ public class CoralogixRum {
 
     /// Returns a tracer for manual custom spans (API naming aligned with the Coralogix Browser SDK: `startCustomSpan`, `endSpan`).
     ///
-    /// - Parameter ignoredInstruments: Reserved for future use (filtering auto-instrumentation interaction with custom trace context).
-    public func getCustomTracer(ignoredInstruments: Set<CoralogixIgnoredInstrument> = []) -> CoralogixCustomTracer {
-        CoralogixCustomTracer(rum: self, ignoredInstruments: ignoredInstruments)
+    /// CX-35956: Returns `nil` when the SDK is not initialized, `traceParentInHeader` is not configured with `enable: true`,
+    /// or a custom tracer was already obtained (singleton until `shutdown()`). The issuance check is locked so concurrent calls cannot both obtain a tracer.
+    ///
+    /// - Parameter ignoredInstruments: When starting a global span via this tracer, listed instruments do not inherit that global trace (CX-35955); auto spans for those types use `setNoParent()`.
+    public func getCustomTracer(ignoredInstruments: Set<CoralogixIgnoredInstrument> = []) -> CoralogixCustomTracer? {
+        guard CoralogixRum.isInitialized else {
+            Log.w("Coralogix RUM is not initialized — getCustomTracer unavailable")
+            return nil
+        }
+        guard let opts = self.options else {
+            Log.w("getCustomTracer unavailable — exporter options missing (SDK may not be fully initialized)")
+            return nil
+        }
+        guard let tpDict = opts.traceParentInHeader else {
+            Log.w("traceParentInHeader must be enabled to use custom tracer")
+            return nil
+        }
+        let traceParent = TraceParentInHeader(params: tpDict)
+        guard traceParent.enable else {
+            Log.w("traceParentInHeader must be enabled to use custom tracer")
+            return nil
+        }
+        Self.customTracerIssuanceLock.lock()
+        defer { Self.customTracerIssuanceLock.unlock() }
+        guard !CoralogixRum.customTracerIssued else {
+            Log.w("Custom tracer already exists")
+            return nil
+        }
+        CoralogixRum.customTracerIssued = true
+        return CoralogixCustomTracer(rum: self, ignoredInstruments: ignoredInstruments)
     }
     
     // MARK: - Spans & Attributes
@@ -430,8 +472,36 @@ public class CoralogixRum {
         print(coralogixText)
     }
     
+    /// Maps auto-instrumented `CoralogixEventType` values to `CoralogixIgnoredInstrument` (CX-35955).
+    private static func ignoredInstrument(forAutoSpanEvent event: CoralogixEventType) -> CoralogixIgnoredInstrument? {
+        switch event {
+        case .networkRequest: return .networkRequests
+        case .userInteraction: return .userInteractions
+        case .error: return .errors
+        default:
+            // Event types without a mapping never use `ignoredInstruments`; they follow the global parent policy in `applyAutoInstrumentationParentPolicy`.
+            return nil
+        }
+    }
+
+    /// CX-35955: opt out of global trace when this event type is in the active global's `ignoredInstruments`.
+    /// CX-35954: when OTel has no active span but a global is registered, parent explicitly under the global (async / other activity).
+    private static func applyAutoInstrumentationParentPolicy(builder: SpanBuilder, event: CoralogixEventType) {
+        if let ignored = ignoredInstrument(forAutoSpanEvent: event),
+           CoralogixCustomGlobalSpanRegistry.shared.shouldBreakTraceInheritance(for: ignored) {
+            _ = builder.setNoParent()
+            return
+        }
+        if OpenTelemetry.instance.contextProvider.activeSpan == nil,
+           let global = CoralogixCustomGlobalSpanRegistry.shared.registeredGlobalForAutoInstrumentationParent() {
+            _ = builder.setParent(global)
+        }
+    }
+
     internal func makeSpan(event: CoralogixEventType, source: Keys, severity: CoralogixLogSeverity) -> any Span {
-        var span = tracerProvider().spanBuilder(spanName: Keys.iosSdk.rawValue).startSpan()
+        let builder = tracerProvider().spanBuilder(spanName: Keys.iosSdk.rawValue)
+        Self.applyAutoInstrumentationParentPolicy(builder: builder, event: event)
+        var span = builder.startSpan()
         span.setAttribute(key: Keys.eventType.rawValue, value: event.rawValue)
         span.setAttribute(key: Keys.source.rawValue, value: source.rawValue)
         span.setAttribute(key: Keys.severity.rawValue, value: AttributeValue.int(severity.rawValue))

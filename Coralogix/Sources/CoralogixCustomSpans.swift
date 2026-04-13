@@ -17,6 +17,8 @@ final class CoralogixCustomGlobalSpanRegistry {
     private let lock = NSLock()
     private weak var registeredGlobal: (any Span)?
     private weak var spanActiveBeforeGlobal: (any Span)?
+    /// `ignoredInstruments` from the `CoralogixCustomTracer` that started the active global span (CX-35955).
+    private var ignoredInstruments: Set<CoralogixIgnoredInstrument> = []
 
     private init() {}
 
@@ -30,7 +32,7 @@ final class CoralogixCustomGlobalSpanRegistry {
     }
 
     /// Returns `false` if a global custom span is already registered (second `startGlobalSpan` is ignored, like the Browser SDK).
-    func registerGlobalSpan(_ span: any Span) -> Bool {
+    func registerGlobalSpan(_ span: any Span, ignoredInstruments: Set<CoralogixIgnoredInstrument>) -> Bool {
         lock.lock()
         defer { lock.unlock() }
         if registeredGlobal != nil {
@@ -38,6 +40,7 @@ final class CoralogixCustomGlobalSpanRegistry {
         }
         spanActiveBeforeGlobal = OpenTelemetry.instance.contextProvider.activeSpan
         registeredGlobal = span
+        self.ignoredInstruments = ignoredInstruments
         OpenTelemetry.instance.contextProvider.setActiveSpan(span)
         return true
     }
@@ -45,11 +48,12 @@ final class CoralogixCustomGlobalSpanRegistry {
     /// Ends the registry entry for this span: clears state, ends the span, restores previous active context. Returns `false` if `span` is not the registered global.
     func endGlobalSpanIfMatches(_ span: any Span) -> Bool {
         lock.lock()
-        let isMatch = (registeredGlobal as AnyObject?) === (span as AnyObject)
+        let isMatch = registeredGlobal?.context.spanId == span.context.spanId
         let previous = spanActiveBeforeGlobal
         if isMatch {
             registeredGlobal = nil
             spanActiveBeforeGlobal = nil
+            ignoredInstruments = []
         }
         lock.unlock()
         guard isMatch else {
@@ -59,6 +63,21 @@ final class CoralogixCustomGlobalSpanRegistry {
         return true
     }
 
+    /// When `OpenTelemetry.instance.contextProvider.activeSpan` is `nil` (e.g. URLSession callback or `DispatchQueue` work on another activity) but a global custom span is still registered, auto-instrumented spans should parent under that span so traceId / parentSpanId match the global trace (CX-35954).
+    internal func registeredGlobalForAutoInstrumentationParent() -> (any Span)? {
+        lock.lock()
+        defer { lock.unlock() }
+        return registeredGlobal
+    }
+
+    /// CX-35955: If the active global was started with this instrument in `ignoredInstruments`, the corresponding auto span must **not** inherit the global trace (`setNoParent()`).
+    internal func shouldBreakTraceInheritance(for instrument: CoralogixIgnoredInstrument) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard registeredGlobal != nil else { return false }
+        return ignoredInstruments.contains(instrument)
+    }
+
     /// Clears any registered global custom span (`shutdown` and unit tests). Ends the span if still active and restores the pre-global OTel context.
     internal func teardownIfNeeded() {
         lock.lock()
@@ -66,6 +85,7 @@ final class CoralogixCustomGlobalSpanRegistry {
         let previous = spanActiveBeforeGlobal
         registeredGlobal = nil
         spanActiveBeforeGlobal = nil
+        ignoredInstruments = []
         lock.unlock()
         guard let g else { return }
         Self.endGlobalSpanAndRestorePrevious(g, previous: previous)
@@ -133,8 +153,8 @@ public final class CoralogixCustomTracer {
         stampCoralogixCustomSpanRUM(on: &otelSpan)
         rum.addRumCorrelationMetadata(to: &otelSpan)
         setMergedCustomLabelsJSON(merged: mergedSdkAndGlobal, on: &otelSpan)
-        guard CoralogixCustomGlobalSpanRegistry.shared.registerGlobalSpan(otelSpan) else {
-            Log.w("Global custom span already active — startGlobalSpan ignored; ending orphan span")
+        guard CoralogixCustomGlobalSpanRegistry.shared.registerGlobalSpan(otelSpan, ignoredInstruments: ignoredInstruments) else {
+            Log.w("Global span already exists")
             otelSpan.end()
             return nil
         }
@@ -148,6 +168,10 @@ public final class CoralogixCustomTracer {
 }
 
 /// A root custom span created via `CoralogixCustomTracer.startGlobalSpan(name:labels:)`.
+///
+/// - Note: This class holds a weak reference to `CoralogixRum`. If the SDK is deallocated while
+///   a global span is still in use, `startCustomSpan` will still work but RUM correlation metadata
+///   will not be added to child spans.
 public final class CoralogixGlobalSpan {
     public let span: any Span
     private let tracer: Tracer
@@ -169,7 +193,7 @@ public final class CoralogixGlobalSpan {
 
     private func isRegisteredGlobalActiveInOTel() -> Bool {
         let active = OpenTelemetry.instance.contextProvider.activeSpan
-        return (active as AnyObject?) === (span as AnyObject)
+        return active?.context.spanId == span.context.spanId
     }
 
     /// Runs `work` with this span as the active OTel context. If it is already active (after `startGlobalSpan`), runs `work` without removing it from context.

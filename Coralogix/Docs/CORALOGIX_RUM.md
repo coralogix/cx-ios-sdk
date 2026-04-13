@@ -68,6 +68,7 @@ Identify if your app project contains an `AppDelegate` file or a `SceneDelegate`
                                                ignoreErrors: [],
                                                labels: ["String" : Any],
                                                sessionSampleRate: 100,
+                                               traceParentInHeader: ["enable": true],
                                                debug: false)
         self.coralogixRum = CoralogixRum(options: options)
         
@@ -314,6 +315,8 @@ The Custom Spans API mirrors the Coralogix Browser SDK naming (`startCustomSpan`
 
 Only **one** global custom span may exist at a time (same as the Browser SDK). `startGlobalSpan` registers it as the **active OpenTelemetry span**, so auto-instrumented spans and network propagation can share the same `traceId` until `endSpan()` (which restores the prior active context). `withContext` is a no-op when the global span is already active. `shutdown()` clears a leaked global registration.
 
+**`getCustomTracer()` opt-in and guards (CX-35956, Browser parity):** Custom spans are **opt-in** via exporter options: set **`traceParentInHeader`** to a dictionary with the public key **`"enable"`** and value **`true`** (for example `traceParentInHeader: ["enable": true]` in Swift). The SDK reads that flag from your options dictionary; you do **not** reference internal types such as `TraceParentInHeader` or the `Keys` enum in app code. **`getCustomTracer()`** returns **`nil`** unless the SDK is initialized, **`traceParentInHeader`** is present with **`enable`** set to **`true`**, and a custom tracer has **not** already been issued in this SDK lifecycle (only **`shutdown()`** resets that slot so another `getCustomTracer()` can succeed). **`startGlobalSpan`** returns **`nil`** when a global span is already active (warning log: global span already exists).
+
 **Label merge (CX-35953, Browser parity):** Labels from `CoralogixRum` init / `setLabels` (SDK level), then `startGlobalSpan(name:labels:)`, then `startCustomSpan(name:labels:)`—each step overrides the same key from the previous. The merged map is stored on the span as a JSON string attribute **`custom_labels`**, same as the Browser SDK’s `setCustomLabelsForSpan` / `getCustomMergedLabels`. RUM `text.cx_rum.labels` is built from SDK options merged with that attribute (see `Helper.getLabels`).
 
 **Tracing:** Each exported custom-span log includes **`instrumentation_data.otelSpan`** with mobile fields plus **OTLP-style mirrors** used by the Browser trace converter (`trace_id`, `span_id`, `parent_span_id`, `start_time_unix_nano`, `end_time_unix_nano`, `kind_string`, `status_otlp`). The Browser SDK also sends a **separate** OTLP payload via optional `tracesExporter`; iOS only uses the RUM logs endpoint. If spans still do not appear under **Tracing**, confirm with Coralogix that your account indexes `instrumentation_data` from **mobile** RUM (pipeline may differ from web).
@@ -321,14 +324,14 @@ Only **one** global custom span may exist at a time (same as the Browser SDK). `
 ### Types
 
 - `CoralogixIgnoredInstrument` — `.networkRequests`, `.userInteractions`, `.errors` (values are reserved for future behavior when combining auto-instrumentation with custom traces).
-- `CoralogixCustomTracer` — from `getCustomTracer(ignoredInstruments:)`.
+- `CoralogixCustomTracer` — from `getCustomTracer(ignoredInstruments:)` (optional; see CX-35956 guards above).
 - `CoralogixGlobalSpan` — root span from `startGlobalSpan(name:labels:)`; exposes `span`, `withContext(_:)`, `startCustomSpan(name:labels:)`, `endSpan()`.
 - `CoralogixCustomSpan` — nested span; exposes `span`, `endSpan()`, `setAttribute`, `addEvent`, `setStatus`.
 
 ### Example
 
 ```swift
-let tracer = coralogixRum.getCustomTracer(ignoredInstruments: [.networkRequests])
+guard let tracer = coralogixRum.getCustomTracer(ignoredInstruments: [.networkRequests]) else { return }
 guard let global = tracer.startGlobalSpan(name: "checkout", labels: ["step": "payment"]) else { return }
 
 global.withContext {
@@ -340,7 +343,7 @@ global.withContext {
 global.endSpan()
 ```
 
-`startGlobalSpan` returns `nil` if the SDK did not finish initialization (for example, sampling disabled the SDK).
+`startGlobalSpan` returns `nil` if the SDK did not finish initialization (for example, sampling disabled the SDK), or if a global span is already active.
 
 ## About Method Swizzling and SwiftUI Modifiers
 ### Method Swizzling
