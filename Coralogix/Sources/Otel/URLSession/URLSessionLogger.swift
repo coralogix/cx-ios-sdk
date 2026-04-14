@@ -110,7 +110,7 @@ class URLSessionLogger {
 
         var returnRequest: URLRequest?
         if shouldInjectHeaders, effectiveConfig.shouldInjectTracingHeaders?(request) ?? true {
-            returnRequest = instrumentedRequest(for: request, span: span, instrumentation: instrumentation)
+            returnRequest = instrumentedRequest(for: request, span: span, effectiveConfig: effectiveConfig)
         }
 
         #if os(iOS) && !targetEnvironment(macCatalyst)
@@ -193,13 +193,9 @@ class URLSessionLogger {
     }
     private static var instrumentedKey: UInt8 = 0
 
-    private static func instrumentedRequest(for request: URLRequest, span: (any Span)?, instrumentation: URLSessionInstrumentation) -> URLRequest? {
+    private static func instrumentedRequest(for request: URLRequest, span: (any Span)?, effectiveConfig: URLSessionInstrumentationConfiguration) -> URLRequest? {
         var request = request
-        guard instrumentation.configuration.shouldInjectTracingHeaders?(request) ?? true
-        else {
-            return nil
-        }
-        instrumentation.configuration.injectCustomHeaders?(&request, span)
+        effectiveConfig.injectCustomHeaders?(&request, span)
         var instrumentedRequest = request
         objc_setAssociatedObject(instrumentedRequest,
                                  &instrumentedKey,
