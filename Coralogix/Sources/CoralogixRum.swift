@@ -485,15 +485,16 @@ public class CoralogixRum {
     }
 
     /// CX-35955: opt out of global trace when this event type is in the active global's `ignoredInstruments`.
-    /// CX-35954: when OTel has no active span but a global is registered, parent explicitly under the global (async / other activity).
+    /// CX-35954: when a global span is registered, always explicitly set it as parent. The default `.currentSpan`
+    /// behavior relies on `os_activity` thread-local context which doesn't propagate reliably across swizzle
+    /// boundaries or closures — `activeSpan` is often nil even when a global is active.
     private static func applyAutoInstrumentationParentPolicy(builder: SpanBuilder, event: CoralogixEventType) {
         if let ignored = ignoredInstrument(forAutoSpanEvent: event),
            CoralogixCustomGlobalSpanRegistry.shared.shouldBreakTraceInheritance(for: ignored) {
             _ = builder.setNoParent()
             return
         }
-        if OpenTelemetry.instance.contextProvider.activeSpan == nil,
-           let global = CoralogixCustomGlobalSpanRegistry.shared.registeredGlobalForAutoInstrumentationParent() {
+        if let global = CoralogixCustomGlobalSpanRegistry.shared.registeredGlobalForAutoInstrumentationParent() {
             _ = builder.setParent(global)
         }
     }
