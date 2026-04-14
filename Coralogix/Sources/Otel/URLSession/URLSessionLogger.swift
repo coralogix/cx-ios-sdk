@@ -154,15 +154,15 @@ class URLSessionLogger {
 
         // Use caller-supplied body when present; otherwise take from rule-based store (e.g. delegate-only path).
         // Prefer dataOrFile first to avoid redundant captureQueue.sync when completion-handler or delegate already passed body.
-        let effectiveInstrumentation = URLSessionInstrumentation.shared ?? instrumentation
-        let effectiveData = dataOrFile ?? effectiveInstrumentation.takeResponseBody(forTaskId: sessionTaskId)
+        let effectiveData = dataOrFile ?? instrumentation.takeResponseBody(forTaskId: sessionTaskId)
         // Re-index native headers under the final URL when a redirect changed it, so the hybrid
         // path (RN/Flutter) can find them by the URL the JS bridge reports.
-        effectiveInstrumentation.indexNativeHeadersForRedirectIfNeeded(
+        instrumentation.indexNativeHeadersForRedirectIfNeeded(
             originalUrl: request?.url?.absoluteString,
             responseUrl: response.url?.absoluteString
         )
-        effectiveInstrumentation.configuration.receivedResponse?(response, effectiveData, span, request)
+        let effectiveConfig = URLSessionInstrumentation.shared?.configuration ?? instrumentation.configuration
+        effectiveConfig.receivedResponse?(response, effectiveData, span, request)
         span.end()
     }
 
