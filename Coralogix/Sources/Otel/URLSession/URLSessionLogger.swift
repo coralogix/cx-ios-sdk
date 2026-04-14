@@ -46,7 +46,9 @@ class URLSessionLogger {
 
     /// This methods creates a Span for a request, and optionally injects tracing headers, returns a  new request if it was needed to create a new one to add the tracing headers
     @discardableResult static func processAndLogRequest(_ request: URLRequest, sessionTaskId: String, instrumentation: URLSessionInstrumentation, shouldInjectHeaders: Bool, preCapturedRequestBody: Data? = nil) -> URLRequest? {
-        guard instrumentation.configuration.shouldInstrument?(request) ?? true else {
+        // Use shared instance's configuration when available so swizzled closures see the latest config (CX-37986)
+        let effectiveConfig = URLSessionInstrumentation.shared?.configuration ?? instrumentation.configuration
+        guard effectiveConfig.shouldInstrument?(request) ?? true else {
             return nil
         }
 
@@ -79,15 +81,15 @@ class URLSessionLogger {
         }
 
         var spanName = "HTTP " + (request.httpMethod ?? "")
-        if let customSpanName = instrumentation.configuration.nameSpan?(request) {
+        if let customSpanName = effectiveConfig.nameSpan?(request) {
             spanName = customSpanName
         }
-        let spanBuilder = instrumentation.configuration.tracer.spanBuilder(spanName: spanName)
+        let spanBuilder = effectiveConfig.tracer.spanBuilder(spanName: spanName)
         spanBuilder.setSpanKind(spanKind: .client)
         attributes.forEach {
             spanBuilder.setAttribute(key: $0.key, value: $0.value)
         }
-        instrumentation.configuration.spanCustomization?(request, spanBuilder)
+        effectiveConfig.spanCustomization?(request, spanBuilder)
         Self.applyNetworkAutoInstrumentationParentPolicy(to: spanBuilder)
 
         let span = spanBuilder.startSpan()
@@ -98,7 +100,7 @@ class URLSessionLogger {
         // Request body capture (CX-33235): stringify and set request_payload when rule has collectReqPayload; 1024-char limit in stringifyBody.
         // Use preCapturedRequestBody when provided (e.g. from prepareAndLogRequest) since request.httpBody may be nil after URLSession/URLProtocol handling.
         let bodyData = preCapturedRequestBody ?? request.httpBody
-        if instrumentation.configuration.shouldCollectRequestPayload?(request) == true,
+        if effectiveConfig.shouldCollectRequestPayload?(request) == true,
            let bodyData {
             let contentType = request.allHTTPHeaderFields?.first { $0.key.lowercased() == "content-type" }?.value
             if let payload = NetworkCaptureRule.stringifyBody(data: bodyData, contentType: contentType) {
@@ -107,7 +109,7 @@ class URLSessionLogger {
         }
 
         var returnRequest: URLRequest?
-        if shouldInjectHeaders, instrumentation.configuration.shouldInjectTracingHeaders?(request) ?? true {
+        if shouldInjectHeaders, effectiveConfig.shouldInjectTracingHeaders?(request) ?? true {
             returnRequest = instrumentedRequest(for: request, span: span, instrumentation: instrumentation)
         }
 
@@ -117,7 +119,7 @@ class URLSessionLogger {
             }
         #endif
 
-        instrumentation.configuration.createdRequest?(returnRequest ?? request, span)
+        effectiveConfig.createdRequest?(returnRequest ?? request, span)
 
         return returnRequest
     }
@@ -152,14 +154,15 @@ class URLSessionLogger {
 
         // Use caller-supplied body when present; otherwise take from rule-based store (e.g. delegate-only path).
         // Prefer dataOrFile first to avoid redundant captureQueue.sync when completion-handler or delegate already passed body.
-        let effectiveData = dataOrFile ?? instrumentation.takeResponseBody(forTaskId: sessionTaskId)
+        let effectiveInstrumentation = URLSessionInstrumentation.shared ?? instrumentation
+        let effectiveData = dataOrFile ?? effectiveInstrumentation.takeResponseBody(forTaskId: sessionTaskId)
         // Re-index native headers under the final URL when a redirect changed it, so the hybrid
         // path (RN/Flutter) can find them by the URL the JS bridge reports.
-        instrumentation.indexNativeHeadersForRedirectIfNeeded(
+        effectiveInstrumentation.indexNativeHeadersForRedirectIfNeeded(
             originalUrl: request?.url?.absoluteString,
             responseUrl: response.url?.absoluteString
         )
-        instrumentation.configuration.receivedResponse?(response, effectiveData, span, request)
+        effectiveInstrumentation.configuration.receivedResponse?(response, effectiveData, span, request)
         span.end()
     }
 
@@ -174,7 +177,8 @@ class URLSessionLogger {
         }
         span.setAttribute(key: SemanticAttributes.httpStatusCode.rawValue, value: AttributeValue.int(statusCode))
         span.status = URLSessionLogger.statusForStatusCode(code: statusCode)
-        instrumentation.configuration.receivedError?(error, dataOrFile, statusCode, span)
+        let effectiveConfig = URLSessionInstrumentation.shared?.configuration ?? instrumentation.configuration
+        effectiveConfig.receivedError?(error, dataOrFile, statusCode, span)
 
         span.end()
     }
