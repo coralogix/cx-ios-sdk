@@ -326,8 +326,8 @@ public class CoralogixRum {
         CoralogixCustomGlobalSpanRegistry.shared.teardownIfNeeded()
         Self.customTracerIssuanceLock.lock()
         CoralogixRum.customTracerIssued = false
-        Self.customTracerIssuanceLock.unlock()
         CoralogixRum.isInitialized = false
+        Self.customTracerIssuanceLock.unlock()
         self.coralogixExporter?.shutdown(explicitTimeout: nil)
         self.removeNotification()
         self.metricsManager.removeObservers()

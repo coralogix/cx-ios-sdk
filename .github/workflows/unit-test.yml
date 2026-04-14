@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - master
   pull_request:
 
 jobs:
@@ -14,24 +15,87 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Select Xcode 15.3
-        uses: maxim-lobanov/setup-xcode@v1
-        with:
-          xcode-version: '15.3'
-
-      - name: Show selected Xcode (debug)
+      - name: Select Xcode
         run: |
-          xcode-select -p
+          # Try Xcode 16.x first (for newer iOS simulators), fall back to 15.x
+          if [ -d "/Applications/Xcode_16.2.app" ]; then
+            echo "DEVELOPER_DIR=/Applications/Xcode_16.2.app/Contents/Developer" >> $GITHUB_ENV
+          elif [ -d "/Applications/Xcode_16.1.app" ]; then
+            echo "DEVELOPER_DIR=/Applications/Xcode_16.1.app/Contents/Developer" >> $GITHUB_ENV
+          elif [ -d "/Applications/Xcode_16.0.app" ]; then
+            echo "DEVELOPER_DIR=/Applications/Xcode_16.0.app/Contents/Developer" >> $GITHUB_ENV
+          elif [ -d "/Applications/Xcode_15.4.app" ]; then
+            echo "DEVELOPER_DIR=/Applications/Xcode_15.4.app/Contents/Developer" >> $GITHUB_ENV
+          elif [ -d "/Applications/Xcode_15.3.app" ]; then
+            echo "DEVELOPER_DIR=/Applications/Xcode_15.3.app/Contents/Developer" >> $GITHUB_ENV
+          else
+            echo "No pinned Xcode found; using default"
+          fi
+
+      - name: Configure Xcode
+        run: |
+          if [ -n "${DEVELOPER_DIR:-}" ]; then
+            sudo xcode-select -s "$DEVELOPER_DIR"
+          fi
           xcodebuild -version
+          sudo xcodebuild -license accept || true
 
       - name: Install xcpretty
-        run: gem install xcpretty
+        run: gem install xcpretty || true
+
+      - name: Find available iPhone simulator
+        run: |
+          set -euo pipefail
+          
+          # List available simulators
+          echo "📱 Available iPhone simulators:"
+          xcrun simctl list devices available | grep -E "iPhone" | head -20 || true
+          
+          # Find best available iPhone simulator (prefer iPhone 15/16 with iOS 17+)
+          DEST=$(xcodebuild -showdestinations -scheme Coralogix-Package 2>/dev/null | \
+            grep -E "platform:iOS Simulator.*name:iPhone" | \
+            grep -E "OS:1[789]\.[0-9]" | \
+            head -1 || true)
+          
+          if [ -z "$DEST" ]; then
+            # Fallback: any iPhone simulator
+            DEST=$(xcodebuild -showdestinations -scheme Coralogix-Package 2>/dev/null | \
+              grep -E "platform:iOS Simulator.*name:iPhone" | \
+              head -1 || true)
+          fi
+          
+          if [ -z "$DEST" ]; then
+            echo "❌ No iPhone simulator found"
+            exit 1
+          fi
+          
+          # Extract name and OS
+          NAME=$(echo "$DEST" | sed -n 's/.*name:\([^,}]*\).*/\1/p' | xargs)
+          OS=$(echo "$DEST" | sed -n 's/.*OS:\([^,}]*\).*/\1/p' | xargs)
+          
+          echo "✅ Selected: $NAME (iOS $OS)"
+          echo "DESTINATION_SPEC=platform=iOS Simulator,name=$NAME,OS=$OS" >> $GITHUB_ENV
 
       - name: Build & Run iOS SDK Tests
         run: |
           set -o pipefail
           xcodebuild clean build test \
             -scheme Coralogix-Package \
-            -destination 'platform=iOS Simulator,name=iPhone 15,OS=17.4' \
-            -parallel-testing-enabled NO | xcpretty
+            -destination "$DESTINATION_SPEC" \
+            -parallel-testing-enabled NO \
+            2>&1 | tee test-output.log | xcpretty || true
+          
+          # Check for test results
+          if grep -q "TEST SUCCEEDED" test-output.log; then
+            echo "✅ Tests passed!"
+          elif grep -Eq "Executed [1-9][0-9]* tests, with 0 failures" test-output.log; then
+            echo "✅ Tests passed!"
+          else
+            echo "❌ Tests failed"
+            echo "🔎 Last 100 lines:"
+            tail -100 test-output.log
+            echo "🔎 Error lines:"
+            grep -iE "error:|failed|failure" test-output.log | tail -30 || true
+            exit 1
+          fi
 

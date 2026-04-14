@@ -112,6 +112,18 @@ public class CoralogixExporter: SpanExporter {
         let uniqueSpans = uniqueSpansDict.compactMap { $0.value.first }
 
         if !uniqueSpans.isEmpty {
+            // Capture tracesExporter once to avoid repeated optional checks
+            let tracesExporterCallback = self.options.tracesExporter
+            
+            // Invoke tracesExporter callback if configured (on current background thread)
+            // This is called before encoding to CxSpan to provide raw SpanData for OTLP conversion.
+            // Note: If the callback crashes, it will crash the export pipeline. Users should
+            // handle their own errors within the callback.
+            if let tracesExporter = tracesExporterCallback {
+                let exporterData = CoralogixTraceExporterData(spans: uniqueSpans)
+                tracesExporter(exporterData)
+            }
+            
             let cxSpansDictionary = autoreleasepool {
                 encodeSpans(spans: uniqueSpans)
             }
@@ -119,15 +131,33 @@ public class CoralogixExporter: SpanExporter {
                 return .success
             }
             
+            // When tracesExporter is set, strip instrumentation_data from RUM payload
+            // to avoid sending duplicate OTel data (mirrors browser SDK behavior).
+            let finalSpansDictionary: [[String: Any]]
+            if tracesExporterCallback != nil {
+                finalSpansDictionary = cxSpansDictionary.map { stripInstrumentationData(from: $0) }
+            } else {
+                finalSpansDictionary = cxSpansDictionary
+            }
+            
             let sdk = CoralogixRum.mobileSDK.sdkFramework
             if !sdk.isNative, let callback = self.options.beforeSendCallBack {
-                let clonedSpans = cxSpansDictionary.deepCopy()
+                let clonedSpans = finalSpansDictionary.deepCopy()
                 callback(clonedSpans)
                 return .success
             }
-            return spanUploader.upload(cxSpansDictionary, endPoint: self.endPoint)
+            return spanUploader.upload(finalSpansDictionary, endPoint: self.endPoint)
         }
         return .failure
+    }
+    
+    /// Strips `instrumentation_data` from a CxSpan dictionary.
+    /// This mirrors the browser SDK behavior when tracesExporter is configured,
+    /// avoiding duplicate OTel span data in the RUM payload.
+    private func stripInstrumentationData(from spanDict: [String: Any]) -> [String: Any] {
+        var result = spanDict
+        result.removeValue(forKey: Keys.instrumentationData.rawValue)
+        return result
     }
 
     public func flush(explicitTimeout: TimeInterval?) -> SpanExporterResultCode {

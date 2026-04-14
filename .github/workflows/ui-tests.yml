@@ -224,13 +224,14 @@ jobs:
 
       - name: Build for testing
         run: |
-          set -euo pipefail
+          set -uo pipefail
           cd Example
 
           CI_DEPLOYMENT_TARGET="18.0"
           echo "🔨 Building for testing (simulator only)..."
           BUILD_START=$(date +%s)
 
+          set +e
           xcodebuild build-for-testing \
             $BUILD_TYPE "$BUILD_PATH_RELATIVE" \
             -scheme "$SCHEME" \
@@ -239,9 +240,33 @@ jobs:
             -derivedDataPath ../DerivedData \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGN_IDENTITY="" \
+            CODE_SIGN_ENTITLEMENTS="" \
+            DEVELOPMENT_TEAM="" \
             IPHONEOS_DEPLOYMENT_TARGET="$CI_DEPLOYMENT_TARGET" \
             -jobs $(sysctl -n hw.ncpu) \
-            | xcpretty --color || cat
+            2>&1 | tee ../build-output.log | xcpretty --color
+          BUILD_EXIT_CODE=${PIPESTATUS[0]}
+          set -e
+
+          # Check xcodebuild exit status first
+          if [ "$BUILD_EXIT_CODE" -ne 0 ]; then
+            echo "❌ Build failed with exit code $BUILD_EXIT_CODE"
+            echo "🔎 Last 50 lines of build output:"
+            tail -n 50 ../build-output.log
+            echo "🔎 Error lines:"
+            grep -iE "error:|failed:" ../build-output.log | tail -20 || true
+            exit "$BUILD_EXIT_CODE"
+          fi
+
+          # Also verify the test bundle was created
+          if [ ! -d "../DerivedData/Build/Products/Debug-iphonesimulator/DemoAppUITests-Runner.app" ]; then
+            echo "❌ Build succeeded but DemoAppUITests-Runner.app not found"
+            echo "🔎 Last 50 lines of build output:"
+            tail -n 50 ../build-output.log
+            echo "🔎 Error lines:"
+            grep -iE "error:|failed:" ../build-output.log | tail -20 || true
+            exit 1
+          fi
 
           BUILD_END=$(date +%s)
           BUILD_DURATION=$((BUILD_END - BUILD_START))

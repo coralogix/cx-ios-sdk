@@ -94,4 +94,10 @@ final class CoralogixRumManager {
     func getSessionId() -> String? {
         return _sdk?.getSessionId
     }
+    
+    func reinitialize(with options: CoralogixExporterOptions) {
+        _sdk?.shutdown()
+        _sdk = CoralogixRum(options: options)
+        print("SDK reinitialized:\(_sdk?.isInitialized.description ?? "not initialized")")
+    }
 }

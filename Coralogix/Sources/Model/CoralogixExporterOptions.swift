@@ -123,6 +123,34 @@ public struct CoralogixExporterOptions {
     /// Per-URL rules for capturing request/response headers and payloads.
     /// `nil` (default) disables all header and payload capture.
     public var networkExtraConfig: [NetworkCaptureRule]?
+    
+    /// Optional callback to receive OTLP-formatted trace data for external export.
+    ///
+    /// When set, this callback is invoked with `CoralogixTraceExporterData` containing spans
+    /// converted to OTLP JSON format. This enables sending traces to OTLP-compatible backends
+    /// (e.g., Jaeger, Zipkin, or other OpenTelemetry collectors) in addition to Coralogix.
+    ///
+    /// When this callback is configured, the SDK automatically strips `instrumentation_data`
+    /// (raw OTel span fields) from the RUM payload sent to Coralogix to avoid duplicate data,
+    /// mirroring the browser SDK behavior.
+    ///
+    /// - Important: The callback is invoked on a background thread (BatchSpanProcessor's
+    ///   processing queue). Do not block the callback with long-running operations.
+    ///   If you need to perform network I/O, dispatch to another queue.
+    ///
+    /// - Example:
+    /// ```swift
+    /// let options = CoralogixExporterOptions(
+    ///     // ... other options ...
+    ///     tracesExporter: { data in
+    ///         // Send to your OTLP backend
+    ///         if let jsonData = data.jsonData {
+    ///             sendToOtlpBackend(jsonData)
+    ///         }
+    ///     }
+    /// )
+    /// ```
+    public var tracesExporter: TracesExporterCallback?
 
     public init(coralogixDomain: CoralogixDomain,
                 userContext: UserContext? = nil,
@@ -142,6 +170,7 @@ public struct CoralogixExporterOptions {
                 traceParentInHeader: [String: Any]? = nil,
                 mobileVitals: [MobileVitalsType: Bool]? = nil,
                 networkExtraConfig: [NetworkCaptureRule]? = nil,
+                tracesExporter: TracesExporterCallback? = nil,
                 shouldSendText: ((UIView, String) -> Bool)? = nil,
                 resolveTargetName: ((UIView) -> String?)? = nil,
                 debug: Bool = false) {
@@ -164,6 +193,7 @@ public struct CoralogixExporterOptions {
         self.traceParentInHeader = traceParentInHeader
         self.mobileVitals = mobileVitals
         self.networkExtraConfig = networkExtraConfig
+        self.tracesExporter = tracesExporter
         self.shouldSendText = shouldSendText
         self.resolveTargetName = resolveTargetName
     }
