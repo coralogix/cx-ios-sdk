@@ -5,6 +5,7 @@
 
 
 import Foundation
+import CoralogixInternal
 
 class BoundRawCounterMetricSdkBase<T>: BoundRawCounterMetric<T> {
     internal var status : RecordStatus
@@ -19,7 +20,8 @@ class BoundRawCounterMetricSdkBase<T>: BoundRawCounterMetric<T> {
     }
     
     func getMetrics() -> [MetricData] {
-        []
+        Log.w("[Coralogix] BoundRawCounterMetricSdkBase.getMetrics() returned empty fallback — raw counter points dropped; subclass should override")
+        return []
     }
     
 }
