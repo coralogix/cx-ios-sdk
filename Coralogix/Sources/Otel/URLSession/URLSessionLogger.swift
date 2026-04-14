@@ -31,14 +31,15 @@ class URLSessionLogger {
     #endif // os(iOS) && !targetEnvironment(macCatalyst)
 
     /// CX-35955: when `.networkRequests` is ignored for the active global, start a new trace (`traceparent` matches).
-    /// CX-35954: when OTel has no active span but a global is registered, parent under the global (async URLSession work).
+    /// CX-35954: when a global span is registered, always explicitly set it as parent. The default `.currentSpan`
+    /// behavior relies on `os_activity` thread-local context which doesn't propagate reliably across URLSession
+    /// swizzle boundaries — `activeSpan` is often nil even when a global is active.
     private static func applyNetworkAutoInstrumentationParentPolicy(to spanBuilder: SpanBuilder) {
         if CoralogixCustomGlobalSpanRegistry.shared.shouldBreakTraceInheritance(for: .networkRequests) {
             _ = spanBuilder.setNoParent()
             return
         }
-        if OpenTelemetry.instance.contextProvider.activeSpan == nil,
-           let global = CoralogixCustomGlobalSpanRegistry.shared.registeredGlobalForAutoInstrumentationParent() {
+        if let global = CoralogixCustomGlobalSpanRegistry.shared.registeredGlobalForAutoInstrumentationParent() {
             _ = spanBuilder.setParent(global)
         }
     }
