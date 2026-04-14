@@ -46,6 +46,20 @@ public class URLSessionInstrumentation {
         get { configurationQueue.sync { _configuration } }
     }
     
+    /// Shared instance used by swizzled methods. Updated on each SDK initialization so
+    /// configuration callbacks (e.g. `shouldCollectResponsePayload`) reflect the latest options.
+    /// This avoids swizzled closures referencing stale instrumentation instances when the SDK
+    /// is reinitialized (e.g. during unit tests with different `networkExtraConfig`).
+    private static var sharedInstance: URLSessionInstrumentation?
+    private static let sharedInstanceLock = NSLock()
+    
+    /// Returns the current shared instance for use in swizzled callbacks.
+    internal static var shared: URLSessionInstrumentation? {
+        sharedInstanceLock.lock()
+        defer { sharedInstanceLock.unlock() }
+        return sharedInstance
+    }
+    
     private let queue = DispatchQueue(label: "io.opentelemetry.ddnetworkinstrumentation", attributes: .concurrent)
     /// Serial queue for response body interception store (CX-33234).
     private let captureQueue = DispatchQueue(label: "com.coralogix.network-capture")
@@ -155,14 +169,23 @@ public class URLSessionInstrumentation {
     }
 
     /// Whether response payload should be buffered for this task. Uses request when available, else response URL (rule resolution consistent with receivedResponse).
+    /// Uses the **shared** instance's configuration so swizzled closures always see the latest options (CX-37986 fix).
     private func shouldBufferResponsePayload(request: URLRequest?, responseURL: URL?) -> Bool {
         let candidate = request ?? responseURL.map { URLRequest(url: $0) }
         guard let candidate else { return false }
-        return configuration.shouldCollectResponsePayload?(candidate) == true
+        // Use shared instance's configuration to support SDK reinitialization with different options
+        let currentConfig = Self.shared?.configuration ?? configuration
+        return currentConfig.shouldCollectResponsePayload?(candidate) == true
     }
 
     public init(configuration: URLSessionInstrumentationConfiguration) {
         self._configuration = configuration
+        
+        // Update shared instance so swizzled closures use the latest configuration (CX-37986).
+        // This supports SDK reinitialization with different options (e.g. unit tests with varying networkExtraConfig).
+        Self.sharedInstanceLock.lock()
+        Self.sharedInstance = self
+        Self.sharedInstanceLock.unlock()
         
         // Perform swizzling with thread-safety protection
         // CRITICAL: All swizzling must be thread-safe to prevent host app crashes
@@ -374,7 +397,9 @@ public class URLSessionInstrumentation {
     }
 
     private func shouldInject(for request: URLRequest) -> Bool {
-        configuration.shouldInjectTracingHeaders?(request) ?? true
+        // Use shared instance's configuration to support SDK reinitialization with different options
+        let currentConfig = Self.shared?.configuration ?? configuration
+        return currentConfig.shouldInjectTracingHeaders?(request) ?? true
     }
 
     /// Centralized request capture and logging for all swizzled URLSession request paths. Caller must pass the returned request to the original IMP, then call `setIdKey(value:sessionTaskId, for: task)` and `storeRequest(requestToUse, forTaskId: sessionTaskId)`.
