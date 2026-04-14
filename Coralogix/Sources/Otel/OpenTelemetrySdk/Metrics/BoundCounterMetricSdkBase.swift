@@ -4,6 +4,7 @@
  */
 
 import Foundation
+import CoralogixInternal
 
 class BoundCounterMetricSdkBase<T>: BoundCounterMetric<T> {
     internal var status: RecordStatus
@@ -15,6 +16,7 @@ class BoundCounterMetricSdkBase<T>: BoundCounterMetric<T> {
     }
 
     func getAggregator() -> Aggregator<T> {
-        Aggregator<T>()
+        Log.w("[Coralogix] BoundCounterMetricSdkBase.getAggregator() returned fallback no-op Aggregator — subclass should override")
+        return Aggregator<T>()
     }
 }
