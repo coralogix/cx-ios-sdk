@@ -15,7 +15,10 @@ final class CoralogixCustomGlobalSpanRegistry {
     static let shared = CoralogixCustomGlobalSpanRegistry()
 
     private let lock = NSLock()
-    private weak var registeredGlobal: (any Span)?
+    /// Strong reference so `shouldBreakTraceInheritance` never sees a nil span while the global is still
+    /// active in OTel context — a weak ref could be nil while `contextProvider.activeSpan` still points at
+    /// the same span, and `SpanBuilder` would then default to `.currentSpan` and re-parent auto spans under the global.
+    private var registeredGlobal: (any Span)?
     private weak var spanActiveBeforeGlobal: (any Span)?
     /// `ignoredInstruments` from the `CoralogixCustomTracer` that started the active global span (CX-35955).
     private var ignoredInstruments: Set<CoralogixIgnoredInstrument> = []

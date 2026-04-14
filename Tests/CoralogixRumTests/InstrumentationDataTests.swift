@@ -40,7 +40,7 @@ final class InstrumentationDataTests: XCTestCase {
             spanId: "span123",
             traceId: "trace123",
             name: "testSpan",
-            kind: 1,
+            kind: 2,
             statusCode: ["status": "ok"],
             resources: [
                 "a": AttributeValue("1"),
@@ -91,7 +91,7 @@ final class InstrumentationDataTests: XCTestCase {
         XCTAssertEqual(otelSpan.endTime[1], UInt64((fractionalPartEnd * 1_000_000_000).rounded()))
 
         XCTAssertEqual(otelSpan.status["status"] as? String, "ok")
-        XCTAssertEqual(otelSpan.kind, 1)
+        XCTAssertEqual(otelSpan.kind, 2)
     }
 
     func testGetOtelSpanDictionary_coreFields() {
@@ -102,7 +102,7 @@ final class InstrumentationDataTests: XCTestCase {
         XCTAssertEqual(dict[Keys.spanId.rawValue] as? String, "span123")
         XCTAssertEqual(dict[Keys.traceId.rawValue] as? String, "trace123")
         XCTAssertEqual(dict[Keys.name.rawValue] as? String, "testSpan")
-        XCTAssertEqual(dict[Keys.kind.rawValue] as? Int, 1)
+        XCTAssertEqual(dict[Keys.kind.rawValue] as? Int, 2)
         XCTAssertNotNil(dict[Keys.startTime.rawValue])
         XCTAssertNotNil(dict[Keys.endTime.rawValue])
         XCTAssertNotNil(dict[Keys.status.rawValue])
