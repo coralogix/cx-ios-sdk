@@ -20,6 +20,6 @@ class BoundRawHistogramMetricSdkBase<T> : BoundRawHistogramMetric<T> {
     }
     
     func getMetrics() -> [MetricData] {
-        fatalError()
+        []
     }
 }

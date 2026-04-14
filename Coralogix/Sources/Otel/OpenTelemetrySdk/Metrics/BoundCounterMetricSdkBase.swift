@@ -15,6 +15,6 @@ class BoundCounterMetricSdkBase<T>: BoundCounterMetric<T> {
     }
 
     func getAggregator() -> Aggregator<T> {
-        fatalError()
+        Aggregator<T>()
     }
 }

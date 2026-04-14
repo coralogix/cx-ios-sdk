@@ -77,7 +77,6 @@ class RawCounterMetricSdkBase<T> : RawCounterMetric {
     }
     
     func createMetric(recordStatus: RecordStatus) -> BoundRawCounterMetricSdkBase<T> {
-        //noop
-        fatalError()
+        BoundRawCounterMetricSdkBase<T>(recordStatus: recordStatus)
     }
 }

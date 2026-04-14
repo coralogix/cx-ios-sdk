@@ -19,7 +19,7 @@ class BoundRawCounterMetricSdkBase<T>: BoundRawCounterMetric<T> {
     }
     
     func getMetrics() -> [MetricData] {
-        fatalError()
+        []
     }
     
 }

@@ -15,13 +15,9 @@ class CounterMetricSdkBase<T>: CounterMetric {
         metricName = name
     }
 
-    func add(value: T, labelset: LabelSet) {
-        fatalError()
-    }
+    func add(value: T, labelset: LabelSet) {}
 
-    func add(value: T, labels: [String: String]) {
-        fatalError()
-    }
+    func add(value: T, labels: [String: String]) {}
 
     func bind(labelset: LabelSet) -> BoundCounterMetric<T> {
         return bind(labelset: labelset, isShortLived: false)
@@ -77,6 +73,6 @@ class CounterMetricSdkBase<T>: CounterMetric {
     }
 
     func createMetric(recordStatus: RecordStatus) -> BoundCounterMetricSdkBase<T> {
-        fatalError()
+        BoundCounterMetricSdkBase<T>(recordStatus: recordStatus)
     }
 }
