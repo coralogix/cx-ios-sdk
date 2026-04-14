@@ -70,6 +70,7 @@ public class URLSessionInstrumentation {
     private static var loggedKey: UInt8 = 0  // Deduplication flag for hybrid approach
     private static var hasCompletionHandlerKey: UInt8 = 0  // Task created with completion handler — delegate must not log (completion has body)
     private static var setStateSwizzleKey: UInt8 = 0
+    private static var urlSessionClassesSwizzled = false
     
     // Thread-safe swizzling lock - protects against concurrent swizzle attempts
     private static let swizzleLock = Lock()
@@ -206,7 +207,12 @@ public class URLSessionInstrumentation {
             }
         }
         
-        // Always swizzle URLSession methods (no class scanning needed - safe)
+        // Swizzle URLSession class methods only once. Subsequent SDK
+        // re-initializations update the shared instance instead so the
+        // existing swizzled closures pick up the latest configuration.
+        guard !Self.urlSessionClassesSwizzled else { return }
+        Self.urlSessionClassesSwizzled = true
+        
         if #available(OSX 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) {
             safeSwizzle(operation: "URLSession create task methods") {
                 injectIntoNSURLSessionCreateTaskMethods()
@@ -229,7 +235,6 @@ public class URLSessionInstrumentation {
             injectIntoNSURLSessionTaskResume()
         }
         
-        // Hybrid approach: Add setState: swizzling for universal coverage (Alamofire, etc.)
         safeSwizzle(operation: "URLSessionTask setState: (hybrid approach)") {
             injectIntoNSURLSessionTaskSetState()
         }
