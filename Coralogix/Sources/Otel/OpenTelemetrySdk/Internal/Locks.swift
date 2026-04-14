@@ -36,6 +36,7 @@ import Darwin
 #else
 import Glibc
 #endif
+import CoralogixInternal
 
 /// A threading lock based on `libpthread` instead of `libdispatch`.
 ///
@@ -44,16 +45,26 @@ import Glibc
 /// one used by NIO.
 internal final class Lock {
     fileprivate let mutex: UnsafeMutablePointer<pthread_mutex_t> = UnsafeMutablePointer.allocate(capacity: 1)
+    @usableFromInline internal private(set) var initialized = false
 
     /// Create a new lock.
     public init() {
         let err = pthread_mutex_init(self.mutex, nil)
-        if err != 0 { debugPrint("[Coralogix] pthread_mutex_init failed with error \(err)") }
+        if err != 0 {
+            Log.e("[Coralogix] pthread_mutex_init failed with error \(err)")
+        } else {
+            initialized = true
+        }
     }
 
     deinit {
+        guard initialized else {
+            self.mutex.deallocate()
+            return
+        }
         let err = pthread_mutex_destroy(self.mutex)
-        if err != 0 { debugPrint("[Coralogix] pthread_mutex_destroy failed with error \(err)") }
+        if err != 0 { Log.e("[Coralogix] pthread_mutex_destroy failed with error \(err)") }
+        initialized = false
         self.mutex.deallocate()
     }
 
@@ -61,9 +72,18 @@ internal final class Lock {
     ///
     /// Whenever possible, consider using `withLock` instead of this method and
     /// `unlock`, to simplify lock handling.
-    public func lock() {
+    @discardableResult
+    public func lock() -> Bool {
+        guard initialized else {
+            Log.e("[Coralogix] Attempted to lock uninitialized mutex")
+            return false
+        }
         let err = pthread_mutex_lock(self.mutex)
-        if err != 0 { debugPrint("[Coralogix] pthread_mutex_lock failed with error \(err)") }
+        if err != 0 {
+            Log.e("[Coralogix] pthread_mutex_lock failed with error \(err)")
+            return false
+        }
+        return true
     }
 
     /// Release the lock.
@@ -71,8 +91,12 @@ internal final class Lock {
     /// Whenever possible, consider using `withLock` instead of this method and
     /// `lock`, to simplify lock handling.
     public func unlock() {
+        guard initialized else {
+            Log.w("[Coralogix] Attempted to unlock uninitialized mutex")
+            return
+        }
         let err = pthread_mutex_unlock(self.mutex)
-        if err != 0 { debugPrint("[Coralogix] pthread_mutex_unlock failed with error \(err)") }
+        if err != 0 { Log.w("[Coralogix] pthread_mutex_unlock failed with error \(err)") }
     }
 }
 
@@ -87,9 +111,9 @@ extension Lock {
     /// - Returns: The value returned by the block.
     @inlinable
     internal func withLock<T>(_ body: () throws -> T) rethrows -> T {
-        self.lock()
+        let locked = self.lock()
         defer {
-            self.unlock()
+            if locked { self.unlock() }
         }
         return try body()
     }
@@ -97,62 +121,101 @@ extension Lock {
     // specialise Void return (for performance)
     @inlinable
     internal func withLockVoid(_ body: () throws -> Void) rethrows {
-        try self.withLock(body)
+        guard initialized else {
+            Log.e("[Coralogix] Lock not initialized — skipping critical section")
+            return
+        }
+        let locked = self.lock()
+        guard locked else { return }
+        defer { self.unlock() }
+        try body()
     }
 }
 
-/// A threading lock based on `libpthread` instead of `libdispatch`.
+/// A reader-writer threading lock based on `libpthread` instead of `libdispatch`.
 ///
-/// This object provides a lock on top of a single `pthread_mutex_t`. This kind
+/// This object provides a lock on top of a single `pthread_rwlock_t`. This kind
 /// of lock is safe to use with `libpthread`-based threading models, such as the
 /// one used by NIO.
 internal final class ReadWriteLock {
     fileprivate let rwlock: UnsafeMutablePointer<pthread_rwlock_t> = UnsafeMutablePointer.allocate(capacity: 1)
+    @usableFromInline internal private(set) var initialized = false
 
     /// Create a new lock.
     public init() {
         let err = pthread_rwlock_init(self.rwlock, nil)
-        if err != 0 { debugPrint("[Coralogix] pthread_rwlock_init failed with error \(err)") }
+        if err != 0 {
+            Log.e("[Coralogix] pthread_rwlock_init failed with error \(err)")
+        } else {
+            initialized = true
+        }
     }
 
     deinit {
+        guard initialized else {
+            self.rwlock.deallocate()
+            return
+        }
         let err = pthread_rwlock_destroy(self.rwlock)
-        if err != 0 { debugPrint("[Coralogix] pthread_rwlock_destroy failed with error \(err)") }
+        if err != 0 { Log.e("[Coralogix] pthread_rwlock_destroy failed with error \(err)") }
+        initialized = false
         self.rwlock.deallocate()
     }
 
     /// Acquire a reader lock.
     ///
-    /// Whenever possible, consider using `withLock` instead of this method and
+    /// Whenever possible, consider using `withReaderLock` instead of this method and
     /// `unlock`, to simplify lock handling.
-    public func lockRead() {
+    @discardableResult
+    public func lockRead() -> Bool {
+        guard initialized else {
+            Log.e("[Coralogix] Attempted to read-lock uninitialized rwlock")
+            return false
+        }
         let err = pthread_rwlock_rdlock(self.rwlock)
-        if err != 0 { debugPrint("[Coralogix] pthread_rwlock_rdlock failed with error \(err)") }
+        if err != 0 {
+            Log.e("[Coralogix] pthread_rwlock_rdlock failed with error \(err)")
+            return false
+        }
+        return true
     }
 
     /// Acquire a writer lock.
     ///
-    /// Whenever possible, consider using `withLock` instead of this method and
+    /// Whenever possible, consider using `withWriterLock` instead of this method and
     /// `unlock`, to simplify lock handling.
-    public func lockWrite() {
+    @discardableResult
+    public func lockWrite() -> Bool {
+        guard initialized else {
+            Log.e("[Coralogix] Attempted to write-lock uninitialized rwlock")
+            return false
+        }
         let err = pthread_rwlock_wrlock(self.rwlock)
-        if err != 0 { debugPrint("[Coralogix] pthread_rwlock_wrlock failed with error \(err)") }
+        if err != 0 {
+            Log.e("[Coralogix] pthread_rwlock_wrlock failed with error \(err)")
+            return false
+        }
+        return true
     }
 
     /// Release the lock.
     ///
-    /// Whenever possible, consider using `withLock` instead of this method and
-    /// `lock`, to simplify lock handling.
+    /// Whenever possible, consider using `withReaderLock`/`withWriterLock` instead
+    /// of this method and `lockRead`/`lockWrite`, to simplify lock handling.
     public func unlock() {
+        guard initialized else {
+            Log.w("[Coralogix] Attempted to unlock uninitialized rwlock")
+            return
+        }
         let err = pthread_rwlock_unlock(self.rwlock)
-        if err != 0 { debugPrint("[Coralogix] pthread_rwlock_unlock failed with error \(err)") }
+        if err != 0 { Log.w("[Coralogix] pthread_rwlock_unlock failed with error \(err)") }
     }
 }
 
 extension ReadWriteLock {
     /// Acquire the reader lock for the duration of the given block.
     ///
-    /// This convenience method should be preferred to `lock` and `unlock` in
+    /// This convenience method should be preferred to `lockRead` and `unlock` in
     /// most situations, as it ensures that the lock will be released regardless
     /// of how `body` exits.
     ///
@@ -160,16 +223,16 @@ extension ReadWriteLock {
     /// - Returns: The value returned by the block.
     @inlinable
     internal func withReaderLock<T>(_ body: () throws -> T) rethrows -> T {
-        self.lockRead()
+        let locked = self.lockRead()
         defer {
-            self.unlock()
+            if locked { self.unlock() }
         }
         return try body()
     }
 
     /// Acquire the writer lock for the duration of the given block.
     ///
-    /// This convenience method should be preferred to `lock` and `unlock` in
+    /// This convenience method should be preferred to `lockWrite` and `unlock` in
     /// most situations, as it ensures that the lock will be released regardless
     /// of how `body` exits.
     ///
@@ -177,22 +240,36 @@ extension ReadWriteLock {
     /// - Returns: The value returned by the block.
     @inlinable
     internal func withWriterLock<T>(_ body: () throws -> T) rethrows -> T {
-        self.lockWrite()
+        let locked = self.lockWrite()
         defer {
-            self.unlock()
+            if locked { self.unlock() }
         }
         return try body()
     }
 
-    // specialise Void return (for performance)
+    // specialise Void return — skips body entirely if lock fails
     @inlinable
     internal func withReaderLockVoid(_ body: () throws -> Void) rethrows {
-        try self.withReaderLock(body)
+        guard initialized else {
+            Log.e("[Coralogix] ReadWriteLock not initialized — skipping critical section")
+            return
+        }
+        let locked = self.lockRead()
+        guard locked else { return }
+        defer { self.unlock() }
+        try body()
     }
 
-    // specialise Void return (for performance)
+    // specialise Void return — skips body entirely if lock fails
     @inlinable
     internal func withWriterLockVoid(_ body: () throws -> Void) rethrows {
-        try self.withWriterLock(body)
+        guard initialized else {
+            Log.e("[Coralogix] ReadWriteLock not initialized — skipping critical section")
+            return
+        }
+        let locked = self.lockWrite()
+        guard locked else { return }
+        defer { self.unlock() }
+        try body()
     }
 }
