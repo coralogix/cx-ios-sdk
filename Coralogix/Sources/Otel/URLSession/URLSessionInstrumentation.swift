@@ -844,12 +844,6 @@ public class URLSessionInstrumentation {
             // Best case - already on main thread
             return classNames.compactMap { NSClassFromString($0) }
         } else {
-            // Not on main thread - customer is misusing SDK
-            #if DEBUG
-            // In debug: Help developers catch this early
-            assertionFailure("CoralogixRUM must be initialized on the main thread")
-            #endif
-            
             Log.w("[URLSessionInstrumentation] CRITICAL: SDK initialized off main thread - dispatching to main (may block). Please initialize on main thread to avoid performance issues.")
             
             // In production: Gracefully handle by dispatching sync
