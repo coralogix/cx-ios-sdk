@@ -599,7 +599,7 @@ public class URLSessionInstrumentation {
                 if let url = argument as? URL {
                     let request = URLRequest(url: url)
                     
-                    if self.configuration.shouldInjectTracingHeaders?(request) ?? true {
+                    if self.shouldInject(for: request) {
                         if selector == #selector(URLSession.dataTask(with:completionHandler:) as (URLSession) -> (URL, @escaping (Data?, URLResponse?, Error?) -> Void) -> URLSessionDataTask) {
                             if let completion = completion {
                                 return session.dataTask(with: request, completionHandler: completion)
