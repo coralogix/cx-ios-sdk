@@ -325,7 +325,7 @@ public class RecordEventsReadableSpan: ReadableSpan, Hashable {
     }
 
     internal func getTotalRecordedEvents() -> Int {
-        eventsSyncLock.withLock {
+        eventsSyncLock.withLock(defaultOnLockFailure: 0) {
             totalRecordedEvents
         }
     }

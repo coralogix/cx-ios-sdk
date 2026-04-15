@@ -5,7 +5,7 @@
 
 
 import Foundation
-
+import CoralogixInternal
 
 class BoundRawHistogramMetricSdkBase<T> : BoundRawHistogramMetric<T> {
     internal var status : RecordStatus
@@ -20,6 +20,7 @@ class BoundRawHistogramMetricSdkBase<T> : BoundRawHistogramMetric<T> {
     }
     
     func getMetrics() -> [MetricData] {
-        []
+        Log.w("[Coralogix] BoundRawHistogramMetricSdkBase.getMetrics() returned empty fallback — raw histogram points dropped; subclass should override")
+        return []
     }
 }

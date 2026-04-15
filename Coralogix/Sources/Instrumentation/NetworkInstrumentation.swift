@@ -101,7 +101,7 @@ extension CoralogixRum {
                 guard let currentOptions = Self.getCurrentNetworkOptions() else { return false }
                 return Self.shouldCollectRequestPayload(for: request, options: currentOptions)
             },
-            receivedResponse: self.receivedResponse,
+            receivedResponse: Self.handleReceivedResponse(response:data:span:request:),
             delegateClassesToInstrument: Self.urlSessionDelegateClassesForReactNative()
         )
         self.sessionInstrumentation = URLSessionInstrumentation(configuration: configuration)
@@ -183,7 +183,8 @@ extension CoralogixRum {
         }
     }
     
-    private func receivedResponse(response: URLResponse, data: DataOrFile?, span: any Span, request: URLRequest?) {
+    /// Static handler so `URLSessionInstrumentationConfiguration` does not strongly retain a `CoralogixRum` instance across SDK reinitializations (CX-37986).
+    private static func handleReceivedResponse(response: URLResponse, data: DataOrFile?, span: any Span, request: URLRequest?) {
         if let httpResponse = response as? HTTPURLResponse {
             let statusCode = httpResponse.statusCode
             let logSeverity = statusCode > 400 ?  CoralogixLogSeverity.error : CoralogixLogSeverity.info
@@ -191,7 +192,6 @@ extension CoralogixRum {
         }
         
         // Use static options to support SDK reinitialization with different config (CX-37986).
-        // The `receivedResponse` closure is captured at init time; static storage ensures we see current options.
         guard let options = Self.getCurrentNetworkOptions() else {
             Log.w("[Coralogix] CoralogixExporterOptions unexpectedly nil during network response handling — skipping span enrichment")
             return

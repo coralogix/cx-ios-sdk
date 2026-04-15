@@ -103,17 +103,24 @@ internal final class Lock {
 extension Lock {
     /// Acquire the lock for the duration of the given block.
     ///
-    /// This convenience method should be preferred to `lock` and `unlock` in
-    /// most situations, as it ensures that the lock will be released regardless
-    /// of how `body` exits.
+    /// If the lock cannot be acquired (uninitialized mutex or `pthread_mutex_lock` failure), `body` is **not** executed
+    /// and `defaultOnLockFailure` is returned instead. This avoids both data races and silent drops without a defined value.
     ///
-    /// - Parameter body: The block to execute while holding the lock.
-    /// - Returns: The value returned by the block.
+    /// - Parameters:
+    ///   - defaultOnLockFailure: Value to return when the lock cannot be acquired.
+    ///   - body: The block to execute while holding the lock.
     @inlinable
-    internal func withLock<T>(_ body: () throws -> T) rethrows -> T {
+    internal func withLock<T>(
+        defaultOnLockFailure: @autoclosure () -> T,
+        _ body: () throws -> T
+    ) rethrows -> T {
         let locked = self.lock()
         defer {
             if locked { self.unlock() }
+        }
+        guard locked else {
+            Log.e("[Coralogix] Lock acquisition failed — returning default; critical section not run")
+            return defaultOnLockFailure()
         }
         return try body()
     }
@@ -213,36 +220,36 @@ internal final class ReadWriteLock {
 }
 
 extension ReadWriteLock {
-    /// Acquire the reader lock for the duration of the given block.
-    ///
-    /// This convenience method should be preferred to `lockRead` and `unlock` in
-    /// most situations, as it ensures that the lock will be released regardless
-    /// of how `body` exits.
-    ///
-    /// - Parameter body: The block to execute while holding the lock.
-    /// - Returns: The value returned by the block.
+    /// If the reader lock cannot be acquired, `body` is not executed and `defaultOnLockFailure` is returned.
     @inlinable
-    internal func withReaderLock<T>(_ body: () throws -> T) rethrows -> T {
+    internal func withReaderLock<T>(
+        defaultOnLockFailure: @autoclosure () -> T,
+        _ body: () throws -> T
+    ) rethrows -> T {
         let locked = self.lockRead()
         defer {
             if locked { self.unlock() }
         }
+        guard locked else {
+            Log.e("[Coralogix] ReadWriteLock read lock acquisition failed — returning default; critical section not run")
+            return defaultOnLockFailure()
+        }
         return try body()
     }
 
-    /// Acquire the writer lock for the duration of the given block.
-    ///
-    /// This convenience method should be preferred to `lockWrite` and `unlock` in
-    /// most situations, as it ensures that the lock will be released regardless
-    /// of how `body` exits.
-    ///
-    /// - Parameter body: The block to execute while holding the lock.
-    /// - Returns: The value returned by the block.
+    /// If the writer lock cannot be acquired, `body` is not executed and `defaultOnLockFailure` is returned.
     @inlinable
-    internal func withWriterLock<T>(_ body: () throws -> T) rethrows -> T {
+    internal func withWriterLock<T>(
+        defaultOnLockFailure: @autoclosure () -> T,
+        _ body: () throws -> T
+    ) rethrows -> T {
         let locked = self.lockWrite()
         defer {
             if locked { self.unlock() }
+        }
+        guard locked else {
+            Log.e("[Coralogix] ReadWriteLock write lock acquisition failed — returning default; critical section not run")
+            return defaultOnLockFailure()
         }
         return try body()
     }

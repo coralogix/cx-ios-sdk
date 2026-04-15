@@ -4,7 +4,7 @@
  */
 
 import Foundation
-// 
+import CoralogixInternal
 
 class BoundHistogramMetricSdkBase<T>: BoundHistogramMetric<T> {
     override init(explicitBoundaries: Array<T>? = nil) {
@@ -12,6 +12,7 @@ class BoundHistogramMetricSdkBase<T>: BoundHistogramMetric<T> {
     }
 
     func getAggregator() -> Aggregator<T> {
-        Aggregator<T>()
+        Log.w("[Coralogix] BoundHistogramMetricSdkBase.getAggregator() returned fallback no-op Aggregator — histogram data dropped; subclass should override")
+        return Aggregator<T>()
     }
 }

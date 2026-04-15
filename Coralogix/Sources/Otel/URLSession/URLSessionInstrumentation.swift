@@ -174,8 +174,8 @@ public class URLSessionInstrumentation {
     private func shouldBufferResponsePayload(request: URLRequest?, responseURL: URL?) -> Bool {
         let candidate = request ?? responseURL.map { URLRequest(url: $0) }
         guard let candidate else { return false }
-        // Use shared instance's configuration to support SDK reinitialization with different options
-        let currentConfig = Self.shared?.configuration ?? configuration
+        // Prefer `shared` (latest init) when present; `init` assigns `shared` before any swizzled code runs, so `self` is a safe fallback.
+        let currentConfig = (Self.shared ?? self).configuration
         return currentConfig.shouldCollectResponsePayload?(candidate) == true
     }
 
@@ -190,7 +190,7 @@ public class URLSessionInstrumentation {
         
         // Perform swizzling with thread-safety protection
         // CRITICAL: All swizzling must be thread-safe to prevent host app crashes
-        Self.swizzleLock.withLock {
+        Self.swizzleLock.withLockVoid {
             self.injectInNSURLClasses()
         }
     }
@@ -402,8 +402,7 @@ public class URLSessionInstrumentation {
     }
 
     private func shouldInject(for request: URLRequest) -> Bool {
-        // Use shared instance's configuration to support SDK reinitialization with different options
-        let currentConfig = Self.shared?.configuration ?? configuration
+        let currentConfig = (Self.shared ?? self).configuration
         return currentConfig.shouldInjectTracingHeaders?(request) ?? true
     }
 
