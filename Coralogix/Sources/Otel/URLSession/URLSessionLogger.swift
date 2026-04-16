@@ -46,7 +46,9 @@ class URLSessionLogger {
 
     /// This methods creates a Span for a request, and optionally injects tracing headers, returns a  new request if it was needed to create a new one to add the tracing headers
     @discardableResult static func processAndLogRequest(_ request: URLRequest, sessionTaskId: String, instrumentation: URLSessionInstrumentation, shouldInjectHeaders: Bool, preCapturedRequestBody: Data? = nil) -> URLRequest? {
-        guard instrumentation.configuration.shouldInstrument?(request) ?? true else {
+        // Prefer shared (latest init); fallback to this instance's configuration.
+        let effectiveConfig = (URLSessionInstrumentation.shared ?? instrumentation).configuration
+        guard effectiveConfig.shouldInstrument?(request) ?? true else {
             return nil
         }
 
@@ -79,15 +81,15 @@ class URLSessionLogger {
         }
 
         var spanName = "HTTP " + (request.httpMethod ?? "")
-        if let customSpanName = instrumentation.configuration.nameSpan?(request) {
+        if let customSpanName = effectiveConfig.nameSpan?(request) {
             spanName = customSpanName
         }
-        let spanBuilder = instrumentation.configuration.tracer.spanBuilder(spanName: spanName)
+        let spanBuilder = effectiveConfig.tracer.spanBuilder(spanName: spanName)
         spanBuilder.setSpanKind(spanKind: .client)
         attributes.forEach {
             spanBuilder.setAttribute(key: $0.key, value: $0.value)
         }
-        instrumentation.configuration.spanCustomization?(request, spanBuilder)
+        effectiveConfig.spanCustomization?(request, spanBuilder)
         Self.applyNetworkAutoInstrumentationParentPolicy(to: spanBuilder)
 
         let span = spanBuilder.startSpan()
@@ -98,7 +100,7 @@ class URLSessionLogger {
         // Request body capture (CX-33235): stringify and set request_payload when rule has collectReqPayload; 1024-char limit in stringifyBody.
         // Use preCapturedRequestBody when provided (e.g. from prepareAndLogRequest) since request.httpBody may be nil after URLSession/URLProtocol handling.
         let bodyData = preCapturedRequestBody ?? request.httpBody
-        if instrumentation.configuration.shouldCollectRequestPayload?(request) == true,
+        if effectiveConfig.shouldCollectRequestPayload?(request) == true,
            let bodyData {
             let contentType = request.allHTTPHeaderFields?.first { $0.key.lowercased() == "content-type" }?.value
             if let payload = NetworkCaptureRule.stringifyBody(data: bodyData, contentType: contentType) {
@@ -107,8 +109,8 @@ class URLSessionLogger {
         }
 
         var returnRequest: URLRequest?
-        if shouldInjectHeaders, instrumentation.configuration.shouldInjectTracingHeaders?(request) ?? true {
-            returnRequest = instrumentedRequest(for: request, span: span, instrumentation: instrumentation)
+        if shouldInjectHeaders, effectiveConfig.shouldInjectTracingHeaders?(request) ?? true {
+            returnRequest = instrumentedRequest(for: request, span: span, effectiveConfig: effectiveConfig)
         }
 
         #if os(iOS) && !targetEnvironment(macCatalyst)
@@ -117,7 +119,7 @@ class URLSessionLogger {
             }
         #endif
 
-        instrumentation.configuration.createdRequest?(returnRequest ?? request, span)
+        effectiveConfig.createdRequest?(returnRequest ?? request, span)
 
         return returnRequest
     }
@@ -159,7 +161,8 @@ class URLSessionLogger {
             originalUrl: request?.url?.absoluteString,
             responseUrl: response.url?.absoluteString
         )
-        instrumentation.configuration.receivedResponse?(response, effectiveData, span, request)
+        let effectiveConfig = (URLSessionInstrumentation.shared ?? instrumentation).configuration
+        effectiveConfig.receivedResponse?(response, effectiveData, span, request)
         span.end()
     }
 
@@ -174,7 +177,8 @@ class URLSessionLogger {
         }
         span.setAttribute(key: SemanticAttributes.httpStatusCode.rawValue, value: AttributeValue.int(statusCode))
         span.status = URLSessionLogger.statusForStatusCode(code: statusCode)
-        instrumentation.configuration.receivedError?(error, dataOrFile, statusCode, span)
+        let effectiveConfig = (URLSessionInstrumentation.shared ?? instrumentation).configuration
+        effectiveConfig.receivedError?(error, dataOrFile, statusCode, span)
 
         span.end()
     }
@@ -189,13 +193,10 @@ class URLSessionLogger {
     }
     private static var instrumentedKey: UInt8 = 0
 
-    private static func instrumentedRequest(for request: URLRequest, span: (any Span)?, instrumentation: URLSessionInstrumentation) -> URLRequest? {
+    /// Preconditions (enforced by `processAndLogRequest`): tracing injection and custom headers are only applied when that caller passes `shouldInjectHeaders` and `shouldInjectTracingHeaders` succeeds.
+    private static func instrumentedRequest(for request: URLRequest, span: (any Span)?, effectiveConfig: URLSessionInstrumentationConfiguration) -> URLRequest? {
         var request = request
-        guard instrumentation.configuration.shouldInjectTracingHeaders?(request) ?? true
-        else {
-            return nil
-        }
-        instrumentation.configuration.injectCustomHeaders?(&request, span)
+        effectiveConfig.injectCustomHeaders?(&request, span)
         var instrumentedRequest = request
         objc_setAssociatedObject(instrumentedRequest,
                                  &instrumentedKey,

@@ -4,7 +4,7 @@
  */
 
 import Foundation
-// 
+import CoralogixInternal
 
 class CounterMetricSdkBase<T>: CounterMetric {
     let bindUnbindLock = Lock()
@@ -16,11 +16,11 @@ class CounterMetricSdkBase<T>: CounterMetric {
     }
 
     func add(value: T, labelset: LabelSet) {
-        fatalError()
+        Log.w("[Coralogix] CounterMetricSdkBase.add(value:labelset:) called on base class for metric '\(metricName)' — update dropped; subclass should override")
     }
 
     func add(value: T, labels: [String: String]) {
-        fatalError()
+        Log.w("[Coralogix] CounterMetricSdkBase.add(value:labels:) called on base class for metric '\(metricName)' — update dropped; subclass should override")
     }
 
     func bind(labelset: LabelSet) -> BoundCounterMetric<T> {
@@ -77,6 +77,7 @@ class CounterMetricSdkBase<T>: CounterMetric {
     }
 
     func createMetric(recordStatus: RecordStatus) -> BoundCounterMetricSdkBase<T> {
-        fatalError()
+        Log.w("[Coralogix] CounterMetricSdkBase.createMetric(recordStatus:) returned fallback for metric '\(metricName)' — subclass should override")
+        return BoundCounterMetricSdkBase<T>(recordStatus: recordStatus)
     }
 }

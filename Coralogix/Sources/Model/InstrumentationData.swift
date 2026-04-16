@@ -220,12 +220,14 @@ struct OtelSpan {
         result[Keys.attributes.rawValue] = self.attributes
         result[Keys.startTime.rawValue] = self.startTime
         result[Keys.endTime.rawValue] = self.endTime
-        result[Keys.status.rawValue] = self.status
-        result[Keys.kind.rawValue] = self.kind
+        // OTLP-formatted status: {code: "STATUS_CODE_*"} matching Browser mapCxSpanToOtlpSpan.
+        result[Keys.status.rawValue] = Self.otlpStatusCode(from: self.status)
+        // OTLP-formatted kind: "SPAN_KIND_*" string matching Browser mapCxSpanToOtlpSpan.
+        result[Keys.kind.rawValue] = Self.otlpSpanKindString(from: self.kind)
         result[Keys.duration.rawValue] = self.duration
         if let sessionId = self.sessionId { result[Keys.keySessionId.rawValue] = sessionId }
 
-        // OTLP-shaped duplicates (Browser mapCxSpanToOtlpSpan) — Tracing may only read these from RUM logs.
+        // OTLP-shaped extra fields (Browser mapCxSpanToOtlpSpan) — Tracing extractors read these from RUM logs.
         result[Keys.otlpTraceId.rawValue] = self.traceId
         result[Keys.otlpSpanId.rawValue] = self.spanId
         if let parentSpanId = self.parentSpanId {
@@ -233,8 +235,6 @@ struct OtelSpan {
         }
         result[Keys.otlpStartTimeUnixNano.rawValue] = Self.otlpUnixNanoString(hrTime: self.startTime)
         result[Keys.otlpEndTimeUnixNano.rawValue] = Self.otlpUnixNanoString(hrTime: self.endTime)
-        result[Keys.otlpKindString.rawValue] = Self.otlpSpanKindString(from: self.kind)
-        result[Keys.otlpStatus.rawValue] = Self.otlpStatusCode(from: self.status)
 
         return result
     }

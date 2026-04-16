@@ -46,6 +46,20 @@ public class URLSessionInstrumentation {
         get { configurationQueue.sync { _configuration } }
     }
     
+    /// Shared instance used by swizzled methods. Updated on each SDK initialization so
+    /// configuration callbacks (e.g. `shouldCollectResponsePayload`) reflect the latest options.
+    /// This avoids swizzled closures referencing stale instrumentation instances when the SDK
+    /// is reinitialized (e.g. during unit tests with different `networkExtraConfig`).
+    private static var sharedInstance: URLSessionInstrumentation?
+    private static let sharedInstanceLock = NSLock()
+    
+    /// Returns the current shared instance for use in swizzled callbacks.
+    internal static var shared: URLSessionInstrumentation? {
+        sharedInstanceLock.lock()
+        defer { sharedInstanceLock.unlock() }
+        return sharedInstance
+    }
+    
     private let queue = DispatchQueue(label: "io.opentelemetry.ddnetworkinstrumentation", attributes: .concurrent)
     /// Serial queue for response body interception store (CX-33234).
     private let captureQueue = DispatchQueue(label: "com.coralogix.network-capture")
@@ -56,6 +70,7 @@ public class URLSessionInstrumentation {
     private static var loggedKey: UInt8 = 0  // Deduplication flag for hybrid approach
     private static var hasCompletionHandlerKey: UInt8 = 0  // Task created with completion handler — delegate must not log (completion has body)
     private static var setStateSwizzleKey: UInt8 = 0
+    private static var urlSessionClassesSwizzled = false
     
     // Thread-safe swizzling lock - protects against concurrent swizzle attempts
     private static let swizzleLock = Lock()
@@ -155,18 +170,27 @@ public class URLSessionInstrumentation {
     }
 
     /// Whether response payload should be buffered for this task. Uses request when available, else response URL (rule resolution consistent with receivedResponse).
+    /// Uses the **shared** instance's configuration so swizzled closures always see the latest options (CX-37986 fix).
     private func shouldBufferResponsePayload(request: URLRequest?, responseURL: URL?) -> Bool {
         let candidate = request ?? responseURL.map { URLRequest(url: $0) }
         guard let candidate else { return false }
-        return configuration.shouldCollectResponsePayload?(candidate) == true
+        // Prefer `shared` (latest init) when present; `init` assigns `shared` before any swizzled code runs, so `self` is a safe fallback.
+        let currentConfig = (Self.shared ?? self).configuration
+        return currentConfig.shouldCollectResponsePayload?(candidate) == true
     }
 
     public init(configuration: URLSessionInstrumentationConfiguration) {
         self._configuration = configuration
         
+        // Update shared instance so swizzled closures use the latest configuration (CX-37986).
+        // This supports SDK reinitialization with different options (e.g. unit tests with varying networkExtraConfig).
+        Self.sharedInstanceLock.lock()
+        Self.sharedInstance = self
+        Self.sharedInstanceLock.unlock()
+        
         // Perform swizzling with thread-safety protection
         // CRITICAL: All swizzling must be thread-safe to prevent host app crashes
-        Self.swizzleLock.withLock {
+        Self.swizzleLock.withLockVoid {
             self.injectInNSURLClasses()
         }
     }
@@ -183,7 +207,12 @@ public class URLSessionInstrumentation {
             }
         }
         
-        // Always swizzle URLSession methods (no class scanning needed - safe)
+        // Swizzle URLSession class methods only once. Subsequent SDK
+        // re-initializations update the shared instance instead so the
+        // existing swizzled closures pick up the latest configuration.
+        guard !Self.urlSessionClassesSwizzled else { return }
+        Self.urlSessionClassesSwizzled = true
+        
         if #available(OSX 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) {
             safeSwizzle(operation: "URLSession create task methods") {
                 injectIntoNSURLSessionCreateTaskMethods()
@@ -206,7 +235,6 @@ public class URLSessionInstrumentation {
             injectIntoNSURLSessionTaskResume()
         }
         
-        // Hybrid approach: Add setState: swizzling for universal coverage (Alamofire, etc.)
         safeSwizzle(operation: "URLSessionTask setState: (hybrid approach)") {
             injectIntoNSURLSessionTaskSetState()
         }
@@ -374,7 +402,8 @@ public class URLSessionInstrumentation {
     }
 
     private func shouldInject(for request: URLRequest) -> Bool {
-        configuration.shouldInjectTracingHeaders?(request) ?? true
+        let currentConfig = (Self.shared ?? self).configuration
+        return currentConfig.shouldInjectTracingHeaders?(request) ?? true
     }
 
     /// Centralized request capture and logging for all swizzled URLSession request paths. Caller must pass the returned request to the original IMP, then call `setIdKey(value:sessionTaskId, for: task)` and `storeRequest(requestToUse, forTaskId: sessionTaskId)`.
@@ -569,7 +598,7 @@ public class URLSessionInstrumentation {
                 if let url = argument as? URL {
                     let request = URLRequest(url: url)
                     
-                    if self.configuration.shouldInjectTracingHeaders?(request) ?? true {
+                    if self.shouldInject(for: request) {
                         if selector == #selector(URLSession.dataTask(with:completionHandler:) as (URLSession) -> (URL, @escaping (Data?, URLResponse?, Error?) -> Void) -> URLSessionDataTask) {
                             if let completion = completion {
                                 return session.dataTask(with: request, completionHandler: completion)
@@ -819,12 +848,6 @@ public class URLSessionInstrumentation {
             // Best case - already on main thread
             return classNames.compactMap { NSClassFromString($0) }
         } else {
-            // Not on main thread - customer is misusing SDK
-            #if DEBUG
-            // In debug: Help developers catch this early
-            assertionFailure("CoralogixRUM must be initialized on the main thread")
-            #endif
-            
             Log.w("[URLSessionInstrumentation] CRITICAL: SDK initialized off main thread - dispatching to main (may block). Please initialize on main thread to avoid performance issues.")
             
             // In production: Gracefully handle by dispatching sync

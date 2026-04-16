@@ -112,7 +112,10 @@ extension CoralogixRum {
         var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, getpid()]
         var size = MemoryLayout<kinfo_proc>.stride
         let junk = sysctl(&mib, UInt32(mib.count), &info, &size, nil, 0)
-        assert(junk == 0, "sysctl failed")
+        guard junk == 0 else {
+            Log.w("sysctl failed with error \(junk)")
+            return false
+        }
         return (info.kp_proc.p_flag & P_TRACED) != 0
     }
     

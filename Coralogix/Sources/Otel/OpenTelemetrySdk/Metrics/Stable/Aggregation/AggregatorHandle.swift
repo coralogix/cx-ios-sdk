@@ -40,9 +40,11 @@ public class AggregatorHandle {
         doRecordDouble(value: value)
     }
     
-    internal func doRecordDouble(value: Double) { fatalError() } // TODO: better way to force subclass override
+    internal func doRecordDouble(value: Double) {}
     
-    internal func doRecordLong(value: Int) { fatalError() }
+    internal func doRecordLong(value: Int) {}
 
-    internal func doAggregateThenMaybeReset(startEpochNano: UInt64, endEpochNano: UInt64, attributes: [String: AttributeValue], exemplars: [ExemplarData], reset: Bool) -> PointData { fatalError() }
+    internal func doAggregateThenMaybeReset(startEpochNano: UInt64, endEpochNano: UInt64, attributes: [String: AttributeValue], exemplars: [ExemplarData], reset: Bool) -> PointData {
+        PointData(startEpochNanos: startEpochNano, endEpochNanos: endEpochNano, attributes: attributes, exemplars: exemplars)
+    }
 }

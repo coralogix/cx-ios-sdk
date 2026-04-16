@@ -10,6 +10,30 @@ import CoralogixInternal
 
 extension CoralogixRum {
     private static let exporterQueue = DispatchQueue(label: Keys.queueExporter.rawValue)
+    
+    /// Current options for network instrumentation callbacks. Updated on each SDK initialization
+    /// so swizzled closures (which persist across reinitializations) can access the latest config.
+    /// Protected by `exporterQueue` for thread-safe access.
+    private static var currentNetworkOptions: CoralogixExporterOptions?
+    
+    /// Weak reference to the current CoralogixRum instance for instrumentation callbacks (CX-37986).
+    /// Updated on each SDK initialization so swizzled closures can access session metadata.
+    private static weak var currentInstance: CoralogixRum?
+    
+    /// Returns the current network options for use in instrumentation callbacks.
+    /// Thread-safe access via `exporterQueue`.
+    internal static func getCurrentNetworkOptions() -> CoralogixExporterOptions? {
+        var opts: CoralogixExporterOptions?
+        exporterQueue.sync { opts = currentNetworkOptions }
+        return opts
+    }
+    
+    /// Returns the current CoralogixRum instance for instrumentation callbacks.
+    internal static func getCurrentInstance() -> CoralogixRum? {
+        var instance: CoralogixRum?
+        exporterQueue.sync { instance = currentInstance }
+        return instance
+    }
 
     public func initializeNetworkInstrumentation() {
         guard let options = self.options else {
@@ -53,18 +77,31 @@ extension CoralogixRum {
     }
     
     internal func initializeInstrumentation(options: CoralogixExporterOptions) {
+        // Store options and instance statically so swizzled closures can access the latest config (CX-37986).
+        // Swizzling only happens once but closures persist; static storage ensures they see current state.
+        Self.exporterQueue.sync {
+            Self.currentNetworkOptions = options
+            Self.currentInstance = self
+        }
+        
         let configuration = URLSessionInstrumentationConfiguration(
-            spanCustomization: self.spanCustomization,
-            shouldInjectTracingHeaders: { [weak self] request in
-                return self?.shouldAddTraceParent(to: request, options: options) ?? false
+            spanCustomization: Self.spanCustomizationStatic,
+            shouldInjectTracingHeaders: { request in
+                // Use static options to support SDK reinitialization with different tracing config (CX-37986)
+                guard let currentOptions = Self.getCurrentNetworkOptions() else { return false }
+                return Self.shouldAddTraceParentStatic(to: request, options: currentOptions)
             },
             shouldCollectResponsePayload: { request in
-                Self.shouldCollectResponsePayload(for: request, options: options)
+                // Use static options to support SDK reinitialization with different networkExtraConfig (CX-37986)
+                guard let currentOptions = Self.getCurrentNetworkOptions() else { return false }
+                return Self.shouldCollectResponsePayload(for: request, options: currentOptions)
             },
             shouldCollectRequestPayload: { request in
-                Self.shouldCollectRequestPayload(for: request, options: options)
+                // Use static options to support SDK reinitialization with different networkExtraConfig (CX-37986)
+                guard let currentOptions = Self.getCurrentNetworkOptions() else { return false }
+                return Self.shouldCollectRequestPayload(for: request, options: currentOptions)
             },
-            receivedResponse: self.receivedResponse,
+            receivedResponse: Self.handleReceivedResponse(response:data:span:request:),
             delegateClassesToInstrument: Self.urlSessionDelegateClassesForReactNative()
         )
         self.sessionInstrumentation = URLSessionInstrumentation(configuration: configuration)
@@ -94,6 +131,11 @@ extension CoralogixRum {
     }
 
     internal func shouldAddTraceParent(to request: URLRequest, options: CoralogixExporterOptions) -> Bool {
+        Self.shouldAddTraceParentStatic(to: request, options: options)
+    }
+    
+    /// Static version for use in swizzled closures that persist across SDK reinitializations (CX-37986).
+    private static func shouldAddTraceParentStatic(to request: URLRequest, options: CoralogixExporterOptions) -> Bool {
         guard let requestURLString = request.url?.absoluteString else {
             return false
         }
@@ -124,32 +166,33 @@ extension CoralogixRum {
     }
     
     private func spanCustomization(request: URLRequest, spanBuilder: SpanBuilder) {
+        Self.spanCustomizationStatic(request: request, spanBuilder: spanBuilder)
+    }
+    
+    /// Static version for use in swizzled closures that persist across SDK reinitializations (CX-37986).
+    private static func spanCustomizationStatic(request: URLRequest, spanBuilder: SpanBuilder) {
         spanBuilder.setAttribute(key: Keys.eventType.rawValue, value: CoralogixEventType.networkRequest.rawValue)
         spanBuilder.setAttribute(key: Keys.source.rawValue, value: Keys.fetch.rawValue)
         
-        // CRITICAL: Add session attributes to network spans
+        // CRITICAL: Add session attributes to network spans using current instance (CX-37986).
         // Without these, each network log creates a new random session ID
         // This is a critical bug - network logs must share the same session as other events
-        if let sessionMetadata = self.sessionManager?.sessionMetadata {
+        if let sessionMetadata = getCurrentInstance()?.sessionManager?.sessionMetadata {
             spanBuilder.setAttribute(key: Keys.sessionId.rawValue, value: sessionMetadata.sessionId)
             spanBuilder.setAttribute(key: Keys.sessionCreationDate.rawValue, value: String(Int(sessionMetadata.sessionCreationDate)))
         }
-
     }
     
-    private func receivedResponse(response: URLResponse, data: DataOrFile?, span: any Span, request: URLRequest?) {
+    /// Static handler so `URLSessionInstrumentationConfiguration` does not strongly retain a `CoralogixRum` instance across SDK reinitializations (CX-37986).
+    private static func handleReceivedResponse(response: URLResponse, data: DataOrFile?, span: any Span, request: URLRequest?) {
         if let httpResponse = response as? HTTPURLResponse {
             let statusCode = httpResponse.statusCode
             let logSeverity = statusCode > 400 ?  CoralogixLogSeverity.error : CoralogixLogSeverity.info
             span.setAttribute(key: Keys.severity.rawValue, value: AttributeValue.int(logSeverity.rawValue))
         }
         
-        var options: CoralogixExporterOptions?
-        CoralogixRum.exporterQueue.sync {
-            options = self.options
-        }
-        
-        guard let options else {
+        // Use static options to support SDK reinitialization with different config (CX-37986).
+        guard let options = Self.getCurrentNetworkOptions() else {
             Log.w("[Coralogix] CoralogixExporterOptions unexpectedly nil during network response handling — skipping span enrichment")
             return
         }

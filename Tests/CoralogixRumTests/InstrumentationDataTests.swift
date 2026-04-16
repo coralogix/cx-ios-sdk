@@ -102,23 +102,23 @@ final class InstrumentationDataTests: XCTestCase {
         XCTAssertEqual(dict[Keys.spanId.rawValue] as? String, "span123")
         XCTAssertEqual(dict[Keys.traceId.rawValue] as? String, "trace123")
         XCTAssertEqual(dict[Keys.name.rawValue] as? String, "testSpan")
-        XCTAssertEqual(dict[Keys.kind.rawValue] as? Int, 2)
+        // kind is now OTLP-formatted string (matching Browser mapCxSpanToOtlpSpan).
+        XCTAssertEqual(dict[Keys.kind.rawValue] as? String, Keys.otlpSpanKindClient.rawValue)
         XCTAssertNotNil(dict[Keys.startTime.rawValue])
         XCTAssertNotNil(dict[Keys.endTime.rawValue])
-        XCTAssertNotNil(dict[Keys.status.rawValue])
+        // status is now OTLP-formatted: {code: "STATUS_CODE_*"}.
+        XCTAssertEqual(
+            (dict[Keys.status.rawValue] as? [String: Any])?[Keys.code.rawValue] as? String,
+            Keys.otlpStatusCodeUnset.rawValue
+        )
         XCTAssertNotNil(dict[Keys.duration.rawValue])
         XCTAssertEqual(dict[Keys.keySessionId.rawValue] as? String, "session_001")
         XCTAssertNil(dict[Keys.parentSpanId.rawValue], "parentSpanId should be absent for root spans")
 
         XCTAssertEqual(dict[Keys.otlpTraceId.rawValue] as? String, "trace123")
         XCTAssertEqual(dict[Keys.otlpSpanId.rawValue] as? String, "span123")
-        XCTAssertEqual(dict[Keys.otlpKindString.rawValue] as? String, Keys.otlpSpanKindClient.rawValue)
         XCTAssertNotNil(dict[Keys.otlpStartTimeUnixNano.rawValue] as? String)
         XCTAssertNotNil(dict[Keys.otlpEndTimeUnixNano.rawValue] as? String)
-        XCTAssertEqual(
-            (dict[Keys.otlpStatus.rawValue] as? [String: Any])?[Keys.code.rawValue] as? String,
-            Keys.otlpStatusCodeUnset.rawValue
-        )
     }
 
     func testInitializationWithAttributes() throws {

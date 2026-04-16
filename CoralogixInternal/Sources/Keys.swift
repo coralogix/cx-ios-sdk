@@ -147,8 +147,6 @@ public enum Keys: String {
     case otlpParentSpanId = "parent_span_id"
     case otlpStartTimeUnixNano = "start_time_unix_nano"
     case otlpEndTimeUnixNano = "end_time_unix_nano"
-    case otlpKindString = "kind_string"
-    case otlpStatus = "status_otlp"
     case otlpSpanKindUnspecified = "SPAN_KIND_UNSPECIFIED"
     case otlpSpanKindInternal = "SPAN_KIND_INTERNAL"
     case otlpSpanKindServer = "SPAN_KIND_SERVER"

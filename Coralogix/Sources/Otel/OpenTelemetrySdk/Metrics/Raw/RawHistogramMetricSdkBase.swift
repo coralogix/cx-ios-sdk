@@ -78,8 +78,7 @@ class RawHistogramMetricSdkBase<T> : RawHistogramMetric {
     }
 
     func createMetric(recordStatus: RecordStatus) -> BoundRawHistogramMetricSdkBase<T> {
-        //noop
-        fatalError()
+        BoundRawHistogramMetricSdkBase<T>(recordStatus: recordStatus)
     }
     
 }

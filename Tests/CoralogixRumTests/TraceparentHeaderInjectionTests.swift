@@ -364,7 +364,7 @@ final class TraceparentHeaderInjectionTests: XCTestCase {
         let r = try XCTUnwrap(rum)
 
         // URL contains the Coralogix domain
-        let request = URLRequest(url: try XCTUnwrap(URL(string: "https://ingress.\(CoralogixDomain.US2.rawValue)/v1/logs")))
+        let request = URLRequest(url: try XCTUnwrap(URL(string: "\(CoralogixDomain.US2.rawValue)/v1/logs")))
         let result = r.shouldAddTraceParent(to: request, options: options)
 
         XCTAssertFalse(result, "shouldAddTraceParent must return false for Coralogix domain URLs")

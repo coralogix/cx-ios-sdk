@@ -4,7 +4,7 @@
  */
 
 import Foundation
-// 
+import CoralogixInternal
 
 class BoundMeasureMetricSdkBase<T>: BoundMeasureMetric<T> {
     override init() {
@@ -12,6 +12,7 @@ class BoundMeasureMetricSdkBase<T>: BoundMeasureMetric<T> {
     }
 
     func getAggregator() -> Aggregator<T> {
-        fatalError()
+        Log.w("[Coralogix] BoundMeasureMetricSdkBase.getAggregator() returned fallback no-op Aggregator — min/max/sum/count data dropped; subclass should override")
+        return Aggregator<T>()
     }
 }
