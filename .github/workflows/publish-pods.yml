@@ -66,7 +66,7 @@ jobs:
           else
             echo "🚀 Pushing CoralogixInternal.podspec..."
             set +e
-            push_output=$(pod trunk push CoralogixInternal.podspec --allow-warnings --skip-tests --verbose 2>&1)
+            push_output=$(pod trunk push CoralogixInternal.podspec --allow-warnings --skip-tests --synchronous --verbose 2>&1)
             push_exit_code=$?
             set -e
             
@@ -116,21 +116,49 @@ jobs:
             echo "ℹ️ SessionReplay ${TAG_RAW} already on Trunk. Skipping push."
           else
             echo "🚀 Pushing SessionReplay.podspec..."
-            set +e
-            push_output=$(pod trunk push SessionReplay.podspec --allow-warnings --skip-tests --verbose 2>&1)
-            push_exit_code=$?
-            set -e
-            
-            if [ $push_exit_code -eq 0 ]; then
-              echo "✅ SessionReplay.podspec pushed!"
-            else
+            max_attempts=6
+            retry_sleep_seconds=60
+            attempt=1
+            pushed=false
+
+            while [ "$attempt" -le "$max_attempts" ]; do
+              echo "📦 SessionReplay push attempt ${attempt}/${max_attempts}..."
+              set +e
+              push_output=$(pod trunk push SessionReplay.podspec --allow-warnings --skip-tests --synchronous --verbose 2>&1)
+              push_exit_code=$?
+              set -e
+
+              if [ $push_exit_code -eq 0 ]; then
+                echo "✅ SessionReplay.podspec pushed!"
+                pushed=true
+                break
+              fi
+
               if echo "$push_output" | grep -q "Unable to accept duplicate entry"; then
                 echo "⚠️ Duplicate entry detected for SessionReplay, skipping to next phase..."
-              else
-                echo "❌ Error pushing SessionReplay.podspec:"
-                echo "$push_output"
-                exit 1
+                pushed=true
+                break
               fi
+
+              # CocoaPods CDN/spec propagation can lag after pushing dependencies.
+              # Retry only on dependency-resolution errors.
+              if echo "$push_output" | grep -Eq "Unable to find a specification for|None of your spec sources contain|required by"; then
+                if [ "$attempt" -lt "$max_attempts" ]; then
+                  echo "⏳ Dependency not resolvable yet (likely CDN propagation). Retrying in ${retry_sleep_seconds}s..."
+                  sleep "$retry_sleep_seconds"
+                  attempt=$((attempt + 1))
+                  continue
+                fi
+              fi
+
+              echo "❌ Error pushing SessionReplay.podspec:"
+              echo "$push_output"
+              exit 1
+            done
+
+            if [ "$pushed" != "true" ]; then
+              echo "❌ SessionReplay.podspec push failed after ${max_attempts} attempts."
+              exit 1
             fi
           fi
 
@@ -143,20 +171,48 @@ jobs:
             echo "ℹ️ Coralogix ${TAG_RAW} already on Trunk. Skipping push."
           else
             echo "🚀 Pushing Coralogix.podspec..."
-            set +e
-            push_output=$(pod trunk push Coralogix.podspec --allow-warnings --skip-tests --verbose 2>&1)
-            push_exit_code=$?
-            set -e
-            
-            if [ $push_exit_code -eq 0 ]; then
-              echo "🎉 Coralogix.podspec pushed successfully! 🎉"
-            else
+            max_attempts=6
+            retry_sleep_seconds=60
+            attempt=1
+            pushed=false
+
+            while [ "$attempt" -le "$max_attempts" ]; do
+              echo "📦 Coralogix push attempt ${attempt}/${max_attempts}..."
+              set +e
+              push_output=$(pod trunk push Coralogix.podspec --allow-warnings --skip-tests --synchronous --verbose 2>&1)
+              push_exit_code=$?
+              set -e
+
+              if [ $push_exit_code -eq 0 ]; then
+                echo "🎉 Coralogix.podspec pushed successfully! 🎉"
+                pushed=true
+                break
+              fi
+
               if echo "$push_output" | grep -q "Unable to accept duplicate entry"; then
                 echo "⚠️ Duplicate entry detected for Coralogix, skipping..."
-              else
-                echo "❌ Error pushing Coralogix.podspec:"
-                echo "$push_output"
-                exit 1
+                pushed=true
+                break
               fi
+
+              # CocoaPods CDN/spec propagation can lag after pushing dependencies.
+              # Retry only on dependency-resolution errors.
+              if echo "$push_output" | grep -Eq "Unable to find a specification for|None of your spec sources contain|required by"; then
+                if [ "$attempt" -lt "$max_attempts" ]; then
+                  echo "⏳ Dependency not resolvable yet (likely CDN propagation). Retrying in ${retry_sleep_seconds}s..."
+                  sleep "$retry_sleep_seconds"
+                  attempt=$((attempt + 1))
+                  continue
+                fi
+              fi
+
+              echo "❌ Error pushing Coralogix.podspec:"
+              echo "$push_output"
+              exit 1
+            done
+
+            if [ "$pushed" != "true" ]; then
+              echo "❌ Coralogix.podspec push failed after ${max_attempts} attempts."
+              exit 1
             fi
           fi
