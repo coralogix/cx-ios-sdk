@@ -115,10 +115,10 @@ final class InstrumentationDataTests: XCTestCase {
         XCTAssertEqual(dict[Keys.keySessionId.rawValue] as? String, "session_001")
         XCTAssertNil(dict[Keys.parentSpanId.rawValue], "parentSpanId should be absent for root spans")
 
-        XCTAssertEqual(dict[Keys.otlpTraceId.rawValue] as? String, "trace123")
-        XCTAssertEqual(dict[Keys.otlpSpanId.rawValue] as? String, "span123")
-        XCTAssertNotNil(dict[Keys.otlpStartTimeUnixNano.rawValue] as? String)
-        XCTAssertNotNil(dict[Keys.otlpEndTimeUnixNano.rawValue] as? String)
+        XCTAssertNil(dict[Keys.otlpTraceId.rawValue], "snake_case trace_id must not appear in log output")
+        XCTAssertNil(dict[Keys.otlpSpanId.rawValue], "snake_case span_id must not appear in log output")
+        XCTAssertNil(dict[Keys.otlpStartTimeUnixNano.rawValue], "snake_case start_time_unix_nano must not appear in log output")
+        XCTAssertNil(dict[Keys.otlpEndTimeUnixNano.rawValue], "snake_case end_time_unix_nano must not appear in log output")
     }
 
     func testInitializationWithAttributes() throws {

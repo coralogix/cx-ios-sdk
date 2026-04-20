@@ -186,14 +186,6 @@ struct OtelSpan {
         return attrs
     }
 
-    /// Matches Browser `timestampToNanosString` (concat of epoch seconds + 9-digit nanos) for Tracing extractors.
-    private static func otlpUnixNanoString(hrTime: [UInt64]) -> String {
-        guard hrTime.count >= 2 else { return "0" }
-        let sec = hrTime[0]
-        let nanos = hrTime[1]
-        return "\(sec)" + String(format: "%09llu", nanos)
-    }
-
     /// Browser `mapStatusCodeToOtlp` (traces-exporter.utils.ts).
     private static func otlpStatusCode(from statusDict: [String: Any]) -> [String: Any] {
         let raw = statusDict[Keys.code.rawValue]
@@ -226,16 +218,6 @@ struct OtelSpan {
         result[Keys.kind.rawValue] = Self.otlpSpanKindString(from: self.kind)
         result[Keys.duration.rawValue] = self.duration
         if let sessionId = self.sessionId { result[Keys.keySessionId.rawValue] = sessionId }
-
-        // OTLP-shaped extra fields (Browser mapCxSpanToOtlpSpan) — Tracing extractors read these from RUM logs.
-        result[Keys.otlpTraceId.rawValue] = self.traceId
-        result[Keys.otlpSpanId.rawValue] = self.spanId
-        if let parentSpanId = self.parentSpanId {
-            result[Keys.otlpParentSpanId.rawValue] = parentSpanId
-        }
-        result[Keys.otlpStartTimeUnixNano.rawValue] = Self.otlpUnixNanoString(hrTime: self.startTime)
-        result[Keys.otlpEndTimeUnixNano.rawValue] = Self.otlpUnixNanoString(hrTime: self.endTime)
-
         return result
     }
 
