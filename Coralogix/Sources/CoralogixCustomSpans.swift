@@ -35,6 +35,7 @@ final class CoralogixCustomGlobalSpanRegistry {
     }
 
     /// Returns `false` if a global custom span is already registered (second `startGlobalSpan` is ignored, like the Browser SDK).
+    @discardableResult
     func registerGlobalSpan(_ span: any Span, ignoredInstruments: Set<CoralogixIgnoredInstrument>) -> Bool {
         lock.lock()
         defer { lock.unlock() }
@@ -173,11 +174,7 @@ public final class CoralogixCustomTracer {
         stampCoralogixCustomSpanRUM(on: &otelSpan)
         rum.addRumCorrelationMetadata(to: &otelSpan)
         setMergedCustomLabelsJSON(merged: mergedSdkAndGlobal, on: &otelSpan)
-        guard CoralogixCustomGlobalSpanRegistry.shared.registerGlobalSpan(otelSpan, ignoredInstruments: ignoredInstruments) else {
-            // Rare race: another thread registered between the pre-check and here.
-            otelSpan.end()
-            return nil
-        }
+        CoralogixCustomGlobalSpanRegistry.shared.registerGlobalSpan(otelSpan, ignoredInstruments: ignoredInstruments)
         return CoralogixGlobalSpan(
             span: otelSpan,
             tracer: tracer,
