@@ -127,16 +127,20 @@ struct SpanDataToOtlpConverter {
             timeUnixNano: dateToUnixNanoString(event.timestamp),
             name: event.name,
             attributes: convertAttributes(event.attributes),
+            // SpanData.Event has no totalAttributeCount; the OTel Swift SDK does not track
+            // dropped event attributes. Span-level dropped attrs use max(0, totalAttributeCount - attributes.count).
             droppedAttributesCount: 0
         )
     }
-    
+
     private static func convertLink(_ link: SpanData.Link) -> OtlpSpanLink {
         return OtlpSpanLink(
             traceId: encodeTraceIdToBase64(link.context.traceId),
             spanId: encodeSpanIdToBase64(link.context.spanId),
             traceState: link.context.traceState.entries.isEmpty ? nil : traceStateToString(link.context.traceState),
             attributes: convertAttributes(link.attributes),
+            // SpanData.Link has no totalAttributeCount; the OTel Swift SDK does not track
+            // dropped link attributes. Span-level dropped attrs use max(0, totalAttributeCount - attributes.count).
             droppedAttributesCount: 0
         )
     }
