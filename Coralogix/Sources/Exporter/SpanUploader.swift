@@ -62,7 +62,8 @@ final class SpanUploader: SpanUploading {
 
             let httpStatus = (response as? HTTPURLResponse)?.statusCode ?? 0
             if httpStatus < 200 || httpStatus >= 300 {
-                let body = data.flatMap { String(data: $0, encoding: .utf8) } ?? "<no body>"
+                let rawBody = data.flatMap { String(data: $0, encoding: .utf8) } ?? "<no body>"
+                let body = rawBody.count > 512 ? String(rawBody.prefix(512)) + "…" : rawBody
                 Log.e("[SpanUploader] Backend rejected upload with HTTP \(httpStatus): \(body)")
                 status = .failure
                 return

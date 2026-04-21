@@ -174,7 +174,12 @@ public final class CoralogixCustomTracer {
         stampCoralogixCustomSpanRUM(on: &otelSpan)
         rum.addRumCorrelationMetadata(to: &otelSpan)
         setMergedCustomLabelsJSON(merged: mergedSdkAndGlobal, on: &otelSpan)
-        CoralogixCustomGlobalSpanRegistry.shared.registerGlobalSpan(otelSpan, ignoredInstruments: ignoredInstruments)
+        guard CoralogixCustomGlobalSpanRegistry.shared.registerGlobalSpan(otelSpan, ignoredInstruments: ignoredInstruments) else {
+            // Another thread registered a span between the pre-check and here (TOCTOU).
+            Log.w("Global span already exists")
+            otelSpan.end()
+            return nil
+        }
         return CoralogixGlobalSpan(
             span: otelSpan,
             tracer: tracer,

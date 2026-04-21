@@ -214,7 +214,7 @@ struct OtelSpan {
         result[Keys.startTime.rawValue] = self.startTime
         result[Keys.endTime.rawValue] = self.endTime
         result[Keys.status.rawValue] = Self.otlpStatusCode(from: self.status)
-        result[Keys.kind.rawValue] = Self.otlpSpanKindString(from: self.kind)
+        result[Keys.kind.rawValue] = Self.otlpSpanKind(from: self.kind)
         result[Keys.duration.rawValue] = self.duration
         if let sessionId = self.sessionId { result[Keys.keySessionId.rawValue] = sessionId }
         return result
@@ -223,7 +223,7 @@ struct OtelSpan {
     /// Maps OTel SDK SpanKind to OTLP proto SpanKind integer (backend expects i32).
     /// OTel SDK: 0=INTERNAL,1=SERVER,2=CLIENT,3=PRODUCER,4=CONSUMER
     /// OTLP proto: 0=UNSPECIFIED,1=INTERNAL,2=SERVER,3=CLIENT,4=PRODUCER,5=CONSUMER
-    private static func otlpSpanKindString(from kind: Int) -> Int {
+    private static func otlpSpanKind(from kind: Int) -> Int {
         switch kind {
         case 0: return 1  // INTERNAL
         case 1: return 2  // SERVER
