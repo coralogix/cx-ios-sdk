@@ -110,8 +110,8 @@ private func stampCoralogixCustomSpanRUM(on span: inout any Span) {
 
 // MARK: - Custom span labels (CX-35953, Browser `getCustomMergedLabels` / `setCustomLabelsForSpan`)
 
-/// Merge order: `base` (SDK-level `[String: Any]`) then `layer` (`[String: String]` wins on key collision).
-private func mergingCustomLabelLayer(into base: [String: Any], _ layer: [String: String]?) -> [String: Any] {
+/// Merge order: `base` (SDK-level `[String: Any]`) then `layer` (`[String: Any]` wins on key collision).
+private func mergingCustomLabelLayer(into base: [String: Any], _ layer: [String: Any]?) -> [String: Any] {
     guard let layer, !layer.isEmpty else { return base }
     var out = base
     for (key, value) in layer {
@@ -151,7 +151,7 @@ public final class CoralogixCustomTracer {
     }
 
     /// Starts a new root span (new trace). Returns `nil` if the SDK is not initialized or the `CoralogixRum` instance was deallocated.
-    public func startGlobalSpan(name: String, labels: [String: String]? = nil) -> CoralogixGlobalSpan? {
+    public func startGlobalSpan(name: String, labels: [String: Any]? = nil) -> CoralogixGlobalSpan? {
         guard let rum = rum, rum.isInitialized else {
             return nil
         }
@@ -237,7 +237,7 @@ public final class CoralogixGlobalSpan {
     }
 
     /// Starts a child span while the global span is the OTel active span (same trace/parent as Browser `context.with(global, …)`).
-    public func startCustomSpan(name: String, labels: [String: String]? = nil) -> CoralogixCustomSpan {
+    public func startCustomSpan(name: String, labels: [String: Any]? = nil) -> CoralogixCustomSpan {
         let baseBuilder: any SpanBuilder
         if isRegisteredGlobalActiveInOTel() {
             baseBuilder = tracer.spanBuilder(spanName: name)
