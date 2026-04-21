@@ -75,12 +75,21 @@ update_internal_dependency_version() {
 }
 
 # Main script logic
-if [ $# -ne 1 ]; then
-  echo "Usage: $0 {major|minor|patch}"
-  exit 1
+if [ $# -eq 1 ]; then
+  part=$1
+else
+  echo "Select version bump type:"
+  echo "  1) patch"
+  echo "  2) minor"
+  echo "  3) major"
+  read -rp "Choice [1/2/3]: " choice
+  case $choice in
+    1) part="patch" ;;
+    2) part="minor" ;;
+    3) part="major" ;;
+    *) echo "Invalid choice: $choice"; exit 1 ;;
+  esac
 fi
-
-part=$1
 
 # Get the absolute path of the script directory
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
