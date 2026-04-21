@@ -51,7 +51,7 @@ final class CoralogixRumManager {
 //            return editableCxRum
 //        },
                                                enableSwizzling: true,
-       //                                        proxyUrl: Envs.PROXY_URL.rawValue, // remove if not need to use proxy
+                                               proxyUrl: Envs.PROXY_URL.rawValue, // remove if not need to use proxy
                                                traceParentInHeader: ["enable": true],
                                                mobileVitals:[.cpuDetector: false,
                                                              .warmDetector: false,
