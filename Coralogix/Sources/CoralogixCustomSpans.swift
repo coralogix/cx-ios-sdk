@@ -72,6 +72,13 @@ final class CoralogixCustomGlobalSpanRegistry {
         return true
     }
 
+    /// Returns `true` if a global custom span is currently registered (fast pre-check before span creation).
+    internal var isGlobalSpanActive: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return registeredGlobal != nil
+    }
+
     /// When `OpenTelemetry.instance.contextProvider.activeSpan` is `nil` (e.g. URLSession callback or `DispatchQueue` work on another activity) but a global custom span is still registered, auto-instrumented spans should parent under that span so traceId / parentSpanId match the global trace (CX-35954).
     internal func registeredGlobalForAutoInstrumentationParent() -> (any Span)? {
         lock.lock()
@@ -155,6 +162,10 @@ public final class CoralogixCustomTracer {
         guard let rum = rum, rum.isInitialized else {
             return nil
         }
+        guard !CoralogixCustomGlobalSpanRegistry.shared.isGlobalSpanActive else {
+            Log.w("Global span already exists")
+            return nil
+        }
         let tracer = rum.tracerProvider()
         let sdkLabels = rum.labels ?? [:]
         let mergedSdkAndGlobal = mergingCustomLabelLayer(into: sdkLabels, labels)
@@ -163,7 +174,7 @@ public final class CoralogixCustomTracer {
         rum.addRumCorrelationMetadata(to: &otelSpan)
         setMergedCustomLabelsJSON(merged: mergedSdkAndGlobal, on: &otelSpan)
         guard CoralogixCustomGlobalSpanRegistry.shared.registerGlobalSpan(otelSpan, ignoredInstruments: ignoredInstruments) else {
-            Log.w("Global span already exists")
+            // Rare race: another thread registered between the pre-check and here.
             otelSpan.end()
             return nil
         }
