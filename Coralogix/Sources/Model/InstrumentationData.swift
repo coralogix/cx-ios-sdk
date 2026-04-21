@@ -192,7 +192,14 @@ struct OtelSpan {
         let raw = statusDict[Keys.code.rawValue]
         let code: Int = {
             if let i = raw as? Int { return i }
-            if let s = raw as? String, let i = Int(s) { return i }
+            if let s = raw as? String {
+                switch s {
+                case "STATUS_CODE_OK":    return 1
+                case "STATUS_CODE_ERROR": return 2
+                default: break
+                }
+                if let i = Int(s) { return i }
+            }
             return 0
         }()
         let otlpCode: Int

@@ -164,7 +164,7 @@ public final class CoralogixCustomTracer {
             return nil
         }
         guard !CoralogixCustomGlobalSpanRegistry.shared.isGlobalSpanActive else {
-            Log.w("Global span already exists")
+            Log.w("[CoralogixCustomTracer] startGlobalSpan ignored — a global span is already active")
             return nil
         }
         let tracer = rum.tracerProvider()
@@ -176,7 +176,7 @@ public final class CoralogixCustomTracer {
         setMergedCustomLabelsJSON(merged: mergedSdkAndGlobal, on: &otelSpan)
         guard CoralogixCustomGlobalSpanRegistry.shared.registerGlobalSpan(otelSpan, ignoredInstruments: ignoredInstruments) else {
             // Another thread registered a span between the pre-check and here (TOCTOU).
-            Log.w("Global span already exists")
+            Log.w("[CoralogixCustomTracer] startGlobalSpan race — span created but discarded, another thread registered first")
             otelSpan.end()
             return nil
         }
