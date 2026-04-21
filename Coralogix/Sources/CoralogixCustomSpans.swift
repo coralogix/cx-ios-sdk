@@ -184,7 +184,9 @@ public final class CoralogixCustomTracer {
 /// - Important: If this object is deallocated without calling `endSpan()`, the span will be
 ///   automatically ended and the OTel context restored as a safety net. Always prefer explicit `endSpan()`.
 public final class CoralogixGlobalSpan {
-    public let span: any Span
+    internal let span: any Span
+    public var traceId: String { span.context.traceId.hexString }
+    public var spanId: String { span.context.spanId.hexString }
     private let tracer: Tracer
     private weak var rum: CoralogixRum?
     /// Snapshot of SDK ∪ global labels at `startGlobalSpan` time; child spans merge child keys on top (CX-35953).
