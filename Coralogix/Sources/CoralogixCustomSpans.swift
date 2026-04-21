@@ -294,10 +294,6 @@ public final class CoralogixCustomSpan {
         span.setAttribute(key: key, value: value)
     }
 
-    public func setAttribute(key: String, value: AttributeValue?) {
-        span.setAttribute(key: key, value: value)
-    }
-
     public func addEvent(name: String) {
         span.addEvent(name: name)
     }
