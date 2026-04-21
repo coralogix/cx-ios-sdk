@@ -122,7 +122,11 @@ public class CoralogixExporter: SpanExporter {
             // handle their own errors within the callback.
             if let tracesExporter = tracesExporterCallback {
                 let exporterData = CoralogixTraceExporterData(spans: uniqueSpans)
-                tracesExporter(exporterData)
+                do {
+                    try tracesExporter(exporterData)
+                } catch {
+                    Log.e("[CoralogixExporter] tracesExporter callback threw: \(error)")
+                }
             }
             
             let cxSpansDictionary = autoreleasepool {
