@@ -186,7 +186,8 @@ struct OtelSpan {
         return attrs
     }
 
-    /// Browser `mapStatusCodeToOtlp` (traces-exporter.utils.ts).
+    /// Maps CxSpan status to OTLP status code integer (proto enum: UNSET=0, OK=1, ERROR=2).
+    /// Backend expects i32, not the string name — protobuf JSON uses numeric enum values.
     private static func otlpStatusCode(from statusDict: [String: Any]) -> [String: Any] {
         let raw = statusDict[Keys.code.rawValue]
         let code: Int = {
@@ -194,13 +195,13 @@ struct OtelSpan {
             if let s = raw as? String, let i = Int(s) { return i }
             return 0
         }()
-        let name: String
+        let otlpCode: Int
         switch code {
-        case 1: name = Keys.otlpStatusCodeOk.rawValue
-        case 2: name = Keys.otlpStatusCodeError.rawValue
-        default: name = Keys.otlpStatusCodeUnset.rawValue
+        case 1: otlpCode = 1  // STATUS_CODE_OK
+        case 2: otlpCode = 2  // STATUS_CODE_ERROR
+        default: otlpCode = 0 // STATUS_CODE_UNSET
         }
-        return [Keys.code.rawValue: name]
+        return [Keys.code.rawValue: otlpCode]
     }
 
     func getDictionary() -> [String: Any] {
@@ -212,25 +213,24 @@ struct OtelSpan {
         result[Keys.attributes.rawValue] = self.attributes
         result[Keys.startTime.rawValue] = self.startTime
         result[Keys.endTime.rawValue] = self.endTime
-        // OTLP-formatted status: {code: "STATUS_CODE_*"} matching Browser mapCxSpanToOtlpSpan.
         result[Keys.status.rawValue] = Self.otlpStatusCode(from: self.status)
-        // OTLP-formatted kind: "SPAN_KIND_*" string matching Browser mapCxSpanToOtlpSpan.
         result[Keys.kind.rawValue] = Self.otlpSpanKindString(from: self.kind)
         result[Keys.duration.rawValue] = self.duration
         if let sessionId = self.sessionId { result[Keys.keySessionId.rawValue] = sessionId }
         return result
     }
 
-    /// Maps OpenTelemetry SpanKind integer to OTLP kind string.
-    /// SpanKind values: 0=INTERNAL, 1=SERVER, 2=CLIENT, 3=PRODUCER, 4=CONSUMER
-    private static func otlpSpanKindString(from kind: Int) -> String {
+    /// Maps OTel SDK SpanKind to OTLP proto SpanKind integer (backend expects i32).
+    /// OTel SDK: 0=INTERNAL,1=SERVER,2=CLIENT,3=PRODUCER,4=CONSUMER
+    /// OTLP proto: 0=UNSPECIFIED,1=INTERNAL,2=SERVER,3=CLIENT,4=PRODUCER,5=CONSUMER
+    private static func otlpSpanKindString(from kind: Int) -> Int {
         switch kind {
-        case 0: return Keys.otlpSpanKindInternal.rawValue
-        case 1: return Keys.otlpSpanKindServer.rawValue
-        case 2: return Keys.otlpSpanKindClient.rawValue
-        case 3: return Keys.otlpSpanKindProducer.rawValue
-        case 4: return Keys.otlpSpanKindConsumer.rawValue
-        default: return Keys.otlpSpanKindUnspecified.rawValue
+        case 0: return 1  // INTERNAL
+        case 1: return 2  // SERVER
+        case 2: return 3  // CLIENT
+        case 3: return 4  // PRODUCER
+        case 4: return 5  // CONSUMER
+        default: return 0 // UNSPECIFIED
         }
     }
 }

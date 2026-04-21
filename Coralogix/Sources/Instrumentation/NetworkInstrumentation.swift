@@ -180,6 +180,8 @@ extension CoralogixRum {
         if let sessionMetadata = getCurrentInstance()?.sessionManager?.sessionMetadata {
             spanBuilder.setAttribute(key: Keys.sessionId.rawValue, value: sessionMetadata.sessionId)
             spanBuilder.setAttribute(key: Keys.sessionCreationDate.rawValue, value: String(Int(sessionMetadata.sessionCreationDate)))
+        } else {
+            Log.w("[Coralogix] ⚠️ Network span missing session attributes — CoralogixRum instance or sessionMetadata is nil. Span will be dropped.")
         }
     }
     

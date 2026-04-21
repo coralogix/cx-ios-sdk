@@ -102,14 +102,14 @@ final class InstrumentationDataTests: XCTestCase {
         XCTAssertEqual(dict[Keys.spanId.rawValue] as? String, "span123")
         XCTAssertEqual(dict[Keys.traceId.rawValue] as? String, "trace123")
         XCTAssertEqual(dict[Keys.name.rawValue] as? String, "testSpan")
-        // kind is now OTLP-formatted string (matching Browser mapCxSpanToOtlpSpan).
-        XCTAssertEqual(dict[Keys.kind.rawValue] as? String, Keys.otlpSpanKindClient.rawValue)
+        // kind is OTLP proto integer: OTel SDK CLIENT(2) → OTLP CLIENT(3)
+        XCTAssertEqual(dict[Keys.kind.rawValue] as? Int, 3)
         XCTAssertNotNil(dict[Keys.startTime.rawValue])
         XCTAssertNotNil(dict[Keys.endTime.rawValue])
-        // status is now OTLP-formatted: {code: "STATUS_CODE_*"}.
+        // status.code is OTLP proto integer: UNSET=0, OK=1, ERROR=2
         XCTAssertEqual(
-            (dict[Keys.status.rawValue] as? [String: Any])?[Keys.code.rawValue] as? String,
-            Keys.otlpStatusCodeUnset.rawValue
+            (dict[Keys.status.rawValue] as? [String: Any])?[Keys.code.rawValue] as? Int,
+            0
         )
         XCTAssertNotNil(dict[Keys.duration.rawValue])
         XCTAssertEqual(dict[Keys.keySessionId.rawValue] as? String, "session_001")

@@ -51,16 +51,25 @@ final class SpanUploader: SpanUploading {
         var status: SpanExporterResultCode = .failure
         let semaphore = DispatchSemaphore(value: 0)
         let jsonDataCopy = requestJsonData
-        let task = URLSession.shared.dataTask(with: request) { [weak self] _, _, error in
+        let task = URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
             defer { semaphore.signal() }
-            
-            if error != nil {
+
+            if let error = error {
+                Log.e("[SpanUploader] Network error: \(error.localizedDescription)")
                 status = .failure
                 return
             }
-            
+
+            let httpStatus = (response as? HTTPURLResponse)?.statusCode ?? 0
+            if httpStatus < 200 || httpStatus >= 300 {
+                let body = data.flatMap { String(data: $0, encoding: .utf8) } ?? "<no body>"
+                Log.e("[SpanUploader] Backend rejected upload with HTTP \(httpStatus): \(body)")
+                status = .failure
+                return
+            }
+
             status = .success
-            
+
             if let data = jsonDataCopy {
                 self?.logJSON(from: data, prettyPrint: true)
             }
