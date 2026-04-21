@@ -481,4 +481,148 @@ final class CoralogixCustomSpansTests: XCTestCase {
         XCTAssertEqual(data.traceId, globalData.traceId)
         XCTAssertEqual(data.parentSpanId, globalData.spanId)
     }
+
+    // MARK: - [String: Any] label merge tests
+
+    /// Mixed-type values (Int, Bool, String) survive merge and JSON serialization to custom_labels.
+    func testGlobalSpanLabels_mixedTypes_surviveJsonSerialization() {
+        let rum = CoralogixRum(options: options!)
+        guard let tracer = rum.getCustomTracer() else {
+            return XCTFail("Expected custom tracer")
+        }
+        let labels: [String: Any] = ["name": "checkout", "retryCount": 3, "isGuest": true]
+        guard let global = tracer.startGlobalSpan(name: "g", labels: labels) else {
+            return XCTFail("Expected global span")
+        }
+        defer { global.endSpan() }
+        guard let readable = global.span as? any ReadableSpan,
+              case let .string(json)? = readable.toSpanData().attributes[Keys.customLabels.rawValue],
+              let dict = Helper.convertJsonStringToDict(jsonString: json) else {
+            return XCTFail("Expected custom_labels JSON on global span")
+        }
+        XCTAssertEqual(dict["name"] as? String, "checkout")
+        XCTAssertEqual(dict["retryCount"] as? Int, 3)
+        XCTAssertEqual(dict["isGuest"] as? Bool, true)
+    }
+
+    /// Child span labels with mixed types survive three-level merge and JSON serialization.
+    func testChildSpanLabels_mixedTypes_surviveJsonSerialization() {
+        let rum = CoralogixRum(options: options!)
+        guard let tracer = rum.getCustomTracer() else {
+            return XCTFail("Expected custom tracer")
+        }
+        guard let global = tracer.startGlobalSpan(name: "g", labels: ["count": 10]) else {
+            return XCTFail("Expected global span")
+        }
+        defer { global.endSpan() }
+        let child = global.startCustomSpan(name: "c", labels: ["ratio": 0.75, "active": false])
+        defer { child.endSpan() }
+        guard let readable = child.span as? any ReadableSpan,
+              case let .string(json)? = readable.toSpanData().attributes[Keys.customLabels.rawValue],
+              let dict = Helper.convertJsonStringToDict(jsonString: json) else {
+            return XCTFail("Expected custom_labels JSON on child span")
+        }
+        XCTAssertEqual(dict["count"] as? Int, 10)
+        XCTAssertEqual(dict["ratio"] as? Double, 0.75)
+        XCTAssertEqual(dict["active"] as? Bool, false)
+    }
+
+    /// Layer overrides base on key collision (layer wins), even with mixed types.
+    func testLabelMerge_layerOverridesBase_mixedTypes() {
+        let rum = CoralogixRum(options: options!)
+        guard let tracer = rum.getCustomTracer() else {
+            return XCTFail("Expected custom tracer")
+        }
+        guard let global = tracer.startGlobalSpan(name: "g", labels: ["tier": "global", "count": 5]) else {
+            return XCTFail("Expected global span")
+        }
+        defer { global.endSpan() }
+        let child = global.startCustomSpan(name: "c", labels: ["tier": "child", "count": 99])
+        defer { child.endSpan() }
+        guard let readable = child.span as? any ReadableSpan,
+              case let .string(json)? = readable.toSpanData().attributes[Keys.customLabels.rawValue],
+              let dict = Helper.convertJsonStringToDict(jsonString: json) else {
+            return XCTFail("Expected custom_labels JSON")
+        }
+        XCTAssertEqual(dict["tier"] as? String, "child")
+        XCTAssertEqual(dict["count"] as? Int, 99)
+    }
+
+    /// nil layer returns base unchanged (no crash, no empty labels).
+    func testLabelMerge_nilLayer_returnsBaseUnchanged() {
+        let rum = CoralogixRum(options: options!)
+        guard let tracer = rum.getCustomTracer() else {
+            return XCTFail("Expected custom tracer")
+        }
+        guard let global = tracer.startGlobalSpan(name: "g", labels: ["env": "prod"]) else {
+            return XCTFail("Expected global span")
+        }
+        defer { global.endSpan() }
+        let child = global.startCustomSpan(name: "c", labels: nil)
+        defer { child.endSpan() }
+        guard let readable = child.span as? any ReadableSpan,
+              case let .string(json)? = readable.toSpanData().attributes[Keys.customLabels.rawValue],
+              let dict = Helper.convertJsonStringToDict(jsonString: json) else {
+            return XCTFail("Expected custom_labels JSON")
+        }
+        XCTAssertEqual(dict["env"] as? String, "prod")
+    }
+
+    /// Empty layer returns base unchanged.
+    func testLabelMerge_emptyLayer_returnsBaseUnchanged() {
+        let rum = CoralogixRum(options: options!)
+        guard let tracer = rum.getCustomTracer() else {
+            return XCTFail("Expected custom tracer")
+        }
+        guard let global = tracer.startGlobalSpan(name: "g", labels: ["env": "staging"]) else {
+            return XCTFail("Expected global span")
+        }
+        defer { global.endSpan() }
+        let child = global.startCustomSpan(name: "c", labels: [:])
+        defer { child.endSpan() }
+        guard let readable = child.span as? any ReadableSpan,
+              case let .string(json)? = readable.toSpanData().attributes[Keys.customLabels.rawValue],
+              let dict = Helper.convertJsonStringToDict(jsonString: json) else {
+            return XCTFail("Expected custom_labels JSON")
+        }
+        XCTAssertEqual(dict["env"] as? String, "staging")
+    }
+
+    /// Three-level merge: SDK labels → global labels → child labels, each level wins on collision.
+    func testLabelMerge_threeLevels_mixedTypes_eachLevelWinsOnCollision() {
+        let opts = CoralogixExporterOptions(
+            coralogixDomain: CoralogixDomain.US2,
+            userContext: nil,
+            environment: "PROD",
+            application: "TestApp-CustomSpans",
+            version: "1.0",
+            publicKey: "token",
+            ignoreUrls: [],
+            ignoreErrors: [],
+            labels: ["tier": "sdk", "sdkOnly": 42, "flag": false],
+            sessionSampleRate: 100,
+            traceParentInHeader: [Keys.enable.rawValue: true],
+            debug: true
+        )
+        let rum = CoralogixRum(options: opts)
+        guard let tracer = rum.getCustomTracer() else {
+            return XCTFail("Expected custom tracer")
+        }
+        guard let global = tracer.startGlobalSpan(name: "g", labels: ["tier": "global", "globalOnly": 99]) else {
+            return XCTFail("Expected global span")
+        }
+        defer { global.endSpan() }
+        let child = global.startCustomSpan(name: "c", labels: ["tier": "child", "childOnly": true])
+        defer { child.endSpan() }
+        guard let readable = child.span as? any ReadableSpan,
+              case let .string(json)? = readable.toSpanData().attributes[Keys.customLabels.rawValue],
+              let dict = Helper.convertJsonStringToDict(jsonString: json) else {
+            return XCTFail("Expected custom_labels JSON on child")
+        }
+        XCTAssertEqual(dict["tier"] as? String, "child")
+        XCTAssertEqual(dict["sdkOnly"] as? Int, 42)
+        XCTAssertEqual(dict["flag"] as? Bool, false)
+        XCTAssertEqual(dict["globalOnly"] as? Int, 99)
+        XCTAssertEqual(dict["childOnly"] as? Bool, true)
+    }
 }
