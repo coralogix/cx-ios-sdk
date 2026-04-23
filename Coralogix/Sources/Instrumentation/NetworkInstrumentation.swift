@@ -217,7 +217,7 @@ extension CoralogixRum {
             let filtered = NetworkCaptureRule.filterHeaders(allReq, allowlist: reqHeaders)
             if !filtered.isEmpty {
                 let dictAny = Dictionary(uniqueKeysWithValues: filtered.map { ($0.key, $0.value as Any) })
-                let json = Helper.convertDictionayToJsonString(dict: dictAny)
+                let json = Helper.convertDictionaryToJsonString(dict: dictAny)
                 span.setAttribute(key: Keys.requestHeaders.rawValue, value: AttributeValue.string(json))
             }
         }
@@ -227,7 +227,7 @@ extension CoralogixRum {
             let filtered = NetworkCaptureRule.filterHeaders(allRes, allowlist: resHeaders)
             if !filtered.isEmpty {
                 let dictAny = Dictionary(uniqueKeysWithValues: filtered.map { ($0.key, $0.value as Any) })
-                let json = Helper.convertDictionayToJsonString(dict: dictAny)
+                let json = Helper.convertDictionaryToJsonString(dict: dictAny)
                 span.setAttribute(key: Keys.responseHeaders.rawValue, value: AttributeValue.string(json))
             }
         }
@@ -296,7 +296,7 @@ extension CoralogixRum {
             }
             if !filtered.isEmpty {
                 let dictAny = Dictionary(uniqueKeysWithValues: filtered.map { ($0.key, $0.value as Any) })
-                let json = Helper.convertDictionayToJsonString(dict: dictAny)
+                let json = Helper.convertDictionaryToJsonString(dict: dictAny)
                 span.setAttribute(key: Keys.requestHeaders.rawValue, value: AttributeValue.string(json))
             }
         } else if let reqHeaders = dictionary[Keys.requestHeaders.rawValue] as? String, !reqHeaders.isEmpty {
@@ -314,7 +314,7 @@ extension CoralogixRum {
             }
             if !filtered.isEmpty {
                 let dictAny = Dictionary(uniqueKeysWithValues: filtered.map { ($0.key, $0.value as Any) })
-                let json = Helper.convertDictionayToJsonString(dict: dictAny)
+                let json = Helper.convertDictionaryToJsonString(dict: dictAny)
                 span.setAttribute(key: Keys.responseHeaders.rawValue, value: AttributeValue.string(json))
             }
         } else if let resHeaders = dictionary[Keys.responseHeaders.rawValue] as? String, !resHeaders.isEmpty {

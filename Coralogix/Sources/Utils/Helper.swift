@@ -71,7 +71,7 @@ class Helper {
         return ""
     }
     
-    internal static func convertDictionayToJsonString(dict: [String: Any]) -> String {
+    internal static func convertDictionaryToJsonString(dict: [String: Any]) -> String {
         func encode(_ d: [String: Any]) -> String? {
             // `isValidJSONObject` rejects `Date` and other non-JSON types without raising an Obj‑C
             // `NSInvalidArgumentException` (which Swift `catch` does not handle).
@@ -90,7 +90,7 @@ class Helper {
         if let json = encode(sanitized) {
             return json
         }
-        Log.e("convertDictionayToJsonString: serialization failed after sanitization (key count \(dict.count))")
+        Log.e("convertDictionaryToJsonString: serialization failed after sanitization (key count \(dict.count))")
         return ""
     }
 
@@ -170,7 +170,7 @@ class Helper {
                 } else {
                     ks = String(describing: k)
                     guard !ks.isEmpty else {
-                        Log.w("convertDictionayToJsonString: skipped non-representable NSDictionary key \(Swift.type(of: k)) at \(keyPath)")
+                        Log.w("convertDictionaryToJsonString: skipped non-representable NSDictionary key \(Swift.type(of: k)) at \(keyPath)")
                         continue
                     }
                 }
@@ -180,7 +180,7 @@ class Helper {
         case let v as NSArray:
             return v.map { jsonSerializationSafeValue($0, keyPath: "\(keyPath)[]") }
         default:
-            Log.w("convertDictionayToJsonString: non-JSON-serializable type \(Swift.type(of: value)) at \(keyPath) — coercing with String(describing:)")
+            Log.w("convertDictionaryToJsonString: non-JSON-serializable type \(Swift.type(of: value)) at \(keyPath) — coercing with String(describing:)")
             return String(describing: value)
         }
     }

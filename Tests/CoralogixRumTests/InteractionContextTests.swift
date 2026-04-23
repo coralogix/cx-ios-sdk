@@ -31,7 +31,7 @@ final class InteractionContextTests: XCTestCase {
                 Keys.eventType.rawValue:   AttributeValue("user-interaction"),
                 Keys.source.rawValue:      AttributeValue("console"),
                 Keys.environment.rawValue: AttributeValue("prod"),
-                Keys.tapObject.rawValue:   AttributeValue(Helper.convertDictionayToJsonString(dict: tapObject))
+                Keys.tapObject.rawValue:   AttributeValue(Helper.convertDictionaryToJsonString(dict: tapObject))
             ],
             startTime: now,
             endTime: now,

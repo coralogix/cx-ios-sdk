@@ -126,11 +126,11 @@ extension CoralogixRum {
         span.setAttribute(key: Keys.message.rawValue, value: message)
         
         if let labels = labels {
-            span.setAttribute(key: Keys.customLabels.rawValue, value: Helper.convertDictionayToJsonString(dict: labels))
+            span.setAttribute(key: Keys.customLabels.rawValue, value: Helper.convertDictionaryToJsonString(dict: labels))
         }
         
         if let data = data {
-            span.setAttribute(key: Keys.data.rawValue, value: Helper.convertDictionayToJsonString(dict: data))
+            span.setAttribute(key: Keys.data.rawValue, value: Helper.convertDictionaryToJsonString(dict: data))
         }
                 
         if severity == .error { self.recordScreenshotForSpan(to: &span) }
@@ -179,7 +179,7 @@ extension CoralogixRum {
         if let errorType { span.setAttribute(key: Keys.errorType.rawValue, value: errorType) }
         if let stackTraceJson { span.setAttribute(key: Keys.stackTrace.rawValue, value: stackTraceJson) }
         if let userInfo, !userInfo.isEmpty {
-            span.setAttribute(key: Keys.userInfo.rawValue, value: Helper.convertDictionayToJsonString(dict: userInfo))
+            span.setAttribute(key: Keys.userInfo.rawValue, value: Helper.convertDictionaryToJsonString(dict: userInfo))
         }
         if let arch, !arch.isEmpty { span.setAttribute(key: Keys.arch.rawValue, value: arch) }
         if let buildId, !buildId.isEmpty { span.setAttribute(key: Keys.buildId.rawValue, value: buildId) }

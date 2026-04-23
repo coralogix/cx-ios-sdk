@@ -93,7 +93,7 @@ extension CoralogixRum {
 
         span.setAttribute(
             key: Keys.tapObject.rawValue,
-            value: Helper.convertDictionayToJsonString(dict: properties)
+            value: Helper.convertDictionaryToJsonString(dict: properties)
         )
         span.end()
     }

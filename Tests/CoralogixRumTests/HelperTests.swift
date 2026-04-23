@@ -89,10 +89,10 @@ final class HelperTests: XCTestCase {
             XCTAssertEqual(result.spanId, "span123")
         }
 
-    /// Non-JSON-serializable values (e.g. `Date`) must not cause `convertDictionayToJsonString` to return empty for the whole map.
+    /// Non-JSON-serializable values (e.g. `Date`) must not cause `convertDictionaryToJsonString` to return empty for the whole map.
     func testConvertDictionaryToJsonStringSanitizesDateAndKeepsOtherKeys() throws {
         let date = Date(timeIntervalSince1970: 1_700_000_000)
-        let json = Helper.convertDictionayToJsonString(dict: [
+        let json = Helper.convertDictionaryToJsonString(dict: [
             "userId": "abc",
             "loggedAt": date,
             "count": 3
@@ -111,7 +111,7 @@ final class HelperTests: XCTestCase {
             NSNumber(value: 7): URL(string: "https://example.com/path")!,
             "plain": "text"
         ]
-        let json = Helper.convertDictionayToJsonString(dict: [
+        let json = Helper.convertDictionaryToJsonString(dict: [
             "labels": nested
         ])
         XCTAssertFalse(json.isEmpty, "expected sanitized JSON, not empty string")

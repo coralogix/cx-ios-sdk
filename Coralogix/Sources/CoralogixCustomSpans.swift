@@ -131,7 +131,7 @@ private func mergingCustomLabelLayer(into base: [String: Any], _ layer: [String:
 /// Writes Browser-parity `custom_labels` JSON on the span for RUM (`Helper.getLabels` / Explorer).
 private func setMergedCustomLabelsJSON(merged: [String: Any], on span: inout any Span) {
     guard !merged.isEmpty else { return }
-    let json = Helper.convertDictionayToJsonString(dict: merged)
+    let json = Helper.convertDictionaryToJsonString(dict: merged)
     guard !json.isEmpty else {
         Log.w("Custom span labels could not be JSON-encoded — custom_labels attribute omitted")
         return
