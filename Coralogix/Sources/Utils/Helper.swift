@@ -73,6 +73,9 @@ class Helper {
     
     internal static func convertDictionayToJsonString(dict: [String: Any]) -> String {
         func encode(_ d: [String: Any]) -> String? {
+            // `isValidJSONObject` rejects `Date` and other non-JSON types without raising an Obj‑C
+            // `NSInvalidArgumentException` (which Swift `catch` does not handle).
+            guard JSONSerialization.isValidJSONObject(d) else { return nil }
             do {
                 let jsonData = try JSONSerialization.data(withJSONObject: d, options: [])
                 return String(data: jsonData, encoding: .utf8)
