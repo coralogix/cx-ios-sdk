@@ -104,5 +104,25 @@ final class HelperTests: XCTestCase {
         XCTAssertEqual(obj?["count"] as? Int, 3)
         XCTAssertNotNil(obj?["loggedAt"] as? String)
     }
+
+    func testConvertDictionaryToJsonStringPreservesNonStringNestedNSDictionaryKeys() throws {
+        let nested: NSDictionary = [
+            NSNumber(value: 42): "answer",
+            NSNumber(value: 7): URL(string: "https://example.com/path")!,
+            "plain": "text"
+        ]
+        let json = Helper.convertDictionayToJsonString(dict: [
+            "labels": nested
+        ])
+        XCTAssertFalse(json.isEmpty, "expected sanitized JSON, not empty string")
+
+        let data = try XCTUnwrap(json.data(using: .utf8))
+        let obj = try XCTUnwrap(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let labels = try XCTUnwrap(obj["labels"] as? [String: Any])
+
+        XCTAssertEqual(labels["42"] as? String, "answer")
+        XCTAssertEqual(labels["7"] as? String, "https://example.com/path")
+        XCTAssertEqual(labels["plain"] as? String, "text")
+    }
 }
     

@@ -164,7 +164,16 @@ class Helper {
         case let v as NSDictionary:
             var mapped: [String: Any] = [:]
             for (k, item) in v {
-                guard let ks = k as? String else { continue }
+                let ks: String
+                if let stringKey = k as? String {
+                    ks = stringKey
+                } else {
+                    ks = String(describing: k)
+                    guard !ks.isEmpty else {
+                        Log.w("convertDictionayToJsonString: skipped non-representable NSDictionary key \(Swift.type(of: k)) at \(keyPath)")
+                        continue
+                    }
+                }
                 mapped[ks] = jsonSerializationSafeValue(item, keyPath: "\(keyPath).\(ks)")
             }
             return mapped
