@@ -72,15 +72,121 @@ class Helper {
     }
     
     internal static func convertDictionayToJsonString(dict: [String: Any]) -> String {
-        do {
-            let jsonData = try JSONSerialization.data(withJSONObject: dict, options: [])
-            if let jsonString = String(data: jsonData, encoding: .utf8) {
-                return jsonString
+        func encode(_ d: [String: Any]) -> String? {
+            do {
+                let jsonData = try JSONSerialization.data(withJSONObject: d, options: [])
+                return String(data: jsonData, encoding: .utf8)
+            } catch {
+                return nil
             }
-        } catch {
-            Log.e("Error: \(error)")
         }
+        if let json = encode(dict) {
+            return json
+        }
+        let sanitized = jsonSerializationSafeDictionary(dict, keyPath: "")
+        if let json = encode(sanitized) {
+            return json
+        }
+        Log.e("convertDictionayToJsonString: serialization failed after sanitization (key count \(dict.count))")
         return ""
+    }
+
+    /// Builds a dictionary `JSONSerialization` accepts: unwraps nested `Optional`s, converts `Date`/`URL`/etc.,
+    /// and replaces unknown types with `String(describing:)` so one bad value does not drop the whole payload.
+    private static func jsonSerializationSafeDictionary(_ dict: [String: Any], keyPath: String) -> [String: Any] {
+        var out: [String: Any] = [:]
+        out.reserveCapacity(dict.count)
+        for (key, value) in dict {
+            let path = keyPath.isEmpty ? key : "\(keyPath).\(key)"
+            out[key] = jsonSerializationSafeValue(value, keyPath: path)
+        }
+        return out
+    }
+
+    private static func jsonSerializationSafeValue(_ value: Any, keyPath: String) -> Any {
+        if let inner = unwrapAnyOptional(value) {
+            return jsonSerializationSafeValue(inner, keyPath: keyPath)
+        }
+        switch value {
+        case is NSNull:
+            return value
+        case let v as String:
+            return v
+        case let v as Bool:
+            return v
+        case let v as Int:
+            return v
+        case let v as Int8:
+            return Int(v)
+        case let v as Int16:
+            return Int(v)
+        case let v as Int32:
+            return Int(v)
+        case let v as Int64:
+            return Int(v)
+        case let v as UInt:
+            return v
+        case let v as UInt8:
+            return UInt(v)
+        case let v as UInt16:
+            return UInt(v)
+        case let v as UInt32:
+            return UInt(v)
+        case let v as UInt64:
+            return v
+        case let v as Double:
+            return v
+        case let v as Float:
+            return Double(v)
+        case let v as NSNumber:
+            return v
+        #if canImport(CoreGraphics)
+        case let v as CGFloat:
+            return Double(v)
+        #endif
+        case let v as Decimal:
+            return NSDecimalNumber(decimal: v).doubleValue
+        case let v as Date:
+            return iso8601String(from: v)
+        case let v as URL:
+            return v.absoluteString
+        case let v as UUID:
+            return v.uuidString
+        case let v as Data:
+            return v.base64EncodedString()
+        case let v as [String: Any]:
+            return jsonSerializationSafeDictionary(v, keyPath: keyPath)
+        case let v as [Any]:
+            return v.map { jsonSerializationSafeValue($0, keyPath: "\(keyPath)[]") }
+        case let v as NSDictionary:
+            var mapped: [String: Any] = [:]
+            for (k, item) in v {
+                guard let ks = k as? String else { continue }
+                mapped[ks] = jsonSerializationSafeValue(item, keyPath: "\(keyPath).\(ks)")
+            }
+            return mapped
+        case let v as NSArray:
+            return v.map { jsonSerializationSafeValue($0, keyPath: "\(keyPath)[]") }
+        default:
+            Log.w("convertDictionayToJsonString: non-JSON-serializable type \(Swift.type(of: value)) at \(keyPath) — coercing with String(describing:)")
+            return String(describing: value)
+        }
+    }
+
+    /// Returns `nil` when `value` is not an `Optional`, `.some(inner)`, or when unwrapping is not needed.
+    private static func unwrapAnyOptional(_ value: Any) -> Any? {
+        let mirror = Mirror(reflecting: value)
+        guard mirror.displayStyle == .optional else { return nil }
+        guard let child = mirror.children.first else {
+            return NSNull()
+        }
+        return child.value
+    }
+
+    private static func iso8601String(from date: Date) -> String {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime]
+        return f.string(from: date)
     }
     
     internal static func convertJsonStringToDict(jsonString: String) -> [String: Any]? {

@@ -25,6 +25,15 @@ struct InstrumentationData {
     }
 }
 
+/// RUM `instrumentation_data.otelSpan` payload (see `getDictionary()`).
+///
+/// **Ingestion contract:** coordinate changes with the backend/RUM pipeline owners. Mixed SDK versions
+/// in the field may require the server to accept more than one shape during rollout.
+/// - Top-level span identity and timing use **camelCase** (`traceId`, `spanId`, `startTime`, …).
+///   Legacy OTLP **snake_case duplicate mirror keys** that nested the same information again under
+///   `otelSpan` were removed on purpose; tracing extractors must not depend on those mirrors.
+/// - `status.code` is an OTLP **integer** enum (`0` unset, `1` ok, `2` error), not `STATUS_CODE_*` strings.
+/// - `kind` is emitted as an OTLP SpanKind **integer** (i32), not a string name.
 struct OtelSpan {
     let spanId: String
     let traceId: String
@@ -186,21 +195,20 @@ struct OtelSpan {
         return attrs
     }
 
-    /// Maps CxSpan status to OTLP status code integer (proto enum: UNSET=0, OK=1, ERROR=2).
-    /// Backend expects i32, not the string name — protobuf JSON uses numeric enum values.
+    /// Maps span status to OTLP status code integer (proto enum: UNSET=0, OK=1, ERROR=2).
+    /// Production `SpanData.getStatusCode()` always supplies `code` as `Int`; string branches are for
+    /// numeric strings and legacy OTLP status names from tests or external `SpanDataProtocol` stubs.
     private static func otlpStatusCode(from statusDict: [String: Any]) -> [String: Any] {
         let raw = statusDict[Keys.code.rawValue]
         let code: Int = {
             if let i = raw as? Int { return i }
-            if let s = raw as? String {
-                switch s {
-                case "STATUS_CODE_OK":    return 1
-                case "STATUS_CODE_ERROR": return 2
-                default: break
-                }
-                if let i = Int(s) { return i }
+            guard let s = raw as? String else { return 0 }
+            switch s {
+            case "STATUS_CODE_OK": return 1
+            case "STATUS_CODE_ERROR": return 2
+            default: break
             }
-            return 0
+            return Int(s) ?? 0
         }()
         let otlpCode: Int
         switch code {
