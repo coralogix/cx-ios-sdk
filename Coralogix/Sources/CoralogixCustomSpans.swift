@@ -35,6 +35,7 @@ final class CoralogixCustomGlobalSpanRegistry {
     }
 
     /// Returns `false` if a global custom span is already registered (second `startGlobalSpan` is ignored, like the Browser SDK).
+    @discardableResult
     func registerGlobalSpan(_ span: any Span, ignoredInstruments: Set<CoralogixIgnoredInstrument>) -> Bool {
         lock.lock()
         defer { lock.unlock() }
@@ -70,6 +71,13 @@ final class CoralogixCustomGlobalSpanRegistry {
         }
         Self.endGlobalSpanAndRestorePrevious(span, previous: previous)
         return true
+    }
+
+    /// Returns `true` if a global custom span is currently registered (fast pre-check before span creation).
+    internal var isGlobalSpanActive: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return registeredGlobal != nil
     }
 
     /// When `OpenTelemetry.instance.contextProvider.activeSpan` is `nil` (e.g. URLSession callback or `DispatchQueue` work on another activity) but a global custom span is still registered, auto-instrumented spans should parent under that span so traceId / parentSpanId match the global trace (CX-35954).
@@ -110,8 +118,8 @@ private func stampCoralogixCustomSpanRUM(on span: inout any Span) {
 
 // MARK: - Custom span labels (CX-35953, Browser `getCustomMergedLabels` / `setCustomLabelsForSpan`)
 
-/// Merge order: `base` (SDK-level `[String: Any]`) then `layer` (`[String: String]` wins on key collision).
-private func mergingCustomLabelLayer(into base: [String: Any], _ layer: [String: String]?) -> [String: Any] {
+/// Merge order: `base` (SDK-level `[String: Any]`) then `layer` (`[String: Any]` wins on key collision).
+private func mergingCustomLabelLayer(into base: [String: Any], _ layer: [String: Any]?) -> [String: Any] {
     guard let layer, !layer.isEmpty else { return base }
     var out = base
     for (key, value) in layer {
@@ -123,7 +131,7 @@ private func mergingCustomLabelLayer(into base: [String: Any], _ layer: [String:
 /// Writes Browser-parity `custom_labels` JSON on the span for RUM (`Helper.getLabels` / Explorer).
 private func setMergedCustomLabelsJSON(merged: [String: Any], on span: inout any Span) {
     guard !merged.isEmpty else { return }
-    let json = Helper.convertDictionayToJsonString(dict: merged)
+    let json = Helper.convertDictionaryToJsonString(dict: merged)
     guard !json.isEmpty else {
         Log.w("Custom span labels could not be JSON-encoded — custom_labels attribute omitted")
         return
@@ -151,8 +159,12 @@ public final class CoralogixCustomTracer {
     }
 
     /// Starts a new root span (new trace). Returns `nil` if the SDK is not initialized or the `CoralogixRum` instance was deallocated.
-    public func startGlobalSpan(name: String, labels: [String: String]? = nil) -> CoralogixGlobalSpan? {
+    public func startGlobalSpan(name: String, labels: [String: Any]? = nil) -> CoralogixGlobalSpan? {
         guard let rum = rum, rum.isInitialized else {
+            return nil
+        }
+        guard !CoralogixCustomGlobalSpanRegistry.shared.isGlobalSpanActive else {
+            Log.w("[CoralogixCustomTracer] startGlobalSpan ignored — a global span is already active")
             return nil
         }
         let tracer = rum.tracerProvider()
@@ -163,7 +175,8 @@ public final class CoralogixCustomTracer {
         rum.addRumCorrelationMetadata(to: &otelSpan)
         setMergedCustomLabelsJSON(merged: mergedSdkAndGlobal, on: &otelSpan)
         guard CoralogixCustomGlobalSpanRegistry.shared.registerGlobalSpan(otelSpan, ignoredInstruments: ignoredInstruments) else {
-            Log.w("Global span already exists")
+            // Another thread registered a span between the pre-check and here (TOCTOU).
+            Log.w("[CoralogixCustomTracer] startGlobalSpan race — span created but discarded, another thread registered first")
             otelSpan.end()
             return nil
         }
@@ -184,7 +197,9 @@ public final class CoralogixCustomTracer {
 /// - Important: If this object is deallocated without calling `endSpan()`, the span will be
 ///   automatically ended and the OTel context restored as a safety net. Always prefer explicit `endSpan()`.
 public final class CoralogixGlobalSpan {
-    public let span: any Span
+    internal let span: any Span
+    public var traceId: String { span.context.traceId.hexString }
+    public var spanId: String { span.context.spanId.hexString }
     private let tracer: Tracer
     private weak var rum: CoralogixRum?
     /// Snapshot of SDK ∪ global labels at `startGlobalSpan` time; child spans merge child keys on top (CX-35953).
@@ -237,7 +252,7 @@ public final class CoralogixGlobalSpan {
     }
 
     /// Starts a child span while the global span is the OTel active span (same trace/parent as Browser `context.with(global, …)`).
-    public func startCustomSpan(name: String, labels: [String: String]? = nil) -> CoralogixCustomSpan {
+    public func startCustomSpan(name: String, labels: [String: Any]? = nil) -> CoralogixCustomSpan {
         let baseBuilder: any SpanBuilder
         if isRegisteredGlobalActiveInOTel() {
             baseBuilder = tracer.spanBuilder(spanName: name)
@@ -289,10 +304,6 @@ public final class CoralogixCustomSpan {
     }
 
     public func setAttribute(key: String, value: Bool) {
-        span.setAttribute(key: key, value: value)
-    }
-
-    public func setAttribute(key: String, value: AttributeValue?) {
         span.setAttribute(key: key, value: value)
     }
 

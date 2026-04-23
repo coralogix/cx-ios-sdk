@@ -16,7 +16,7 @@ extension CoralogixRum {
     
     func sendMobileVitals(_ mobileVitals: [String: Any]) {
         let span = makeSpan(event: .mobileVitals, source: .code, severity: .info)
-        span.setAttribute(key: Keys.mobileVitalsType.rawValue, value: Helper.convertDictionayToJsonString(dict: mobileVitals))
+        span.setAttribute(key: Keys.mobileVitalsType.rawValue, value: Helper.convertDictionaryToJsonString(dict: mobileVitals))
         span.end()
     }
 }

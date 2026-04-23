@@ -75,12 +75,30 @@ update_internal_dependency_version() {
 }
 
 # Main script logic
-if [ $# -ne 1 ]; then
+if [ $# -eq 1 ]; then
+  part=$1
+elif [ $# -gt 1 ]; then
+  echo "Error: too many arguments (expected at most 1, got $#)"
   echo "Usage: $0 {major|minor|patch}"
   exit 1
+else
+  if [ -t 0 ]; then
+    echo "Select version bump type:"
+    echo "  1) patch"
+    echo "  2) minor"
+    echo "  3) major"
+    read -rp "Choice [1/2/3]: " choice
+    case $choice in
+      1) part="patch" ;;
+      2) part="minor" ;;
+      3) part="major" ;;
+      *) echo "Invalid choice: $choice"; exit 1 ;;
+    esac
+  else
+    echo "Error: no argument provided and stdin is not a TTY (non-interactive). Usage: $0 {major|minor|patch}"
+    exit 1
+  fi
 fi
-
-part=$1
 
 # Get the absolute path of the script directory
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)

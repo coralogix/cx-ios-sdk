@@ -88,5 +88,41 @@ final class HelperTests: XCTestCase {
             XCTAssertEqual(result.traceId, "trace123")
             XCTAssertEqual(result.spanId, "span123")
         }
+
+    /// Non-JSON-serializable values (e.g. `Date`) must not cause `convertDictionaryToJsonString` to return empty for the whole map.
+    func testConvertDictionaryToJsonStringSanitizesDateAndKeepsOtherKeys() throws {
+        let date = Date(timeIntervalSince1970: 1_700_000_000)
+        let json = Helper.convertDictionaryToJsonString(dict: [
+            "userId": "abc",
+            "loggedAt": date,
+            "count": 3
+        ])
+        XCTAssertFalse(json.isEmpty, "expected sanitized JSON, not empty string")
+        let data = try XCTUnwrap(json.data(using: .utf8))
+        let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        XCTAssertEqual(obj?["userId"] as? String, "abc")
+        XCTAssertEqual(obj?["count"] as? Int, 3)
+        XCTAssertNotNil(obj?["loggedAt"] as? String)
+    }
+
+    func testConvertDictionaryToJsonStringPreservesNonStringNestedNSDictionaryKeys() throws {
+        let nested: NSDictionary = [
+            NSNumber(value: 42): "answer",
+            NSNumber(value: 7): URL(string: "https://example.com/path")!,
+            "plain": "text"
+        ]
+        let json = Helper.convertDictionaryToJsonString(dict: [
+            "labels": nested
+        ])
+        XCTAssertFalse(json.isEmpty, "expected sanitized JSON, not empty string")
+
+        let data = try XCTUnwrap(json.data(using: .utf8))
+        let obj = try XCTUnwrap(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let labels = try XCTUnwrap(obj["labels"] as? [String: Any])
+
+        XCTAssertEqual(labels["42"] as? String, "answer")
+        XCTAssertEqual(labels["7"] as? String, "https://example.com/path")
+        XCTAssertEqual(labels["plain"] as? String, "text")
+    }
 }
     

@@ -102,23 +102,23 @@ final class InstrumentationDataTests: XCTestCase {
         XCTAssertEqual(dict[Keys.spanId.rawValue] as? String, "span123")
         XCTAssertEqual(dict[Keys.traceId.rawValue] as? String, "trace123")
         XCTAssertEqual(dict[Keys.name.rawValue] as? String, "testSpan")
-        // kind is now OTLP-formatted string (matching Browser mapCxSpanToOtlpSpan).
-        XCTAssertEqual(dict[Keys.kind.rawValue] as? String, Keys.otlpSpanKindClient.rawValue)
+        // kind is OTLP proto integer: OTel SDK CLIENT(2) → OTLP CLIENT(3)
+        XCTAssertEqual(dict[Keys.kind.rawValue] as? Int, 3)
         XCTAssertNotNil(dict[Keys.startTime.rawValue])
         XCTAssertNotNil(dict[Keys.endTime.rawValue])
-        // status is now OTLP-formatted: {code: "STATUS_CODE_*"}.
+        // status.code is OTLP proto integer: UNSET=0, OK=1, ERROR=2
         XCTAssertEqual(
-            (dict[Keys.status.rawValue] as? [String: Any])?[Keys.code.rawValue] as? String,
-            Keys.otlpStatusCodeUnset.rawValue
+            (dict[Keys.status.rawValue] as? [String: Any])?[Keys.code.rawValue] as? Int,
+            0
         )
         XCTAssertNotNil(dict[Keys.duration.rawValue])
         XCTAssertEqual(dict[Keys.keySessionId.rawValue] as? String, "session_001")
         XCTAssertNil(dict[Keys.parentSpanId.rawValue], "parentSpanId should be absent for root spans")
 
-        XCTAssertEqual(dict[Keys.otlpTraceId.rawValue] as? String, "trace123")
-        XCTAssertEqual(dict[Keys.otlpSpanId.rawValue] as? String, "span123")
-        XCTAssertNotNil(dict[Keys.otlpStartTimeUnixNano.rawValue] as? String)
-        XCTAssertNotNil(dict[Keys.otlpEndTimeUnixNano.rawValue] as? String)
+        XCTAssertNil(dict["trace_id"], "snake_case trace_id must not appear in log output")
+        XCTAssertNil(dict["span_id"], "snake_case span_id must not appear in log output")
+        XCTAssertNil(dict["start_time_unix_nano"], "snake_case start_time_unix_nano must not appear in log output")
+        XCTAssertNil(dict["end_time_unix_nano"], "snake_case end_time_unix_nano must not appear in log output")
     }
 
     func testInitializationWithAttributes() throws {
@@ -288,6 +288,70 @@ final class InstrumentationDataTests: XCTestCase {
 
         XCTAssertNil(attrs["cx_rum.error_context.error_type"])
         XCTAssertNil(attrs["cx_rum.error_context.error_message"])
+    }
+
+    // MARK: - OTLP serialization regression tests (fix: network spans 422)
+    // Backend requires i32 for status.code and kind — string enum names cause HTTP 422.
+
+    func testOtlpStatusCode_isInt_notString() {
+        // Regression: status.code was "STATUS_CODE_UNSET" (String) → backend rejected with HTTP 422.
+        // Must be an Int (0=UNSET, 1=OK, 2=ERROR) per OTLP proto spec.
+        let cxRum = makeCxRum()
+        let span = MockSpanData(attributes: [:], kind: 2, statusCode: [:])
+        let dict = OtelSpan(otel: span, cxRum: cxRum, viewManager: nil).getDictionary()
+        let statusCode = (dict[Keys.status.rawValue] as? [String: Any])?[Keys.code.rawValue]
+        XCTAssertNil(statusCode as? String, "status.code must not be a String — backend expects i32")
+        XCTAssertNotNil(statusCode as? Int, "status.code must be an Int")
+    }
+
+    func testOtlpStatusCode_unset_isZero() {
+        let cxRum = makeCxRum()
+        let span = MockSpanData(attributes: [:], kind: 2, statusCode: [Keys.code.rawValue: 0])
+        let code = (OtelSpan(otel: span, cxRum: cxRum, viewManager: nil).getDictionary()[Keys.status.rawValue] as? [String: Any])?[Keys.code.rawValue] as? Int
+        XCTAssertEqual(code, 0)
+    }
+
+    func testOtlpStatusCode_ok_isOne() {
+        let cxRum = makeCxRum()
+        let span = MockSpanData(attributes: [:], kind: 2, statusCode: [Keys.code.rawValue: 1])
+        let code = (OtelSpan(otel: span, cxRum: cxRum, viewManager: nil).getDictionary()[Keys.status.rawValue] as? [String: Any])?[Keys.code.rawValue] as? Int
+        XCTAssertEqual(code, 1)
+    }
+
+    func testOtlpStatusCode_error_isTwo() {
+        let cxRum = makeCxRum()
+        let span = MockSpanData(attributes: [:], kind: 2, statusCode: [Keys.code.rawValue: 2])
+        let code = (OtelSpan(otel: span, cxRum: cxRum, viewManager: nil).getDictionary()[Keys.status.rawValue] as? [String: Any])?[Keys.code.rawValue] as? Int
+        XCTAssertEqual(code, 2)
+    }
+
+    func testOtlpKind_isInt_notString() {
+        // Regression: kind was "SPAN_KIND_CLIENT" (String) → backend would reject with HTTP 422.
+        // Must be an Int per OTLP proto spec.
+        let cxRum = makeCxRum()
+        let span = MockSpanData(attributes: [:], kind: 2)
+        let dict = OtelSpan(otel: span, cxRum: cxRum, viewManager: nil).getDictionary()
+        XCTAssertNil(dict[Keys.kind.rawValue] as? String, "kind must not be a String — backend expects i32")
+        XCTAssertNotNil(dict[Keys.kind.rawValue] as? Int, "kind must be an Int")
+    }
+
+    func testOtlpKind_sdkClientMapsToOtlpClient() {
+        // OTel SDK CLIENT=2 must map to OTLP proto CLIENT=3 (off-by-one: OTLP has UNSPECIFIED=0 at index 0).
+        let cxRum = makeCxRum()
+        let span = MockSpanData(attributes: [:], kind: 2)
+        let kind = OtelSpan(otel: span, cxRum: cxRum, viewManager: nil).getDictionary()[Keys.kind.rawValue] as? Int
+        XCTAssertEqual(kind, 3, "OTel SDK CLIENT(2) must serialize as OTLP proto CLIENT(3)")
+    }
+
+    func testOtlpKind_allSdkValues_mapCorrectly() {
+        // Exhaustive mapping: OTel SDK 0…4 → OTLP proto 1…5; unknown → 0
+        let cxRum = makeCxRum()
+        let expectedOtlpKind: [Int: Int] = [0: 1, 1: 2, 2: 3, 3: 4, 4: 5, 99: 0]
+        for (sdkKind, expectedKind) in expectedOtlpKind {
+            let span = MockSpanData(attributes: [:], kind: sdkKind)
+            let kind = OtelSpan(otel: span, cxRum: cxRum, viewManager: nil).getDictionary()[Keys.kind.rawValue] as? Int
+            XCTAssertEqual(kind, expectedKind, "OTel SDK kind \(sdkKind) should map to OTLP kind \(expectedKind)")
+        }
     }
 
     // MARK: - Helpers

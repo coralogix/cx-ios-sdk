@@ -805,18 +805,21 @@ public class URLSessionInstrumentation {
             let originalIMP = method_getImplementation(method)
             
             let block: @convention(block) (AnyObject) -> Void = { [weak self] task in
-                guard let self = self else { return }
-                
+                let original: ResumeIMPType = unsafeBitCast(originalIMP, to: ResumeIMPType.self)
+                guard let self = self else {
+                    original(task, selector)
+                    return
+                }
+
                 // Call hook
                 if let urlSessionTask = task as? URLSessionTask {
                     self.urlSessionTaskWillResume(urlSessionTask)
                 }
-                
+
                 objc_setAssociatedObject(task, &Self.resumeSwizzleKey, true, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
                 // Call original implementation
-                let original: ResumeIMPType = unsafeBitCast(originalIMP, to: ResumeIMPType.self)
                 original(task, selector)
-                
+
                 objc_setAssociatedObject(task, &Self.resumeSwizzleKey, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
             }
             

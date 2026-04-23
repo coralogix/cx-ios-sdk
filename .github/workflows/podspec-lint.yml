@@ -3,21 +3,21 @@ name: Podspec Lint
 permissions:
   contents: read
 
+concurrency:
+  group: podspec-lint-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Run on every push and PR so CocoaPods validation catches SDK / podspec drift
+# without waiting for a release or a podspec-only change on master.
 on:
   pull_request:
-    paths:
-      - '**/*.podspec'
-      - '.github/workflows/podspec-lint.yml'
   push:
-    branches: [ master ]
-    paths:
-      - '**/*.podspec'
-      - '.github/workflows/podspec-lint.yml'
+  workflow_dispatch:
 
 jobs:
   lint:
     runs-on: macos-14
-    timeout-minutes: 30
+    timeout-minutes: 45
 
     steps:
       - name: Checkout code
@@ -55,7 +55,6 @@ jobs:
             --platforms=iOS \
             --use-static-frameworks \
             --allow-warnings \
-            --skip-tests \
             --fail-fast \
             --no-clean \
             --verbose 2>&1 | tee lint_internal.log
@@ -78,7 +77,6 @@ jobs:
             --platforms=iOS \
             --use-static-frameworks \
             --allow-warnings \
-            --skip-tests \
             --fail-fast \
             --no-clean \
             --verbose 2>&1 | tee lint_session_replay.log
@@ -101,7 +99,6 @@ jobs:
             --platforms=iOS \
             --use-static-frameworks \
             --allow-warnings \
-            --skip-tests \
             --fail-fast \
             --no-clean \
             --verbose 2>&1 | tee lint_main.log

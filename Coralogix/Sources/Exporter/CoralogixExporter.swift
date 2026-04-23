@@ -102,8 +102,9 @@ public class CoralogixExporter: SpanExporter {
         
         // ignore Urls
         var filterSpans = spans.filter { self.shouldRemoveSpan(span: $0) }
+        Log.d("[CoralogixExporter] export: \(spans.count) spans in, \(filterSpans.count) after URL filter")
         if filterSpans.isEmpty { return .failure }
-        
+
         // ignore Error
         filterSpans = filterSpans.filter { self.shouldFilterIgnoreError(span: $0) }
         
@@ -121,12 +122,17 @@ public class CoralogixExporter: SpanExporter {
             // handle their own errors within the callback.
             if let tracesExporter = tracesExporterCallback {
                 let exporterData = CoralogixTraceExporterData(spans: uniqueSpans)
-                tracesExporter(exporterData)
+                do {
+                    try tracesExporter(exporterData)
+                } catch {
+                    Log.e("[CoralogixExporter] tracesExporter callback threw: \(error)")
+                }
             }
             
             let cxSpansDictionary = autoreleasepool {
                 encodeSpans(spans: uniqueSpans)
             }
+            Log.d("[CoralogixExporter] encodeSpans: \(uniqueSpans.count) in, \(cxSpansDictionary.count) encoded")
             if cxSpansDictionary.isEmpty {
                 return .success
             }

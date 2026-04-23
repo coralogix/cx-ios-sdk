@@ -63,4 +63,4 @@ public struct CoralogixTraceExporterData {
 /// - Important: This callback is invoked on a background thread (BatchSpanProcessor's processing queue).
 ///   Implementations must not block for extended periods. If you need to perform I/O operations,
 ///   dispatch them to another queue.
-public typealias TracesExporterCallback = (CoralogixTraceExporterData) -> Void
+public typealias TracesExporterCallback = (CoralogixTraceExporterData) throws -> Void

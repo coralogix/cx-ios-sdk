@@ -573,8 +573,7 @@ final class UserInteractionUITests: XCTestCase {
         Thread.sleep(forTimeInterval: sdkFlushDelay)
         navigateBackToMainMenu()
         navigateToSchemaValidation()
-        triggerValidation()
-        verifySchemaValidationPassed()
+        validateSchemaWithRetry()
     }
 
     private func triggerValidation() {
@@ -588,17 +587,45 @@ final class UserInteractionUITests: XCTestCase {
         print("🟪 ✅ Validation request sent")
     }
 
-    private func verifySchemaValidationPassed(file: StaticString = #file, line: UInt = #line) {
+    private func validateSchemaWithRetry(file: StaticString = #file, line: UInt = #line) {
+        let maxAttempts = isCI ? 3 : 2
+        for attempt in 1...maxAttempts {
+            print("🟪 🔁 Schema validation attempt \(attempt)/\(maxAttempts)")
+            triggerValidation()
+            if verifySchemaValidationPassed() {
+                return
+            }
+
+            let visibleLabels = app.staticTexts.allElementsBoundByIndex.map { $0.label }
+            let combined = visibleLabels.joined(separator: " | ")
+            let isRetryable = combined.contains("Network error:")
+                || combined.contains("Internet connection appears to be offline")
+                || combined.contains("timed out")
+                || combined.contains("could not connect")
+
+            if attempt < maxAttempts && isRetryable {
+                print("🟨 Schema validation hit transient network issue, retrying…")
+                Thread.sleep(forTimeInterval: networkDelay)
+                continue
+            }
+
+            XCTFail(
+                "Schema validation failed after \(attempt) attempt(s). Visible labels: [\(visibleLabels.joined(separator: ", "))]",
+                file: file,
+                line: line
+            )
+            return
+        }
+    }
+
+    private func verifySchemaValidationPassed() -> Bool {
         print("🟪 🔍 Checking schema validation result…")
         let successLabel = app.staticTexts["All logs are valid! ✅"]
-        if !successLabel.waitForExistence(timeout: networkDelay) {
-            let visibleLabels = app.staticTexts.allElementsBoundByIndex
-                .map { $0.label }
-                .joined(separator: ", ")
-            XCTFail("Schema validation failed. Visible labels: [\(visibleLabels)]", file: file, line: line)
-        } else {
+        if successLabel.waitForExistence(timeout: networkDelay) {
             print("🟪 ✅ Schema validation passed!")
+            return true
         }
+        return false
     }
 
     // MARK: - Temp-file I/O

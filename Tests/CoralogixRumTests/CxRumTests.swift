@@ -26,7 +26,7 @@ final class CxRumTests: XCTestCase {
                                        actionCount: 0,
                                        hasRecording: false)
         let dict = Helper.convertDictionary(snapshot.getDictionary())
-        let snapshotString = Helper.convertDictionayToJsonString(dict: dict)
+        let snapshotString = Helper.convertDictionaryToJsonString(dict: dict)
         mockSpanData = MockSpanData(attributes: [Keys.severity.rawValue: AttributeValue("3"),
                                                  Keys.eventType.rawValue: AttributeValue("log"),
                                                  Keys.source.rawValue: AttributeValue("console"),
