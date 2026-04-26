@@ -145,13 +145,10 @@ private final class SpanRowCell: UITableViewCell {
     required init?(coder: NSCoder) { fatalError() }
 
     private func setupLayout() {
-        // Top row: kindBadge | nameLabel | timeLabel | copyButton | expandButton
         let topRow = UIStackView(arrangedSubviews: [kindBadge, nameLabel, timeLabel, copyButton, expandButton])
         topRow.axis = .horizontal
         topRow.spacing = 8
         topRow.alignment = .center
-        topRow.translatesAutoresizingMaskIntoConstraints = false
-        // nameLabel expands, timeLabel stays compact
         nameLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
         timeLabel.setContentHuggingPriority(.required, for: .horizontal)
         timeLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
@@ -159,42 +156,38 @@ private final class SpanRowCell: UITableViewCell {
         let idStack = UIStackView(arrangedSubviews: [spanIdLabel, traceIdLabel])
         idStack.axis = .vertical
         idStack.spacing = 1
-        idStack.translatesAutoresizingMaskIntoConstraints = false
 
+        // jsonContainer internal layout
         jsonContainer.addSubview(jsonSeparator)
         jsonContainer.addSubview(jsonLabel)
-
-        contentView.addSubview(topRow)
-        contentView.addSubview(idStack)
-        contentView.addSubview(jsonContainer)
-
         NSLayoutConstraint.activate([
-            kindBadge.widthAnchor.constraint(greaterThanOrEqualToConstant: 52),
-            kindBadge.heightAnchor.constraint(equalToConstant: 18),
-
-            topRow.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 10),
-            topRow.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
-            topRow.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -8),
-
-            idStack.topAnchor.constraint(equalTo: topRow.bottomAnchor, constant: 3),
-            idStack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
-            idStack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
-
-            jsonContainer.topAnchor.constraint(equalTo: idStack.bottomAnchor, constant: 8),
-            jsonContainer.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
-            jsonContainer.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
-            jsonContainer.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -10),
-
             jsonSeparator.topAnchor.constraint(equalTo: jsonContainer.topAnchor),
             jsonSeparator.leadingAnchor.constraint(equalTo: jsonContainer.leadingAnchor),
             jsonSeparator.trailingAnchor.constraint(equalTo: jsonContainer.trailingAnchor),
             jsonSeparator.heightAnchor.constraint(equalToConstant: 0.5),
-
             jsonLabel.topAnchor.constraint(equalTo: jsonSeparator.bottomAnchor, constant: 10),
             jsonLabel.leadingAnchor.constraint(equalTo: jsonContainer.leadingAnchor, constant: 16),
             jsonLabel.trailingAnchor.constraint(equalTo: jsonContainer.trailingAnchor, constant: -16),
             jsonLabel.bottomAnchor.constraint(equalTo: jsonContainer.bottomAnchor, constant: -10),
         ])
+
+        // Outer vertical stack — hidden arranged subviews collapse automatically
+        let outerStack = UIStackView(arrangedSubviews: [topRow, idStack, jsonContainer])
+        outerStack.axis = .vertical
+        outerStack.spacing = 4
+        outerStack.translatesAutoresizingMaskIntoConstraints = false
+
+        contentView.addSubview(outerStack)
+        NSLayoutConstraint.activate([
+            kindBadge.widthAnchor.constraint(greaterThanOrEqualToConstant: 52),
+            kindBadge.heightAnchor.constraint(equalToConstant: 18),
+            outerStack.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 10),
+            outerStack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
+            outerStack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -8),
+            outerStack.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -10),
+        ])
+        // jsonContainer needs full-width bleed so override leading/trailing
+        jsonContainer.translatesAutoresizingMaskIntoConstraints = false
     }
 
     func configure(with row: SpanRow) {
