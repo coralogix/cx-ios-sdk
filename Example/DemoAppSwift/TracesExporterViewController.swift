@@ -446,11 +446,13 @@ final class TracesExporterViewController: UIViewController {
                         }
                     }
                 }
-                if let json = data.jsonString {
-                    DispatchQueue.main.async { Self.fullJsonLogs.insert(json, at: 0) }
-                }
-                guard !newRows.isEmpty else { return }
+                let batchJson = data.jsonString
+                guard !newRows.isEmpty || batchJson != nil else { return }
                 DispatchQueue.main.async { [weak self] in
+                    if let json = batchJson {
+                        Self.fullJsonLogs.insert(json, at: 0)
+                    }
+                    guard !newRows.isEmpty else { return }
                     let wasEmpty = Self.spans.isEmpty
                     // Insert newest at top
                     Self.spans.insert(contentsOf: newRows.reversed(), at: 0)
