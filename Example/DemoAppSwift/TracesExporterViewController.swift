@@ -2,11 +2,9 @@
 //  TracesExporterViewController.swift
 //  DemoAppSwift
 //
-//  Test view for the Traces Exporter (OTLP callback) feature.
-//  UI mirrors the Flutter plugin's TracesExporterDemoPage:
-//  - Copy All + Clear live in the navigation bar (top-right)
-//  - Each received OTLP batch is its own expandable card row
-//  - iOS-specific controls (Reinit, Trigger) are in a compact top section
+//  Each individual OtlpSpan received via the tracesExporter callback
+//  gets its own row in a table. Controls are fixed above the table
+//  and do not scroll with it.
 //
 
 import UIKit
@@ -14,18 +12,22 @@ import Coralogix
 
 // MARK: - Model
 
-private struct OtlpBatch {
-    let batchNumber: Int
-    let spanCount: Int
+private struct SpanRow {
+    let name: String
+    let spanId: String
+    let traceId: String
+    let parentSpanId: String?
+    let kind: OtlpSpanKind
+    let statusCode: String
     let receivedAt: Date
-    let jsonString: String
+    let otlpSpan: OtlpSpan
     var isExpanded: Bool = false
 
     var prettyJson: String {
-        guard let data = jsonString.data(using: .utf8),
+        guard let data = try? JSONEncoder().encode(otlpSpan),
               let obj = try? JSONSerialization.jsonObject(with: data),
               let pretty = try? JSONSerialization.data(withJSONObject: obj, options: [.prettyPrinted, .sortedKeys]),
-              let str = String(data: pretty, encoding: .utf8) else { return jsonString }
+              let str = String(data: pretty, encoding: .utf8) else { return spanId }
         return str
     }
 
@@ -34,27 +36,38 @@ private struct OtlpBatch {
         f.dateFormat = "HH:mm:ss"
         return f.string(from: receivedAt)
     }
+
+    var kindShort: String {
+        switch kind {
+        case .client:   return "CLIENT"
+        case .server:   return "SERVER"
+        case .internal: return "INTERNAL"
+        case .producer: return "PRODUCER"
+        case .consumer: return "CONSUMER"
+        case .unspecified: return "SPAN"
+        }
+    }
 }
 
-// MARK: - Batch Cell
+// MARK: - Span Cell
 
-private final class OtlpBatchCell: UITableViewCell {
+private final class SpanRowCell: UITableViewCell {
     var onCopy: (() -> Void)?
     var onToggle: (() -> Void)?
 
-    private let badgeLabel: UILabel = {
+    private let kindBadge: UILabel = {
         let l = UILabel()
-        l.font = .monospacedSystemFont(ofSize: 11, weight: .bold)
+        l.font = .monospacedSystemFont(ofSize: 9, weight: .bold)
         l.textAlignment = .center
         l.textColor = .white
-        l.backgroundColor = .systemBlue
-        l.layer.cornerRadius = 8
+        l.backgroundColor = .systemIndigo
+        l.layer.cornerRadius = 6
         l.clipsToBounds = true
         l.translatesAutoresizingMaskIntoConstraints = false
         return l
     }()
 
-    private let titleLabel: UILabel = {
+    private let nameLabel: UILabel = {
         let l = UILabel()
         l.font = .preferredFont(forTextStyle: .subheadline)
         l.translatesAutoresizingMaskIntoConstraints = false
@@ -63,8 +76,24 @@ private final class OtlpBatchCell: UITableViewCell {
 
     private let timeLabel: UILabel = {
         let l = UILabel()
-        l.font = .preferredFont(forTextStyle: .caption1)
+        l.font = .preferredFont(forTextStyle: .caption2)
         l.textColor = .secondaryLabel
+        l.translatesAutoresizingMaskIntoConstraints = false
+        return l
+    }()
+
+    private let spanIdLabel: UILabel = {
+        let l = UILabel()
+        l.font = .monospacedSystemFont(ofSize: 10, weight: .regular)
+        l.textColor = .secondaryLabel
+        l.translatesAutoresizingMaskIntoConstraints = false
+        return l
+    }()
+
+    private let traceIdLabel: UILabel = {
+        let l = UILabel()
+        l.font = .monospacedSystemFont(ofSize: 10, weight: .regular)
+        l.textColor = .tertiaryLabel
         l.translatesAutoresizingMaskIntoConstraints = false
         return l
     }()
@@ -85,17 +114,6 @@ private final class OtlpBatchCell: UITableViewCell {
         return b
     }()
 
-    // Collapsed: short preview (mirrors Flutter's 200-char, 3-line preview)
-    private let previewLabel: UILabel = {
-        let l = UILabel()
-        l.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
-        l.textColor = UIColor.secondaryLabel.withAlphaComponent(0.7)
-        l.numberOfLines = 3
-        l.translatesAutoresizingMaskIntoConstraints = false
-        return l
-    }()
-
-    // Expanded: full pretty JSON on gray background (mirrors Flutter's surfaceContainerHighest container)
     private let jsonLabel: UILabel = {
         let l = UILabel()
         l.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
@@ -127,65 +145,72 @@ private final class OtlpBatchCell: UITableViewCell {
     required init?(coder: NSCoder) { fatalError() }
 
     private func setupLayout() {
-        let infoStack = UIStackView(arrangedSubviews: [titleLabel, timeLabel])
-        infoStack.axis = .vertical
-        infoStack.spacing = 2
-        infoStack.translatesAutoresizingMaskIntoConstraints = false
+        // Top row: kindBadge | nameLabel | timeLabel | copyButton | expandButton
+        let topRow = UIStackView(arrangedSubviews: [kindBadge, nameLabel, timeLabel, copyButton, expandButton])
+        topRow.axis = .horizontal
+        topRow.spacing = 8
+        topRow.alignment = .center
+        topRow.translatesAutoresizingMaskIntoConstraints = false
+        // nameLabel expands, timeLabel stays compact
+        nameLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        timeLabel.setContentHuggingPriority(.required, for: .horizontal)
+        timeLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
 
-        let headerStack = UIStackView(arrangedSubviews: [badgeLabel, infoStack, copyButton, expandButton])
-        headerStack.axis = .horizontal
-        headerStack.spacing = 10
-        headerStack.alignment = .center
-        headerStack.translatesAutoresizingMaskIntoConstraints = false
+        let idStack = UIStackView(arrangedSubviews: [spanIdLabel, traceIdLabel])
+        idStack.axis = .vertical
+        idStack.spacing = 1
+        idStack.translatesAutoresizingMaskIntoConstraints = false
 
         jsonContainer.addSubview(jsonSeparator)
         jsonContainer.addSubview(jsonLabel)
 
-        contentView.addSubview(headerStack)
-        contentView.addSubview(previewLabel)
+        contentView.addSubview(topRow)
+        contentView.addSubview(idStack)
         contentView.addSubview(jsonContainer)
 
         NSLayoutConstraint.activate([
-            badgeLabel.widthAnchor.constraint(greaterThanOrEqualToConstant: 36),
-            badgeLabel.heightAnchor.constraint(equalToConstant: 22),
+            kindBadge.widthAnchor.constraint(greaterThanOrEqualToConstant: 52),
+            kindBadge.heightAnchor.constraint(equalToConstant: 18),
 
-            headerStack.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 12),
-            headerStack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
-            headerStack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -8),
+            topRow.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 10),
+            topRow.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
+            topRow.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -8),
 
-            previewLabel.topAnchor.constraint(equalTo: headerStack.bottomAnchor, constant: 4),
-            previewLabel.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
-            previewLabel.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
+            idStack.topAnchor.constraint(equalTo: topRow.bottomAnchor, constant: 3),
+            idStack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
+            idStack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
 
-            jsonContainer.topAnchor.constraint(equalTo: previewLabel.bottomAnchor, constant: 8),
+            jsonContainer.topAnchor.constraint(equalTo: idStack.bottomAnchor, constant: 8),
             jsonContainer.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
             jsonContainer.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
-            jsonContainer.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -12),
+            jsonContainer.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -10),
 
             jsonSeparator.topAnchor.constraint(equalTo: jsonContainer.topAnchor),
             jsonSeparator.leadingAnchor.constraint(equalTo: jsonContainer.leadingAnchor),
             jsonSeparator.trailingAnchor.constraint(equalTo: jsonContainer.trailingAnchor),
             jsonSeparator.heightAnchor.constraint(equalToConstant: 0.5),
 
-            jsonLabel.topAnchor.constraint(equalTo: jsonSeparator.bottomAnchor, constant: 12),
+            jsonLabel.topAnchor.constraint(equalTo: jsonSeparator.bottomAnchor, constant: 10),
             jsonLabel.leadingAnchor.constraint(equalTo: jsonContainer.leadingAnchor, constant: 16),
             jsonLabel.trailingAnchor.constraint(equalTo: jsonContainer.trailingAnchor, constant: -16),
-            jsonLabel.bottomAnchor.constraint(equalTo: jsonContainer.bottomAnchor, constant: -12),
+            jsonLabel.bottomAnchor.constraint(equalTo: jsonContainer.bottomAnchor, constant: -10),
         ])
     }
 
-    func configure(with batch: OtlpBatch) {
-        badgeLabel.text = "  #\(batch.batchNumber)  "
-        titleLabel.text = "\(batch.spanCount) span\(batch.spanCount == 1 ? "" : "s")"
-        timeLabel.text = batch.timeString
+    func configure(with row: SpanRow) {
+        kindBadge.text = "  \(row.kindShort)  "
+        kindBadge.backgroundColor = row.parentSpanId != nil ? .systemGreen : .systemIndigo
+        nameLabel.text = row.name
+        timeLabel.text = row.timeString
+        spanIdLabel.text = "spanId: \(row.spanId)"
+        let tracePrefix = row.traceId.count > 16 ? String(row.traceId.prefix(16)) + "…" : row.traceId
+        traceIdLabel.text = row.parentSpanId != nil
+            ? "traceId: \(tracePrefix)  ↑ \(row.parentSpanId!)"
+            : "traceId: \(tracePrefix)"
 
-        let preview = batch.jsonString
-        previewLabel.text = preview.count > 200 ? String(preview.prefix(200)) + "…" : preview
-        jsonLabel.text = batch.prettyJson
-
-        expandButton.setImage(UIImage(systemName: batch.isExpanded ? "chevron.up" : "chevron.down"), for: .normal)
-        previewLabel.isHidden = batch.isExpanded
-        jsonContainer.isHidden = !batch.isExpanded
+        expandButton.setImage(UIImage(systemName: row.isExpanded ? "chevron.up" : "chevron.down"), for: .normal)
+        jsonLabel.text = row.prettyJson
+        jsonContainer.isHidden = !row.isExpanded
     }
 
     @objc private func didTapCopy() { onCopy?() }
@@ -194,168 +219,169 @@ private final class OtlpBatchCell: UITableViewCell {
 
 // MARK: - View Controller
 
-final class TracesExporterViewController: UITableViewController {
+final class TracesExporterViewController: UIViewController {
 
     // MARK: - Persistent state
 
     private static var isTracesExporterEnabled = false
-    private static var batches: [OtlpBatch] = []
-    private static var batchCounter = 0
+    private static var spans: [SpanRow] = []
     private static var fullJsonLogs: [String] = []
 
-    // MARK: - Sections
+    // MARK: - Fixed controls (do not scroll)
 
-    private enum Section: Int, CaseIterable {
-        case controls = 0
-        case batches  = 1
-    }
+    private let statusLabel: UILabel = {
+        let l = UILabel()
+        l.font = .preferredFont(forTextStyle: .footnote)
+        l.textAlignment = .center
+        l.translatesAutoresizingMaskIntoConstraints = false
+        return l
+    }()
+
+    private lazy var reinitButton: UIButton = makeControlButton(
+        "Reinitialize SDK with Traces Exporter",
+        icon: "arrow.clockwise.circle",
+        action: #selector(didTapReinit)
+    )
+    private lazy var networkButton: UIButton = makeControlButton(
+        "Trigger Network Request",
+        icon: "network",
+        action: #selector(didTapNetwork)
+    )
+    private lazy var customSpanButton: UIButton = makeControlButton(
+        "Trigger Custom Span",
+        icon: "point.3.connected.trianglepath.dotted",
+        action: #selector(didTapCustomSpan)
+    )
+
+    private let controlsDivider: UIView = {
+        let v = UIView()
+        v.backgroundColor = .separator
+        v.translatesAutoresizingMaskIntoConstraints = false
+        return v
+    }()
+
+    // MARK: - Span table
+
+    private let tableView: UITableView = {
+        let t = UITableView(frame: .zero, style: .plain)
+        t.translatesAutoresizingMaskIntoConstraints = false
+        t.rowHeight = UITableView.automaticDimension
+        t.estimatedRowHeight = 72
+        t.separatorInset = UIEdgeInsets(top: 0, left: 16, bottom: 0, right: 0)
+        return t
+    }()
 
     // MARK: - Lifecycle
-
-    init() { super.init(style: .insetGrouped) }
-    required init?(coder: NSCoder) { super.init(coder: coder) }
 
     override func viewDidLoad() {
         super.viewDidLoad()
         title = "Traces Exporter"
+        view.backgroundColor = .systemBackground
         navigationController?.navigationBar.prefersLargeTitles = false
-        tableView.register(UITableViewCell.self, forCellReuseIdentifier: "control")
-        tableView.register(OtlpBatchCell.self, forCellReuseIdentifier: "batch")
+
+        setupLayout()
+        tableView.dataSource = self
+        tableView.delegate = self
+        tableView.register(SpanRowCell.self, forCellReuseIdentifier: "span")
         tableView.register(UITableViewCell.self, forCellReuseIdentifier: "empty")
-        tableView.rowHeight = UITableView.automaticDimension
-        tableView.estimatedRowHeight = 100
+
+        updateControls()
         updateNavBarButtons()
     }
 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
+        updateControls()
         updateNavBarButtons()
     }
 
-    // MARK: - Nav bar (Copy All + Clear — mirrors Flutter AppBar actions)
+    private func setupLayout() {
+        let buttonRow = UIStackView(arrangedSubviews: [reinitButton, networkButton, customSpanButton])
+        buttonRow.axis = .horizontal
+        buttonRow.spacing = 0
+        buttonRow.distribution = .fillEqually
+        buttonRow.translatesAutoresizingMaskIntoConstraints = false
+
+        let controlsStack = UIStackView(arrangedSubviews: [statusLabel, buttonRow])
+        controlsStack.axis = .vertical
+        controlsStack.spacing = 6
+        controlsStack.translatesAutoresizingMaskIntoConstraints = false
+
+        view.addSubview(controlsStack)
+        view.addSubview(controlsDivider)
+        view.addSubview(tableView)
+
+        NSLayoutConstraint.activate([
+            controlsStack.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 10),
+            controlsStack.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
+            controlsStack.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
+
+            controlsDivider.topAnchor.constraint(equalTo: controlsStack.bottomAnchor, constant: 10),
+            controlsDivider.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            controlsDivider.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            controlsDivider.heightAnchor.constraint(equalToConstant: 0.5),
+
+            tableView.topAnchor.constraint(equalTo: controlsDivider.bottomAnchor),
+            tableView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            tableView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            tableView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+        ])
+    }
+
+    private func makeControlButton(_ title: String, icon: String, action: Selector) -> UIButton {
+        var config = UIButton.Configuration.plain()
+        config.image = UIImage(systemName: icon)
+        config.title = title
+        config.imagePlacement = .top
+        config.imagePadding = 4
+        config.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { attrs in
+            var a = attrs; a.font = UIFont.preferredFont(forTextStyle: .caption2); return a
+        }
+        let b = UIButton(configuration: config)
+        b.translatesAutoresizingMaskIntoConstraints = false
+        b.addTarget(self, action: action, for: .touchUpInside)
+        return b
+    }
+
+    // MARK: - State updates
+
+    private func updateControls() {
+        if Self.isTracesExporterEnabled {
+            statusLabel.text = "✅ Traces Exporter enabled — \(Self.spans.count) span(s) received"
+            statusLabel.textColor = .secondaryLabel
+            reinitButton.isEnabled = false
+            reinitButton.alpha = 0.4
+        } else {
+            statusLabel.text = "⚠️ Reinitialize SDK to enable the Traces Exporter"
+            statusLabel.textColor = .systemOrange
+            reinitButton.isEnabled = true
+            reinitButton.alpha = 1
+        }
+        networkButton.isEnabled = Self.isTracesExporterEnabled
+        customSpanButton.isEnabled = Self.isTracesExporterEnabled
+        networkButton.alpha = Self.isTracesExporterEnabled ? 1 : 0.4
+        customSpanButton.alpha = Self.isTracesExporterEnabled ? 1 : 0.4
+    }
 
     private func updateNavBarButtons() {
-        guard Self.batches.isEmpty == false else {
+        guard !Self.spans.isEmpty else {
             navigationItem.rightBarButtonItems = nil
             return
         }
-        let copyBtn = UIBarButtonItem(
-            image: UIImage(systemName: "doc.on.doc"),
-            style: .plain,
-            target: self,
-            action: #selector(copyAll)
-        )
-        let clearBtn = UIBarButtonItem(
-            image: UIImage(systemName: "trash"),
-            style: .plain,
-            target: self,
-            action: #selector(clearBatches)
-        )
+        let copyBtn = UIBarButtonItem(image: UIImage(systemName: "doc.on.doc"), style: .plain,
+                                      target: self, action: #selector(copyAll))
+        let clearBtn = UIBarButtonItem(image: UIImage(systemName: "trash"), style: .plain,
+                                       target: self, action: #selector(clearSpans))
         clearBtn.tintColor = .systemRed
         navigationItem.rightBarButtonItems = [clearBtn, copyBtn]
     }
 
-    // MARK: - Table data source
-
-    override func numberOfSections(in tableView: UITableView) -> Int {
-        Section.allCases.count
-    }
-
-    override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        switch Section(rawValue: section)! {
-        case .controls: return 3   // Reinit, Trigger Network, Trigger Custom Span
-        case .batches:  return max(Self.batches.count, 1)  // 1 = empty state row
-        }
-    }
-
-    override func tableView(_ tableView: UITableView, titleForHeaderInSection section: Int) -> String? {
-        switch Section(rawValue: section)! {
-        case .controls: return nil
-        case .batches:  return Self.batches.isEmpty ? nil : "Received Batches"
-        }
-    }
-
-    override func tableView(_ tableView: UITableView, titleForFooterInSection section: Int) -> String? {
-        guard section == Section.controls.rawValue else { return nil }
-        return Self.isTracesExporterEnabled
-            ? "✅ Traces Exporter enabled — \(Self.batches.count) batch(es) received"
-            : "⚠️ Traces Exporter disabled — tap Reinitialize to enable"
-    }
-
-    override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-        switch Section(rawValue: indexPath.section)! {
-
-        case .controls:
-            let cell = tableView.dequeueReusableCell(withIdentifier: "control", for: indexPath)
-            var config = UIListContentConfiguration.cell()
-            switch indexPath.row {
-            case 0:
-                config.text = Self.isTracesExporterEnabled
-                    ? "SDK initialized with Traces Exporter"
-                    : "Reinitialize SDK with Traces Exporter"
-                config.image = UIImage(systemName: "arrow.clockwise.circle")
-                cell.accessoryType = Self.isTracesExporterEnabled ? .none : .disclosureIndicator
-                cell.isUserInteractionEnabled = !Self.isTracesExporterEnabled
-                config.textProperties.color = Self.isTracesExporterEnabled ? .secondaryLabel : .label
-            case 1:
-                config.text = "Trigger Network Request"
-                config.image = UIImage(systemName: "network")
-                cell.accessoryType = .disclosureIndicator
-                cell.isUserInteractionEnabled = Self.isTracesExporterEnabled
-                config.textProperties.color = Self.isTracesExporterEnabled ? .label : .secondaryLabel
-            case 2:
-                config.text = "Trigger Custom Span"
-                config.image = UIImage(systemName: "point.3.connected.trianglepath.dotted")
-                cell.accessoryType = .disclosureIndicator
-                cell.isUserInteractionEnabled = Self.isTracesExporterEnabled
-                config.textProperties.color = Self.isTracesExporterEnabled ? .label : .secondaryLabel
-            default: break
-            }
-            cell.contentConfiguration = config
-            return cell
-
-        case .batches:
-            if Self.batches.isEmpty {
-                let cell = tableView.dequeueReusableCell(withIdentifier: "empty", for: indexPath)
-                cell.selectionStyle = .none
-                var config = UIListContentConfiguration.cell()
-                config.text = "No batches yet — trigger a span above, each OTLP batch will appear here."
-                config.image = UIImage(systemName: "tray")
-                config.textProperties.color = .secondaryLabel
-                config.textProperties.numberOfLines = 0
-                config.imageProperties.tintColor = .tertiaryLabel
-                cell.contentConfiguration = config
-                return cell
-            }
-            let cell = tableView.dequeueReusableCell(withIdentifier: "batch", for: indexPath) as! OtlpBatchCell
-            cell.configure(with: Self.batches[indexPath.row])
-            let row = indexPath.row
-            cell.onCopy = { [weak self] in self?.copyBatch(at: row) }
-            cell.onToggle = { [weak self] in
-                Self.batches[row].isExpanded.toggle()
-                self?.tableView.reloadRows(at: [indexPath], with: .automatic)
-            }
-            return cell
-        }
-    }
-
-    override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
-        tableView.deselectRow(at: indexPath, animated: true)
-        guard indexPath.section == Section.controls.rawValue else { return }
-        switch indexPath.row {
-        case 0: confirmReinitialize()
-        case 1: triggerNetworkRequest()
-        case 2: triggerCustomSpan()
-        default: break
-        }
-    }
-
     // MARK: - Actions
 
-    private func confirmReinitialize() {
+    @objc private func didTapReinit() {
         let alert = UIAlertController(
             title: "Reinitialize SDK",
-            message: "This will shutdown the current SDK and reinitialize it with the tracesExporter callback enabled.",
+            message: "Shuts down the current SDK and reinitializes it with the tracesExporter callback enabled.",
             preferredStyle: .alert
         )
         alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
@@ -386,30 +412,40 @@ final class TracesExporterViewController: UITableViewController {
             ],
             collectIPData: true,
             tracesExporter: { [weak self] data in
-                let spanCount = data.spanCount
-                let jsonString = data.jsonString ?? ""
-                DispatchQueue.main.async {
-                    Self.batchCounter += 1
-                    let batch = OtlpBatch(
-                        batchNumber: Self.batchCounter,
-                        spanCount: spanCount,
-                        receivedAt: Date(),
-                        jsonString: jsonString
-                    )
-                    let wasEmpty = Self.batches.isEmpty
-                    Self.batches.insert(batch, at: 0)
-                    if !jsonString.isEmpty {
-                        Self.fullJsonLogs.insert(jsonString, at: 0)
-                        if Self.fullJsonLogs.count > 50 { Self.fullJsonLogs.removeLast() }
+                let now = Date()
+                // Flatten all spans from this batch into individual rows
+                var newRows: [SpanRow] = []
+                for resourceSpan in data.tracesData.resourceSpans {
+                    for scopeSpan in resourceSpan.scopeSpans {
+                        for span in scopeSpan.spans {
+                            newRows.append(SpanRow(
+                                name: span.name,
+                                spanId: span.spanId,
+                                traceId: span.traceId,
+                                parentSpanId: span.parentSpanId,
+                                kind: span.kind,
+                                statusCode: span.status.code.rawValue,
+                                receivedAt: now,
+                                otlpSpan: span
+                            ))
+                        }
                     }
-                    if Self.batches.count > 50 { Self.batches.removeLast() }
-
+                }
+                if let json = data.jsonString {
+                    DispatchQueue.main.async { Self.fullJsonLogs.insert(json, at: 0) }
+                }
+                guard !newRows.isEmpty else { return }
+                DispatchQueue.main.async { [weak self] in
+                    let wasEmpty = Self.spans.isEmpty
+                    // Insert newest at top
+                    Self.spans.insert(contentsOf: newRows.reversed(), at: 0)
                     if wasEmpty {
-                        self?.tableView.reloadSections(IndexSet(integer: Section.batches.rawValue), with: .automatic)
+                        self?.tableView.reloadData()
                     } else {
-                        self?.tableView.insertRows(at: [IndexPath(row: 0, section: Section.batches.rawValue)], with: .automatic)
+                        let paths = (0..<newRows.count).map { IndexPath(row: $0, section: 0) }
+                        self?.tableView.insertRows(at: paths, with: .automatic)
                     }
-                    self?.tableView.reloadSections(IndexSet(integer: Section.controls.rawValue), with: .none)
+                    self?.updateControls()
                     self?.updateNavBarButtons()
                 }
             },
@@ -418,18 +454,18 @@ final class TracesExporterViewController: UITableViewController {
 
         CoralogixRumManager.shared.reinitialize(with: options)
         Self.isTracesExporterEnabled = true
-        tableView.reloadSections(IndexSet(integer: Section.controls.rawValue), with: .automatic)
+        updateControls()
         showToast("SDK reinitialized with Traces Exporter")
     }
 
-    private func triggerNetworkRequest() {
-        guard Self.isTracesExporterEnabled else { showToast("Reinitialize SDK first"); return }
+    @objc private func didTapNetwork() {
+        guard Self.isTracesExporterEnabled else { return }
         NetworkSim.sendSuccesfullRequest()
         showToast("Network request sent")
     }
 
-    private func triggerCustomSpan() {
-        guard Self.isTracesExporterEnabled else { showToast("Reinitialize SDK first"); return }
+    @objc private func didTapCustomSpan() {
+        guard Self.isTracesExporterEnabled else { return }
         let rum = CoralogixRumManager.shared.sdk
         guard rum.isInitialized else { showToast("SDK not initialized"); return }
         guard let tracer = rum.getCustomTracer() else { showToast("Failed to get custom tracer"); return }
@@ -447,152 +483,60 @@ final class TracesExporterViewController: UITableViewController {
     }
 
     @objc private func copyAll() {
-        guard !Self.fullJsonLogs.isEmpty else { showToast("No OTLP data to copy"); return }
+        guard !Self.fullJsonLogs.isEmpty else { showToast("No data to copy"); return }
         var out = "=== Traces Exporter Full Log ===\nTotal exports: \(Self.fullJsonLogs.count)\n\n"
         for (i, json) in Self.fullJsonLogs.enumerated() { out += "=== Export #\(i + 1) ===\n\(json)\n\n" }
         UIPasteboard.general.string = out
-        showToast("Copied \(Self.fullJsonLogs.count) batch(es) as JSON")
+        showToast("Copied \(Self.fullJsonLogs.count) export(s)")
     }
 
-    @objc private func clearBatches() {
-        Self.batches.removeAll()
+    @objc private func clearSpans() {
+        Self.spans.removeAll()
         Self.fullJsonLogs.removeAll()
-        Self.batchCounter = 0
-        tableView.reloadSections(IndexSet(integer: Section.batches.rawValue), with: .automatic)
-        tableView.reloadSections(IndexSet(integer: Section.controls.rawValue), with: .none)
+        tableView.reloadData()
+        updateControls()
         updateNavBarButtons()
-    }
-
-    private func copyBatch(at index: Int) {
-        UIPasteboard.general.string = Self.batches[index].prettyJson
-        showToast("Batch JSON copied")
-    }
-
-    // MARK: - OTLP Validation
-
-    func validateOtlpStructure() {
-        guard !Self.fullJsonLogs.isEmpty else {
-            showValidationResult(title: "No Data", message: "No OTLP data to validate.")
-            return
-        }
-        var results: [String] = []
-        var totalPassed = 0, totalFailed = 0
-        for (i, json) in Self.fullJsonLogs.enumerated() {
-            let v = validateSingleExport(json, exportIndex: i + 1)
-            results.append(v.report); totalPassed += v.passed; totalFailed += v.failed
-        }
-        let summary = "Exports: \(Self.fullJsonLogs.count) | ✅ \(totalPassed) | ❌ \(totalFailed)\n\n"
-            + results.joined(separator: "\n\n")
-        showValidationResult(
-            title: totalFailed == 0 ? "✅ All Passed" : "⚠️ Some Failed",
-            message: summary
-        )
-    }
-
-    private struct ValidationResult { let report: String; let passed: Int; let failed: Int }
-
-    private func validateSingleExport(_ jsonString: String, exportIndex: Int) -> ValidationResult {
-        var checks: [(name: String, passed: Bool, detail: String)] = []
-        guard let data = jsonString.data(using: .utf8),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            return ValidationResult(report: "Export #\(exportIndex): ❌ Invalid JSON", passed: 0, failed: 1)
-        }
-        checks.append(("Valid JSON", true, ""))
-        guard let resourceSpans = json["resource_spans"] as? [[String: Any]] else {
-            checks.append(("Has resource_spans", false, "Missing"))
-            return buildReport(exportIndex: exportIndex, checks: checks)
-        }
-        checks.append(("Has resource_spans", true, "\(resourceSpans.count)"))
-        for (rIdx, rs) in resourceSpans.enumerated() {
-            if let r = rs["resource"] as? [String: Any], r["attributes"] is [[String: Any]] {
-                checks.append(("Resource[\(rIdx)] attributes", true, ""))
-            } else { checks.append(("Resource[\(rIdx)] attributes", false, "Missing")) }
-            guard let scopeSpans = rs["scope_spans"] as? [[String: Any]] else {
-                checks.append(("Resource[\(rIdx)] scope_spans", false, "Missing")); continue
-            }
-            checks.append(("Resource[\(rIdx)] scope_spans", true, "\(scopeSpans.count)"))
-            for (sIdx, ss) in scopeSpans.enumerated() {
-                if let scope = ss["scope"] as? [String: Any], scope["name"] is String {
-                    checks.append(("Scope[\(rIdx)][\(sIdx)] name", true, ""))
-                } else { checks.append(("Scope[\(rIdx)][\(sIdx)] name", false, "Missing")) }
-                guard let spans = ss["spans"] as? [[String: Any]] else {
-                    checks.append(("Scope[\(rIdx)][\(sIdx)] spans", false, "Missing")); continue
-                }
-                checks.append(("Scope[\(rIdx)][\(sIdx)] spans", true, "\(spans.count)"))
-                for (spIdx, span) in spans.enumerated() {
-                    checks.append(contentsOf: validateSpan(span, path: "Span[\(rIdx)][\(sIdx)][\(spIdx)]"))
-                }
-            }
-        }
-        return buildReport(exportIndex: exportIndex, checks: checks)
-    }
-
-    private func validateSpan(_ span: [String: Any], path: String) -> [(name: String, passed: Bool, detail: String)] {
-        var c: [(name: String, passed: Bool, detail: String)] = []
-        if let v = span["trace_id"] as? String { let r = validateBase64(v, bytes: 16); c.append(("\(path) trace_id", r.0, r.1)) }
-        else { c.append(("\(path) trace_id", false, "Missing")) }
-        if let v = span["span_id"] as? String { let r = validateBase64(v, bytes: 8); c.append(("\(path) span_id", r.0, r.1)) }
-        else { c.append(("\(path) span_id", false, "Missing")) }
-        if let name = span["name"] as? String, !name.isEmpty { c.append(("\(path) name", true, "'\(name)'")) }
-        else { c.append(("\(path) name", false, "Missing")) }
-        if let kind = span["kind"] as? String {
-            let valid = ["SPAN_KIND_UNSPECIFIED","SPAN_KIND_INTERNAL","SPAN_KIND_SERVER","SPAN_KIND_CLIENT","SPAN_KIND_PRODUCER","SPAN_KIND_CONSUMER"].contains(kind)
-            c.append(("\(path) kind", valid, valid ? kind : "Invalid: \(kind)"))
-        } else { c.append(("\(path) kind", false, "Missing")) }
-        for key in ["start_time_unix_nano", "end_time_unix_nano"] {
-            if let t = span[key] as? String { c.append(("\(path) \(key)", UInt64(t) != nil, "")) }
-            else { c.append(("\(path) \(key)", false, "Missing")) }
-        }
-        if let status = span["status"] as? [String: Any], let code = status["code"] as? String {
-            let valid = ["STATUS_CODE_UNSET","STATUS_CODE_OK","STATUS_CODE_ERROR"].contains(code)
-            c.append(("\(path) status.code", valid, valid ? code : "Invalid: \(code)"))
-        } else { c.append(("\(path) status.code", false, "Missing")) }
-        return c
-    }
-
-    private func validateBase64(_ s: String, bytes: Int) -> (Bool, String) {
-        guard let d = Data(base64Encoded: s) else { return (false, "Invalid Base64") }
-        return d.count == bytes ? (true, "\(bytes) bytes") : (false, "Expected \(bytes), got \(d.count)")
-    }
-
-    private func buildReport(exportIndex: Int, checks: [(name: String, passed: Bool, detail: String)]) -> ValidationResult {
-        let p = checks.filter { $0.passed }.count
-        let f = checks.filter { !$0.passed }.count
-        var r = "--- Export #\(exportIndex) --- Passed: \(p), Failed: \(f)\n"
-        for c in checks { r += "\(c.passed ? "✅" : "❌") \(c.name)\(c.detail.isEmpty ? "" : " (\(c.detail))")\n" }
-        return ValidationResult(report: r, passed: p, failed: f)
-    }
-
-    private func showValidationResult(title: String, message: String) {
-        let alert = UIAlertController(title: title, message: nil, preferredStyle: .alert)
-        let tv = UITextView()
-        tv.text = message; tv.isEditable = false
-        tv.font = .monospacedSystemFont(ofSize: 10, weight: .regular)
-        tv.backgroundColor = .clear; tv.translatesAutoresizingMaskIntoConstraints = false
-        let container = UIView()
-        container.addSubview(tv); container.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([
-            tv.topAnchor.constraint(equalTo: container.topAnchor),
-            tv.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-            tv.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            tv.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            container.heightAnchor.constraint(equalToConstant: 300)
-        ])
-        alert.view.addSubview(container)
-        NSLayoutConstraint.activate([
-            container.topAnchor.constraint(equalTo: alert.view.topAnchor, constant: 50),
-            container.leadingAnchor.constraint(equalTo: alert.view.leadingAnchor, constant: 10),
-            container.trailingAnchor.constraint(equalTo: alert.view.trailingAnchor, constant: -10),
-            alert.view.heightAnchor.constraint(greaterThanOrEqualToConstant: 400)
-        ])
-        alert.addAction(UIAlertAction(title: "Copy Report", style: .default) { _ in UIPasteboard.general.string = message })
-        alert.addAction(UIAlertAction(title: "OK", style: .cancel))
-        present(alert, animated: true)
     }
 
     private func showToast(_ message: String) {
         let alert = UIAlertController(title: nil, message: message, preferredStyle: .alert)
         present(alert, animated: true)
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { alert.dismiss(animated: true) }
+    }
+}
+
+// MARK: - UITableViewDataSource / Delegate
+
+extension TracesExporterViewController: UITableViewDataSource, UITableViewDelegate {
+
+    func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
+        max(Self.spans.count, 1)
+    }
+
+    func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+        if Self.spans.isEmpty {
+            let cell = tableView.dequeueReusableCell(withIdentifier: "empty", for: indexPath)
+            cell.selectionStyle = .none
+            var config = UIListContentConfiguration.cell()
+            config.text = "No spans yet — trigger a network request or custom span."
+            config.image = UIImage(systemName: "tray")
+            config.textProperties.color = .secondaryLabel
+            config.textProperties.numberOfLines = 0
+            config.imageProperties.tintColor = .tertiaryLabel
+            cell.contentConfiguration = config
+            return cell
+        }
+        let cell = tableView.dequeueReusableCell(withIdentifier: "span", for: indexPath) as! SpanRowCell
+        let row = indexPath.row
+        cell.configure(with: Self.spans[row])
+        cell.onCopy = { [weak self] in
+            UIPasteboard.general.string = Self.spans[row].prettyJson
+            self?.showToast("Span JSON copied")
+        }
+        cell.onToggle = { [weak self] in
+            Self.spans[row].isExpanded.toggle()
+            self?.tableView.reloadRows(at: [indexPath], with: .automatic)
+        }
+        return cell
     }
 }
