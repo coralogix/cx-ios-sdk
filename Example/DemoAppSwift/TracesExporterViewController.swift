@@ -532,13 +532,12 @@ extension TracesExporterViewController: UITableViewDataSource, UITableViewDelega
         if Self.spans.isEmpty {
             let cell = tableView.dequeueReusableCell(withIdentifier: "empty", for: indexPath)
             cell.selectionStyle = .none
-            var config = UIListContentConfiguration.cell()
-            config.text = "No spans yet — trigger a network request or custom span."
-            config.image = UIImage(systemName: "tray")
-            config.textProperties.color = .secondaryLabel
-            config.textProperties.numberOfLines = 0
-            config.imageProperties.tintColor = .tertiaryLabel
-            cell.contentConfiguration = config
+            cell.imageView?.image = UIImage(systemName: "tray")
+            cell.imageView?.tintColor = .tertiaryLabel
+            cell.textLabel?.text = "No spans yet — trigger a network request or custom span."
+            cell.textLabel?.textColor = .secondaryLabel
+            cell.textLabel?.numberOfLines = 0
+            cell.textLabel?.font = .preferredFont(forTextStyle: .footnote)
             return cell
         }
         let cell = tableView.dequeueReusableCell(withIdentifier: "span", for: indexPath) as! SpanRowCell
