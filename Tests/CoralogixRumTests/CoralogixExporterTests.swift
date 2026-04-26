@@ -996,7 +996,10 @@ final class CoralogixExporterTests: XCTestCase {
         XCTAssertNotNil(receivedData?.jsonData, "JSON data should be available")
     }
 
-    func test_tracesExporter_stripsInstrumentationDataFromUpload() {
+    func test_tracesExporter_set_preservesInstrumentationDataInCxLogs() {
+        // tracesExporter is additive — it receives raw OTLP data but must NOT suppress
+        // instrumentation_data from the CX log pipeline. The RUM trace view requires
+        // instrumentation_data.otelSpan to reconstruct parent→child span hierarchies.
         let opts = CoralogixExporterOptions(
             coralogixDomain: .US2,
             userContext: nil,
@@ -1018,7 +1021,6 @@ final class CoralogixExporterTests: XCTestCase {
         let mockUploader = MockSpanUploader()
         exporter.spanUploader = mockUploader
 
-        // Create a network-request span which normally includes instrumentation_data
         let attributes: [String: AttributeValue] = [
             Keys.severity.rawValue: AttributeValue("3"),
             Keys.eventType.rawValue: AttributeValue("network-request"),
@@ -1043,12 +1045,12 @@ final class CoralogixExporterTests: XCTestCase {
         )
         _ = exporter.export(spans: [span], explicitTimeout: nil)
 
-        // Verify instrumentation_data is stripped
         XCTAssertTrue(mockUploader.uploadCalled, "Upload should be called")
-        for spanDict in mockUploader.uploadedSpans {
-            XCTAssertNil(spanDict[Keys.instrumentationData.rawValue],
-                         "instrumentation_data should be stripped when tracesExporter is set")
+        let hasInstrumentationData = mockUploader.uploadedSpans.contains { spanDict in
+            spanDict[Keys.instrumentationData.rawValue] != nil
         }
+        XCTAssertTrue(hasInstrumentationData,
+                      "instrumentation_data must be preserved in CX logs even when tracesExporter is set")
     }
 
     func test_tracesExporter_notSet_preservesInstrumentationData() {

@@ -18,6 +18,5 @@ Example/envs.swift
 # Ignore tech debt documentation
 tech-debt/
 
-# Jira MCP package (not part of iOS SDK; keep local only)
+# Jira MCP local install (not part of iOS SDK; keep local only)
 package/
-mcp-devtools-jira-0.2.6.tgz
