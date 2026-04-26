@@ -329,16 +329,37 @@ final class TracesExporterViewController: UIViewController {
     }
 
     private func makeControlButton(_ title: String, icon: String, action: Selector) -> UIButton {
-        var config = UIButton.Configuration.plain()
-        config.image = UIImage(systemName: icon)
-        config.title = title
-        config.imagePlacement = .top
-        config.imagePadding = 4
-        config.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { attrs in
-            var a = attrs; a.font = UIFont.preferredFont(forTextStyle: .caption2); return a
-        }
-        let b = UIButton(configuration: config)
+        let b = UIButton(type: .system)
         b.translatesAutoresizingMaskIntoConstraints = false
+
+        let imageView = UIImageView(image: UIImage(systemName: icon))
+        imageView.contentMode = .scaleAspectFit
+        imageView.translatesAutoresizingMaskIntoConstraints = false
+
+        let label = UILabel()
+        label.text = title
+        label.font = .preferredFont(forTextStyle: .caption2)
+        label.textAlignment = .center
+        label.numberOfLines = 2
+        label.translatesAutoresizingMaskIntoConstraints = false
+
+        let stack = UIStackView(arrangedSubviews: [imageView, label])
+        stack.axis = .vertical
+        stack.spacing = 3
+        stack.alignment = .center
+        stack.isUserInteractionEnabled = false
+        stack.translatesAutoresizingMaskIntoConstraints = false
+
+        b.addSubview(stack)
+        NSLayoutConstraint.activate([
+            imageView.heightAnchor.constraint(equalToConstant: 22),
+            imageView.widthAnchor.constraint(equalToConstant: 22),
+            stack.topAnchor.constraint(equalTo: b.topAnchor, constant: 6),
+            stack.bottomAnchor.constraint(equalTo: b.bottomAnchor, constant: -6),
+            stack.leadingAnchor.constraint(equalTo: b.leadingAnchor, constant: 4),
+            stack.trailingAnchor.constraint(equalTo: b.trailingAnchor, constant: -4),
+        ])
+
         b.addTarget(self, action: action, for: .touchUpInside)
         return b
     }
