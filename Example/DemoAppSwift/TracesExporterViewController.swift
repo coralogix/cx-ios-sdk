@@ -4,7 +4,9 @@
 //
 //  Test view for the Traces Exporter (OTLP callback) feature.
 //  UI mirrors the Flutter plugin's TracesExporterDemoPage:
-//  each received OTLP batch gets its own expandable row.
+//  - Copy All + Clear live in the navigation bar (top-right)
+//  - Each received OTLP batch is its own expandable card row
+//  - iOS-specific controls (Reinit, Trigger) are in a compact top section
 //
 
 import UIKit
@@ -34,7 +36,7 @@ private struct OtlpBatch {
     }
 }
 
-// MARK: - Cell
+// MARK: - Batch Cell
 
 private final class OtlpBatchCell: UITableViewCell {
     var onCopy: (() -> Void)?
@@ -83,15 +85,17 @@ private final class OtlpBatchCell: UITableViewCell {
         return b
     }()
 
+    // Collapsed: short preview (mirrors Flutter's 200-char, 3-line preview)
     private let previewLabel: UILabel = {
         let l = UILabel()
         l.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
-        l.textColor = .secondaryLabel
+        l.textColor = UIColor.secondaryLabel.withAlphaComponent(0.7)
         l.numberOfLines = 3
         l.translatesAutoresizingMaskIntoConstraints = false
         return l
     }()
 
+    // Expanded: full pretty JSON on gray background (mirrors Flutter's surfaceContainerHighest container)
     private let jsonLabel: UILabel = {
         let l = UILabel()
         l.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
@@ -108,7 +112,7 @@ private final class OtlpBatchCell: UITableViewCell {
         return v
     }()
 
-    private let separator: UIView = {
+    private let jsonSeparator: UIView = {
         let v = UIView()
         v.backgroundColor = .separator
         v.translatesAutoresizingMaskIntoConstraints = false
@@ -120,7 +124,6 @@ private final class OtlpBatchCell: UITableViewCell {
         selectionStyle = .none
         setupLayout()
     }
-
     required init?(coder: NSCoder) { fatalError() }
 
     private func setupLayout() {
@@ -135,7 +138,7 @@ private final class OtlpBatchCell: UITableViewCell {
         headerStack.alignment = .center
         headerStack.translatesAutoresizingMaskIntoConstraints = false
 
-        jsonContainer.addSubview(separator)
+        jsonContainer.addSubview(jsonSeparator)
         jsonContainer.addSubview(jsonLabel)
 
         contentView.addSubview(headerStack)
@@ -159,12 +162,12 @@ private final class OtlpBatchCell: UITableViewCell {
             jsonContainer.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
             jsonContainer.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -12),
 
-            separator.topAnchor.constraint(equalTo: jsonContainer.topAnchor),
-            separator.leadingAnchor.constraint(equalTo: jsonContainer.leadingAnchor),
-            separator.trailingAnchor.constraint(equalTo: jsonContainer.trailingAnchor),
-            separator.heightAnchor.constraint(equalToConstant: 0.5),
+            jsonSeparator.topAnchor.constraint(equalTo: jsonContainer.topAnchor),
+            jsonSeparator.leadingAnchor.constraint(equalTo: jsonContainer.leadingAnchor),
+            jsonSeparator.trailingAnchor.constraint(equalTo: jsonContainer.trailingAnchor),
+            jsonSeparator.heightAnchor.constraint(equalToConstant: 0.5),
 
-            jsonLabel.topAnchor.constraint(equalTo: separator.bottomAnchor, constant: 12),
+            jsonLabel.topAnchor.constraint(equalTo: jsonSeparator.bottomAnchor, constant: 12),
             jsonLabel.leadingAnchor.constraint(equalTo: jsonContainer.leadingAnchor, constant: 16),
             jsonLabel.trailingAnchor.constraint(equalTo: jsonContainer.trailingAnchor, constant: -16),
             jsonLabel.bottomAnchor.constraint(equalTo: jsonContainer.bottomAnchor, constant: -12),
@@ -178,12 +181,9 @@ private final class OtlpBatchCell: UITableViewCell {
 
         let preview = batch.jsonString
         previewLabel.text = preview.count > 200 ? String(preview.prefix(200)) + "…" : preview
-
         jsonLabel.text = batch.prettyJson
 
-        let imageName = batch.isExpanded ? "chevron.up" : "chevron.down"
-        expandButton.setImage(UIImage(systemName: imageName), for: .normal)
-
+        expandButton.setImage(UIImage(systemName: batch.isExpanded ? "chevron.up" : "chevron.down"), for: .normal)
         previewLabel.isHidden = batch.isExpanded
         jsonContainer.isHidden = !batch.isExpanded
     }
@@ -194,96 +194,159 @@ private final class OtlpBatchCell: UITableViewCell {
 
 // MARK: - View Controller
 
-final class TracesExporterViewController: UIViewController {
+final class TracesExporterViewController: UITableViewController {
 
-    // MARK: - Persistent state (survives navigation pop/push)
+    // MARK: - Persistent state
 
     private static var isTracesExporterEnabled = false
     private static var batches: [OtlpBatch] = []
     private static var batchCounter = 0
     private static var fullJsonLogs: [String] = []
 
-    // MARK: - UI
+    // MARK: - Sections
 
-    private let tableView: UITableView = {
-        let t = UITableView(frame: .zero, style: .plain)
-        t.translatesAutoresizingMaskIntoConstraints = false
-        t.separatorInset = .zero
-        t.rowHeight = UITableView.automaticDimension
-        t.estimatedRowHeight = 100
-        return t
-    }()
-
-    private let headerView = TracesExporterHeaderView()
+    private enum Section: Int, CaseIterable {
+        case controls = 0
+        case batches  = 1
+    }
 
     // MARK: - Lifecycle
+
+    init() { super.init(style: .insetGrouped) }
+    required init?(coder: NSCoder) { super.init(coder: coder) }
 
     override func viewDidLoad() {
         super.viewDidLoad()
         title = "Traces Exporter"
-        view.backgroundColor = .systemBackground
-
-        tableView.dataSource = self
-        tableView.delegate = self
+        navigationController?.navigationBar.prefersLargeTitles = false
+        tableView.register(UITableViewCell.self, forCellReuseIdentifier: "control")
         tableView.register(OtlpBatchCell.self, forCellReuseIdentifier: "batch")
-
-        view.addSubview(tableView)
-        NSLayoutConstraint.activate([
-            tableView.topAnchor.constraint(equalTo: view.topAnchor),
-            tableView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            tableView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            tableView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
-        ])
-
-        headerView.onReinit = { [weak self] in self?.confirmReinitialize() }
-        headerView.onTriggerNetwork = { [weak self] in self?.triggerNetworkRequest() }
-        headerView.onTriggerCustomSpan = { [weak self] in self?.triggerCustomSpan() }
-        headerView.onCopyAll = { [weak self] in self?.copyAll() }
-        headerView.onClear = { [weak self] in self?.clearBatches() }
-        headerView.onValidate = { [weak self] in self?.validateOtlpStructure() }
-
-        tableView.tableHeaderView = headerView
-        updateEmptyState()
+        tableView.register(UITableViewCell.self, forCellReuseIdentifier: "empty")
+        tableView.rowHeight = UITableView.automaticDimension
+        tableView.estimatedRowHeight = 100
+        updateNavBarButtons()
     }
 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
-        refreshHeader()
+        updateNavBarButtons()
     }
 
-    override func viewDidLayoutSubviews() {
-        super.viewDidLayoutSubviews()
-        sizeHeaderView()
-    }
+    // MARK: - Nav bar (Copy All + Clear — mirrors Flutter AppBar actions)
 
-    private func sizeHeaderView() {
-        let targetWidth = tableView.bounds.width
-        let size = headerView.systemLayoutSizeFitting(
-            CGSize(width: targetWidth, height: UIView.layoutFittingCompressedSize.height),
-            withHorizontalFittingPriority: .required,
-            verticalFittingPriority: .fittingSizeLevel
+    private func updateNavBarButtons() {
+        guard Self.batches.isEmpty == false else {
+            navigationItem.rightBarButtonItems = nil
+            return
+        }
+        let copyBtn = UIBarButtonItem(
+            image: UIImage(systemName: "doc.on.doc"),
+            style: .plain,
+            target: self,
+            action: #selector(copyAll)
         )
-        if headerView.frame.size != size {
-            headerView.frame.size = size
-            tableView.tableHeaderView = headerView
+        let clearBtn = UIBarButtonItem(
+            image: UIImage(systemName: "trash"),
+            style: .plain,
+            target: self,
+            action: #selector(clearBatches)
+        )
+        clearBtn.tintColor = .systemRed
+        navigationItem.rightBarButtonItems = [clearBtn, copyBtn]
+    }
+
+    // MARK: - Table data source
+
+    override func numberOfSections(in tableView: UITableView) -> Int {
+        Section.allCases.count
+    }
+
+    override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
+        switch Section(rawValue: section)! {
+        case .controls: return 3   // Reinit, Trigger Network, Trigger Custom Span
+        case .batches:  return max(Self.batches.count, 1)  // 1 = empty state row
         }
     }
 
-    private func refreshHeader() {
-        headerView.configure(
-            enabled: Self.isTracesExporterEnabled,
-            batchCount: Self.batches.count
-        )
-        sizeHeaderView()
+    override func tableView(_ tableView: UITableView, titleForHeaderInSection section: Int) -> String? {
+        switch Section(rawValue: section)! {
+        case .controls: return nil
+        case .batches:  return Self.batches.isEmpty ? nil : "Received Batches"
+        }
     }
 
-    private func updateEmptyState() {
-        if Self.batches.isEmpty {
-            let empty = EmptyStateView()
-            empty.frame = CGRect(x: 0, y: 0, width: tableView.bounds.width, height: 300)
-            tableView.backgroundView = empty
-        } else {
-            tableView.backgroundView = nil
+    override func tableView(_ tableView: UITableView, titleForFooterInSection section: Int) -> String? {
+        guard section == Section.controls.rawValue else { return nil }
+        return Self.isTracesExporterEnabled
+            ? "✅ Traces Exporter enabled — \(Self.batches.count) batch(es) received"
+            : "⚠️ Traces Exporter disabled — tap Reinitialize to enable"
+    }
+
+    override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+        switch Section(rawValue: indexPath.section)! {
+
+        case .controls:
+            let cell = tableView.dequeueReusableCell(withIdentifier: "control", for: indexPath)
+            var config = UIListContentConfiguration.cell()
+            switch indexPath.row {
+            case 0:
+                config.text = Self.isTracesExporterEnabled
+                    ? "SDK initialized with Traces Exporter"
+                    : "Reinitialize SDK with Traces Exporter"
+                config.image = UIImage(systemName: "arrow.clockwise.circle")
+                cell.accessoryType = Self.isTracesExporterEnabled ? .none : .disclosureIndicator
+                cell.isUserInteractionEnabled = !Self.isTracesExporterEnabled
+                config.textProperties.color = Self.isTracesExporterEnabled ? .secondaryLabel : .label
+            case 1:
+                config.text = "Trigger Network Request"
+                config.image = UIImage(systemName: "network")
+                cell.accessoryType = .disclosureIndicator
+                cell.isUserInteractionEnabled = Self.isTracesExporterEnabled
+                config.textProperties.color = Self.isTracesExporterEnabled ? .label : .secondaryLabel
+            case 2:
+                config.text = "Trigger Custom Span"
+                config.image = UIImage(systemName: "point.3.connected.trianglepath.dotted")
+                cell.accessoryType = .disclosureIndicator
+                cell.isUserInteractionEnabled = Self.isTracesExporterEnabled
+                config.textProperties.color = Self.isTracesExporterEnabled ? .label : .secondaryLabel
+            default: break
+            }
+            cell.contentConfiguration = config
+            return cell
+
+        case .batches:
+            if Self.batches.isEmpty {
+                let cell = tableView.dequeueReusableCell(withIdentifier: "empty", for: indexPath)
+                cell.selectionStyle = .none
+                var config = UIListContentConfiguration.cell()
+                config.text = "No batches yet — trigger a span above, each OTLP batch will appear here."
+                config.image = UIImage(systemName: "tray")
+                config.textProperties.color = .secondaryLabel
+                config.textProperties.numberOfLines = 0
+                config.imageProperties.tintColor = .tertiaryLabel
+                cell.contentConfiguration = config
+                return cell
+            }
+            let cell = tableView.dequeueReusableCell(withIdentifier: "batch", for: indexPath) as! OtlpBatchCell
+            cell.configure(with: Self.batches[indexPath.row])
+            let row = indexPath.row
+            cell.onCopy = { [weak self] in self?.copyBatch(at: row) }
+            cell.onToggle = { [weak self] in
+                Self.batches[row].isExpanded.toggle()
+                self?.tableView.reloadRows(at: [indexPath], with: .automatic)
+            }
+            return cell
+        }
+    }
+
+    override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+        tableView.deselectRow(at: indexPath, animated: true)
+        guard indexPath.section == Section.controls.rawValue else { return }
+        switch indexPath.row {
+        case 0: confirmReinitialize()
+        case 1: triggerNetworkRequest()
+        case 2: triggerCustomSpan()
+        default: break
         }
     }
 
@@ -325,7 +388,6 @@ final class TracesExporterViewController: UIViewController {
             tracesExporter: { [weak self] data in
                 let spanCount = data.spanCount
                 let jsonString = data.jsonString ?? ""
-
                 DispatchQueue.main.async {
                     Self.batchCounter += 1
                     let batch = OtlpBatch(
@@ -334,6 +396,7 @@ final class TracesExporterViewController: UIViewController {
                         receivedAt: Date(),
                         jsonString: jsonString
                     )
+                    let wasEmpty = Self.batches.isEmpty
                     Self.batches.insert(batch, at: 0)
                     if !jsonString.isEmpty {
                         Self.fullJsonLogs.insert(jsonString, at: 0)
@@ -341,9 +404,13 @@ final class TracesExporterViewController: UIViewController {
                     }
                     if Self.batches.count > 50 { Self.batches.removeLast() }
 
-                    self?.tableView.insertRows(at: [IndexPath(row: 0, section: 0)], with: .automatic)
-                    self?.updateEmptyState()
-                    self?.refreshHeader()
+                    if wasEmpty {
+                        self?.tableView.reloadSections(IndexSet(integer: Section.batches.rawValue), with: .automatic)
+                    } else {
+                        self?.tableView.insertRows(at: [IndexPath(row: 0, section: Section.batches.rawValue)], with: .automatic)
+                    }
+                    self?.tableView.reloadSections(IndexSet(integer: Section.controls.rawValue), with: .none)
+                    self?.updateNavBarButtons()
                 }
             },
             debug: true
@@ -351,24 +418,18 @@ final class TracesExporterViewController: UIViewController {
 
         CoralogixRumManager.shared.reinitialize(with: options)
         Self.isTracesExporterEnabled = true
-        refreshHeader()
+        tableView.reloadSections(IndexSet(integer: Section.controls.rawValue), with: .automatic)
         showToast("SDK reinitialized with Traces Exporter")
     }
 
     private func triggerNetworkRequest() {
-        guard Self.isTracesExporterEnabled else {
-            showToast("Reinitialize SDK with Traces Exporter first")
-            return
-        }
+        guard Self.isTracesExporterEnabled else { showToast("Reinitialize SDK first"); return }
         NetworkSim.sendSuccesfullRequest()
         showToast("Network request sent")
     }
 
     private func triggerCustomSpan() {
-        guard Self.isTracesExporterEnabled else {
-            showToast("Reinitialize SDK with Traces Exporter first")
-            return
-        }
+        guard Self.isTracesExporterEnabled else { showToast("Reinitialize SDK first"); return }
         let rum = CoralogixRumManager.shared.sdk
         guard rum.isInitialized else { showToast("SDK not initialized"); return }
         guard let tracer = rum.getCustomTracer() else { showToast("Failed to get custom tracer"); return }
@@ -385,37 +446,33 @@ final class TracesExporterViewController: UIViewController {
         showToast("Custom spans created")
     }
 
-    private func copyAll() {
+    @objc private func copyAll() {
         guard !Self.fullJsonLogs.isEmpty else { showToast("No OTLP data to copy"); return }
-        var out = "=== Traces Exporter Full Log ===\n"
-        out += "Total exports: \(Self.fullJsonLogs.count)\n\n"
-        for (i, json) in Self.fullJsonLogs.enumerated() {
-            out += "=== Export #\(i + 1) ===\n\(json)\n\n"
-        }
+        var out = "=== Traces Exporter Full Log ===\nTotal exports: \(Self.fullJsonLogs.count)\n\n"
+        for (i, json) in Self.fullJsonLogs.enumerated() { out += "=== Export #\(i + 1) ===\n\(json)\n\n" }
         UIPasteboard.general.string = out
         showToast("Copied \(Self.fullJsonLogs.count) batch(es) as JSON")
     }
 
-    private func clearBatches() {
+    @objc private func clearBatches() {
         Self.batches.removeAll()
         Self.fullJsonLogs.removeAll()
         Self.batchCounter = 0
-        tableView.reloadData()
-        updateEmptyState()
-        refreshHeader()
+        tableView.reloadSections(IndexSet(integer: Section.batches.rawValue), with: .automatic)
+        tableView.reloadSections(IndexSet(integer: Section.controls.rawValue), with: .none)
+        updateNavBarButtons()
     }
 
     private func copyBatch(at index: Int) {
-        let batch = Self.batches[index]
-        UIPasteboard.general.string = batch.prettyJson
+        UIPasteboard.general.string = Self.batches[index].prettyJson
         showToast("Batch JSON copied")
     }
 
-    // MARK: - OTLP Validation (kept from original)
+    // MARK: - OTLP Validation
 
-    private func validateOtlpStructure() {
+    func validateOtlpStructure() {
         guard !Self.fullJsonLogs.isEmpty else {
-            showValidationResult(title: "No Data", message: "No OTLP data to validate. Generate some spans first.")
+            showValidationResult(title: "No Data", message: "No OTLP data to validate.")
             return
         }
         var results: [String] = []
@@ -424,15 +481,12 @@ final class TracesExporterViewController: UIViewController {
             let v = validateSingleExport(json, exportIndex: i + 1)
             results.append(v.report); totalPassed += v.passed; totalFailed += v.failed
         }
-        let summary = """
-        === OTLP Validation Summary ===
-        Exports validated: \(Self.fullJsonLogs.count)
-        Passed: \(totalPassed)  Failed: \(totalFailed)
-
-        \(results.joined(separator: "\n\n"))
-        """
-        let title = totalFailed == 0 ? "✅ All Validations Passed" : "⚠️ Some Validations Failed"
-        showValidationResult(title: title, message: summary)
+        let summary = "Exports: \(Self.fullJsonLogs.count) | ✅ \(totalPassed) | ❌ \(totalFailed)\n\n"
+            + results.joined(separator: "\n\n")
+        showValidationResult(
+            title: totalFailed == 0 ? "✅ All Passed" : "⚠️ Some Failed",
+            message: summary
+        )
     }
 
     private struct ValidationResult { let report: String; let passed: Int; let failed: Int }
@@ -448,13 +502,11 @@ final class TracesExporterViewController: UIViewController {
             checks.append(("Has resource_spans", false, "Missing"))
             return buildReport(exportIndex: exportIndex, checks: checks)
         }
-        checks.append(("Has resource_spans", true, "\(resourceSpans.count) resource(s)"))
+        checks.append(("Has resource_spans", true, "\(resourceSpans.count)"))
         for (rIdx, rs) in resourceSpans.enumerated() {
             if let r = rs["resource"] as? [String: Any], r["attributes"] is [[String: Any]] {
                 checks.append(("Resource[\(rIdx)] attributes", true, ""))
-            } else {
-                checks.append(("Resource[\(rIdx)] attributes", false, "Missing"))
-            }
+            } else { checks.append(("Resource[\(rIdx)] attributes", false, "Missing")) }
             guard let scopeSpans = rs["scope_spans"] as? [[String: Any]] else {
                 checks.append(("Resource[\(rIdx)] scope_spans", false, "Missing")); continue
             }
@@ -462,9 +514,7 @@ final class TracesExporterViewController: UIViewController {
             for (sIdx, ss) in scopeSpans.enumerated() {
                 if let scope = ss["scope"] as? [String: Any], scope["name"] is String {
                     checks.append(("Scope[\(rIdx)][\(sIdx)] name", true, ""))
-                } else {
-                    checks.append(("Scope[\(rIdx)][\(sIdx)] name", false, "Missing"))
-                }
+                } else { checks.append(("Scope[\(rIdx)][\(sIdx)] name", false, "Missing")) }
                 guard let spans = ss["spans"] as? [[String: Any]] else {
                     checks.append(("Scope[\(rIdx)][\(sIdx)] spans", false, "Missing")); continue
                 }
@@ -479,9 +529,9 @@ final class TracesExporterViewController: UIViewController {
 
     private func validateSpan(_ span: [String: Any], path: String) -> [(name: String, passed: Bool, detail: String)] {
         var c: [(name: String, passed: Bool, detail: String)] = []
-        if let v = span["trace_id"] as? String { let r = validateBase64(v, expectedBytes: 16); c.append(("\(path) trace_id", r.0, r.1)) }
+        if let v = span["trace_id"] as? String { let r = validateBase64(v, bytes: 16); c.append(("\(path) trace_id", r.0, r.1)) }
         else { c.append(("\(path) trace_id", false, "Missing")) }
-        if let v = span["span_id"] as? String { let r = validateBase64(v, expectedBytes: 8); c.append(("\(path) span_id", r.0, r.1)) }
+        if let v = span["span_id"] as? String { let r = validateBase64(v, bytes: 8); c.append(("\(path) span_id", r.0, r.1)) }
         else { c.append(("\(path) span_id", false, "Missing")) }
         if let name = span["name"] as? String, !name.isEmpty { c.append(("\(path) name", true, "'\(name)'")) }
         else { c.append(("\(path) name", false, "Missing")) }
@@ -489,10 +539,10 @@ final class TracesExporterViewController: UIViewController {
             let valid = ["SPAN_KIND_UNSPECIFIED","SPAN_KIND_INTERNAL","SPAN_KIND_SERVER","SPAN_KIND_CLIENT","SPAN_KIND_PRODUCER","SPAN_KIND_CONSUMER"].contains(kind)
             c.append(("\(path) kind", valid, valid ? kind : "Invalid: \(kind)"))
         } else { c.append(("\(path) kind", false, "Missing")) }
-        if let t = span["start_time_unix_nano"] as? String { c.append(("\(path) start_time", UInt64(t) != nil, "")) }
-        else { c.append(("\(path) start_time", false, "Missing")) }
-        if let t = span["end_time_unix_nano"] as? String { c.append(("\(path) end_time", UInt64(t) != nil, "")) }
-        else { c.append(("\(path) end_time", false, "Missing")) }
+        for key in ["start_time_unix_nano", "end_time_unix_nano"] {
+            if let t = span[key] as? String { c.append(("\(path) \(key)", UInt64(t) != nil, "")) }
+            else { c.append(("\(path) \(key)", false, "Missing")) }
+        }
         if let status = span["status"] as? [String: Any], let code = status["code"] as? String {
             let valid = ["STATUS_CODE_UNSET","STATUS_CODE_OK","STATUS_CODE_ERROR"].contains(code)
             c.append(("\(path) status.code", valid, valid ? code : "Invalid: \(code)"))
@@ -500,9 +550,9 @@ final class TracesExporterViewController: UIViewController {
         return c
     }
 
-    private func validateBase64(_ s: String, expectedBytes: Int) -> (Bool, String) {
+    private func validateBase64(_ s: String, bytes: Int) -> (Bool, String) {
         guard let d = Data(base64Encoded: s) else { return (false, "Invalid Base64") }
-        return d.count == expectedBytes ? (true, "\(expectedBytes) bytes") : (false, "Expected \(expectedBytes), got \(d.count)")
+        return d.count == bytes ? (true, "\(bytes) bytes") : (false, "Expected \(bytes), got \(d.count)")
     }
 
     private func buildReport(exportIndex: Int, checks: [(name: String, passed: Bool, detail: String)]) -> ValidationResult {
@@ -545,166 +595,4 @@ final class TracesExporterViewController: UIViewController {
         present(alert, animated: true)
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { alert.dismiss(animated: true) }
     }
-}
-
-// MARK: - UITableViewDataSource / Delegate
-
-extension TracesExporterViewController: UITableViewDataSource, UITableViewDelegate {
-    func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        Self.batches.count
-    }
-
-    func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-        let cell = tableView.dequeueReusableCell(withIdentifier: "batch", for: indexPath) as! OtlpBatchCell
-        cell.configure(with: Self.batches[indexPath.row])
-        cell.onCopy = { [weak self] in self?.copyBatch(at: indexPath.row) }
-        cell.onToggle = { [weak self, weak tableView] in
-            Self.batches[indexPath.row].isExpanded.toggle()
-            tableView?.reloadRows(at: [indexPath], with: .automatic)
-        }
-        return cell
-    }
-}
-
-// MARK: - Header view
-
-private final class TracesExporterHeaderView: UIView {
-    var onReinit: (() -> Void)?
-    var onTriggerNetwork: (() -> Void)?
-    var onTriggerCustomSpan: (() -> Void)?
-    var onCopyAll: (() -> Void)?
-    var onClear: (() -> Void)?
-    var onValidate: (() -> Void)?
-
-    private let statusLabel: UILabel = {
-        let l = UILabel()
-        l.font = .preferredFont(forTextStyle: .headline)
-        l.textAlignment = .center
-        l.numberOfLines = 0
-        return l
-    }()
-
-    private let batchCountLabel: UILabel = {
-        let l = UILabel()
-        l.font = .monospacedSystemFont(ofSize: 13, weight: .medium)
-        l.textAlignment = .center
-        return l
-    }()
-
-    private lazy var reinitButton = makeButton("Reinitialize SDK with Traces Exporter", style: .body, action: #selector(didTapReinit))
-    private lazy var networkButton = makeButton("Trigger Network Request", style: .body, action: #selector(didTapNetwork))
-    private lazy var customSpanButton = makeButton("Trigger Custom Span", style: .body, action: #selector(didTapCustomSpan))
-    private lazy var copyAllButton = makeButton("Copy All JSON", style: .footnote, action: #selector(didTapCopyAll))
-    private lazy var clearButton: UIButton = {
-        let b = makeButton("Clear", style: .footnote, action: #selector(didTapClear))
-        b.setTitleColor(.systemRed, for: .normal)
-        return b
-    }()
-    private lazy var validateButton = makeButton("Validate OTLP", style: .footnote, action: #selector(didTapValidate))
-
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-        setupLayout()
-    }
-    required init?(coder: NSCoder) { fatalError() }
-
-    private func makeButton(_ title: String, style: UIFont.TextStyle, action: Selector) -> UIButton {
-        let b = UIButton(type: .system)
-        b.setTitle(title, for: .normal)
-        b.titleLabel?.font = .preferredFont(forTextStyle: style)
-        b.addTarget(self, action: action, for: .touchUpInside)
-        return b
-    }
-
-    private func setupLayout() {
-        let bottomRow = UIStackView(arrangedSubviews: [copyAllButton, clearButton, validateButton])
-        bottomRow.axis = .horizontal; bottomRow.spacing = 16; bottomRow.distribution = .equalCentering
-
-        let stack = UIStackView(arrangedSubviews: [
-            statusLabel, batchCountLabel,
-            reinitButton, networkButton, customSpanButton,
-            bottomRow
-        ])
-        stack.axis = .vertical; stack.spacing = 12; stack.alignment = .center
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(stack)
-
-        let sep = UIView()
-        sep.backgroundColor = .separator
-        sep.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(sep)
-
-        NSLayoutConstraint.activate([
-            stack.topAnchor.constraint(equalTo: topAnchor, constant: 16),
-            stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
-            stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -16),
-            sep.topAnchor.constraint(equalTo: stack.bottomAnchor, constant: 16),
-            sep.leadingAnchor.constraint(equalTo: leadingAnchor),
-            sep.trailingAnchor.constraint(equalTo: trailingAnchor),
-            sep.heightAnchor.constraint(equalToConstant: 0.5),
-            sep.bottomAnchor.constraint(equalTo: bottomAnchor),
-        ])
-    }
-
-    func configure(enabled: Bool, batchCount: Int) {
-        if enabled {
-            statusLabel.text = "✅ Traces Exporter: ENABLED"
-            statusLabel.textColor = .systemGreen
-            reinitButton.isEnabled = false
-            reinitButton.setTitle("SDK already initialized with Traces Exporter", for: .normal)
-        } else {
-            statusLabel.text = "⚠️ Traces Exporter: DISABLED"
-            statusLabel.textColor = .systemOrange
-            reinitButton.isEnabled = true
-            reinitButton.setTitle("Reinitialize SDK with Traces Exporter", for: .normal)
-        }
-        batchCountLabel.text = "Batches received: \(batchCount)"
-    }
-
-    @objc private func didTapReinit() { onReinit?() }
-    @objc private func didTapNetwork() { onTriggerNetwork?() }
-    @objc private func didTapCustomSpan() { onTriggerCustomSpan?() }
-    @objc private func didTapCopyAll() { onCopyAll?() }
-    @objc private func didTapClear() { onClear?() }
-    @objc private func didTapValidate() { onValidate?() }
-}
-
-// MARK: - Empty state
-
-private final class EmptyStateView: UIView {
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-        let icon = UIImageView(image: UIImage(systemName: "tray"))
-        icon.tintColor = UIColor.secondaryLabel.withAlphaComponent(0.4)
-        icon.contentMode = .scaleAspectFit
-        icon.translatesAutoresizingMaskIntoConstraints = false
-
-        let title = UILabel()
-        title.text = "No batches yet"
-        title.font = .preferredFont(forTextStyle: .title3)
-        title.textColor = .secondaryLabel
-        title.textAlignment = .center
-
-        let body = UILabel()
-        body.text = "Run a custom spans demo or any SDK instrumentation to produce spans.\nEach OTLP batch delivered via the tracesExporter callback appears here."
-        body.font = .preferredFont(forTextStyle: .footnote)
-        body.textColor = .tertiaryLabel
-        body.textAlignment = .center
-        body.numberOfLines = 0
-
-        let stack = UIStackView(arrangedSubviews: [icon, title, body])
-        stack.axis = .vertical; stack.spacing = 12; stack.alignment = .center
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(stack)
-
-        NSLayoutConstraint.activate([
-            icon.widthAnchor.constraint(equalToConstant: 60),
-            icon.heightAnchor.constraint(equalToConstant: 60),
-            stack.centerXAnchor.constraint(equalTo: centerXAnchor),
-            stack.centerYAnchor.constraint(equalTo: centerYAnchor),
-            stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 32),
-            stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -32),
-        ])
-    }
-    required init?(coder: NSCoder) { fatalError() }
 }
