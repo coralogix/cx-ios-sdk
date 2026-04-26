@@ -197,9 +197,11 @@ private final class SpanRowCell: UITableViewCell {
         timeLabel.text = row.timeString
         spanIdLabel.text = "spanId: \(row.spanId)"
         let tracePrefix = row.traceId.count > 16 ? String(row.traceId.prefix(16)) + "…" : row.traceId
-        traceIdLabel.text = row.parentSpanId != nil
-            ? "traceId: \(tracePrefix)  ↑ \(row.parentSpanId!)"
-            : "traceId: \(tracePrefix)"
+        if let parent = row.parentSpanId {
+            traceIdLabel.text = "traceId: \(tracePrefix)  ↑ \(parent)"
+        } else {
+            traceIdLabel.text = "traceId: \(tracePrefix)"
+        }
 
         expandButton.setImage(UIImage(systemName: row.isExpanded ? "chevron.up" : "chevron.down"), for: .normal)
         jsonLabel.text = row.prettyJson
