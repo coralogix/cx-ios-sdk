@@ -7,11 +7,10 @@ concurrency:
   group: podspec-lint-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-# Run on every push and PR so CocoaPods validation catches SDK / podspec drift
-# without waiting for a release or a podspec-only change on master.
 on:
-  pull_request:
   push:
+    branches:
+      - master
   workflow_dispatch:
 
 jobs:
