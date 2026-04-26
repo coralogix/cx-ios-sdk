@@ -425,6 +425,7 @@ final class TracesExporterViewController: UIViewController {
                 .userActions: true, .network: true, .anr: true, .lifeCycle: true
             ],
             collectIPData: true,
+            traceParentInHeader: ["enable": true],
             tracesExporter: { [weak self] data in
                 let now = Date()
                 // Flatten all spans from this batch into individual rows
