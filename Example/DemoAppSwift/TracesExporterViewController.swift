@@ -542,15 +542,23 @@ extension TracesExporterViewController: UITableViewDataSource, UITableViewDelega
             return cell
         }
         let cell = tableView.dequeueReusableCell(withIdentifier: "span", for: indexPath) as! SpanRowCell
-        let row = indexPath.row
-        cell.configure(with: Self.spans[row])
+        let spanId = Self.spans[indexPath.row].spanId
+        cell.configure(with: Self.spans[indexPath.row])
         cell.onCopy = { [weak self] in
-            UIPasteboard.general.string = Self.spans[row].prettyJson
+            guard let idx = Self.spans.firstIndex(where: { $0.spanId == spanId }) else { return }
+            UIPasteboard.general.string = Self.spans[idx].prettyJson
             self?.showToast("Span JSON copied")
         }
         cell.onToggle = { [weak self] in
-            Self.spans[row].isExpanded.toggle()
-            self?.tableView.reloadRows(at: [indexPath], with: .automatic)
+            guard let self,
+                  let idx = Self.spans.firstIndex(where: { $0.spanId == spanId }) else { return }
+            Self.spans[idx].isExpanded.toggle()
+            let path = IndexPath(row: idx, section: 0)
+            if let visible = self.tableView.cellForRow(at: path) as? SpanRowCell {
+                visible.configure(with: Self.spans[idx])
+            }
+            self.tableView.beginUpdates()
+            self.tableView.endUpdates()
         }
         return cell
     }
