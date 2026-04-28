@@ -113,6 +113,7 @@ private final class SwipeDetectorGestureRecognizer: UIPanGestureRecognizer {
 @available(iOS 13, *)
 struct SwipeDetectorView: UIViewRepresentable {
 
+    @available(iOS 13, *)
     class Coordinator: NSObject {
         @objc func handlePan(_ gesture: UIPanGestureRecognizer) {
             guard gesture.state == .ended, let view = gesture.view else { return }
