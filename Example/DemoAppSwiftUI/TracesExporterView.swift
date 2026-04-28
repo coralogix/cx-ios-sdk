@@ -36,11 +36,13 @@ struct TracesExporterView: View {
         .navigationTitle("Traces Exporter")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            if !spans.isEmpty {
-                ToolbarItemGroup(placement: .navigationBarTrailing) {
-                    Button { copyAll() } label: { Image(systemName: "doc.on.doc") }
-                    Button { clearSpans() } label: { Image(systemName: "trash").foregroundColor(.red) }
-                }
+            ToolbarItemGroup(placement: .navigationBarTrailing) {
+                Button { copyAll() } label: { Image(systemName: "doc.on.doc") }
+                    .opacity(spans.isEmpty ? 0 : 1)
+                    .disabled(spans.isEmpty)
+                Button { clearSpans() } label: { Image(systemName: "trash").foregroundColor(.red) }
+                    .opacity(spans.isEmpty ? 0 : 1)
+                    .disabled(spans.isEmpty)
             }
         }
         .trackCXView(name: "Traces Exporter")
@@ -99,32 +101,35 @@ struct TracesExporterView: View {
         .opacity(enabled ? 1 : 0.4)
     }
 
-    @ViewBuilder
     private var spanList: some View {
-        if spans.isEmpty {
-            VStack {
-                Spacer()
-                Text("No spans received yet.\nReinitialize the SDK and trigger a request.")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding()
-                Spacer()
-            }
-        } else {
-            List {
-                ForEach($spans) { $span in
-                    spanRow(span: $span)
+        List {
+            if spans.isEmpty {
+                HStack {
+                    Spacer()
+                    Text("No spans received yet.\nReinitialize the SDK and trigger a request.")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding()
+                    Spacer()
+                }
+                .listRowBackground(Color.clear)
+            } else {
+                ForEach(spans, id: \.id) { span in
+                    spanRow(spanId: span.id)
                         .listRowInsets(EdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 8))
                 }
             }
-            .listStyle(.plain)
         }
+        .listStyle(.plain)
     }
 
-    private func spanRow(span: Binding<SpanRow>) -> some View {
-        let s = span.wrappedValue
-        return VStack(alignment: .leading, spacing: 4) {
+    private func spanRow(spanId: UUID) -> some View {
+        guard let index = spans.firstIndex(where: { $0.id == spanId }) else {
+            return AnyView(EmptyView())
+        }
+        let s = spans[index]
+        return AnyView(VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 8) {
                 Text("  \(s.kindShort)  ")
                     .font(.system(size: 9, weight: .bold, design: .monospaced))
@@ -154,7 +159,8 @@ struct TracesExporterView: View {
                 }
 
                 Button {
-                    span.isExpanded.toggle()
+                    guard let i = spans.firstIndex(where: { $0.id == spanId }) else { return }
+                    spans[i].isExpanded.toggle()
                     updateState()
                 } label: {
                     Image(systemName: s.isExpanded ? "chevron.up" : "chevron.down")
@@ -180,7 +186,7 @@ struct TracesExporterView: View {
                     .padding(.top, 6)
                     .padding(.horizontal, 2)
             }
-        }
+        })
     }
 
     private func performReinitialize() {

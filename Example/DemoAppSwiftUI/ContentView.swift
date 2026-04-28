@@ -128,7 +128,7 @@ struct ContentView: View {
         .toast(message: $toastMessage)
     }
 
-    @ViewBuilder
+    @SwiftUI.ViewBuilder
     private var sessionHeader: some View {
         Section {
             HStack {

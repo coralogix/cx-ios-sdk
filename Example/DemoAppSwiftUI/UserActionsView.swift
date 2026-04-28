@@ -118,7 +118,7 @@ struct UserActionsView: View {
         .padding(.vertical, 2)
     }
 
-    @objc private func triggerBadAccessCrash() {
+    private func triggerBadAccessCrash() {
         let pointer = UnsafeMutablePointer<Int>(bitPattern: 0x16)!
         pointer.pointee = 42
     }
