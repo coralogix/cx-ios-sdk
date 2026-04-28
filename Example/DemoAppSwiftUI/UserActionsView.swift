@@ -9,6 +9,22 @@ struct UserActionsView: View {
 
     var body: some View {
         List {
+            Section("Swipe Demo") {
+                VStack(spacing: 6) {
+                    Image(systemName: "antenna.radiowaves.left.and.right")
+                        .font(.system(size: 36, weight: .medium))
+                        .foregroundColor(.accentColor)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .trackCXSwipeAction()
+                    Text("Swipe the icon to emit a RUM swipe span")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.bottom, 8)
+                }
+            }
+
             Section {
                 Button("Log In (resolveTargetName demo)") {
                     toastMessage = "Login tapped — target_element will be 'Login Button' in RUM"

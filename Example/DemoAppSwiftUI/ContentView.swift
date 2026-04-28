@@ -82,8 +82,6 @@ struct ContentView: View {
             List {
                 sessionHeader
 
-                swipeDemo
-
                 ForEach(menuItems, id: \.title) { item in
                     NavigationLink(destination: item.destination) {
                         Label {
@@ -148,24 +146,6 @@ struct ContentView: View {
                 }
             }
             .padding(.vertical, 2)
-        }
-    }
-
-    private var swipeDemo: some View {
-        Section("Swipe Demo") {
-            VStack(spacing: 6) {
-                Image(systemName: "antenna.radiowaves.left.and.right")
-                    .font(.system(size: 36, weight: .medium))
-                    .foregroundColor(.accentColor)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .trackCXSwipeAction()
-                Text("Swipe the icon to emit a RUM swipe span")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .frame(maxWidth: .infinity)
-                    .padding(.bottom, 8)
-            }
         }
     }
 
