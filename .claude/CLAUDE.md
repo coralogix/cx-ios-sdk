@@ -90,4 +90,4 @@ Events carry context structs from `Coralogix/Sources/Model/Contexts/` (e.g., `De
 
 ## Distribution
 
-Three podspecs must be published in order (`CoralogixInternal` → `SessionReplay` + `Coralogix`) with CDN propagation waits between steps. The `lint_and_push_cocoapods.sh` script handles this interactively. Version numbers must be kept in sync across `Package.swift`, all three `.podspec` files, and the `CoralogixRum` source constant.
+Three podspecs must be published in order (`CoralogixInternal` → `SessionReplay` + `Coralogix`) with CDN propagation waits between steps. The `lint_and_push_cocoapods.sh` script handles this interactively. Version numbers must be kept in sync across all three `.podspec` files and the `CoralogixRum` source constant (`Global.sdk` in `CoralogixInternal/Sources/Utils.swift`). `Package.swift` has no version string — SPM versioning is driven by git tags.
