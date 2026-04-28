@@ -1,0 +1,14 @@
+platform :ios, '13.0'
+use_frameworks!
+
+target 'DemoAppSwift' do
+  pod 'Alamofire'
+  pod 'AFNetworking'
+  pod 'SDWebImage'
+end
+
+target 'DemoAppSwiftUI' do
+  pod 'Alamofire'
+  pod 'AFNetworking'
+  pod 'SDWebImage'
+end

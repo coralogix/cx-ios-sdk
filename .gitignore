@@ -20,3 +20,7 @@ tech-debt/
 
 # Jira MCP local install (not part of iOS SDK; keep local only)
 package/
+
+# CocoaPods (example app dependencies)
+Example/Pods/
+Example/Podfile.lock

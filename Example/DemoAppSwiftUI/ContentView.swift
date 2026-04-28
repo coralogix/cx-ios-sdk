@@ -29,6 +29,7 @@ struct ContentView: View {
                 Image(systemName: "globe")
                     .imageScale(.large)
                     .foregroundColor(.accentColor)
+                    .trackCXSwipeAction()
                     .onAppear {
                         let userContext = UserContext(userId: "1234",
                                                       userName: "Daffy Duck",
@@ -101,13 +102,13 @@ struct CustomButton: View {
             } else if item == Keys.sendNSError.rawValue {
                 ErrorSim.sendNSError()
             } else if item == Keys.sendErrorString.rawValue {
-                ErrorSim.sendStringError()
+                ErrorSim.sendError()
             } else if item == Keys.sendCrash.rawValue {
                 CrashSim.simulateRandomCrash()
             } else if item == Keys.shutDownCoralogixRum.rawValue {
                 coralogixRum.shutdown()
             } else if item == Keys.sendLogWithData.rawValue {
-                ErrorSim.sendLog()
+                ErrorSim.sendErrorLog()
             } else if item == Keys.updateLabels.rawValue {
                 coralogixRum.set(labels: ["item3" : "playstation 4", "itemPrice" : 400])
             } else if item == Keys.succesfullNetworkRequestFlutter.rawValue {
