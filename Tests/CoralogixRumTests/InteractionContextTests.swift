@@ -790,10 +790,6 @@ final class InteractionContextTests: XCTestCase {
         private var _stubState: UIGestureRecognizer.State = .ended
         private let stubView: UIView = UIView()
 
-        var stubState: UIGestureRecognizer.State {
-            get { _stubState }
-            set { _stubState = newValue }
-        }
         override var state: UIGestureRecognizer.State {
             get { _stubState }
             set { _stubState = newValue }
@@ -813,7 +809,7 @@ final class InteractionContextTests: XCTestCase {
         let gesture = StubPanGesture()
         gesture.stubLocation = location
         gesture.stubTranslation = translation
-        gesture.stubState = state
+        gesture.state = state
 
         var received: TouchEvent?
         let token = NotificationCenter.default.addObserver(
