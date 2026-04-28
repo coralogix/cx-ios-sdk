@@ -128,7 +128,12 @@ private final class SwipeDetectorGestureRecognizer: UIPanGestureRecognizer {
 struct SwipeDetectorView: UIViewRepresentable {
 
     @available(iOS 13, *)
-    class Coordinator: NSObject {
+    class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                               shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+            return true
+        }
+
         @objc func handlePan(_ gesture: UIPanGestureRecognizer) {
             guard gesture.state == .ended, let view = gesture.view else { return }
             let loc = gesture.location(in: nil)
@@ -152,6 +157,9 @@ struct SwipeDetectorView: UIViewRepresentable {
         )
         pan.minimumNumberOfTouches = 1
         pan.maximumNumberOfTouches = 1
+        pan.cancelsTouchesInView = false
+        pan.delaysTouchesEnded = false
+        pan.delegate = context.coordinator
         view.addGestureRecognizer(pan)
         return view
     }
