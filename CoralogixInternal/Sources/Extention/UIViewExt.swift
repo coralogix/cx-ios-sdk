@@ -48,7 +48,7 @@ public extension UIView {
             for win in windows {
                 ctx.cgContext.saveGState()
                 ctx.cgContext.translateBy(x: win.frame.origin.x, y: win.frame.origin.y)
-                if !win.drawHierarchy(in: win.bounds, afterScreenUpdates: true) {
+                if !win.drawHierarchy(in: win.bounds, afterScreenUpdates: false) {
                     win.layer.render(in: ctx.cgContext)
                 }
                 ctx.cgContext.restoreGState()
