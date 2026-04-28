@@ -819,7 +819,7 @@ final class InteractionContextTests: XCTestCase {
         let token = NotificationCenter.default.addObserver(
             forName: .cxRumNotificationUserActions,
             object: nil,
-            queue: .main
+            queue: nil
         ) { note in
             received = note.object as? TouchEvent
         }
