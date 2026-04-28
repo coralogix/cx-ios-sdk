@@ -1,123 +1,160 @@
-//
-//  ContentView.swift
-//  DemoApp
-//
-//  Created by Coralogix DEV TEAM on 05/05/2024.
-//
-
 import SwiftUI
 import Coralogix
 
 struct ContentView: View {
-    @Binding var coralogixRum: CoralogixRum
-    let items = [Keys.failureNetworkRequest.rawValue,
-                 Keys.succesfullNetworkRequest.rawValue,
-                 Keys.succesfullNetworkRequestFlutter.rawValue,
-                 Keys.failureNetworkRequestFlutter.rawValue,
-                 Keys.sendNSException.rawValue,
-                 Keys.sendNSError.rawValue,
-                 Keys.sendErrorString.rawValue,
-                 Keys.sendLogWithData.rawValue,
-                 Keys.sendCrash.rawValue,
-                 Keys.shutDownCoralogixRum.rawValue,
-                 Keys.updateLabels.rawValue,
-                 Keys.maskUI.rawValue]
-    
+    @State private var toastMessage: String?
+    @State private var sessionID: String = CoralogixRumManager.shared.getSessionId()?.lowercased() ?? "No session"
+
+    private struct MenuItem {
+        let title: String
+        let subtitle: String
+        let icon: String
+        let destination: AnyView
+    }
+
+    private var menuItems: [MenuItem] {
+        [
+            MenuItem(
+                title: "Network instrumentation",
+                subtitle: "Track requests, responses & timings",
+                icon: "antenna.radiowaves.left.and.right",
+                destination: AnyView(NetworkView())
+            ),
+            MenuItem(
+                title: "Error instrumentation",
+                subtitle: "Capture crashes, errors & exceptions",
+                icon: "exclamationmark.triangle",
+                destination: AnyView(ErrorView())
+            ),
+            MenuItem(
+                title: "SDK functions",
+                subtitle: "Test core Coralogix APIs",
+                icon: "gearshape",
+                destination: AnyView(SdkView())
+            ),
+            MenuItem(
+                title: "Custom spans",
+                subtitle: "Manual global & nested spans (Browser API parity)",
+                icon: "timeline.selection",
+                destination: AnyView(CustomSpansView())
+            ),
+            MenuItem(
+                title: "User actions",
+                subtitle: "Buttons, screens & custom events",
+                icon: "hand.tap",
+                destination: AnyView(UserActionsView())
+            ),
+            MenuItem(
+                title: "Session replay",
+                subtitle: "Replay user sessions visually",
+                icon: "film.stack",
+                destination: AnyView(SessionReplayView())
+            ),
+            MenuItem(
+                title: "Clock",
+                subtitle: "Timing, spans & scheduling",
+                icon: "clock",
+                destination: AnyView(ClockView())
+            ),
+            MenuItem(
+                title: "Schema validation",
+                subtitle: "Validate payload structure & fields",
+                icon: "checkmark.shield",
+                destination: AnyView(SchemaValidationView())
+            ),
+            MenuItem(
+                title: "Mask UI",
+                subtitle: "Hide sensitive on-screen data",
+                icon: "eye.slash",
+                destination: AnyView(MaskDemoView())
+            ),
+            MenuItem(
+                title: "Traces Exporter",
+                subtitle: "Test OTLP trace export callback",
+                icon: "arrow.up.doc",
+                destination: AnyView(TracesExporterView())
+            )
+        ]
+    }
+
     var body: some View {
         NavigationView {
-            VStack {
-                Image(systemName: "globe")
-                    .imageScale(.large)
-                    .foregroundColor(.accentColor)
-                    .trackCXSwipeAction()
-                    .onAppear {
-                        let userContext = UserContext(userId: "1234",
-                                                      userName: "Daffy Duck",
-                                                      userEmail: "daffy.duck@coralogix.com",
-                                                      userMetadata: ["age": "18", "profession" : "duck"])
-                        coralogixRum.setUserContext(userContext: userContext)
-                    }.padding(10)
-                    .border(.gray)
+            List {
+                sessionHeader
 
-                NavigationLink(destination: SecondView(coralogixRum: $coralogixRum)) {
-                                    Text("Go to Second View")
-                                }
-                                .navigationTitle("Main View")
-                                .trackCXView(name: "Main View")
-                                .trackCXTapAction(name: "second View")
-                
-                NavigationLink(destination: MaskDemoView()) {
-                    Text("UI Mask Demo")
-                }
-                .navigationTitle("UI Mask Demo")
-                
-                List(items, id: \.self) { item in
-                    CustomButton(item: item, coralogixRum: $coralogixRum)
+                ForEach(menuItems, id: \.title) { item in
+                    NavigationLink(destination: item.destination) {
+                        Label {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(item.title)
+                                    .font(.body)
+                                Text(item.subtitle)
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        } icon: {
+                            Image(systemName: item.icon)
+                                .font(.system(size: 20, weight: .medium))
+                                .frame(width: 28)
+                        }
+                        .padding(.vertical, 2)
+                    }
                 }
             }
-            .padding()
+            .listStyle(.insetGrouped)
+            .navigationTitle("Coralogix Demo")
+            .navigationBarTitleDisplayMode(.large)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button {
+                        copySessionID()
+                    } label: {
+                        Image(systemName: "doc.on.doc")
+                    }
+                }
+            }
+            .trackCXView(name: "Main View")
+            .onAppear {
+                CoralogixRumManager.shared.sdk.setUserContext(
+                    userContext: UserContext(
+                        userId: "1234",
+                        userName: "Daffy Duck",
+                        userEmail: "daffy.duck@coralogix.com",
+                        userMetadata: ["age": "18", "profession": "duck"]
+                    )
+                )
+            }
+        }
+        .toast(message: $toastMessage)
+    }
+
+    @ViewBuilder
+    private var sessionHeader: some View {
+        Section {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Session ID")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                    Text(sessionID)
+                        .font(.system(.footnote, design: .monospaced))
+                        .foregroundColor(.primary)
+                }
+                Spacer()
+                Button("Copy") {
+                    copySessionID()
+                }
+            }
+            .padding(.vertical, 2)
         }
     }
-}
 
-struct SecondView: View {
-    @Binding var coralogixRum: CoralogixRum
-    
-    let items = ["Send NSError",
-                 "Send Crash"]
-    var body: some View {
-        Text("Welcome to the Second View!")
-            .navigationTitle("Second View")
-            .trackCXView(name: "Second View")
-        
-//        List(items, id: \.self) { item in
-//            Button(action: {
-//                print("Clicked on: \(item)")
-//                if item == "Send Crash" {
-//                    CrashSim.simulateRandomCrash()
-//                } else if item == "Send NSError" {
-//                    ErrorSim.sendNSError(cxRum: self.coralogixRum)
-//                }
-//            },label: {
-//               Text(item)
-//            }).trackCXTapAction(name: "\(item)")
-//        }
-//        .padding()
-    }
-}
-
-struct CustomButton: View {
-    var item: String
-    @Binding var coralogixRum: CoralogixRum
-    
-    var body: some View {
-        Button(action: {
-            print("Clicked on: \(item)")
-            if item == Keys.failureNetworkRequest.rawValue {
-                NetworkSim.failureNetworkRequest()
-            } else if item == Keys.succesfullNetworkRequest.rawValue {
-                NetworkSim.sendSuccesfullRequest()
-            } else if item == Keys.sendNSException.rawValue {
-                ErrorSim.sendNSException()
-            } else if item == Keys.sendNSError.rawValue {
-                ErrorSim.sendNSError()
-            } else if item == Keys.sendErrorString.rawValue {
-                ErrorSim.sendError()
-            } else if item == Keys.sendCrash.rawValue {
-                CrashSim.simulateRandomCrash()
-            } else if item == Keys.shutDownCoralogixRum.rawValue {
-                coralogixRum.shutdown()
-            } else if item == Keys.sendLogWithData.rawValue {
-                ErrorSim.sendErrorLog()
-            } else if item == Keys.updateLabels.rawValue {
-                coralogixRum.set(labels: ["item3" : "playstation 4", "itemPrice" : 400])
-            } else if item == Keys.succesfullNetworkRequestFlutter.rawValue {
-                NetworkSim.setNetworkRequestContextSuccsess()
-            } else if item == Keys.failureNetworkRequestFlutter.rawValue {
-                NetworkSim.setNetworkRequestContextFailure()
-            } 
-        }, label: {
-            Text(item)
-        }).trackCXTapAction(name: "\(item)")
+    private func copySessionID() {
+        guard let id = CoralogixRumManager.shared.getSessionId() else {
+            toastMessage = "No session ID available"
+            return
+        }
+        UIPasteboard.general.string = id
+        toastMessage = "Session ID copied"
     }
 }
