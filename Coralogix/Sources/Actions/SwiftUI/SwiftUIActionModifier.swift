@@ -97,13 +97,27 @@ struct TapView: UIViewRepresentable {
 /// redundant .scroll span for the same gesture.
 /// Only discards when state == .ended (recognized) — taps and micro-drags that fail to
 /// recognize (state == .failed) do not discard, so their click events still fire.
+/// Skips discarding when the gesture's view is nested inside a UIScrollView: in that
+/// context the underlying scroll view's own pan gesture is legitimate and its scroll
+/// span must not be suppressed.
 @available(iOS 13, *)
 private final class SwipeDetectorGestureRecognizer: UIPanGestureRecognizer {
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent) {
         super.touchesEnded(touches, with: event)
-        if state == .ended {
+        if state == .ended && !isInScrollViewContext() {
             touches.forEach { ScrollTracker.shared.discardTouch($0) }
         }
+    }
+
+    /// Returns true if any ancestor of the gesture's view in the responder chain is a
+    /// UIScrollView (covers UITableView, UICollectionView, SwiftUI List/ScrollView, etc.).
+    private func isInScrollViewContext() -> Bool {
+        var ancestor = view?.superview
+        while let v = ancestor {
+            if v is UIScrollView { return true }
+            ancestor = v.superview
+        }
+        return false
     }
 }
 
