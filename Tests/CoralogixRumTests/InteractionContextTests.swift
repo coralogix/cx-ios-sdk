@@ -780,4 +780,99 @@ final class InteractionContextTests: XCTestCase {
         XCTAssertNil(context.scrollDirection)
         XCTAssertNil(context.attributes)
     }
+
+    // MARK: - SwipeDetectorView.Coordinator — direction mapping
+
+    /// Stub UIPanGestureRecognizer that returns fixed values for location(in:) and translation(in:).
+    private final class StubPanGesture: UIPanGestureRecognizer {
+        var stubLocation: CGPoint = .zero
+        var stubTranslation: CGPoint = .zero
+        private var _stubState: UIGestureRecognizer.State = .ended
+        private let stubView: UIView = UIView()
+
+        override var state: UIGestureRecognizer.State {
+            get { _stubState }
+            set { _stubState = newValue }
+        }
+        override var view: UIView? { stubView }
+        override func location(in view: UIView?) -> CGPoint { stubLocation }
+        override func translation(in view: UIView?) -> CGPoint { stubTranslation }
+    }
+
+    private func makeCoordinatorAndObserve(
+        location: CGPoint,
+        translation: CGPoint,
+        state: UIGestureRecognizer.State = .ended,
+        block: (TouchEvent?) -> Void
+    ) {
+        let coordinator = SwipeDetectorView.Coordinator()
+        let gesture = StubPanGesture()
+        gesture.stubLocation = location
+        gesture.stubTranslation = translation
+        gesture.state = state
+
+        var received: TouchEvent?
+        let token = NotificationCenter.default.addObserver(
+            forName: .cxRumNotificationUserActions,
+            object: nil,
+            queue: nil
+        ) { note in
+            received = note.object as? TouchEvent
+        }
+        coordinator.handlePan(gesture)
+        NotificationCenter.default.removeObserver(token)
+        block(received)
+    }
+
+    func testSwipeDetector_downSwipe_postsSwipeNotification() {
+        makeCoordinatorAndObserve(location: CGPoint(x: 100, y: 150), translation: CGPoint(x: 0, y: 50)) { event in
+            XCTAssertNotNil(event, "A 50 pt downward pan must post a swipe notification")
+            XCTAssertEqual(event?.eventType, .swipe)
+            XCTAssertEqual(event?.scrollDirection, .down)
+        }
+    }
+
+    func testSwipeDetector_upSwipe_directionIsUp() {
+        makeCoordinatorAndObserve(location: CGPoint(x: 100, y: 100), translation: CGPoint(x: 0, y: -50)) { event in
+            XCTAssertEqual(event?.scrollDirection, .up)
+        }
+    }
+
+    func testSwipeDetector_leftSwipe_directionIsLeft() {
+        makeCoordinatorAndObserve(location: CGPoint(x: 50, y: 100), translation: CGPoint(x: -50, y: 0)) { event in
+            XCTAssertEqual(event?.scrollDirection, .left)
+        }
+    }
+
+    func testSwipeDetector_rightSwipe_directionIsRight() {
+        makeCoordinatorAndObserve(location: CGPoint(x: 150, y: 100), translation: CGPoint(x: 50, y: 0)) { event in
+            XCTAssertEqual(event?.scrollDirection, .right)
+        }
+    }
+
+    func testSwipeDetector_belowThreshold_noNotification() {
+        makeCoordinatorAndObserve(location: CGPoint(x: 100, y: 115), translation: CGPoint(x: 0, y: 15)) { event in
+            XCTAssertNil(event, "A 15 pt pan is below the 20 pt threshold — no swipe notification should fire")
+        }
+    }
+
+    func testSwipeDetector_exactThreshold_postsNotification() {
+        makeCoordinatorAndObserve(
+            location: CGPoint(x: 100, y: 100 + ScrollTracker.threshold),
+            translation: CGPoint(x: 0, y: ScrollTracker.threshold)
+        ) { event in
+            XCTAssertNotNil(event, "Movement exactly at threshold must fire a swipe event")
+            XCTAssertEqual(event?.scrollDirection, .down)
+        }
+    }
+
+    func testSwipeDetector_nonEndedState_noNotification() {
+        makeCoordinatorAndObserve(
+            location: CGPoint(x: 100, y: 150),
+            translation: CGPoint(x: 0, y: 50),
+            state: .changed
+        ) { event in
+            XCTAssertNil(event, "handlePan must only fire for state == .ended")
+        }
+    }
 }

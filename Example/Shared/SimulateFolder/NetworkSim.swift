@@ -82,18 +82,10 @@ class NetworkSim {
     
     static func sendAFNetworkingRequest() {
         let manager = AFHTTPSessionManager()
-        
-        // Set response serializer (JSON in this case)
         manager.responseSerializer = AFJSONResponseSerializer()
-        
-        // Perform GET request
         manager.get(url, parameters: nil, headers: nil, progress: nil, success: { task, responseObject in
-            // Success block
-            if let response = responseObject {
-                print("Response: \(response)")
-            }
+            if let response = responseObject { print("Response: \(response)") }
         }) { task, error in
-            // Failure block
             print("Error: \(error.localizedDescription)")
         }
     }
@@ -197,42 +189,29 @@ class NetworkSim {
     }
     
     static func succesfullAlamofire() {
-        // Create a request using Alamofire
-        AF.request(url, method: .get)
-            .validate()  // Validates the response status code
-            .responseData { response in
-                switch response.result {
-                case .success(let data):
-                    do {
-                        let json = try JSONSerialization.jsonObject(with: data, options: [])
-                        print("Request Successful")
-                        print("Response Data: \(json)")
-                    } catch {
-                        print("JSON Parsing Error: \(error)")
-                    }
-                case .failure(let error):
-                    print("Request failed with error: \(error)")
+        AF.request(url, method: .get).validate().responseData { response in
+            switch response.result {
+            case .success(let data):
+                if let json = try? JSONSerialization.jsonObject(with: data, options: []) {
+                    print("Request Successful\nResponse Data: \(json)")
                 }
+            case .failure(let error):
+                print("Request failed with error: \(error)")
             }
+        }
     }
-    
+
     static func failureAlamofire() {
-        AF.request(errorUrl, method: .get)
-            .validate()  // Validates the response status code
-            .responseData { response in
-                switch response.result {
-                case .success(let data):
-                    do {
-                        let json = try JSONSerialization.jsonObject(with: data, options: [])
-                        print("Request Successful")
-                        print("Response Data: \(json)")
-                    } catch {
-                        print("JSON Parsing Error: \(error)")
-                    }
-                case .failure(let error):
-                    print("Request failed with error: \(error)")
+        AF.request(errorUrl, method: .get).validate().responseData { response in
+            switch response.result {
+            case .success(let data):
+                if let json = try? JSONSerialization.jsonObject(with: data, options: []) {
+                    print("Request Successful\nResponse Data: \(json)")
                 }
+            case .failure(let error):
+                print("Request failed with error: \(error)")
             }
+        }
     }
     
     static func createSampleFile() -> URL? {
@@ -275,7 +254,6 @@ class NetworkSim {
             return
         }
         
-        // Start upload
         AF.upload(multipartFormData: { multipartFormData in
             multipartFormData.append(fileURL, withName: "file", fileName: "sample.txt", mimeType: "text/plain")
         }, to: url)
@@ -298,19 +276,12 @@ class NetworkSim {
     static func downloadImage() {
         let urlString = "https://www.google.com/url?sa=i&url=https%3A%2F%2Funikal.az%2Fnews%2F490204%2Ftramp-meshur-aparicinin-verilisini-baglatdirir&psig=AOvVaw1NJs_lRnGqkjnhDu8j3AOd&ust=1753266023938000&source=images&cd=vfe&opi=89978449&ved=2ahUKEwjIstmFn9COAxX0UqQEHfprJpkQjRx6BAgAEBo"
         guard let url = URL(string: urlString) else { return }
-        
         DispatchQueue.global(qos: .background).async {
-            SDWebImageDownloader.shared.downloadImage(
-                with: url,
-                options: [],
-                progress: nil
-            ) { image, data, error, finished in
+            SDWebImageDownloader.shared.downloadImage(with: url, options: [], progress: nil) { image, _, _, finished in
                 guard let image = image, finished else { return }
                 DispatchQueue.main.async {
                     let imageView = UIImageView(image: image)
-                    if imageView.image != nil {
-                        print("Image downloaded")
-                    }
+                    if imageView.image != nil { print("Image downloaded") }
                 }
             }
         }

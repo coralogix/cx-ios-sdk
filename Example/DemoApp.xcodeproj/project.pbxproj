@@ -22,6 +22,9 @@
 		E64ABB282F3C5CFA00D990A9 /* AFNetworking in Frameworks */ = {isa = PBXBuildFile; productRef = E64ABB272F3C5CFA00D990A9 /* AFNetworking */; };
 		E64ABB2B2F3C5ECB00D990A9 /* SDWebImage in Frameworks */ = {isa = PBXBuildFile; productRef = E64ABB2A2F3C5ECB00D990A9 /* SDWebImage */; };
 		E64ABB2E2F3C5F0300D990A9 /* Alamofire in Frameworks */ = {isa = PBXBuildFile; productRef = E64ABB2D2F3C5F0300D990A9 /* Alamofire */; };
+		E64ABB312F3C5CFA00D990B9 /* AFNetworking in Frameworks */ = {isa = PBXBuildFile; productRef = E64ABB302F3C5CFA00D990B9 /* AFNetworking */; };
+		E64ABB332F3C5ECB00D990B9 /* SDWebImage in Frameworks */ = {isa = PBXBuildFile; productRef = E64ABB322F3C5ECB00D990B9 /* SDWebImage */; };
+		E64ABB352F3C5F0300D990B9 /* Alamofire in Frameworks */ = {isa = PBXBuildFile; productRef = E64ABB342F3C5F0300D990B9 /* Alamofire */; };
 		E6525B5B2E38BE3C006DB4AA /* envs.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6525B5A2E38BE3A006DB4AA /* envs.swift */; };
 		E6525B602E38C548006DB4AA /* envs.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6525B5A2E38BE3A006DB4AA /* envs.swift */; };
 		E6525B612E38C548006DB4AA /* envs.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6525B5A2E38BE3A006DB4AA /* envs.swift */; };
@@ -72,6 +75,19 @@
 		E6D4BBF92DE336310096B46D /* CoralogixRumManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6D4BBF62DE336310096B46D /* CoralogixRumManager.swift */; };
 		E6E515FE2EBB8644008EC19A /* MaskViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6E515FD2EBB8644008EC19A /* MaskViewController.swift */; };
 		E6E516002EBC957D008EC19A /* MaskViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6E515FF2EBC957D008EC19A /* MaskViewController.swift */; };
+		E6CF001C2BFDEB8C00000001 /* ActionItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6CF000C2BFDEB8C00000001 /* ActionItem.swift */; };
+		E6CF001D2BFDEB8C00000001 /* ActionListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6CF000D2BFDEB8C00000001 /* ActionListView.swift */; };
+		E6CF001B2BFDEB8C00000001 /* DemoRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6CF000B2BFDEB8C00000001 /* DemoRow.swift */; };
+		E6CF00112BFDEB8C00000001 /* Toast.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6CF00012BFDEB8C00000001 /* Toast.swift */; };
+		E6CF00122BFDEB8C00000001 /* NetworkView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6CF00022BFDEB8C00000001 /* NetworkView.swift */; };
+		E6CF00132BFDEB8C00000001 /* ErrorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6CF00032BFDEB8C00000001 /* ErrorView.swift */; };
+		E6CF00142BFDEB8C00000001 /* SdkView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6CF00042BFDEB8C00000001 /* SdkView.swift */; };
+		E6CF00152BFDEB8C00000001 /* CustomSpansView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6CF00052BFDEB8C00000001 /* CustomSpansView.swift */; };
+		E6CF00162BFDEB8C00000001 /* UserActionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6CF00062BFDEB8C00000001 /* UserActionsView.swift */; };
+		E6CF00172BFDEB8C00000001 /* SessionReplayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6CF00072BFDEB8C00000001 /* SessionReplayView.swift */; };
+		E6CF00182BFDEB8C00000001 /* ClockView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6CF00082BFDEB8C00000001 /* ClockView.swift */; };
+		E6CF00192BFDEB8C00000001 /* SchemaValidationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6CF00092BFDEB8C00000001 /* SchemaValidationView.swift */; };
+		E6CF001A2BFDEB8C00000001 /* TracesExporterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6CF000A2BFDEB8C00000001 /* TracesExporterView.swift */; };
 		E6FD68F82D01D5570066BDE8 /* CreditCardInputCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6FD68F72D01D5570066BDE8 /* CreditCardInputCell.swift */; };
 		E6FDDA2D2DF176DC0005F274 /* ClockViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6FDDA2C2DF176DC0005F274 /* ClockViewController.swift */; };
 		E6FDDA2E2DF176DC0005F275 /* SchemaValidationViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6FDDA312DF176DC0005F275 /* SchemaValidationViewController.swift */; };
@@ -166,6 +182,19 @@
 		E6D4BBF62DE336310096B46D /* CoralogixRumManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoralogixRumManager.swift; sourceTree = "<group>"; };
 		E6E515FD2EBB8644008EC19A /* MaskViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MaskViewController.swift; sourceTree = "<group>"; };
 		E6E515FF2EBC957D008EC19A /* MaskViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MaskViewController.swift; sourceTree = "<group>"; };
+		E6CF000C2BFDEB8C00000001 /* ActionItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionItem.swift; sourceTree = "<group>"; };
+		E6CF000D2BFDEB8C00000001 /* ActionListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionListView.swift; sourceTree = "<group>"; };
+		E6CF000B2BFDEB8C00000001 /* DemoRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoRow.swift; sourceTree = "<group>"; };
+		E6CF00012BFDEB8C00000001 /* Toast.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Toast.swift; sourceTree = "<group>"; };
+		E6CF00022BFDEB8C00000001 /* NetworkView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkView.swift; sourceTree = "<group>"; };
+		E6CF00032BFDEB8C00000001 /* ErrorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ErrorView.swift; sourceTree = "<group>"; };
+		E6CF00042BFDEB8C00000001 /* SdkView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SdkView.swift; sourceTree = "<group>"; };
+		E6CF00052BFDEB8C00000001 /* CustomSpansView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomSpansView.swift; sourceTree = "<group>"; };
+		E6CF00062BFDEB8C00000001 /* UserActionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserActionsView.swift; sourceTree = "<group>"; };
+		E6CF00072BFDEB8C00000001 /* SessionReplayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionReplayView.swift; sourceTree = "<group>"; };
+		E6CF00082BFDEB8C00000001 /* ClockView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClockView.swift; sourceTree = "<group>"; };
+		E6CF00092BFDEB8C00000001 /* SchemaValidationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SchemaValidationView.swift; sourceTree = "<group>"; };
+		E6CF000A2BFDEB8C00000001 /* TracesExporterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TracesExporterView.swift; sourceTree = "<group>"; };
 		E6FD68F72D01D5570066BDE8 /* CreditCardInputCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreditCardInputCell.swift; sourceTree = "<group>"; };
 		E6FDDA2C2DF176DC0005F274 /* ClockViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClockViewController.swift; sourceTree = "<group>"; };
 		E6FDDA312DF176DC0005F275 /* SchemaValidationViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SchemaValidationViewController.swift; sourceTree = "<group>"; };
@@ -191,6 +220,9 @@
 			files = (
 				E66E3B6C2DA7FB6400FBC86B /* Coralogix in Frameworks */,
 				E6B60A022DB4E53F003AD35D /* SessionReplay in Frameworks */,
+				E64ABB312F3C5CFA00D990B9 /* AFNetworking in Frameworks */,
+				E64ABB332F3C5ECB00D990B9 /* SDWebImage in Frameworks */,
+				E64ABB352F3C5F0300D990B9 /* Alamofire in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -227,6 +259,19 @@
 				E622115A2BFDEB8B00052682 /* DemoAppSwiftUIApp.swift */,
 				E6E515FF2EBC957D008EC19A /* MaskViewController.swift */,
 				E622115C2BFDEB8B00052682 /* ContentView.swift */,
+				E6CF000C2BFDEB8C00000001 /* ActionItem.swift */,
+				E6CF000D2BFDEB8C00000001 /* ActionListView.swift */,
+				E6CF000B2BFDEB8C00000001 /* DemoRow.swift */,
+				E6CF00012BFDEB8C00000001 /* Toast.swift */,
+				E6CF00022BFDEB8C00000001 /* NetworkView.swift */,
+				E6CF00032BFDEB8C00000001 /* ErrorView.swift */,
+				E6CF00042BFDEB8C00000001 /* SdkView.swift */,
+				E6CF00052BFDEB8C00000001 /* CustomSpansView.swift */,
+				E6CF00062BFDEB8C00000001 /* UserActionsView.swift */,
+				E6CF00072BFDEB8C00000001 /* SessionReplayView.swift */,
+				E6CF00082BFDEB8C00000001 /* ClockView.swift */,
+				E6CF00092BFDEB8C00000001 /* SchemaValidationView.swift */,
+				E6CF000A2BFDEB8C00000001 /* TracesExporterView.swift */,
 				E622115E2BFDEB8C00052682 /* Assets.xcassets */,
 				E62211602BFDEB8C00052682 /* Preview Content */,
 			);
@@ -390,6 +435,9 @@
 			packageProductDependencies = (
 				E66E3B6B2DA7FB6400FBC86B /* Coralogix */,
 				E6B60A012DB4E53F003AD35D /* SessionReplay */,
+				E64ABB302F3C5CFA00D990B9 /* AFNetworking */,
+				E64ABB322F3C5ECB00D990B9 /* SDWebImage */,
+				E64ABB342F3C5F0300D990B9 /* Alamofire */,
 			);
 			productName = DemoAppSwiftUI;
 			productReference = E62211582BFDEB8B00052682 /* DemoAppSwiftUI.app */;
@@ -590,6 +638,19 @@
 				E622115D2BFDEB8B00052682 /* ContentView.swift in Sources */,
 				E6E516002EBC957D008EC19A /* MaskViewController.swift in Sources */,
 				E622115B2BFDEB8B00052682 /* DemoAppSwiftUIApp.swift in Sources */,
+				E6CF001C2BFDEB8C00000001 /* ActionItem.swift in Sources */,
+				E6CF001D2BFDEB8C00000001 /* ActionListView.swift in Sources */,
+				E6CF001B2BFDEB8C00000001 /* DemoRow.swift in Sources */,
+				E6CF00112BFDEB8C00000001 /* Toast.swift in Sources */,
+				E6CF00122BFDEB8C00000001 /* NetworkView.swift in Sources */,
+				E6CF00132BFDEB8C00000001 /* ErrorView.swift in Sources */,
+				E6CF00142BFDEB8C00000001 /* SdkView.swift in Sources */,
+				E6CF00152BFDEB8C00000001 /* CustomSpansView.swift in Sources */,
+				E6CF00162BFDEB8C00000001 /* UserActionsView.swift in Sources */,
+				E6CF00172BFDEB8C00000001 /* SessionReplayView.swift in Sources */,
+				E6CF00182BFDEB8C00000001 /* ClockView.swift in Sources */,
+				E6CF00192BFDEB8C00000001 /* SchemaValidationView.swift in Sources */,
+				E6CF001A2BFDEB8C00000001 /* TracesExporterView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1129,6 +1190,21 @@
 			productName = SDWebImage;
 		};
 		E64ABB2D2F3C5F0300D990A9 /* Alamofire */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E64ABB2C2F3C5F0300D990A9 /* XCRemoteSwiftPackageReference "Alamofire" */;
+			productName = Alamofire;
+		};
+		E64ABB302F3C5CFA00D990B9 /* AFNetworking */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E64ABB262F3C5CFA00D990A9 /* XCRemoteSwiftPackageReference "AFNetworking" */;
+			productName = AFNetworking;
+		};
+		E64ABB322F3C5ECB00D990B9 /* SDWebImage */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E64ABB292F3C5ECB00D990A9 /* XCRemoteSwiftPackageReference "SDWebImage" */;
+			productName = SDWebImage;
+		};
+		E64ABB342F3C5F0300D990B9 /* Alamofire */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = E64ABB2C2F3C5F0300D990A9 /* XCRemoteSwiftPackageReference "Alamofire" */;
 			productName = Alamofire;
