@@ -3,9 +3,12 @@ import SwiftUI
 struct UserActionsView: View {
     @State private var toastMessage: String?
     @State private var showModal = false
-    @State private var showAlert = false
-    @State private var showCrashBadAccessConfirm = false
-    @State private var showCrashFatalConfirm = false
+    @State private var activeAlert: AlertType?
+
+    private enum AlertType: Identifiable {
+        case alert, crashBadAccess, crashFatal
+        var id: Self { self }
+    }
 
     var body: some View {
         List {
@@ -53,7 +56,7 @@ struct UserActionsView: View {
                 }
 
                 Button {
-                    showAlert = true
+                    activeAlert = .alert
                 } label: {
                     DemoRow(icon: "exclamationmark.triangle", title: "Alert View",
                             subtitle: "Instrument alerts and user confirmations")
@@ -69,14 +72,14 @@ struct UserActionsView: View {
                 .accessibilityIdentifier("sensitiveLabel")
 
                 Button {
-                    showCrashBadAccessConfirm = true
+                    activeAlert = .crashBadAccess
                 } label: {
                     DemoRow(icon: "xmark.octagon.fill", title: "Simulate Crash: Bad Access",
                             subtitle: "Trigger an EXC_BAD_ACCESS crash for testing")
                 }
 
                 Button {
-                    showCrashFatalConfirm = true
+                    activeAlert = .crashFatal
                 } label: {
                     DemoRow(icon: "xmark.octagon", title: "Simulate Crash: Fatal Error",
                             subtitle: "Trigger a fatalError() crash for testing")
@@ -90,28 +93,35 @@ struct UserActionsView: View {
         .sheet(isPresented: $showModal) {
             SimpleModalView()
         }
-        .alert("Alert", isPresented: $showAlert) {
-            Button("OK") { toastMessage = "Alert dismissed" }
-        } message: {
-            Text("I'm an alert")
-        }
-        .alert("⚠️ Simulate Crash", isPresented: $showCrashBadAccessConfirm) {
-            Button("Cancel", role: .cancel) { toastMessage = "Crash cancelled" }
-            Button("Crash Now", role: .destructive) {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    triggerBadAccessCrash()
-                }
+        .alert(item: $activeAlert) { type in
+            switch type {
+            case .alert:
+                return Alert(
+                    title: Text("Alert"),
+                    message: Text("I'm an alert"),
+                    dismissButton: .default(Text("OK")) { toastMessage = "Alert dismissed" }
+                )
+            case .crashBadAccess:
+                return Alert(
+                    title: Text("⚠️ Simulate Crash"),
+                    message: Text("This will crash the app to test crash reporting. Continue?"),
+                    primaryButton: .destructive(Text("Crash Now")) {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                            triggerBadAccessCrash()
+                        }
+                    },
+                    secondaryButton: .cancel(Text("Cancel")) { toastMessage = "Crash cancelled" }
+                )
+            case .crashFatal:
+                return Alert(
+                    title: Text("⚠️ Simulate Fatal Error Crash"),
+                    message: Text("This will crash the app using fatalError(). Continue?"),
+                    primaryButton: .destructive(Text("Crash Now")) {
+                        fatalError("Simulated crash (fatalError)")
+                    },
+                    secondaryButton: .cancel(Text("Cancel")) { toastMessage = "Crash cancelled" }
+                )
             }
-        } message: {
-            Text("This will crash the app to test crash reporting. Continue?")
-        }
-        .alert("⚠️ Simulate Fatal Error Crash", isPresented: $showCrashFatalConfirm) {
-            Button("Cancel", role: .cancel) { toastMessage = "Crash cancelled" }
-            Button("Crash Now", role: .destructive) {
-                fatalError("Simulated crash (fatalError)")
-            }
-        } message: {
-            Text("This will crash the app using fatalError(). Continue?")
         }
         .toast(message: $toastMessage)
     }
