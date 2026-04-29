@@ -233,6 +233,7 @@ struct PageCarouselView: View {
         }
         .tabViewStyle(.page(indexDisplayMode: .always))
         .indexViewStyle(.page(backgroundDisplayMode: .always))
+        .accessibilityIdentifier("pageControllerScrollView")
         .navigationTitle("Page Controller")
         .navigationBarTitleDisplayMode(.inline)
         .trackCXView(name: "Page Controller")

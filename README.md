@@ -318,5 +318,35 @@ let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
 ### Session Recording
 See the [Session Recording Guide](SessionReplay/Sources/Docs/README.md) for installation steps and examples.
 
+## Example Apps
+
+The repository includes two fully-featured demo apps under `Example/`:
+
+| App | Target | Description |
+|-----|--------|-------------|
+| `DemoAppSwift` | UIKit | Reference implementation — all instrumentation scenarios |
+| `DemoAppSwiftUI` | SwiftUI | SwiftUI port — same scenarios, native SwiftUI patterns |
+
+Both apps cover: Network instrumentation, Error instrumentation, SDK functions, Custom spans, User Actions (tap/scroll/swipe), Session Replay, Traces Exporter, Schema Validation, Mask UI, and Clock.
+
+**To run locally:**
+1. Open `Example/DemoApp.xcworkspace` in Xcode.
+2. Select the `DemoAppSwift` or `DemoAppSwiftUI` scheme.
+3. Fill in your credentials in `Example/Shared/Envs.swift` (API key, proxy URL).
+4. Run on a simulator or device.
+
+**E2E UI tests** (requires a running validation proxy):
+```bash
+# UIKit
+xcodebuild test -scheme DemoAppSwift \
+  -destination 'platform=iOS Simulator,name=iPhone 16,OS=18.5' \
+  -only-testing:DemoAppUITests
+
+# SwiftUI
+xcodebuild test -scheme DemoAppSwiftUI \
+  -destination 'platform=iOS Simulator,name=iPhone 16,OS=18.5' \
+  -only-testing:DemoAppSwiftUIUITests
+```
+
 ## License
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
