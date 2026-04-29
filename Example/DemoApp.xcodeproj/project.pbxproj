@@ -75,6 +75,7 @@
 		E6D4BBF92DE336310096B46D /* CoralogixRumManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6D4BBF62DE336310096B46D /* CoralogixRumManager.swift */; };
 		E6E515FE2EBB8644008EC19A /* MaskViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6E515FD2EBB8644008EC19A /* MaskViewController.swift */; };
 		E6E516002EBC957D008EC19A /* MaskViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6E515FF2EBC957D008EC19A /* MaskViewController.swift */; };
+		E6CF001B2BFDEB8C00000001 /* DemoRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6CF000B2BFDEB8C00000001 /* DemoRow.swift */; };
 		E6CF00112BFDEB8C00000001 /* Toast.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6CF00012BFDEB8C00000001 /* Toast.swift */; };
 		E6CF00122BFDEB8C00000001 /* NetworkView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6CF00022BFDEB8C00000001 /* NetworkView.swift */; };
 		E6CF00132BFDEB8C00000001 /* ErrorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6CF00032BFDEB8C00000001 /* ErrorView.swift */; };
@@ -179,6 +180,7 @@
 		E6D4BBF62DE336310096B46D /* CoralogixRumManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoralogixRumManager.swift; sourceTree = "<group>"; };
 		E6E515FD2EBB8644008EC19A /* MaskViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MaskViewController.swift; sourceTree = "<group>"; };
 		E6E515FF2EBC957D008EC19A /* MaskViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MaskViewController.swift; sourceTree = "<group>"; };
+		E6CF000B2BFDEB8C00000001 /* DemoRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoRow.swift; sourceTree = "<group>"; };
 		E6CF00012BFDEB8C00000001 /* Toast.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Toast.swift; sourceTree = "<group>"; };
 		E6CF00022BFDEB8C00000001 /* NetworkView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkView.swift; sourceTree = "<group>"; };
 		E6CF00032BFDEB8C00000001 /* ErrorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ErrorView.swift; sourceTree = "<group>"; };
@@ -253,6 +255,7 @@
 				E622115A2BFDEB8B00052682 /* DemoAppSwiftUIApp.swift */,
 				E6E515FF2EBC957D008EC19A /* MaskViewController.swift */,
 				E622115C2BFDEB8B00052682 /* ContentView.swift */,
+				E6CF000B2BFDEB8C00000001 /* DemoRow.swift */,
 				E6CF00012BFDEB8C00000001 /* Toast.swift */,
 				E6CF00022BFDEB8C00000001 /* NetworkView.swift */,
 				E6CF00032BFDEB8C00000001 /* ErrorView.swift */,
@@ -629,6 +632,7 @@
 				E622115D2BFDEB8B00052682 /* ContentView.swift in Sources */,
 				E6E516002EBC957D008EC19A /* MaskViewController.swift in Sources */,
 				E622115B2BFDEB8B00052682 /* DemoAppSwiftUIApp.swift in Sources */,
+				E6CF001B2BFDEB8C00000001 /* DemoRow.swift in Sources */,
 				E6CF00112BFDEB8C00000001 /* Toast.swift in Sources */,
 				E6CF00122BFDEB8C00000001 /* NetworkView.swift in Sources */,
 				E6CF00132BFDEB8C00000001 /* ErrorView.swift in Sources */,

@@ -13,14 +13,14 @@ struct SdkView: View {
                 toastMessage = "Selected: SDK Shutdown"
                 CoralogixRumManager.shared.sdk.shutdown()
             } label: {
-                demoRow(icon: "power", title: "SDK Shutdown", subtitle: "Stop the Coralogix SDK")
+                DemoRow(icon: "power", title: "SDK Shutdown", subtitle: "Stop the Coralogix SDK")
             }
 
             Button {
                 toastMessage = "Selected: Update Labels"
                 CoralogixRumManager.shared.sdk.set(labels: ["item3": "playstation 4", "itemPrice": 400])
             } label: {
-                demoRow(icon: "tag", title: "Update Labels", subtitle: "Set custom session labels")
+                DemoRow(icon: "tag", title: "Update Labels", subtitle: "Set custom session labels")
             }
 
             Button {
@@ -29,7 +29,7 @@ struct SdkView: View {
                     type: "custom metric", value: 10.0, units: "ms"
                 )
             } label: {
-                demoRow(icon: "chart.xyaxis.line", title: "Report Mobile Vitals", subtitle: "Custom performance measurement")
+                DemoRow(icon: "chart.xyaxis.line", title: "Report Mobile Vitals", subtitle: "Custom performance measurement")
             }
 
             Button {
@@ -40,20 +40,20 @@ struct SdkView: View {
                     labels: ["im custom label": "label value", "thats wrong": 0]
                 )
             } label: {
-                demoRow(icon: "tag.circle", title: "Custom Labels Log", subtitle: "Log message with custom labels")
+                DemoRow(icon: "tag.circle", title: "Custom Labels Log", subtitle: "Log message with custom labels")
             }
 
             Button {
                 toastMessage = "Selected: Custom Measurement"
                 CoralogixRumManager.shared.sdk.sendCustomMeasurement(name: "LSD", value: 43.0)
             } label: {
-                demoRow(icon: "gauge.with.dots.needle.67percent", title: "Custom Measurement", subtitle: "Send custom metric data")
+                DemoRow(icon: "gauge.with.dots.needle.67percent", title: "Custom Measurement", subtitle: "Send custom metric data")
             }
 
             Button {
                 showSamplerSheet = true
             } label: {
-                demoRow(icon: "percent", title: "Test Session Sampler", subtitle: "Run sampler trials with a chosen rate (0–100%)")
+                DemoRow(icon: "percent", title: "Test Session Sampler", subtitle: "Run sampler trials with a chosen rate (0–100%)")
             }
         }
         .listStyle(.insetGrouped)
@@ -79,24 +79,6 @@ struct SdkView: View {
         }, message: {
             Text(samplerResult ?? "")
         })
-    }
-
-    private func demoRow(icon: String, title: String, subtitle: String) -> some View {
-        Label {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.body)
-                    .foregroundColor(.primary)
-                Text(subtitle)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-        } icon: {
-            Image(systemName: icon)
-                .font(.system(size: 20, weight: .medium))
-                .frame(width: 28)
-        }
-        .padding(.vertical, 2)
     }
 
     private func runSamplerTest() {

@@ -37,25 +37,25 @@ struct UserActionsView: View {
                 Button {
                     showModal = true
                 } label: {
-                    demoRow(icon: "rectangle.on.rectangle", title: "Modal Presentation",
+                    DemoRow(icon: "rectangle.on.rectangle", title: "Modal Presentation",
                             subtitle: "Track full-screen modals and presentation flows")
                 }
                 .trackCXTapAction(name: "Modal Presentation")
 
                 NavigationLink(destination: SegmentedGridView()) {
-                    demoRow(icon: "square.grid.2x2", title: "Segmented Collection",
+                    DemoRow(icon: "square.grid.2x2", title: "Segmented Collection",
                             subtitle: "Monitor segmented controls & collection interactions")
                 }
 
                 NavigationLink(destination: PageCarouselView()) {
-                    demoRow(icon: "rectangle.portrait.on.rectangle.portrait", title: "Page Controller",
+                    DemoRow(icon: "rectangle.portrait.on.rectangle.portrait", title: "Page Controller",
                             subtitle: "Capture page swipes and transitions")
                 }
 
                 Button {
                     showAlert = true
                 } label: {
-                    demoRow(icon: "exclamationmark.triangle", title: "Alert View",
+                    DemoRow(icon: "exclamationmark.triangle", title: "Alert View",
                             subtitle: "Instrument alerts and user confirmations")
                 }
                 .trackCXTapAction(name: "Alert View")
@@ -63,7 +63,7 @@ struct UserActionsView: View {
                 Button {
                     toastMessage = "Tapped — but text is suppressed in RUM (shouldSendText → false)"
                 } label: {
-                    demoRow(icon: "eye.slash", title: "Sensitive Label (text suppressed)",
+                    DemoRow(icon: "eye.slash", title: "Sensitive Label (text suppressed)",
                             subtitle: "Tap this — shouldSendText returns false, so no text is captured in RUM")
                 }
                 .accessibilityIdentifier("sensitiveLabel")
@@ -71,14 +71,14 @@ struct UserActionsView: View {
                 Button {
                     showCrashBadAccessConfirm = true
                 } label: {
-                    demoRow(icon: "xmark.octagon.fill", title: "Simulate Crash: Bad Access",
+                    DemoRow(icon: "xmark.octagon.fill", title: "Simulate Crash: Bad Access",
                             subtitle: "Trigger an EXC_BAD_ACCESS crash for testing")
                 }
 
                 Button {
                     showCrashFatalConfirm = true
                 } label: {
-                    demoRow(icon: "xmark.octagon", title: "Simulate Crash: Fatal Error",
+                    DemoRow(icon: "xmark.octagon", title: "Simulate Crash: Fatal Error",
                             subtitle: "Trigger a fatalError() crash for testing")
                 }
             }
@@ -114,24 +114,6 @@ struct UserActionsView: View {
             Text("This will crash the app using fatalError(). Continue?")
         }
         .toast(message: $toastMessage)
-    }
-
-    private func demoRow(icon: String, title: String, subtitle: String) -> some View {
-        Label {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.body)
-                    .foregroundColor(.primary)
-                Text(subtitle)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-        } icon: {
-            Image(systemName: icon)
-                .font(.system(size: 20, weight: .medium))
-                .frame(width: 28)
-        }
-        .padding(.vertical, 2)
     }
 
     private func triggerBadAccessCrash() {
