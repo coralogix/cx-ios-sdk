@@ -149,6 +149,12 @@ struct SchemaValidationView: View {
                 else { errorMessages.append("Invalid status code: \(code)") }
             }
         }
+        if CommandLine.arguments.contains("--uitesting") {
+            if let saved = try? JSONSerialization.data(withJSONObject: jsonArray, options: .prettyPrinted) {
+                try? saved.write(to: URL(fileURLWithPath: "/tmp/coralogix_validation_response.json"))
+            }
+        }
+
         if allValid {
             statusText = "All logs are valid! ✅"
             statusColor = .green
