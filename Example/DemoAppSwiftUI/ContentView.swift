@@ -115,6 +115,7 @@ struct ContentView: View {
             }
             .trackCXView(name: "Main View")
             .onAppear {
+                sessionID = CoralogixRumManager.shared.getSessionId()?.lowercased() ?? "No session"
                 CoralogixRumManager.shared.sdk.setUserContext(
                     userContext: UserContext(
                         userId: "1234",
@@ -154,7 +155,8 @@ struct ContentView: View {
             toastMessage = "No session ID available"
             return
         }
-        UIPasteboard.general.string = id
+        sessionID = id.lowercased()
+        UIPasteboard.general.string = sessionID
         toastMessage = "Session ID copied"
     }
 }

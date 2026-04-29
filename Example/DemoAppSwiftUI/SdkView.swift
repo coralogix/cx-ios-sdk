@@ -61,16 +61,31 @@ struct SdkView: View {
         .navigationBarTitleDisplayMode(.large)
         .trackCXView(name: "SDK Functions")
         .toast(message: $toastMessage)
-        .alert("Test Session Sampler", isPresented: $showSamplerSheet, actions: {
-            TextField("Sample rate (0–100)", text: $samplerRateText)
-                .keyboardType(.numberPad)
-            Button("Cancel", role: .cancel) {}
-            Button("Run 1000 trials") {
-                runSamplerTest()
+        .sheet(isPresented: $showSamplerSheet) {
+            VStack(spacing: 20) {
+                Text("Test Session Sampler")
+                    .font(.headline)
+                Text("Enter sample rate (0–100). We'll run 1000 trials and show how many would initialize.")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                TextField("Sample rate (0–100)", text: $samplerRateText)
+                    .keyboardType(.numberPad)
+                    .textFieldStyle(.roundedBorder)
+                HStack {
+                    Button("Cancel") {
+                        showSamplerSheet = false
+                    }
+                    Spacer()
+                    Button("Run 1000 trials") {
+                        showSamplerSheet = false
+                        runSamplerTest()
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
             }
-        }, message: {
-            Text("Enter sample rate (0–100). We'll run 1000 trials and show how many would initialize.")
-        })
+            .padding(32)
+        }
         .alert("Sampler result", isPresented: Binding(
             get: { samplerResult != nil },
             set: { if !$0 { samplerResult = nil } }

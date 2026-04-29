@@ -87,7 +87,7 @@ struct UserActionsView: View {
         .navigationTitle("User Actions")
         .navigationBarTitleDisplayMode(.large)
         .trackCXView(name: "User Actions")
-        .fullScreenCover(isPresented: $showModal) {
+        .sheet(isPresented: $showModal) {
             SimpleModalView()
         }
         .alert("Alert", isPresented: $showAlert) {
@@ -222,7 +222,7 @@ struct PageCarouselView: View {
             }
         }
         .tabViewStyle(.page(indexDisplayMode: .always))
-        .indexViewStyle(.page(backgroundDisplayMode: .always))
+        .indexViewStyle(.page())
         .navigationTitle("Page Controller")
         .navigationBarTitleDisplayMode(.inline)
         .trackCXView(name: "Page Controller")
