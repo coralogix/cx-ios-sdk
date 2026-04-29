@@ -338,12 +338,16 @@ Both apps cover: Network instrumentation, Error instrumentation, SDK functions, 
 **E2E UI tests** (requires a running validation proxy):
 ```bash
 # UIKit
-xcodebuild test -scheme DemoAppSwift \
+xcodebuild test \
+  -workspace Example/DemoApp.xcworkspace \
+  -scheme DemoAppSwift \
   -destination 'platform=iOS Simulator,name=iPhone 16,OS=18.5' \
   -only-testing:DemoAppUITests
 
 # SwiftUI
-xcodebuild test -scheme DemoAppSwiftUI \
+xcodebuild test \
+  -workspace Example/DemoApp.xcworkspace \
+  -scheme DemoAppSwiftUI \
   -destination 'platform=iOS Simulator,name=iPhone 16,OS=18.5' \
   -only-testing:DemoAppSwiftUIUITests
 ```

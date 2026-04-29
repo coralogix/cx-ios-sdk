@@ -91,8 +91,8 @@ final class UserInteractionUITests: XCTestCase {
         list.swipeUp()
         Thread.sleep(forTimeInterval: shortDelay)
 
-        // ── Phase 2: resolveTargetName tap ──
-        print("🟦 👆 Phase 2: Login button tap (resolveTargetName)…")
+        // ── Phase 2: tap instrumentation ──
+        print("🟦 👆 Phase 2: Login button tap (tap instrumentation)…")
         let loginButton = app.buttons["loginButton"].firstMatch
         XCTAssertTrue(loginButton.waitForExistence(timeout: elementTimeout),
                       "❌ loginButton not found — check UserActionsView.trackCXTapAction(name: 'Log In')")
@@ -443,7 +443,7 @@ final class UserInteractionUITests: XCTestCase {
  | Phase | Events verified                                      |
  |-------|------------------------------------------------------|
  | 1     | scroll/down, scroll/up (List swipe)                  |
- | 2     | click — target_element = "Login Button" (resolveTargetName) |
+ | 2     | click — any click event captured (tap instrumentation works) |
  | 3     | click — target_element_inner_text absent (shouldSendText)   |
  | 4     | swipe/left, swipe/right (PageCarousel TabView)       |
 
