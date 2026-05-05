@@ -63,7 +63,11 @@ public struct CoralogixExporterOptions {
     
     /// Number between 0-100 as a precentage of SDK should be init.
     var sdkSampler: SDKSampler
-    
+
+    /// Instrumentation categories that should keep emitting events regardless of the session
+    /// sampling decision. Empty by default (all event types follow the session sample rate).
+    var excludeFromSampling: Set<ExcludableInstrumentation>
+
     /// A list of instruments that you wish to switch off during runtime. all instrumentations are active by default.
     var instrumentations: [InstrumentationType: Bool]?
     
@@ -162,6 +166,7 @@ public struct CoralogixExporterOptions {
                 ignoreErrors: [String]? = nil,
                 labels: [String: Any]? = nil,
                 sessionSampleRate: Int = 100, // percent (0–100)
+                excludeFromSampling: Set<ExcludableInstrumentation> = [],
                 instrumentations: [InstrumentationType: Bool]? = nil,
                 collectIPData: Bool = true,
                 beforeSend: (([String: Any]) -> [String: Any]?)? = nil,
@@ -185,6 +190,7 @@ public struct CoralogixExporterOptions {
         self.version = version
         self.labels = labels
         self.sdkSampler = SDKSampler(sampleRate: sessionSampleRate)
+        self.excludeFromSampling = excludeFromSampling
         self.instrumentations = instrumentations
         self.collectIPData = collectIPData
         self.beforeSend = beforeSend
@@ -216,6 +222,7 @@ public struct CoralogixExporterOptions {
         initData[Keys.ignoreErrors.rawValue] = self.ignoreErrors
         initData[Keys.labels.rawValue] = self.labels
         initData[Keys.sessionSampleRate.rawValue] = self.sdkSampler.sampleRate
+        initData[Keys.excludeFromSampling.rawValue] = self.excludeFromSampling.map(\.rawValue).sorted()
         initData[Keys.instrumentations.rawValue] = self.getStatesAsDictionary(from: self.instrumentations)
         initData[Keys.collectIPData.rawValue] = self.collectIPData
         initData[Keys.enableSwizzling.rawValue] = self.enableSwizzling
