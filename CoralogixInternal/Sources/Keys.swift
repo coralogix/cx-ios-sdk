@@ -243,6 +243,7 @@ public enum Keys: String {
     case ignoreErrors
     case collectIPData
     case sessionSampleRate
+    case excludeFromSampling
     case traceParentInHeader
     case debug
     case proxyUrl
@@ -284,4 +285,32 @@ public enum CoralogixEventType: String {
     /// Manual spans from `getCustomTracer()` (parity with Browser SDK `CoralogixEventType.CUSTOM_SPAN`).
     case customSpan = "custom-span"
     case unknown
+}
+
+/// Public-facing instrumentation categories that can be excluded from session sampling.
+///
+/// Pass via `CoralogixExporterOptions.excludeFromSampling` to keep emitting these event
+/// types regardless of the session sample-rate decision. Mirrors the browser SDK's
+/// `ExcludableInstrumentation` (PR #800, v3.8.0).
+public enum ExcludableInstrumentation: String, CaseIterable, Sendable {
+    case errors
+    case logs
+    case network
+    case userInteractions
+    case mobileVitals
+    case customSpan
+    case customMeasurement
+
+    /// Internal `CoralogixEventType` this public case maps to.
+    public var eventType: CoralogixEventType {
+        switch self {
+        case .errors: return .error
+        case .logs: return .log
+        case .network: return .networkRequest
+        case .userInteractions: return .userInteraction
+        case .mobileVitals: return .mobileVitals
+        case .customSpan: return .customSpan
+        case .customMeasurement: return .customMeasurement
+        }
+    }
 }
