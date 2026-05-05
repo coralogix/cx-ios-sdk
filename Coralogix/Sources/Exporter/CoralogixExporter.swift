@@ -124,9 +124,19 @@ public class CoralogixExporter: SpanExporter {
             Log.d("[SDK] Skipping export, session is idle")
             return .success
         }
-        
+
+        // Per-session sampling: when the current session is sampled out, only spans whose
+        // event_type is opted into options.excludeFromSampling proceed. Placed above URL/error
+        // filters and the tracesExporter callback so hybrid + external OTLP consumers inherit
+        // the same behavior.
+        var filterSpans = spans.filter { self.passesSessionSampling($0) }
+        if filterSpans.count != spans.count {
+            Log.d("[CoralogixExporter] export: \(spans.count) in, \(filterSpans.count) after sampling filter")
+        }
+        if filterSpans.isEmpty { return .success }
+
         // ignore Urls
-        var filterSpans = spans.filter { self.shouldRemoveSpan(span: $0) }
+        filterSpans = filterSpans.filter { self.shouldRemoveSpan(span: $0) }
         Log.d("[CoralogixExporter] export: \(spans.count) spans in, \(filterSpans.count) after URL filter")
         if filterSpans.isEmpty { return .failure }
 
@@ -234,6 +244,28 @@ public class CoralogixExporter: SpanExporter {
         return false
     }
     
+    /// Returns `true` if the span should proceed past the per-session sampling filter.
+    /// When the session is sampled in, every span passes. When sampled out, only spans whose
+    /// `event_type` attribute matches an opt-in entry in `options.excludeFromSampling` pass.
+    /// Spans missing an `event_type` attribute are dropped on sampled-out sessions.
+    /// Internal (rather than private per the ticket) so unit tests can exercise it directly.
+    internal func passesSessionSampling(_ span: SpanDataProtocol) -> Bool {
+        if isCurrentSessionSampledIn() { return true }
+
+        let attributes = span.getAttributes()
+        let eventTypeStr: String?
+        if let attrValue = attributes?[Keys.eventType.rawValue] as? AttributeValue {
+            eventTypeStr = attrValue.description
+        } else if let rawString = attributes?[Keys.eventType.rawValue] as? String {
+            eventTypeStr = rawString
+        } else {
+            eventTypeStr = nil
+        }
+
+        guard let eventType = eventTypeStr else { return false }
+        return options.excludeFromSampling.contains { $0.eventType.rawValue == eventType }
+    }
+
     internal func shouldRemoveSpan(span: SpanDataProtocol) -> Bool {
         // if the closure returns true, the element stays in the result.
         let attributes = span.getAttributes()
