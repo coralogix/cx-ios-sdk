@@ -22,6 +22,9 @@ final class CoralogixRumManager {
     }
     private init() {}
 
+    private static let testExportPath = "/tmp/coralogix_validation_response.json"
+    private let testExportQueue = DispatchQueue(label: "com.coralogix.uitesting.export")
+
     func initialize() {
         let userContext = UserContext(userId: "ww",
                                       userName: "?",
@@ -66,6 +69,7 @@ final class CoralogixRumManager {
                                                                    collectReqPayload: true,
                                                                    collectResPayload: true)
                                                ],
+                                               tracesExporter: Self.makeUITestingTracesExporter(queue: self.testExportQueue),
                                                shouldSendText: { view, text in
             // Return false to suppress text capture for a specific view.
             return view.accessibilityIdentifier != "sensitiveLabel"
@@ -99,5 +103,71 @@ final class CoralogixRumManager {
         _sdk?.shutdown()
         _sdk = CoralogixRum(options: options)
         print("SDK reinitialized:\(_sdk?.isInitialized.description ?? "not initialized")")
+    }
+
+    // MARK: - UI testing span capture
+
+    /// Returns a `tracesExporter` callback that mirrors the Coralogix backend's
+    /// "logs" shape into a local file when the host app is launched with
+    /// `--uitesting`. UI tests poll the file instead of waiting for the real
+    /// ingest pipeline + schema-validator round-trip. Returns nil otherwise.
+    private static func makeUITestingTracesExporter(queue: DispatchQueue) -> TracesExporterCallback? {
+        guard ProcessInfo.processInfo.arguments.contains("--uitesting") else { return nil }
+        return { data in
+            let entries = data.tracesData.resourceSpans
+                .flatMap { $0.scopeSpans }
+                .flatMap { $0.spans }
+                .map(spanToLogEntry)
+            queue.async {
+                var existing: [[String: Any]] = []
+                if let raw = try? Data(contentsOf: URL(fileURLWithPath: testExportPath)),
+                   let arr = try? JSONSerialization.jsonObject(with: raw) as? [[String: Any]] {
+                    existing = arr
+                }
+                existing.append(contentsOf: entries)
+                if let out = try? JSONSerialization.data(withJSONObject: existing) {
+                    try? out.write(to: URL(fileURLWithPath: testExportPath))
+                }
+            }
+        }
+    }
+
+    /// Converts an OTLP span into the nested `{ "text": { "cx_rum": { ... } } }`
+    /// shape that UI test assertions walk. Flat dotted attribute keys
+    /// (`cx_rum.interaction_context.event_name`) become nested paths.
+    private static func spanToLogEntry(_ span: OtlpSpan) -> [String: Any] {
+        var nested: [String: Any] = [:]
+        for kv in span.attributes {
+            let path = kv.key.split(separator: ".").map(String.init)
+            setNested(&nested, path: path, value: unwrap(kv.value))
+        }
+        return ["text": nested]
+    }
+
+    private static func unwrap(_ v: OtlpAnyValue) -> Any {
+        switch v {
+        case .stringValue(let s): return s
+        case .boolValue(let b): return b
+        case .intValue(let i): return i
+        case .doubleValue(let d): return d
+        case .arrayValue(let arr): return arr.map(unwrap)
+        case .kvlistValue(let kvs):
+            var out: [String: Any] = [:]
+            for kv in kvs { out[kv.key] = unwrap(kv.value) }
+            return out
+        }
+    }
+
+    private static func setNested(_ dict: inout [String: Any], path: [String], value: Any) {
+        guard let head = path.first else { return }
+        if path.count == 1 {
+            dict[head] = value
+            return
+        }
+        var sub = (dict[head] as? [String: Any]) ?? [:]
+        var rest = path
+        rest.removeFirst()
+        setNested(&sub, path: rest, value: value)
+        dict[head] = sub
     }
 }
