@@ -50,10 +50,10 @@ final class UserInteractionUITests: XCTestCase {
     private var isCI = false
 
     private var elementTimeout: TimeInterval  { isCI ? 15.0 : 10.0 }
-    private var shortDelay: TimeInterval      { isCI ?  2.0 :  1.0 }
-    private var sdkFlushDelay: TimeInterval   { isCI ? 10.0 :  5.0 }
+    private var shortDelay: TimeInterval      { isCI ?  0.5 :  0.3 }
+    private var sdkFlushDelay: TimeInterval   { isCI ?  2.0 :  1.0 }
     /// Wait after tapping "Validate Schema" for the backend to fetch and return logs.
-    private var networkDelay: TimeInterval    { isCI ?  8.0 :  3.0 }
+    private var networkDelay: TimeInterval    { isCI ?  3.0 :  1.5 }
 
     // MARK: - Setup / Teardown
 
@@ -72,11 +72,11 @@ final class UserInteractionUITests: XCTestCase {
 
     override func tearDownWithError() throws {
         app.terminate()
-        // Give the OS time to fully wind down the process before the next
-        // test's setUp calls app.launch(), which internally terminates any
-        // running instance — without this gap, launch() can fail with
-        // "Failed to terminate <bundle-id>" on slow CI machines.
-        Thread.sleep(forTimeInterval: isCI ? 3.0 : 1.0)
+        let stopped = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "state == %d", XCUIApplication.State.notRunning.rawValue),
+            object: app
+        )
+        wait(for: [stopped], timeout: 5.0)
         app = nil
         try super.tearDownWithError()
     }
