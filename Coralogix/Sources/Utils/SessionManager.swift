@@ -53,6 +53,10 @@ public class SessionManager {
     private let countersLock = NSLock()
     public var sessionChangedCallback: ((String) -> Void)?
     public var sessionEndedCallback: (() -> Void)?
+    /// Fired alongside `sessionChangedCallback` on every session rotation. Kept as a separate
+    /// property so the sampling-reroll path (CX-40200) cannot accidentally clobber the existing
+    /// SessionReplay listener that owns `sessionChangedCallback`.
+    public var samplingReevaluationCallback: ((String) -> Void)?
     public var hasRecording: Bool = false
     
     public var lastSnapshotEventTime: Date?
@@ -171,6 +175,7 @@ public class SessionManager {
 
         if let sessionId = self.sessionMetadata?.sessionId {
             self.sessionChangedCallback?(sessionId)
+            self.samplingReevaluationCallback?(sessionId)
         }
     }
     

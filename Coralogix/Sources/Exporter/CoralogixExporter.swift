@@ -17,7 +17,13 @@ public class CoralogixExporter: SpanExporter {
     lazy var spanUploader: SpanUploading = SpanUploader(options: self.options)
 
     private let spanProcessingQueue = DispatchQueue(label: Keys.queueSpanProcessingQueue.rawValue)
-    
+
+    /// Per-session sampling decision. `true` while the SDK should export the current session's
+    /// non-excluded events; `false` while only events listed in `options.excludeFromSampling`
+    /// should pass. Rerolled on every session rotation by `CoralogixRum`.
+    private var currentSessionSampledIn: Bool = true
+    private let samplingStateLock = NSLock()
+
     public init(options: CoralogixExporterOptions,
                 sessionManager: SessionManager,
                 networkManager: NetworkProtocol,
@@ -80,6 +86,21 @@ public class CoralogixExporter: SpanExporter {
     public func update(application: String, version: String) {
         self.options.version = version
         self.options.application = application
+    }
+
+    /// Updates the per-session sampling decision. Called once at init and again on every session
+    /// rotation. The wired gating logic (drop non-excluded events when `sampledIn == false`) lands
+    /// in T3 (CX-40201); this T2 ticket only stores the decision.
+    public func updateSessionSampling(sampledIn: Bool) {
+        samplingStateLock.lock()
+        defer { samplingStateLock.unlock() }
+        self.currentSessionSampledIn = sampledIn
+    }
+
+    public func isCurrentSessionSampledIn() -> Bool {
+        samplingStateLock.lock()
+        defer { samplingStateLock.unlock() }
+        return self.currentSessionSampledIn
     }
     
     internal func sendBeforeSendData(data: [[String: Any]]) {
