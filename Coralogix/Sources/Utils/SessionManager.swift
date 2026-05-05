@@ -54,7 +54,7 @@ public class SessionManager {
     public var sessionChangedCallback: ((String) -> Void)?
     public var sessionEndedCallback: (() -> Void)?
     /// Fired alongside `sessionChangedCallback` on every session rotation. Kept as a separate
-    /// property so the sampling-reroll path (CX-40200) cannot accidentally clobber the existing
+    /// property so the sampling-reroll path cannot accidentally clobber the existing
     /// SessionReplay listener that owns `sessionChangedCallback`.
     public var samplingReevaluationCallback: ((String) -> Void)?
     public var hasRecording: Bool = false

@@ -63,12 +63,12 @@ public class CoralogixRum {
         self.sessionManager = sessionManager
         self.displayCoralogixWord()
         
-        // CX-40200: only short-circuit when the session is sampled out AND the user did not opt
-        // any instrumentation out of sampling. With excludeFromSampling non-empty, the SDK still
+        // Only short-circuit when the session is sampled out AND the user did not opt any
+        // instrumentation out of sampling. With excludeFromSampling non-empty, the SDK still
         // initializes so the listed event types can be emitted regardless of the sampling roll.
         let initialSampledIn = options.sdkSampler.shouldInitialized()
         guard initialSampledIn || !options.excludeFromSampling.isEmpty else {
-            Log.e("Initialization skipped due to sample rate.")
+            Log.e("Initialization skipped: session sampled out and no instrumentation opted into excludeFromSampling.")
             return
         }
 
@@ -99,19 +99,22 @@ public class CoralogixRum {
 
         self.setupCoreModules()
         self.setupExporter(sessionManager: sessionManager, options: options)
-        self.setupTracer(applicationName: options.application)
-        self.swizzle()
-        self.initializeEnabledInstrumentations(using: options)
-        self.createInitSpan()
 
-        // Seed the exporter with the first-session sampling decision, then re-roll on every
-        // session rotation so a long-running app gets a fresh probability per session.
+        // Seed the exporter and install the reroll callback immediately after the exporter
+        // exists, before swizzling or instrumentation init can drive a session rotation
+        // (e.g. a tap or foreground notification arriving mid-startup). Re-rolling on every
+        // rotation gives long-running apps a fresh probability per session.
         self.coralogixExporter?.updateSessionSampling(sampledIn: initialSampledIn)
         sessionManager.samplingReevaluationCallback = { [weak self] _ in
             self?.coralogixExporter?.updateSessionSampling(
                 sampledIn: options.sdkSampler.shouldInitialized()
             )
         }
+
+        self.setupTracer(applicationName: options.application)
+        self.swizzle()
+        self.initializeEnabledInstrumentations(using: options)
+        self.createInitSpan()
 
         CoralogixRum.isInitialized = true
     }

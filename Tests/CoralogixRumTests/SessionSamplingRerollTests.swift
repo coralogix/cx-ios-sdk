@@ -1,7 +1,7 @@
 //
 //  SessionSamplingRerollTests.swift
 //
-//  CX-40200 (T2) — verifies that:
+//  Verifies that:
 //   1. The init guard short-circuits ONLY when the session is sampled out AND no
 //      instrumentation is opted into `excludeFromSampling` (back-compat).
 //   2. The exporter's per-session sampling decision is seeded at init.
@@ -56,6 +56,17 @@ final class SessionSamplingRerollTests: XCTestCase {
         XCTAssertEqual(rum.coralogixExporter?.isCurrentSessionSampledIn(), true)
     }
 
+    // MARK: - Sampled-in + opt-in (overlap case): exclude must not interfere with normal init
+
+    func testInit_sampleRateOneHundred_excludeNonEmpty_initializesWithSampledInFlag() {
+        let rum = CoralogixRum(options: makeOptions(sampleRate: 100, exclude: [.errors]))
+        defer { rum.shutdown() }
+
+        XCTAssertTrue(rum.isInitialized,
+                      "Sampled-in init must proceed regardless of excludeFromSampling content.")
+        XCTAssertEqual(rum.coralogixExporter?.isCurrentSessionSampledIn(), true)
+    }
+
     // MARK: - Session rotation re-evaluates sampling
 
     func testInit_sessionRotation_keepsExporterFlagInSync() {
@@ -82,19 +93,19 @@ final class SessionSamplingRerollTests: XCTestCase {
             return XCTFail("SessionManager must exist after a successful init.")
         }
 
-        // CoralogixRum.startup installs samplingReevaluationCallback; we attach a sessionChangedCallback
-        // here to mimic what SessionReplayInstrumentation does. Both must fire on the next rotation.
-        let sessionChangedExp = expectation(description: "sessionChangedCallback fires")
-        sessionManager.sessionChangedCallback = { _ in sessionChangedExp.fulfill() }
-
         XCTAssertNotNil(sessionManager.samplingReevaluationCallback,
                         "CoralogixRum.startup must install samplingReevaluationCallback.")
 
+        // CoralogixRum.startup installs samplingReevaluationCallback; attach a sessionChangedCallback
+        // here to mimic what SessionReplayInstrumentation does. Callbacks fire synchronously inside
+        // setupSessionMetadata, so a Bool flag is enough — no async wait needed.
+        var sessionChangedFired = false
+        sessionManager.sessionChangedCallback = { _ in sessionChangedFired = true }
+
         sessionManager.setupSessionMetadata()
 
-        wait(for: [sessionChangedExp], timeout: 1.0)
-        // If samplingReevaluationCallback had been clobbered (or vice versa) the assertion above
-        // would have failed; reaching this point proves both run independently.
+        XCTAssertTrue(sessionChangedFired,
+                      "sessionChangedCallback must fire on rotation; if samplingReevaluationCallback had clobbered it, this would be false.")
     }
 
     // MARK: - Helpers

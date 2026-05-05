@@ -89,15 +89,19 @@ public class CoralogixExporter: SpanExporter {
     }
 
     /// Updates the per-session sampling decision. Called once at init and again on every session
-    /// rotation. The wired gating logic (drop non-excluded events when `sampledIn == false`) lands
-    /// in T3 (CX-40201); this T2 ticket only stores the decision.
-    public func updateSessionSampling(sampledIn: Bool) {
+    /// rotation. The gating logic that drops non-excluded events when `sampledIn == false` is
+    /// wired in `export()` separately; this method only stores the decision.
+    internal func updateSessionSampling(sampledIn: Bool) {
         samplingStateLock.lock()
-        defer { samplingStateLock.unlock() }
+        let changed = self.currentSessionSampledIn != sampledIn
         self.currentSessionSampledIn = sampledIn
+        samplingStateLock.unlock()
+        if changed {
+            Log.d("[SDK] sampling decision updated: sampledIn=\(sampledIn)")
+        }
     }
 
-    public func isCurrentSessionSampledIn() -> Bool {
+    internal func isCurrentSessionSampledIn() -> Bool {
         samplingStateLock.lock()
         defer { samplingStateLock.unlock() }
         return self.currentSessionSampledIn
