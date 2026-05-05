@@ -32,10 +32,11 @@ final class NetworkInstrumentationUITests: XCTestCase {
         
         // Enable test mode - saves validation data to temp file
         app.launchArguments = ["--uitesting"]
-        
+        app.launchEnvironment["CX_BATCH_SCHEDULE_DELAY_MS"] = "100"
+
         print("🚀 Launching app with --uitesting flag")
         print("   This enables SchemaValidationViewController to save validation data")
-        
+
         app.launch()
         
         // Clear previous validation data

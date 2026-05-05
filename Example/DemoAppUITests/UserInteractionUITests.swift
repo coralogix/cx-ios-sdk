@@ -64,6 +64,7 @@ final class UserInteractionUITests: XCTestCase {
         continueAfterFailure = false
         app = XCUIApplication()
         app.launchArguments = ["--uitesting"]
+        app.launchEnvironment["CX_BATCH_SCHEDULE_DELAY_MS"] = "100"
         clearValidationData()
         print("🟪 🚀 Launching app (CI=\(isCI))")
         app.launch()

@@ -161,7 +161,7 @@ public class CoralogixRum {
         
         let spanProcessor = BatchSpanProcessor(
             spanExporter: exporter,
-            scheduleDelay: Double(Global.BatchSpan.scheduleDelay.rawValue),
+            scheduleDelay: Global.effectiveBatchScheduleDelay(),
             maxExportBatchSize: Global.BatchSpan.maxExportBatchSize.rawValue
         )
         

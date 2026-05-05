@@ -25,7 +25,17 @@ public enum Global: String {
         case maxExportBatchSize = 50
         case scheduleDelay = 2
     }
-    
+
+    /// Effective batch schedule delay in seconds. UI/E2E tests can override via the
+    /// `CX_BATCH_SCHEDULE_DELAY_MS` env var to flush spans faster and shrink the test cycle.
+    public static func effectiveBatchScheduleDelay() -> TimeInterval {
+        if let raw = ProcessInfo.processInfo.environment["CX_BATCH_SCHEDULE_DELAY_MS"],
+           let ms = Double(raw), ms > 0 {
+            return ms / 1000.0
+        }
+        return TimeInterval(BatchSpan.scheduleDelay.rawValue)
+    }
+
     static let monitoredPaths: Set<String> = [
         Global.coralogixPath.rawValue,
         Global.sessionReplayPath.rawValue
