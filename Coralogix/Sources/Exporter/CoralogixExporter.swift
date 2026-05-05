@@ -124,10 +124,21 @@ public class CoralogixExporter: SpanExporter {
             Log.d("[SDK] Skipping export, session is idle")
             return .success
         }
-        
+
+        // Per-session sampling: when the current session is sampled out, only spans whose
+        // event_type is opted into options.excludeFromSampling proceed. Placed above URL/error
+        // filters and the tracesExporter callback so hybrid + external OTLP consumers inherit
+        // the same behavior.
+        var filterSpans = spans.filter { self.passesSessionSampling($0) }
+        if filterSpans.count != spans.count {
+            Log.d("[CoralogixExporter] export: \(spans.count) in, \(filterSpans.count) after sampling filter")
+        }
+        if filterSpans.isEmpty { return .success }
+
         // ignore Urls
-        var filterSpans = spans.filter { self.shouldRemoveSpan(span: $0) }
-        Log.d("[CoralogixExporter] export: \(spans.count) spans in, \(filterSpans.count) after URL filter")
+        let urlFilterInputCount = filterSpans.count
+        filterSpans = filterSpans.filter { self.shouldRemoveSpan(span: $0) }
+        Log.d("[CoralogixExporter] export: \(urlFilterInputCount) spans in, \(filterSpans.count) after URL filter")
         if filterSpans.isEmpty { return .failure }
 
         // ignore Error
@@ -234,28 +245,46 @@ public class CoralogixExporter: SpanExporter {
         return false
     }
     
+    /// Returns the string value of `key` on `span`, supporting both `AttributeValue` and raw
+    /// `String` encodings. Returns nil when the attribute is absent or stored as another type.
+    private func attributeStringValue(forKey key: String, span: SpanDataProtocol) -> String? {
+        let attributes = span.getAttributes()
+        if let attrValue = attributes?[key] as? AttributeValue {
+            return attrValue.description
+        }
+        if let rawString = attributes?[key] as? String {
+            return rawString
+        }
+        return nil
+    }
+
+    /// Returns `true` if the span should proceed past the per-session sampling filter.
+    /// When the session is sampled in, every span passes. When sampled out, only spans whose
+    /// `event_type` attribute matches an opt-in entry in `options.excludeFromSampling` pass.
+    /// Spans missing an `event_type` attribute are dropped on sampled-out sessions.
+    /// Internal (rather than private per the ticket) so unit tests can exercise it directly.
+    internal func passesSessionSampling(_ span: SpanDataProtocol) -> Bool {
+        if isCurrentSessionSampledIn() { return true }
+
+        guard let eventType = attributeStringValue(forKey: Keys.eventType.rawValue, span: span) else {
+            return false
+        }
+        return options.excludeFromSampling.contains { $0.eventType.rawValue == eventType }
+    }
+
     internal func shouldRemoveSpan(span: SpanDataProtocol) -> Bool {
         // if the closure returns true, the element stays in the result.
-        let attributes = span.getAttributes()
-        var urlString: String?
-        
-        if let attrValue = attributes?[SemanticAttributes.httpUrl.rawValue] as? AttributeValue {
-            urlString = attrValue.description  // Or attrValue.stringValue if available
-        } else if let rawString = attributes?[SemanticAttributes.httpUrl.rawValue] as? String {
-            urlString = rawString
-        }
-        
-        guard let url = urlString?.description else {
+        guard let url = attributeStringValue(forKey: SemanticAttributes.httpUrl.rawValue, span: span) else {
             return true
         }
-        
+
         if !Global.containsMonitoredPath(url) {
             if let ignoreUrlsOrRejexs = self.options.ignoreUrls,
                !ignoreUrlsOrRejexs.isEmpty,
                ignoreUrlsOrRejexs.contains(url) {
                 return false
             }
-            
+
             if let ignoreUrlsOrRejexs = self.options.ignoreUrls,
                !ignoreUrlsOrRejexs.isEmpty {
                 let isMatch = Global.isURLMatchesRegexPattern(string: url, regexs: ignoreUrlsOrRejexs)
@@ -265,19 +294,10 @@ public class CoralogixExporter: SpanExporter {
         }
         return false
     }
-    
+
     internal func shouldFilterIgnoreError(span: SpanDataProtocol) -> Bool {
         // if the closure returns true, the element stays in the result.
-        let attributes = span.getAttributes()
-        var message: String?
-
-        if let attrValue = attributes?[Keys.errorMessage.rawValue] as? AttributeValue {
-            message = attrValue.description
-        } else if let rawString = attributes?[Keys.errorMessage.rawValue] as? String {
-            message = rawString
-        }
-        
-        guard let message = message?.description else {
+        guard let message = attributeStringValue(forKey: Keys.errorMessage.rawValue, span: span) else {
             return true
         }
         
