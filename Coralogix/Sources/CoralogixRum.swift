@@ -63,12 +63,19 @@ public class CoralogixRum {
         self.sessionManager = sessionManager
         self.displayCoralogixWord()
         
-        guard options.sdkSampler.shouldInitialized() else {
-            Log.e("Initialization skipped due to sample rate.")
+        // Only short-circuit when the session is sampled out AND the user did not opt any
+        // instrumentation out of sampling. With excludeFromSampling non-empty, the SDK still
+        // initializes so the listed event types can be emitted regardless of the sampling roll.
+        let initialSampledIn = options.sdkSampler.shouldInitialized()
+        guard initialSampledIn || !options.excludeFromSampling.isEmpty else {
+            Log.e("Initialization skipped: session sampled out and no instrumentation opted into excludeFromSampling.")
+            // Drop the default-constructed SessionManager so its NotificationCenter observers
+            // unregister via deinit instead of staying live for the lifetime of the skipped RUM.
+            self.sessionManager = nil
             return
         }
-        
-        self.startup(options: options)
+
+        self.startup(options: options, initialSampledIn: initialSampledIn)
     }
     
     deinit {
@@ -85,20 +92,33 @@ public class CoralogixRum {
         NotificationCenter.default.removeObserver(self, name: UIApplication.didReceiveMemoryWarningNotification, object: nil)
     }
     
-    private func startup(options: CoralogixExporterOptions) {
+    private func startup(options: CoralogixExporterOptions, initialSampledIn: Bool) {
         guard let sessionManager = self.sessionManager else {
             Log.e("SessionManager is nil.")
             return
         }
         _ = UserAgentManager.shared.getUserAgent()
         Log.isDebug = options.debug
-        
+
         self.setupCoreModules()
         self.setupExporter(sessionManager: sessionManager, options: options)
+
+        // Seed the exporter and install the reroll callback immediately after the exporter
+        // exists, before swizzling or instrumentation init can drive a session rotation
+        // (e.g. a tap or foreground notification arriving mid-startup). Re-rolling on every
+        // rotation gives long-running apps a fresh probability per session.
+        self.coralogixExporter?.updateSessionSampling(sampledIn: initialSampledIn)
+        sessionManager.samplingReevaluationCallback = { [weak self] _ in
+            self?.coralogixExporter?.updateSessionSampling(
+                sampledIn: options.sdkSampler.shouldInitialized()
+            )
+        }
+
         self.setupTracer(applicationName: options.application)
         self.swizzle()
         self.initializeEnabledInstrumentations(using: options)
         self.createInitSpan()
+
         CoralogixRum.isInitialized = true
     }
     

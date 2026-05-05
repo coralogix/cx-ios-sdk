@@ -53,6 +53,11 @@ public class SessionManager {
     private let countersLock = NSLock()
     public var sessionChangedCallback: ((String) -> Void)?
     public var sessionEndedCallback: (() -> Void)?
+    /// Fired alongside `sessionChangedCallback` on every session rotation. Kept as a separate
+    /// property so the sampling-reroll path cannot accidentally clobber the existing
+    /// SessionReplay listener that owns `sessionChangedCallback`. Internal-only — host apps
+    /// have no use for setting this, and a public slot would invite accidental clobber.
+    internal var samplingReevaluationCallback: ((String) -> Void)?
     public var hasRecording: Bool = false
     
     public var lastSnapshotEventTime: Date?
@@ -171,6 +176,7 @@ public class SessionManager {
 
         if let sessionId = self.sessionMetadata?.sessionId {
             self.sessionChangedCallback?(sessionId)
+            self.samplingReevaluationCallback?(sessionId)
         }
     }
     
