@@ -69,6 +69,9 @@ public class CoralogixRum {
         let initialSampledIn = options.sdkSampler.shouldInitialized()
         guard initialSampledIn || !options.excludeFromSampling.isEmpty else {
             Log.e("Initialization skipped: session sampled out and no instrumentation opted into excludeFromSampling.")
+            // Drop the default-constructed SessionManager so its NotificationCenter observers
+            // unregister via deinit instead of staying live for the lifetime of the skipped RUM.
+            self.sessionManager = nil
             return
         }
 
