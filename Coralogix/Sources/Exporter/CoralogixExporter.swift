@@ -136,8 +136,9 @@ public class CoralogixExporter: SpanExporter {
         if filterSpans.isEmpty { return .success }
 
         // ignore Urls
+        let urlFilterInputCount = filterSpans.count
         filterSpans = filterSpans.filter { self.shouldRemoveSpan(span: $0) }
-        Log.d("[CoralogixExporter] export: \(spans.count) spans in, \(filterSpans.count) after URL filter")
+        Log.d("[CoralogixExporter] export: \(urlFilterInputCount) spans in, \(filterSpans.count) after URL filter")
         if filterSpans.isEmpty { return .failure }
 
         // ignore Error
@@ -244,6 +245,19 @@ public class CoralogixExporter: SpanExporter {
         return false
     }
     
+    /// Returns the string value of `key` on `span`, supporting both `AttributeValue` and raw
+    /// `String` encodings. Returns nil when the attribute is absent or stored as another type.
+    private func attributeStringValue(forKey key: String, span: SpanDataProtocol) -> String? {
+        let attributes = span.getAttributes()
+        if let attrValue = attributes?[key] as? AttributeValue {
+            return attrValue.description
+        }
+        if let rawString = attributes?[key] as? String {
+            return rawString
+        }
+        return nil
+    }
+
     /// Returns `true` if the span should proceed past the per-session sampling filter.
     /// When the session is sampled in, every span passes. When sampled out, only spans whose
     /// `event_type` attribute matches an opt-in entry in `options.excludeFromSampling` pass.
@@ -252,42 +266,25 @@ public class CoralogixExporter: SpanExporter {
     internal func passesSessionSampling(_ span: SpanDataProtocol) -> Bool {
         if isCurrentSessionSampledIn() { return true }
 
-        let attributes = span.getAttributes()
-        let eventTypeStr: String?
-        if let attrValue = attributes?[Keys.eventType.rawValue] as? AttributeValue {
-            eventTypeStr = attrValue.description
-        } else if let rawString = attributes?[Keys.eventType.rawValue] as? String {
-            eventTypeStr = rawString
-        } else {
-            eventTypeStr = nil
+        guard let eventType = attributeStringValue(forKey: Keys.eventType.rawValue, span: span) else {
+            return false
         }
-
-        guard let eventType = eventTypeStr else { return false }
         return options.excludeFromSampling.contains { $0.eventType.rawValue == eventType }
     }
 
     internal func shouldRemoveSpan(span: SpanDataProtocol) -> Bool {
         // if the closure returns true, the element stays in the result.
-        let attributes = span.getAttributes()
-        var urlString: String?
-        
-        if let attrValue = attributes?[SemanticAttributes.httpUrl.rawValue] as? AttributeValue {
-            urlString = attrValue.description  // Or attrValue.stringValue if available
-        } else if let rawString = attributes?[SemanticAttributes.httpUrl.rawValue] as? String {
-            urlString = rawString
-        }
-        
-        guard let url = urlString?.description else {
+        guard let url = attributeStringValue(forKey: SemanticAttributes.httpUrl.rawValue, span: span) else {
             return true
         }
-        
+
         if !Global.containsMonitoredPath(url) {
             if let ignoreUrlsOrRejexs = self.options.ignoreUrls,
                !ignoreUrlsOrRejexs.isEmpty,
                ignoreUrlsOrRejexs.contains(url) {
                 return false
             }
-            
+
             if let ignoreUrlsOrRejexs = self.options.ignoreUrls,
                !ignoreUrlsOrRejexs.isEmpty {
                 let isMatch = Global.isURLMatchesRegexPattern(string: url, regexs: ignoreUrlsOrRejexs)
@@ -297,19 +294,10 @@ public class CoralogixExporter: SpanExporter {
         }
         return false
     }
-    
+
     internal func shouldFilterIgnoreError(span: SpanDataProtocol) -> Bool {
         // if the closure returns true, the element stays in the result.
-        let attributes = span.getAttributes()
-        var message: String?
-
-        if let attrValue = attributes?[Keys.errorMessage.rawValue] as? AttributeValue {
-            message = attrValue.description
-        } else if let rawString = attributes?[Keys.errorMessage.rawValue] as? String {
-            message = rawString
-        }
-        
-        guard let message = message?.description else {
+        guard let message = attributeStringValue(forKey: Keys.errorMessage.rawValue, span: span) else {
             return true
         }
         
