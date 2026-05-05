@@ -38,44 +38,7 @@
 
 import XCTest
 
-final class UserInteractionUITests: XCTestCase {
-
-    private var app: XCUIApplication!
-
-    // MARK: - CI detection
-
-    private var isCI = false
-
-    private var elementTimeout: TimeInterval  { isCI ? 15.0 : 10.0 }
-    private var shortDelay: TimeInterval      { isCI ?  0.5 :  0.3 }
-    private var sdkFlushDelay: TimeInterval   { isCI ?  2.0 :  1.0 }
-    private var networkDelay: TimeInterval    { isCI ?  3.0 :  1.5 }
-
-    // MARK: - Setup / Teardown
-
-    override func setUpWithError() throws {
-        try super.setUpWithError()
-        let env = ProcessInfo.processInfo.environment
-        isCI = env["CI"] == "true" || env["GITHUB_ACTIONS"] == "true" || env["CONTINUOUS_INTEGRATION"] == "true"
-        continueAfterFailure = false
-        app = XCUIApplication()
-        app.launchArguments = ["--uitesting"]
-        app.launchEnvironment["CX_BATCH_SCHEDULE_DELAY_MS"] = "100"
-        clearValidationData()
-        print("🟦 🚀 Launching SwiftUI app (CI=\(isCI))")
-        app.launch()
-    }
-
-    override func tearDownWithError() throws {
-        app.terminate()
-        let stopped = XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "state == %d", XCUIApplication.State.notRunning.rawValue),
-            object: app
-        )
-        wait(for: [stopped], timeout: 5.0)
-        app = nil
-        try super.tearDownWithError()
-    }
+final class UserInteractionUITests: CoralogixUITestCase {
 
     // MARK: - Compound test (CI-friendly single-run)
 
@@ -314,10 +277,6 @@ final class UserInteractionUITests: XCTestCase {
     }
 
     // MARK: - Temp-file I/O
-
-    private func clearValidationData() {
-        try? FileManager.default.removeItem(atPath: "/tmp/coralogix_validation_response.json")
-    }
 
     private func readValidationData() -> [[String: Any]]? {
         let path = "/tmp/coralogix_validation_response.json"
