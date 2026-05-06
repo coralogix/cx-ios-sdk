@@ -497,12 +497,97 @@ final class UserInteractionUITests: CoralogixUITestCase {
         tapBackButton(failureMessage: "❌ Back button not found — cannot navigate back (wrong screen?)")
     }
 
+    private func navigateBackToMainMenu() {
+        print("🟪 🧭 Navigating to main menu…")
+        tapBackButton(failureMessage: "❌ Back button not found — cannot return to main menu (wrong screen?)")
+
+        let schemaCell = app.cells.containing(.staticText, identifier: "Schema validation").firstMatch
+        XCTAssertTrue(schemaCell.waitForExistence(timeout: elementTimeout),
+                      "❌ Did not return to main menu")
+        print("🟪 ✅ Back on main menu")
+    }
+
     /// Taps the first button in the navigation bar (the system back button) and waits `shortDelay`.
     private func tapBackButton(failureMessage: String) {
         let backButton = app.navigationBars.firstMatch.buttons.firstMatch
         XCTAssertTrue(backButton.waitForExistence(timeout: elementTimeout), failureMessage)
         backButton.tap()
         Thread.sleep(forTimeInterval: shortDelay)
+    }
+
+    private func navigateToSchemaValidation() {
+        print("🟪 🧭 Navigating to Schema validation…")
+        let schemaCell = app.cells.containing(.staticText, identifier: "Schema validation").firstMatch
+        XCTAssertTrue(schemaCell.waitForExistence(timeout: elementTimeout),
+                      "❌ 'Schema validation' cell not found")
+        schemaCell.tap()
+        Thread.sleep(forTimeInterval: shortDelay)
+
+        XCTAssertTrue(app.buttons["Validate Schema"].waitForExistence(timeout: elementTimeout),
+                      "❌ 'Validate Schema' button not found")
+        print("🟪 ✅ On Schema validation screen")
+    }
+
+    // MARK: - Flush & validate helpers
+
+    private func flushAndValidate() {
+        print("🟪 ⏳ Waiting \(sdkFlushDelay)s for SDK to flush events to backend…")
+        Thread.sleep(forTimeInterval: sdkFlushDelay)
+        navigateBackToMainMenu()
+        navigateToSchemaValidation()
+        validateSchemaWithRetry()
+    }
+
+    private func triggerValidation() {
+        print("🟪 🔍 Triggering schema validation…")
+        let validateButton = app.buttons["Validate Schema"]
+        XCTAssertTrue(validateButton.waitForExistence(timeout: elementTimeout),
+                      "❌ 'Validate Schema' button not found on schema validation screen")
+        XCTAssertTrue(validateButton.isEnabled, "❌ 'Validate Schema' button is disabled")
+        validateButton.tap()
+        Thread.sleep(forTimeInterval: networkDelay)
+        print("🟪 ✅ Validation request sent")
+    }
+
+    private func validateSchemaWithRetry(file: StaticString = #file, line: UInt = #line) {
+        let maxAttempts = isCI ? 3 : 2
+        for attempt in 1...maxAttempts {
+            print("🟪 🔁 Schema validation attempt \(attempt)/\(maxAttempts)")
+            triggerValidation()
+            if verifySchemaValidationPassed() {
+                return
+            }
+
+            let visibleLabels = app.staticTexts.allElementsBoundByIndex.map { $0.label }
+            let combined = visibleLabels.joined(separator: " | ")
+            let isRetryable = combined.contains("Network error:")
+                || combined.contains("Internet connection appears to be offline")
+                || combined.contains("timed out")
+                || combined.contains("could not connect")
+
+            if attempt < maxAttempts && isRetryable {
+                print("🟨 Schema validation hit transient network issue, retrying…")
+                Thread.sleep(forTimeInterval: networkDelay)
+                continue
+            }
+
+            XCTFail(
+                "Schema validation failed after \(attempt) attempt(s). Visible labels: [\(visibleLabels.joined(separator: ", "))]",
+                file: file,
+                line: line
+            )
+            return
+        }
+    }
+
+    private func verifySchemaValidationPassed() -> Bool {
+        print("🟪 🔍 Checking schema validation result…")
+        let successLabel = app.staticTexts["All logs are valid! ✅"]
+        if successLabel.waitForExistence(timeout: networkDelay) {
+            print("🟪 ✅ Schema validation passed!")
+            return true
+        }
+        return false
     }
 
     // MARK: - Temp-file I/O

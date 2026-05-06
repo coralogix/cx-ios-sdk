@@ -12,6 +12,8 @@ class CoralogixUITestCase: XCTestCase {
 
     var elementTimeout: TimeInterval { isCI ? 15.0 : 10.0 }
     var shortDelay: TimeInterval     { isCI ?  0.5 :  0.3 }
+    var sdkFlushDelay: TimeInterval  { isCI ?  2.0 :  1.0 }
+    var networkDelay: TimeInterval   { isCI ?  3.0 :  1.5 }
 
     override func setUpWithError() throws {
         try super.setUpWithError()
@@ -38,22 +40,5 @@ class CoralogixUITestCase: XCTestCase {
 
     func clearValidationData() {
         try? FileManager.default.removeItem(atPath: "/tmp/coralogix_validation_response.json")
-    }
-
-    /// Wait for the host app's `tracesExporter` callback to populate
-    /// `/tmp/coralogix_validation_response.json` with at least one log entry.
-    /// Replaces the old "navigate to Schema validation → tap Validate → wait
-    /// for backend round-trip" flow with a sub-second poll.
-    func flushAndValidate(timeout: TimeInterval? = nil) {
-        let path = "/tmp/coralogix_validation_response.json"
-        let predicate = NSPredicate { _, _ in
-            guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
-                  let arr = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
-                return false
-            }
-            return !arr.isEmpty
-        }
-        let exp = XCTNSPredicateExpectation(predicate: predicate, object: nil)
-        wait(for: [exp], timeout: timeout ?? (isCI ? 5.0 : 3.0))
     }
 }
