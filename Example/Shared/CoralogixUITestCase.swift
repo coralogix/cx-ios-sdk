@@ -40,4 +40,57 @@ class CoralogixUITestCase: XCTestCase {
     func clearValidationData() {
         try? FileManager.default.removeItem(atPath: "/tmp/coralogix_validation_response.json")
     }
+
+    // MARK: - Marshal-field span capture (Phase 2.2 v3)
+
+    /// Reads the host app's marshal text field and returns the captured
+    /// interaction events as flat dicts. Each event has the keys produced by
+    /// `InteractionContext.payload` — typically:
+    ///   - `event_name`: `"click" | "scroll" | "swipe"`
+    ///   - `scroll_direction`: `"up" | "down" | "left" | "right"` (when applicable)
+    ///   - `target_element`: resolveTargetName output or UIKit class name
+    ///   - `element_classes`: UIKit class name (always present)
+    ///   - `element_id`: accessibilityIdentifier (when set)
+    ///   - `target_element_inner_text`: captured text (when shouldSendText permits)
+    ///
+    /// Polls via `XCTNSPredicateExpectation` until the field's accessibility
+    /// value contains a non-empty JSON array, or `timeout` elapses. Returns
+    /// `nil` on timeout.
+    func marshaledInteractionEvents(timeout: TimeInterval? = nil) -> [[String: Any]]? {
+        let identifier = "coralogix.uitesting.marshal"
+        let field = app.textFields[identifier]
+        let predicate = NSPredicate { _, _ in
+            guard let value = field.value as? String,
+                  let data = value.data(using: .utf8),
+                  let arr = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]],
+                  !arr.isEmpty else { return false }
+            return true
+        }
+        let exp = XCTNSPredicateExpectation(predicate: predicate, object: nil)
+        let result = XCTWaiter().wait(for: [exp], timeout: timeout ?? (isCI ? 8.0 : 4.0))
+        guard result == .completed,
+              let value = field.value as? String,
+              let data = value.data(using: .utf8),
+              let events = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]]
+        else { return nil }
+        return events
+    }
+
+    /// Returns true when at least one marshaled event matches all the
+    /// supplied (non-nil) criteria. Mirrors `hasInteractionEvent` in the
+    /// individual test files but consumes the flat marshaled shape.
+    func hasMarshaledEvent(in events: [[String: Any]],
+                           eventName: String,
+                           direction: String? = nil,
+                           targetElement: String? = nil,
+                           elementId: String? = nil) -> Bool {
+        for event in events {
+            guard (event["event_name"] as? String) == eventName else { continue }
+            if let dir = direction, (event["scroll_direction"] as? String) != dir { continue }
+            if let te = targetElement, (event["target_element"] as? String) != te { continue }
+            if let eid = elementId, (event["element_id"] as? String) != eid { continue }
+            return true
+        }
+        return false
+    }
 }

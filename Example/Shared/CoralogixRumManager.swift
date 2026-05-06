@@ -66,6 +66,7 @@ final class CoralogixRumManager {
                                                                    collectReqPayload: true,
                                                                    collectResPayload: true)
                                                ],
+                                               tracesExporter: MarshalSpanCapture.shared.makeTracesExporter(),
                                                shouldSendText: { view, text in
             // Return false to suppress text capture for a specific view.
             return view.accessibilityIdentifier != "sensitiveLabel"
@@ -99,5 +100,115 @@ final class CoralogixRumManager {
         _sdk?.shutdown()
         _sdk = CoralogixRum(options: options)
         print("SDK reinitialized:\(_sdk?.isInitialized.description ?? "not initialized")")
+    }
+}
+
+// MARK: - UI test marshal-field span capture (Phase 2.2 v3)
+
+/// Captures interaction events for UI tests by serializing them into a hidden
+/// `UITextField`'s `accessibilityValue`. UI tests read the field via XCUI:
+///
+///     app.textFields["coralogix.uitesting.marshal"].value as? String
+///
+/// Active only when the host app is launched with `--uitesting`. Production
+/// behaviour is unchanged.
+///
+/// Why a marshal text field and not HTTP/file IPC: the iOS Simulator
+/// sandboxes `/tmp/` per-process and `NWListener`-based localhost adds
+/// non-trivial infrastructure. The accessibility tree crosses process
+/// boundaries natively, so the test runner can read this field without any
+/// IPC plumbing — pattern borrowed from `sentry-cocoa`'s
+/// `UITestHelpers.marshalJSONDictionaryFromApp(...)`.
+final class MarshalSpanCapture {
+    static let shared = MarshalSpanCapture()
+    static let fieldIdentifier = "coralogix.uitesting.marshal"
+
+    private let lock = NSLock()
+    private var events: [[String: Any]] = []
+    private weak var marshalField: UITextField?
+
+    private init() {}
+
+    /// Returns a `tracesExporter` callback when running under `--uitesting`,
+    /// otherwise `nil`.
+    func makeTracesExporter() -> TracesExporterCallback? {
+        guard ProcessInfo.processInfo.arguments.contains("--uitesting") else { return nil }
+        return { [weak self] data in
+            self?.handle(data)
+        }
+    }
+
+    private func handle(_ data: CoralogixTraceExporterData) {
+        let newEvents = Self.extractInteractionEvents(from: data)
+        guard !newEvents.isEmpty else { return }
+
+        lock.lock()
+        events.append(contentsOf: newEvents)
+        let snapshot = events
+        lock.unlock()
+
+        DispatchQueue.main.async { [weak self] in
+            self?.publish(snapshot)
+        }
+    }
+
+    private func publish(_ events: [[String: Any]]) {
+        guard let json = try? JSONSerialization.data(withJSONObject: events),
+              let str = String(data: json, encoding: .utf8) else { return }
+
+        let field = ensureMarshalField()
+        field?.accessibilityValue = str
+    }
+
+    private func ensureMarshalField() -> UITextField? {
+        if let field = marshalField, field.window != nil { return field }
+        guard let window = Self.activeWindow() else { return nil }
+
+        let field = UITextField(frame: .zero)
+        field.accessibilityIdentifier = Self.fieldIdentifier
+        field.alpha = 0.01           // effectively invisible but still in the accessibility tree
+        field.isUserInteractionEnabled = false
+        field.isAccessibilityElement = true
+        window.addSubview(field)
+        marshalField = field
+        return field
+    }
+
+    private static func activeWindow() -> UIWindow? {
+        let windows = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap { $0.windows }
+        return windows.first(where: { $0.isKeyWindow }) ?? windows.first
+    }
+
+    /// Walks the OTLP batch JSON and pulls out interaction events. The SDK
+    /// packs each interaction's fields into a single `tapObject` attribute
+    /// whose value is a JSON-encoded string (per
+    /// `Coralogix/Sources/Model/Contexts/InteractionContext.swift`). We
+    /// decode that string here so test assertions can match on flat keys
+    /// like `event_name`, `scroll_direction`, `target_element`.
+    private static func extractInteractionEvents(from data: CoralogixTraceExporterData) -> [[String: Any]] {
+        guard let jsonData = data.jsonData,
+              let root = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any],
+              let resourceSpans = root["resourceSpans"] as? [[String: Any]] else { return [] }
+
+        var result: [[String: Any]] = []
+        for rs in resourceSpans {
+            guard let scopeSpans = rs["scopeSpans"] as? [[String: Any]] else { continue }
+            for ss in scopeSpans {
+                guard let spans = ss["spans"] as? [[String: Any]] else { continue }
+                for span in spans {
+                    guard let attrs = span["attributes"] as? [[String: Any]] else { continue }
+                    guard let tapObjAttr = attrs.first(where: { ($0["key"] as? String) == "tapObject" }),
+                          let valueObj = tapObjAttr["value"] as? [String: Any],
+                          let jsonString = valueObj["stringValue"] as? String,
+                          let stringData = jsonString.data(using: .utf8),
+                          let dict = try? JSONSerialization.jsonObject(with: stringData) as? [String: Any]
+                    else { continue }
+                    result.append(dict)
+                }
+            }
+        }
+        return result
     }
 }
