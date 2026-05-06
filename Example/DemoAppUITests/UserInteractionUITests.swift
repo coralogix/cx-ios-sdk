@@ -128,24 +128,26 @@ final class UserInteractionUITests: CoralogixUITestCase {
         slowSwipe(on: pageScrollView, direction: .right)
         Thread.sleep(forTimeInterval: shortDelay)
 
-        // ── Phase 3: Pull captured spans from the host app's marshal text
-        //            field (Phase 2.2 v3) instead of round-tripping through
-        //            the schema-validator backend. Skips ~25s of UI nav +
-        //            onrender.com latency per test.
-        guard let events = marshaledInteractionEvents() else {
-            XCTFail("❌ No interaction events captured via marshal field within timeout")
+        // ── Phase 3: Navigate back, flush + validate ──
+        navigateBack()
+        flushAndValidate()
+
+        // ── Phase 4: Verify events in backend response ──
+        guard let data = readValidationData() else {
+            handleMissingValidationData()
             return
         }
-        print("🟪 📊 Read \(events.count) interaction events from marshal field")
 
-        let foundLeft  = hasMarshaledEvent(in: events, eventName: "swipe", direction: "left")
-        let foundRight = hasMarshaledEvent(in: events, eventName: "swipe", direction: "right")
+        printInteractionEventsSummary(data)
+
+        let foundLeft  = hasInteractionEvent(in: data, eventName: "swipe", direction: "left")
+        let foundRight = hasInteractionEvent(in: data, eventName: "swipe", direction: "right")
 
         XCTAssertTrue(foundLeft,  "❌ Expected a 'swipe' event with direction 'left'")
         XCTAssertTrue(foundRight, "❌ Expected a 'swipe' event with direction 'right'")
 
         if foundLeft && foundRight {
-            print("🟪 ✅ Both swipe directions (left, right) confirmed via marshal-field capture!")
+            print("🟪 ✅ Both swipe directions (left, right) confirmed in backend!")
         }
     }
 
