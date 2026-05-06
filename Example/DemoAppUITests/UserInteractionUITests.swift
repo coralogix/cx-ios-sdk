@@ -128,12 +128,13 @@ final class UserInteractionUITests: CoralogixUITestCase {
         slowSwipe(on: pageScrollView, direction: .right)
         Thread.sleep(forTimeInterval: shortDelay)
 
-        // ── Phase 3: Pull captured spans from the host app's localhost
-        //            endpoint instead of round-tripping through the schema
-        //            validator. This skips ~13s of UI navigation +
-        //            onrender.com latency per test.
-        guard let data = inProcessLogEntries() else {
-            XCTFail("❌ No spans captured via localhost endpoint within timeout")
+        // ── Phase 3: Navigate back, flush + validate ──
+        navigateBack()
+        flushAndValidate()
+
+        // ── Phase 4: Verify events in backend response ──
+        guard let data = readValidationData() else {
+            handleMissingValidationData()
             return
         }
 
@@ -146,7 +147,7 @@ final class UserInteractionUITests: CoralogixUITestCase {
         XCTAssertTrue(foundRight, "❌ Expected a 'swipe' event with direction 'right'")
 
         if foundLeft && foundRight {
-            print("🟪 ✅ Both swipe directions (left, right) confirmed in localhost capture!")
+            print("🟪 ✅ Both swipe directions (left, right) confirmed in backend!")
         }
     }
 
