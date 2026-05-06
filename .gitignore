@@ -18,6 +18,9 @@ Example/envs.swift
 # Ignore tech debt documentation
 tech-debt/
 
+# Claude Code internal state (per-machine, not for the repo)
+.claude/
+
 # Jira MCP local install (not part of iOS SDK; keep local only)
 package/
 
