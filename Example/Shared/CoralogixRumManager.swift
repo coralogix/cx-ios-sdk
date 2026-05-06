@@ -131,8 +131,18 @@ final class MarshalSpanCapture {
 
     /// Returns a `tracesExporter` callback when running under `--uitesting`,
     /// otherwise `nil`.
+    ///
+    /// Disabled for the SwiftUI demo app: injecting a `UITextField` subview
+    /// into `UIHostingController.view` and mutating its `accessibilityValue`
+    /// every batch triggered SwiftUI layout invalidation cycles that
+    /// saturated the main thread, leaving the app un-terminable at test
+    /// teardown (`Failed to terminate com.coralogix.DemoAppSwiftUI` in
+    /// run 25440150722). Phase 2 migrations only target UIKit tests, so
+    /// the SwiftUI app keeps the existing schema-validator path until we
+    /// design a SwiftUI-safe transport.
     func makeTracesExporter() -> TracesExporterCallback? {
         guard ProcessInfo.processInfo.arguments.contains("--uitesting") else { return nil }
+        if Bundle.main.bundleIdentifier?.contains("SwiftUI") == true { return nil }
         return { [weak self] data in
             self?.handle(data)
         }
