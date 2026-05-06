@@ -140,22 +140,27 @@ jobs:
           OUT=$(xcodebuild -showdestinations -workspace DemoApp.xcworkspace -scheme DemoAppSwift)
           echo "$OUT"
 
-          # Prefer iPhone 16 or newer with iOS 18.0+ (we override deployment target in CI)
-          LINE=$(echo "$OUT" | grep -E "platform:iOS Simulator, id:.*name:iPhone (1[6-9]|[2-9][0-9])" | grep -E "OS:1[89]\.[0-9]" | head -1 || true)
-          
-          # If not found, try any iPhone with iOS 18.0+
+          # Xcode 16.4 (macos-15) emits `platform:iOS Simulator, arch:arm64, id:...`
+          # whereas 16.2 emitted `platform:iOS Simulator, id:...` directly. Use
+          # `.*id:` so the regex tolerates intervening fields either way.
+          SIM_PREFIX="platform:iOS Simulator,.*id:"
+
+          # Prefer iPhone 16 or newer with iOS 18.x (we override deployment target in CI)
+          LINE=$(echo "$OUT" | grep -E "${SIM_PREFIX}.*name:iPhone (1[6-9]|[2-9][0-9])" | grep -E "OS:1[89]\.[0-9]" | head -1 || true)
+
+          # If not found, try any iPhone with iOS 18.x
           if [ -z "$LINE" ]; then
-            LINE=$(echo "$OUT" | grep -E "platform:iOS Simulator, id:.*name:iPhone" | grep -E "OS:1[89]\.[0-9]" | head -1 || true)
+            LINE=$(echo "$OUT" | grep -E "${SIM_PREFIX}.*name:iPhone" | grep -E "OS:1[89]\.[0-9]" | head -1 || true)
           fi
-          
-          # If still not found, try any iPhone with iOS 17.0+ (fallback)
+
+          # If still not found, accept iOS 17.x or the newer 26.x runtimes
           if [ -z "$LINE" ]; then
-            LINE=$(echo "$OUT" | grep -E "platform:iOS Simulator, id:.*name:iPhone" | grep -E "OS:1[7-9]\.[0-9]" | head -1 || true)
+            LINE=$(echo "$OUT" | grep -E "${SIM_PREFIX}.*name:iPhone" | grep -E "OS:(1[7-9]|2[6-9])\." | head -1 || true)
           fi
-          
+
           # Last resort: any iPhone simulator
           if [ -z "$LINE" ]; then
-            LINE=$(echo "$OUT" | grep -E "platform:iOS Simulator, id:.*name:iPhone" | head -1 || true)
+            LINE=$(echo "$OUT" | grep -E "${SIM_PREFIX}.*name:iPhone" | head -1 || true)
           fi
           
           if [ -z "$LINE" ]; then
@@ -230,6 +235,14 @@ jobs:
           echo "✅ Created placeholder GoogleService-Info.plist (app will skip Firebase init)"
           ls -la GoogleService-Info.plist
 
+      - name: Cache Swift Packages
+        uses: actions/cache@v4
+        with:
+          path: DerivedData/SourcePackages
+          key: ${{ runner.os }}-spm-${{ hashFiles('**/Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-spm-
+
       - name: Build for testing
         run: |
           set -uo pipefail
@@ -291,13 +304,18 @@ jobs:
           set +e
           TEST_START=$(date +%s)
 
+          # Phase 1.2 — parallelise across the two UI test bundles (UIKit +
+          # SwiftUI). Re-enabled on macos-15-arm64; the previous attempt on
+          # macos-14 timed out at 30m due to runner memory pressure when
+          # cloning a second simulator.
           xcodebuild test-without-building \
             $BUILD_TYPE "$BUILD_PATH_RELATIVE" \
             -scheme "$SCHEME" \
             -destination "$DESTINATION_SPEC" \
             -derivedDataPath ../DerivedData \
             -resultBundlePath ../DerivedData/TestResults.xcresult \
-            -parallel-testing-enabled NO \
+            -parallel-testing-enabled YES \
+            -maximum-concurrent-test-simulator-destinations 2 \
             2>&1 | tee ../test-output.log | xcpretty
 
           EXIT_CODE=${PIPESTATUS[0]}
