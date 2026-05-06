@@ -12,7 +12,7 @@ class CoralogixUITestCase: XCTestCase {
 
     var elementTimeout: TimeInterval { isCI ? 15.0 : 10.0 }
     var shortDelay: TimeInterval     { isCI ?  0.5 :  0.3 }
-    var sdkFlushDelay: TimeInterval  { isCI ?  2.0 :  1.0 }
+    var sdkFlushDelay: TimeInterval  { isCI ?  5.0 :  1.0 }
     var networkDelay: TimeInterval   { isCI ?  3.0 :  1.5 }
 
     override func setUpWithError() throws {
