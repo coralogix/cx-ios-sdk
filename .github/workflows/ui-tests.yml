@@ -222,14 +222,6 @@ jobs:
           echo "✅ Created placeholder GoogleService-Info.plist (app will skip Firebase init)"
           ls -la GoogleService-Info.plist
 
-      - name: Cache Swift Packages
-        uses: actions/cache@v4
-        with:
-          path: DerivedData/SourcePackages
-          key: ${{ runner.os }}-spm-${{ hashFiles('**/Package.resolved') }}
-          restore-keys: |
-            ${{ runner.os }}-spm-
-
       - name: Build for testing
         run: |
           set -uo pipefail
