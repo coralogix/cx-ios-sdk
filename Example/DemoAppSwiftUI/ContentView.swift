@@ -73,6 +73,12 @@ struct ContentView: View {
                 subtitle: "Test OTLP trace export callback",
                 icon: "arrow.up.doc",
                 destination: AnyView(TracesExporterView())
+            ),
+            MenuItem(
+                title: "Log Sampling Decoupling",
+                subtitle: "Pick rate + exclude set, fire events, watch what survives",
+                icon: "slider.horizontal.3",
+                destination: AnyView(LogSamplingDecouplingView())
             )
         ]
     }

@@ -73,6 +73,12 @@ final class MainViewController: UITableViewController {
             subtitle: "Test OTLP trace export callback",
             systemImageName: "arrow.up.doc",
             key: .tracesExporter
+        ),
+        .init(
+            title: "Log Sampling Decoupling",
+            subtitle: "Pick rate + exclude set, fire events, watch what survives",
+            systemImageName: "slider.horizontal.3",
+            key: .logSamplingDecoupling
         )
     ]
 
@@ -265,6 +271,8 @@ final class MainViewController: UITableViewController {
             vc = MaskViewController()
         case .tracesExporter:
             vc = TracesExporterViewController()
+        case .logSamplingDecoupling:
+            vc = LogSamplingDecouplingViewController()
         default:
             showToast("Not implemented for this menu item")
             return
