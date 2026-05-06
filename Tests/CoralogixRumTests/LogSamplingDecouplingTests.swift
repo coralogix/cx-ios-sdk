@@ -168,6 +168,8 @@ final class LogSamplingDecouplingTests: XCTestCase {
         }
 
         // Export queue: pushes 1 log span (excluded ⇒ should always pass) per iteration.
+        // Span is built once and reused; export() dedups by spanId *within a single call*,
+        // not across calls, so the duplicate spanId here is harmless.
         group.enter()
         DispatchQueue.global(qos: .userInitiated).async {
             let span = self.makeSpan(eventType: .log)

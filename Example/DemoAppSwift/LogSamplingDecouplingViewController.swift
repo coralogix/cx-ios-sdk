@@ -61,6 +61,9 @@ final class LogSamplingDecouplingViewController: UIViewController {
     private lazy var sendCustomSpanButton: UIButton = makeButton("Send Custom Span",
                                                                   icon: "point.3.connected.trianglepath.dotted",
                                                                   action: #selector(didTapSendCustomSpan))
+    private lazy var sendCustomMeasurementButton: UIButton = makeButton("Send Custom Measurement",
+                                                                         icon: "ruler",
+                                                                         action: #selector(didTapSendCustomMeasurement))
     private lazy var clearButton: UIButton = makeButton("Clear captured",
                                                         icon: "trash",
                                                         action: #selector(didTapClear))
@@ -121,6 +124,13 @@ final class LogSamplingDecouplingViewController: UIViewController {
         contentStack.addArrangedSubview(statusLabel)
         contentStack.addArrangedSubview(applyButton)
 
+        let applyNote = UILabel()
+        applyNote.text = "Apply rebuilds the SDK on EU2 with all instrumentations on; overrides the initial CoralogixRumManager config."
+        applyNote.font = .preferredFont(forTextStyle: .caption2)
+        applyNote.textColor = .tertiaryLabel
+        applyNote.numberOfLines = 0
+        contentStack.addArrangedSubview(applyNote)
+
         contentStack.addArrangedSubview(makeSectionHeader("Applied config"))
         appliedConfigLabel.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
         appliedConfigLabel.textColor = .secondaryLabel
@@ -138,6 +148,7 @@ final class LogSamplingDecouplingViewController: UIViewController {
         triggers2.distribution = .fillEqually
         contentStack.addArrangedSubview(triggers)
         contentStack.addArrangedSubview(triggers2)
+        contentStack.addArrangedSubview(sendCustomMeasurementButton)
 
         contentStack.addArrangedSubview(makeSectionHeader("Captured (tracesExporter)"))
         contentStack.addArrangedSubview(clearButton)
@@ -211,7 +222,7 @@ final class LogSamplingDecouplingViewController: UIViewController {
                     for scopeSpan in resourceSpan.scopeSpans {
                         for span in scopeSpan.spans {
                             rows.append(CapturedSpan(
-                                eventType: Self.eventType(in: span) ?? "(no event_type)",
+                                eventType: span.eventType ?? "(no event_type)",
                                 name: span.name,
                                 receivedAt: now
                             ))
@@ -265,18 +276,17 @@ final class LogSamplingDecouplingViewController: UIViewController {
         showToast("Custom span emitted")
     }
 
+    @objc private func didTapSendCustomMeasurement() {
+        CoralogixRumManager.shared.sdk.sendCustomMeasurement(name: "sampling-demo.measurement", value: 42.0)
+        showToast("sendCustomMeasurement() called")
+    }
+
     @objc private func didTapClear() {
         Self.captured.removeAll()
         capturedTable.reloadData()
     }
 
     // MARK: - Helpers
-
-    private static func eventType(in span: OtlpSpan) -> String? {
-        guard let kv = span.attributes.first(where: { $0.key == CoralogixInternal.Keys.eventType.rawValue }) else { return nil }
-        if case .stringValue(let value) = kv.value { return value }
-        return nil
-    }
 
     private func updateStatusLabel() {
         let rate = Self.currentSampleRate
@@ -309,7 +319,7 @@ final class LogSamplingDecouplingViewController: UIViewController {
 
     private func updateButtonsEnabled() {
         let on = Self.isApplied
-        for btn in [sendLogButton, sendErrorButton, sendNetworkButton, sendCustomSpanButton] {
+        for btn in [sendLogButton, sendErrorButton, sendNetworkButton, sendCustomSpanButton, sendCustomMeasurementButton] {
             btn.isEnabled = on
             btn.alpha = on ? 1 : 0.4
         }
@@ -322,7 +332,7 @@ final class LogSamplingDecouplingViewController: UIViewController {
 
     // MARK: - View builders
 
-    private func makeSectionHeader(_ title: String) -> UILabel {
+    private func makeSectionHeader(_ title: String) -> UIView {
         let l = UILabel()
         l.text = title
         l.font = .preferredFont(forTextStyle: .headline)
@@ -351,6 +361,8 @@ final class LogSamplingDecouplingViewController: UIViewController {
         btn.setTitle(" " + title, for: .normal)
         btn.setImage(UIImage(systemName: icon), for: .normal)
         btn.titleLabel?.font = .preferredFont(forTextStyle: .body)
+        // contentEdgeInsets is deprecated in iOS 15 (replaced by UIButton.Configuration),
+        // but the demo app's deployment target is iOS 13 so the modern API isn't available.
         btn.contentEdgeInsets = UIEdgeInsets(top: 10, left: 12, bottom: 10, right: 12)
         btn.backgroundColor = UIColor.systemBlue.withAlphaComponent(0.12)
         btn.layer.cornerRadius = 10

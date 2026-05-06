@@ -45,13 +45,12 @@ struct LogSamplingDecouplingView: View {
     var body: some View {
         Form {
             Section("sessionSampleRate") {
-                Picker("Sample rate", selection: $sampleRate) {
+                Picker("Sample rate", selection: sampleRateBinding) {
                     Text("0%").tag(0)
                     Text("50%").tag(50)
                     Text("100%").tag(100)
                 }
                 .pickerStyle(.segmented)
-                .onChange(of: sampleRate) { LogSamplingState.sampleRate = $0 }
             }
 
             Section("excludeFromSampling") {
@@ -68,6 +67,9 @@ struct LogSamplingDecouplingView: View {
                 } label: {
                     Label("Apply (reinit SDK)", systemImage: "arrow.clockwise.circle")
                 }
+                Text("Apply rebuilds the SDK on EU2 with all instrumentations on; overrides the initial CoralogixRumManager config.")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
             }
 
             Section("Applied config") {
@@ -87,6 +89,7 @@ struct LogSamplingDecouplingView: View {
                 Button { triggerError() } label: { Label("Send Error", systemImage: "exclamationmark.triangle") }
                 Button { triggerNetwork() } label: { Label("Send Network", systemImage: "network") }
                 Button { triggerCustomSpan() } label: { Label("Send Custom Span", systemImage: "point.3.connected.trianglepath.dotted") }
+                Button { triggerCustomMeasurement() } label: { Label("Send Custom Measurement", systemImage: "ruler") }
             }
             .disabled(!isApplied)
 
@@ -155,6 +158,16 @@ struct LogSamplingDecouplingView: View {
         "isInitialized=\(CoralogixRumManager.shared.sdk.isInitialized)"
     }
 
+    private var sampleRateBinding: Binding<Int> {
+        Binding(
+            get: { sampleRate },
+            set: { newValue in
+                sampleRate = newValue
+                LogSamplingState.sampleRate = newValue
+            }
+        )
+    }
+
     private func bindingForExclude(_ excludable: ExcludableInstrumentation) -> Binding<Bool> {
         Binding(
             get: { exclude.contains(excludable) },
@@ -197,7 +210,7 @@ struct LogSamplingDecouplingView: View {
                     for scopeSpan in resourceSpan.scopeSpans {
                         for span in scopeSpan.spans {
                             rows.append(CapturedSpan(
-                                eventType: eventType(in: span) ?? "(no event_type)",
+                                eventType: span.eventType ?? "(no event_type)",
                                 name: span.name,
                                 receivedAt: now
                             ))
@@ -252,16 +265,15 @@ struct LogSamplingDecouplingView: View {
         toastMessage = "Custom span emitted"
     }
 
+    private func triggerCustomMeasurement() {
+        CoralogixRumManager.shared.sdk.sendCustomMeasurement(name: "sampling-demo.measurement", value: 42.0)
+        toastMessage = "sendCustomMeasurement() called"
+    }
+
     // MARK: - Helpers
 
     private func formatExclude(_ set: Set<ExcludableInstrumentation>) -> String {
         if set.isEmpty { return "[]" }
         return "[" + set.map { ".\($0.rawValue)" }.sorted().joined(separator: ", ") + "]"
     }
-}
-
-private func eventType(in span: OtlpSpan) -> String? {
-    guard let kv = span.attributes.first(where: { $0.key == CoralogixInternal.Keys.eventType.rawValue }) else { return nil }
-    if case .stringValue(let value) = kv.value { return value }
-    return nil
 }
