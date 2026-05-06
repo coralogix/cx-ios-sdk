@@ -13,7 +13,7 @@ on:
 jobs:
   ui-tests:
     name: Run DemoApp UI Tests
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 30
     permissions:
       contents: read
@@ -26,7 +26,15 @@ jobs:
 
       - name: Select Xcode (via DEVELOPER_DIR)
         run: |
-          if [ -d "/Applications/Xcode_16.2.app" ]; then
+          # Prefer Xcode 16.4 (default on macos-15) — Xcode 16.2 swiftc has
+          # been failing to compile firebase-ios-sdk's Package.swift under
+          # `-swift-version 6` since early May 2026 (manifest resolution
+          # error). 16.3/16.2/16.1/16.0 kept as fallbacks.
+          if [ -d "/Applications/Xcode_16.4.app" ]; then
+            echo "DEVELOPER_DIR=/Applications/Xcode_16.4.app/Contents/Developer" >> $GITHUB_ENV
+          elif [ -d "/Applications/Xcode_16.3.app" ]; then
+            echo "DEVELOPER_DIR=/Applications/Xcode_16.3.app/Contents/Developer" >> $GITHUB_ENV
+          elif [ -d "/Applications/Xcode_16.2.app" ]; then
             echo "DEVELOPER_DIR=/Applications/Xcode_16.2.app/Contents/Developer" >> $GITHUB_ENV
           elif [ -d "/Applications/Xcode_16.1.app" ]; then
             echo "DEVELOPER_DIR=/Applications/Xcode_16.1.app/Contents/Developer" >> $GITHUB_ENV
