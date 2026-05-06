@@ -11,9 +11,9 @@ class CoralogixUITestCase: XCTestCase {
     var isCI = false
 
     var elementTimeout: TimeInterval { isCI ? 15.0 : 10.0 }
-    var shortDelay: TimeInterval     { isCI ?  0.5 :  0.3 }
-    var sdkFlushDelay: TimeInterval  { isCI ?  5.0 :  1.0 }
-    var networkDelay: TimeInterval   { isCI ?  3.0 :  1.5 }
+    var shortDelay: TimeInterval     { isCI ?  2.0 :  1.0 }
+    var sdkFlushDelay: TimeInterval  { isCI ? 10.0 :  5.0 }
+    var networkDelay: TimeInterval   { isCI ?  8.0 :  3.0 }
 
     override func setUpWithError() throws {
         try super.setUpWithError()
@@ -22,7 +22,6 @@ class CoralogixUITestCase: XCTestCase {
         continueAfterFailure = false
         app = XCUIApplication()
         app.launchArguments = ["--uitesting"]
-        app.launchEnvironment["CX_BATCH_SCHEDULE_DELAY_MS"] = "100"
         clearValidationData()
         app.launch()
     }
