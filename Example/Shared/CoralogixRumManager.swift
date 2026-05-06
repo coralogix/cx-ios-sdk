@@ -164,14 +164,16 @@ final class MarshalSpanCapture {
         if let field = marshalField, field.window != nil { return field }
         guard let host = Self.hostView() else { return nil }
 
-        // 1pt off-screen so the field never paints. The earlier attempt
-        // attached this directly to the keyWindow, which polluted the
-        // window-level accessibility tree and broke `app.staticTexts`
-        // traversal in `testSchemaValidationFlow`. Attaching to the
-        // top-most presented view controller's view scopes the field
-        // to the same level as ordinary app content.
-        let field = UITextField(frame: CGRect(x: -1, y: -1, width: 1, height: 1))
+        // 1×1 at origin (NOT off-screen): iOS's accessibility tree typically
+        // prunes views whose frame is fully outside the parent's bounds, which
+        // makes XCUI's snapshot exclude them entirely. On-screen + alpha 0.01
+        // is what `sentry-cocoa`'s marshal field uses for the same reason.
+        // The earlier keyWindow placement broke `testSchemaValidationFlow`'s
+        // staticTexts traversal — scoping to the top-most VC's view fixes
+        // that without sacrificing reachability.
+        let field = UITextField(frame: CGRect(x: 0, y: 0, width: 1, height: 1))
         field.accessibilityIdentifier = Self.fieldIdentifier
+        field.isAccessibilityElement = true
         field.alpha = 0.01
         field.isUserInteractionEnabled = false
         host.addSubview(field)

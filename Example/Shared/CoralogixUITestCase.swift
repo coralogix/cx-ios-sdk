@@ -53,27 +53,32 @@ class CoralogixUITestCase: XCTestCase {
     ///   - `element_id`: accessibilityIdentifier (when set)
     ///   - `target_element_inner_text`: captured text (when shouldSendText permits)
     ///
-    /// Polls via `XCTNSPredicateExpectation` until the field's accessibility
-    /// value contains a non-empty JSON array, or `timeout` elapses. Returns
-    /// `nil` on timeout.
+    /// Polls the marshal field every 0.25s until it contains a non-empty
+    /// JSON array, or `timeout` elapses. Returns `nil` on timeout.
+    ///
+    /// Manual polling instead of `XCTNSPredicateExpectation` because the
+    /// expectation's predicate evaluates `field.value as? String`, and
+    /// `XCUIElement.value` *raises* "no matching snapshot" rather than
+    /// returning nil before the host app has installed the field. Checking
+    /// `field.exists` first sidesteps the throw.
     func marshaledInteractionEvents(timeout: TimeInterval? = nil) -> [[String: Any]]? {
         let identifier = "coralogix.uitesting.marshal"
+        let totalTimeout = timeout ?? (isCI ? 8.0 : 4.0)
+        let deadline = Date().addingTimeInterval(totalTimeout)
         let field = app.textFields[identifier]
-        let predicate = NSPredicate { _, _ in
-            guard let value = field.value as? String,
-                  let data = value.data(using: .utf8),
-                  let arr = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]],
-                  !arr.isEmpty else { return false }
-            return true
+
+        while Date() < deadline {
+            if field.exists,
+               let value = field.value as? String,
+               !value.isEmpty,
+               let data = value.data(using: .utf8),
+               let events = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]],
+               !events.isEmpty {
+                return events
+            }
+            Thread.sleep(forTimeInterval: 0.25)
         }
-        let exp = XCTNSPredicateExpectation(predicate: predicate, object: nil)
-        let result = XCTWaiter().wait(for: [exp], timeout: timeout ?? (isCI ? 8.0 : 4.0))
-        guard result == .completed,
-              let value = field.value as? String,
-              let data = value.data(using: .utf8),
-              let events = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]]
-        else { return nil }
-        return events
+        return nil
     }
 
     /// Returns true when at least one marshaled event matches all the
