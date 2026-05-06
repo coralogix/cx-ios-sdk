@@ -162,23 +162,38 @@ final class MarshalSpanCapture {
 
     private func ensureMarshalField() -> UITextField? {
         if let field = marshalField, field.window != nil { return field }
-        guard let window = Self.activeWindow() else { return nil }
+        guard let host = Self.hostView() else { return nil }
 
-        let field = UITextField(frame: .zero)
+        // 1pt off-screen so the field never paints. The earlier attempt
+        // attached this directly to the keyWindow, which polluted the
+        // window-level accessibility tree and broke `app.staticTexts`
+        // traversal in `testSchemaValidationFlow`. Attaching to the
+        // top-most presented view controller's view scopes the field
+        // to the same level as ordinary app content.
+        let field = UITextField(frame: CGRect(x: -1, y: -1, width: 1, height: 1))
         field.accessibilityIdentifier = Self.fieldIdentifier
-        field.alpha = 0.01           // effectively invisible but still in the accessibility tree
+        field.alpha = 0.01
         field.isUserInteractionEnabled = false
-        field.isAccessibilityElement = true
-        window.addSubview(field)
+        host.addSubview(field)
         marshalField = field
         return field
     }
 
-    private static func activeWindow() -> UIWindow? {
+    /// Returns the top-most presented view controller's view. The marshal
+    /// field rides along with whatever screen is currently on; if the user
+    /// navigates, the previous field deallocates and the next callback
+    /// installs a fresh one on the new VC's view (idempotent — still
+    /// queryable by the same accessibilityIdentifier).
+    private static func hostView() -> UIView? {
         let windows = UIApplication.shared.connectedScenes
             .compactMap { $0 as? UIWindowScene }
             .flatMap { $0.windows }
-        return windows.first(where: { $0.isKeyWindow }) ?? windows.first
+        guard let window = windows.first(where: { $0.isKeyWindow }) ?? windows.first,
+              var current = window.rootViewController else { return nil }
+        while let presented = current.presentedViewController {
+            current = presented
+        }
+        return current.view
     }
 
     /// Walks the OTLP batch JSON and pulls out interaction events. The SDK

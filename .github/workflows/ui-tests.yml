@@ -310,6 +310,12 @@ jobs:
           # (CoralogixRum.init singleton, swizzling) so they aren't actually
           # parallel-safe today. Splitting monolithic tests (Phase 2.3) and
           # making setup hermetic must come before re-enabling parallel.
+          # Per-test timeouts: a hung individual test fails its own assertion
+          # at -default-test-execution-time-allowance (s) instead of running
+          # until the job-level timeout-minutes kill switch. Ceiling
+          # (-maximum-test-execution-time-allowance) enforces the upper bound
+          # even if a test method requests more via `executionTimeAllowance`.
+          # Defaults sized for our slowest test today (~137s) plus headroom.
           xcodebuild test-without-building \
             $BUILD_TYPE "$BUILD_PATH_RELATIVE" \
             -scheme "$SCHEME" \
@@ -317,6 +323,9 @@ jobs:
             -derivedDataPath ../DerivedData \
             -resultBundlePath ../DerivedData/TestResults.xcresult \
             -parallel-testing-enabled NO \
+            -test-timeouts-enabled YES \
+            -default-test-execution-time-allowance 240 \
+            -maximum-test-execution-time-allowance 360 \
             2>&1 | tee ../test-output.log | xcpretty
 
           EXIT_CODE=${PIPESTATUS[0]}
