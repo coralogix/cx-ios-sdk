@@ -39,7 +39,7 @@ struct LogSamplingDecouplingView: View {
     @State private var sampleRate: Int = LogSamplingState.sampleRate
     @State private var exclude: Set<ExcludableInstrumentation> = LogSamplingState.exclude
     @State private var isApplied: Bool = LogSamplingState.isApplied
-    @State private var captured: [CapturedSpan] = LogSamplingState.captured
+    @State private var refreshTick = UUID()
     @State private var toastMessage: String?
 
     var body: some View {
@@ -97,19 +97,19 @@ struct LogSamplingDecouplingView: View {
                     Spacer()
                     Button {
                         LogSamplingState.captured.removeAll()
-                        captured = []
+                        refreshTick = UUID()
                     } label: {
                         Image(systemName: "trash").foregroundColor(.red)
                     }
-                    .disabled(captured.isEmpty)
+                    .disabled(LogSamplingState.captured.isEmpty)
                 }
 
-                if captured.isEmpty {
+                if LogSamplingState.captured.isEmpty {
                     Text("(no spans yet — apply a config and trigger events)")
                         .font(.footnote)
                         .foregroundColor(.secondary)
                 } else {
-                    ForEach(captured) { row in
+                    ForEach(LogSamplingState.captured) { row in
                         VStack(alignment: .leading, spacing: 2) {
                             Text(row.eventType)
                                 .font(.system(.callout, design: .monospaced))
@@ -120,6 +120,7 @@ struct LogSamplingDecouplingView: View {
                     }
                 }
             }
+            .id(refreshTick)
         }
         .navigationTitle("Log Sampling Decoupling")
         .navigationBarTitleDisplayMode(.inline)
@@ -206,7 +207,7 @@ struct LogSamplingDecouplingView: View {
                 guard !rows.isEmpty else { return }
                 DispatchQueue.main.async {
                     LogSamplingState.captured.insert(contentsOf: rows.reversed(), at: 0)
-                    captured = LogSamplingState.captured
+                    refreshTick = UUID()
                 }
             },
             debug: true

@@ -41,12 +41,12 @@ final class LogSamplingDecouplingTests: XCTestCase {
 
     // MARK: - Case 2: sampleRate=0, exclude=[.logs] ⇒ logs export, others drop
 
-    func testCase2_sampleRateZero_excludeLogs_logsExportOthersDrop() {
+    func testCase2_sampleRateZero_excludeLogs_logsExportOthersDrop() throws {
         let capture = Capture()
         let rum = CoralogixRum(options: makeOptions(sampleRate: 0, exclude: [.logs], capture: capture))
         defer { rum.shutdown() }
 
-        let exporter = requireExporter(rum)
+        let exporter = try requireExporter(rum)
         exporter.spanUploader = MockSpanUploader()
 
         _ = exporter.export(spans: [
@@ -61,12 +61,12 @@ final class LogSamplingDecouplingTests: XCTestCase {
 
     // MARK: - Case 3: sampleRate=100, exclude=[.logs] ⇒ all spans export
 
-    func testCase3_sampleRateHundred_excludeLogs_allSpansExport() {
+    func testCase3_sampleRateHundred_excludeLogs_allSpansExport() throws {
         let capture = Capture()
         let rum = CoralogixRum(options: makeOptions(sampleRate: 100, exclude: [.logs], capture: capture))
         defer { rum.shutdown() }
 
-        let exporter = requireExporter(rum)
+        let exporter = try requireExporter(rum)
         exporter.spanUploader = MockSpanUploader()
 
         _ = exporter.export(spans: [
@@ -82,7 +82,7 @@ final class LogSamplingDecouplingTests: XCTestCase {
 
     // MARK: - Case 4: session rotation re-rolls sampling (and the reroll callback actually runs)
 
-    func testCase4_sessionRotation_sampleRateZero_rerollFlipsBackToFalse() {
+    func testCase4_sessionRotation_sampleRateZero_rerollFlipsBackToFalse() throws {
         // Rationale: with sampleRate=0 the deterministic outcome is `false`. Manually flip
         // the flag to `true`, rotate the session, and watch the reroll callback flip it
         // back. Asserting "the value didn't change" alone would also be true if the callback
@@ -90,7 +90,7 @@ final class LogSamplingDecouplingTests: XCTestCase {
         let rum = CoralogixRum(options: makeOptions(sampleRate: 0, exclude: [.logs]))
         defer { rum.shutdown() }
 
-        let exporter = requireExporter(rum)
+        let exporter = try requireExporter(rum)
         XCTAssertEqual(exporter.isCurrentSessionSampledIn(), false,
                        "Initial roll at sampleRate=0 must be sampled-out.")
 
@@ -104,11 +104,11 @@ final class LogSamplingDecouplingTests: XCTestCase {
                        "Rotation must invoke the reroll callback; sampleRate=0 deterministically re-rolls to false.")
     }
 
-    func testCase4_sessionRotation_sampleRateHundred_rerollFlipsBackToTrue() {
+    func testCase4_sessionRotation_sampleRateHundred_rerollFlipsBackToTrue() throws {
         let rum = CoralogixRum(options: makeOptions(sampleRate: 100, exclude: []))
         defer { rum.shutdown() }
 
-        let exporter = requireExporter(rum)
+        let exporter = try requireExporter(rum)
         XCTAssertEqual(exporter.isCurrentSessionSampledIn(), true,
                        "Initial roll at sampleRate=100 must be sampled-in.")
 
@@ -124,14 +124,14 @@ final class LogSamplingDecouplingTests: XCTestCase {
 
     // MARK: - Case 5: multiple categories ⇒ only those pass
 
-    func testCase5_sampleRateZero_excludeLogsAndErrors_onlyThoseTwoPass() {
+    func testCase5_sampleRateZero_excludeLogsAndErrors_onlyThoseTwoPass() throws {
         let capture = Capture()
         let rum = CoralogixRum(options: makeOptions(sampleRate: 0,
                                                     exclude: [.logs, .errors],
                                                     capture: capture))
         defer { rum.shutdown() }
 
-        let exporter = requireExporter(rum)
+        let exporter = try requireExporter(rum)
         exporter.spanUploader = MockSpanUploader()
 
         _ = exporter.export(spans: [
@@ -147,12 +147,12 @@ final class LogSamplingDecouplingTests: XCTestCase {
 
     // MARK: - Case 6: thread-safety smoke — rotate on one queue while exporting on another
 
-    func testCase6_sessionRotation_concurrentWithExport_threadSafetySmoke() {
+    func testCase6_sessionRotation_concurrentWithExport_threadSafetySmoke() throws {
         let capture = Capture()
         let rum = CoralogixRum(options: makeOptions(sampleRate: 0, exclude: [.logs], capture: capture))
         defer { rum.shutdown() }
 
-        let exporter = requireExporter(rum)
+        let exporter = try requireExporter(rum)
         exporter.spanUploader = MockSpanUploader()
 
         let iterations = 100
@@ -182,10 +182,15 @@ final class LogSamplingDecouplingTests: XCTestCase {
 
         XCTAssertEqual(exporter.isCurrentSessionSampledIn(), false,
                        "Final roll at sampleRate=0 must remain sampled-out after every reroll.")
-        XCTAssertEqual(capture.eventTypes.count, iterations,
+        // Count only `"log"` entries: other spans the SDK might emit as a side effect of init or
+        // session rotation would be filtered out by sampleRate=0 + exclude=[.logs] anyway, but
+        // counting them here would flake the assertion if any happened to carry event_type=log.
+        let logCount = capture.eventTypes.filter { $0 == "log" }.count
+        XCTAssertEqual(logCount, iterations,
                        "Every log export must survive the filter (logs are in excludeFromSampling).")
-        XCTAssertTrue(capture.eventTypes.allSatisfy { $0 == "log" },
-                      "Captured event_types must all be 'log' — the only event_type pushed.")
+        let nonLog = Set(capture.eventTypes).subtracting(["log"])
+        XCTAssertTrue(nonLog.isEmpty,
+                      "No non-log event_types should pass the filter; saw: \(nonLog.sorted())")
     }
 
     // MARK: - Helpers
@@ -233,15 +238,8 @@ final class LogSamplingDecouplingTests: XCTestCase {
         )
     }
 
-    private func requireExporter(_ rum: CoralogixRum,
-                                 file: StaticString = #file,
-                                 line: UInt = #line) -> CoralogixExporter {
-        guard let exporter = rum.coralogixExporter else {
-            XCTFail("Exporter must exist after init.", file: file, line: line)
-            // Unreachable — XCTFail aborts the test, but the compiler still needs a return.
-            fatalError("unreachable: XCTFail aborts before this line")
-        }
-        return exporter
+    private func requireExporter(_ rum: CoralogixRum) throws -> CoralogixExporter {
+        return try XCTUnwrap(rum.coralogixExporter, "Exporter must exist after init.")
     }
 
     /// Builds a SpanData with the attributes CxSpan needs to encode successfully, plus the
