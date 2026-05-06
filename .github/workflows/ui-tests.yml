@@ -304,18 +304,19 @@ jobs:
           set +e
           TEST_START=$(date +%s)
 
-          # Phase 1.2 — parallelise across the two UI test bundles (UIKit +
-          # SwiftUI). Re-enabled on macos-15-arm64; the previous attempt on
-          # macos-14 timed out at 30m due to runner memory pressure when
-          # cloning a second simulator.
+          # Phase 1.2 — parallel testing kept OFF. Two attempts on different
+          # runners (macos-14 and macos-15-arm64) both regressed wall-clock
+          # past the 30-min job timeout. The bundles share global SDK state
+          # (CoralogixRum.init singleton, swizzling) so they aren't actually
+          # parallel-safe today. Splitting monolithic tests (Phase 2.3) and
+          # making setup hermetic must come before re-enabling parallel.
           xcodebuild test-without-building \
             $BUILD_TYPE "$BUILD_PATH_RELATIVE" \
             -scheme "$SCHEME" \
             -destination "$DESTINATION_SPEC" \
             -derivedDataPath ../DerivedData \
             -resultBundlePath ../DerivedData/TestResults.xcresult \
-            -parallel-testing-enabled YES \
-            -maximum-concurrent-test-simulator-destinations 2 \
+            -parallel-testing-enabled NO \
             2>&1 | tee ../test-output.log | xcpretty
 
           EXIT_CODE=${PIPESTATUS[0]}
