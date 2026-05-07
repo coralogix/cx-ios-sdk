@@ -29,8 +29,16 @@ struct CapturedSpan: Identifiable {
 final class LogSamplingDemoModel: ObservableObject {
     static let shared = LogSamplingDemoModel()
 
+    /// Editable selection bound to the UI controls. Reads here drift as the user toggles
+    /// the picker/switches and do NOT reflect what the SDK is currently configured with.
     @Published var sampleRate: Int = 0
     @Published var exclude: Set<ExcludableInstrumentation> = [.logs]
+
+    /// Snapshot of the values that were in effect on the last successful Apply. Use these
+    /// (not the editable fields above) when displaying "what the SDK is configured with".
+    @Published var appliedSampleRate: Int = 0
+    @Published var appliedExclude: Set<ExcludableInstrumentation> = []
+
     @Published var isApplied: Bool = false
     @Published var captured: [CapturedSpan] = []
 
@@ -45,9 +53,11 @@ final class LogSamplingDemoModel: ObservableObject {
     static let allExcludable: [ExcludableInstrumentation] =
         [.logs, .errors, .network, .userInteractions, .mobileVitals, .customSpan, .customMeasurement]
 
-    var formattedExclude: String {
-        if exclude.isEmpty { return "[]" }
-        return "[" + exclude.map { ".\($0.rawValue)" }.sorted().joined(separator: ", ") + "]"
+    var formattedAppliedExclude: String { Self.formatExclude(appliedExclude) }
+
+    private static func formatExclude(_ set: Set<ExcludableInstrumentation>) -> String {
+        if set.isEmpty { return "[]" }
+        return "[" + set.map { ".\($0.rawValue)" }.sorted().joined(separator: ", ") + "]"
     }
 
     /// Reinitializes the SDK with the current sampleRate + exclude.
@@ -58,9 +68,15 @@ final class LogSamplingDemoModel: ObservableObject {
             return "sampleRate=0 + exclude=[] would skip init. Pick a rate or an exclude."
         }
 
+        // Snapshot the values being attempted so toast strings and the success-side
+        // state-write all use the same numbers, even if the user mutates the editable
+        // fields later (the closure below is captured by reference into the SDK).
+        let attemptedSampleRate = sampleRate
+        let attemptedExclude = exclude
+        let attemptedFormatted = Self.formatExclude(attemptedExclude)
+
         runToken += 1
         let runToken = self.runToken
-        captured.removeAll()
 
         CoralogixRumManager.shared.sdk.shutdown()
         let options = CoralogixExporterOptions(
@@ -73,8 +89,8 @@ final class LogSamplingDemoModel: ObservableObject {
             application: "DemoApp-iOS-LogSamplingDecoupling",
             version: "1",
             publicKey: Envs.PUBLIC_KEY.rawValue,
-            sessionSampleRate: sampleRate,
-            excludeFromSampling: exclude,
+            sessionSampleRate: attemptedSampleRate,
+            excludeFromSampling: attemptedExclude,
             instrumentations: [.mobileVitals: true, .custom: true, .errors: true,
                                .userActions: true, .network: true, .anr: true, .lifeCycle: true],
             collectIPData: true,
@@ -105,9 +121,17 @@ final class LogSamplingDemoModel: ObservableObject {
 
         let didApply = CoralogixRumManager.shared.sdk.isInitialized
         isApplied = didApply
+        if didApply {
+            // Promote the attempted config into the "applied" snapshot only after the SDK
+            // confirms it initialized; clearing captured here (vs. before shutdown) keeps
+            // the previous run's rows visible if Apply fails.
+            appliedSampleRate = attemptedSampleRate
+            appliedExclude = attemptedExclude
+            captured.removeAll()
+        }
         return didApply
-            ? "SDK reinitialized — rate=\(sampleRate), exclude=\(formattedExclude)"
-            : "❌ SDK failed to initialize for rate=\(sampleRate), exclude=\(formattedExclude)"
+            ? "SDK reinitialized — rate=\(attemptedSampleRate), exclude=\(attemptedFormatted)"
+            : "❌ SDK failed to initialize for rate=\(attemptedSampleRate), exclude=\(attemptedFormatted)"
     }
 
     @discardableResult

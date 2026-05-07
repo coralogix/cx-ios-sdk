@@ -47,7 +47,7 @@ struct LogSamplingDecouplingView: View {
 
             Section("Applied config") {
                 if model.isApplied {
-                    Text("rate=\(model.sampleRate)\nexclude=\(model.formattedExclude)\nisInitialized=\(CoralogixRumManager.shared.sdk.isInitialized)")
+                    Text("rate=\(model.appliedSampleRate)\nexclude=\(model.formattedAppliedExclude)\nisInitialized=\(CoralogixRumManager.shared.sdk.isInitialized)")
                         .font(.system(.footnote, design: .monospaced))
                         .foregroundColor(.secondary)
                 } else {
