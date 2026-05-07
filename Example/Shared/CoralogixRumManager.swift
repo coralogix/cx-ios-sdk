@@ -150,6 +150,7 @@ final class MarshalSpanCapture {
 
     private func handle(_ data: CoralogixTraceExporterData) {
         let newEvents = Self.extractInteractionEvents(from: data)
+        print("🟪 [Marshal] handle: spanCount=\(data.spanCount) interactionEvents=\(newEvents.count)")
         guard !newEvents.isEmpty else { return }
 
         lock.lock()
@@ -164,15 +165,22 @@ final class MarshalSpanCapture {
 
     private func publish(_ events: [[String: Any]]) {
         guard let json = try? JSONSerialization.data(withJSONObject: events),
-              let str = String(data: json, encoding: .utf8) else { return }
+              let str = String(data: json, encoding: .utf8) else {
+            print("🟪 [Marshal] publish: JSON serialization failed for events=\(events.count)")
+            return
+        }
 
         let field = ensureMarshalField()
+        print("🟪 [Marshal] publish: events=\(events.count) bytes=\(str.count) field=\(field != nil ? "installed" : "nil")")
         field?.accessibilityValue = str
     }
 
     private func ensureMarshalField() -> UITextField? {
         if let field = marshalField, field.window != nil { return field }
-        guard let host = Self.hostView() else { return nil }
+        guard let host = Self.hostView() else {
+            print("🟪 [Marshal] ensureMarshalField: hostView() returned nil")
+            return nil
+        }
 
         // 1×1 at origin (NOT off-screen): iOS's accessibility tree typically
         // prunes views whose frame is fully outside the parent's bounds, which
@@ -188,6 +196,7 @@ final class MarshalSpanCapture {
         field.isUserInteractionEnabled = false
         host.addSubview(field)
         marshalField = field
+        print("🟪 [Marshal] ensureMarshalField: installed in \(type(of: host)) hostInWindow=\(host.window != nil)")
         return field
     }
 
