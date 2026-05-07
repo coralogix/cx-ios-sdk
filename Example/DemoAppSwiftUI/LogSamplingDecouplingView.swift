@@ -241,9 +241,20 @@ struct LogSamplingDecouplingView: View {
         CoralogixRumManager.shared.reinitialize(with: options)
         LogSamplingState.sampleRate = sampleRate
         LogSamplingState.exclude = exclude
-        LogSamplingState.isApplied = true
-        isApplied = true
-        toastMessage = "SDK reinitialized — rate=\(sampleRate), exclude=\(formatExclude(exclude))"
+
+        // Gate the success path on the SDK's real initialization state. Today the only
+        // known no-init path (rate=0 + exclude=[]) is already guarded above, but the
+        // contract could grow more skip paths — surfacing the failure here keeps the
+        // demo honest if that happens.
+        if CoralogixRumManager.shared.sdk.isInitialized {
+            LogSamplingState.isApplied = true
+            isApplied = true
+            toastMessage = "SDK reinitialized — rate=\(sampleRate), exclude=\(formatExclude(exclude))"
+        } else {
+            LogSamplingState.isApplied = false
+            isApplied = false
+            toastMessage = "❌ SDK failed to initialize for rate=\(sampleRate), exclude=\(formatExclude(exclude))"
+        }
     }
 
     private func triggerLog() {
