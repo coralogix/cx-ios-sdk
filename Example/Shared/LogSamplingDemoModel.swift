@@ -55,6 +55,15 @@ final class LogSamplingDemoModel: ObservableObject {
 
     var formattedAppliedExclude: String { Self.formatExclude(appliedExclude) }
 
+    /// Human-readable summary of the currently-applied SDK config. Used by both demo
+    /// screens; centralizing the format keeps the two views from drifting if the
+    /// summary needs another field later.
+    var appliedConfigDescription: String {
+        "rate=\(appliedSampleRate)\n" +
+        "exclude=\(formattedAppliedExclude)\n" +
+        "isInitialized=\(CoralogixRumManager.shared.sdk.isInitialized)"
+    }
+
     private static func formatExclude(_ set: Set<ExcludableInstrumentation>) -> String {
         if set.isEmpty { return "[]" }
         return "[" + set.map { ".\($0.rawValue)" }.sorted().joined(separator: ", ") + "]"

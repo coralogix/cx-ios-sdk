@@ -207,10 +207,7 @@ final class LogSamplingDecouplingViewController: UIViewController {
 
     private func updateAppliedConfigLabel() {
         if model.isApplied {
-            appliedConfigLabel.text =
-                "rate=\(model.appliedSampleRate)\n" +
-                "exclude=\(model.formattedAppliedExclude)\n" +
-                "isInitialized=\(CoralogixRumManager.shared.sdk.isInitialized)"
+            appliedConfigLabel.text = model.appliedConfigDescription
         } else {
             appliedConfigLabel.text = "(not applied — tap Apply to reinit the SDK)"
         }
