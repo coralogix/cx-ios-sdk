@@ -98,6 +98,8 @@
 		E6LSDC012F0C000010035952 /* LogSamplingDecouplingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6LSDC002F0C000010035952 /* LogSamplingDecouplingView.swift */; };
 		E6OTLP012F0C000010035951 /* OtlpSpan+EventType.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6OTLP002F0C000010035951 /* OtlpSpan+EventType.swift */; };
 		E6OTLP012F0C000010035952 /* OtlpSpan+EventType.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6OTLP002F0C000010035951 /* OtlpSpan+EventType.swift */; };
+		E6LSDM012F0C000010035951 /* LogSamplingDemoModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6LSDM002F0C000010035951 /* LogSamplingDemoModel.swift */; };
+		E6LSDM012F0C000010035952 /* LogSamplingDemoModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6LSDM002F0C000010035951 /* LogSamplingDemoModel.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -214,6 +216,7 @@
 		E6LSDC002F0C000010035951 /* LogSamplingDecouplingViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogSamplingDecouplingViewController.swift; sourceTree = "<group>"; };
 		E6LSDC002F0C000010035952 /* LogSamplingDecouplingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogSamplingDecouplingView.swift; sourceTree = "<group>"; };
 		E6OTLP002F0C000010035951 /* OtlpSpan+EventType.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "OtlpSpan+EventType.swift"; sourceTree = "<group>"; };
+		E6LSDM002F0C000010035951 /* LogSamplingDemoModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogSamplingDemoModel.swift; sourceTree = "<group>"; };
 		2A8D067F2E27BBC8002C4FCE /* DemoAppSwiftUIUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DemoAppSwiftUIUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -416,6 +419,7 @@
 				E622116B2BFF2A7B00052682 /* Keys.swift */,
 				E6D4BBF62DE336310096B46D /* CoralogixRumManager.swift */,
 				E6OTLP002F0C000010035951 /* OtlpSpan+EventType.swift */,
+				E6LSDM002F0C000010035951 /* LogSamplingDemoModel.swift */,
 			);
 			path = Shared;
 			sourceTree = "<group>";
@@ -723,6 +727,7 @@
 				E6CF001A2BFDEB8C00000001 /* TracesExporterView.swift in Sources */,
 				E6LSDC012F0C000010035952 /* LogSamplingDecouplingView.swift in Sources */,
 				E6OTLP012F0C000010035952 /* OtlpSpan+EventType.swift in Sources */,
+				E6LSDM012F0C000010035952 /* LogSamplingDemoModel.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -757,6 +762,7 @@
 				E6TRACES012F0C000010035951 /* TracesExporterViewController.swift in Sources */,
 				E6LSDC012F0C000010035951 /* LogSamplingDecouplingViewController.swift in Sources */,
 				E6OTLP012F0C000010035951 /* OtlpSpan+EventType.swift in Sources */,
+				E6LSDM012F0C000010035951 /* LogSamplingDemoModel.swift in Sources */,
 				E669384F2C747E860002335F /* CustomView.swift in Sources */,
 				E6E515FE2EBB8644008EC19A /* MaskViewController.swift in Sources */,
 				E66938572C74A8830002335F /* UserActionsViewController.swift in Sources */,

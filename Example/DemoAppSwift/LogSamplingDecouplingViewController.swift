@@ -2,45 +2,20 @@
 //  LogSamplingDecouplingViewController.swift
 //  DemoAppSwift
 //
-//  Manual harness for PIPEV2-3365: pick a sessionSampleRate (0/50/100) and an
-//  excludeFromSampling set, reinitialize the SDK with that config, then fire
-//  events and watch which event_types actually survive the sampling filter
-//  via the tracesExporter callback.
+//  UIKit presenter on top of LogSamplingDemoModel — pick a sessionSampleRate +
+//  excludeFromSampling set, reinitialize the SDK, fire events, and watch which
+//  event_types survive the sampling filter via the tracesExporter callback.
 //
 
 import UIKit
+import Combine
 import Coralogix
 import CoralogixInternal
 
-private struct CapturedSpan {
-    let eventType: String
-    let name: String
-    let receivedAt: Date
-
-    var timeString: String {
-        let f = DateFormatter()
-        f.dateFormat = "HH:mm:ss"
-        return f.string(from: receivedAt)
-    }
-}
-
 final class LogSamplingDecouplingViewController: UIViewController {
 
-    // MARK: - Persistent state
-
-    private static var currentSampleRate: Int = 0
-    private static var currentExclude: Set<ExcludableInstrumentation> = [.logs]
-    private static var isApplied = false
-    private static var captured: [CapturedSpan] = []
-    /// Bumped on every Apply. Each tracesExporter closure captures its token so late
-    /// callbacks from a previous run (e.g., flushed by BatchSpanProcessor after
-    /// shutdown but before reinit) can be discarded instead of polluting the list.
-    private static var currentRunToken: Int = 0
-
-    private static let allExcludable: [ExcludableInstrumentation] =
-        [.logs, .errors, .network, .userInteractions, .mobileVitals, .customSpan, .customMeasurement]
-
-    // MARK: - UI
+    private let model = LogSamplingDemoModel.shared
+    private var cancellables = Set<AnyCancellable>()
 
     private let scrollView = UIScrollView()
     private let contentStack = UIStackView()
@@ -74,20 +49,25 @@ final class LogSamplingDecouplingViewController: UIViewController {
 
     private let capturedTable = UITableView(frame: .zero, style: .plain)
 
-    // MARK: - Lifecycle
-
     override func viewDidLoad() {
         super.viewDidLoad()
         title = "Log Sampling Decoupling"
         view.backgroundColor = .systemBackground
 
         setupLayout()
-        configureFromState()
         capturedTable.dataSource = self
         capturedTable.delegate = self
         capturedTable.register(UITableViewCell.self, forCellReuseIdentifier: "captured")
-        updateAppliedConfigLabel()
-        updateButtonsEnabled()
+
+        configureFromModel()
+        refreshFromModel()
+
+        // The model emits objectWillChange before each @Published mutation; sink on the
+        // main queue and re-render the parts of the UI that depend on model state.
+        model.objectWillChange
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in self?.refreshFromModel() }
+            .store(in: &cancellables)
     }
 
     private func setupLayout() {
@@ -118,9 +98,8 @@ final class LogSamplingDecouplingViewController: UIViewController {
         contentStack.addArrangedSubview(sampleRateSegmented)
 
         contentStack.addArrangedSubview(makeSectionHeader("excludeFromSampling"))
-        for excludable in Self.allExcludable {
-            let row = makeExcludeRow(excludable)
-            contentStack.addArrangedSubview(row)
+        for excludable in LogSamplingDemoModel.allExcludable {
+            contentStack.addArrangedSubview(makeExcludeRow(excludable))
         }
 
         statusLabel.font = .preferredFont(forTextStyle: .footnote)
@@ -165,146 +144,53 @@ final class LogSamplingDecouplingViewController: UIViewController {
         contentStack.addArrangedSubview(capturedTable)
     }
 
-    private func configureFromState() {
-        switch Self.currentSampleRate {
+    private func configureFromModel() {
+        switch model.sampleRate {
         case 0:   sampleRateSegmented.selectedSegmentIndex = 0
         case 50:  sampleRateSegmented.selectedSegmentIndex = 1
         default:  sampleRateSegmented.selectedSegmentIndex = 2
         }
         for (excludable, toggle) in excludeToggles {
-            toggle.isOn = Self.currentExclude.contains(excludable)
+            toggle.isOn = model.exclude.contains(excludable)
         }
+    }
+
+    private func refreshFromModel() {
+        capturedTable.reloadData()
         updateStatusLabel()
+        updateAppliedConfigLabel()
+        updateButtonsEnabled()
     }
 
     // MARK: - Actions
 
     @objc private func sampleRateChanged() {
-        Self.currentSampleRate = [0, 50, 100][sampleRateSegmented.selectedSegmentIndex]
-        updateStatusLabel()
+        model.sampleRate = [0, 50, 100][sampleRateSegmented.selectedSegmentIndex]
     }
 
     @objc private func excludeToggleChanged(_ toggle: UISwitch) {
-        guard let excludable = Self.allExcludable.first(where: { excludeToggles[$0] === toggle }) else { return }
+        guard let excludable = LogSamplingDemoModel.allExcludable.first(where: { excludeToggles[$0] === toggle }) else { return }
         if toggle.isOn {
-            Self.currentExclude.insert(excludable)
+            model.exclude.insert(excludable)
         } else {
-            Self.currentExclude.remove(excludable)
+            model.exclude.remove(excludable)
         }
-        updateStatusLabel()
     }
 
-    @objc private func didTapApply() {
-        let rate = Self.currentSampleRate
-        let exclude = Self.currentExclude
-        if rate == 0 && exclude.isEmpty {
-            showToast("sampleRate=0 + exclude=[] would skip init (legacy contract). Pick a rate or an exclude.")
-            return
-        }
+    @objc private func didTapApply() { showToast(model.apply()) }
+    @objc private func didTapSendLog() { showToast(model.triggerLog()) }
+    @objc private func didTapSendError() { showToast(model.triggerError()) }
+    @objc private func didTapSendNetwork() { showToast(model.triggerNetwork()) }
+    @objc private func didTapSendCustomSpan() { showToast(model.triggerCustomSpan()) }
+    @objc private func didTapSendCustomMeasurement() { showToast(model.triggerCustomMeasurement()) }
+    @objc private func didTapClear() { model.clearCaptured() }
 
-        // Bump the run token first so any late callback from the previous run (still
-        // possibly in flight on the BatchSpanProcessor's queue) is discarded by the
-        // closure's token guard rather than re-filling the just-cleared list.
-        Self.currentRunToken += 1
-        let runToken = Self.currentRunToken
-        Self.captured.removeAll()
-        capturedTable.reloadData()
-
-        CoralogixRumManager.shared.sdk.shutdown()
-        let options = CoralogixExporterOptions(
-            coralogixDomain: .EU2,
-            userContext: UserContext(userId: "sampling-test",
-                                     userName: "Sampling Tester",
-                                     userEmail: "sampling@example.com",
-                                     userMetadata: ["test": "logSamplingDecoupling"]),
-            environment: "PROD",
-            application: "DemoApp-iOS-LogSamplingDecoupling",
-            version: "1",
-            publicKey: Envs.PUBLIC_KEY.rawValue,
-            sessionSampleRate: rate,
-            excludeFromSampling: exclude,
-            instrumentations: [.mobileVitals: true, .custom: true, .errors: true,
-                               .userActions: true, .network: true, .anr: true, .lifeCycle: true],
-            collectIPData: true,
-            traceParentInHeader: ["enable": true],
-            tracesExporter: { [weak self] data in
-                let now = Date()
-                var rows: [CapturedSpan] = []
-                for resourceSpan in data.tracesData.resourceSpans {
-                    for scopeSpan in resourceSpan.scopeSpans {
-                        for span in scopeSpan.spans {
-                            rows.append(CapturedSpan(
-                                eventType: span.eventType ?? "(no event_type)",
-                                name: span.name,
-                                receivedAt: now
-                            ))
-                        }
-                    }
-                }
-                guard !rows.isEmpty else { return }
-                DispatchQueue.main.async {
-                    guard runToken == Self.currentRunToken else { return }
-                    Self.captured.insert(contentsOf: rows.reversed(), at: 0)
-                    self?.capturedTable.reloadData()
-                }
-            },
-            debug: true
-        )
-        CoralogixRumManager.shared.reinitialize(with: options)
-        Self.isApplied = true
-        updateAppliedConfigLabel()
-        updateButtonsEnabled()
-        showToast("SDK reinitialized — rate=\(rate), exclude=\(formatExclude(exclude))")
-    }
-
-    @objc private func didTapSendLog() {
-        CoralogixRumManager.shared.sdk.log(severity: .info,
-                                           message: "Sampling demo log",
-                                           data: ["source": "LogSamplingDecouplingVC"])
-        showToast("log() called")
-    }
-
-    @objc private func didTapSendError() {
-        CoralogixRumManager.shared.sdk.reportError(message: "Sampling demo error", data: nil)
-        showToast("reportError() called")
-    }
-
-    @objc private func didTapSendNetwork() {
-        NetworkSim.sendSuccesfullRequest()
-        showToast("Network request sent")
-    }
-
-    @objc private func didTapSendCustomSpan() {
-        let rum = CoralogixRumManager.shared.sdk
-        guard rum.isInitialized else { showToast("SDK not initialized"); return }
-        guard let tracer = rum.getCustomTracer() else { showToast("Failed to get custom tracer"); return }
-        guard let global = tracer.startGlobalSpan(name: "sampling-demo.global",
-                                                   labels: ["source": "LogSamplingDecouplingVC"]) else {
-            showToast("startGlobalSpan returned nil")
-            return
-        }
-        let child = global.startCustomSpan(name: "sampling-demo.child")
-        child.endSpan()
-        global.endSpan()
-        showToast("Custom span emitted")
-    }
-
-    @objc private func didTapSendCustomMeasurement() {
-        CoralogixRumManager.shared.sdk.sendCustomMeasurement(name: "sampling-demo.measurement", value: 42.0)
-        showToast("sendCustomMeasurement() called")
-    }
-
-    @objc private func didTapClear() {
-        Self.captured.removeAll()
-        capturedTable.reloadData()
-    }
-
-    // MARK: - Helpers
+    // MARK: - View state derived from model
 
     private func updateStatusLabel() {
-        let rate = Self.currentSampleRate
-        let exclude = Self.currentExclude
-        if rate == 0 && exclude.isEmpty {
+        let rate = model.sampleRate
+        let empty = model.exclude.isEmpty
+        if rate == 0 && empty {
             statusLabel.text = "⚠️ rate=0 + exclude=[] would short-circuit init (legacy contract). Apply will refuse this combination."
             statusLabel.textColor = .systemOrange
         } else if rate == 100 {
@@ -320,10 +206,10 @@ final class LogSamplingDecouplingViewController: UIViewController {
     }
 
     private func updateAppliedConfigLabel() {
-        if Self.isApplied {
+        if model.isApplied {
             appliedConfigLabel.text =
-                "rate=\(Self.currentSampleRate)\n" +
-                "exclude=\(formatExclude(Self.currentExclude))\n" +
+                "rate=\(model.sampleRate)\n" +
+                "exclude=\(model.formattedExclude)\n" +
                 "isInitialized=\(CoralogixRumManager.shared.sdk.isInitialized)"
         } else {
             appliedConfigLabel.text = "(not applied — tap Apply to reinit the SDK)"
@@ -331,16 +217,11 @@ final class LogSamplingDecouplingViewController: UIViewController {
     }
 
     private func updateButtonsEnabled() {
-        let on = Self.isApplied
+        let on = model.isApplied
         for btn in [sendLogButton, sendErrorButton, sendNetworkButton, sendCustomSpanButton, sendCustomMeasurementButton] {
             btn.isEnabled = on
             btn.alpha = on ? 1 : 0.4
         }
-    }
-
-    private func formatExclude(_ set: Set<ExcludableInstrumentation>) -> String {
-        if set.isEmpty { return "[]" }
-        return "[" + set.map { ".\($0.rawValue)" }.sorted().joined(separator: ", ") + "]"
     }
 
     // MARK: - View builders
@@ -358,7 +239,7 @@ final class LogSamplingDecouplingViewController: UIViewController {
         label.font = .preferredFont(forTextStyle: .body)
 
         let toggle = UISwitch()
-        toggle.isOn = Self.currentExclude.contains(excludable)
+        toggle.isOn = model.exclude.contains(excludable)
         toggle.addTarget(self, action: #selector(excludeToggleChanged(_:)), for: .valueChanged)
         excludeToggles[excludable] = toggle
 
@@ -396,19 +277,19 @@ final class LogSamplingDecouplingViewController: UIViewController {
 extension LogSamplingDecouplingViewController: UITableViewDataSource, UITableViewDelegate {
 
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        max(Self.captured.count, 1)
+        max(model.captured.count, 1)
     }
 
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         let cell = tableView.dequeueReusableCell(withIdentifier: "captured", for: indexPath)
         cell.selectionStyle = .none
         var config = UIListContentConfiguration.subtitleCell()
-        if Self.captured.isEmpty {
+        if model.captured.isEmpty {
             config.text = "(no spans yet — apply a config and trigger events)"
             config.textProperties.color = .secondaryLabel
             config.textProperties.font = .preferredFont(forTextStyle: .footnote)
         } else {
-            let row = Self.captured[indexPath.row]
+            let row = model.captured[indexPath.row]
             config.text = row.eventType
             config.secondaryText = "\(row.timeString)  ·  \(row.name)"
             config.textProperties.font = .monospacedSystemFont(ofSize: 13, weight: .medium)
