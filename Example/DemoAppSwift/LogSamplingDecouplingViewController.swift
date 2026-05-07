@@ -32,6 +32,10 @@ final class LogSamplingDecouplingViewController: UIViewController {
     private static var currentExclude: Set<ExcludableInstrumentation> = [.logs]
     private static var isApplied = false
     private static var captured: [CapturedSpan] = []
+    /// Bumped on every Apply. Each tracesExporter closure captures its token so late
+    /// callbacks from a previous run (e.g., flushed by BatchSpanProcessor after
+    /// shutdown but before reinit) can be discarded instead of polluting the list.
+    private static var currentRunToken: Int = 0
 
     private static let allExcludable: [ExcludableInstrumentation] =
         [.logs, .errors, .network, .userInteractions, .mobileVitals, .customSpan, .customMeasurement]
@@ -198,6 +202,14 @@ final class LogSamplingDecouplingViewController: UIViewController {
             return
         }
 
+        // Bump the run token first so any late callback from the previous run (still
+        // possibly in flight on the BatchSpanProcessor's queue) is discarded by the
+        // closure's token guard rather than re-filling the just-cleared list.
+        Self.currentRunToken += 1
+        let runToken = Self.currentRunToken
+        Self.captured.removeAll()
+        capturedTable.reloadData()
+
         CoralogixRumManager.shared.sdk.shutdown()
         let options = CoralogixExporterOptions(
             coralogixDomain: .EU2,
@@ -231,6 +243,7 @@ final class LogSamplingDecouplingViewController: UIViewController {
                 }
                 guard !rows.isEmpty else { return }
                 DispatchQueue.main.async {
+                    guard runToken == Self.currentRunToken else { return }
                     Self.captured.insert(contentsOf: rows.reversed(), at: 0)
                     self?.capturedTable.reloadData()
                 }

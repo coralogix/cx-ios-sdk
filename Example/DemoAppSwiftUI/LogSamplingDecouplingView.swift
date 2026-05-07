@@ -29,6 +29,10 @@ private enum LogSamplingState {
     static var exclude: Set<ExcludableInstrumentation> = [.logs]
     static var isApplied = false
     static var captured: [CapturedSpan] = []
+    /// Bumped on every Apply. Each tracesExporter closure captures its token so late
+    /// callbacks from a previous run (e.g., flushed by BatchSpanProcessor after
+    /// shutdown but before reinit) can be discarded instead of polluting the list.
+    static var runToken: Int = 0
 }
 
 struct LogSamplingDecouplingView: View {
@@ -186,6 +190,14 @@ struct LogSamplingDecouplingView: View {
             return
         }
 
+        // Bump the run token first so any late callback from the previous run (still
+        // possibly in flight on the BatchSpanProcessor's queue) is discarded by the
+        // closure's token guard rather than re-filling the just-cleared list.
+        LogSamplingState.runToken += 1
+        let runToken = LogSamplingState.runToken
+        LogSamplingState.captured.removeAll()
+        refreshTick = UUID()
+
         CoralogixRumManager.shared.sdk.shutdown()
         let options = CoralogixExporterOptions(
             coralogixDomain: .EU2,
@@ -219,6 +231,7 @@ struct LogSamplingDecouplingView: View {
                 }
                 guard !rows.isEmpty else { return }
                 DispatchQueue.main.async {
+                    guard runToken == LogSamplingState.runToken else { return }
                     LogSamplingState.captured.insert(contentsOf: rows.reversed(), at: 0)
                     refreshTick = UUID()
                 }
