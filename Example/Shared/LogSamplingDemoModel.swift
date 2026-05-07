@@ -176,6 +176,13 @@ final class LogSamplingDemoModel: ObservableObject {
     }
 
     func clearCaptured() {
+        // Bumping runToken first invalidates any tracesExporter callbacks already in
+        // flight on BatchSpanProcessor's queue; their main-queue insert will hit the
+        // token guard and drop the row instead of repopulating the just-cleared list.
+        // Side effect: this also stops the current SDK's *future* spans from being
+        // captured (the closure's captured token is now stale). To resume capture,
+        // tap Apply again.
+        runToken += 1
         captured.removeAll()
     }
 }
