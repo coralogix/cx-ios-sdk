@@ -32,13 +32,15 @@ public class SessionReplayModel {
     private let screenshotDataQueue = DispatchQueue(label: "com.coralogix.sessionReplay.screenshotDataQueue")
     private var _prvScreenshotData: Data? = nil
 
-    /// Concurrent queue used to JPEG-encode captured frames off the main thread.
+    /// Serial queue used to JPEG-encode captured frames off the main thread.
     /// `UIImage`/`CGImage` and `UIGraphicsImageRenderer` outputs aren't main-thread
     /// bound, so encoding can run here freely while drawHierarchy stays on main.
+    /// Serial (not concurrent) so the skip-identical comparison in
+    /// `encodeAndProcess` sees `_prvScreenshotData` updates in capture order
+    /// and saves arrive on disk in capture order.
     internal let encodingQueue = DispatchQueue(
         label: "com.coralogix.sessionReplay.encodingQueue",
-        qos: .userInitiated,
-        attributes: .concurrent
+        qos: .userInitiated
     )
     
     private lazy var comparisonContext = CIContext(options: [.workingColorSpace: NSNull()])
