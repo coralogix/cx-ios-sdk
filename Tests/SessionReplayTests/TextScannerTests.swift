@@ -99,6 +99,9 @@ class TextScannerTests: XCTestCase {
         // masker. The fix is to turn it off so every recognized observation
         // is mask-eligible.
         request.usesLanguageCorrection = true
+        // Pre-set to .fast so the post-call .accurate assertion below
+        // actively verifies the helper, not the framework default.
+        request.recognitionLevel = .fast
 
         textScanner.configureRecognitionRequest(request)
 
