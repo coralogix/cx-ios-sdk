@@ -92,6 +92,41 @@ class TextScannerTests: XCTestCase {
         }
     }
     
+    func testConfigureRecognitionRequest_disablesLanguageCorrection() {
+        let request = VNRecognizeTextRequest()
+        // Default is true — language correction filters short/non-word tokens
+        // like "OK", "$4.99", IDs, etc., causing them to never reach the
+        // masker. The fix is to turn it off so every recognized observation
+        // is mask-eligible.
+        request.usesLanguageCorrection = true
+
+        textScanner.configureRecognitionRequest(request)
+
+        XCTAssertFalse(request.usesLanguageCorrection)
+        XCTAssertEqual(request.recognitionLevel, .accurate)
+    }
+
+    func testConfigureRecognitionRequest_widensLanguageCoverage() {
+        let request = VNRecognizeTextRequest()
+
+        textScanner.configureRecognitionRequest(request)
+
+        if #available(iOS 16.0, *) {
+            // iOS 16+: Vision picks the language per-image from its full
+            // supported set — the right behaviour for international apps.
+            XCTAssertTrue(request.automaticallyDetectsLanguage)
+        } else {
+            // Pre-iOS 16: we enumerate the supported OCR languages so
+            // non-en-US UI text is detected and masked. The default
+            // (`["en-US"]`) is the bug we're fixing — assert we widened it.
+            XCTAssertGreaterThan(request.recognitionLanguages.count, 1)
+            XCTAssertTrue(request.recognitionLanguages.contains("en-US"))
+            // Spot-check a non-English language to guard against accidental
+            // regression to the en-US default.
+            XCTAssertTrue(request.recognitionLanguages.contains("ja-JP"))
+        }
+    }
+
     func testMaskText_withSpecificPattern_shouldMaskOnlyMatchingText() {
         
         // Mock input image

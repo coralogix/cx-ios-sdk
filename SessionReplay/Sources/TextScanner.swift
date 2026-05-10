@@ -52,11 +52,42 @@ public class TextScanner {
                 maskLayer = self?.processCandidate(topCandidate, in: image, with: patterns, baseMask: maskLayer, color: blackColor) ?? maskLayer
             }
         }
+        configureRecognitionRequest(request)
 
         performTextRecognition(request, on: image)
 
         let flippedMaskLayer = flipVertically(maskLayer, height: image.extent.height)
         return flippedMaskLayer.composited(over: image)
+    }
+
+    /// Tunes the Vision text recognition request to be permissive enough for
+    /// "mask everything that looks like text". The default `VNRecognizeTextRequest`
+    /// is gated to `en-US` only and runs language correction, both of which cause
+    /// real text to be invisible to the masker (non-English UI strings, short
+    /// tokens like "OK"/"$4.99", IDs, version numbers, code-like labels).
+    internal func configureRecognitionRequest(_ request: VNRecognizeTextRequest) {
+        request.recognitionLevel = .accurate
+        request.usesLanguageCorrection = false
+        if #available(iOS 16.0, *) {
+            request.automaticallyDetectsLanguage = true
+        } else {
+            // Vision's OCR language coverage grew incrementally:
+            //   iOS 13     → en-US only
+            //   iOS 14.0+  → fr/it/de/es/pt-BR/zh-Hans/zh-Hant
+            //   iOS 14.5+  → ru/uk
+            //   iOS 15.4+  → ja/ko
+            // Setting unsupported languages can cause `perform()` to throw on
+            // older OSes, so intersect with what the runtime actually supports.
+            let desired = [
+                "en-US", "fr-FR", "it-IT", "de-DE", "es-ES", "pt-BR",
+                "zh-Hans", "zh-Hant", "ja-JP", "ko-KR", "ru-RU", "uk-UA"
+            ]
+            let supported = (try? VNRecognizeTextRequest.supportedRecognitionLanguages(
+                for: .accurate,
+                revision: VNRecognizeTextRequest.currentRevision)) ?? ["en-US"]
+            let supportedSet = Set(supported)
+            request.recognitionLanguages = desired.filter { supportedSet.contains($0) }
+        }
     }
     
     private func performTextRecognition(_ request: VNRequest, on image: CIImage) {
