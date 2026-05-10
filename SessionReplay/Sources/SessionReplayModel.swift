@@ -107,10 +107,7 @@ public class SessionReplayModel {
     /// folding mask compositing into the same renderer pass. Does NOT JPEG-encode —
     /// callers can dispatch encoding to `encodingQueue`.
     internal func prepareScreenshotImageOnMain(properties: [String: Any]?) -> UIImage? {
-        guard Thread.isMainThread else {
-            Log.e("prepareScreenshotImageOnMain must be called on the main thread")
-            return nil
-        }
+        guard Thread.isMainThread else { return nil }
 
         guard let window = getKeyWindow() else {
             Log.e("No key window found")
@@ -312,7 +309,6 @@ public class SessionReplayModel {
             guard let self = self else { return }
 
             guard let screenshotData = image.jpegData(compressionQuality: compressionQuality) else {
-                Log.e("[SessionReplayModel] JPEG encoding failed")
                 if callerIncrementedCounter {
                     SdkManager.shared.getCoralogixSdk()?.revertScreenshotCounter()
                 }
