@@ -122,7 +122,7 @@ public class TextScanner {
         let desired = [
             "en-US", "fr-FR", "it-IT", "de-DE", "es-ES", "pt-BR",
             "zh-Hans", "zh-Hant", "ja-JP", "ko-KR", "ru-RU", "uk-UA",
-            "ar-SA", "th-TH", "vi-VT", "he-IL", "el-GR"
+            "ar-SA", "th-TH", "vi-VN", "he-IL", "el-GR"
         ]
         let supported = (try? VNRecognizeTextRequest.supportedRecognitionLanguages(
             for: .accurate,

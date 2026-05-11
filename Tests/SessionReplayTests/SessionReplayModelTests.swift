@@ -486,9 +486,11 @@ final class SessionReplayModelTests: XCTestCase {
         class CapturingModel: SessionReplayModel {
             var saveExpectation: XCTestExpectation?
             var savedData: Data?
+            var saveThread: Thread?
 
             override func saveScreenshotToFileSystem(screenshotData: Data, properties: [String : Any]?) {
                 savedData = screenshotData
+                saveThread = Thread.current
                 saveExpectation?.fulfill()
             }
         }
@@ -503,6 +505,8 @@ final class SessionReplayModelTests: XCTestCase {
             ctx.fill(CGRect(x: 0, y: 0, width: 4, height: 4))
         }
 
+        let callingThread = Thread.current
+
         model.encodeAndProcess(
             image: image,
             compressionQuality: 0.8,
@@ -510,12 +514,16 @@ final class SessionReplayModelTests: XCTestCase {
             callerIncrementedCounter: false
         )
 
-        // encodeAndProcess must dispatch — save must not have run on the calling thread.
-        XCTAssertNil(model.savedData, "JPEG encode + save should be deferred off the calling thread")
-
         wait(for: [exp], timeout: 2.0)
         XCTAssertNotNil(model.savedData)
         XCTAssertGreaterThan(model.savedData?.count ?? 0, 0, "Encoded JPEG should be non-empty")
+        // Asserting on the recorded execution thread instead of "savedData was
+        // still nil right after the call" — the latter races against
+        // encodingQueue.async, which can start before the test thread reaches
+        // the next line. Recording where the save actually ran is what we
+        // really want to verify.
+        XCTAssertNotEqual(model.saveThread, callingThread,
+                          "JPEG encode + save should run off the calling thread (on encodingQueue)")
     }
 
     func testHandleCapturedData_ShouldCallAddURLAndCompress() {
