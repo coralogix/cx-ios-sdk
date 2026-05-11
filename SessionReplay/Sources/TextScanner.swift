@@ -49,7 +49,12 @@ public class TextScanner {
 
             for observation in observations {
                 guard let topCandidate = observation.topCandidates(1).first else { continue }
-                maskLayer = self?.processCandidate(topCandidate, in: image, with: patterns, baseMask: maskLayer, color: blackColor) ?? maskLayer
+                maskLayer = self?.processCandidate(topCandidate,
+                                                   observationBox: observation.boundingBox,
+                                                   in: image,
+                                                   with: patterns,
+                                                   baseMask: maskLayer,
+                                                   color: blackColor) ?? maskLayer
             }
         }
         configureRecognitionRequest(request)
@@ -75,6 +80,8 @@ public class TextScanner {
         //   iOS 14.0+  → fr/it/de/es/pt-BR/zh-Hans/zh-Hant
         //   iOS 14.5+  → ru/uk
         //   iOS 15.4+  → ja/ko
+        //   iOS 16.0+  → ar
+        //   iOS 17.0+  → th/vi
         // Setting unsupported languages can cause `perform()` to throw on older
         // OSes, so intersect with what the runtime actually supports.
         //
@@ -84,9 +91,15 @@ public class TextScanner {
         // mixed-script frames (e.g. Latin + Cyrillic + CJK on screen at once) to
         // collapse to a single dominant script and silently drop the others, so
         // we always set the explicit list as well.
+        //
+        // Hebrew/Greek are included as candidates but Vision currently has no
+        // OCR support for those scripts, so supportedRecognitionLanguages will
+        // filter them out — their text will remain unmasked unless the host app
+        // explicitly wraps it with a mask region.
         let desired = [
             "en-US", "fr-FR", "it-IT", "de-DE", "es-ES", "pt-BR",
-            "zh-Hans", "zh-Hant", "ja-JP", "ko-KR", "ru-RU", "uk-UA"
+            "zh-Hans", "zh-Hant", "ja-JP", "ko-KR", "ru-RU", "uk-UA",
+            "ar-SA", "th-TH", "vi-VT", "he-IL", "el-GR"
         ]
         let supported = (try? VNRecognizeTextRequest.supportedRecognitionLanguages(
             for: .accurate,
@@ -109,6 +122,7 @@ public class TextScanner {
     }
     
     private func processCandidate(_ candidate: VNRecognizedText,
+                                  observationBox: CGRect,
                                   in image: CIImage,
                                   with patterns: [String]?,
                                   baseMask: CIImage,
@@ -120,13 +134,26 @@ public class TextScanner {
 
         for pattern in patterns {
             if matchesPattern(recognizedText, pattern: pattern) {
-                if let masked = maskCandidate(candidate, in: image, matching: pattern, color: color) {
+                if let masked = maskCandidate(candidate,
+                                              observationBox: observationBox,
+                                              in: image,
+                                              matching: pattern,
+                                              color: color) {
                     updatedMask = masked.composited(over: updatedMask)
                 }
                 break
             }
         }
         return updatedMask
+    }
+
+    /// Match-all regex patterns sent by the Flutter/RN bridges when the host
+    /// enables `maskAllTexts`. For these we want the entire observation rect,
+    /// not a per-character substring box — Vision's per-range mapping is
+    /// brittle for dense punctuation tokens (e.g. `"OK · USB-C · v2.6.3"`) and
+    /// returns nil, causing the whole line to escape the mask.
+    private static func isMatchAllPattern(_ pattern: String) -> Bool {
+        pattern == ".*" || pattern == ".+"
     }
     
     private func matchesPattern(_ text: String, pattern: String) -> Bool {
@@ -141,28 +168,36 @@ public class TextScanner {
     }
     
     private func maskCandidate(_ candidate: VNRecognizedText,
+                               observationBox: CGRect,
                                in image: CIImage,
                                matching pattern: String,
                                color: CIColor) -> CIImage? {
-        guard let range = candidate.string.range(of: pattern, options: .regularExpression) else {
-            return nil
-        }
-        do {
-            let wordBox = try candidate.boundingBox(for: range)
-            guard let boundingBox = wordBox?.boundingBox else { return nil }
+        let normalizedRect: CGRect
 
-            let adjustedRect = CGRect(
-                x: boundingBox.minX * image.extent.width,
-                y: (1 - boundingBox.minY - boundingBox.height) * image.extent.height,
-                width: boundingBox.width * image.extent.width,
-                height: boundingBox.height * image.extent.height
-            )
-
-            return CIImage(color: color).cropped(to: adjustedRect)
-        } catch {
-            Log.e("Error getting bounding box: \(error)")
-            return nil
+        if Self.isMatchAllPattern(pattern) {
+            normalizedRect = observationBox
+        } else {
+            guard let range = candidate.string.range(of: pattern, options: .regularExpression) else {
+                return nil
+            }
+            do {
+                let wordBox = try candidate.boundingBox(for: range)
+                guard let boundingBox = wordBox?.boundingBox else { return nil }
+                normalizedRect = boundingBox
+            } catch {
+                Log.e("Error getting bounding box: \(error)")
+                return nil
+            }
         }
+
+        let adjustedRect = CGRect(
+            x: normalizedRect.minX * image.extent.width,
+            y: (1 - normalizedRect.minY - normalizedRect.height) * image.extent.height,
+            width: normalizedRect.width * image.extent.width,
+            height: normalizedRect.height * image.extent.height
+        )
+
+        return CIImage(color: color).cropped(to: adjustedRect)
     }
     
     private func flipVertically(_ image: CIImage, height: CGFloat) -> CIImage {
