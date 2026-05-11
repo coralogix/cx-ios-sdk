@@ -132,6 +132,23 @@ class TextScannerTests: XCTestCase {
         }
     }
 
+    func testMaskText_withMatchAllPattern_shouldRunRegionFallback() {
+        // The maskAllTexts path (Flutter/RN bridges send [".*"]) must run BOTH
+        // VNRecognizeTextRequest and VNDetectTextRectanglesRequest. The combined
+        // pipeline shouldn't crash and should yield a non-nil image whose extent
+        // matches the input — same baseline guarantees as the other paths.
+        guard let inputURL = SDKResources.bundle.url(forResource: "test_image", withExtension: "png"),
+              let ciImage = CIImage(contentsOf: inputURL) else {
+            XCTFail("test_image.png not found in Bundle.module")
+            return
+        }
+
+        let maskedImage = textScanner.maskText(in: ciImage, with: [".*"])
+
+        XCTAssertNotNil(maskedImage)
+        XCTAssertEqual(maskedImage.extent, ciImage.extent)
+    }
+
     func testMaskText_withSpecificPattern_shouldMaskOnlyMatchingText() {
         
         // Mock input image

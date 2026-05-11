@@ -40,13 +40,12 @@ public class TextScanner {
     internal func maskText(in image: CIImage, with patterns: [String]?) -> CIImage {
         let blackColor = CIColor.black
         var maskLayer = CIImage.empty().cropped(to: image.extent)
+        let hasMatchAll = patterns?.contains(where: { Self.isMatchAllPattern($0) }) ?? false
 
-        let request = VNRecognizeTextRequest { [weak self] request, error in
+        let recognizeRequest = VNRecognizeTextRequest { [weak self] request, _ in
             guard let observations = request.results as? [VNRecognizedTextObservation] else {
-                Log.e("No text detected or an error occurred: \(String(describing: error))")
                 return
             }
-
             for observation in observations {
                 guard let topCandidate = observation.topCandidates(1).first else { continue }
                 maskLayer = self?.processCandidate(topCandidate,
@@ -57,9 +56,33 @@ public class TextScanner {
                                                    color: blackColor) ?? maskLayer
             }
         }
-        configureRecognitionRequest(request)
+        configureRecognitionRequest(recognizeRequest)
 
-        performTextRecognition(request, on: image)
+        var requests: [VNRequest] = [recognizeRequest]
+
+        // For maskAllTexts (pattern includes `.*`/`.+`) also run a region-only
+        // pass. `VNRecognizeTextRequest` periodically misses lines its recognizer
+        // can't confidently transcribe — observed on wrapped paragraph rows and
+        // dense punctuation tokens. `VNDetectTextRectanglesRequest` is purely
+        // geometric ("does this look like text?"), much cheaper than recognition,
+        // and catches regions the recognizer drops, including scripts Vision has
+        // no OCR support for (e.g. Hebrew, Greek).
+        if hasMatchAll {
+            let regionsRequest = VNDetectTextRectanglesRequest { [weak self] request, _ in
+                guard let observations = request.results as? [VNTextObservation] else { return }
+                for observation in observations {
+                    if let masked = self?.maskNormalizedRect(observation.boundingBox,
+                                                             in: image,
+                                                             color: blackColor) {
+                        maskLayer = masked.composited(over: maskLayer)
+                    }
+                }
+            }
+            regionsRequest.reportCharacterBoxes = false
+            requests.append(regionsRequest)
+        }
+
+        performRequests(requests, on: image)
 
         let flippedMaskLayer = flipVertically(maskLayer, height: image.extent.height)
         return flippedMaskLayer.composited(over: image)
@@ -112,13 +135,28 @@ public class TextScanner {
         }
     }
     
-    private func performTextRecognition(_ request: VNRequest, on image: CIImage) {
+    private func performRequests(_ requests: [VNRequest], on image: CIImage) {
         let handler = VNImageRequestHandler(ciImage: image, options: [:])
         do {
-            try handler.perform([request])
+            try handler.perform(requests)
         } catch {
             Log.e("Failed to perform text detection: \(error)")
         }
+    }
+
+    /// Translates a Vision-normalized rect (origin bottom-left, [0,1] units)
+    /// into a CIImage-extent rect with origin flipped to top-left, then returns
+    /// a solid-color CIImage cropped to that rect.
+    private func maskNormalizedRect(_ normalizedRect: CGRect,
+                                    in image: CIImage,
+                                    color: CIColor) -> CIImage {
+        let adjustedRect = CGRect(
+            x: normalizedRect.minX * image.extent.width,
+            y: (1 - normalizedRect.minY - normalizedRect.height) * image.extent.height,
+            width: normalizedRect.width * image.extent.width,
+            height: normalizedRect.height * image.extent.height
+        )
+        return CIImage(color: color).cropped(to: adjustedRect)
     }
     
     private func processCandidate(_ candidate: VNRecognizedText,
@@ -190,14 +228,7 @@ public class TextScanner {
             }
         }
 
-        let adjustedRect = CGRect(
-            x: normalizedRect.minX * image.extent.width,
-            y: (1 - normalizedRect.minY - normalizedRect.height) * image.extent.height,
-            width: normalizedRect.width * image.extent.width,
-            height: normalizedRect.height * image.extent.height
-        )
-
-        return CIImage(color: color).cropped(to: adjustedRect)
+        return maskNormalizedRect(normalizedRect, in: image, color: color)
     }
     
     private func flipVertically(_ image: CIImage, height: CGFloat) -> CIImage {
