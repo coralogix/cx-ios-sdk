@@ -31,6 +31,17 @@ public class SessionReplayModel {
     /// Serial queue for synchronizing access to prvScreenshotData
     private let screenshotDataQueue = DispatchQueue(label: "com.coralogix.sessionReplay.screenshotDataQueue")
     private var _prvScreenshotData: Data? = nil
+
+    /// Serial queue used to JPEG-encode captured frames off the main thread.
+    /// `UIImage`/`CGImage` and `UIGraphicsImageRenderer` outputs aren't main-thread
+    /// bound, so encoding can run here freely while drawHierarchy stays on main.
+    /// Serial (not concurrent) so the skip-identical comparison in
+    /// `encodeAndProcess` sees `_prvScreenshotData` updates in capture order
+    /// and saves arrive on disk in capture order.
+    internal let encodingQueue = DispatchQueue(
+        label: "com.coralogix.sessionReplay.encodingQueue",
+        qos: .userInitiated
+    )
     
     private lazy var comparisonContext = CIContext(options: [.workingColorSpace: NSNull()])
     
@@ -94,19 +105,17 @@ public class SessionReplayModel {
         Log.d("SessionManager deinitialized and resources cleaned up.")
     }
     
-    internal func prepareScreenshotIfNeeded(properties: [String: Any]?) -> Data? {
-        guard Thread.isMainThread else {
-            DispatchQueue.main.async { [weak self] in
-                _ = self?.captureImage(properties: properties)
-            }
-            return nil
-        }
-        
+    /// Captures the current key window into a UIImage on the main thread,
+    /// folding mask compositing into the same renderer pass. Does NOT JPEG-encode —
+    /// callers can dispatch encoding to `encodingQueue`.
+    internal func prepareScreenshotImageOnMain(properties: [String: Any]?) -> UIImage? {
+        guard Thread.isMainThread else { return nil }
+
         guard let window = getKeyWindow() else {
             Log.e("No key window found")
             return nil
         }
-        
+
         guard let options = self.sessionReplayOptions,
               self.isValidSessionReplayOptions(options) else {
             Log.e("Invalid sessionReplayOptions")
@@ -115,12 +124,29 @@ public class SessionReplayModel {
 
         // Use cached mask regions from the provider (fetched before capture)
         let regionsRect: [CGRect] = getCachedMaskRegions()
-            
-        return window.captureScreenshot(
+
+        return window.captureScreenshotImage(
             scale: options.captureScale,
-            compressionQuality: options.captureCompressionQuality,
             regions: regionsRect
         )
+    }
+
+    /// Synchronous capture-and-encode, retained as a back-compat shim. The hot
+    /// `captureAutomatic` path no longer routes through here — it uses
+    /// `prepareScreenshotImageOnMain` and encodes JPEGs on `encodingQueue`.
+    internal func prepareScreenshotIfNeeded(properties: [String: Any]?) -> Data? {
+        guard Thread.isMainThread else {
+            DispatchQueue.main.async { [weak self] in
+                _ = self?.captureImage(properties: properties)
+            }
+            return nil
+        }
+
+        guard let image = prepareScreenshotImageOnMain(properties: properties),
+              let quality = sessionReplayOptions?.captureCompressionQuality else {
+            return nil
+        }
+        return image.jpegData(compressionQuality: quality)
     }
     
     /// Cached mask regions from the last provider call
@@ -166,22 +192,32 @@ public class SessionReplayModel {
     ///   - properties: Additional properties for the screenshot
     ///   - completion: Called with the screenshot data or nil if capture failed
     internal func prepareScreenshotWithMaskRegions(properties: [String: Any]?, completion: @escaping (Data?) -> Void) {
-        // Fetch mask regions first, then capture
+        // Fetch mask regions first, then capture on main, then encode off-main.
         fetchMaskRegions { [weak self] in
             guard let self = self else {
                 completion(nil)
                 return
             }
-            
-            // Ensure we're on main thread for screenshot capture
-            if Thread.isMainThread {
-                let data = self.prepareScreenshotIfNeeded(properties: properties)
-                completion(data)
-            } else {
-                DispatchQueue.main.async {
-                    let data = self.prepareScreenshotIfNeeded(properties: properties)
-                    completion(data)
+
+            let captureAndEncode: () -> Void = { [weak self] in
+                guard let self = self else {
+                    completion(nil)
+                    return
                 }
+                guard let image = self.prepareScreenshotImageOnMain(properties: properties),
+                      let quality = self.sessionReplayOptions?.captureCompressionQuality else {
+                    completion(nil)
+                    return
+                }
+                self.encodingQueue.async {
+                    completion(image.jpegData(compressionQuality: quality))
+                }
+            }
+
+            if Thread.isMainThread {
+                captureAndEncode()
+            } else {
+                DispatchQueue.main.async(execute: captureAndEncode)
             }
         }
     }
@@ -231,33 +267,75 @@ public class SessionReplayModel {
         // Check if we need to use async region fetching (pull-based model)
         let hasProvider = sessionReplayOptions?.maskRegionsProvider != nil
         let hasRegionIds = !maskedRegionIds.isEmpty
-        
+
         if hasProvider && hasRegionIds {
             // Use async capture with dynamic mask regions
             captureAutomaticWithMaskRegions(properties: properties)
             return .success(()) // Return success as the capture is in progress
         }
-        
-        // Synchronous capture without dynamic mask regions
-        if let screenshotData = prepareScreenshotIfNeeded(properties: properties) {
-            // Atomic read-compare-write for prvScreenshotData
-            let shouldSkip = screenshotDataQueue.sync { () -> Bool in
-                if let prvData = _prvScreenshotData, !self.imagesAreDifferent(screenshotData, prvData) {
+
+        // Capture the UIImage on the main thread (UIKit-bound work only),
+        // then JPEG-encode + skip-check + save off-main on encodingQueue.
+        // Skipping is detected asynchronously now; if the caller had already
+        // incremented the screenshot counter (via segmentIndex), revert it from
+        // inside the async completion. This mirrors captureAutomaticWithMaskRegions.
+        guard let image = prepareScreenshotImageOnMain(properties: properties),
+              let options = sessionReplayOptions else {
+            return .failure(.captureFailed)
+        }
+
+        let callerIncrementedCounter = properties?[Keys.segmentIndex.rawValue] as? Int != nil
+        encodeAndProcess(
+            image: image,
+            compressionQuality: options.captureCompressionQuality,
+            properties: properties,
+            callerIncrementedCounter: callerIncrementedCounter
+        )
+        return .success(())
+    }
+
+    /// JPEG-encodes the captured image off the main thread, performs the
+    /// "skip identical screenshots" check on the encoded bytes (preserving the
+    /// existing comparison semantics), and saves to disk if the frame is new.
+    /// We compare on encoded Data — same behaviour as before — and accept the
+    /// occasional wasted encode on duplicate frames as a fair tradeoff for
+    /// simplicity and exact behavioural parity. The encode itself was the
+    /// expensive piece on main; doing it off-main resolves the scroll lag.
+    internal func encodeAndProcess(
+        image: UIImage,
+        compressionQuality: CGFloat,
+        properties: [String: Any]?,
+        callerIncrementedCounter: Bool
+    ) {
+        encodingQueue.async { [weak self] in
+            guard let self = self else { return }
+
+            guard let screenshotData = image.jpegData(compressionQuality: compressionQuality) else {
+                if callerIncrementedCounter {
+                    SdkManager.shared.getCoralogixSdk()?.revertScreenshotCounter()
+                }
+                return
+            }
+
+            let shouldSkip = self.screenshotDataQueue.sync { () -> Bool in
+                if let prvData = self._prvScreenshotData,
+                   !self.imagesAreDifferent(screenshotData, prvData) {
                     return true
                 }
-                _prvScreenshotData = screenshotData
+                self._prvScreenshotData = screenshotData
                 return false
             }
-            
+
             if shouldSkip {
                 Log.d("[SessionReplayModel] Same screenshot, skipping...")
-                return .failure(.skippingEvent)
+                if callerIncrementedCounter {
+                    SdkManager.shared.getCoralogixSdk()?.revertScreenshotCounter()
+                }
+                return
             }
-            
-            saveScreenshotToFileSystem(screenshotData: screenshotData, properties: properties)
-            return .success(())
+
+            self.saveScreenshotToFileSystem(screenshotData: screenshotData, properties: properties)
         }
-        return .failure(.captureFailed)
     }
     
     /// Captures screenshot asynchronously with dynamic mask regions.

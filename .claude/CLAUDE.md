@@ -88,6 +88,8 @@ Events carry context structs from `Coralogix/Sources/Model/Contexts/` (e.g., `De
 
 - **Protect all shared mutable state with `NSLock` or a serial `DispatchQueue`.** Follow the existing pattern — don't introduce unguarded shared state.
 
+- **Demo-app changes must land in both `Example/DemoAppSwift` (UIKit) and `Example/DemoAppSwiftUI` (SwiftUI).** When adding a new screen, section, or interactive control to one demo app, mirror it in the other so feature parity holds across both targets and the UI tests (`DemoAppUITests`, `DemoAppSwiftUIUITests`) stay symmetrical.
+
 ## Distribution
 
 Three podspecs must be published in order (`CoralogixInternal` → `SessionReplay` + `Coralogix`) with CDN propagation waits between steps. The `lint_and_push_cocoapods.sh` script handles this interactively. Version numbers must be kept in sync across all three `.podspec` files and the `CoralogixRum` source constant (`Global.sdk` in `CoralogixInternal/Sources/Utils.swift`). `Package.swift` has no version string — SPM versioning is driven by git tags.

@@ -92,27 +92,29 @@ final class SessionReplayModelTests: XCTestCase {
     func testCaptureImage_fallsBackToPrepareScreenshotIfNoneProvided() {
         let model = MockSessionReplayModel2()
         model.sessionId = "abc123"
-        
+        model.sessionReplayOptions = SessionReplayOptions(captureScale: 1.0, captureCompressionQuality: 0.8)
+
         _ = model.captureImage(properties: nil)
-        
+
         XCTAssertTrue(model.didCallPrepareScreenshot)
         XCTAssertTrue(model.didCallSaveScreenshot)
         XCTAssertEqual(model.passedScreenshotData, "mock image".data(using: .utf8))
     }
-    
+
     func testCaptureImage_logsAndReturnsIfPrepareScreenshotFails() {
         class FailingScreenshotModel: MockSessionReplayModel2 {
-            override func prepareScreenshotIfNeeded(properties: [String : Any]? = nil) -> Data? {
+            override func prepareScreenshotImageOnMain(properties: [String : Any]?) -> UIImage? {
                 didCallPrepareScreenshot = true
                 return nil
             }
         }
-        
+
         let model = FailingScreenshotModel()
         model.sessionId = "abc123"
-        
+        model.sessionReplayOptions = SessionReplayOptions(captureScale: 1.0, captureCompressionQuality: 0.8)
+
         _ = model.captureImage(properties: nil)
-        
+
         XCTAssertTrue(model.didCallPrepareScreenshot)
         XCTAssertFalse(model.didCallSaveScreenshot)
     }
@@ -480,6 +482,50 @@ final class SessionReplayModelTests: XCTestCase {
         XCTAssertEqual(result, .failure, "Result should be .failure when saving to an invalid path")
     }
     
+    func testEncodeAndProcess_runsAsynchronously_andSaves() {
+        class CapturingModel: SessionReplayModel {
+            var saveExpectation: XCTestExpectation?
+            var savedData: Data?
+            var saveThread: Thread?
+
+            override func saveScreenshotToFileSystem(screenshotData: Data, properties: [String : Any]?) {
+                savedData = screenshotData
+                saveThread = Thread.current
+                saveExpectation?.fulfill()
+            }
+        }
+
+        let model = CapturingModel()
+        let exp = expectation(description: "save called after off-main encode")
+        model.saveExpectation = exp
+
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: 4, height: 4))
+        let image = renderer.image { ctx in
+            UIColor.red.setFill()
+            ctx.fill(CGRect(x: 0, y: 0, width: 4, height: 4))
+        }
+
+        let callingThread = Thread.current
+
+        model.encodeAndProcess(
+            image: image,
+            compressionQuality: 0.8,
+            properties: nil,
+            callerIncrementedCounter: false
+        )
+
+        wait(for: [exp], timeout: 2.0)
+        XCTAssertNotNil(model.savedData)
+        XCTAssertGreaterThan(model.savedData?.count ?? 0, 0, "Encoded JPEG should be non-empty")
+        // Asserting on the recorded execution thread instead of "savedData was
+        // still nil right after the call" — the latter races against
+        // encodingQueue.async, which can start before the test thread reaches
+        // the next line. Recording where the save actually ran is what we
+        // really want to verify.
+        XCTAssertNotEqual(model.saveThread, callingThread,
+                          "JPEG encode + save should run off the calling thread (on encodingQueue)")
+    }
+
     func testHandleCapturedData_ShouldCallAddURLAndCompress() {
 
         let fileURL = URL(string: "file:///mockfile.png")!
@@ -676,9 +722,27 @@ class MockSessionReplayModel2: SessionReplayModel {
     var passedScreenshotData: Data?
     var passedProperties: [String: Any]?
 
-    override func prepareScreenshotIfNeeded(properties: [String : Any]? = nil) -> Data? {
+    override func prepareScreenshotImageOnMain(properties: [String : Any]?) -> UIImage? {
         didCallPrepareScreenshot = true
-        return "mock image".data(using: .utf8)
+        // 1x1 white image — real UIImage so the encode pipeline can run, but cheap.
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: 1, height: 1))
+        return renderer.image { ctx in
+            UIColor.white.setFill()
+            ctx.fill(CGRect(x: 0, y: 0, width: 1, height: 1))
+        }
+    }
+
+    /// Bypass the encodingQueue + JPEG path and inject a deterministic byte
+    /// payload synchronously so tests can assert on captured data without
+    /// awaiting an off-main encode.
+    override func encodeAndProcess(
+        image: UIImage,
+        compressionQuality: CGFloat,
+        properties: [String : Any]?,
+        callerIncrementedCounter: Bool
+    ) {
+        let data = "mock image".data(using: .utf8)!
+        saveScreenshotToFileSystem(screenshotData: data, properties: properties)
     }
 
     override func saveScreenshotToFileSystem(screenshotData: Data, properties: [String : Any]?) {
