@@ -111,6 +111,35 @@ public struct SessionReplayOptions {
     /// Uses a pull-based model where coordinates are fetched on-demand since widget positions can change.
     /// - Note: Set this callback to enable dynamic masking of regions (e.g., Flutter widgets).
     public var maskRegionsProvider: MaskRegionsProvider?
+
+    /// When set, the SDK requests a pre-masked bitmap from this provider
+    /// for each FlutterView found in the captured view hierarchy.
+    ///
+    /// The Flutter plugin (cx-flutter-plugin, BUGV2-6045) registers this
+    /// callback to return finished RGBA pixel data; the SDK substitutes
+    /// it into the FlutterView region of the captured host bitmap. This
+    /// path replaces the frame-skew-prone pull-based [maskRegionsProvider]
+    /// for FlutterView regions.
+    ///
+    /// When both this and [maskRegionsProvider] are set, this field
+    /// takes precedence for FlutterView regions; the rect provider
+    /// continues to handle non-Flutter masked views during the
+    /// Flutter plugin's migration.
+    ///
+    /// Additive in this release — no behaviour change when unset.
+    /// Full contract in `docs/session-replay-shared.md`; integration
+    /// plan in `docs/session-replay-ios.md` §4.2.
+    public var flutterViewBitmapProvider: FlutterViewBitmapProvider?
+
+    /// Optional. Returns the live Flutter platform-view IDs for a given
+    /// FlutterView so the SDK can re-paint them on top of the Dart
+    /// bitmap after substitution (Maps, WebView, etc.). When unset, the
+    /// SDK skips the platform-view re-paint step — acceptable when the
+    /// app has no platform views or when fidelity for them in the
+    /// recording is not a priority.
+    ///
+    /// See `docs/session-replay-ios.md` §4.3 for the composition order.
+    public var flutterPlatformViewsProvider: FlutterPlatformViewsProvider?
     
     /// Initializes a new instance of `SessionReplayOptions` with the provided parameters.
     /// - Parameters:
@@ -138,7 +167,9 @@ public struct SessionReplayOptions {
                 maskFaces: Bool = false,
                 creditCardPredicate: [String]? = nil,
                 autoStartSessionRecording: Bool = false,
-                maskRegionsProvider: MaskRegionsProvider? = nil) {
+                maskRegionsProvider: MaskRegionsProvider? = nil,
+                flutterViewBitmapProvider: FlutterViewBitmapProvider? = nil,
+                flutterPlatformViewsProvider: FlutterPlatformViewsProvider? = nil) {
         self.recordingType = recordingType
         self.captureTimeInterval = captureTimeInterval
         self.captureScale = captureScale
@@ -151,6 +182,8 @@ public struct SessionReplayOptions {
         self.autoStartSessionRecording = autoStartSessionRecording
         self.sessionRecordingSampleRate = sessionRecordingSampleRate
         self.maskRegionsProvider = maskRegionsProvider
+        self.flutterViewBitmapProvider = flutterViewBitmapProvider
+        self.flutterPlatformViewsProvider = flutterPlatformViewsProvider
     }
 }
 
