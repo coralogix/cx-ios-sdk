@@ -24,6 +24,31 @@ class SessionReplayViewController: UITableViewController {
     var customView = CustomView(frame: .zero)
     private let customViewHeight: CGFloat = 150
 
+    // Stress content for the SR text-masking pipeline: multi-language paragraphs
+    // (RTL + CJK) and short non-word tokens that the old en-US + language-corrected
+    // VNRecognizeTextRequest used to silently drop. Scroll through this section to
+    // exercise the widened TextScanner config under maskAllTexts.
+    private static let stressTextLines: [String] = [
+        "The quick brown fox jumps over the lazy dog. Pack my box with five dozen liquor jugs — abc123 OK.",
+        "El veloz murciélago hindú comía feliz cardillo y kiwi. La cigüeña tocaba el saxofón detrás del palenque.",
+        "Portez ce vieux whisky au juge blond qui fume. Voix ambiguë d'un cœur qui préfère les jattes de kiwis.",
+        "Zwölf Boxkämpfer jagen Viktor quer über den großen Sylter Deich — Größe ÄÖÜ.",
+        "Ma la volpe, col suo balzo, ha raggiunto il quieto Fido — perché sì.",
+        "Um pequeno jabuti xereta viu dez cegonhas felizes — coração à beça.",
+        "Съешь же ещё этих мягких французских булок, да выпей чаю.",
+        "דג סקרן שט לו בים זך אך לפתע פגש חבורה נחמדה של דגים.",
+        "نص حكيم له سر قاطع وذو شأن عظيم مكتوب على ثوب أخضر ومغلف بجلد أزرق.",
+        "いろはにほへと ちりぬるを — 価格 ¥1,200 OK 確認。",
+        "敏捷的棕色狐狸跳过懒狗。今天 ¥99.90 限时特惠 OK。",
+        "다람쥐 헌 쳇바퀴에 타고파. 확인 ₩9,900 OK.",
+        "เป็นมนุษย์สุดประเสริฐเลิศคุณค่า กว่าบรรดาฝูงสัตว์เดรัจฉาน — OK.",
+        "Ξεσκεπάζω τὴν ψυχοφθόρα βδελυγμία — Τιμή €4,99.",
+        "OK · USB-C · v2.6.3 · ETA 5m · ID#A1B2 · PIN 0000",
+        "$4.99 · €19,90 · £10.50 · ¥1,200 · ₪59.90 · ₹499 · ₩9,900",
+        "HTTP/2 · TLS 1.3 · SHA-256 · 200 OK · 404 · 500 · 422",
+        "A1B2-C3D4 · P/N: X-42 · MAC 00:1A:2B:3C:4D:5E · UUID e4f1…"
+    ]
+
     override func viewDidLoad() {
         super.viewDidLoad()
 
@@ -41,6 +66,7 @@ class SessionReplayViewController: UITableViewController {
         tableView.register(UITableViewCell.self, forCellReuseIdentifier: "session_replay_cell")
         tableView.register(CreditCardInputCell.self, forCellReuseIdentifier: "CreditCardInputCell")
         tableView.register(FullImageCell.self, forCellReuseIdentifier: "full_image_cell")
+        tableView.register(UITableViewCell.self, forCellReuseIdentifier: "stress_text_cell")
 
         tableView.dataSource = self
         tableView.delegate = self
@@ -75,15 +101,36 @@ class SessionReplayViewController: UITableViewController {
     // MARK: - Data source
 
     override func numberOfSections(in tableView: UITableView) -> Int {
-        1
+        2
     }
 
     override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        items.count
+        section == 0 ? items.count : Self.stressTextLines.count
+    }
+
+    override func tableView(_ tableView: UITableView,
+                            titleForHeaderInSection section: Int) -> String? {
+        section == 1 ? "Stress Test — Mixed Text" : nil
     }
 
     override func tableView(_ tableView: UITableView,
                             cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+        if indexPath.section == 1 {
+            let cell = tableView.dequeueReusableCell(
+                withIdentifier: "stress_text_cell",
+                for: indexPath
+            )
+            var content = cell.defaultContentConfiguration()
+            content.text = Self.stressTextLines[indexPath.row]
+            content.textProperties.numberOfLines = 0
+            content.textProperties.font = .preferredFont(forTextStyle: .footnote)
+            cell.contentConfiguration = content
+            cell.accessoryType = .none
+            cell.selectionStyle = .none
+            cell.backgroundColor = .secondarySystemGroupedBackground
+            return cell
+        }
+
         let cellText = items[indexPath.row]
 
         if cellText == Keys.creditCardElement.rawValue {
@@ -143,6 +190,10 @@ class SessionReplayViewController: UITableViewController {
 
     override func tableView(_ tableView: UITableView,
                             didSelectRowAt indexPath: IndexPath) {
+        guard indexPath.section == 0 else {
+            tableView.deselectRow(at: indexPath, animated: true)
+            return
+        }
         let item = items[indexPath.row]
         customView.updateText("Selected item: \(item)")
 
@@ -173,6 +224,9 @@ class SessionReplayViewController: UITableViewController {
 
     override func tableView(_ tableView: UITableView,
                             heightForRowAt indexPath: IndexPath) -> CGFloat {
+        if indexPath.section == 1 {
+            return UITableView.automaticDimension
+        }
         let cellText = items[indexPath.row]
         if cellText == Keys.creditCardImgElement.rawValue {
             return 150
