@@ -114,19 +114,21 @@ class TextScannerTests: XCTestCase {
 
         textScanner.configureRecognitionRequest(request)
 
+        // recognitionLanguages must be widened on every iOS version we support.
+        // Relying on `automaticallyDetectsLanguage` alone on iOS 16+ caused
+        // mixed-script frames to collapse to a single dominant script and drop
+        // the rest (Latin + Cyrillic missed when CJK/RTL were also on screen).
+        // The fix is to always supply an explicit multi-script candidate list.
+        XCTAssertGreaterThan(request.recognitionLanguages.count, 1)
+        XCTAssertTrue(request.recognitionLanguages.contains("en-US"))
+        // Spot-check a non-English language to guard against accidental
+        // regression to the en-US default.
+        XCTAssertTrue(request.recognitionLanguages.contains("ja-JP"))
+
         if #available(iOS 16.0, *) {
-            // iOS 16+: Vision picks the language per-image from its full
-            // supported set — the right behaviour for international apps.
+            // iOS 16+: keep auto-detect on top of the explicit list so Vision
+            // biases per-image while still seeing every script we care about.
             XCTAssertTrue(request.automaticallyDetectsLanguage)
-        } else {
-            // Pre-iOS 16: we enumerate the supported OCR languages so
-            // non-en-US UI text is detected and masked. The default
-            // (`["en-US"]`) is the bug we're fixing — assert we widened it.
-            XCTAssertGreaterThan(request.recognitionLanguages.count, 1)
-            XCTAssertTrue(request.recognitionLanguages.contains("en-US"))
-            // Spot-check a non-English language to guard against accidental
-            // regression to the en-US default.
-            XCTAssertTrue(request.recognitionLanguages.contains("ja-JP"))
         }
     }
 

@@ -68,25 +68,34 @@ public class TextScanner {
     internal func configureRecognitionRequest(_ request: VNRecognizeTextRequest) {
         request.recognitionLevel = .accurate
         request.usesLanguageCorrection = false
+
+        // Always supply an explicit multi-script language list. Vision's OCR
+        // language coverage grew incrementally:
+        //   iOS 13     → en-US only
+        //   iOS 14.0+  → fr/it/de/es/pt-BR/zh-Hans/zh-Hant
+        //   iOS 14.5+  → ru/uk
+        //   iOS 15.4+  → ja/ko
+        // Setting unsupported languages can cause `perform()` to throw on older
+        // OSes, so intersect with what the runtime actually supports.
+        //
+        // On iOS 16+ we additionally enable automaticallyDetectsLanguage: per
+        // Apple's docs this biases detection per-image using recognitionLanguages
+        // as candidates. Relying on automaticallyDetectsLanguage alone caused
+        // mixed-script frames (e.g. Latin + Cyrillic + CJK on screen at once) to
+        // collapse to a single dominant script and silently drop the others, so
+        // we always set the explicit list as well.
+        let desired = [
+            "en-US", "fr-FR", "it-IT", "de-DE", "es-ES", "pt-BR",
+            "zh-Hans", "zh-Hant", "ja-JP", "ko-KR", "ru-RU", "uk-UA"
+        ]
+        let supported = (try? VNRecognizeTextRequest.supportedRecognitionLanguages(
+            for: .accurate,
+            revision: VNRecognizeTextRequest.currentRevision)) ?? ["en-US"]
+        let supportedSet = Set(supported)
+        request.recognitionLanguages = desired.filter { supportedSet.contains($0) }
+
         if #available(iOS 16.0, *) {
             request.automaticallyDetectsLanguage = true
-        } else {
-            // Vision's OCR language coverage grew incrementally:
-            //   iOS 13     → en-US only
-            //   iOS 14.0+  → fr/it/de/es/pt-BR/zh-Hans/zh-Hant
-            //   iOS 14.5+  → ru/uk
-            //   iOS 15.4+  → ja/ko
-            // Setting unsupported languages can cause `perform()` to throw on
-            // older OSes, so intersect with what the runtime actually supports.
-            let desired = [
-                "en-US", "fr-FR", "it-IT", "de-DE", "es-ES", "pt-BR",
-                "zh-Hans", "zh-Hant", "ja-JP", "ko-KR", "ru-RU", "uk-UA"
-            ]
-            let supported = (try? VNRecognizeTextRequest.supportedRecognitionLanguages(
-                for: .accurate,
-                revision: VNRecognizeTextRequest.currentRevision)) ?? ["en-US"]
-            let supportedSet = Set(supported)
-            request.recognitionLanguages = desired.filter { supportedSet.contains($0) }
         }
     }
     
