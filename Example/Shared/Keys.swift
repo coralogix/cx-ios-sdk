@@ -67,4 +67,5 @@ enum Keys: String {
     case customSpans = "Custom Spans"
     case tracesExporter = "Traces Exporter"
     case logSamplingDecoupling = "Log Sampling Decoupling"
+    case timeMeasurement = "Custom Time Measurement"
 }

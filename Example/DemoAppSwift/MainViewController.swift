@@ -79,6 +79,12 @@ final class MainViewController: UITableViewController {
             subtitle: "Pick rate + exclude set, fire events, watch what survives",
             systemImageName: "slider.horizontal.3",
             key: .logSamplingDecoupling
+        ),
+        .init(
+            title: "Custom Time Measurement",
+            subtitle: "startTimeMeasure / endTimeMeasure with labels, quick presets, captured spans",
+            systemImageName: "timer",
+            key: .timeMeasurement
         )
     ]
 
@@ -273,6 +279,8 @@ final class MainViewController: UITableViewController {
             vc = TracesExporterViewController()
         case .logSamplingDecoupling:
             vc = LogSamplingDecouplingViewController()
+        case .timeMeasurement:
+            vc = TimeMeasurementViewController()
         default:
             showToast("Not implemented for this menu item")
             return
