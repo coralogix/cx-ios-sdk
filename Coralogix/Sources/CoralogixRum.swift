@@ -427,7 +427,8 @@ public class CoralogixRum {
     ///   - name: Unique identifier. Empty / whitespace-only keys are ignored.
     ///     A duplicate `start` for an in-flight name is also ignored (first wins).
     ///   - labels: Optional labels attached at start; merged with SDK-level
-    ///     labels at `end`; encoded into `custom_labels`.
+    ///     labels at `end` (start labels win on key collision); encoded into
+    ///     `custom_labels`.
     public func startTimeMeasure(name: String, labels: [String: Any]? = nil) {
         guard CoralogixRum.isInitialized else {
             Log.w("CoralogixRum not initialized — startTimeMeasure ignored")
