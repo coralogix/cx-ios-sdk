@@ -37,18 +37,18 @@ final class TimeMeasurementTrackerTests: XCTestCase {
 
     // MARK: - Case 1: happy path
 
-    func testHappyPath_durationMatchesElapsedTime() {
+    func testHappyPath_durationMatchesElapsedTime() throws {
         tracker.startMeasurement(key: "a", labels: nil)
         Thread.sleep(forTimeInterval: 0.1)
-        let result = tracker.endMeasurement(key: "a")
+        let result = try XCTUnwrap(tracker.endMeasurement(key: "a"),
+                                   "end should return a non-nil duration tuple.")
 
-        let duration = try? XCTUnwrap(result).durationMs
         // Lower bound: Thread.sleep guarantees ≥100ms, allow 5ms slack for clock skew at the
         // boundary. Upper bound: generous to avoid flakes under CI scheduling pressure — the
         // assertion that matters is "tracker reported at least the sleep duration".
-        XCTAssertGreaterThanOrEqual(duration ?? 0, 95.0,
+        XCTAssertGreaterThanOrEqual(result.durationMs, 95.0,
                                     "Duration should be ≥95ms (sleep was 100ms).")
-        XCTAssertLessThanOrEqual(duration ?? .infinity, 500.0,
+        XCTAssertLessThanOrEqual(result.durationMs, 500.0,
                                  "Duration shouldn't be wildly inflated.")
     }
 
@@ -77,17 +77,17 @@ final class TimeMeasurementTrackerTests: XCTestCase {
 
     // MARK: - Case 4: duplicate start — first wins
 
-    func testStart_duplicateKey_secondIgnored_firstWins() {
+    func testStart_duplicateKey_secondIgnored_firstWins() throws {
         tracker.startMeasurement(key: "a", labels: nil)
         Thread.sleep(forTimeInterval: 0.05)
         // Second start should be ignored; if it overwrote the first, the duration
         // below would be ~50ms instead of ~100ms.
         tracker.startMeasurement(key: "a", labels: nil)
         Thread.sleep(forTimeInterval: 0.05)
-        let result = tracker.endMeasurement(key: "a")
+        let result = try XCTUnwrap(tracker.endMeasurement(key: "a"),
+                                   "end should return a non-nil duration tuple.")
 
-        let duration = try? XCTUnwrap(result).durationMs
-        XCTAssertGreaterThanOrEqual(duration ?? 0, 95.0,
+        XCTAssertGreaterThanOrEqual(result.durationMs, 95.0,
                                     "Duplicate start must be ignored — duration should reflect the first start (~100ms total), not the second (~50ms).")
     }
 
