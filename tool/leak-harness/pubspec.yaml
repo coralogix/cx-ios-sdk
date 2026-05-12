@@ -1,0 +1,18 @@
+name: cx_session_replay_leak_harness
+description: |
+  Vendored harness scripts for BUGV2-6045 session-replay leak detection
+  against the native iOS SDK. Mock proxy server intercepts session-
+  replay uploads; pixel scanner counts magenta sentinel pixels in each
+  captured frame. Same shape as the harnesses in cx-flutter-plugin,
+  android-sdk, and cx-react-native-plugin — each repo owns its own
+  copy so it can be run without depending on a particular workstation
+  layout.
+publish_to: 'none'
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  shelf: ^1.4.1
+  mime: ^1.0.5
+  path: ^1.9.0

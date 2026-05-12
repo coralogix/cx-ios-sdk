@@ -27,6 +27,16 @@ final class CoralogixRumManager {
                                       userName: "?",
                                       userEmail: "a@a.com",
                                       userMetadata: ["d":"d"])
+        // BUGV2-6045 leak-harness override: when the XCUITest harness
+        // launches the app it sets CX_MOCK_PORT in the env. Point the
+        // session-replay proxy at the host mock server on the simulator
+        // host loopback. No effect on normal demo launches.
+        let proxyUrl: String? = {
+            if let port = ProcessInfo.processInfo.environment["CX_MOCK_PORT"], !port.isEmpty {
+                return "http://127.0.0.1:\(port)"
+            }
+            return Envs.PROXY_URL.rawValue
+        }()
         let options = CoralogixExporterOptions(coralogixDomain: CoralogixDomain.EU2,
                                                userContext: userContext,
                                                environment: "PROD",
@@ -51,7 +61,7 @@ final class CoralogixRumManager {
 //            return editableCxRum
 //        },
                                                enableSwizzling: true,
-                                               proxyUrl: Envs.PROXY_URL.rawValue, // remove if not need to use proxy
+                                               proxyUrl: proxyUrl, // BUGV2-6045: harness override (CX_MOCK_PORT env), else Envs.PROXY_URL
                                                traceParentInHeader: ["enable": true],
                                                mobileVitals:[.cpuDetector: false,
                                                              .warmDetector: false,

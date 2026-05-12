@@ -25,12 +25,38 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
         CoralogixRumManager.shared.initialize()
 
-        // Only configure Firebase if GoogleService-Info.plist exists and is valid
-        // This allows the app to run in CI without Firebase
-        if let path = Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist"),
+        // BUGV2-6045 leak-harness mode: when launched with --leak-harness,
+        // initialize SessionReplay with maskAllTexts (via maskText: [".*"])
+        // and start recording so the XCUITest can drive the LIST scenario.
+        // The proxyUrl is overridden by CoralogixRumManager when CX_MOCK_PORT
+        // is set in the env (also set by the XCUITest launch).
+        if ProcessInfo.processInfo.arguments.contains("--leak-harness") {
+            let srOptions = SessionReplayOptions(
+                recordingType: .image,
+                captureTimeInterval: 1.0,
+                captureScale: 1.0,
+                captureCompressionQuality: 1.0,
+                sessionRecordingSampleRate: 100,
+                maskText: [".*"], // matches Android maskAllTexts: true
+                maskOnlyCreditCards: false,
+                maskAllImages: false,
+                maskFaces: false,
+                creditCardPredicate: nil,
+                autoStartSessionRecording: true
+            )
+            SessionReplay.initializeWithOptions(sessionReplayOptions: srOptions)
+        }
+
+        // Only configure Firebase if GoogleService-Info.plist exists and is valid.
+        // Skipped in leak-harness mode because the harness uses a stub plist
+        // that doesn't pass Firebase's API-key validation; the harness doesn't
+        // exercise Firebase anyway.
+        let isLeakHarness = ProcessInfo.processInfo.arguments.contains("--leak-harness")
+        if !isLeakHarness,
+           let path = Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist"),
            FileManager.default.fileExists(atPath: path) {
             FirebaseApp.configure()
-        } else {
+        } else if !isLeakHarness {
             print("⚠️ Firebase not configured: GoogleService-Info.plist not found (this is expected in CI)")
         }
 
