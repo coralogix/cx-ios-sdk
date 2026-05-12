@@ -7,8 +7,9 @@
 //
 //  Routes real `SpanData` through `CoralogixExporter.export()` and captures what
 //  survives the sampling filter via the `tracesExporter` callback (which fires after
-//  the sampling/URL/error filters but before encode/upload). A MockSpanUploader is
-//  wired in to keep tests offline.
+//  the sampling/URL/error filters but before encode/upload). A `SamplingMockSpanUploader`
+//  is wired in to keep tests offline. Shared helpers (`EventTypeCapture`, factories,
+//  mock uploader) live in `SamplingTestHelpers.swift` and are reused by `HybridAPITests`.
 //
 //  "Deterministic sampler stub": SDKSampler.shouldInitialized() uses
 //  Int.random(in: 0..<100) < sampleRate, which is deterministic at the boundaries
@@ -30,7 +31,7 @@ final class LogSamplingDecouplingTests: XCTestCase {
     // MARK: - Case 1: sampleRate=0, exclude=[] ⇒ SDK does not initialize
 
     func testCase1_sampleRateZero_excludeEmpty_doesNotInitialize() {
-        let rum = CoralogixRum(options: makeOptions(sampleRate: 0, exclude: []))
+        let rum = CoralogixRum(options: makeSamplingOptions(sampleRate: 0, exclude: []))
         defer { rum.shutdown() }
 
         XCTAssertFalse(rum.isInitialized,
@@ -42,17 +43,19 @@ final class LogSamplingDecouplingTests: XCTestCase {
     // MARK: - Case 2: sampleRate=0, exclude=[.logs] ⇒ logs export, others drop
 
     func testCase2_sampleRateZero_excludeLogs_logsExportOthersDrop() throws {
-        let capture = Capture()
-        let rum = CoralogixRum(options: makeOptions(sampleRate: 0, exclude: [.logs], capture: capture))
+        let capture = EventTypeCapture()
+        let rum = CoralogixRum(options: makeSamplingOptions(sampleRate: 0,
+                                                            exclude: [.logs],
+                                                            tracesExporter: capture.tracesExporterCallback()))
         defer { rum.shutdown() }
 
         let exporter = try requireExporter(rum)
-        exporter.spanUploader = MockSpanUploader()
+        exporter.spanUploader = SamplingMockSpanUploader()
 
         _ = exporter.export(spans: [
-            makeSpan(eventType: .log),
-            makeSpan(eventType: .error),
-            makeSpan(eventType: .networkRequest)
+            makeSamplingSpan(eventType: .log),
+            makeSamplingSpan(eventType: .error),
+            makeSamplingSpan(eventType: .networkRequest)
         ], explicitTimeout: nil)
 
         XCTAssertEqual(capture.eventTypes, ["log"],
@@ -62,17 +65,19 @@ final class LogSamplingDecouplingTests: XCTestCase {
     // MARK: - Case 3: sampleRate=100, exclude=[.logs] ⇒ all spans export
 
     func testCase3_sampleRateHundred_excludeLogs_allSpansExport() throws {
-        let capture = Capture()
-        let rum = CoralogixRum(options: makeOptions(sampleRate: 100, exclude: [.logs], capture: capture))
+        let capture = EventTypeCapture()
+        let rum = CoralogixRum(options: makeSamplingOptions(sampleRate: 100,
+                                                            exclude: [.logs],
+                                                            tracesExporter: capture.tracesExporterCallback()))
         defer { rum.shutdown() }
 
         let exporter = try requireExporter(rum)
-        exporter.spanUploader = MockSpanUploader()
+        exporter.spanUploader = SamplingMockSpanUploader()
 
         _ = exporter.export(spans: [
-            makeSpan(eventType: .log),
-            makeSpan(eventType: .error),
-            makeSpan(eventType: .networkRequest)
+            makeSamplingSpan(eventType: .log),
+            makeSamplingSpan(eventType: .error),
+            makeSamplingSpan(eventType: .networkRequest)
         ], explicitTimeout: nil)
 
         XCTAssertEqual(Set(capture.eventTypes),
@@ -87,7 +92,7 @@ final class LogSamplingDecouplingTests: XCTestCase {
         // the flag to `true`, rotate the session, and watch the reroll callback flip it
         // back. Asserting "the value didn't change" alone would also be true if the callback
         // never fired — the manual flip closes that gap.
-        let rum = CoralogixRum(options: makeOptions(sampleRate: 0, exclude: [.logs]))
+        let rum = CoralogixRum(options: makeSamplingOptions(sampleRate: 0, exclude: [.logs]))
         defer { rum.shutdown() }
 
         let exporter = try requireExporter(rum)
@@ -105,7 +110,7 @@ final class LogSamplingDecouplingTests: XCTestCase {
     }
 
     func testCase4_sessionRotation_sampleRateHundred_rerollFlipsBackToTrue() throws {
-        let rum = CoralogixRum(options: makeOptions(sampleRate: 100, exclude: []))
+        let rum = CoralogixRum(options: makeSamplingOptions(sampleRate: 100, exclude: []))
         defer { rum.shutdown() }
 
         let exporter = try requireExporter(rum)
@@ -125,20 +130,20 @@ final class LogSamplingDecouplingTests: XCTestCase {
     // MARK: - Case 5: multiple categories ⇒ only those pass
 
     func testCase5_sampleRateZero_excludeLogsAndErrors_onlyThoseTwoPass() throws {
-        let capture = Capture()
-        let rum = CoralogixRum(options: makeOptions(sampleRate: 0,
-                                                    exclude: [.logs, .errors],
-                                                    capture: capture))
+        let capture = EventTypeCapture()
+        let rum = CoralogixRum(options: makeSamplingOptions(sampleRate: 0,
+                                                            exclude: [.logs, .errors],
+                                                            tracesExporter: capture.tracesExporterCallback()))
         defer { rum.shutdown() }
 
         let exporter = try requireExporter(rum)
-        exporter.spanUploader = MockSpanUploader()
+        exporter.spanUploader = SamplingMockSpanUploader()
 
         _ = exporter.export(spans: [
-            makeSpan(eventType: .log),
-            makeSpan(eventType: .error),
-            makeSpan(eventType: .networkRequest),
-            makeSpan(eventType: .mobileVitals)
+            makeSamplingSpan(eventType: .log),
+            makeSamplingSpan(eventType: .error),
+            makeSamplingSpan(eventType: .networkRequest),
+            makeSamplingSpan(eventType: .mobileVitals)
         ], explicitTimeout: nil)
 
         XCTAssertEqual(Set(capture.eventTypes), Set(["log", "error"]),
@@ -148,12 +153,14 @@ final class LogSamplingDecouplingTests: XCTestCase {
     // MARK: - Case 6: thread-safety smoke — rotate on one queue while exporting on another
 
     func testCase6_sessionRotation_concurrentWithExport_threadSafetySmoke() throws {
-        let capture = Capture()
-        let rum = CoralogixRum(options: makeOptions(sampleRate: 0, exclude: [.logs], capture: capture))
+        let capture = EventTypeCapture()
+        let rum = CoralogixRum(options: makeSamplingOptions(sampleRate: 0,
+                                                            exclude: [.logs],
+                                                            tracesExporter: capture.tracesExporterCallback()))
         defer { rum.shutdown() }
 
         let exporter = try requireExporter(rum)
-        exporter.spanUploader = MockSpanUploader()
+        exporter.spanUploader = SamplingMockSpanUploader()
 
         let iterations = 100
         let group = DispatchGroup()
@@ -172,7 +179,7 @@ final class LogSamplingDecouplingTests: XCTestCase {
         // not across calls, so the duplicate spanId here is harmless.
         group.enter()
         DispatchQueue.global(qos: .userInitiated).async {
-            let span = self.makeSpan(eventType: .log)
+            let span = makeSamplingSpan(eventType: .log)
             for _ in 0..<iterations {
                 _ = exporter.export(spans: [span], explicitTimeout: nil)
             }
@@ -197,99 +204,7 @@ final class LogSamplingDecouplingTests: XCTestCase {
 
     // MARK: - Helpers
 
-    /// Thread-safe append-only collector for event_type strings observed by `tracesExporter`.
-    private final class Capture {
-        private let lock = NSLock()
-        private var values: [String] = []
-
-        func append(_ value: String) {
-            lock.lock()
-            values.append(value)
-            lock.unlock()
-        }
-
-        var eventTypes: [String] {
-            lock.lock()
-            defer { lock.unlock() }
-            return values
-        }
-    }
-
-    private func makeOptions(sampleRate: Int,
-                             exclude: Set<ExcludableInstrumentation>,
-                             capture: Capture? = nil) -> CoralogixExporterOptions {
-        return CoralogixExporterOptions(
-            coralogixDomain: .US2,
-            userContext: nil,
-            environment: "test",
-            application: "TestApp",
-            version: "1.0.0",
-            publicKey: "test-key",
-            ignoreUrls: [],
-            ignoreErrors: [],
-            labels: nil,
-            sessionSampleRate: sampleRate,
-            excludeFromSampling: exclude,
-            instrumentations: nil,
-            tracesExporter: capture.map { capture in
-                { data in
-                    Self.eventTypes(in: data).forEach(capture.append)
-                }
-            },
-            debug: false
-        )
-    }
-
     private func requireExporter(_ rum: CoralogixRum) throws -> CoralogixExporter {
         return try XCTUnwrap(rum.coralogixExporter, "Exporter must exist after init.")
-    }
-
-    /// Builds a SpanData with the attributes CxSpan needs to encode successfully, plus the
-    /// `event_type` under test. No `httpUrl` and no `errorMessage`, so URL/error filters pass.
-    private func makeSpan(eventType: CoralogixEventType) -> SpanData {
-        let attributes: [String: AttributeValue] = [
-            Keys.eventType.rawValue: AttributeValue(eventType.rawValue),
-            Keys.severity.rawValue: AttributeValue("3"),
-            Keys.source.rawValue: AttributeValue("console"),
-            Keys.environment.rawValue: AttributeValue("test"),
-            Keys.userId.rawValue: AttributeValue("uid"),
-            Keys.userName.rawValue: AttributeValue("Test User"),
-            Keys.userEmail.rawValue: AttributeValue("test@example.com"),
-            Keys.sessionId.rawValue: AttributeValue("session_001"),
-            Keys.sessionCreationDate.rawValue: AttributeValue("1609459200")
-        ]
-        return SpanData(traceId: TraceId.random(),
-                        spanId: SpanId.random(),
-                        name: "testSpan_\(eventType.rawValue)",
-                        kind: .client,
-                        startTime: Date(),
-                        attributes: attributes,
-                        endTime: Date(),
-                        hasEnded: true)
-    }
-
-    /// Walks the OTLP-shaped capture to extract every `event_type` string attribute.
-    private static func eventTypes(in data: CoralogixTraceExporterData) -> [String] {
-        return data.tracesData.resourceSpans.flatMap { resourceSpan in
-            resourceSpan.scopeSpans.flatMap { scopeSpan in
-                scopeSpan.spans.compactMap { span -> String? in
-                    guard let kv = span.attributes.first(where: { $0.key == Keys.eventType.rawValue }) else {
-                        return nil
-                    }
-                    if case .stringValue(let value) = kv.value { return value }
-                    return nil
-                }
-            }
-        }
-    }
-}
-
-// MARK: - Test Doubles
-
-/// Local copy of the MockSpanUploader pattern from CoralogixExporterTests.swift to keep
-/// this file self-contained and avoid network I/O during export.
-private final class MockSpanUploader: SpanUploading {
-    func upload(_ spans: [[String: Any]], endPoint: String) -> SpanExporterResultCode {
-        return .success
     }
 }

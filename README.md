@@ -261,7 +261,7 @@ These intervals are optimized for battery efficiency while capturing all importa
 - **Frozen frames**: Frame render time >= 700ms (causes perceivable UI freeze)
 - The 700ms frozen frame threshold aligns with ANR detection, providing consistent "unresponsive UI" definition across the SDK
 - Thresholds automatically adapt to display refresh rate (60Hz standard, 120Hz ProMotion)
-- Industry comparison: Apple recommends 250ms, Firebase uses 400ms, Sentry/Coralogix use 700ms (aligned with ANR)
+- Industry thresholds range from 250ms (very sensitive) to 700ms (severe freezes only); 700ms aligns with ANR
 
 ### Enable Swizzling
 Controls whether the SDK automatically swizzles system methods for instrumentation (e.g. `NSURLSession`, view-controller lifecycle). Enabled by default. Set to `false` only if another library conflicts with Coralogix's swizzling.
