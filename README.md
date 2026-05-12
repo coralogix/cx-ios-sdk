@@ -156,6 +156,33 @@ let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
                                         sessionSampleRate: 100)
 ```
 
+### Excluding Instrumentations from Session Sampling
+Opt specific event categories out of the `sessionSampleRate` gate so they always export, even from sessions that are otherwise sampled out. Useful when you want a low session sample rate for general telemetry but still need every log and error captured.
+
+In the example below, only 10% of sessions are sampled in for the full event stream; the remaining 90% of sessions still export `.logs` and `.errors`, but every other category is dropped.
+```swift
+let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
+                                        environment: "ENVIRONMENT",
+                                        application: "APP-NAME",
+                                        version: "APP-VERSION",
+                                        publicKey: "API-KEY",
+                                        sessionSampleRate: 10,
+                                        excludeFromSampling: [.logs, .errors])
+```
+
+Accepted `ExcludableInstrumentation` cases:
+- `.errors`
+- `.logs`
+- `.network`
+- `.userInteractions`
+- `.mobileVitals`
+- `.customSpan`
+- `.customMeasurement`
+
+**Back-compat:** The default is an empty set — `sessionSampleRate` gates the entire SDK exactly as before. Add categories to `excludeFromSampling` to let them bypass the gate.
+
+Parity note: the Coralogix Browser SDK exposes the same option with matching semantics.
+
 ### Before Send
 Enable event access and modification before sending to Coralogix, supporting content modification.
 ```swift
@@ -317,6 +344,37 @@ let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
 
 ### Session Recording
 See the [Session Recording Guide](SessionReplay/Sources/Docs/README.md) for installation steps and examples.
+
+### Custom Time Measurement
+Time arbitrary spans of work in your app code with `startTimeMeasure(name:labels:)` and `endTimeMeasure(name:)`. Use this when you need to measure something the SDK can't auto-instrument — checkout flows, custom render passes, asset loading, etc. The duration is reported as a `custom-measurement` span (milliseconds).
+
+```swift
+coralogixRum.startTimeMeasure(name: "checkout", labels: ["cart_size": 3])
+performCheckoutFlow()
+coralogixRum.endTimeMeasure(name: "checkout")
+```
+
+**Parameters:**
+
+| Method | Parameter | Type | Notes |
+|---|---|---|---|
+| `startTimeMeasure` | `name` | `String` | Unique identifier. Empty / whitespace-only keys are ignored. A duplicate `start` for an in-flight name is also ignored (first wins). |
+| `startTimeMeasure` | `labels` | `[String: Any]?` | Optional labels attached at start; merged with SDK-level `labels` at `end`. Start labels win on key collision. |
+| `endTimeMeasure` | `name` | `String` | Must match a prior `start`. No-op when the key was never started, was already ended, or the session has gone idle. |
+
+**Pair `start` / `end` like `lock` / `unlock`.** The SDK keeps in-flight measurements in memory and does not impose a cap; an unbalanced caller will accumulate state until the next session-idle reset (15 min of inactivity). The `defer` idiom makes pairing automatic:
+
+```swift
+coralogixRum.startTimeMeasure(name: "checkout")
+defer { coralogixRum.endTimeMeasure(name: "checkout") }
+try performCheckout()
+```
+
+**Notes:**
+- **Monotonic clock.** Durations use `DispatchTime.now().uptimeNanoseconds`, so wall-clock changes (NTP step, manual time adjustments) cannot produce negative durations.
+- **Trimmed keys.** Leading and trailing whitespace is stripped; `"k "` and `"k"` resolve to the same entry.
+
+Parity note: the Coralogix Browser SDK exposes the same `startTimeMeasure` / `endTimeMeasure` surface with matching semantics.
 
 ## Example Apps
 

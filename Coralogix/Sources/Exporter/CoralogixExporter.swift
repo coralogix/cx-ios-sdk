@@ -136,9 +136,7 @@ public class CoralogixExporter: SpanExporter {
         if filterSpans.isEmpty { return .success }
 
         // ignore Urls
-        let urlFilterInputCount = filterSpans.count
         filterSpans = filterSpans.filter { self.shouldRemoveSpan(span: $0) }
-        Log.d("[CoralogixExporter] export: \(urlFilterInputCount) spans in, \(filterSpans.count) after URL filter")
         if filterSpans.isEmpty { return .failure }
 
         // ignore Error

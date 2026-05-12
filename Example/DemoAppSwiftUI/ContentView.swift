@@ -79,6 +79,12 @@ struct ContentView: View {
                 subtitle: "Pick rate + exclude set, fire events, watch what survives",
                 icon: "slider.horizontal.3",
                 destination: AnyView(LogSamplingDecouplingView())
+            ),
+            MenuItem(
+                title: "Custom Time Measurement",
+                subtitle: "startTimeMeasure / endTimeMeasure with labels, quick presets, captured spans",
+                icon: "timer",
+                destination: AnyView(TimeMeasurementView())
             )
         ]
     }
