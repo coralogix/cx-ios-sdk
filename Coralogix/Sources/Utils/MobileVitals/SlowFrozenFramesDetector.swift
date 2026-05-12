@@ -19,13 +19,13 @@ import UIKit
 /// ## Why 700ms for Frozen Frames?
 /// The 700ms threshold was chosen to align with the SDK's ANR (Application Not Responding)
 /// detection threshold, providing a consistent definition of "unresponsive UI" across all
-/// SDK features. This matches Sentry's production-tested approach and balances sensitivity
-/// with noise reduction.
+/// SDK features. This is an industry-tested threshold that balances sensitivity with
+/// noise reduction.
 ///
-/// Industry comparison:
-/// - Apple WWDC guidelines: 250ms (very sensitive, includes moderate hitches)
-/// - Firebase Performance: 400ms (moderate sensitivity)
-/// - Sentry/Coralogix: 700ms (aligned with ANR, focused on severe freezes)
+/// Industry thresholds span 250ms–700ms:
+/// - 250ms: very sensitive, includes moderate hitches
+/// - 400ms: moderate sensitivity
+/// - 700ms: aligned with ANR, focused on severe freezes
 ///
 /// A frame frozen for 700ms will trigger BOTH:
 /// 1. A frozen frame metric (this detector)
@@ -116,7 +116,7 @@ final class SlowFrozenFramesDetector {
     /// - Parameters:
     ///   - frozenThresholdMs: Frame time (ms) at which a frame is considered frozen.
     ///     Default 700ms aligns with ANR threshold for consistent "unresponsive UI" definition.
-    ///     Industry varies: Apple 250ms, Firebase 400ms, Sentry/Coralogix 700ms.
+    ///     Industry thresholds range from 250ms (sensitive) to 700ms (severe freezes only).
     ///   - reportIntervalMs: Window size for aggregating frame counts. Default 60s.
     ///   - tolerancePercentage: Tolerance for slow frame detection. Default 3% to prevent false positives.
     init(

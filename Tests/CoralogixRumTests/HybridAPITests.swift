@@ -415,4 +415,59 @@ final class HybridAPITests: XCTestCase {
         XCTAssertEqual(result?[Keys.eventName.rawValue] as? String, "swipe")
         XCTAssertEqual(result?[Keys.scrollDirection.rawValue] as? String, "left")
     }
+
+    // MARK: - T5 (CX-40203): hybrid path inherits per-span sampling filter
+    //
+    // Pins the ordering of the per-span sampling filter relative to `beforeSendCallBack`
+    // inside `CoralogixExporter.export()`. The filter sits ABOVE the callback so hybrid
+    // platforms (Flutter/RN) automatically get the same filtered set as native upload —
+    // without any bridge-side changes. A future refactor that swaps the filter below the
+    // callback would fail these tests. Shared helpers live in `SamplingTestHelpers.swift`.
+
+    func testFlutterPath_sampleRateZero_excludeLogs_callbackReceivesOnlyLogs() throws {
+        coralogixRum?.shutdown()
+        coralogixRum = nil
+
+        let capture = EventTypeCapture()
+        var opts = makeSamplingOptions(sampleRate: 0, exclude: [.logs])
+        opts.beforeSendCallBack = capture.beforeSendCallback()
+
+        coralogixRum = CoralogixRum(options: opts, sdkFramework: .flutter(version: "1.0.0"))
+
+        let exporter = try XCTUnwrap(coralogixRum.coralogixExporter, "Exporter must exist after init.")
+        exporter.spanUploader = SamplingMockSpanUploader()
+
+        _ = exporter.export(spans: [
+            makeSamplingSpan(eventType: .log),
+            makeSamplingSpan(eventType: .networkRequest)
+        ], explicitTimeout: nil)
+
+        XCTAssertEqual(capture.eventTypes, ["log"],
+                       "Hybrid callback must only receive spans whose event_type matches excludeFromSampling.")
+    }
+
+    /// Positive control: when the session is sampled in, the filter is a no-op and both
+    /// log and network spans reach the callback. Guards the negative test above from
+    /// passing for the wrong reason (e.g., encoding silently dropping network spans).
+    func testFlutterPath_sampleRateHundred_callbackReceivesAllSpans() throws {
+        coralogixRum?.shutdown()
+        coralogixRum = nil
+
+        let capture = EventTypeCapture()
+        var opts = makeSamplingOptions(sampleRate: 100, exclude: [.logs])
+        opts.beforeSendCallBack = capture.beforeSendCallback()
+
+        coralogixRum = CoralogixRum(options: opts, sdkFramework: .flutter(version: "1.0.0"))
+
+        let exporter = try XCTUnwrap(coralogixRum.coralogixExporter, "Exporter must exist after init.")
+        exporter.spanUploader = SamplingMockSpanUploader()
+
+        _ = exporter.export(spans: [
+            makeSamplingSpan(eventType: .log),
+            makeSamplingSpan(eventType: .networkRequest)
+        ], explicitTimeout: nil)
+
+        XCTAssertEqual(Set(capture.eventTypes), Set(["log", "network-request"]),
+                       "Sampled-in: every span should reach the hybrid callback regardless of excludeFromSampling.")
+    }
 }
