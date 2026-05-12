@@ -15,6 +15,7 @@ public class CoralogixRum {
     internal var networkManager = NetworkManager()
     internal var viewManager = ViewManager(keyChain: KeychainManager())
     internal var sessionManager: SessionManager?
+    internal var timeMeasurementTracker: TimeMeasurementTracker?
     internal var sessionInstrumentation: URLSessionInstrumentation?
     internal var metricsManager = MetricsManager()
     internal let readinessGroup = DispatchGroup()
@@ -102,6 +103,7 @@ public class CoralogixRum {
 
         self.setupCoreModules()
         self.setupExporter(sessionManager: sessionManager, options: options)
+        self.timeMeasurementTracker = TimeMeasurementTracker(sessionManager: sessionManager)
 
         // Seed the exporter and install the reroll callback immediately after the exporter
         // exists, before swizzling or instrumentation init can drive a session rotation
@@ -351,6 +353,8 @@ public class CoralogixRum {
         self.coralogixExporter?.shutdown(explicitTimeout: nil)
         self.removeNotification()
         self.metricsManager.removeObservers()
+        self.timeMeasurementTracker?.teardown()
+        self.timeMeasurementTracker = nil
     }
     
     public var isInitialized: Bool { return CoralogixRum.isInitialized }
@@ -405,6 +409,73 @@ public class CoralogixRum {
         span.setAttribute(key: Keys.name.rawValue, value: name)
         span.setAttribute(key: Keys.value.rawValue, value: value)
         span.end()
+    }
+
+    // MARK: - Public custom time measurement API (CX-28920)
+
+    /// Starts a named time measurement. The duration is reported via
+    /// `endTimeMeasure(name:)` as a custom-measurement span (milliseconds).
+    ///
+    /// - Important: **You are responsible for calling `endTimeMeasure(name:)`
+    ///   for every `startTimeMeasure(name:labels:)`.** The SDK keeps in-flight
+    ///   measurements in memory and does not impose a cap; an unbalanced caller
+    ///   that starts measurements without ending them will accumulate state until
+    ///   the next session-idle reset (15 min of inactivity). Treat `start` / `end`
+    ///   like `lock` / `unlock` — always pair them, ideally with a `defer`.
+    ///
+    /// - Parameters:
+    ///   - name: Unique identifier. Empty / whitespace-only keys are ignored.
+    ///     A duplicate `start` for an in-flight name is also ignored (first wins).
+    ///   - labels: Optional labels attached at start; merged with SDK-level
+    ///     labels at `end`; encoded into `custom_labels`.
+    public func startTimeMeasure(name: String, labels: [String: Any]? = nil) {
+        guard CoralogixRum.isInitialized else {
+            Log.w("CoralogixRum not initialized — startTimeMeasure ignored")
+            return
+        }
+        self.timeMeasurementTracker?.startMeasurement(key: name, labels: labels)
+    }
+
+    /// Ends a measurement and emits a custom-measurement span. No-op if the
+    /// key was never started, was already ended, or the session has gone idle.
+    ///
+    /// Mirrors the Browser SDK signature exactly — labels are supplied at
+    /// `start` and merged at `end`; this method takes no labels argument.
+    ///
+    /// - Important: Pair every `startTimeMeasure(name:labels:)` with exactly one
+    ///   `endTimeMeasure(name:)`. Leaked starts persist in memory until the
+    ///   session goes idle.
+    public func endTimeMeasure(name: String) {
+        guard CoralogixRum.isInitialized else {
+            Log.w("CoralogixRum not initialized — endTimeMeasure ignored")
+            return
+        }
+        guard let result = self.timeMeasurementTracker?.endMeasurement(key: name) else {
+            return
+        }
+        self.emitTimedMeasurement(name: name, durationMs: result.durationMs, labels: result.labels)
+    }
+
+    private func emitTimedMeasurement(name: String, durationMs: Double, labels: [String: Any]?) {
+        let span = self.makeSpan(event: .customMeasurement, source: .code, severity: .info)
+        span.setAttribute(key: Keys.name.rawValue, value: name)
+        span.setAttribute(key: Keys.value.rawValue, value: durationMs)
+        let merged = mergedCustomLabels(layer: labels)
+        if !merged.isEmpty {
+            let json = Helper.convertDictionaryToJsonString(dict: merged)
+            if !json.isEmpty {
+                span.setAttribute(key: Keys.customLabels.rawValue, value: json)
+            }
+        }
+        span.end()
+    }
+
+    /// Merges SDK-level labels with the per-measurement layer. Layer wins on key collision —
+    /// callers can override SDK-level labels for a specific measurement.
+    private func mergedCustomLabels(layer: [String: Any]?) -> [String: Any] {
+        let base = self.options?.labels ?? [:]
+        guard let layer = layer, !layer.isEmpty else { return base }
+        return base.merging(layer) { _, fromLayer in fromLayer }
     }
 
     /// Returns a tracer for manual custom spans (API naming aligned with the Coralogix Browser SDK: `startCustomSpan`, `endSpan`).
