@@ -41,12 +41,12 @@ final class CoralogixRumTimeMeasureTests: XCTestCase {
     // MARK: - Case 9: labels merging + payload shape
 
     func testCase9_labels_startWinsOnCollision_andLandAtCxRumTopLevel() throws {
-        startRumWithMockUploader(sdkLabels: ["a": "options", "b": "options"])
+        try startRumWithMockUploader(sdkLabels: ["a": "options", "b": "options"])
 
         rum?.startTimeMeasure(name: "myTimer", labels: ["a": "start", "c": "start"])
         Thread.sleep(forTimeInterval: 0.02)
         rum?.endTimeMeasure(name: "myTimer")
-        forceFlush()
+        try forceFlush()
 
         let cxRum = try XCTUnwrap(
             mockUploader.customMeasurementSpans().first,
@@ -90,13 +90,13 @@ final class CoralogixRumTimeMeasureTests: XCTestCase {
     // MARK: - Case 10: SDK not initialized — both calls are no-ops
 
     func testCase10_sdkNotInitialized_startAndEnd_areNoOp() throws {
-        startRumWithMockUploader()
+        try startRumWithMockUploader()
         rum?.shutdown() // isInitialized → false
 
         // Both calls must be no-ops; neither should reach the tracker nor emit a span.
         rum?.startTimeMeasure(name: "x", labels: nil)
         rum?.endTimeMeasure(name: "x")
-        forceFlush()
+        try forceFlush()
 
         XCTAssertTrue(mockUploader.customMeasurementSpans().isEmpty,
                       "No custom-measurement spans should be emitted when the SDK is not initialized.")
@@ -105,7 +105,7 @@ final class CoralogixRumTimeMeasureTests: XCTestCase {
     // MARK: - Case 11: shutdown mid-measurement
 
     func testCase11_shutdownMidMeasurement_endIsNoOp() throws {
-        startRumWithMockUploader()
+        try startRumWithMockUploader()
 
         rum?.startTimeMeasure(name: "a", labels: nil)
         rum?.shutdown() // teardown clears the tracker; isInitialized → false
@@ -113,7 +113,7 @@ final class CoralogixRumTimeMeasureTests: XCTestCase {
         // end after shutdown must be a no-op — neither the guard nor the (now nil)
         // tracker reference is allowed to crash or emit a span.
         rum?.endTimeMeasure(name: "a")
-        forceFlush()
+        try forceFlush()
 
         XCTAssertTrue(mockUploader.customMeasurementSpans().isEmpty,
                       "No custom-measurement spans should be emitted when end fires after shutdown.")
@@ -121,7 +121,7 @@ final class CoralogixRumTimeMeasureTests: XCTestCase {
 
     // MARK: - Helpers
 
-    private func startRumWithMockUploader(sdkLabels: [String: Any]? = nil) {
+    private func startRumWithMockUploader(sdkLabels: [String: Any]? = nil) throws {
         let options = CoralogixExporterOptions(
             coralogixDomain: .EU2,
             userContext: nil,
@@ -139,13 +139,24 @@ final class CoralogixRumTimeMeasureTests: XCTestCase {
         XCTAssertTrue(CoralogixRum.isInitialized, "Sanity check: rum should initialize.")
         // Swap the real uploader with the mock so test runs stay offline and we can
         // inspect the encoded `[[String: Any]]` payloads downstream of encodeSpans.
-        rum?.coralogixExporter?.spanUploader = mockUploader
+        // Unwrap explicitly so a nil exporter fails the test loudly instead of
+        // silently skipping the mock injection.
+        let exporter = try XCTUnwrap(rum?.coralogixExporter,
+                                     "coralogixExporter must exist to inject the mock uploader.")
+        exporter.spanUploader = mockUploader
     }
 
     /// Drain the BatchSpanProcessor and give the spanUploader time to receive.
     /// Same shape used by `GlobalSpanPropagationIntegrationTests.forceFlush()`.
-    private func forceFlush() {
-        (OpenTelemetry.instance.tracerProvider as? TracerProviderSdk)?.forceFlush(timeout: 3)
+    /// `TracerProviderSdk.forceFlush(timeout:)` returns Void in this SDK version,
+    /// so there's no result to assert on — but the cast itself must succeed,
+    /// otherwise the flush silently no-ops and tests would race the batcher.
+    private func forceFlush() throws {
+        let provider = try XCTUnwrap(
+            OpenTelemetry.instance.tracerProvider as? TracerProviderSdk,
+            "OpenTelemetry.instance.tracerProvider must be a TracerProviderSdk in this test environment."
+        )
+        provider.forceFlush(timeout: 3)
         Thread.sleep(forTimeInterval: 0.6)
     }
 }
