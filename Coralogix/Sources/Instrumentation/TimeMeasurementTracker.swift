@@ -36,10 +36,18 @@ final class TimeMeasurementTracker {
             return
         }
 
-        clearIfSessionIdle()
+        // Read isIdle outside the lock (best-effort, no I/O). The idle-clear and
+        // the insert below happen under the same lock so they're atomic w.r.t.
+        // each other — Browser parity with web SDK `timeMeasurementTracker.ts:34-38`.
+        let isIdle = sessionManager?.isIdle == true
 
         lock.lock()
         defer { lock.unlock() }
+
+        if isIdle, !measurements.isEmpty {
+            Log.d("[TimeMeasurement] session idle — discarding \(measurements.count) in-flight measurements")
+            measurements.removeAll(keepingCapacity: false)
+        }
 
         if measurements[trimmed] != nil {
             Log.d("[TimeMeasurement] start ignored — duplicate key '\(trimmed)'")
@@ -57,11 +65,15 @@ final class TimeMeasurementTracker {
         let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
 
-        clearIfSessionIdle()
+        let isIdle = sessionManager?.isIdle == true
 
-        // Critical section is just the dictionary removal — release the lock before
-        // doing the duration math, logging, or returning the tuple.
+        // Critical section: maybe clear, then remove the entry. Release the lock
+        // before doing the duration math, logging, or returning the tuple.
         lock.lock()
+        if isIdle, !measurements.isEmpty {
+            Log.d("[TimeMeasurement] session idle — discarding \(measurements.count) in-flight measurements")
+            measurements.removeAll(keepingCapacity: false)
+        }
         let entry = measurements.removeValue(forKey: trimmed)
         lock.unlock()
 
@@ -75,18 +87,6 @@ final class TimeMeasurementTracker {
         // crash the host app (CLAUDE.md rule) — wrap defensively.
         let elapsedNs = DispatchTime.now().uptimeNanoseconds &- entry.startedAt
         return (Double(elapsedNs) / 1_000_000.0, entry.labels)
-    }
-
-    /// Idle session ⇒ wipe in-flight timers. Browser parity with web SDK
-    /// `timeMeasurementTracker.ts:34-38`. The 15-minute idle threshold owned by
-    /// `SessionManager` is the only safety net against unbalanced callers.
-    private func clearIfSessionIdle() {
-        guard sessionManager?.isIdle == true else { return }
-        lock.lock()
-        defer { lock.unlock() }
-        guard !measurements.isEmpty else { return }
-        Log.d("[TimeMeasurement] session idle — discarding \(measurements.count) in-flight measurements")
-        measurements.removeAll(keepingCapacity: false)
     }
 
     /// Called from `CoralogixRum.shutdown()` and tests. Drops all in-flight state.
