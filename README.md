@@ -156,6 +156,33 @@ let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
                                         sessionSampleRate: 100)
 ```
 
+### Excluding Instrumentations from Session Sampling
+Opt specific event categories out of the `sessionSampleRate` gate so they always export, even from sessions that are otherwise sampled out. Useful when you want a low session sample rate for general telemetry but still need every log and error captured.
+
+In the example below, only 10% of sessions are sampled in for the full event stream; the remaining 90% of sessions still export `.logs` and `.errors`, but every other category is dropped.
+```swift
+let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
+                                        environment: "ENVIRONMENT",
+                                        application: "APP-NAME",
+                                        version: "APP-VERSION",
+                                        publicKey: "API-KEY",
+                                        sessionSampleRate: 10,
+                                        excludeFromSampling: [.logs, .errors])
+```
+
+Accepted `ExcludableInstrumentation` cases:
+- `.errors`
+- `.logs`
+- `.network`
+- `.userInteractions`
+- `.mobileVitals`
+- `.customSpan`
+- `.customMeasurement`
+
+**Back-compat:** The default is an empty set — `sessionSampleRate` gates the entire SDK exactly as before. Add categories to `excludeFromSampling` to let them bypass the gate.
+
+Parity note: the Coralogix Browser SDK exposes the same option with matching semantics.
+
 ### Before Send
 Enable event access and modification before sending to Coralogix, supporting content modification.
 ```swift
