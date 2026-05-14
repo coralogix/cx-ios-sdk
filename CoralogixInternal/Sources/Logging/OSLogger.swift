@@ -29,8 +29,6 @@ public final class OSLogger: Logger {
                     file: String,
                     function: String,
                     line: Int) {
-        guard Log.isDebug else { return }
-
         let formatted = Self.format(message: message(), metadata: metadata)
 
         if #available(iOS 14.0, *) {
