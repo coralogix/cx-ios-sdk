@@ -126,12 +126,11 @@ public class Log {
                              file: String = #fileID,
                              function: String = #function,
                              line: Int = #line) {
-        shared.log(level: .error,
-                   message: error.localizedDescription,
-                   metadata: nil,
-                   file: file,
-                   function: function,
-                   line: line)
+        emit(level: .error,
+             message: { error.localizedDescription },
+             file: file,
+             function: function,
+             line: line)
     }
 
     private static func combine(message: String, error: Error?) -> String {

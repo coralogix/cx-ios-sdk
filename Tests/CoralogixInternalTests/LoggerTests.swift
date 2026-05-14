@@ -278,4 +278,19 @@ final class LoggerTests: XCTestCase {
         XCTAssertEqual(rec.entries[0].level, .error)
         XCTAssertEqual(rec.entries[0].message, "only-error")
     }
+
+    func test_Log_e_errorOnly_isGatedByIsDebug_atFaçadeLayer() {
+        // RecordingLogger does NOT inspect Log.isDebug; it records everything it
+        // receives. So if Log.e(Error) reaches it with isDebug=false, the façade
+        // gate is broken.
+        Log.isDebug = false
+        let rec = RecordingLogger()
+        Log.shared = rec
+
+        struct E: LocalizedError { var errorDescription: String? { "boom" } }
+        Log.e(E())
+        Log.error(E())
+
+        XCTAssertEqual(rec.entries.count, 0, "Log.e(Error)/Log.error(Error) must be gated at the façade, not rely on the underlying logger")
+    }
 }
