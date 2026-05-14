@@ -125,15 +125,33 @@ final class ANRDetectorTests: XCTestCase {
     func testHandleANRCallsClosureAndLogs() {
         // This test focuses on the `handleANR` method itself,
         // not necessarily triggered by the timer mechanism, but by directly calling it.
-        
+
         expectation = XCTestExpectation(description: "ANR handler closure should be called")
-        
+
         anrDetector.handleANRClosure = {
             self.expectation.fulfill()
         }
-       
+
         anrDetector.handleANR()
-        
+
         wait(for: [expectation], timeout: 1.0) // Short timeout as it's a direct call
+    }
+
+    func testCheckForANRFiresWhenMockClockAdvancesBeyondMaxBlockTime() {
+        // Deterministic check of the time-comparison branch using MockClock —
+        // no Thread.sleep, no real Timer. The async block on main is queued but
+        // cannot run while this synchronous test body holds the main thread, so
+        // the first checkForANR sees `isMainThreadResponsive = false` and the
+        // advanced delta > maxBlockTime, which is exactly the ANR condition.
+        let clock = MockClock()
+        let detector = ANRDetector(checkInterval: 1.0, maxBlockTime: 0.5, clock: clock)
+
+        var anrCalled = false
+        detector.handleANRClosure = { anrCalled = true }
+
+        clock.advance(by: 1.0)
+        detector.checkForANR()
+
+        XCTAssertTrue(anrCalled, "ANR should fire when clock advances beyond maxBlockTime")
     }
 }
