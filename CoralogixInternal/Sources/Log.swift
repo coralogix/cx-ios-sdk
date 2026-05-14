@@ -10,9 +10,9 @@ public class Log {
     public static var isDebug = false
 
     private static let sharedLock = NSLock()
-    private static var _shared: Logger = OSLogger()
+    private static var _shared: CXLogger = OSLogger()
 
-    public static var shared: Logger {
+    public static var shared: CXLogger {
         get {
             sharedLock.lock()
             defer { sharedLock.unlock() }

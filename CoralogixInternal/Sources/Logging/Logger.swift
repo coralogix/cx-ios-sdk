@@ -4,7 +4,7 @@
 
 import Foundation
 
-public protocol Logger {
+public protocol CXLogger {
     func log(level: LogLevel,
              message: @autoclosure () -> String,
              metadata: [String: Any]?,
@@ -13,7 +13,7 @@ public protocol Logger {
              line: Int)
 }
 
-public extension Logger {
+public extension CXLogger {
     func log(level: LogLevel,
              _ message: @autoclosure () -> String,
              metadata: [String: Any]? = nil,
@@ -29,7 +29,7 @@ public extension Logger {
     }
 }
 
-public struct NoopLogger: Logger {
+public struct NoopLogger: CXLogger {
     public init() {}
     public func log(level: LogLevel,
                     message: @autoclosure () -> String,

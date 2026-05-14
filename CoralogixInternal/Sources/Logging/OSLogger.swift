@@ -5,7 +5,7 @@
 import Foundation
 import os
 
-public final class OSLogger: Logger {
+public final class OSLogger: CXLogger {
     public static let defaultSubsystem = "com.coralogix.rum"
     public static let defaultCategory = "default"
 
@@ -29,7 +29,7 @@ public final class OSLogger: Logger {
                     file: String,
                     function: String,
                     line: Int) {
-        let formatted = Self.format(message: message(), metadata: metadata)
+        let formatted = "\(level.emojiPrefix) \(Self.format(message: message(), metadata: metadata))"
 
         if #available(iOS 14.0, *) {
             let logger = modernLogger()
@@ -43,8 +43,6 @@ public final class OSLogger: Logger {
         } else {
             os_log("%{public}@", log: legacyLog, type: level.osLogType, formatted)
         }
-
-        print("\(level.emojiPrefix) \(formatted)")
     }
 
     @available(iOS 14.0, *)

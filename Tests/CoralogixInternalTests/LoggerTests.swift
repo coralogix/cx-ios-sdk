@@ -10,7 +10,7 @@ final class LoggerTests: XCTestCase {
 
     // MARK: - Test doubles
 
-    final class RecordingLogger: Logger {
+    final class RecordingLogger: CXLogger {
         struct Entry {
             let level: LogLevel
             let message: String
@@ -40,7 +40,7 @@ final class LoggerTests: XCTestCase {
         }
     }
 
-    final class LevelFilteringLogger: Logger {
+    final class LevelFilteringLogger: CXLogger {
         let threshold: LogLevel
         private(set) var emitted: [String] = []
         private(set) var evaluations = 0
