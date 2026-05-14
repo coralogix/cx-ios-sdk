@@ -25,14 +25,15 @@ public class Log {
         }
     }
 
-    // MARK: - Debug
-
-    public static func d(_ message: @autoclosure () -> String,
-                         file: String = #fileID,
-                         function: String = #function,
-                         line: Int = #line) {
+    // Emits at `level` if-and-only-if `isDebug` is true. `message` is only
+    // invoked after the gate, so disabled levels do not evaluate the closure.
+    private static func emit(level: LogLevel,
+                             message: () -> String,
+                             file: String,
+                             function: String,
+                             line: Int) {
         guard isDebug else { return }
-        shared.log(level: .debug,
+        shared.log(level: level,
                    message: message(),
                    metadata: nil,
                    file: file,
@@ -40,11 +41,20 @@ public class Log {
                    line: line)
     }
 
+    // MARK: - Debug
+
+    public static func d(_ message: @autoclosure () -> String,
+                         file: String = #fileID,
+                         function: String = #function,
+                         line: Int = #line) {
+        emit(level: .debug, message: message, file: file, function: function, line: line)
+    }
+
     public static func debug(_ message: @autoclosure () -> String,
                              file: String = #fileID,
                              function: String = #function,
                              line: Int = #line) {
-        d(message(), file: file, function: function, line: line)
+        emit(level: .debug, message: message, file: file, function: function, line: line)
     }
 
     // MARK: - Trace
@@ -53,20 +63,14 @@ public class Log {
                          file: String = #fileID,
                          function: String = #function,
                          line: Int = #line) {
-        guard isDebug else { return }
-        shared.log(level: .trace,
-                   message: message(),
-                   metadata: nil,
-                   file: file,
-                   function: function,
-                   line: line)
+        emit(level: .trace, message: message, file: file, function: function, line: line)
     }
 
     public static func trace(_ message: @autoclosure () -> String,
                              file: String = #fileID,
                              function: String = #function,
                              line: Int = #line) {
-        t(message(), file: file, function: function, line: line)
+        emit(level: .trace, message: message, file: file, function: function, line: line)
     }
 
     // MARK: - Warning
@@ -75,20 +79,14 @@ public class Log {
                          file: String = #fileID,
                          function: String = #function,
                          line: Int = #line) {
-        guard isDebug else { return }
-        shared.log(level: .warning,
-                   message: message(),
-                   metadata: nil,
-                   file: file,
-                   function: function,
-                   line: line)
+        emit(level: .warning, message: message, file: file, function: function, line: line)
     }
 
     public static func warning(_ message: @autoclosure () -> String,
                                file: String = #fileID,
                                function: String = #function,
                                line: Int = #line) {
-        w(message(), file: file, function: function, line: line)
+        emit(level: .warning, message: message, file: file, function: function, line: line)
     }
 
     // MARK: - Error
@@ -98,14 +96,11 @@ public class Log {
                          file: String = #fileID,
                          function: String = #function,
                          line: Int = #line) {
-        guard isDebug else { return }
-        let combined = combine(message: message(), error: error)
-        shared.log(level: .error,
-                   message: combined,
-                   metadata: nil,
-                   file: file,
-                   function: function,
-                   line: line)
+        emit(level: .error,
+             message: { combine(message: message(), error: error) },
+             file: file,
+             function: function,
+             line: line)
     }
 
     public static func error(_ message: @autoclosure () -> String = "",
@@ -113,7 +108,11 @@ public class Log {
                              file: String = #fileID,
                              function: String = #function,
                              line: Int = #line) {
-        e(message(), error, file: file, function: function, line: line)
+        emit(level: .error,
+             message: { combine(message: message(), error: error) },
+             file: file,
+             function: function,
+             line: line)
     }
 
     public static func e(_ error: Error,

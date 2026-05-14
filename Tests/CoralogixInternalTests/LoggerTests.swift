@@ -186,6 +186,27 @@ final class LoggerTests: XCTestCase {
         XCTAssertEqual(rec.entries.count, 0)
     }
 
+    func test_Log_longNameVariants_doNotEvaluateMessage_whenIsDebugIsFalse() {
+        Log.isDebug = false
+        let rec = RecordingLogger()
+        Log.shared = rec
+
+        var sideEffect = 0
+        func expensive() -> String {
+            sideEffect += 1
+            return "should not be built"
+        }
+
+        Log.debug(expensive())
+        Log.trace(expensive())
+        Log.warning(expensive())
+        Log.error(expensive())
+        Log.error(expensive(), NSError(domain: "x", code: 0))
+
+        XCTAssertEqual(sideEffect, 0, "long-name variants must skip autoclosure evaluation when isDebug is false")
+        XCTAssertEqual(rec.entries.count, 0)
+    }
+
     func test_Log_d_routesToSharedLogger_atDebugLevel_whenIsDebugIsTrue() {
         Log.isDebug = true
         let rec = RecordingLogger()
