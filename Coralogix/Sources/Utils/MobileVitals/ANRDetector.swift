@@ -18,15 +18,17 @@ internal class ANRDetector {
     // Maximum allowed main thread block time (e.g., 5 seconds)
     let maxBlockTime: TimeInterval
 
-    private var lastCheckTimestamp: CFAbsoluteTime = CFAbsoluteTimeGetCurrent()
+    private let clock: CoralogixInternal.Clock
+    private var lastCheckTimestamp: Date
 
     // ANR handling closure (useful for testing)
     var handleANRClosure: (() -> Void)?
-    
-    init(checkInterval: TimeInterval = 1.0, maxBlockTime: TimeInterval = 5.0) {
+
+    init(checkInterval: TimeInterval = 1.0, maxBlockTime: TimeInterval = 5.0, clock: CoralogixInternal.Clock = SystemClock()) {
         self.checkInterval = checkInterval
         self.maxBlockTime = maxBlockTime
-        self.lastCheckTimestamp = CFAbsoluteTimeGetCurrent()
+        self.clock = clock
+        self.lastCheckTimestamp = clock.now()
     }
 
     func startMonitoring() {
@@ -38,8 +40,8 @@ internal class ANRDetector {
         timer = nil
     }
 
-    @objc private func checkForANR() {
-        let currentTime = CFAbsoluteTimeGetCurrent()
+    @objc internal func checkForANR() {
+        let currentTime = clock.now()
         isMainThreadResponsive = false
 
         DispatchQueue.main.async { [weak self] in
@@ -48,16 +50,15 @@ internal class ANRDetector {
             self.lastCheckTimestamp = currentTime
         }
 
-        if !isMainThreadResponsive && (currentTime - lastCheckTimestamp) > maxBlockTime {
+        if !isMainThreadResponsive && currentTime.timeIntervalSince(lastCheckTimestamp) > maxBlockTime {
             handleANR()
         }
     }
 
     public func handleANR() {
         handleANRClosure?()
-        
-        let currentTime = CFAbsoluteTimeGetCurrent()
-        let duration = currentTime - lastCheckTimestamp
+
+        let duration = clock.now().timeIntervalSince(lastCheckTimestamp)
         Log.d("[Metric] ANR detected: Main thread unresponsive for \(String(format: "%.2f", duration)) seconds")
     }
 }
