@@ -8,6 +8,16 @@
 import Foundation
 import CoralogixInternal
 
+/// Logical representation of a network-request RUM event.
+///
+/// IMPORTANT: `toOTelAttributes()` does NOT cover the full wire shape on its
+/// own. `duration` and `statusText` reach the backend via OTel span
+/// **infrastructure** (start/end time, span status) — they have no OTel
+/// attribute slot. Any consumer wiring a `NetworkRequestEvent` into a real
+/// span emission path must, in addition to applying `toOTelAttributes()`,
+/// set span timing from `duration` and span status from `statusText`.
+/// Forgetting either produces wire output that silently omits the field
+/// without failing tests.
 struct NetworkRequestEvent: TelemetryEvent {
     let id: UUID
     let timestamp: Date
@@ -18,13 +28,14 @@ struct NetworkRequestEvent: TelemetryEvent {
     let fragments: String
     let host: String
     let schema: String
-    // duration (ms) and statusText flow to the wire via OTel span infrastructure
-    // (startTime/endTime, span status) — NOT as attributes. They live on the
-    // struct so callers can author/inspect a complete event, but the adapter
-    // does not emit them. Future consumers wiring this into a real emission
-    // path must set the span's timing/status separately.
+
+    /// Span-derived. NOT emitted by `toOTelAttributes()`. The consumer must
+    /// translate this into the span's `startTime` / `endTime` at emission.
     let duration: UInt64
+    /// Span-derived. NOT emitted by `toOTelAttributes()`. The consumer must
+    /// translate this into the span's status at emission.
     let statusText: String
+
     let responseContentLength: Int
 
     // Optional capture-rule fields (CX-33233 / CX-33234). Headers travel as
