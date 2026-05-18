@@ -18,6 +18,10 @@ import CoralogixInternal
 /// set span timing from `duration` and span status from `statusText`.
 /// Forgetting either produces wire output that silently omits the field
 /// without failing tests.
+///
+/// `duration` and `statusText` are intentionally non-defaulted on `init` so
+/// every call site has to acknowledge them — preventing the "accept the
+/// default 0/empty and forget the field exists" failure mode.
 struct NetworkRequestEvent: TelemetryEvent {
     let id: UUID
     let timestamp: Date
@@ -54,8 +58,8 @@ struct NetworkRequestEvent: TelemetryEvent {
         fragments: String = "",
         host: String,
         schema: URLScheme,
-        duration: UInt64 = 0,
-        statusText: String = "",
+        duration: UInt64,
+        statusText: String,
         responseContentLength: Int = 0,
         requestHeaders: [String: String]? = nil,
         responseHeaders: [String: String]? = nil,
