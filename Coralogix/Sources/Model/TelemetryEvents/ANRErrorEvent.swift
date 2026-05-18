@@ -22,8 +22,8 @@ struct ANRErrorEvent: TelemetryEvent {
     init(
         id: UUID = UUID(),
         timestamp: Date = Date(),
-        errorMessage: String = Keys.anrErrorMessage.rawValue,
-        errorType: String = Keys.anrErrorType.rawValue
+        errorMessage: String = WireValues.anrErrorMessage.rawValue,
+        errorType: String = WireValues.anrErrorType.rawValue
     ) {
         self.id = id
         self.timestamp = timestamp

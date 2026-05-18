@@ -145,8 +145,8 @@ public class MetricsManager {
     }
     
     private func handleANREvent() {
-        let errorMessage = Keys.anrErrorMessage.rawValue
-        let errorType = Keys.anrErrorType.rawValue
+        let errorMessage = WireValues.anrErrorMessage.rawValue
+        let errorType = WireValues.anrErrorType.rawValue
         
         // Report ANR as error (not mobile vitals)
         guard let anrErrorClosure = self.anrErrorClosure else {
