@@ -56,10 +56,8 @@ final class ErrorEventTests: XCTestCase {
         let stackFrames: [[String: Any]] = [
             ["function": "main", "file": "AppDelegate.swift", "line": 12]
         ]
-        let stackJson = try String(
-            data: JSONSerialization.data(withJSONObject: stackFrames, options: []),
-            encoding: .utf8
-        ) ?? "[]"
+        let stackData = try JSONSerialization.data(withJSONObject: stackFrames, options: [])
+        let stackJson = try XCTUnwrap(String(data: stackData, encoding: .utf8))
 
         let event = ErrorEvent(
             domain: "io.app.network",
@@ -92,6 +90,28 @@ final class ErrorEventTests: XCTestCase {
         XCTAssertEqual(userInfoDict["retry"]  as? Int,    3)
 
         // ErrorContext renames stack_trace -> original_stacktrace on the way out.
+        let stack = try XCTUnwrap(dict[Keys.originalStackTrace.rawValue] as? [[String: Any]])
+        XCTAssertEqual(stack.first?["function"] as? String, "main")
+    }
+
+    // ErrorEvent.make handles JSON encoding internally; callers pass dicts.
+    func testFactoryEncodesUserInfoAndStackTraceForExistingContextPath() throws {
+        let event = ErrorEvent.make(
+            domain: "io.app.network",
+            code: 504,
+            errorMessage: "gateway timeout",
+            userInfo: ["reason": "timeout", "retry": 3],
+            stackTrace: [["function": "main", "file": "AppDelegate.swift", "line": 12]]
+        )
+
+        let mockSpan = MockSpanData(attributes: event.toOTelAttributes())
+        let context = ErrorContext(otel: mockSpan)
+        let dict = context.getDictionary()
+
+        let userInfoDict = try XCTUnwrap(dict[Keys.userInfo.rawValue] as? [String: Any])
+        XCTAssertEqual(userInfoDict["reason"] as? String, "timeout")
+        XCTAssertEqual(userInfoDict["retry"]  as? Int,    3)
+
         let stack = try XCTUnwrap(dict[Keys.originalStackTrace.rawValue] as? [[String: Any]])
         XCTAssertEqual(stack.first?["function"] as? String, "main")
     }

@@ -71,8 +71,7 @@ final class NetworkRequestEventTests: XCTestCase {
     // wire-dict field matches the original.
     func testDictParityViaExistingContextPath_fullPopulation() throws {
         let event = makeEvent(
-            duration: 250,                       // expected wire value
-            statusText: "undefined",             // SpanDataExt always returns "undefined"
+            duration: 250,                       // expected wire value (from span timing below)
             requestHeaders: ["Authorization": "Bearer xyz"],
             responseHeaders: ["Server": "nginx"],
             requestPayload: #"{"q":"hello"}"#,
@@ -96,6 +95,10 @@ final class NetworkRequestEventTests: XCTestCase {
         XCTAssertEqual(dict[Keys.schema.rawValue]                as? String, "https")
         XCTAssertEqual(dict[Keys.duration.rawValue]              as? UInt64, 250)
         XCTAssertEqual(dict[Keys.responseContentLength.rawValue] as? Int,    1234)
+        // statusText is span-status-derived, not an OTel attribute — and
+        // `SpanDataExt.getStatusText()` is hardcoded to `Keys.undefined.rawValue`.
+        // This assertion locks in that existing behaviour; the struct's own
+        // `statusText` field doesn't affect it.
         XCTAssertEqual(dict[Keys.statusText.rawValue]            as? String, Keys.undefined.rawValue)
 
         let reqHeaders = try XCTUnwrap(dict[Keys.requestHeaders.rawValue] as? [String: String])
@@ -141,12 +144,12 @@ final class NetworkRequestEventTests: XCTestCase {
     private func makeEvent(
         id: UUID = UUID(uuidString: "00000000-0000-0000-0000-000000000006")!,
         timestamp: Date = Date(timeIntervalSince1970: 1_700_000_000),
-        method: String = "GET",
+        method: HTTPMethod = .get,
         statusCode: Int = 200,
         url: String = "https://api.example.com/v1/foo?x=1",
         fragments: String = "/v1/foo",
         host: String = "api.example.com",
-        schema: String = "https",
+        schema: URLScheme = .https,
         duration: UInt64 = 0,
         statusText: String = "",
         responseContentLength: Int = 1234,

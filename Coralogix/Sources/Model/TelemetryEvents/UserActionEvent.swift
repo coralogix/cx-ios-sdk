@@ -18,12 +18,16 @@ struct UserActionEvent: TelemetryEvent {
     let elementId: String?
     let targetElementInnerText: String?
     let scrollDirection: ScrollDirection?
+    /// Free-form user-supplied sub-dict forwarded from hybrid bridges
+    /// (Flutter/RN). Heterogeneous values are modelled via `JSONValue`.
+    let attributes: [String: JSONValue]?
 
-    // NOTE: the wire format carries an optional free-form `attributes` sub-dict
-    // (heterogeneous user-supplied values). Modelling that requires a shared
-    // JSONValue helper that NetworkRequestEvent will also need; deferred to
-    // the slice that introduces it. Until then, this struct covers the
-    // structured fields surfaced by InteractionContext.
+    // NOTE: `positionX` / `positionY` (touch coordinates) are intentionally
+    // not surfaced. `UserActionsInstrumentation.validateHybridInteraction`
+    // writes them into the tap_object dict, but `InteractionContext` never
+    // reads them back — they're a pre-existing gap in the iOS extraction
+    // path and surfacing them here without fixing the extractor would imply
+    // a wire contract that isn't actually delivered.
 
     init(
         id: UUID = UUID(),
@@ -33,7 +37,8 @@ struct UserActionEvent: TelemetryEvent {
         elementClasses: String? = nil,
         elementId: String? = nil,
         targetElementInnerText: String? = nil,
-        scrollDirection: ScrollDirection? = nil
+        scrollDirection: ScrollDirection? = nil,
+        attributes: [String: JSONValue]? = nil
     ) {
         self.id = id
         self.timestamp = timestamp
@@ -43,6 +48,7 @@ struct UserActionEvent: TelemetryEvent {
         self.elementId = elementId
         self.targetElementInnerText = targetElementInnerText
         self.scrollDirection = scrollDirection
+        self.attributes = attributes
     }
 
     func toOTelAttributes() -> [String: AttributeValue] {
@@ -54,6 +60,7 @@ struct UserActionEvent: TelemetryEvent {
         if let v = elementId              { tapObject[Keys.elementId.rawValue] = v }
         if let v = targetElementInnerText { tapObject[Keys.targetElementInnerText.rawValue] = v }
         if let v = scrollDirection        { tapObject[Keys.scrollDirection.rawValue] = v.rawValue }
+        if let v = attributes             { tapObject[Keys.attributes.rawValue] = v.mapValues { $0.toAny() } }
 
         let json = Helper.convertDictionaryToJsonString(dict: tapObject)
         return [

@@ -22,12 +22,12 @@ struct NetworkRequestEvent: TelemetryEvent {
     let id: UUID
     let timestamp: Date
     var type: EventType { .networkRequest }
-    let method: String
+    let method: HTTPMethod
     let statusCode: Int
     let url: String
     let fragments: String
     let host: String
-    let schema: String
+    let schema: URLScheme
 
     /// Span-derived. NOT emitted by `toOTelAttributes()`. The consumer must
     /// translate this into the span's `startTime` / `endTime` at emission.
@@ -48,12 +48,12 @@ struct NetworkRequestEvent: TelemetryEvent {
     init(
         id: UUID = UUID(),
         timestamp: Date = Date(),
-        method: String,
+        method: HTTPMethod,
         statusCode: Int = 0,
         url: String,
         fragments: String = "",
         host: String,
-        schema: String,
+        schema: URLScheme,
         duration: UInt64 = 0,
         statusText: String = "",
         responseContentLength: Int = 0,
@@ -82,11 +82,11 @@ struct NetworkRequestEvent: TelemetryEvent {
     func toOTelAttributes() -> [String: AttributeValue] {
         var attrs: [String: AttributeValue] = [
             Keys.eventType.rawValue:                          .string(type.rawValue),
-            SemanticAttributes.httpMethod.rawValue:           .string(method),
+            SemanticAttributes.httpMethod.rawValue:           .string(method.rawValue),
             SemanticAttributes.httpUrl.rawValue:              .string(url),
             SemanticAttributes.httpTarget.rawValue:           .string(fragments),
             SemanticAttributes.netPeerName.rawValue:          .string(host),
-            SemanticAttributes.httpScheme.rawValue:           .string(schema),
+            SemanticAttributes.httpScheme.rawValue:           .string(schema.rawValue),
             SemanticAttributes.httpStatusCode.rawValue:       .int(statusCode),
             SemanticAttributes.httpResponseBodySize.rawValue: .int(responseContentLength),
         ]

@@ -68,6 +68,29 @@ final class UserActionEventTests: XCTestCase {
         XCTAssertNil(dict[Keys.attributes.rawValue])
     }
 
+    func testDictParityViaExistingContextPath_clickWithAttributes() throws {
+        let event = UserActionEvent(
+            eventName: .click,
+            targetElement: "loginButton",
+            attributes: [
+                "loginMethod": .string("oauth"),
+                "retryCount":  .int(2),
+                "rememberMe":  .bool(true),
+                "tags":        .array([.string("urgent"), .string("auth")])
+            ]
+        )
+
+        let mockSpan = MockSpanData(attributes: event.toOTelAttributes())
+        let context = InteractionContext(otel: mockSpan)
+        let dict = context.getDictionary()
+
+        let attrs = try XCTUnwrap(dict[Keys.attributes.rawValue] as? [String: Any])
+        XCTAssertEqual(attrs["loginMethod"] as? String, "oauth")
+        XCTAssertEqual(attrs["retryCount"]  as? Int,    2)
+        XCTAssertEqual(attrs["rememberMe"]  as? Bool,   true)
+        XCTAssertEqual(attrs["tags"] as? [String], ["urgent", "auth"])
+    }
+
     func testDictParityViaExistingContextPath_scrollWithDirection() {
         let event = UserActionEvent(
             eventName: .scroll,

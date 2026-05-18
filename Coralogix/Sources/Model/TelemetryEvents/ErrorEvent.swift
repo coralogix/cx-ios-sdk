@@ -62,6 +62,47 @@ struct ErrorEvent: TelemetryEvent {
         self.stackTraceJson = stackTraceJson
     }
 
+    /// Ergonomic factory that accepts unencoded `userInfo` / `stackTrace`
+    /// dictionaries and performs the JSON encoding internally. Prefer this
+    /// over the raw `init` — it moves the "must be valid JSON" contract from
+    /// the call site into the model, eliminating a class of silent failures
+    /// (`ErrorContext` drops malformed JSON without surfacing the error).
+    static func make(
+        id: UUID = UUID(),
+        timestamp: Date = Date(),
+        domain: String,
+        code: Int? = nil,
+        errorMessage: String,
+        isCrash: Bool = false,
+        errorType: String? = nil,
+        arch: String? = nil,
+        buildId: String? = nil,
+        stackTraceType: String? = nil,
+        userInfo: [String: Any]? = nil,
+        stackTrace: [[String: Any]]? = nil
+    ) -> ErrorEvent {
+        let userInfoJson = userInfo.map { Helper.convertDictionaryToJsonString(dict: $0) }
+        let stackTraceJson = stackTrace.flatMap { frames -> String? in
+            guard JSONSerialization.isValidJSONObject(frames),
+                  let data = try? JSONSerialization.data(withJSONObject: frames, options: []) else { return nil }
+            return String(data: data, encoding: .utf8)
+        }
+        return ErrorEvent(
+            id: id,
+            timestamp: timestamp,
+            domain: domain,
+            code: code,
+            errorMessage: errorMessage,
+            isCrash: isCrash,
+            errorType: errorType,
+            arch: arch,
+            buildId: buildId,
+            stackTraceType: stackTraceType,
+            userInfoJson: userInfoJson,
+            stackTraceJson: stackTraceJson
+        )
+    }
+
     func toOTelAttributes() -> [String: AttributeValue] {
         var attrs: [String: AttributeValue] = [
             Keys.eventType.rawValue:    .string(type.rawValue),
