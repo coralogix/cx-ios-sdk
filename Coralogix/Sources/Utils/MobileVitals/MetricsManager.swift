@@ -145,8 +145,8 @@ public class MetricsManager {
     }
     
     private func handleANREvent() {
-        let errorMessage = "Application Not Responding"
-        let errorType = "ANR"
+        let errorMessage = Keys.anrErrorMessage.rawValue
+        let errorType = Keys.anrErrorType.rawValue
         
         // Report ANR as error (not mobile vitals)
         guard let anrErrorClosure = self.anrErrorClosure else {

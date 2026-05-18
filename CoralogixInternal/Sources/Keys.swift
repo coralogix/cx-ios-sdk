@@ -166,6 +166,8 @@ public enum Keys: String {
     case mobileVitalsUnits = "units"
     case value
     case anrString = "application_not_responding"
+    case anrErrorMessage = "Application Not Responding"
+    case anrErrorType = "ANR"
     case skipEnrichmentWithIp = "skip_enrichment_with_ip"
     case appDidFinishLaunching
     case appDidBecomeActiveNotification
