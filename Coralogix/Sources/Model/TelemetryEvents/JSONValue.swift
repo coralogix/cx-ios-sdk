@@ -10,6 +10,17 @@ import Foundation
 /// A `Codable`, heterogeneous JSON value. Used by `TelemetryEvent` structs that
 /// carry free-form user-supplied sub-dicts (e.g. `UserActionEvent.attributes`).
 /// `[String: Any]` is not `Codable`; this enum is the typed bridge.
+///
+/// Round-trip caveat: JSON itself does not distinguish `2` from `2.0`, so a
+/// whole-number `Double` is not round-trip safe through Codable:
+///   `.double(2.0)`  -> encoded as `2`   -> decoded as `.int(2)`
+///   `.double(2.5)`  -> encoded as `2.5` -> decoded as `.double(2.5)`
+///   `.int(2)`       -> encoded as `2`   -> decoded as `.int(2)`
+/// `Int` is tried first on decode by design — most user-supplied numeric
+/// values are integers (counts, IDs) and demoting them to `Double` would
+/// change the `toAny()` runtime type for the common case. Callers that need
+/// to preserve "this was a Double" semantics for whole values must do so
+/// outside `JSONValue`.
 enum JSONValue: Codable, Equatable {
     case null
     case bool(Bool)
