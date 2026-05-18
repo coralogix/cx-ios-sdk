@@ -123,6 +123,7 @@ final class NetworkRequestEventTests: XCTestCase {
         let decoded = try JSONDecoder().decode(NetworkRequestEvent.self, from: encoded)
 
         XCTAssertEqual(decoded.id,                    original.id)
+        XCTAssertEqual(decoded.timestamp,             original.timestamp)
         XCTAssertEqual(decoded.type,                  original.type)
         XCTAssertEqual(decoded.method,                original.method)
         XCTAssertEqual(decoded.statusCode,            original.statusCode)
