@@ -7,7 +7,7 @@
 
 import Foundation
 
-/// Standard HTTP request methods. RawValue is lowercase to match what
+/// Standard HTTP request methods. RawValue is uppercase to match what
 /// `URLRequest.httpMethod` and the OTel `http.method` attribute convention
 /// produce in practice; callers may construct via `HTTPMethod(rawValue:)`
 /// from a normalized string.
