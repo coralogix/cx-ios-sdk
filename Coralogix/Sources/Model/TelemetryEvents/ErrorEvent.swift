@@ -65,8 +65,14 @@ struct ErrorEvent: TelemetryEvent {
     /// Ergonomic factory that accepts unencoded `userInfo` / `stackTrace`
     /// dictionaries and performs the JSON encoding internally. Prefer this
     /// over the raw `init` — it moves the "must be valid JSON" contract from
-    /// the call site into the model, eliminating a class of silent failures
-    /// (`ErrorContext` drops malformed JSON without surfacing the error).
+    /// the call site into the model.
+    ///
+    /// Failure handling: when encoding fails (e.g. a `Date` or non-finite
+    /// `Double` inside `userInfo`), `Helper.convert{Dictionary,Array}ToJsonString`
+    /// logs via `Log.e(...)` and returns `""`. We normalize `""` back to
+    /// `nil` here so the resulting event omits the attribute on the wire
+    /// instead of emitting an empty string that the downstream parser would
+    /// silently drop again.
     static func make(
         id: UUID = UUID(),
         timestamp: Date = Date(),
@@ -81,12 +87,12 @@ struct ErrorEvent: TelemetryEvent {
         userInfo: [String: Any]? = nil,
         stackTrace: [[String: Any]]? = nil
     ) -> ErrorEvent {
-        let userInfoJson = userInfo.map { Helper.convertDictionaryToJsonString(dict: $0) }
-        let stackTraceJson = stackTrace.flatMap { frames -> String? in
-            guard JSONSerialization.isValidJSONObject(frames),
-                  let data = try? JSONSerialization.data(withJSONObject: frames, options: []) else { return nil }
-            return String(data: data, encoding: .utf8)
-        }
+        let userInfoJson = userInfo
+            .map { Helper.convertDictionaryToJsonString(dict: $0) }
+            .flatMap { $0.isEmpty ? nil : $0 }
+        let stackTraceJson = stackTrace
+            .map { Helper.convertArrayToJsonString(array: $0) }
+            .flatMap { $0.isEmpty ? nil : $0 }
         return ErrorEvent(
             id: id,
             timestamp: timestamp,
