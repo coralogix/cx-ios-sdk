@@ -8,14 +8,14 @@
 import Foundation
 
 /// The type of a recorded user interaction.
-public enum InteractionEventName: String {
+public enum InteractionEventName: String, Codable {
     case click
     case scroll
     case swipe // Reserved for future use (UISwipeGestureRecognizer / SwiftUI DragGesture)
 }
 
 /// Direction of a scroll or swipe gesture.
-public enum ScrollDirection: String {
+public enum ScrollDirection: String, Codable {
     case up
     case down
     case left

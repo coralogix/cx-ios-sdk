@@ -268,7 +268,7 @@ public enum CoralogixLogSeverity: Int {
     case critical = 6
 }
 
-public enum CoralogixEventType: String {
+public enum CoralogixEventType: String, Codable {
     case error
     case networkRequest = "network-request"
     case log
