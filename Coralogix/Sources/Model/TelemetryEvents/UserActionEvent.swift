@@ -11,7 +11,7 @@ import CoralogixInternal
 struct UserActionEvent: TelemetryEvent {
     let id: UUID
     let timestamp: Date
-    let type: EventType
+    var type: EventType { .userInteraction }
     let eventName: InteractionEventName
     let targetElement: String
     let elementClasses: String?
@@ -37,7 +37,6 @@ struct UserActionEvent: TelemetryEvent {
     ) {
         self.id = id
         self.timestamp = timestamp
-        self.type = .userInteraction
         self.eventName = eventName
         self.targetElement = targetElement
         self.elementClasses = elementClasses

@@ -11,7 +11,7 @@ import CoralogixInternal
 struct NetworkRequestEvent: TelemetryEvent {
     let id: UUID
     let timestamp: Date
-    let type: EventType
+    var type: EventType { .networkRequest }
     let method: String
     let statusCode: Int
     let url: String
@@ -53,7 +53,6 @@ struct NetworkRequestEvent: TelemetryEvent {
     ) {
         self.id = id
         self.timestamp = timestamp
-        self.type = .networkRequest
         self.method = method
         self.statusCode = statusCode
         self.url = url

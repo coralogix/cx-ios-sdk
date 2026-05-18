@@ -11,7 +11,7 @@ import CoralogixInternal
 struct ViewLifecycleEvent: TelemetryEvent {
     let id: UUID
     let timestamp: Date
-    let type: EventType
+    var type: EventType { .lifeCycle }
     let lifeCycleType: String
 
     init(
@@ -21,7 +21,6 @@ struct ViewLifecycleEvent: TelemetryEvent {
     ) {
         self.id = id
         self.timestamp = timestamp
-        self.type = .lifeCycle
         self.lifeCycleType = lifeCycleType
     }
 

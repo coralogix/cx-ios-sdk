@@ -15,7 +15,7 @@ import CoralogixInternal
 struct ANRErrorEvent: TelemetryEvent {
     let id: UUID
     let timestamp: Date
-    let type: EventType
+    var type: EventType { .error }
     let errorMessage: String
     let errorType: String
 
@@ -27,7 +27,6 @@ struct ANRErrorEvent: TelemetryEvent {
     ) {
         self.id = id
         self.timestamp = timestamp
-        self.type = .error
         self.errorMessage = errorMessage
         self.errorType = errorType
     }

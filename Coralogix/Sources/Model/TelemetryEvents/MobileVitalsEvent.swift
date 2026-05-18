@@ -11,7 +11,7 @@ import CoralogixInternal
 struct MobileVitalsEvent: TelemetryEvent {
     let id: UUID
     let timestamp: Date
-    let type: EventType
+    var type: EventType { .mobileVitals }
     // Payload travels as a JSON-encoded string under `Keys.mobileVitalsType`
     // (camelCase on the wire — see Keys.swift) and is parsed back into a
     // dict on the exporter side. Holding the encoded string keeps the
@@ -25,7 +25,6 @@ struct MobileVitalsEvent: TelemetryEvent {
     ) {
         self.id = id
         self.timestamp = timestamp
-        self.type = .mobileVitals
         self.mobileVitalsType = mobileVitalsType
     }
 
