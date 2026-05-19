@@ -259,6 +259,17 @@ public enum Keys: String {
     case mobileVitals
 }
 
+/// Wire-format constant **values** (not keys) emitted on spans. Kept
+/// separate from `Keys` so the "keys" enum stays purely a registry of
+/// attribute names — see the CLAUDE.md rule that all attribute keys live
+/// in `Keys.swift`. Values that flow into attribute slots live here.
+public enum WireValues: String {
+    /// `error_message` value emitted for ANR-derived error events.
+    case anrErrorMessage = "Application Not Responding"
+    /// `error_type` discriminator emitted for ANR-derived error events.
+    case anrErrorType = "ANR"
+}
+
 public enum CoralogixLogSeverity: Int {
     case debug = 1
     case verbose = 2
@@ -268,7 +279,7 @@ public enum CoralogixLogSeverity: Int {
     case critical = 6
 }
 
-public enum CoralogixEventType: String {
+public enum CoralogixEventType: String, Codable {
     case error
     case networkRequest = "network-request"
     case log
