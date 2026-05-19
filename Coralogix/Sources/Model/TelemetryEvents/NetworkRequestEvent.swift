@@ -94,13 +94,21 @@ struct NetworkRequestEvent: TelemetryEvent {
             SemanticAttributes.httpStatusCode.rawValue:       .int(statusCode),
             SemanticAttributes.httpResponseBodySize.rawValue: .int(responseContentLength),
         ]
+        // `Helper.convertDictionaryToJsonString` logs via `Log.e(...)` and
+        // returns "" on encoding failure. Omit the attribute on failure
+        // instead of emitting an empty string that the downstream parser
+        // would silently drop again (mirrors `ErrorEvent.make`).
         if let requestHeaders {
             let json = Helper.convertDictionaryToJsonString(dict: requestHeaders)
-            attrs[Keys.requestHeaders.rawValue] = .string(json)
+            if !json.isEmpty {
+                attrs[Keys.requestHeaders.rawValue] = .string(json)
+            }
         }
         if let responseHeaders {
             let json = Helper.convertDictionaryToJsonString(dict: responseHeaders)
-            attrs[Keys.responseHeaders.rawValue] = .string(json)
+            if !json.isEmpty {
+                attrs[Keys.responseHeaders.rawValue] = .string(json)
+            }
         }
         if let requestPayload  { attrs[Keys.requestPayload.rawValue]  = .string(requestPayload) }
         if let responsePayload { attrs[Keys.responsePayload.rawValue] = .string(responsePayload) }
