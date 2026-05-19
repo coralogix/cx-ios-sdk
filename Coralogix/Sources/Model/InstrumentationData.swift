@@ -92,6 +92,8 @@ struct OtelSpan {
         static let versionMetadataAppVersion = "cx_rum.version_metadata.app_version"
         static let labels                    = "cx_rum.labels"
         static let sessionId                 = "cx_rum.session_context.session_id"
+        static let sessionCreationDate       = "cx_rum.session_context.session_creation_date"
+        static let hasRecording              = "cx_rum.session_context.hasRecording"
         static let userId                    = "cx_rum.session_context.user_id"
         static let userName                  = "cx_rum.session_context.user_name"
         static let userEmail                 = "cx_rum.session_context.user_email"
@@ -144,6 +146,8 @@ struct OtelSpan {
         // Session context
         if let session = cxRum.sessionContext {
             attrs[AttrKey.sessionId] = session.sessionId
+            attrs[AttrKey.sessionCreationDate] = session.sessionCreationDate.milliseconds
+            attrs[AttrKey.hasRecording] = session.hasRecording
             if !session.userId.isEmpty    { attrs[AttrKey.userId]    = session.userId }
             if !session.userName.isEmpty  { attrs[AttrKey.userName]  = session.userName }
             if !session.userEmail.isEmpty { attrs[AttrKey.userEmail] = session.userEmail }
