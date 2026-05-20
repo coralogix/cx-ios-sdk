@@ -20,9 +20,27 @@ public class MetricsManager {
     var memoryDetector: MemoryDetector?
     var slowFrozenFramesDetector: SlowFrozenFramesDetector?
     var fpsDetector = FPSDetector()
+
+    // MARK: - Reporting dependencies (CX-40573)
+    //
+    // When set, these protocol-typed sinks take precedence over the legacy
+    // closure properties below. Production wires `SpanMetricsCollector` /
+    // `SpanEventReporter`; the wire format produced by either path is
+    // byte-identical to the dict the deprecated closures emit — pinned by
+    // `WireFormatTests`.
+    //
+    // Threading: expected to be set once during init on the main thread.
+    // Subsequent reads from background callbacks (MetricKit, ANR timer)
+    // are unsynchronized; do not mutate after init.
+    var metricsCollector: MetricsCollector?
+    var eventReporter: EventReporter?
+
+    // MARK: - Legacy closure fallbacks (deprecated)
+    @available(*, deprecated, message: "Inject a MetricsCollector via the new metricsCollector property instead. Closure-based wiring will be removed in a future major release.")
     var metricsManagerClosure: (([String: Any]) -> Void)?
+    @available(*, deprecated, message: "Inject an EventReporter via the new eventReporter property instead. Closure-based wiring will be removed in a future major release.")
     var anrErrorClosure: ((String, String) -> Void)?
-    
+
     // MARK: - Internal timer for periodic send
     private let sendInterval: TimeInterval = 15.0
     private var lastSendTime: Date?
@@ -30,17 +48,44 @@ public class MetricsManager {
                 
     public func addMetricKitObservers() {
         MyMetricSubscriber.shared.metricKitClosure = { [weak self] dict in
-            self?.metricsManagerClosure?(dict)
+            self?.emitMetricKitPayload(dict)
         }
         MyMetricSubscriber.shared.hangDiagnosticClosure = { [weak self] message, errorType in
             guard let self = self else { return }
-            guard let anrErrorClosure = self.anrErrorClosure else {
-                Log.d("[MetricsManager] Warning: anrErrorClosure not set, MetricKit hang not reported")
-                return
-            }
-            anrErrorClosure(message, errorType)
+            self.reportANR(message: message, errorType: errorType, source: "MetricKit hang")
         }
         MXMetricManager.shared.add(MyMetricSubscriber.shared)
+    }
+
+    /// Re-emits a category-keyed dict (`{ "<category>": <payload> }`) — used
+    /// by MetricKit and the cold/warm detectors — through whichever sink is
+    /// wired, preferring the protocol path. The shape sent on the wire is
+    /// byte-identical either way (pinned by `WireFormatTests`).
+    private func emitMetricKitPayload(_ dict: [String: Any]) {
+        if let metricsCollector = self.metricsCollector {
+            // Pass the value through as-is: `VitalsMetric.payload` is typed
+            // `Any` precisely so the dict / array shape produced by the
+            // upstream producer reaches the collector unchanged.
+            let metrics: [VitalsMetric] = dict.map { VitalsMetric(name: $0.key, payload: $0.value) }
+            metricsCollector.collect(metrics)
+            return
+        }
+        self.metricsManagerClosure?(dict)
+    }
+
+    /// Routes an ANR-shaped event through whichever sink is wired. Uses the
+    /// typed `ANRErrorEvent` (from CX-40572) when going through the protocol;
+    /// falls back to the deprecated closure otherwise.
+    private func reportANR(message: String, errorType: String, source: String) {
+        if let eventReporter = self.eventReporter {
+            eventReporter.report(ANRErrorEvent(errorMessage: message, errorType: errorType))
+            return
+        }
+        guard let anrErrorClosure = self.anrErrorClosure else {
+            Log.d("[MetricsManager] Warning: no eventReporter or anrErrorClosure set, \(source) not reported")
+            return
+        }
+        anrErrorClosure(message, errorType)
     }
     
     public func removeObservers() {
@@ -50,32 +95,38 @@ public class MetricsManager {
     }
     
     public func sendMobileVitals() {
-        var vitals = [String: Any]()
+        // Build a [VitalsMetric] in the same category order used by the
+        // legacy dict path. The dict and the protocol path are equivalent —
+        // see `WireFormatTests.testMetricsManager_sendMobileVitals_*`.
+        var metrics: [VitalsMetric] = []
         if let cpuDetector = cpuDetector {
-            vitals[Keys.cpu.rawValue] = cpuDetector.statsDictionary()
+            metrics.append(VitalsMetric(name: Keys.cpu.rawValue, payload: cpuDetector.statsDictionary()))
         }
-        
         if let memoryDetector = memoryDetector {
-            vitals[Keys.memory.rawValue] = memoryDetector.statsDictionary()
+            metrics.append(VitalsMetric(name: Keys.memory.rawValue, payload: memoryDetector.statsDictionary()))
         }
-        
         if let slowFrozenFramesDetector = slowFrozenFramesDetector {
-            vitals[Keys.slowFrozen.rawValue] = slowFrozenFramesDetector.statsDictionary()
+            metrics.append(VitalsMetric(name: Keys.slowFrozen.rawValue, payload: slowFrozenFramesDetector.statsDictionary()))
         }
-        
-        // Only include FPS if rendering detector is running
         if fpsDetector.isRunning {
-            vitals[MobileVitalsType.fps.stringValue] = fpsDetector.statsDictionary()
+            metrics.append(VitalsMetric(name: MobileVitalsType.fps.stringValue, payload: fpsDetector.statsDictionary()))
         }
-        
-        // Don't send if no vitals collected
-        guard !vitals.isEmpty else {
+
+        guard !metrics.isEmpty else {
             Log.d("[MetricsManager] No vitals to send, skipping")
             return
         }
-        
-        // Send event
-        self.metricsManagerClosure?(vitals)
+
+        if let metricsCollector = self.metricsCollector {
+            metricsCollector.collect(metrics)
+        } else {
+            // Legacy closure path — reconstruct the same dict shape callers
+            // have always received. Inlined so the fallback doesn't require
+            // a separate `MetricsCollector` impl; `WireFormatTests` pins
+            // this reconstruction to be byte-identical to
+            // `[VitalsMetric].toDictionary()`.
+            self.metricsManagerClosure?(metrics.toDictionary())
+        }
         lastSendTime = Date()
 
         // Reset stats after sending
@@ -120,17 +171,17 @@ public class MetricsManager {
         guard coldDetector == nil else { return }
         let detector = ColdDetector()
         detector.handleColdClosure = { [weak self] dict in
-            self?.metricsManagerClosure?(dict)
+            self?.emitMetricKitPayload(dict)
         }
         detector.startMonitoring()
         self.coldDetector = detector
     }
-    
+
     func startWarmStartMonitoring() {
         guard warmDetector == nil else { return }
         let detector = WarmDetector()
         detector.handleWarmClosure = { [weak self] dict in
-            self?.metricsManagerClosure?(dict)
+            self?.emitMetricKitPayload(dict)
         }
         detector.startMonitoring()
         self.warmDetector = detector
@@ -147,14 +198,7 @@ public class MetricsManager {
     private func handleANREvent() {
         let errorMessage = WireValues.anrErrorMessage.rawValue
         let errorType = WireValues.anrErrorType.rawValue
-        
-        // Report ANR as error (not mobile vitals)
-        guard let anrErrorClosure = self.anrErrorClosure else {
-            Log.d("[MetricsManager] Warning: anrErrorClosure not set, ANR event not reported")
-            return
-        }
-        
-        anrErrorClosure(errorMessage, errorType)
+        reportANR(message: errorMessage, errorType: errorType, source: "ANR event")
         Log.d("[MetricsManager] ANR error reported: \(errorMessage)")
     }
     

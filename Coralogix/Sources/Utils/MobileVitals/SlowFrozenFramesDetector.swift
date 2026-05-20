@@ -110,6 +110,11 @@ final class SlowFrozenFramesDetector {
     
     
     
+    /// Injected metrics sink (CX-40573). Reserved for the follow-up ticket
+    /// that migrates the pull-based send loop in `MetricsManager` onto
+    /// self-pushing detectors. Stored but not invoked here yet.
+    let metricsCollector: MetricsCollector?
+
     // MARK: - Init
     /// Creates a new slow/frozen frame detector.
     ///
@@ -119,14 +124,17 @@ final class SlowFrozenFramesDetector {
     ///     Industry thresholds range from 250ms (sensitive) to 700ms (severe freezes only).
     ///   - reportIntervalMs: Window size for aggregating frame counts. Default 60s.
     ///   - tolerancePercentage: Tolerance for slow frame detection. Default 3% to prevent false positives.
+    ///   - metricsCollector: See `metricsCollector` property doc. Reserved for follow-up; pass nil today.
     init(
         frozenThresholdMs: Double = 700.0,
         reportIntervalMs: Int64 = 60_000,
-        tolerancePercentage: Double = 0.03
+        tolerancePercentage: Double = 0.03,
+        metricsCollector: MetricsCollector? = nil
     ) {
         self.frozenThresholdMs = frozenThresholdMs
         self.reportIntervalMs = reportIntervalMs
         self.tolerancePercentage = tolerancePercentage
+        self.metricsCollector = metricsCollector
         updateRefreshRateAndBudget()
     }
 

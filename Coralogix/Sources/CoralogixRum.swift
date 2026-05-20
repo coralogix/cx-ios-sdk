@@ -189,8 +189,12 @@ public class CoralogixRum {
     private func setupCoreModules() {
         self.initializeSessionReplay()
         self.initializeNavigationInstrumentation()
-        self.metricsManager.metricsManagerClosure = { [weak self] dict in
-            self?.sendMobileVitals(dict)
+        // CX-40573: Mobile-vitals payloads now flow through the typed
+        // MetricsCollector protocol instead of the previous closure on
+        // MetricsManager. Wire format is unchanged — pinned by
+        // WireFormatTests.testMetricsManager_protocolPath_equalsClosurePath_endToEnd.
+        self.metricsManager.metricsCollector = SpanMetricsCollector { [weak self] in
+            self?.makeSpan(event: .mobileVitals, source: .code, severity: .info)
         }
     }
     
@@ -302,7 +306,7 @@ public class CoralogixRum {
     public func reportMobileVitalsMeasurement(type: String, metrics: [HybridMetric]) {
         guard CoralogixRum.isInitialized else { return }
         if (CoralogixRum.mobileSDK.sdkFramework.isNative) { return }
-        
+
         var vitalArray = [[String: Any]]()
         metrics.forEach { element in
             let vital = [
@@ -313,21 +317,28 @@ public class CoralogixRum {
             ]
             vitalArray.append(vital)
         }
-        self.sendMobileVitals([type: vitalArray])
+        // CX-40573: same wire format as before, routed through the typed
+        // MetricsCollector path so the orchestrator owns span creation.
+        guard let collector = self.metricsManager.metricsCollector else {
+            Log.d("[CoralogixRum] metricsCollector not wired; dropping hybrid measurement type=\(type) metrics=\(metrics.count)")
+            return
+        }
+        collector.collect([VitalsMetric(name: type, payload: vitalArray)])
     }
-    
+
     public func reportMobileVitalsMeasurement(type: String, value: Double, units: String) {
         guard CoralogixRum.isInitialized else { return }
         if (CoralogixRum.mobileSDK.sdkFramework.isNative) { return }
-        
-        let vital = [
-            type: [
-                Keys.mobileVitalsUnits.rawValue: units,
-                Keys.value.rawValue: value
-            ]
+
+        let payload: [String: Any] = [
+            Keys.mobileVitalsUnits.rawValue: units,
+            Keys.value.rawValue: value
         ]
-        
-        self.sendMobileVitals(vital)
+        guard let collector = self.metricsManager.metricsCollector else {
+            Log.d("[CoralogixRum] metricsCollector not wired; dropping hybrid measurement type=\(type) value=\(value)")
+            return
+        }
+        collector.collect([VitalsMetric(name: type, payload: payload)])
     }
     
     public func setView(name: String) {

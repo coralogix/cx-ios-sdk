@@ -54,9 +54,16 @@ final class CPUDetector {
     var avgMainThreadMs: Double { mainThreadDeltaMsSamples.isEmpty ? 0 : mainThreadDeltaMsSamples.reduce(0, +) / Double(mainThreadDeltaMsSamples.count) }
     var p95MainThreadMs: Double { percentile95(of: mainThreadDeltaMsSamples) }
 
-    init(checkInterval: TimeInterval = 1.0) {
+    /// Injected metrics sink (CX-40573). Reserved for the follow-up ticket
+    /// that migrates the pull-based send loop in `MetricsManager` onto
+    /// self-pushing detectors. Stored but not invoked here yet.
+    let metricsCollector: MetricsCollector?
+
+    init(checkInterval: TimeInterval = 1.0,
+         metricsCollector: MetricsCollector? = nil) {
         mach_timebase_info(&timebase)
         self.checkInterval = max(checkInterval, minInterval)
+        self.metricsCollector = metricsCollector
     }
     
     public func startMonitoring() {
