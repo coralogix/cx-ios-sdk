@@ -182,6 +182,33 @@ final class InstrumentationDataTests: XCTestCase {
         XCTAssertNotNil(attrs["cx_rum.session_context.user_agent"])
     }
 
+    func testBuildRumContextAttributes_hasRecording_reflectsSessionState() {
+        let cxRumOff = makeCxRum(hasRecording: false)
+        XCTAssertEqual(
+            OtelSpan(otel: mockSpan, cxRum: cxRumOff, viewManager: nil).attributes["cx_rum.session_context.hasRecording"] as? Bool,
+            false
+        )
+
+        let cxRumOn = makeCxRum(hasRecording: true)
+        XCTAssertEqual(
+            OtelSpan(otel: mockSpan, cxRum: cxRumOn, viewManager: nil).attributes["cx_rum.session_context.hasRecording"] as? Bool,
+            true
+        )
+    }
+
+    func testBuildRumContextAttributes_sessionCreationDate_isMillisecondInt() {
+        // The mock session span carries sessionCreationDate="1609459200" (seconds).
+        // The cx_rum attribute must be emitted as Int milliseconds (1609459200000),
+        // matching the SessionContext payload encoding and the backend tracing contract.
+        let cxRum = makeCxRum()
+        let attrs = OtelSpan(otel: mockSpan, cxRum: cxRum, viewManager: nil).attributes
+
+        let scd = attrs["cx_rum.session_context.session_creation_date"]
+        XCTAssertNotNil(scd, "cx_rum.session_context.session_creation_date must be present in instrumentation_data attributes")
+        XCTAssertNil(scd as? String, "session_creation_date must not be a String — backend expects an integer ms timestamp")
+        XCTAssertEqual(scd as? Int, 1_609_459_200_000)
+    }
+
     func testBuildRumContextAttributes_eventContext_isPresent() {
         let cxRum = makeCxRum(eventType: .networkRequest, severity: 3, source: "fetch")
         let attrs = OtelSpan(otel: mockSpan, cxRum: cxRum, viewManager: nil).attributes
@@ -373,7 +400,8 @@ final class InstrumentationDataTests: XCTestCase {
         fragments: String = "/api",
         labels: [String: Any]? = nil,
         errorType: String = "",
-        errorMessage: String = ""
+        errorMessage: String = "",
+        hasRecording: Bool = false
     ) -> CxRum {
         let eventSpan = MockSpanData(attributes: [
             Keys.eventType.rawValue: AttributeValue(eventType.rawValue),
@@ -409,7 +437,7 @@ final class InstrumentationDataTests: XCTestCase {
             timeStamp: Date().timeIntervalSince1970,
             networkRequestContext: NetworkRequestContext(otel: networkSpan),
             versionMetadata: VersionMetadata(appName: appName, appVersion: appVersion),
-            sessionContext: SessionContext(otel: sessionSpan, userMetadata: nil),
+            sessionContext: SessionContext(otel: sessionSpan, userMetadata: nil, hasRecording: hasRecording),
             prevSessionContext: nil,
             eventContext: EventContext(otel: eventSpan),
             logContext: LogContext(otel: emptySpan),
