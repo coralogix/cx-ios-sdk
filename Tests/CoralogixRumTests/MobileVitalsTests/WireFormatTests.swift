@@ -272,7 +272,7 @@ final class WireFormatTests: XCTestCase {
         }
         let rebuilt = metrics.toDictionary()
 
-        XCTAssertEqual(jsonString(original), jsonString(rebuilt),
+        XCTAssertEqual(try jsonString(original), try jsonString(rebuilt),
                        "Round-trip dict must be byte-identical to the legacy payload")
     }
 
@@ -286,7 +286,7 @@ final class WireFormatTests: XCTestCase {
         let closureDict = try captureSendMobileVitals(useProtocolPath: false)
         let protocolDict = try captureSendMobileVitals(useProtocolPath: true)
 
-        XCTAssertEqual(jsonString(closureDict), jsonString(protocolDict),
+        XCTAssertEqual(try jsonString(closureDict), try jsonString(protocolDict),
                        "Protocol path must produce the same bytes as the closure path")
     }
 
@@ -343,10 +343,13 @@ final class WireFormatTests: XCTestCase {
 
     /// Deterministic JSON serialization for dict equality.
     /// Uses `.sortedKeys` so dict ordering can't smuggle in a false positive.
-    private func jsonString(_ dict: [String: Any]) -> String {
-        guard let data = try? JSONSerialization.data(withJSONObject: dict, options: [.sortedKeys]),
-              let str = String(data: data, encoding: .utf8) else {
-            return "<unserializable>"
+    /// Throws on any serialization failure — never returns a sentinel — so a
+    /// silently-broken payload can't make two failed-encode calls compare equal.
+    private func jsonString(_ dict: [String: Any]) throws -> String {
+        let data = try JSONSerialization.data(withJSONObject: dict, options: [.sortedKeys])
+        guard let str = String(data: data, encoding: .utf8) else {
+            throw NSError(domain: "WireFormatTests", code: 1,
+                          userInfo: [NSLocalizedDescriptionKey: "JSON data was not valid UTF-8"])
         }
         return str
     }
