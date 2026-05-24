@@ -52,13 +52,24 @@ class FPSDetector {
     static let defaultInterval: TimeInterval = 1.0 // second
     internal var samples: [Double] = []
 
-    /// Injected metrics sink (CX-40573). Reserved for the follow-up ticket
-    /// that migrates the pull-based send loop in `MetricsManager` onto
-    /// self-pushing detectors. Stored but not invoked here yet.
+    /// Injected metrics sink (CX-40573 / CX-43340). Invoked from `flush()`
+    /// to push this detector's FPS category through the protocol path.
+    /// Production wires `SpanMetricsCollector`; tests inject a recorder.
+    /// nil disables the push (the detector still samples; nothing is emitted).
     let metricsCollector: MetricsCollector?
 
     init(metricsCollector: MetricsCollector? = nil) {
         self.metricsCollector = metricsCollector
+    }
+
+    /// Pushes one `VitalsMetric` for the FPS category through `metricsCollector`
+    /// and resets the accumulated samples so the next window starts fresh.
+    /// Called by `MetricsManager.flushAll()` on the periodic scheduler tick
+    /// and on view-change boundaries.
+    func flush() {
+        guard isRunning, let metricsCollector = metricsCollector else { return }
+        metricsCollector.collect([VitalsMetric(name: MobileVitalsType.fps.stringValue, payload: statsDictionary())])
+        reset()
     }
 
     // MARK: - Public stats

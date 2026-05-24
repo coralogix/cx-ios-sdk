@@ -110,9 +110,11 @@ final class SlowFrozenFramesDetector {
     
     
     
-    /// Injected metrics sink (CX-40573). Reserved for the follow-up ticket
-    /// that migrates the pull-based send loop in `MetricsManager` onto
-    /// self-pushing detectors. Stored but not invoked here yet.
+    /// Injected metrics sink (CX-40573 / CX-43340). Invoked from `flush()`
+    /// to push this detector's slow/frozen-frame category through the
+    /// protocol path. Production wires `SpanMetricsCollector`; tests inject
+    /// a recorder. nil disables the push (the detector still records
+    /// windows; nothing is emitted).
     let metricsCollector: MetricsCollector?
 
     // MARK: - Init
@@ -124,7 +126,7 @@ final class SlowFrozenFramesDetector {
     ///     Industry thresholds range from 250ms (sensitive) to 700ms (severe freezes only).
     ///   - reportIntervalMs: Window size for aggregating frame counts. Default 60s.
     ///   - tolerancePercentage: Tolerance for slow frame detection. Default 3% to prevent false positives.
-    ///   - metricsCollector: See `metricsCollector` property doc. Reserved for follow-up; pass nil today.
+    ///   - metricsCollector: See `metricsCollector` property doc.
     init(
         frozenThresholdMs: Double = 700.0,
         reportIntervalMs: Int64 = 60_000,
@@ -136,6 +138,16 @@ final class SlowFrozenFramesDetector {
         self.tolerancePercentage = tolerancePercentage
         self.metricsCollector = metricsCollector
         updateRefreshRateAndBudget()
+    }
+
+    /// Pushes one `VitalsMetric` for the slow/frozen-frame category through
+    /// `metricsCollector` and resets accumulated windows. Called by
+    /// `MetricsManager.flushAll()` on the periodic scheduler tick and on
+    /// view-change boundaries.
+    func flush() {
+        guard let metricsCollector = metricsCollector else { return }
+        metricsCollector.collect([VitalsMetric(name: Keys.slowFrozen.rawValue, payload: statsDictionary())])
+        reset()
     }
 
     // MARK: - Public API
