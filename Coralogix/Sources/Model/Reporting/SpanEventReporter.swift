@@ -10,10 +10,12 @@ import CoralogixInternal
 
 /// Production `EventReporter` impl. Turns a `TelemetryEvent` into an
 /// error span via the orchestrator's `makeSpan`. Today only
-/// `ANRErrorEvent` is wired through this path; the switch is deliberately
-/// conservative so any new event type is logged and dropped rather than
-/// silently mis-routed. Add new event handlers as their producers come
-/// online.
+/// `ANRErrorEvent` is wired through this path. The switch on
+/// `event.type` is exhaustive (no `default:`) so adding a new
+/// `CoralogixEventType` case fails to compile here until a contributor
+/// explicitly handles it — either with a new `case` or by adding it to
+/// the drop list. Prevents silent mis-routing as the event taxonomy
+/// grows.
 ///
 /// `createSpan` and `recordScreenshot` are injected closures — they let
 /// this struct stay decoupled from `CoralogixRum`'s API surface while
@@ -29,14 +31,27 @@ final class SpanEventReporter: EventReporter {
     }
 
     func report(_ event: TelemetryEvent) {
-        if let anr = event as? ANRErrorEvent {
+        switch event.type {
+        case .error:
+            guard let anr = event as? ANRErrorEvent else {
+                Log.d("[SpanEventReporter] event.type=.error but concrete type is not ANRErrorEvent; dropping")
+                return
+            }
             guard var span = createErrorSpan() else { return }
             span.setAttribute(key: Keys.errorMessage.rawValue, value: anr.errorMessage)
             span.setAttribute(key: Keys.errorType.rawValue,    value: anr.errorType)
             recordScreenshot(&span)
             span.end()
-            return
+
+        // These event types do not flow through the EventReporter
+        // protocol path today — they emit spans via other code paths.
+        // Enumerated explicitly (rather than caught by `default:`) so
+        // adding a new `CoralogixEventType` case forces a compile-time
+        // decision here.
+        case .networkRequest, .log, .userInteraction, .webVitals, .longtask, .resources,
+             .internalKey, .navigation, .mobileVitals, .lifeCycle, .screenshot,
+             .customMeasurement, .customSpan, .unknown:
+            Log.d("[SpanEventReporter] event.type=\(event.type.rawValue) is not handled by the protocol path; dropping")
         }
-        Log.d("[SpanEventReporter] Unhandled event type \(event.type.rawValue); dropping")
     }
 }
