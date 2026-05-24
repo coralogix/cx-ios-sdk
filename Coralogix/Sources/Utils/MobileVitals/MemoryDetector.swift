@@ -27,6 +27,15 @@ final class MemoryDetector {
     // Memory changes slowly (seconds), so 1s provides accurate min/max/avg/p95 statistics
     // See CX-31659 for analysis and rationale
     private let defaultInterval: TimeInterval = 1.0
+
+    /// Injected metrics sink (CX-40573). Reserved for the follow-up ticket
+    /// that migrates the pull-based send loop in `MetricsManager` onto
+    /// self-pushing detectors. Stored but not invoked here yet.
+    let metricsCollector: MetricsCollector?
+
+    init(metricsCollector: MetricsCollector? = nil) {
+        self.metricsCollector = metricsCollector
+    }
     
     // MARK: - Stored samples (instantaneous per sample)
     internal var footprintSamples: [Double] = []       // MB

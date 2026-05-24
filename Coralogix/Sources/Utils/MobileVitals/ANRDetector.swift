@@ -24,11 +24,21 @@ internal class ANRDetector {
     // ANR handling closure (useful for testing)
     var handleANRClosure: (() -> Void)?
 
-    init(checkInterval: TimeInterval = 1.0, maxBlockTime: TimeInterval = 5.0, clock: CoralogixInternal.Clock = SystemClock()) {
+    /// Injected typed event sink (CX-40573). Reserved for the follow-up
+    /// ticket that migrates ANR delivery off `MetricsManager.handleANREvent`
+    /// onto self-pushing detectors. Stored but not invoked here yet so the
+    /// existing wire format stays untouched.
+    let eventReporter: EventReporter?
+
+    init(checkInterval: TimeInterval = 1.0,
+         maxBlockTime: TimeInterval = 5.0,
+         clock: CoralogixInternal.Clock = SystemClock(),
+         eventReporter: EventReporter? = nil) {
         self.checkInterval = checkInterval
         self.maxBlockTime = maxBlockTime
         self.clock = clock
         self.lastCheckTimestamp = clock.now()
+        self.eventReporter = eventReporter
     }
 
     func startMonitoring() {

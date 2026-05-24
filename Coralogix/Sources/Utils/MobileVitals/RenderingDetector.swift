@@ -51,7 +51,16 @@ class FPSDetector {
     internal var isRunning = false
     static let defaultInterval: TimeInterval = 1.0 // second
     internal var samples: [Double] = []
-    
+
+    /// Injected metrics sink (CX-40573). Reserved for the follow-up ticket
+    /// that migrates the pull-based send loop in `MetricsManager` onto
+    /// self-pushing detectors. Stored but not invoked here yet.
+    let metricsCollector: MetricsCollector?
+
+    init(metricsCollector: MetricsCollector? = nil) {
+        self.metricsCollector = metricsCollector
+    }
+
     // MARK: - Public stats
     var minFPS: Double { samples.min() ?? 0 }
     var maxFPS: Double { samples.max() ?? 0 }
