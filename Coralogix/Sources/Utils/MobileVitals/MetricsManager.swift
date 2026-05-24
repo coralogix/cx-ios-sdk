@@ -31,9 +31,24 @@ public class MetricsManager {
     //
     // Threading: expected to be set once during init on the main thread.
     // Subsequent reads from background callbacks (MetricKit, ANR timer)
-    // are unsynchronized; do not mutate after init.
-    var metricsCollector: MetricsCollector?
-    var eventReporter: EventReporter?
+    // are unsynchronized; do not mutate after init. The `didSet` observers
+    // below surface a `Log.e` if the invariant is violated — it can't be a
+    // `precondition` because the SDK must never crash the host app
+    // (see CLAUDE.md).
+    var metricsCollector: MetricsCollector? {
+        didSet {
+            if oldValue != nil {
+                Log.e("[MetricsManager] metricsCollector reassigned after init — this races background-thread reads (MetricKit/timer callbacks). Set once during init only.")
+            }
+        }
+    }
+    var eventReporter: EventReporter? {
+        didSet {
+            if oldValue != nil {
+                Log.e("[MetricsManager] eventReporter reassigned after init — this races background-thread reads (ANR/MetricKit callbacks). Set once during init only.")
+            }
+        }
+    }
 
     // MARK: - Legacy closure fallbacks (deprecated)
     @available(*, deprecated, message: "Inject a MetricsCollector via the new metricsCollector property instead. Closure-based wiring will be removed in a future major release.")
