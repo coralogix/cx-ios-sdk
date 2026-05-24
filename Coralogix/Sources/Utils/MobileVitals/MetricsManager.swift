@@ -19,7 +19,7 @@ public class MetricsManager {
     var cpuDetector: CPUDetector?
     var memoryDetector: MemoryDetector?
     var slowFrozenFramesDetector: SlowFrozenFramesDetector?
-    var fpsDetector = FPSDetector()
+    var fpsDetector: FPSDetector?
 
     // MARK: - Reporting dependencies (CX-40573)
     //
@@ -109,47 +109,36 @@ public class MetricsManager {
         self.stopSendScheduler()
     }
     
-    public func sendMobileVitals() {
-        // Build a [VitalsMetric] in the same category order used by the
-        // legacy dict path. The dict and the protocol path are equivalent —
-        // see `WireFormatTests.testMetricsManager_sendMobileVitals_*`.
-        var metrics: [VitalsMetric] = []
-        if let cpuDetector = cpuDetector {
-            metrics.append(VitalsMetric(name: Keys.cpu.rawValue, payload: cpuDetector.statsDictionary()))
-        }
-        if let memoryDetector = memoryDetector {
-            metrics.append(VitalsMetric(name: Keys.memory.rawValue, payload: memoryDetector.statsDictionary()))
-        }
-        if let slowFrozenFramesDetector = slowFrozenFramesDetector {
-            metrics.append(VitalsMetric(name: Keys.slowFrozen.rawValue, payload: slowFrozenFramesDetector.statsDictionary()))
-        }
-        if fpsDetector.isRunning {
-            metrics.append(VitalsMetric(name: MobileVitalsType.fps.stringValue, payload: fpsDetector.statsDictionary()))
-        }
-
-        guard !metrics.isEmpty else {
-            Log.d("[MetricsManager] No vitals to send, skipping")
-            return
-        }
-
-        if let metricsCollector = self.metricsCollector {
-            metricsCollector.collect(metrics)
-        } else {
-            // Legacy closure path — reconstruct the same dict shape callers
-            // have always received. Inlined so the fallback doesn't require
-            // a separate `MetricsCollector` impl; `WireFormatTests` pins
-            // this reconstruction to be byte-identical to
-            // `[VitalsMetric].toDictionary()`.
-            self.metricsManagerClosure?(metrics.toDictionary())
-        }
-        lastSendTime = Date()
-
-        // Reset stats after sending
-        cpuDetector?.reset()
-        memoryDetector?.reset()
-        slowFrozenFramesDetector?.reset()
-        if fpsDetector.isRunning {
-            fpsDetector.reset()
+    /// Fan-out: signal every periodic detector to push its current category
+    /// through its own `metricsCollector` and reset. Replaces the previous
+    /// pull-loop (`sendMobileVitals()` in CX-40573) — detectors now own
+    /// their own emit per CX-43340.
+    ///
+    /// Each detector produces one `mobile_vitals` span via the production
+    /// `SpanMetricsCollector` (one per category, instead of the pre-refactor
+    /// single batched span). Wire format per span is unchanged — pinned by
+    /// `WireFormatTests`.
+    ///
+    /// Called by the periodic scheduler (every 15s) and on view-change
+    /// boundaries (`NavigationInstrumentation`). ANR is event-driven and
+    /// pushes itself from `ANRDetector.handleANR()`; it does not participate
+    /// in `flushAll`.
+    public func flushAll() {
+        cpuDetector?.flush()
+        memoryDetector?.flush()
+        slowFrozenFramesDetector?.flush()
+        fpsDetector?.flush()
+        // Match the pre-refactor invariant: bump lastSendTime only if at
+        // least one detector would have contributed — otherwise an empty
+        // scheduler tick (no detectors wired) would debounce subsequent
+        // ticks for 15s. CPU/Memory/SlowFrozen contribute iff non-nil;
+        // FPS contributes iff its display-link sampler is running.
+        let anyContribution = cpuDetector != nil
+            || memoryDetector != nil
+            || slowFrozenFramesDetector != nil
+            || (fpsDetector?.isRunning ?? false)
+        if anyContribution {
+            lastSendTime = Date()
         }
     }
     
@@ -167,7 +156,7 @@ public class MetricsManager {
         let mobileVitalsMap: [(CoralogixExporterOptions.MobileVitalsType, () -> Void)] = [
             (.coldDetector, self.startColdStartMonitoring),
             (.warmDetector, self.startWarmStartMonitoring),
-            (.renderingDetector, self.fpsDetector.startMonitoring),
+            (.renderingDetector, self.startFPSMonitoring),
             (.cpuDetector, self.startCPUMonitoring),
             (.memoryDetector, self.startMemoryMonitoring),
             (.slowFrozenFramesDetector, self.startSlowFrozenFramesMonitoring)
@@ -203,41 +192,48 @@ public class MetricsManager {
     }
     
     func startANRMonitoring() {
-        self.anrDetector = ANRDetector()
+        self.anrDetector = ANRDetector(eventReporter: self.eventReporter)
         self.anrDetector?.handleANRClosure = { [weak self] in
             self?.handleANREvent()
         }
         self.anrDetector?.startMonitoring()
     }
-    
+
     private func handleANREvent() {
         let errorMessage = WireValues.anrErrorMessage.rawValue
         let errorType = WireValues.anrErrorType.rawValue
         reportANR(message: errorMessage, errorType: errorType, source: "ANR event")
         Log.d("[MetricsManager] ANR error reported: \(errorMessage)")
     }
-    
+
     func startCPUMonitoring() {
         guard cpuDetector == nil else { return }
-        let detector = CPUDetector()
+        let detector = CPUDetector(metricsCollector: self.metricsCollector)
         detector.startMonitoring()
         self.cpuDetector = detector
     }
-    
+
     func startMemoryMonitoring() {
         guard memoryDetector == nil else { return }
-        let detector = MemoryDetector()
+        let detector = MemoryDetector(metricsCollector: self.metricsCollector)
         detector.startMonitoring()
         self.memoryDetector = detector
     }
-    
+
     func startSlowFrozenFramesMonitoring() {
         guard slowFrozenFramesDetector == nil else { return }
-        let detector = SlowFrozenFramesDetector()
+        let detector = SlowFrozenFramesDetector(metricsCollector: self.metricsCollector)
         detector.startMonitoring()
         self.slowFrozenFramesDetector = detector
     }
-    
+
+    func startFPSMonitoring() {
+        guard fpsDetector == nil else { return }
+        let detector = FPSDetector(metricsCollector: self.metricsCollector)
+        detector.startMonitoring()
+        self.fpsDetector = detector
+    }
+
     private func stopAllDetectors() {
         anrDetector?.stopMonitoring()
         anrDetector = nil
@@ -247,7 +243,8 @@ public class MetricsManager {
         memoryDetector = nil
         slowFrozenFramesDetector?.stopMonitoring()
         slowFrozenFramesDetector = nil
-        fpsDetector.stopMonitoring()
+        fpsDetector?.stopMonitoring()
+        fpsDetector = nil
     }
     
     private func startSendScheduler() {
@@ -274,13 +271,13 @@ public class MetricsManager {
                 let now = Date()
                 if let last = self.lastSendTime {
                     if now.timeIntervalSince(last) >= self.sendInterval {
-                        self.sendMobileVitals()
+                        self.flushAll()
                     } else {
                         Log.d("[MetricsManager] Skipped send, only \(now.timeIntervalSince(last))s since last event")
                     }
                 } else {
                     // First time we fire the scheduler
-                    self.sendMobileVitals()
+                    self.flushAll()
                 }
                 
                 // Re-schedule the next check

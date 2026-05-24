@@ -54,9 +54,10 @@ final class CPUDetector {
     var avgMainThreadMs: Double { mainThreadDeltaMsSamples.isEmpty ? 0 : mainThreadDeltaMsSamples.reduce(0, +) / Double(mainThreadDeltaMsSamples.count) }
     var p95MainThreadMs: Double { percentile95(of: mainThreadDeltaMsSamples) }
 
-    /// Injected metrics sink (CX-40573). Reserved for the follow-up ticket
-    /// that migrates the pull-based send loop in `MetricsManager` onto
-    /// self-pushing detectors. Stored but not invoked here yet.
+    /// Injected metrics sink (CX-40573 / CX-43340). Invoked from `flush()`
+    /// to push this detector's CPU category through the protocol path.
+    /// Production wires `SpanMetricsCollector`; tests inject a recorder.
+    /// nil disables the push (the detector still samples; nothing is emitted).
     let metricsCollector: MetricsCollector?
 
     init(checkInterval: TimeInterval = 1.0,
@@ -64,6 +65,16 @@ final class CPUDetector {
         mach_timebase_info(&timebase)
         self.checkInterval = max(checkInterval, minInterval)
         self.metricsCollector = metricsCollector
+    }
+
+    /// Pushes one `VitalsMetric` for the CPU category through `metricsCollector`
+    /// and resets the accumulated samples so the next window starts fresh.
+    /// Called by `MetricsManager.flushAll()` on the periodic scheduler tick
+    /// and on view-change boundaries.
+    func flush() {
+        guard let metricsCollector = metricsCollector else { return }
+        metricsCollector.collect([VitalsMetric(name: Keys.cpu.rawValue, payload: statsDictionary())])
+        reset()
     }
     
     public func startMonitoring() {

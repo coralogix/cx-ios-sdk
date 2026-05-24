@@ -24,10 +24,12 @@ internal class ANRDetector {
     // ANR handling closure (useful for testing)
     var handleANRClosure: (() -> Void)?
 
-    /// Injected typed event sink (CX-40573). Reserved for the follow-up
-    /// ticket that migrates ANR delivery off `MetricsManager.handleANREvent`
-    /// onto self-pushing detectors. Stored but not invoked here yet so the
-    /// existing wire format stays untouched.
+    /// Injected typed event sink (CX-40573 / CX-43340). When set,
+    /// `handleANR()` reports the ANR directly through this protocol instead
+    /// of routing through `MetricsManager.handleANREvent` via the legacy
+    /// `handleANRClosure`. Production wires `SpanEventReporter`; tests
+    /// inject a recorder. nil falls back to the closure path for backward
+    /// compatibility (closure removal is out of scope per CX-43340; covered by 1.5b).
     let eventReporter: EventReporter?
 
     init(checkInterval: TimeInterval = 1.0,
@@ -66,9 +68,17 @@ internal class ANRDetector {
     }
 
     public func handleANR() {
-        handleANRClosure?()
-
         let duration = clock.now().timeIntervalSince(lastCheckTimestamp)
         Log.d("[Metric] ANR detected: Main thread unresponsive for \(String(format: "%.2f", duration)) seconds")
+
+        if let eventReporter = eventReporter {
+            let event = ANRErrorEvent(
+                errorMessage: WireValues.anrErrorMessage.rawValue,
+                errorType: WireValues.anrErrorType.rawValue
+            )
+            eventReporter.report(event)
+            return
+        }
+        handleANRClosure?()
     }
 }
