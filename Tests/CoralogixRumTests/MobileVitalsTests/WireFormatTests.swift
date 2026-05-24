@@ -4,17 +4,23 @@
 //
 //  Created by Coralogix DEV TEAM on 20/05/2026.
 //
-//  Pins the exact dict shape each MetricsManager / detector emits. The
-//  EventReporter / MetricsCollector refactor (CX-40573) must preserve these
+//  Pins the exact dict shape each detector emits. The EventReporter /
+//  MetricsCollector refactor (CX-40573 / CX-43340) must preserve these
 //  shapes byte-for-byte — these tests are the contract.
 //
-//  Three layers, in order:
-//   1. Schema pins — key set + leaf type for each statsDictionary() and
-//      the MetricsManager.sendMobileVitals() aggregate.
-//   2. Round-trip — [String: Any] -> [VitalsMetric] -> toDictionary() is
-//      byte-identical to the legacy payload.
-//   3. End-to-end — protocol path produces the same JSON as the closure
-//      path, both for sendMobileVitals() and for ANR.
+//  Four layers, in order:
+//   1. Schema pins — key set + leaf type for each detector's
+//      statsDictionary().
+//   2. Per-detector self-push (CX-43340) — each detector, wired with a
+//      MetricsCollector, emits exactly one VitalsMetric on flush() with
+//      its category key and the same payload shape it produced before
+//      the migration. ANRDetector emits one ANRErrorEvent through its
+//      EventReporter on handleANR().
+//   3. Round-trip — [String: Any] -> [VitalsMetric] -> toDictionary() is
+//      byte-identical to the legacy payload (still used by the
+//      cold/warm/MetricKit path through MetricsManager.emitMetricKitPayload).
+//   4. End-to-end ANR — protocol path produces the same fields as the
+//      legacy closure path (closure removal is out of scope per CX-43340).
 //
 //  We pin *key set and leaf type* at every nesting level, not the float
 //  values (which depend on live stats and would be flaky).
@@ -122,83 +128,124 @@ final class WireFormatTests: XCTestCase {
         ])
     }
 
-    // MARK: - MetricsManager.sendMobileVitals() aggregate pin
+    // MARK: - Per-detector self-push (CX-43340)
+    //
+    // Each periodic detector, when constructed with a `MetricsCollector`,
+    // emits exactly one `VitalsMetric` on `flush()` — the category key
+    // plus the same payload shape `statsDictionary()` would produce.
+    // These tests pin the contract that `MetricsManager.flushAll()` and
+    // `NavigationInstrumentation` rely on.
 
-    func testMetricsManager_sendMobileVitals_aggregateSchema_allDetectorsActive() {
-        let manager = MetricsManager()
-        // Wire up all detectors so the aggregate dict reaches its maximum shape.
-        manager.cpuDetector = CPUDetector()
-        manager.memoryDetector = MemoryDetector()
-        manager.slowFrozenFramesDetector = SlowFrozenFramesDetector()
-        manager.fpsDetector.isRunning = true  // FPS is only included when its detector is running
+    func testCPUDetector_flush_pushesOneMetricViaCollector() throws {
+        let recorder = BatchRecordingCollector()
+        let detector = CPUDetector(metricsCollector: recorder)
 
-        var captured: [String: Any]?
-        manager.metricsManagerClosure = { dict in captured = dict }
+        detector.flush()
 
-        manager.sendMobileVitals()
-
-        guard let dict = captured else {
-            XCTFail("metricsManagerClosure was not invoked")
-            return
-        }
-
-        XCTAssertEqual(schema(dict), [
-            "cpu.cpu_usage.avg: Double",
-            "cpu.cpu_usage.max: Double",
-            "cpu.cpu_usage.min: Double",
-            "cpu.cpu_usage.p95: Double",
-            "cpu.cpu_usage.units: String",
-            "cpu.main_thread_cpu_time.avg: Double",
-            "cpu.main_thread_cpu_time.max: Double",
-            "cpu.main_thread_cpu_time.min: Double",
-            "cpu.main_thread_cpu_time.p95: Double",
-            "cpu.main_thread_cpu_time.units: String",
-            "cpu.total_cpu_time.avg: Double",
-            "cpu.total_cpu_time.max: Double",
-            "cpu.total_cpu_time.min: Double",
-            "cpu.total_cpu_time.p95: Double",
-            "cpu.total_cpu_time.units: String",
-            "fps.avg: Double",
-            "fps.max: Double",
-            "fps.min: Double",
-            "fps.p95: Double",
-            "fps.units: String",
-            "memory.footprint_memory.avg: Double",
-            "memory.footprint_memory.max: Double",
-            "memory.footprint_memory.min: Double",
-            "memory.footprint_memory.p95: Double",
-            "memory.footprint_memory.units: String",
-            "memory.memory_utilization.avg: Double",
-            "memory.memory_utilization.max: Double",
-            "memory.memory_utilization.min: Double",
-            "memory.memory_utilization.p95: Double",
-            "memory.memory_utilization.units: String",
-            "memory.resident_memory.avg: Double",
-            "memory.resident_memory.max: Double",
-            "memory.resident_memory.min: Double",
-            "memory.resident_memory.p95: Double",
-            "memory.resident_memory.units: String",
-            "slow_frozen.frozen_frames.avg: Double",
-            "slow_frozen.frozen_frames.max: Double",
-            "slow_frozen.frozen_frames.min: Double",
-            "slow_frozen.frozen_frames.p95: Double",
-            "slow_frozen.frozen_frames.units: String",
-            "slow_frozen.slow_frames.avg: Double",
-            "slow_frozen.slow_frames.max: Double",
-            "slow_frozen.slow_frames.min: Double",
-            "slow_frozen.slow_frames.p95: Double",
-            "slow_frozen.slow_frames.units: String"
-        ])
+        let batch = try XCTUnwrap(recorder.batches.first, "flush() did not call collect()")
+        XCTAssertEqual(recorder.batches.count, 1, "flush() must emit exactly one batch")
+        XCTAssertEqual(batch.count, 1, "CPU flush must emit a single VitalsMetric")
+        XCTAssertEqual(batch.first?.name, Keys.cpu.rawValue)
+        let payload = try XCTUnwrap(batch.first?.payload as? [String: Any])
+        XCTAssertEqual(schema(payload), schema(detector.statsDictionary()),
+                       "CPU flush payload must match statsDictionary() schema")
     }
 
-    func testMetricsManager_sendMobileVitals_skipsEmptyPayload() {
-        // Guard against silent regression: when no detector is attached and
-        // FPS isn't running, sendMobileVitals() must NOT call the closure.
-        let manager = MetricsManager()
-        var callCount = 0
-        manager.metricsManagerClosure = { _ in callCount += 1 }
-        manager.sendMobileVitals()
-        XCTAssertEqual(callCount, 0, "Empty vitals payload must not be sent")
+    func testMemoryDetector_flush_pushesOneMetricViaCollector() throws {
+        let recorder = BatchRecordingCollector()
+        let detector = MemoryDetector(metricsCollector: recorder)
+
+        detector.flush()
+
+        let batch = try XCTUnwrap(recorder.batches.first, "flush() did not call collect()")
+        XCTAssertEqual(recorder.batches.count, 1)
+        XCTAssertEqual(batch.count, 1)
+        XCTAssertEqual(batch.first?.name, Keys.memory.rawValue)
+        let payload = try XCTUnwrap(batch.first?.payload as? [String: Any])
+        XCTAssertEqual(schema(payload), schema(detector.statsDictionary()))
+    }
+
+    func testSlowFrozenFramesDetector_flush_pushesOneMetricViaCollector() throws {
+        let recorder = BatchRecordingCollector()
+        let detector = SlowFrozenFramesDetector(metricsCollector: recorder)
+
+        detector.flush()
+
+        let batch = try XCTUnwrap(recorder.batches.first, "flush() did not call collect()")
+        XCTAssertEqual(recorder.batches.count, 1)
+        XCTAssertEqual(batch.count, 1)
+        XCTAssertEqual(batch.first?.name, Keys.slowFrozen.rawValue)
+        let payload = try XCTUnwrap(batch.first?.payload as? [String: Any])
+        XCTAssertEqual(schema(payload), schema(detector.statsDictionary()))
+    }
+
+    func testFPSDetector_flush_pushesOneMetricViaCollector_whenRunning() throws {
+        let recorder = BatchRecordingCollector()
+        let detector = FPSDetector(metricsCollector: recorder)
+        detector.isRunning = true   // FPS only emits while its display link is active
+
+        detector.flush()
+
+        let batch = try XCTUnwrap(recorder.batches.first, "flush() did not call collect()")
+        XCTAssertEqual(recorder.batches.count, 1)
+        XCTAssertEqual(batch.count, 1)
+        XCTAssertEqual(batch.first?.name, MobileVitalsType.fps.stringValue)
+        let payload = try XCTUnwrap(batch.first?.payload as? [String: Any])
+        XCTAssertEqual(schema(payload), schema(detector.statsDictionary()))
+    }
+
+    func testFPSDetector_flush_skipsEmit_whenNotRunning() {
+        // Preserves the legacy semantic: FPS is only included when its
+        // display-link sampler is active (pre-CX-43340 this was an
+        // `if fpsDetector.isRunning` gate in MetricsManager.sendMobileVitals).
+        let recorder = BatchRecordingCollector()
+        let detector = FPSDetector(metricsCollector: recorder)
+        // detector.isRunning is false by default
+
+        detector.flush()
+
+        XCTAssertTrue(recorder.batches.isEmpty, "FPS must not emit when not running")
+    }
+
+    func testDetector_flush_isNoOp_whenNoCollectorWired() {
+        // A detector with no metricsCollector silently drops the flush —
+        // this is the legacy path for test code that constructs detectors
+        // directly. No throw, no log spam, no closure path.
+        CPUDetector().flush()
+        MemoryDetector().flush()
+        SlowFrozenFramesDetector().flush()
+        let fps = FPSDetector()
+        fps.isRunning = true
+        fps.flush()
+        // No assertion needed — the test asserts only that the calls return.
+    }
+
+    // MARK: - ANRDetector self-push (CX-43340)
+
+    func testANRDetector_handleANR_pushesViaEventReporter_whenWired() throws {
+        var captured: TelemetryEvent?
+        let reporter = RecordingEventReporter { captured = $0 }
+        let detector = ANRDetector(eventReporter: reporter)
+
+        detector.handleANR()
+
+        let event = try XCTUnwrap(captured as? ANRErrorEvent,
+                                  "handleANR must emit an ANRErrorEvent through the protocol path")
+        XCTAssertEqual(event.errorMessage, WireValues.anrErrorMessage.rawValue)
+        XCTAssertEqual(event.errorType, WireValues.anrErrorType.rawValue)
+    }
+
+    func testANRDetector_handleANR_fallsBackToClosure_whenEventReporterNil() {
+        // Backward-compat path: when no protocol sink is wired, handleANR
+        // still routes through the legacy closure (out of scope to remove
+        // per CX-43340; covered by 1.5b).
+        var closureFired = false
+        let detector = ANRDetector()
+        detector.handleANRClosure = { closureFired = true }
+
+        detector.handleANR()
+
+        XCTAssertTrue(closureFired, "Closure path must still fire when eventReporter is nil")
     }
 
     // MARK: - Cold / Warm / MetricKit single-shot payload pins
@@ -276,38 +323,6 @@ final class WireFormatTests: XCTestCase {
                        "Round-trip dict must be byte-identical to the legacy payload")
     }
 
-    // MARK: - End-to-end: protocol path emits the same bytes as the closure path
-
-    func testMetricsManager_protocolPath_equalsClosurePath_endToEnd() throws {
-        // Run sendMobileVitals() twice with identical state — first via the
-        // deprecated closure, then via the new MetricsCollector — and assert
-        // the captured dicts serialize to the same JSON.
-
-        let closureDict = try captureSendMobileVitals(useProtocolPath: false)
-        let protocolDict = try captureSendMobileVitals(useProtocolPath: true)
-
-        XCTAssertEqual(try jsonString(closureDict), try jsonString(protocolDict),
-                       "Protocol path must produce the same bytes as the closure path")
-    }
-
-    private func captureSendMobileVitals(useProtocolPath: Bool) throws -> [String: Any] {
-        let manager = MetricsManager()
-        manager.cpuDetector = CPUDetector()
-        manager.memoryDetector = MemoryDetector()
-        manager.slowFrozenFramesDetector = SlowFrozenFramesDetector()
-        manager.fpsDetector.isRunning = true
-
-        var captured: [String: Any]?
-        if useProtocolPath {
-            manager.metricsCollector = RecordingMetricsCollector { dict in captured = dict }
-        } else {
-            manager.metricsManagerClosure = { dict in captured = dict }
-        }
-
-        manager.sendMobileVitals()
-        return try XCTUnwrap(captured, "sendMobileVitals did not emit on \(useProtocolPath ? "protocol" : "closure") path")
-    }
-
     // MARK: - End-to-end ANR equivalence
 
     func testANR_protocolPath_equalsClosurePath_endToEnd() {
@@ -357,15 +372,16 @@ final class WireFormatTests: XCTestCase {
 
 // MARK: - Test doubles
 
-/// Records the `[VitalsMetric]` batch and re-emits it as the legacy dict
-/// shape so the wire-format equivalence tests can compare bytes against
-/// the closure path. Lives in the test target only; production uses
-/// `SpanMetricsCollector`.
-private struct RecordingMetricsCollector: MetricsCollector {
-    let onDict: ([String: Any]) -> Void
+/// Records each `collect(_:)` call as a separate batch so per-detector
+/// self-push tests can assert both *what* was emitted and *how many
+/// times*. Production uses `SpanMetricsCollector`.
+///
+/// A class (not struct) so callers can hold a single reference and
+/// observe mutations from `flush()`.
+private final class BatchRecordingCollector: MetricsCollector {
+    var batches: [[VitalsMetric]] = []
     func collect(_ metrics: [VitalsMetric]) {
-        guard !metrics.isEmpty else { return }
-        onDict(metrics.toDictionary())
+        batches.append(metrics)
     }
 }
 

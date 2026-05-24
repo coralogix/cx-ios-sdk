@@ -26,7 +26,7 @@ extension CoralogixRum {
             if viewManager.isUniqueView(name: cxView.name) {
                 // Only send mobile vitals if instrumentation is enabled
                 if options?.shouldInitInstrumentation(instrumentation: .mobileVitals) == true {
-                    metricsManager.sendMobileVitals()
+                    metricsManager.flushAll()
                 }
                 
                 var span = makeSpan(event: .navigation, source: .console, severity: .info)
