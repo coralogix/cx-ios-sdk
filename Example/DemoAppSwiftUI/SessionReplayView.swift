@@ -78,21 +78,6 @@ struct SessionReplayView: View {
                     toastMessage = "Session ID updated"
                 }
 
-                actionRow(icon: "eye.slash", title: "Register Mask Region",
-                          subtitle: "Mask a region of the screen from recording.") {
-                    let id = "demoMaskRegion"
-                    CoralogixRumManager.shared.sdk.registerMaskRegion(id)
-                    alertMessage = "Registered mask region with id: \(id)"
-                    showAlert = true
-                }
-
-                actionRow(icon: "eye", title: "Unregister Mask Region",
-                          subtitle: "Remove the mask from the demo region.") {
-                    let id = "demoMaskRegion"
-                    CoralogixRumManager.shared.sdk.unregisterMaskRegion(id)
-                    alertMessage = "Unregistered mask region with id: \(id)"
-                    showAlert = true
-                }
             }
 
             Section("Credit Card Input") {

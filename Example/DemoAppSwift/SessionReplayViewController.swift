@@ -11,8 +11,6 @@ class SessionReplayViewController: UITableViewController {
         Keys.isInitialized.rawValue,
         Keys.updateSessionId.rawValue,
         Keys.creditCardElement.rawValue,
-        Keys.registerMaskRegion.rawValue,
-        Keys.unregisterMaskRegion.rawValue,
         Keys.creditCardImgElement.rawValue,
         Keys.creditCardImgElement.rawValue,
         Keys.creditCardImgElement.rawValue,
@@ -209,14 +207,6 @@ class SessionReplayViewController: UITableViewController {
             showAlertView(message: "isRecording: \(CoralogixRumManager.shared.sdk.isSRRecording())")
         } else if item == Keys.isInitialized.rawValue {
             showAlertView(message: "isInitialized: \(CoralogixRumManager.shared.sdk.isSRInitialized())")
-        } else if item == Keys.registerMaskRegion.rawValue {
-            let maskRegionId = "demoMaskRegion"
-            CoralogixRumManager.shared.sdk.registerMaskRegion(maskRegionId)
-            showAlertView(message: "Registered mask region with id: \(maskRegionId)")
-        } else if item == Keys.unregisterMaskRegion.rawValue {
-            let maskRegionId = "demoMaskRegion"
-            CoralogixRumManager.shared.sdk.unregisterMaskRegion(maskRegionId)
-            showAlertView(message: "Unregistered mask region with id: \(maskRegionId)")
         }
 
         tableView.deselectRow(at: indexPath, animated: true)
@@ -252,8 +242,6 @@ class SessionReplayViewController: UITableViewController {
         case Keys.isRecording.rawValue:        return "Is Recording?"
         case Keys.isInitialized.rawValue:      return "Is Initialized?"
         case Keys.updateSessionId.rawValue:    return "Update Session ID"
-        case Keys.registerMaskRegion.rawValue: return "Register Mask Region"
-        case Keys.unregisterMaskRegion.rawValue: return "Unregister Mask Region"
         default: return raw
         }
     }
@@ -272,10 +260,6 @@ class SessionReplayViewController: UITableViewController {
             return "Check if the SDK has been initialized."
         case Keys.updateSessionId.rawValue:
             return "Generate and apply a fresh session identifier."
-        case Keys.registerMaskRegion.rawValue:
-            return "Mask a region of the screen from recording."
-        case Keys.unregisterMaskRegion.rawValue:
-            return "Remove the mask from the demo region."
         default:
             return ""
         }
@@ -289,8 +273,6 @@ class SessionReplayViewController: UITableViewController {
         case Keys.isRecording.rawValue:        return "waveform.circle"
         case Keys.isInitialized.rawValue:      return "checkmark.seal"
         case Keys.updateSessionId.rawValue:    return "arrow.triangle.2.circlepath"
-        case Keys.registerMaskRegion.rawValue: return "eye.slash"
-        case Keys.unregisterMaskRegion.rawValue: return "eye"
         default: return nil
         }
     }

@@ -26,22 +26,21 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         CoralogixRumManager.shared.initialize()
 
         // BUGV2-6045 leak-harness mode: when launched with --leak-harness,
-        // initialize SessionReplay with maskAllTexts (via maskText: [".*"])
-        // and start recording so the XCUITest can drive the LIST scenario.
+        // initialize SessionReplay with maskAllTexts and start recording.
+        // --leak-harness-60fps switches captureTimeInterval to 1/60 s.
         // The proxyUrl is overridden by CoralogixRumManager when CX_MOCK_PORT
-        // is set in the env (also set by the XCUITest launch).
+        // is set in the env (also propagated by the XCUITest launch).
         if ProcessInfo.processInfo.arguments.contains("--leak-harness") {
+            let is60fps = ProcessInfo.processInfo.arguments.contains("--leak-harness-60fps")
             let srOptions = SessionReplayOptions(
                 recordingType: .image,
-                captureTimeInterval: 1.0,
+                captureTimeInterval: is60fps ? (1.0 / 60.0) : 1.0,
                 captureScale: 1.0,
                 captureCompressionQuality: 1.0,
                 sessionRecordingSampleRate: 100,
-                maskText: [".*"], // matches Android maskAllTexts: true
+                maskAllTexts: true,
                 maskOnlyCreditCards: false,
                 maskAllImages: false,
-                maskFaces: false,
-                creditCardPredicate: nil,
                 autoStartSessionRecording: true
             )
             SessionReplay.initializeWithOptions(sessionReplayOptions: srOptions)
@@ -60,17 +59,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
             print("⚠️ Firebase not configured: GoogleService-Info.plist not found (this is expected in CI)")
         }
 
-
-//        // Must be initialized after CoralogixRum
-//        let sessionReplayOptions = SessionReplayOptions(recordingType: .image,
-//                                                        captureTimeInterval: 10.0,
-//                                                        captureScale: 2.0,
-//                                                        captureCompressionQuality: 0.8,
-//                                                        maskText: [],
-//                                                        maskOnlyCreditCards: false,
-//                                                        maskAllImages: false,
-//                                                        autoStartSessionRecording: true)
-//        SessionReplay.initializeWithOptions(sessionReplayOptions:sessionReplayOptions)
         return true
     }
     

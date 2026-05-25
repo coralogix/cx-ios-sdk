@@ -29,16 +29,13 @@ final class SessionReplayLeakUITests: XCTestCase {
         continueAfterFailure = false
 
         app = XCUIApplication()
-        // Tell SceneDelegate / AppDelegate to enter harness mode.
-        app.launchArguments.append("--leak-harness")
 
         // Propagate the mock-server port set by the host wrapper script.
-        // Read from this test process's env (xcodebuild forwards env to
-        // the test runner) and pass it into the launched app via
-        // launchEnvironment.
         if let mockPort = ProcessInfo.processInfo.environment["CX_MOCK_PORT"] {
             app.launchEnvironment["CX_MOCK_PORT"] = mockPort
         }
+        // Note: --leak-harness (and optional --leak-harness-60fps) are set
+        // per-test below so each test controls its own frame-rate config.
     }
 
     override func tearDown() {
@@ -46,7 +43,11 @@ final class SessionReplayLeakUITests: XCTestCase {
         super.tearDown()
     }
 
-    func test_listSlowScroll_capturesFrames() {
+    // MARK: - 1 fps scenario
+
+    func test_listSlowScroll_1fps() {
+        signalScenario("1fps")
+        app.launchArguments = ["--leak-harness"]
         app.launch()
 
         let table = app.tables[LeakHarnessTableId]
@@ -62,9 +63,53 @@ final class SessionReplayLeakUITests: XCTestCase {
         }
 
         // Wait a few capture intervals for in-flight uploads to land
-        // at the mock server. captureTimeInterval is 1.0 s in the
-        // harness's AppDelegate-side SessionReplay init.
+        // at the mock server. captureTimeInterval is 1.0 s in 1fps mode.
         usleep(5_000_000) // 5 s
+    }
+
+    // MARK: - 60 fps scenario
+
+    func test_listSlowScroll_60fps() {
+        signalScenario("60fps")
+        app.launchArguments = ["--leak-harness", "--leak-harness-60fps"]
+        app.launch()
+
+        let table = app.tables[LeakHarnessTableId]
+        XCTAssertTrue(table.waitForExistence(timeout: 10),
+                      "Leak-harness table didn't appear — DemoAppSwift may not have entered --leak-harness mode")
+
+        // Match Android harness: 20 swipes with 300 ms pauses.
+        // The longer inter-swipe pause gives the SDK time to drain the
+        // upload queue between swipes — at 60 fps the encode+upload
+        // pipeline saturates quickly and frames are lost if swipes fire
+        // too fast. 300 ms ≈ 18 frames of headroom each gap.
+        for _ in 0..<20 {
+            table.swipeUp(velocity: .slow)
+            usleep(300_000) // 300 ms between swipes
+        }
+
+        // Extended wait: the upload queue can hold many 60fps frames;
+        // 30 s gives the SDK enough time to drain it before the mock
+        // server is killed. Android uses 2 s but its SDK batches frames
+        // more aggressively — iOS needs more headroom.
+        usleep(30_000_000) // 30 s
+    }
+
+    // MARK: - Helpers
+
+    /// Tells the mock server which scenario is about to run so it can
+    /// prefix frame filenames (e.g. `1fps_frame_000001.jpg`).
+    /// Blocks until the server acknowledges or the port is unavailable.
+    private func signalScenario(_ scenario: String) {
+        guard let portStr = ProcessInfo.processInfo.environment["CX_MOCK_PORT"],
+              let port = Int(portStr),
+              let url = URL(string: "http://127.0.0.1:\(port)/scenario?name=\(scenario)")
+        else { return }
+        var request = URLRequest(url: url, timeoutInterval: 3)
+        request.httpMethod = "POST"
+        let sem = DispatchSemaphore(value: 0)
+        URLSession.shared.dataTask(with: request) { _, _, _ in sem.signal() }.resume()
+        sem.wait()
     }
 
     private let LeakHarnessTableId = "cx_leak_harness_table"

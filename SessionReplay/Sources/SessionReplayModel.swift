@@ -11,10 +11,7 @@ import CoreImage
 
 /// The possible results for the export method.
 public enum SessionReplayResultCode {
-    /// The export operation finished successfully.
     case success
-    
-    /// The export operation finished with an error.
     case failure
 }
 
@@ -23,71 +20,29 @@ public class SessionReplayModel {
     private var urlObserver: URLObserver?
     internal var sessionId: String = ""
     var captureTimer: Timer?
-    private var isMaskingProcessorWorking = false
     var sessionReplayOptions: SessionReplayOptions?
-    var isRecording = false  // Custom flag to track recording state
+    var isRecording = false
     private let srNetworkManager: SRNetworkManager?
-    
-    /// Serial queue for synchronizing access to prvScreenshotData
+
     private let screenshotDataQueue = DispatchQueue(label: "com.coralogix.sessionReplay.screenshotDataQueue")
     private var _prvScreenshotData: Data? = nil
 
-    /// Serial queue used to JPEG-encode captured frames off the main thread.
-    /// `UIImage`/`CGImage` and `UIGraphicsImageRenderer` outputs aren't main-thread
-    /// bound, so encoding can run here freely while drawHierarchy stays on main.
-    /// Serial (not concurrent) so the skip-identical comparison in
-    /// `encodeAndProcess` sees `_prvScreenshotData` updates in capture order
-    /// and saves arrive on disk in capture order.
+    /// Serial queue for off-main JPEG encoding. Serial so skip-identical comparison
+    /// sees _prvScreenshotData updates in capture order.
     internal let encodingQueue = DispatchQueue(
         label: "com.coralogix.sessionReplay.encodingQueue",
         qos: .userInitiated
     )
-    
+
     private lazy var comparisonContext = CIContext(options: [.workingColorSpace: NSNull()])
-    
-    /// Serial queue for synchronizing access to mask region data
-    private let maskRegionsQueue = DispatchQueue(label: "com.coralogix.sessionReplay.maskRegionsQueue")
-    
-    /// Set of registered region IDs that should be masked during capture.
-    /// Uses a pull-based model where coordinates are fetched at capture time via maskRegionsProvider.
-    /// Access must be synchronized via maskRegionsQueue.
-    private var _maskedRegionIds = Set<String>()
-    
-    /// Thread-safe read-only accessor for maskedRegionIds
-    var maskedRegionIds: Set<String> {
-        maskRegionsQueue.sync { _maskedRegionIds }
-    }
-    
-    // MARK: - Atomic Mutation Helpers for maskedRegionIds
-    
-    /// Atomically registers a mask region ID.
-    /// - Parameter id: The region ID to register
-    func registerMaskedRegion(id: String) {
-        maskRegionsQueue.sync {
-            _ = _maskedRegionIds.insert(id)
-        }
-    }
-    
-    /// Atomically unregisters a mask region ID.
-    /// - Parameter id: The region ID to unregister
-    func unregisterMaskedRegion(id: String) {
-        maskRegionsQueue.sync {
-            _ = _maskedRegionIds.remove(id)
-        }
-    }
-    
-    /// Atomically replaces all masked region IDs.
-    /// - Parameter ids: The new set of region IDs
-    func replaceMaskedRegions(_ ids: Set<String>) {
-        maskRegionsQueue.sync {
-            _maskedRegionIds = ids
-        }
-    }
+
+    /// Monotonic counter passed to flutterViewBitmapProvider as frameId.
+    private var captureFrameCounter: Int64 = 0
 
     internal var getKeyWindow: () -> UIWindow? = {
         Global.getKeyWindow()
     }
-    
+
     init(sessionReplayOptions: SessionReplayOptions? = nil,
          networkManager: SRNetworkManager? = SRNetworkManager()) {
         self.sessionReplayOptions = sessionReplayOptions
@@ -96,44 +51,46 @@ public class SessionReplayModel {
                                        sessionReplayOptions: sessionReplayOptions)
         _ = self.createSessionReplayFolder()
     }
-    
+
     deinit {
-        // Invalidate any other timers (like idleTimer if present)
         captureTimer?.invalidate()
         captureTimer = nil
-        
         Log.d("SessionManager deinitialized and resources cleaned up.")
     }
-    
-    /// Captures the current key window into a UIImage on the main thread,
-    /// folding mask compositing into the same renderer pass. Does NOT JPEG-encode —
-    /// callers can dispatch encoding to `encodingQueue`.
-    internal func prepareScreenshotImageOnMain(properties: [String: Any]?) -> UIImage? {
+
+    // MARK: - Screenshot capture
+
+    /// Captures a screenshot of all visible windows with synchronous UIView-walk masking.
+    /// For the Flutter path, `flutterCGImage` and `flutterViewRect` carry the pre-masked
+    /// Dart bitmap and its position in screen points.
+    /// Must be called on the main thread.
+    private func prepareScreenshotImageOnMain(
+        options: SessionReplayOptions,
+        flutterCGImage: CGImage?,
+        flutterViewRect: CGRect?
+    ) -> UIImage? {
         guard Thread.isMainThread else { return nil }
-
-        guard let window = getKeyWindow() else {
-            Log.e("No key window found")
-            return nil
-        }
-
-        guard let options = self.sessionReplayOptions,
-              self.isValidSessionReplayOptions(options) else {
+        guard isValidSessionReplayOptions(options) else {
             Log.e("Invalid sessionReplayOptions")
             return nil
         }
-
-        // Use cached mask regions from the provider (fetched before capture)
-        let regionsRect: [CGRect] = getCachedMaskRegions()
-
-        return window.captureScreenshotImage(
+        return UIView().captureScreenshotImage(
             scale: options.captureScale,
-            regions: regionsRect
+            maskAllTexts: options.maskAllTexts,
+            textsToMask: options.textsToMask ?? [],
+            maskAllImages: options.maskAllImages,
+            flutterCGImage: flutterCGImage,
+            flutterViewRect: flutterViewRect
         )
     }
 
-    /// Synchronous capture-and-encode, retained as a back-compat shim. The hot
-    /// `captureAutomatic` path no longer routes through here — it uses
-    /// `prepareScreenshotImageOnMain` and encodes JPEGs on `encodingQueue`.
+    /// Legacy signature kept for test compatibility and the synchronous captureAutomatic path.
+    internal func prepareScreenshotImageOnMain(properties: [String: Any]?) -> UIImage? {
+        guard let options = sessionReplayOptions else { return nil }
+        return prepareScreenshotImageOnMain(options: options, flutterCGImage: nil, flutterViewRect: nil)
+    }
+
+    /// Synchronous capture-and-encode, retained as a back-compat shim.
     internal func prepareScreenshotIfNeeded(properties: [String: Any]?) -> Data? {
         guard Thread.isMainThread else {
             DispatchQueue.main.async { [weak self] in
@@ -148,80 +105,7 @@ public class SessionReplayModel {
         }
         return image.jpegData(compressionQuality: quality)
     }
-    
-    /// Cached mask regions from the last provider call
-    /// Access must be synchronized via maskRegionsQueue.
-    private var _cachedMaskRegions: [CGRect] = []
-    
-    /// Returns a thread-safe copy of the cached mask regions
-    internal func getCachedMaskRegions() -> [CGRect] {
-        return maskRegionsQueue.sync { _cachedMaskRegions }
-    }
-    
-    /// Fetches mask regions from the provider and caches them.
-    /// Call this method before capturing to ensure fresh coordinates.
-    /// - Parameter completion: Called when regions are fetched and cached
-    internal func fetchMaskRegions(completion: @escaping () -> Void) {
-        // Read maskedRegionIds under queue synchronization
-        let ids = maskRegionsQueue.sync { Array(_maskedRegionIds) }
-        
-        guard let options = self.sessionReplayOptions,
-              let provider = options.maskRegionsProvider,
-              !ids.isEmpty else {
-            maskRegionsQueue.sync { _cachedMaskRegions = [] }
-            completion()
-            return
-        }
-        
-        provider(ids) { [weak self] maskRegions in
-            guard let self = self else {
-                completion()
-                return
-            }
-            
-            // Convert MaskRegion objects to CGRect and cache under queue synchronization
-            let rects = maskRegions.map { $0.toCGRect() }
-            self.maskRegionsQueue.sync { self._cachedMaskRegions = rects }
-            completion()
-        }
-    }
-    
-    /// Prepares screenshot with mask regions fetched asynchronously.
-    /// This is the preferred method when dynamic masking is active.
-    /// - Parameters:
-    ///   - properties: Additional properties for the screenshot
-    ///   - completion: Called with the screenshot data or nil if capture failed
-    internal func prepareScreenshotWithMaskRegions(properties: [String: Any]?, completion: @escaping (Data?) -> Void) {
-        // Fetch mask regions first, then capture on main, then encode off-main.
-        fetchMaskRegions { [weak self] in
-            guard let self = self else {
-                completion(nil)
-                return
-            }
 
-            let captureAndEncode: () -> Void = { [weak self] in
-                guard let self = self else {
-                    completion(nil)
-                    return
-                }
-                guard let image = self.prepareScreenshotImageOnMain(properties: properties),
-                      let quality = self.sessionReplayOptions?.captureCompressionQuality else {
-                    completion(nil)
-                    return
-                }
-                self.encodingQueue.async {
-                    completion(image.jpegData(compressionQuality: quality))
-                }
-            }
-
-            if Thread.isMainThread {
-                captureAndEncode()
-            } else {
-                DispatchQueue.main.async(execute: captureAndEncode)
-            }
-        }
-    }
-    
     internal func saveScreenshotToFileSystem(
         screenshotData: Data,
         properties: [String: Any]?
@@ -234,12 +118,12 @@ public class SessionReplayModel {
                 Log.e("Failed to locate documents directory")
                 return
             }
-            
+
             if let fileName = self?.generateFileName(properties: properties) {
                 let fileURL = documentsDirectory
                     .appendingPathComponent("SessionReplay")
                     .appendingPathComponent(fileName)
-                
+
                 self?.handleCapturedData(
                     fileURL: fileURL,
                     data: screenshotData,
@@ -248,41 +132,37 @@ public class SessionReplayModel {
             }
         }
     }
-    
+
     internal func captureImage(properties: [String: Any]? = nil) -> Result<Void, CaptureEventError> {
         guard !sessionId.isEmpty else {
             Log.e("[SessionReplayModel] Invalid sessionId")
             return .failure(.invalidSessionId)
         }
-        
+
         guard let screenshotData = properties?[Keys.screenshotData.rawValue] as? Data else {
             return self.captureAutomatic(properties: properties)
         }
-        
+
         self.captureManual(properties: properties, screenshotData: screenshotData)
         return .success(())
     }
-    
-    internal func captureAutomatic(properties: [String: Any]?) -> Result<Void, CaptureEventError> {
-        // Check if we need to use async region fetching (pull-based model)
-        let hasProvider = sessionReplayOptions?.maskRegionsProvider != nil
-        let hasRegionIds = !maskedRegionIds.isEmpty
 
-        if hasProvider && hasRegionIds {
-            // Use async capture with dynamic mask regions
-            captureAutomaticWithMaskRegions(properties: properties)
-            return .success(()) // Return success as the capture is in progress
+    internal func captureAutomatic(properties: [String: Any]?) -> Result<Void, CaptureEventError> {
+        // Flutter path: Dart rasterises + masks in one synchronous slice and pushes
+        // the pre-masked bitmap to native. Async — returns immediately.
+        if sessionReplayOptions?.flutterViewBitmapProvider != nil {
+            captureAutomaticFlutter(properties: properties)
+            return .success(())
         }
 
-        // Capture the UIImage on the main thread (UIKit-bound work only),
-        // then JPEG-encode + skip-check + save off-main on encodingQueue.
-        // Skipping is detected asynchronously now; if the caller had already
-        // incremented the screenshot counter (via segmentIndex), revert it from
-        // inside the async completion. This mirrors captureAutomaticWithMaskRegions.
+        // Native path: synchronous UIView walk on main thread, encode off-main.
+        let renderStart = Date()
         guard let image = prepareScreenshotImageOnMain(properties: properties),
               let options = sessionReplayOptions else {
             return .failure(.captureFailed)
         }
+        let renderMs = Date().timeIntervalSince(renderStart) * 1_000
+        Log.d("[SR-perf] render \(String(format: "%.1f", renderMs))ms")
 
         let callerIncrementedCounter = properties?[Keys.segmentIndex.rawValue] as? Int != nil
         encodeAndProcess(
@@ -294,13 +174,101 @@ public class SessionReplayModel {
         return .success(())
     }
 
+    /// Flutter async capture path.
+    ///
+    /// Calls `flutterViewBitmapProvider` on the main thread; the provider invokes
+    /// `captureMaskedFlutterView` on the Flutter MethodChannel and delivers the
+    /// pre-masked RGBA bitmap via a callback that also fires on the main thread.
+    /// No blocking wait — the run loop handles the round-trip.
+    private func captureAutomaticFlutter(properties: [String: Any]?) {
+        guard let options = sessionReplayOptions,
+              let provider = options.flutterViewBitmapProvider else { return }
+
+        captureFrameCounter &+= 1
+        let frameId = captureFrameCounter
+        let callerIncrementedCounter = properties?[Keys.segmentIndex.rawValue] as? Int != nil
+
+        // Locate the FlutterView on screen synchronously before yielding.
+        let flutterViewRect = findFlutterViewRect()
+
+        // No FlutterView visible — capture native windows only.
+        guard let rect = flutterViewRect else {
+            guard let image = prepareScreenshotImageOnMain(
+                options: options, flutterCGImage: nil, flutterViewRect: nil
+            ) else {
+                if callerIncrementedCounter {
+                    SdkManager.shared.getCoralogixSdk()?.revertScreenshotCounter()
+                }
+                return
+            }
+            encodeAndProcess(image: image, compressionQuality: options.captureCompressionQuality,
+                             properties: properties, callerIncrementedCounter: callerIncrementedCounter)
+            return
+        }
+
+        // Call the provider; its completion fires on the main thread via the MethodChannel run-loop.
+        provider("implicit_view", frameId) { [weak self] bitmap in
+            guard let self = self, let options = self.sessionReplayOptions else { return }
+
+            let flutterCGImage = bitmap.flatMap { Self.makeCGImage(from: $0) }
+
+            guard let image = self.prepareScreenshotImageOnMain(
+                options: options, flutterCGImage: flutterCGImage, flutterViewRect: rect
+            ) else {
+                if callerIncrementedCounter {
+                    SdkManager.shared.getCoralogixSdk()?.revertScreenshotCounter()
+                }
+                return
+            }
+
+            self.encodeAndProcess(image: image, compressionQuality: options.captureCompressionQuality,
+                                  properties: properties, callerIncrementedCounter: callerIncrementedCounter)
+        }
+    }
+
+    /// Converts a `FlutterViewBitmap` (RGBA8888 premul, device-DPR resolution) to a CGImage
+    /// that can be composited inside `UIGraphicsImageRenderer`.
+    private static func makeCGImage(from bitmap: FlutterViewBitmap) -> CGImage? {
+        guard let provider = CGDataProvider(data: bitmap.bytes as CFData) else { return nil }
+        let bitmapInfo = CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue)
+        return CGImage(
+            width: bitmap.width,
+            height: bitmap.height,
+            bitsPerComponent: 8,
+            bitsPerPixel: 32,
+            bytesPerRow: bitmap.width * 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: bitmapInfo,
+            provider: provider,
+            decode: nil,
+            shouldInterpolate: false,
+            intent: .defaultIntent
+        )
+    }
+
+    /// Walks all visible windows in the active scene to find the first FlutterView,
+    /// then returns its frame in screen coordinates (UIKit points). Must be called
+    /// on the main thread. Returns nil when no FlutterView is on screen.
+    private func findFlutterViewRect() -> CGRect? {
+        guard Thread.isMainThread else { return nil }
+        guard let scene = UIApplication.shared.connectedScenes
+            .compactMap({ $0 as? UIWindowScene })
+            .first(where: { $0.activationState == .foregroundActive }) else { return nil }
+
+        let windows = scene.windows
+            .filter { !$0.isHidden && $0.alpha > 0 }
+            .sorted(by: { $0.windowLevel < $1.windowLevel })
+
+        for window in windows {
+            if let flutterView = UIView.findFlutterViewInSubtree(window) {
+                return flutterView.convert(flutterView.bounds, to: nil)
+            }
+        }
+        return nil
+    }
+
     /// JPEG-encodes the captured image off the main thread, performs the
-    /// "skip identical screenshots" check on the encoded bytes (preserving the
-    /// existing comparison semantics), and saves to disk if the frame is new.
-    /// We compare on encoded Data — same behaviour as before — and accept the
-    /// occasional wasted encode on duplicate frames as a fair tradeoff for
-    /// simplicity and exact behavioural parity. The encode itself was the
-    /// expensive piece on main; doing it off-main resolves the scroll lag.
+    /// skip-identical check, and saves to disk if the frame is new.
     internal func encodeAndProcess(
         image: UIImage,
         compressionQuality: CGFloat,
@@ -310,12 +278,15 @@ public class SessionReplayModel {
         encodingQueue.async { [weak self] in
             guard let self = self else { return }
 
+            let encodeStart = Date()
             guard let screenshotData = image.jpegData(compressionQuality: compressionQuality) else {
                 if callerIncrementedCounter {
                     SdkManager.shared.getCoralogixSdk()?.revertScreenshotCounter()
                 }
                 return
             }
+            let encodeMs = Date().timeIntervalSince(encodeStart) * 1_000
+            Log.d("[SR-perf] encode \(String(format: "%.1f", encodeMs))ms size=\(screenshotData.count)B")
 
             let shouldSkip = self.screenshotDataQueue.sync { () -> Bool in
                 if let prvData = self._prvScreenshotData,
@@ -327,63 +298,22 @@ public class SessionReplayModel {
             }
 
             if shouldSkip {
-                Log.d("[SessionReplayModel] Same screenshot, skipping...")
+                Log.d("[SR-perf] SKIP duplicate frame")
                 if callerIncrementedCounter {
                     SdkManager.shared.getCoralogixSdk()?.revertScreenshotCounter()
                 }
                 return
             }
 
+            Log.d("[SR-perf] dispatching upload \(screenshotData.count)B")
             self.saveScreenshotToFileSystem(screenshotData: screenshotData, properties: properties)
         }
     }
-    
-    /// Captures screenshot asynchronously with dynamic mask regions.
-    /// - Parameter properties: Additional properties for the screenshot
-    private func captureAutomaticWithMaskRegions(properties: [String: Any]?) {
-        // Check if caller already incremented the counter (native instrumentation provides properties)
-        let callerIncrementedCounter = properties?[Keys.segmentIndex.rawValue] as? Int != nil
-        
-        prepareScreenshotWithMaskRegions(properties: properties) { [weak self] screenshotData in
-            guard let self = self else { return }
-            
-            guard let screenshotData = screenshotData else {
-                Log.e("[SessionReplayModel] Failed to capture screenshot with mask regions")
-                // Revert counter if caller had already incremented it
-                if callerIncrementedCounter {
-                    SdkManager.shared.getCoralogixSdk()?.revertScreenshotCounter()
-                }
-                return
-            }
-            
-            // Atomic read-compare-write for prvScreenshotData
-            let shouldSkip = self.screenshotDataQueue.sync { () -> Bool in
-                if let prvData = self._prvScreenshotData,
-                   !self.imagesAreDifferent(screenshotData, prvData) {
-                    return true
-                }
-                self._prvScreenshotData = screenshotData
-                return false
-            }
-            
-            if shouldSkip {
-                Log.d("[SessionReplayModel] Same screenshot, skipping...")
-                // Revert counter if caller had already incremented it
-                if callerIncrementedCounter {
-                    SdkManager.shared.getCoralogixSdk()?.revertScreenshotCounter()
-                }
-                return
-            }
-            
-            // prvScreenshotData already set atomically in the sync block above
-            self.saveScreenshotToFileSystem(screenshotData: screenshotData, properties: properties)
-        }
-    }
-    
+
     internal func captureManual(properties: [String: Any]?, screenshotData: Data) {
         saveScreenshotToFileSystem(screenshotData: screenshotData, properties: properties)
     }
-    
+
     internal func updateSessionId(with sessionId: String) {
         if sessionId != self.sessionId {
             self.sessionId = sessionId
@@ -392,15 +322,15 @@ public class SessionReplayModel {
             SRUtils.deleteURLsFromDisk()
         }
     }
-    
+
     internal func clearSessionReplayFolder(fileManager: FileManager = .default) -> SessionReplayResultCode {
         guard let documentsURL = getDocumentsDirectory(fileManager: fileManager) else {
             Log.e("Could not locate Documents directory.")
             return .failure
         }
-        
+
         let sessionReplayURL = documentsURL.appendingPathComponent("SessionReplay")
-        
+
         do {
             let contents = try fileManager.contentsOfDirectory(at: sessionReplayURL,
                                                                includingPropertiesForKeys: nil,
@@ -418,11 +348,11 @@ public class SessionReplayModel {
             return .failure
         }
     }
-    
+
     internal func getDocumentsDirectory(fileManager: FileManager = .default) -> URL? {
         return fileManager.urls(for: .documentDirectory, in: .userDomainMask).first
     }
-    
+
     internal func saveImageToDocument(fileURL: URL, data: Data) -> SessionReplayResultCode {
         do {
             try data.write(to: fileURL)
@@ -432,15 +362,15 @@ public class SessionReplayModel {
             return .failure
         }
     }
-    
+
     internal func createSessionReplayFolder(fileManager: FileManager = .default) -> SessionReplayResultCode {
         guard let documentsURL = getDocumentsDirectory(fileManager: fileManager) else {
             Log.e("Could not locate Documents directory.")
             return .failure
         }
-        
+
         let sessionReplayURL = documentsURL.appendingPathComponent("SessionReplay")
-        
+
         if !fileManager.fileExists(atPath: sessionReplayURL.path) {
             do {
                 try fileManager.createDirectory(at: sessionReplayURL, withIntermediateDirectories: true, attributes: nil)
@@ -455,24 +385,25 @@ public class SessionReplayModel {
             return .failure
         }
     }
-    
+
     // MARK: - Helper Methods
+
     internal func isValidSessionReplayOptions(_ options: SessionReplayOptions) -> Bool {
         return options.captureScale > 0 && options.captureCompressionQuality > 0
     }
-    
+
     internal func getTimestamp(from properties: [String: Any]?) -> TimeInterval {
         return (properties?[Keys.timestamp.rawValue] as? TimeInterval) ?? Date().timeIntervalSince1970 * 1000
     }
-    
+
     internal func getScreenshotId(from properties: [String: Any]?) -> String {
         return (properties?[Keys.screenshotId.rawValue] as? String) ?? UUID().uuidString.lowercased()
     }
-    
+
     internal func getSegmentIndex(from properties: [String: Any]?) -> Int {
         return (properties?[Keys.segmentIndex.rawValue] as? Int) ?? 0
     }
-    
+
     internal func getPage(from properties: [String: Any]?) -> String {
         guard let properties = properties,
               let page = properties[Keys.page.rawValue] as? Int else {
@@ -480,18 +411,16 @@ public class SessionReplayModel {
         }
         return "\(page)"
     }
-    
+
     internal func generateFileName(properties: [String: Any]?) -> String {
         let segmentIndex: Int
         let page: Int
-        
-        // Use provided properties if available, otherwise request from CoralogixRum
+
         if let providedSegmentIndex = properties?[Keys.segmentIndex.rawValue] as? Int,
            let providedPage = properties?[Keys.page.rawValue] as? Int {
             segmentIndex = providedSegmentIndex
             page = providedPage
         } else if let coralogixSdk = SdkManager.shared.getCoralogixSdk() {
-            // Request screenshot location from CoralogixRum (uses ScreenshotManager)
             let locationProps = coralogixSdk.getNextScreenshotLocationProperties()
             segmentIndex = locationProps[Keys.segmentIndex.rawValue] as? Int ?? 0
             page = locationProps[Keys.page.rawValue] as? Int ?? 0
@@ -500,10 +429,10 @@ public class SessionReplayModel {
             segmentIndex = 0
             page = 0
         }
-        
+
         return "\(sessionId)_\(page)_\(segmentIndex).jpg"
     }
-    
+
     internal func handleCapturedData(fileURL: URL, data: Data, properties: [String: Any]?) {
         DispatchQueue(label: Keys.queueFileOperations.rawValue).async { [weak self] in
             guard let self = self else { return }
@@ -512,8 +441,8 @@ public class SessionReplayModel {
             let segmentIndex = self.getSegmentIndex(from: properties)
             let page = self.getPage(from: properties)
             let point = self.getClickPoint(from: properties)
-            
-            let completion: URLProcessingCompletion = { [weak self] ciImage, urlEntry  in
+
+            let completion: URLProcessingCompletion = { [weak self] ciImage, urlEntry in
                 if let ciImage = ciImage,
                    let ciImageData = Global.ciImageToData(ciImage) {
                     if let sdkManager = SdkManager.shared.getCoralogixSdk(), sdkManager.isDebug() {
@@ -522,7 +451,7 @@ public class SessionReplayModel {
                     _ = self?.compressAndSendData(data: ciImageData, urlEntry: urlEntry)
                 }
             }
-            
+
             let urlEntry = URLEntry(url: fileURL,
                                     timestamp: timestamp,
                                     screenshotId: screenshotId,
@@ -531,51 +460,38 @@ public class SessionReplayModel {
                                     screenshotData: data,
                                     point: point,
                                     completion: completion)
-            
+
             self.urlManager.addURL(urlEntry: urlEntry)
             self.updateSessionId(with: self.sessionId)
         }
     }
-    
+
     internal func getClickPoint(from properties: [String: Any]?) -> CGPoint? {
-        // Safely unwrap the dictionary
-        guard let properties = properties else {
-            return nil
-        }
-        // Check if the dictionary contains valid x and y values
+        guard let properties = properties else { return nil }
         if let positionX = properties[Keys.positionX.rawValue] as? CGFloat,
            let positionY = properties[Keys.positionY.rawValue] as? CGFloat {
             return CGPoint(x: positionX, y: positionY)
         }
-        // Return nil if the dictionary doesn't contain valid values
         return nil
     }
-    
+
     internal func saveImageToDocumentIfDebug(fileURL: URL, data: Data) -> SessionReplayResultCode {
         if let sdkManager = SdkManager.shared.getCoralogixSdk(), sdkManager.isDebug() {
             return saveImageToDocument(fileURL: fileURL, data: data)
         }
         return .failure
     }
-    
+
     internal func calculateSubIndex(chunkCount: Int, currentIndex: Int) -> Int {
         return chunkCount > 1 ? currentIndex : -1
     }
-    
+
     internal func compressAndSendData(
         data: Data,
         urlEntry: URLEntry?) -> SessionReplayResultCode {
-            //            let sizeInBytes = data.count
-            //            let sizeInMB = Double(sizeInBytes) / (1024.0 * 1024.0)
-            //            Log.d("Data size: \(String(format: "%.2f", sizeInMB)) MB")
-            
             if let compressedChunks = data.gzipCompressed(), compressedChunks.count > 0 {
-                //Log.d("Compression succeeded! Number of chunks: \(compressedChunks.count)")
                 for (index, chunk) in compressedChunks.enumerated() {
-                    // Log.d("Chunk \(index): \(chunk.count) bytes")
                     let subIndex = calculateSubIndex(chunkCount: compressedChunks.count, currentIndex: index)
-                    
-                    // Send Data
                     self.srNetworkManager?.send(chunk,
                                                 urlEntry: urlEntry,
                                                 sessionId: self.sessionId.lowercased(),
@@ -593,39 +509,33 @@ public class SessionReplayModel {
                 return .failure
             }
         }
-    
-    /// This function compares two images (from Data) by computing how different their pixels are on average.
-    /// It doesn’t care about where the difference is — just how much overall.
-    /// If the total difference is larger than a chosen threshold (like 1%), it says “yes, they’re different”.
+
     func imagesAreDifferent(_ data1: Data, _ data2: Data, threshold: Double = 0.01) -> Bool {
         guard
             let image1 = CIImage(data: data1),
             let image2 = CIImage(data: data2),
             image1.extent == image2.extent
         else {
-            return true // invalid or different sizes → considered different
+            return true
         }
-        
-        // Compute pixel-wise difference
+
         let diffFilter = CIFilter(name: "CIDifferenceBlendMode")!
         diffFilter.setValue(image1, forKey: kCIInputImageKey)
         diffFilter.setValue(image2, forKey: kCIInputBackgroundImageKey)
         guard let diffImage = diffFilter.outputImage else { return true }
-        
-        // Get average difference color (aggregate diff intensity)
+
         let extentVector = CIVector(x: diffImage.extent.origin.x,
                                     y: diffImage.extent.origin.y,
                                     z: diffImage.extent.size.width,
                                     w: diffImage.extent.size.height)
-        
+
         guard let avgFilter = CIFilter(name: "CIAreaAverage",
                                        parameters: [kCIInputImageKey: diffImage,
                                                    kCIInputExtentKey: extentVector]),
               let outputImage = avgFilter.outputImage else {
             return true
         }
-        
-        // Render 1×1 pixel average into RGBA buffer
+
         var bitmap = [UInt8](repeating: 0, count: 4)
         comparisonContext.render(outputImage,
                        toBitmap: &bitmap,
@@ -633,11 +543,8 @@ public class SessionReplayModel {
                        bounds: CGRect(x: 0, y: 0, width: 1, height: 1),
                        format: .RGBA8,
                        colorSpace: nil)
-        
-        // Calculate normalized RGB difference [0–1]
+
         let avgDiff = (Double(bitmap[0]) + Double(bitmap[1]) + Double(bitmap[2])) / (3.0 * 255.0)
-        
         return avgDiff > threshold
     }
 }
-

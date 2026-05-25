@@ -17,7 +17,7 @@ struct DemoAppSwiftUIApp: App {
                                                         captureTimeInterval: 10.0,
                                                         captureScale: 2.0,
                                                         captureCompressionQuality: 0.8,
-                                                        maskText: [],
+                                                        maskAllTexts: false,
                                                         maskOnlyCreditCards: false,
                                                         maskAllImages: false,
                                                         autoStartSessionRecording: true)

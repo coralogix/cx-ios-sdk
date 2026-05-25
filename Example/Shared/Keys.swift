@@ -60,8 +60,6 @@ enum Keys: String {
     case isInitialized = "Is Initialized"
     case isRecording = "Is Recording"
     case maskUI = "Mask UI"
-    case registerMaskRegion   = "Register mask region"
-    case unregisterMaskRegion = "Unregister mask region"
     case testSessionSampler   = "Test Session Sampler"
     case requestWithHeaderCapture = "Request with header/payload capture"
     case customSpans = "Custom Spans"

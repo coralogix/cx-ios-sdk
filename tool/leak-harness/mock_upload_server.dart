@@ -30,6 +30,14 @@ class MockUploadServer {
   late final Directory _dir;
   final List<String> _frames = <String>[];
 
+  // Scenario tagging — set via POST /scenario?name=<tag> before each test.
+  String _currentScenario = 'unknown';
+
+  // Bottleneck diagnostics — per-scenario arrival timing.
+  final Map<String, int> _scenarioCount = {};
+  final Map<String, DateTime> _scenarioFirstArrival = {};
+  DateTime? _lastFrameArrival;
+
   /// Where to bind. Use 0.0.0.0 so both the iOS simulator (which sees
   /// the host as 127.0.0.1) and the Android emulator (which sees the
   /// host as 10.0.2.2) can reach it.
@@ -64,8 +72,20 @@ class MockUploadServer {
   }
 
   Future<Response> _handle(Request req) async {
-    // Log every request — diagnostic to confirm proxyUrl wiring works.
     final cxFwd = req.url.queryParameters['cx_forward'] ?? '';
+
+    // Scenario-signal endpoint: POST /scenario?name=<tag>
+    // Called by the XCUITest before each test to tag subsequent frames.
+    if (req.method == 'POST' && req.url.path == 'scenario') {
+      await req.read().drain<void>();
+      final name = req.url.queryParameters['name'] ?? 'unknown';
+      _currentScenario = name;
+      _lastFrameArrival = null; // reset inter-frame timer for new scenario
+      // ignore: avoid_print
+      print('[mock-upload] ── scenario → $_currentScenario ──');
+      return Response.ok('');
+    }
+
     // ignore: avoid_print
     print(
         '[mock-upload] ${req.method} /${req.url.path} cx_forward=$cxFwd ctype=${req.headers['content-type'] ?? ''}');
@@ -74,7 +94,6 @@ class MockUploadServer {
 
     final isSessionReplay = _looksLikeSessionReplay(req);
     if (!isSessionReplay) {
-      // Drain and ignore: logs, traces, and any other proxied traffic.
       await req.read().drain<void>();
       return Response.ok('');
     }
@@ -83,10 +102,8 @@ class MockUploadServer {
       await _persistMultipart(req);
       // ignore: avoid_print
       print(
-          '[mock-upload] persisted frame #${_seq - 1} → ${_frames.isNotEmpty ? _frames.last : "(no chunk?)"}');
+          '[mock-upload] persisted frame #${_seq - 1} [$_currentScenario] → ${_frames.isNotEmpty ? _frames.last : "(no chunk?)"}');
     } catch (e, st) {
-      // Don't fail the SDK upload — the harness will surface this via
-      // a missing-frames assertion if persistence is broken.
       // ignore: avoid_print
       print('[mock-upload] persist failed: $e\n$st');
     }
@@ -132,18 +149,38 @@ class MockUploadServer {
 
     if (jpegBytes == null) return;
 
-    // The SDK gzip-compresses the JPEG bytes before uploading
-    // (SessionReplayModel.swift:494, data.gzipCompressed()). Detect via
-    // magic bytes 1f 8b and inflate.
+    // Bottleneck diagnostic: measure inter-frame arrival gap and rate.
+    final now = DateTime.now();
+    final gapMs = _lastFrameArrival != null
+        ? now.difference(_lastFrameArrival!).inMilliseconds
+        : null;
+    _lastFrameArrival = now;
+
+    final sc = _currentScenario;
+    _scenarioCount[sc] = (_scenarioCount[sc] ?? 0) + 1;
+    _scenarioFirstArrival.putIfAbsent(sc, () => now);
+    final scCount = _scenarioCount[sc]!;
+    final scElapsedMs =
+        now.difference(_scenarioFirstArrival[sc]!).inMilliseconds;
+    final avgIntervalMs =
+        scCount > 1 ? (scElapsedMs / (scCount - 1)).round() : 0;
+
+    // The SDK gzip-compresses the JPEG bytes before uploading.
     final decoded = _maybeInflate(jpegBytes);
 
+    // ignore: avoid_print
+    print('[mock-upload] [$sc] frame #$scCount'
+        ' | gap=${gapMs != null ? "${gapMs}ms" : "first"}'
+        ' | avg_interval=${avgIntervalMs}ms'
+        ' | raw=${jpegBytes.length}B → decoded=${decoded.length}B');
+
     final seq = _seq++;
-    final framePath = p.join(_dir.path, 'frame_${_pad(seq)}.jpg');
+    final framePath = p.join(_dir.path, '${sc}_frame_${_pad(seq)}.jpg');
     await File(framePath).writeAsBytes(decoded);
     _frames.add(framePath);
 
     if (metaJson != null) {
-      final metaPath = p.join(_dir.path, 'meta_${_pad(seq)}.json');
+      final metaPath = p.join(_dir.path, '${sc}_meta_${_pad(seq)}.json');
       await File(metaPath).writeAsString(metaJson);
     }
   }

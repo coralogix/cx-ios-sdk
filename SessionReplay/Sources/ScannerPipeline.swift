@@ -13,31 +13,28 @@ class ScannerPipeline {
     func runPipeline(
         options: SessionReplayOptions,
         urlEntry: URLEntry? = nil,
-        completion: @escaping (CIImage?,URLEntry?) -> Void
+        completion: @escaping (CIImage?, URLEntry?) -> Void
     ) {
         guard let urlEntry = urlEntry else {
             Log.e("Missing urlEntry")
             completion(nil, urlEntry)
             return
         }
-        
-        // Decode CIImage once and reuse it
+
         guard let originalImage = urlEntry.ciImage else {
             Log.e("Failed to decode screenshot data into CIImage.")
             completion(nil, urlEntry)
             return
         }
-        
-        var isTextScannerEnabled = false
-        var isFaceScannerEnabled = false
-        var isImageScannerEnabled = false
-        
-        isTextScannerEnabled = !(options.maskText?.isEmpty ?? true)
-        isFaceScannerEnabled = options.maskFaces
-        isImageScannerEnabled = options.maskAllImages
+
+        // ImageScanner: credit-card image detection only (uses Vision rectangle + OCR).
+        // General image masking is handled synchronously by the UIImageView walk in UIViewExt.
+        // TextScanner removed: native text masking is done by the synchronous UILabel walk;
+        // Flutter text masking is handled by the Dart bitmap provider (pre-masked bitmap).
+        let isImageScannerEnabled = options.maskOnlyCreditCards
+        let isFaceScannerEnabled = options.maskFaces
 
         let imageScanner = ImageScanner()
-        let textScanner = TextScanner()
         let faceScanner = FaceScanner()
         let clickScanner = ClickScanner()
 
@@ -49,21 +46,10 @@ class ScannerPipeline {
 
             imageScanner.processImage(
                 screenshotData: urlEntry.screenshotData,
-                maskAll: !options.maskOnlyCreditCards,
+                maskAll: false,
                 creditCardPredicate: options.creditCardPredicate
             ) { outputImage in
                 completion(outputImage ?? input)
-            }
-        }
-
-        func runTextScanner(input: CIImage, completion: @escaping (CIImage) -> Void) {
-            guard isTextScannerEnabled else {
-                completion(input)
-                return
-            }
-
-            textScanner.processImage(ciImage: input, maskText: options.maskText) { outputImage in
-                completion(outputImage)
             }
         }
 
@@ -96,11 +82,9 @@ class ScannerPipeline {
         }
 
         runImageScanner(input: originalImage) { img1 in
-            runTextScanner(input: img1) { img2 in
-                runFaceScanner(input: img2) { img3 in
-                    runClickScanner(input: img3) { finalImage in
-                        completion(finalImage, urlEntry)
-                    }
+            runFaceScanner(input: img1) { img2 in
+                runClickScanner(input: img2) { finalImage in
+                    completion(finalImage, urlEntry)
                 }
             }
         }
