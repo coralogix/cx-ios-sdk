@@ -23,11 +23,11 @@ public class MetricsManager {
 
     // MARK: - Reporting dependencies (CX-40573)
     //
-    // When set, these protocol-typed sinks take precedence over the legacy
-    // closure properties below. Production wires `SpanMetricsCollector` /
-    // `SpanEventReporter`; the wire format produced by either path is
-    // byte-identical to the dict the deprecated closures emit — pinned by
-    // `WireFormatTests`.
+    // Production wires `SpanMetricsCollector` / `SpanEventReporter`. When
+    // unwired, calls into `emitMetricKitPayload` / `reportANR` /
+    // `flushAll` drop with a `Log.d`. The wire format is pinned by
+    // `WireFormatTests`. (Deprecated closure fallbacks removed in
+    // CX-43341.)
     //
     // Threading: expected to be set once during init on the main thread.
     // Subsequent reads from background callbacks (MetricKit, ANR timer)
@@ -50,12 +50,6 @@ public class MetricsManager {
         }
     }
 
-    // MARK: - Legacy closure fallbacks (deprecated)
-    @available(*, deprecated, message: "Inject a MetricsCollector via the new metricsCollector property instead. Closure-based wiring will be removed in a future major release.")
-    var metricsManagerClosure: (([String: Any]) -> Void)?
-    @available(*, deprecated, message: "Inject an EventReporter via the new eventReporter property instead. Closure-based wiring will be removed in a future major release.")
-    var anrErrorClosure: ((String, String) -> Void)?
-
     // MARK: - Internal timer for periodic send
     private let sendInterval: TimeInterval = 15.0
     private var lastSendTime: Date?
@@ -72,35 +66,33 @@ public class MetricsManager {
         MXMetricManager.shared.add(MyMetricSubscriber.shared)
     }
 
-    /// Re-emits a category-keyed dict (`{ "<category>": <payload> }`) — used
-    /// by MetricKit and the cold/warm detectors — through whichever sink is
-    /// wired, preferring the protocol path. The shape sent on the wire is
-    /// byte-identical either way (pinned by `WireFormatTests`).
+    /// Emits a category-keyed dict (`{ "<category>": <payload> }`) — used
+    /// by MetricKit and the cold/warm detectors — through the injected
+    /// `MetricsCollector`. Wire format pinned by `WireFormatTests`.
+    /// Drops with a debug log when no collector is wired (set in
+    /// production by `CoralogixRum.setupCoreModules`).
     private func emitMetricKitPayload(_ dict: [String: Any]) {
-        if let metricsCollector = self.metricsCollector {
-            // Pass the value through as-is: `VitalsMetric.payload` is typed
-            // `Any` precisely so the dict / array shape produced by the
-            // upstream producer reaches the collector unchanged.
-            let metrics: [VitalsMetric] = dict.map { VitalsMetric(name: $0.key, payload: $0.value) }
-            metricsCollector.collect(metrics)
+        guard let metricsCollector = self.metricsCollector else {
+            Log.d("[MetricsManager] no metricsCollector wired; dropping MetricKit/cold/warm payload with keys \(dict.keys.sorted())")
             return
         }
-        self.metricsManagerClosure?(dict)
+        // Pass the value through as-is: `VitalsMetric.payload` is typed
+        // `Any` precisely so the dict / array shape produced by the
+        // upstream producer reaches the collector unchanged.
+        let metrics: [VitalsMetric] = dict.map { VitalsMetric(name: $0.key, payload: $0.value) }
+        metricsCollector.collect(metrics)
     }
 
-    /// Routes an ANR-shaped event through whichever sink is wired. Uses the
-    /// typed `ANRErrorEvent` (from CX-40572) when going through the protocol;
-    /// falls back to the deprecated closure otherwise.
+    /// Routes an ANR-shaped event through the injected `EventReporter`
+    /// as a typed `ANRErrorEvent` (from CX-40572). Drops with a debug log
+    /// when no reporter is wired (set in production by
+    /// `CoralogixRum.initializeANRInstrumentation`).
     private func reportANR(message: String, errorType: String, source: String) {
-        if let eventReporter = self.eventReporter {
-            eventReporter.report(ANRErrorEvent(errorMessage: message, errorType: errorType))
+        guard let eventReporter = self.eventReporter else {
+            Log.d("[MetricsManager] Warning: no eventReporter set, \(source) not reported")
             return
         }
-        guard let anrErrorClosure = self.anrErrorClosure else {
-            Log.d("[MetricsManager] Warning: no eventReporter or anrErrorClosure set, \(source) not reported")
-            return
-        }
-        anrErrorClosure(message, errorType)
+        eventReporter.report(ANRErrorEvent(errorMessage: message, errorType: errorType))
     }
     
     public func removeObservers() {

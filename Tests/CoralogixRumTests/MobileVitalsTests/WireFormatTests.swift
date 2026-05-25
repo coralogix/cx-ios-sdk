@@ -17,10 +17,10 @@
 //      the migration. ANRDetector emits one ANRErrorEvent through its
 //      EventReporter on handleANR().
 //   3. Round-trip — [String: Any] -> [VitalsMetric] -> toDictionary() is
-//      byte-identical to the legacy payload (still used by the
-//      cold/warm/MetricKit path through MetricsManager.emitMetricKitPayload).
-//   4. End-to-end ANR — protocol path produces the same fields as the
-//      legacy closure path (closure removal is out of scope per CX-43340).
+//      byte-identical to the dict the cold/warm/MetricKit producers
+//      hand to MetricsManager.emitMetricKitPayload.
+//   4. End-to-end ANR — protocol path emits the exact WireValues
+//      constants the backend reads (snapshot assertion).
 //
 //  We pin *key set and leaf type* at every nesting level, not the float
 //  values (which depend on live stats and would be flaky).
@@ -279,13 +279,13 @@ final class WireFormatTests: XCTestCase {
     // MARK: - Round-trip: dict → [VitalsMetric] → toDictionary() → dict
     //
     // Pins the contract the production `SpanMetricsCollector` relies on:
-    // a dict shaped like the legacy `metricsManagerClosure` payload must
-    // round-trip byte-identical through the new `[VitalsMetric]` value
-    // type. `SpanMetricsCollector.collect` calls `toDictionary()` and
-    // JSON-encodes the result onto a span attribute — so this property
-    // is what guarantees wire compatibility.
+    // a dict produced by `MetricsManager.emitMetricKitPayload` (cold /
+    // warm / MetricKit) must round-trip byte-identical through the
+    // `[VitalsMetric]` value type. `SpanMetricsCollector.collect` calls
+    // `toDictionary()` and JSON-encodes the result onto a span attribute
+    // — so this property is what guarantees wire compatibility.
 
-    func testVitalsMetric_toDictionary_roundTripsLegacyDict() throws {
+    func testVitalsMetric_toDictionary_roundTripsEmitMetricKitPayloadShape() throws {
         let original: [String: Any] = [
             Keys.cpu.rawValue: [
                 MobileVitalsType.cpuUsage.stringValue: [
@@ -323,35 +323,27 @@ final class WireFormatTests: XCTestCase {
                        "Round-trip dict must be byte-identical to the legacy payload")
     }
 
-    // MARK: - End-to-end ANR equivalence
+    // MARK: - End-to-end ANR: protocol path matches expected wire snapshot
+    //
+    // Pre-CX-43341 this test compared a "closure path" capture against a
+    // "protocol path" capture. With the deprecated closures gone, the
+    // equivalence framing collapses to a snapshot assertion: the protocol
+    // path emits an `ANRErrorEvent` carrying the exact `WireValues`
+    // constants — the wire format the backend reads.
 
-    func testANR_protocolPath_equalsClosurePath_endToEnd() {
-        // Capture (message, errorType) via the closure path…
-        let viaClosure = captureANR(useProtocolPath: false)
-
-        // …and capture the same fields from the typed ANRErrorEvent on the protocol path.
-        let viaProtocol = captureANR(useProtocolPath: true)
-
-        XCTAssertEqual(viaClosure?.message, viaProtocol?.message)
-        XCTAssertEqual(viaClosure?.errorType, viaProtocol?.errorType)
-        XCTAssertEqual(viaClosure?.message, WireValues.anrErrorMessage.rawValue)
-        XCTAssertEqual(viaClosure?.errorType, WireValues.anrErrorType.rawValue)
-    }
-
-    private func captureANR(useProtocolPath: Bool) -> (message: String, errorType: String)? {
+    func testANR_protocolPath_emitsExpectedWireSnapshot() throws {
         let manager = MetricsManager()
-        var captured: (message: String, errorType: String)?
-        if useProtocolPath {
-            manager.eventReporter = RecordingEventReporter { event in
-                guard let anr = event as? ANRErrorEvent else { return }
-                captured = (anr.errorMessage, anr.errorType)
-            }
-        } else {
-            manager.anrErrorClosure = { msg, type in captured = (msg, type) }
+        var captured: ANRErrorEvent?
+        manager.eventReporter = RecordingEventReporter { event in
+            captured = event as? ANRErrorEvent
         }
+
         manager.startANRMonitoring()
         manager.anrDetector?.handleANR()
-        return captured
+
+        let event = try XCTUnwrap(captured, "ANRDetector did not push ANRErrorEvent through eventReporter")
+        XCTAssertEqual(event.errorMessage, WireValues.anrErrorMessage.rawValue)
+        XCTAssertEqual(event.errorType, WireValues.anrErrorType.rawValue)
     }
 
     // MARK: - JSON helper
@@ -370,25 +362,6 @@ final class WireFormatTests: XCTestCase {
     }
 }
 
-// MARK: - Test doubles
-
-/// Records each `collect(_:)` call as a separate batch so per-detector
-/// self-push tests can assert both *what* was emitted and *how many
-/// times*. Production uses `SpanMetricsCollector`.
-///
-/// A class (not struct) so callers can hold a single reference and
-/// observe mutations from `flush()`.
-private final class BatchRecordingCollector: MetricsCollector {
-    var batches: [[VitalsMetric]] = []
-    func collect(_ metrics: [VitalsMetric]) {
-        batches.append(metrics)
-    }
-}
-
-/// Records a `TelemetryEvent` for assertions. Test-target only.
-private struct RecordingEventReporter: EventReporter {
-    let onEvent: (TelemetryEvent) -> Void
-    func report(_ event: TelemetryEvent) {
-        onEvent(event)
-    }
-}
+// Test doubles (`BatchRecordingCollector`, `RecordingEventReporter`)
+// live in `TestDoubles.swift` since CX-43341 — shared with
+// `MetricsManagerTests`.
