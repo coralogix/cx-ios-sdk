@@ -12,11 +12,10 @@ extension CoralogixRum {
     /// Initializes ANR (Application Not Responding) detection.
     /// ANR events are reported as error events, not mobile vitals.
     ///
-    /// CX-40573: ANR events now flow through the typed EventReporter
+    /// CX-40573: ANR events flow through the typed EventReporter
     /// protocol — the orchestrator wires SpanEventReporter here and the
     /// underlying span-building logic lives in that struct. The
-    /// pre-refactor `anrErrorClosure` path remains on MetricsManager as a
-    /// deprecated fallback for test code that pokes the closure directly.
+    /// `anrErrorClosure` fallback path was removed in CX-43341.
     public func initializeANRInstrumentation() {
         self.metricsManager.eventReporter = SpanEventReporter(
             createErrorSpan: { [weak self] in

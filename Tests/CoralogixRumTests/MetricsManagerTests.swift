@@ -37,64 +37,29 @@ final class MetricsManagerTests: XCTestCase {
         XCTAssertNotNil(metricsManager.anrDetector, "ANR monitoring should start and anrDetector should be initialized")
     }
     
-    func testANRErrorClosureIsCalled() {
-        let expectation = XCTestExpectation(description: "ANR error closure should be called")
-        var receivedErrorMessage: String?
-        var receivedErrorType: String?
-        var mobileVitalsWasCalled = false
-        
-        // Set up mobile vitals closure (should NOT be called)
-        metricsManager.metricsManagerClosure = { _ in
-            mobileVitalsWasCalled = true
-        }
-        
-        // Set up the ANR error closure
-        metricsManager.anrErrorClosure = { errorMessage, errorType in
-            receivedErrorMessage = errorMessage
-            receivedErrorType = errorType
+    func testANRErrorIsRoutedToEventReporter() {
+        let expectation = XCTestExpectation(description: "ANRErrorEvent should be reported")
+        var receivedEvent: ANRErrorEvent?
+        let vitalsCollector = BatchRecordingCollector()
+
+        // metricsCollector must NOT receive anything for an ANR event
+        metricsManager.metricsCollector = vitalsCollector
+
+        // ANR routes through the EventReporter protocol
+        metricsManager.eventReporter = RecordingEventReporter { event in
+            receivedEvent = event as? ANRErrorEvent
             expectation.fulfill()
         }
-        
-        // Start monitoring
+
         metricsManager.startANRMonitoring()
-        
-        // Simulate ANR detection by directly calling the detector's handleANR
         metricsManager.anrDetector?.handleANR()
-        
+
         wait(for: [expectation], timeout: 1.0)
-        
-        // Verify the error message and type
-        XCTAssertNotNil(receivedErrorMessage, "Error message should be received")
-        XCTAssertNotNil(receivedErrorType, "Error type should be received")
-        XCTAssertEqual(receivedErrorType, "ANR", "Error type should be 'ANR'")
-        XCTAssertEqual(receivedErrorMessage, "Application Not Responding", "Error message should be 'Application Not Responding'")
-        
-        // Verify mobile vitals closure was NOT called
-        XCTAssertFalse(mobileVitalsWasCalled, "Mobile vitals closure should not be called for ANR events")
-    }
-    
-    func testANRDoesNotCallMobileVitalsClosure() {
-        let expectation = XCTestExpectation(description: "Mobile vitals closure should NOT be called for ANR")
-        expectation.isInverted = true
-        
-        // Set up the mobile vitals closure (should NOT be called)
-        metricsManager.metricsManagerClosure = { _ in
-            XCTFail("Mobile vitals closure should not be called for ANR events")
-            expectation.fulfill()
-        }
-        
-        // Set up the ANR error closure (should be called)
-        metricsManager.anrErrorClosure = { _, _ in
-            // ANR error closure called correctly
-        }
-        
-        // Start monitoring
-        metricsManager.startANRMonitoring()
-        
-        // Simulate ANR detection
-        metricsManager.anrDetector?.handleANR()
-        
-        wait(for: [expectation], timeout: 1.0)
+
+        // Wire-constant guard: hard-coded strings catch accidental WireValues changes
+        XCTAssertEqual(receivedEvent?.errorType, "ANR", "Error type should be 'ANR'")
+        XCTAssertEqual(receivedEvent?.errorMessage, "Application Not Responding", "Error message should be 'Application Not Responding'")
+        XCTAssertTrue(vitalsCollector.batches.isEmpty, "metricsCollector must not be called for ANR events")
     }
 
     // MARK: - MetricKit Hang Diagnostics
@@ -142,31 +107,29 @@ final class MetricsManagerTests: XCTestCase {
     }
 
     /// Verifies that `addMetricKitObservers()` wires `hangDiagnosticClosure` so that a MetricKit
-    /// hang is forwarded to `anrErrorClosure` — not to `metricsManagerClosure` (mobile vitals).
-    func testAddMetricKitObservers_hangRoutesToAnrErrorClosure() {
-        var errorMessage: String?
-        var errorType: String?
-        var mobileVitalsCalled = false
+    /// hang is forwarded to `eventReporter` as an `ANRErrorEvent` — not to `metricsCollector` (mobile vitals).
+    func testAddMetricKitObservers_hangRoutesToEventReporter() {
+        var receivedEvent: ANRErrorEvent?
+        let vitalsCollector = BatchRecordingCollector()
 
-        metricsManager.metricsManagerClosure = { _ in mobileVitalsCalled = true }
-        metricsManager.anrErrorClosure = { msg, type in
-            errorMessage = msg
-            errorType = type
+        metricsManager.metricsCollector = vitalsCollector
+        metricsManager.eventReporter = RecordingEventReporter { event in
+            receivedEvent = event as? ANRErrorEvent
         }
 
         metricsManager.addMetricKitObservers()
 
         MyMetricSubscriber.shared.processHang(MockHangDiagnostic(hangDurationMs: 3000))
 
-        XCTAssertEqual(errorType, "MXHangDiagnostic", "Hang must be routed to the error closure")
-        XCTAssertEqual(errorMessage, "App hang detected by MetricKit for 3000 ms")
-        XCTAssertFalse(mobileVitalsCalled, "Hang must not trigger mobile vitals closure")
+        XCTAssertEqual(receivedEvent?.errorType, "MXHangDiagnostic", "Hang must be routed via EventReporter as ANRErrorEvent")
+        XCTAssertEqual(receivedEvent?.errorMessage, "App hang detected by MetricKit for 3000 ms")
+        XCTAssertTrue(vitalsCollector.batches.isEmpty, "Hang must not trigger metricsCollector")
     }
 
-    /// Verifies that when `anrErrorClosure` is not set, a MetricKit hang is silently dropped
+    /// Verifies that when `eventReporter` is not set, a MetricKit hang is silently dropped
     /// without crashing.
-    func testAddMetricKitObservers_hangDroppedWhenAnrErrorClosureIsNil() {
-        metricsManager.anrErrorClosure = nil
+    func testAddMetricKitObservers_hangDroppedWhenEventReporterIsNil() {
+        // eventReporter is nil by default — explicit no-op.
         metricsManager.addMetricKitObservers()
 
         MyMetricSubscriber.shared.processHang(MockHangDiagnostic(hangDurationMs: 1500))
