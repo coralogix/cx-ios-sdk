@@ -16,7 +16,7 @@ final class EventPipelineTests: XCTestCase {
     private struct LabelEvent: TelemetryEvent {
         let id: UUID = UUID()
         let timestamp: Date = Date()
-        var type: EventType { .error }
+        var type: EventType { .unknown }
         let label: String
 
         func toOTelAttributes() -> [String: AttributeValue] { [:] }
