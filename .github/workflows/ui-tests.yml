@@ -335,11 +335,13 @@ jobs:
           echo "⏱️  End time: $(date)"
 
       - name: Install Dart
+        if: always()
         uses: dart-lang/setup-dart@v1
         with:
           sdk: stable
 
       - name: Run session-replay leak harness
+        if: always()
         run: |
           set -euo pipefail
           CX_IOS_DESTINATION="$DESTINATION_SPEC" bash tool/run_leak_harness.sh

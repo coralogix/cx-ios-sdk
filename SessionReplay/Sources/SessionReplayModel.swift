@@ -206,7 +206,8 @@ public class SessionReplayModel {
             return
         }
 
-        // Call the provider; its completion fires on the main thread via the MethodChannel run-loop.
+        // viewId is intentionally "implicit_view" — the cx-flutter-plugin ignores it (uses `_`)
+        // and routes all captures to Flutter's single implicit view. Only frameId matters.
         provider("implicit_view", frameId) { [weak self] bitmap in
             guard let self = self, let options = self.sessionReplayOptions else { return }
 

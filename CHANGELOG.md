@@ -9,6 +9,27 @@ Release-mechanics commits (version bumps, podspec/script tweaks, README edits) a
 omitted; the focus here is user-facing behavior changes. Tickets are referenced as
 `CX-XXXXX` (Jira) or `ALPH-XXXX` (legacy). Pull request numbers are in parentheses.
 
+## [3.0.0] - 2026-05-26
+
+### Breaking Changes
+- `SessionReplayOptions.maskText: [String]?` removed — replaced by `maskAllTexts: Bool` (default `false`) and `textsToMask: [String]?`. Matching semantics changed from regex to case-insensitive substring: `maskText: [".*"]` → `maskAllTexts: true`; `maskText: ["foo", "bar"]` → `textsToMask: ["foo", "bar"]`.
+- `MaskRegion` struct and `MaskRegionsProvider` typealias removed.
+- `SessionReplayOptions.maskRegionsProvider` removed (was the Flutter pull-based mask path and the root cause of the mask-skew bug).
+- `SessionReplayOptions.flutterPlatformViewsProvider` removed (was an unused Phase 0 stub).
+- `UIView.captureScreenshotImage(scale:regions:)` and `captureScreenshot(scale:compressionQuality:regions:)` — `regions: [CGRect]?` parameter removed; masking is now handled internally.
+- `SessionReplayInterface.registerMaskRegion(_:)`, `unregisterMaskRegion(_:)`, `getMaskedRegionIds()` removed from the protocol (were Flutter-internal plumbing, no native consumer).
+
+### Fixed
+- Session replay mask-skew bug (BUGV2-6045): during scroll animations, mask rects drifted 16–80+ px behind the text they covered. Root cause: `drawHierarchy` captured the presentation layer while mask rects were read from the model layer — the two diverge during `CAAnimation`. Fix: native-window capture now uses `layer.render(in:)` (model layer) and collects mask rects synchronously in the same render pass. Leak rate: 47% of frames → 0.
+- Flutter content appeared as a transparent hole in session-replay frames. Fix: new `flutterViewBitmapProvider` requests a pre-masked RGBA8888 bitmap from the Flutter plugin's Dart rasteriser, which captures and masks in a single synchronous frame slice. Flutter leak rate: 77% → 0.
+- Session replay capture timer silently never fired when initialised via Flutter's background MethodChannel task queue (background threads have no run loop). Fix: all `SessionReplay` entry points now dispatch to `DispatchQueue.main`.
+
+### Added
+- `SessionReplayOptions.flutterViewBitmapProvider: FlutterViewBitmapProvider?` — callback for Flutter hosts to supply pre-masked frame bitmaps per capture.
+- `SessionReplayOptions.maskAllTexts: Bool` — mask all text content in captured frames.
+- `SessionReplayOptions.textsToMask: [String]?` — mask specific strings by case-insensitive substring match.
+- Native-iOS session-replay leak harness (`tool/leak-harness/`, `tool/run_leak_harness.sh`) for CI leak validation (BUGV2-6045).
+
 ## [2.7.0] - 2026-06-02
 
 ### Added

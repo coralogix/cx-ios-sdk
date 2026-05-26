@@ -19,11 +19,13 @@ Holds the configuration used to initialize SessionReplay. This includes capture 
 - `captureScale`: Scale factor for image resolution.
 - `captureCompressionQuality`: Compression level for image quality (0.0–1.0).
 - `sessionRecordingSampleRate`: Sampling percentage (0–100) to determine whether the session is recorded.
-- `maskText`: Text patterns (strings or regex) to redact from captured content.
-- `maskCreditCard`: Only credit card images will be masked.
+- `maskAllTexts`: If `true`, all text content (UILabel, UITextField, UITextView) is masked in every captured frame.
+- `textsToMask`: List of specific strings to mask by case-insensitive substring match. Ignored when `maskAllTexts` is `true`.
 - `maskAllImages`: Whether all images should be masked.
 - `maskFaces`: Whether faces should be masked (default: `false`).
 - `creditCardPredicate`: Custom text patterns to identify images that may contain credit card content.
+
+> **Migration from v2.x:** `maskText: [String]?` has been removed. Use `maskAllTexts: true` to replace `maskText: [".*"]`, or `textsToMask: ["foo", "bar"]` to replace `maskText: ["foo", "bar"]`. Note: the old field matched by regex; the new field matches by case-insensitive substring.
 
 #### Initializer
 ```swift
@@ -33,8 +35,8 @@ public init(
     captureScale: CGFloat = 2.0,
     captureCompressionQuality: CGFloat = 1.0,
     sessionRecordingSampleRate: Int = 100,
-    maskText: [String]? = nil,
-    maskImages: Bool = false,
+    maskAllTexts: Bool = false,
+    textsToMask: [String]? = nil,
     maskAllImages: Bool = true,
     maskFaces: Bool = false,
     creditCardPredicate: [String]? = nil,
@@ -44,12 +46,20 @@ public init(
 
 #### Example Usage
 ```swift
+// Mask all text
 let options = SessionReplayOptions(
     recordingType: .image,
     captureTimeInterval: 5.0,
-    maskText: ["Confidential", ".*"], // ".*" mask all text
-    maskImages: true,
+    maskAllTexts: true,
+    maskAllImages: true,
     maskFaces: true,
+    autoStartSessionRecording: true
+)
+
+// Mask specific strings only
+let options = SessionReplayOptions(
+    captureTimeInterval: 5.0,
+    textsToMask: ["Confidential", "Account Number"],
     autoStartSessionRecording: true
 )
 
@@ -99,8 +109,8 @@ let result = SessionReplay.shared.captureEvent()
 let options = SessionReplayOptions(
     recordingType: .image,
     captureTimeInterval: 5.0,
-    maskText: [".*"], // ".*" mask all text
-    maskImages: true,
+    maskAllTexts: true,
+    maskAllImages: true,
     maskFaces: true,
     autoStartSessionRecording: false
 )
