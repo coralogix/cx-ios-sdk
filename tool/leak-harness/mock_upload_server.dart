@@ -189,7 +189,13 @@ class MockUploadServer {
     if (bytes.length < 3) return bytes;
     final isGzip = bytes[0] == 0x1f && bytes[1] == 0x8b && bytes[2] == 0x08;
     if (!isGzip) return bytes;
-    return gzip.decode(bytes);
+    try {
+      return gzip.decode(bytes);
+    } catch (e) {
+      // ignore: avoid_print
+      print('[mock-upload] WARNING: gzip decode failed ($e) — saving raw bytes');
+      return bytes;
+    }
   }
 
   Future<List<int>> _collect(Stream<List<int>> s) async {

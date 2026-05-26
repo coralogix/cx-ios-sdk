@@ -10,6 +10,7 @@
 // `docs/session-replay-ios.md` §4.2.
 
 import Foundation
+import CoralogixInternal
 
 /// A pre-masked RGBA8888 bitmap supplied by the Flutter plugin for a
 /// single FlutterView found in the captured view hierarchy.
@@ -39,11 +40,15 @@ public struct FlutterViewBitmap {
     /// Pixel height.
     public let height: Int
 
-    public init(bytes: Data, width: Int, height: Int) {
-        precondition(width > 0 && height > 0,
-                     "FlutterViewBitmap dimensions must be positive (got \(width)x\(height))")
-        precondition(bytes.count == width * height * 4,
-                     "FlutterViewBitmap byte count (\(bytes.count)) does not match width*height*4 (\(width * height * 4))")
+    public init?(bytes: Data, width: Int, height: Int) {
+        guard width > 0 && height > 0 else {
+            Log.w("FlutterViewBitmap: invalid dimensions \(width)x\(height) — treating as missing bitmap")
+            return nil
+        }
+        guard bytes.count == width * height * 4 else {
+            Log.w("FlutterViewBitmap: byte count \(bytes.count) ≠ \(width)×\(height)×4 — treating as missing bitmap")
+            return nil
+        }
         self.bytes = bytes
         self.width = width
         self.height = height

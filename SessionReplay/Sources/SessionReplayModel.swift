@@ -212,9 +212,13 @@ public class SessionReplayModel {
             guard let self = self, let options = self.sessionReplayOptions else { return }
 
             let flutterCGImage = bitmap.flatMap { Self.makeCGImage(from: $0) }
+            // Re-snapshot rect at compositing time — Flutter view may have moved
+            // during the async Dart round-trip. Fall back to pre-snapshotted rect
+            // if the view is no longer visible (e.g., navigation transition).
+            let compositeRect = self.findFlutterViewRect() ?? rect
 
             guard let image = self.prepareScreenshotImageOnMain(
-                options: options, flutterCGImage: flutterCGImage, flutterViewRect: rect
+                options: options, flutterCGImage: flutterCGImage, flutterViewRect: compositeRect
             ) else {
                 if callerIncrementedCounter {
                     SdkManager.shared.getCoralogixSdk()?.revertScreenshotCounter()

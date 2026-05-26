@@ -164,4 +164,8 @@ echo "[leak-harness] re-scan with: dart run $HARNESS_DIR/pixel_scanner.dart $DIR
 echo "[leak-harness] xcode log (SR-perf): grep '\[SR-perf\]' $XCODE_LOG"
 echo "[leak-harness] app log  (SR-perf): grep 'SR-perf' $APP_LOG"
 
+if [ "$TEST_EXIT" -ne 0 ]; then
+  echo "[leak-harness] FAIL: xcodebuild exited $TEST_EXIT" >&2
+  exit "$TEST_EXIT"
+fi
 exit $SCAN_EXIT

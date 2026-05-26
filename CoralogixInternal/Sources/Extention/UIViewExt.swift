@@ -146,16 +146,17 @@ public extension UIView {
 
         return renderer.image { _ in
             for win in windows {
-                if let rect = flutterViewRect, UIView.subtreeContainsFlutterView(win) {
-                    // Flutter window: paste Dart pre-masked bitmap; black-fill on nil.
-                    if let cgImage = flutterCGImage {
+                if UIView.subtreeContainsFlutterView(win) {
+                    // Flutter window: paste Dart pre-masked bitmap; black-fill on nil/missing rect.
+                    // Never fall through to win.layer.render — GPU surfaces produce transparent holes.
+                    if let rect = flutterViewRect, let cgImage = flutterCGImage {
                         let uiImage = UIImage(cgImage: cgImage,
                                               scale: UIScreen.main.scale,
                                               orientation: .up)
                         uiImage.draw(in: rect)
                     } else {
                         UIColor.black.setFill()
-                        UIRectFill(rect)
+                        UIRectFill(flutterViewRect ?? win.bounds)
                     }
                 } else {
                     // Native window: render from the model layer so that mask-rect

@@ -161,7 +161,6 @@
 		1E8D067F2E27BBC8002C4FCE /* DemoAppUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DemoAppUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		1E8D068F2E27BC82002C4FCE /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		1E90A340190C0B87337E4053 /* Pods_DemoAppSwift.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_DemoAppSwift.framework; sourceTree = BUILT_PRODUCTS_DIR; };
-		2A8D067F2E27BBC8002C4FCE /* DemoAppSwiftUIUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DemoAppSwiftUIUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		2BFFDB5C0CEBD0009FE0ADC1 /* LeakHarnessViewController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LeakHarnessViewController.swift; sourceTree = "<group>"; };
 		2E11204B152575C210B226A4 /* Pods-DemoAppSwiftUI.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-DemoAppSwiftUI.release.xcconfig"; path = "Target Support Files/Pods-DemoAppSwiftUI/Pods-DemoAppSwiftUI.release.xcconfig"; sourceTree = "<group>"; };
 		7569CF6A4A46DF39A56A0F67 /* Pods_DemoAppSwiftUI.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_DemoAppSwiftUI.framework; sourceTree = BUILT_PRODUCTS_DIR; };

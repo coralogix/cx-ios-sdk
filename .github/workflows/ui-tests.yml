@@ -235,6 +235,12 @@ jobs:
           echo "✅ Created placeholder GoogleService-Info.plist (app will skip Firebase init)"
           ls -la GoogleService-Info.plist
 
+      - name: Install CocoaPods dependencies
+        run: |
+          set -euo pipefail
+          cd Example
+          pod install --no-repo-update
+
       - name: Build for testing
         run: |
           set -uo pipefail
@@ -336,7 +342,7 @@ jobs:
 
       - name: Install Dart
         if: always()
-        uses: dart-lang/setup-dart@v1
+        uses: dart-lang/setup-dart@65eb853c7ba17dde3be364c3d2858773e7144260 # v1
         with:
           sdk: stable
 
