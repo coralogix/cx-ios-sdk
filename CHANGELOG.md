@@ -9,8 +9,6 @@ Release-mechanics commits (version bumps, podspec/script tweaks, README edits) a
 omitted; the focus here is user-facing behavior changes. Tickets are referenced as
 `CX-XXXXX` (Jira) or `ALPH-XXXX` (legacy). Pull request numbers are in parentheses.
 
-## [Unreleased]
-
 ## [2.6.4] - 2026-05-12
 
 ### Added
