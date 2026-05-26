@@ -11,19 +11,6 @@ omitted; the focus here is user-facing behavior changes. Tickets are referenced 
 
 ## [Unreleased]
 
-### Added
-- `EventReporter` and `MetricsCollector` protocols for mobile vitals + ANR reporting (CX-40573, #207)
-- Typed `TelemetryEvent` model for RUM events (CX-40572, #205)
-- `Clock` abstraction (`SystemClock` + `MockClock`) for testable time (CX-40571, #204)
-- Structured `Logger` protocol with `LogLevel` (CX-40570, #203)
-- Expose `session_creation_date` and `hasRecording` in `cx_rum.session_context` tracing attrs (CX-43017, #206)
-
-### Changed
-- Mobile-vitals and ANR detectors now self-push events via injected `EventReporter`/`MetricsCollector` (CX-43340, #209)
-
-### Removed
-- Deprecated `metricsManagerClosure` and `anrErrorClosure` properties on `MetricsManager` (CX-43341, #210)
-
 ## [2.6.4] - 2026-05-12
 
 ### Added
