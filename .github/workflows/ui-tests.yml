@@ -333,3 +333,13 @@ jobs:
 
           echo "✅ Tests passed!"
           echo "⏱️  End time: $(date)"
+
+      - name: Install Dart
+        uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+
+      - name: Run session-replay leak harness
+        run: |
+          set -euo pipefail
+          CX_IOS_DESTINATION="$DESTINATION_SPEC" bash tool/run_leak_harness.sh

@@ -127,6 +127,10 @@ CX_MOCK_PORT="$PORT" TEST_RUNNER_CX_MOCK_PORT="$PORT" xcodebuild \
   -parallel-testing-enabled NO \
   -disable-concurrent-destination-testing \
   ENABLE_USER_SCRIPT_SANDBOXING=NO \
+  CODE_SIGNING_ALLOWED=NO \
+  CODE_SIGN_IDENTITY="" \
+  CODE_SIGN_ENTITLEMENTS="" \
+  DEVELOPMENT_TEAM="" \
   test 2>&1 | tee "$XCODE_LOG" | tail -50
 TEST_EXIT=${PIPESTATUS[0]}
 echo "[leak-harness] xcodebuild test exit=$TEST_EXIT"
