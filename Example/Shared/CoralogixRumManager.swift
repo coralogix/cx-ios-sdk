@@ -53,12 +53,12 @@ final class CoralogixRumManager {
                                                enableSwizzling: true,
                                                proxyUrl: Envs.PROXY_URL.rawValue, // remove if not need to use proxy
                                                traceParentInHeader: ["enable": true],
-                                               mobileVitals:[.cpuDetector: false,
-                                                             .warmDetector: false,
-                                                             .coldDetector: false,
-                                                             .slowFrozenFramesDetector: false,
-                                                             .memoryDetector: false,
-                                                             .renderingDetector: false],
+                                               mobileVitals:[.cpuDetector: true,
+                                                             .warmDetector: true,
+                                                             .coldDetector: true,
+                                                             .slowFrozenFramesDetector: true,
+                                                             .memoryDetector: true,
+                                                             .renderingDetector: true],
                                                networkExtraConfig: [
                                                 NetworkCaptureRule(url: "https://jsonplaceholder.typicode.com/posts",
                                                                    reqHeaders: ["Content-Type", "Accept", "X-Demo-Header"],
