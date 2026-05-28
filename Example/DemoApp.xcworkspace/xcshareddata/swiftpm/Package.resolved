@@ -1,5 +1,5 @@
 {
-  "originHash" : "19a61ae0cbcda58579b19de0dc985aa911852bfec77a3e49d5c5489255322279",
+  "originHash" : "c41772a911c360fedf04c290065e60f154a49e92fff39b254c93c6df0f31fd66",
   "pins" : [
     {
       "identity" : "abseil-cpp-binary",
@@ -8,15 +8,6 @@
       "state" : {
         "revision" : "bbe8b69694d7873315fd3a4ad41efe043e1c07c5",
         "version" : "1.2024072200.0"
-      }
-    },
-    {
-      "identity" : "afnetworking",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/AFNetworking/AFNetworking.git",
-      "state" : {
-        "revision" : "ffae2391ab0c29dc88eb0a58d2f5b2c2c27cadbf",
-        "version" : "4.0.1"
       }
     },
     {

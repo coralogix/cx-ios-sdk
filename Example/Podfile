@@ -12,3 +12,21 @@ target 'DemoAppSwiftUI' do
   pod 'AFNetworking'
   pod 'SDWebImage'
 end
+
+# AFNetworking 4.0.1 (unmaintained) imports <netinet6/in6.h>, which is a
+# private header in the iOS 26 SDK and triggers a hard module-privacy error.
+# The include is redundant — <netinet/in.h> already pulls in everything used.
+# Strip it from the two affected files after each pod install.
+post_install do |installer|
+  pods_root = installer.sandbox.root
+  ['AFNetworking/AFNetworkReachabilityManager.m', 'AFNetworking/AFHTTPSessionManager.m'].each do |rel|
+    path = File.join(pods_root, 'AFNetworking', rel)
+    next unless File.exist?(path)
+    contents = File.read(path)
+    patched = contents.sub(/^#import <netinet6\/in6\.h>\n/, '')
+    next if patched == contents
+    File.chmod(0o644, path)
+    File.write(path, patched)
+    File.chmod(0o444, path)
+  end
+end
