@@ -26,13 +26,14 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         CoralogixRumManager.shared.initialize()
 
         // BUGV2-6045 leak-harness mode: when launched with --leak-harness,
-        // initialize SessionReplay with maskAllTexts and start recording.
+        // SessionReplay uses maskAllTexts and auto-starts recording.
         // --leak-harness-60fps switches captureTimeInterval to 1/60 s.
-        // The proxyUrl is overridden by CoralogixRumManager when CX_MOCK_PORT
-        // is set in the env (also propagated by the XCUITest launch).
+        // For normal launches, SR is initialized with demo defaults so the
+        // Start/Stop Recording buttons in SessionReplayViewController work.
+        let srOptions: SessionReplayOptions
         if ProcessInfo.processInfo.arguments.contains("--leak-harness") {
             let is60fps = ProcessInfo.processInfo.arguments.contains("--leak-harness-60fps")
-            let srOptions = SessionReplayOptions(
+            srOptions = SessionReplayOptions(
                 recordingType: .image,
                 captureTimeInterval: is60fps ? (1.0 / 60.0) : 1.0,
                 captureScale: 1.0,
@@ -43,8 +44,19 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
                 maskAllImages: false,
                 autoStartSessionRecording: true
             )
-            SessionReplay.initializeWithOptions(sessionReplayOptions: srOptions)
+        } else {
+            srOptions = SessionReplayOptions(
+                recordingType: .image,
+                captureTimeInterval: 10.0,
+                captureScale: 2.0,
+                captureCompressionQuality: 0.8,
+                maskAllTexts: false,
+                maskOnlyCreditCards: false,
+                maskAllImages: false,
+                autoStartSessionRecording: false
+            )
         }
+        SessionReplay.initializeWithOptions(sessionReplayOptions: srOptions)
 
         // Only configure Firebase if GoogleService-Info.plist exists and is valid.
         // Skipped in leak-harness mode because the harness uses a stub plist

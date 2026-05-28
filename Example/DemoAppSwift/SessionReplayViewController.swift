@@ -85,11 +85,19 @@ class SessionReplayViewController: UITableViewController {
         let container = UIView(frame: CGRect(x: 0, y: 0, width: tableView.bounds.width, height: 0))
         container.addSubview(label)
 
+        // The container starts at width/height 0; trailing and bottom can't
+        // be satisfied until the first layout pass widens it. Drop those two
+        // to .defaultHigh so UIKit relaxes them silently instead of logging.
+        let trailing = label.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -20)
+        trailing.priority = .defaultHigh
+        let bottom = label.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -8)
+        bottom.priority = .defaultHigh
+
         NSLayoutConstraint.activate([
             label.topAnchor.constraint(equalTo: container.topAnchor, constant: 12),
             label.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 20),
-            label.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -20),
-            label.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -8)
+            trailing,
+            bottom
         ])
 
         container.layoutIfNeeded()

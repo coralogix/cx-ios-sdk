@@ -182,6 +182,11 @@ public class SessionReplay: SessionReplayInterface {
                 Log.e("[SessionReplay] CoralogixSdk is not initialized")
                 return
             }
+            if coralogixSdk.isDebug(),
+               let documentsDirectory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
+                let path = documentsDirectory.appendingPathComponent("SessionReplay").path
+                Log.d("[SessionReplay] saving images to: \(path)")
+            }
             coralogixSdk.periodicallyCaptureEventTriggered()
             sessionReplayModel.captureTimer = Timer.scheduledTimer(withTimeInterval: sessionReplayOptions.captureTimeInterval, repeats: true) { _ in
                 coralogixSdk.periodicallyCaptureEventTriggered()
