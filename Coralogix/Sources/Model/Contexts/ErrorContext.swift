@@ -26,6 +26,7 @@ struct ErrorContext {
     var isCrash: Bool = false
     let buildId: String?
     let stackTraceType: String?
+    var data: [String: Any]?
 
     init(otel: SpanDataProtocol) {
         self.domain = otel.getAttribute(forKey: Keys.domain.rawValue) as? String ?? ""
@@ -34,6 +35,10 @@ struct ErrorContext {
         if let jsonString = otel.getAttribute(forKey: Keys.userInfo.rawValue) as? String,
            let dict = Helper.convertJsonStringToDict(jsonString: jsonString) {
             self.userInfo = dict
+        }
+        if let jsonString = otel.getAttribute(forKey: Keys.data.rawValue) as? String,
+           let dict = Helper.convertJsonStringToDict(jsonString: jsonString) {
+            self.data = dict
         }
         
         self.exceptionType = otel.getAttribute(forKey: Keys.exceptionType.rawValue) as? String ?? ""
@@ -124,6 +129,10 @@ struct ErrorContext {
 
             if let stackTraceType = self.stackTraceType {
                 errorContext[Keys.stackTraceType.rawValue] = stackTraceType
+            }
+
+            if let data = self.data {
+                errorContext[Keys.data.rawValue] = data
             }
 
             errorContext[Keys.isCrash.rawValue] = self.isCrash

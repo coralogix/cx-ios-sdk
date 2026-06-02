@@ -69,14 +69,16 @@ extension CoralogixRum {
                          obfuscatedStackTrace: [String],
                          arch: String?,
                          buildId: String?,
-                         stackTraceType: String?) {
+                         stackTraceType: String?,
+                         data: [String: Any]? = nil) {
         let frames: [[String: Any]] = obfuscatedStackTrace.map { [Keys.virt.rawValue: $0] }
         let stackTraceJson = Helper.convertArrayToJsonString(array: frames)
         reportErrorInternal(message: message,
                             stackTraceJson: stackTraceJson,
                             arch: arch,
                             buildId: buildId,
-                            stackTraceType: stackTraceType)
+                            stackTraceType: stackTraceType,
+                            data: data)
     }
 
     // MARK: - Used By React Native
@@ -86,7 +88,8 @@ extension CoralogixRum {
                          isCrash: Bool = false,
                          arch: String? = nil,
                          buildId: String? = nil,
-                         stackTraceType: String? = nil) {
+                         stackTraceType: String? = nil,
+                         data: [String: Any]? = nil) {
         let stackTraceJson = Helper.convertArrayToJsonString(array: stackTrace)
         reportErrorInternal(message: message,
                             stackTraceJson: stackTraceJson,
@@ -94,7 +97,8 @@ extension CoralogixRum {
                             isCrash: isCrash,
                             arch: arch,
                             buildId: buildId,
-                            stackTraceType: stackTraceType)
+                            stackTraceType: stackTraceType,
+                            data: data)
     }
 
     private func reportErrorInternal(message: String,
@@ -103,7 +107,8 @@ extension CoralogixRum {
                                      isCrash: Bool = false,
                                      arch: String? = nil,
                                      buildId: String? = nil,
-                                     stackTraceType: String? = nil) {
+                                     stackTraceType: String? = nil,
+                                     data: [String: Any]? = nil) {
         guard isErrorsEnabled else { return }
         self.writeError(
             domain: "",
@@ -113,7 +118,8 @@ extension CoralogixRum {
             isCrash: isCrash,
             arch: arch,
             buildId: buildId,
-            stackTraceType: stackTraceType
+            stackTraceType: stackTraceType,
+            data: data
         )
     }
 
@@ -170,7 +176,8 @@ extension CoralogixRum {
                             isCrash: Bool = false,
                             arch: String? = nil,
                             buildId: String? = nil,
-                            stackTraceType: String? = nil) {
+                            stackTraceType: String? = nil,
+                            data: [String: Any]? = nil) {
         var span = makeSpan(event: .error, source: .console, severity: .error)
         span.setAttribute(key: Keys.domain.rawValue, value: domain)
         if let code { span.setAttribute(key: Keys.code.rawValue, value: code) }
@@ -184,6 +191,9 @@ extension CoralogixRum {
         if let arch, !arch.isEmpty { span.setAttribute(key: Keys.arch.rawValue, value: arch) }
         if let buildId, !buildId.isEmpty { span.setAttribute(key: Keys.buildId.rawValue, value: buildId) }
         if let stackTraceType, !stackTraceType.isEmpty { span.setAttribute(key: Keys.stackTraceType.rawValue, value: stackTraceType) }
+        if let data, !data.isEmpty {
+            span.setAttribute(key: Keys.data.rawValue, value: Helper.convertDictionaryToJsonString(dict: data))
+        }
         // Note: hybrid error paths (Flutter/RN) intentionally omit the code attribute — there is
         // no meaningful error code in these contexts. Native paths pass an explicit code when relevant.
         recordScreenshotForSpan(to: &span)

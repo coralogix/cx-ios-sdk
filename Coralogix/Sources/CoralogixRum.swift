@@ -268,7 +268,8 @@ public class CoralogixRum {
                             isCrash: Bool = false,
                             arch: String? = nil,
                             buildId: String? = nil,
-                            stackTraceType: String? = nil) {
+                            stackTraceType: String? = nil,
+                            data: [String: Any]? = nil) {
         guard CoralogixRum.isInitialized else { return }
         self.reportErrorWith(message: message,
                              stackTrace: stackTrace,
@@ -276,7 +277,8 @@ public class CoralogixRum {
                              isCrash: isCrash,
                              arch: arch,
                              buildId: buildId,
-                             stackTraceType: stackTraceType)
+                             stackTraceType: stackTraceType,
+                             data: data)
     }
 
     /// Reports a Dart obfuscated error from Flutter.
@@ -290,19 +292,22 @@ public class CoralogixRum {
     ///   - arch: The CPU architecture (e.g. `"arm64"`).
     ///   - buildId: The Dart snapshot build ID used for symbolication.
     ///   - stackTraceType: The stack trace type (e.g. `"obfuscated"`).
+    ///   - data: Optional custom attributes to attach to the error event.
     public func reportError(message: String,
                             obfuscatedStackTrace: [String],
                             arch: String? = nil,
                             buildId: String? = nil,
-                            stackTraceType: String? = Keys.obfuscated.rawValue) {
+                            stackTraceType: String? = Keys.obfuscated.rawValue,
+                            data: [String: Any]? = nil) {
         guard CoralogixRum.isInitialized else { return }
         self.reportErrorWith(message: message,
                              obfuscatedStackTrace: obfuscatedStackTrace,
                              arch: arch,
                              buildId: buildId,
-                             stackTraceType: stackTraceType)
+                             stackTraceType: stackTraceType,
+                             data: data)
     }
-    
+
     public func reportMobileVitalsMeasurement(type: String, metrics: [HybridMetric]) {
         guard CoralogixRum.isInitialized else { return }
         if (CoralogixRum.mobileSDK.sdkFramework.isNative) { return }
