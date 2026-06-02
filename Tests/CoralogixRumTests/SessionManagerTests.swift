@@ -150,4 +150,103 @@ class SessionManagerTests: XCTestCase {
         XCTAssertNotNil(prevMetadata)
         XCTAssertEqual(prevMetadata?.sessionId, oldSessionId)
     }
+
+    // MARK: - Session rotation contract (24h-session bug)
+    //
+    // These four tests characterise the rotation gap that produces 20–24h
+    // sessions in production:
+    //  - Bug #1: `getSessionMetadata` skips the 1h rotation while idle
+    //  - Bug #2: span-emission paths read `.sessionMetadata` directly,
+    //            never invoking rotation
+    //  - Bug #3: `lastSnapshotEventTime` carries over across rotations,
+    //            suppressing the first snapshot of a fresh session for ≤60s
+    //
+    // Each test is designed to FAIL on current code and PASS after the fix.
+
+    /// Bug #1: an idle session that has lived longer than an hour must still rotate
+    /// when `getSessionMetadata()` is queried. Today the rotation branch is gated by
+    /// `isIdle == false`, so a stale idle session is returned unchanged.
+    func testHourPassed_whileIdle_rotatesSession() {
+        sessionManager.setupSessionMetadata()
+        guard var metadata = sessionManager.sessionMetadata else {
+            XCTFail("Initial session metadata should not be nil")
+            return
+        }
+
+        // Force the session into "older than 1h" + "idle (>15 min since activity)" state.
+        metadata.sessionCreationDate = Date().addingTimeInterval(-3601).timeIntervalSince1970
+        sessionManager.sessionMetadata = metadata
+        sessionManager.lastActivity = Date().addingTimeInterval(-(16 * 60))
+
+        let staleSessionId = metadata.sessionId
+        let returned = sessionManager.getSessionMetadata()
+
+        XCTAssertNotEqual(returned?.sessionId, staleSessionId,
+            "Session must rotate after 1h even when currently idle — otherwise background spans inherit a stale session ID")
+    }
+
+    /// Bug #1 (callback wiring): the rotation that recovers a stale idle session
+    /// must also notify listeners (SessionReplay, sampling re-roll) via the two
+    /// callbacks. Today the rotation never fires, so neither callback runs.
+    func testHourPassed_whileIdle_firesSessionCallbacks() {
+        sessionManager.setupSessionMetadata()
+        guard var metadata = sessionManager.sessionMetadata else {
+            XCTFail("Initial session metadata should not be nil")
+            return
+        }
+        let staleSessionId = metadata.sessionId
+        metadata.sessionCreationDate = Date().addingTimeInterval(-3601).timeIntervalSince1970
+        sessionManager.sessionMetadata = metadata
+        sessionManager.lastActivity = Date().addingTimeInterval(-(16 * 60))
+
+        let endedExpectation = expectation(description: "sessionEndedCallback fires when stale session rotates")
+        let changedExpectation = expectation(description: "sessionChangedCallback fires with a fresh session id")
+
+        sessionManager.sessionEndedCallback = {
+            endedExpectation.fulfill()
+        }
+        sessionManager.sessionChangedCallback = { newId in
+            XCTAssertNotEqual(newId, staleSessionId, "Callback must receive the new (rotated) session id")
+            changedExpectation.fulfill()
+        }
+
+        _ = sessionManager.getSessionMetadata()
+
+        waitForExpectations(timeout: 1.0)
+    }
+
+    /// Bug #3: `lastSnapshotEventTime` must reset on rotation so a fresh session
+    /// can emit its first snapshot immediately. Today the value carries over,
+    /// suppressing the first non-error/non-navigation snapshot of the new session
+    /// for up to 60s after rotation.
+    func testRotationResetsLastSnapshotEventTime() {
+        sessionManager.lastSnapshotEventTime = Date()
+
+        sessionManager.setupSessionMetadata()
+
+        XCTAssertNil(sessionManager.lastSnapshotEventTime,
+            "lastSnapshotEventTime must reset on rotation — otherwise a fresh session's first snapshot is suppressed for up to 60s")
+    }
+
+    /// When a stale-idle session rotates, the previously-stale ID must be preserved as
+    /// `prevSessionMetadata` so the wire-side `prev_session_id` attribute can attribute
+    /// the rotation correctly (the dashboard relies on this to chain sessions). Catches
+    /// regressions where a rotation drops the previous attribution instead of carrying it.
+    func testStaleRotation_preservesStaleIdAsPrevSession() {
+        sessionManager.setupSessionMetadata()
+        guard var metadata = sessionManager.sessionMetadata else {
+            XCTFail("Initial session metadata should not be nil")
+            return
+        }
+        let staleSessionId = metadata.sessionId
+        metadata.sessionCreationDate = Date().addingTimeInterval(-3601).timeIntervalSince1970
+        sessionManager.sessionMetadata = metadata
+        sessionManager.lastActivity = Date().addingTimeInterval(-(16 * 60))
+
+        _ = sessionManager.getSessionMetadata()  // triggers rotation
+
+        let prev = sessionManager.getPrevSessionMetadata()
+        XCTAssertEqual(prev?.sessionId, staleSessionId,
+            "Rotation must retain the stale session ID as the previous session so spans carry correct prev_session_id attribution")
+    }
 }

@@ -51,6 +51,13 @@ public class SessionManager {
     private var errorCount: Int = 0
     private var clickCount: Int = 0
     private let countersLock = NSLock()
+    /// Serializes session-rotation read/write. NSRecursiveLock because
+    /// `getSessionMetadata` → `setupSessionMetadata` and `updateActivityTime`
+    /// → `setupSessionMetadata` both re-lock from the same thread. Network
+    /// instrumentation reads run on URLSession delegate threads, so concurrent
+    /// reads on stale sessions need to serialize to avoid two rotations
+    /// producing two different new session IDs.
+    private let sessionLock = NSRecursiveLock()
     public var sessionChangedCallback: ((String) -> Void)?
     public var sessionEndedCallback: (() -> Void)?
     /// Fired alongside `sessionChangedCallback` on every session rotation. Kept as a separate
@@ -103,6 +110,8 @@ public class SessionManager {
     }
     
     public func getPrevSessionMetadata() -> SessionMetadata? {
+        sessionLock.lock()
+        defer { sessionLock.unlock() }
         return self.prevSessionMetadata
     }
     
@@ -119,9 +128,17 @@ public class SessionManager {
     }
     
     public func getSessionMetadata() -> SessionMetadata? {
+        sessionLock.lock()
+        defer { sessionLock.unlock() }
+
+        // Rotation is purely time-based: if the session is older than 1h, rotate
+        // regardless of activity state. Idle state gates *export* (see
+        // CoralogixExporter.export), not rotation — the two concerns are
+        // independent. The previous `isIdle == false` guard meant an idle session
+        // could persist for days and then leak its stale ID onto the next
+        // emitted span (24h-session bug).
         if let sessionCreationDate = self.sessionMetadata?.sessionCreationDate,
-           self.isIdle == false,
-            self.hasAnHourPassed(since: sessionCreationDate) == true {
+           self.hasAnHourPassed(since: sessionCreationDate) {
             self.sessionEndedCallback?()
             self.setupSessionMetadata()
         }
@@ -169,18 +186,29 @@ public class SessionManager {
     }
     
     internal func setupSessionMetadata() {
+        sessionLock.lock()
+        defer { sessionLock.unlock() }
+
         self.prevSessionMetadata = self.sessionMetadata
         self.sessionMetadata = SessionMetadata(sessionId: UUID().uuidString.lowercased(),
                                                sessionCreationDate: Date().timeIntervalSince1970,
                                                using: KeychainManager())
+        // Reset snapshot-throttle so the fresh session can emit its first
+        // snapshot immediately; otherwise the previous session's timestamp
+        // would suppress the new session's first non-error/non-navigation
+        // event for up to 60s (see CxRumBuilder.buildSnapshotContextIfNeeded).
+        self.lastSnapshotEventTime = nil
 
         if let sessionId = self.sessionMetadata?.sessionId {
             self.sessionChangedCallback?(sessionId)
             self.samplingReevaluationCallback?(sessionId)
         }
     }
-    
+
     internal func updateActivityTime() {
+        sessionLock.lock()
+        defer { sessionLock.unlock() }
+
         if isIdle {
             Log.d("[SDK] transitioning from idle to active state")
             self.sessionEndedCallback?()

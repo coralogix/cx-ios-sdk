@@ -177,7 +177,12 @@ extension CoralogixRum {
         // CRITICAL: Add session attributes to network spans using current instance (CX-37986).
         // Without these, each network log creates a new random session ID
         // This is a critical bug - network logs must share the same session as other events
-        if let sessionMetadata = getCurrentInstance()?.sessionManager?.sessionMetadata {
+        //
+        // CRITICAL: go through getSessionMetadata(), NOT the .sessionMetadata
+        // property, so the 1-hour rotation check fires at span-emission time.
+        // Direct property reads bypass rotation and produce stale session_ids
+        // on every span (the 24h-session bug).
+        if let sessionMetadata = getCurrentInstance()?.sessionManager?.getSessionMetadata() {
             spanBuilder.setAttribute(key: Keys.sessionId.rawValue, value: sessionMetadata.sessionId)
             spanBuilder.setAttribute(key: Keys.sessionCreationDate.rawValue, value: String(Int(sessionMetadata.sessionCreationDate)))
         } else {

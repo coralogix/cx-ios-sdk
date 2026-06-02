@@ -547,7 +547,11 @@ public class CoralogixRum {
     }
 
     private func addSessionAndPrevSessionMetadata(to span: inout any Span) {
-        if let sessionMetadata = self.coralogixExporter?.getSessionManager().sessionMetadata {
+        // CRITICAL: go through getSessionMetadata(), NOT the .sessionMetadata
+        // property, so the 1-hour rotation check fires at span-emission time.
+        // Direct property reads bypass rotation and produce stale session_ids
+        // on every span (the 24h-session bug).
+        if let sessionMetadata = self.coralogixExporter?.getSessionManager().getSessionMetadata() {
             span.setAttribute(key: Keys.sessionCreationDate.rawValue, value: String(Int(sessionMetadata.sessionCreationDate)))
             span.setAttribute(key: Keys.sessionId.rawValue, value: sessionMetadata.sessionId)
         }
