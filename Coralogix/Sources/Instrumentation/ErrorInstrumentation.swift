@@ -192,7 +192,14 @@ extension CoralogixRum {
         if let buildId, !buildId.isEmpty { span.setAttribute(key: Keys.buildId.rawValue, value: buildId) }
         if let stackTraceType, !stackTraceType.isEmpty { span.setAttribute(key: Keys.stackTraceType.rawValue, value: stackTraceType) }
         if let data, !data.isEmpty {
-            span.setAttribute(key: Keys.data.rawValue, value: Helper.convertDictionaryToJsonString(dict: data))
+            // Helper.convertDictionaryToJsonString returns "" on encoding failure (e.g. non-JSON
+            // values inside `data`). Skip emitting the attribute in that case so the wire-side
+            // reader doesn't see a blank Keys.data — mirrors the "" → nil normalisation in
+            // ErrorEvent.make.
+            let json = Helper.convertDictionaryToJsonString(dict: data)
+            if !json.isEmpty {
+                span.setAttribute(key: Keys.data.rawValue, value: json)
+            }
         }
         // Note: hybrid error paths (Flutter/RN) intentionally omit the code attribute — there is
         // no meaningful error code in these contexts. Native paths pass an explicit code when relevant.

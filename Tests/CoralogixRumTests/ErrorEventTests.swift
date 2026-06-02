@@ -51,7 +51,8 @@ final class ErrorEventTests: XCTestCase {
         let dataAttr = try XCTUnwrap(attrs[Keys.data.rawValue])
         // Encoded as a JSON string (same shape used by the log path).
         guard case .string(let raw) = dataAttr else {
-            return XCTFail("expected .string attribute, got \(dataAttr)")
+            XCTFail("expected .string attribute, got \(dataAttr)")
+            return
         }
         let decoded = try XCTUnwrap(Helper.convertJsonStringToDict(jsonString: raw))
         XCTAssertEqual(decoded["fruit"] as? String, "banana")
@@ -176,7 +177,8 @@ final class ErrorEventTests: XCTestCase {
             buildId: nil,
             stackTraceType: "objc",
             userInfoJson: nil,
-            stackTraceJson: "[]"
+            stackTraceJson: "[]",
+            dataJson: "{\"fruit\":\"banana\"}"
         )
 
         let encoded = try JSONEncoder().encode(original)
@@ -195,5 +197,6 @@ final class ErrorEventTests: XCTestCase {
         XCTAssertEqual(decoded.stackTraceType, original.stackTraceType)
         XCTAssertNil(decoded.userInfoJson)
         XCTAssertEqual(decoded.stackTraceJson, original.stackTraceJson)
+        XCTAssertEqual(decoded.dataJson,       original.dataJson)
     }
 }

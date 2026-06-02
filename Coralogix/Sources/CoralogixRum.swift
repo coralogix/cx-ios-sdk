@@ -307,7 +307,7 @@ public class CoralogixRum {
                              stackTraceType: stackTraceType,
                              data: data)
     }
-
+    
     public func reportMobileVitalsMeasurement(type: String, metrics: [HybridMetric]) {
         guard CoralogixRum.isInitialized else { return }
         if (CoralogixRum.mobileSDK.sdkFramework.isNative) { return }
