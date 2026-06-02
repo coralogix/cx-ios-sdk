@@ -197,6 +197,16 @@ public class SessionManager {
         // snapshot immediately; otherwise the previous session's timestamp
         // would suppress the new session's first non-error/non-navigation
         // event for up to 60s (see CxRumBuilder.buildSnapshotContextIfNeeded).
+        //
+        // KNOWN INCONSISTENCY: this write is under sessionLock, but the other
+        // accesses to lastSnapshotEventTime in CxRumBuilder.buildSnapshotContextIfNeeded
+        // (read at line ~113, write at line ~124) are unsynchronised and run on
+        // arbitrary span-emission threads (e.g. URLSession delegates). Optional<Date>
+        // is two words on 64-bit, so a torn read concurrent with this reset is
+        // theoretically possible — worst case is one skipped or extra snapshot-
+        // throttle decision, which is benign for best-effort telemetry. Full
+        // synchronisation would require routing CxRumBuilder's accesses through
+        // sessionLock-aware accessors; tracked as a follow-up.
         self.lastSnapshotEventTime = nil
 
         if let sessionId = self.sessionMetadata?.sessionId {
