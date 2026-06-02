@@ -555,12 +555,10 @@ final class NetworkInstrumentationUITests: XCTestCase {
         if afnetworkingLinked {
             expectedRequests.append((url: "jsonplaceholder.typicode.com/posts", statusCode: 200, description: "8. AFNetworking"))
         }
-        expectedRequests.append(contentsOf: [
-            // 9. SDWebImage - Skip verification (Google redirect URL, unpredictable)
-            ("jsonplaceholder.typicode.com/posts", 201, "10. POST request"),
-            ("jsonplaceholder.typicode.com/posts/1", 200, "11. GET request"),
-            ("jsonplaceholder.typicode.com/posts", 201, "12. Async/Await POST")
-        ])
+        // 9. SDWebImage - Skip verification (Google redirect URL, unpredictable)
+        expectedRequests.append((url: "jsonplaceholder.typicode.com/posts",   statusCode: 201, description: "10. POST request"))
+        expectedRequests.append((url: "jsonplaceholder.typicode.com/posts/1", statusCode: 200, description: "11. GET request"))
+        expectedRequests.append((url: "jsonplaceholder.typicode.com/posts",   statusCode: 201, description: "12. Async/Await POST"))
         
         verifyExpectedRequests(expectedRequests)
         
