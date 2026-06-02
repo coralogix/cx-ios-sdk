@@ -82,8 +82,8 @@ class NetworkSim {
         task.resume()
     }
     
-    #if canImport(AFNetworking)
     static func sendAFNetworkingRequest() {
+        #if canImport(AFNetworking)
         let manager = AFHTTPSessionManager()
         manager.responseSerializer = AFJSONResponseSerializer()
         manager.get(url, parameters: nil, headers: nil, progress: nil, success: { task, responseObject in
@@ -91,12 +91,10 @@ class NetworkSim {
         }) { task, error in
             print("Error: \(error.localizedDescription)")
         }
-    }
-    #else
-    static func sendAFNetworkingRequest() {
+        #else
         print("[NetworkSim] AFNetworking not linked in this build — sendAFNetworkingRequest is a no-op.")
+        #endif
     }
-    #endif
     
     static func setNetworkRequestContextSuccsess() {
         let dict = ["url" : "\(url)",
