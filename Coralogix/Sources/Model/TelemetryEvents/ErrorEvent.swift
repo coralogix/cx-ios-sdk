@@ -97,9 +97,7 @@ struct ErrorEvent: TelemetryEvent {
         let stackTraceJson = stackTrace
             .map { Helper.convertArrayToJsonString(array: $0) }
             .flatMap { $0.isEmpty ? nil : $0 }
-        let dataJson = customAttributes
-            .map { Helper.convertDictionaryToJsonString(dict: $0) }
-            .flatMap { $0.isEmpty ? nil : $0 }
+        let dataJson = Helper.jsonAttributeString(dict: customAttributes)
         return ErrorEvent(
             id: id,
             timestamp: timestamp,
