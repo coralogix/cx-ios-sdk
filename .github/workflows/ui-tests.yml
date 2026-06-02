@@ -235,6 +235,18 @@ jobs:
           echo "✅ Created placeholder GoogleService-Info.plist (app will skip Firebase init)"
           ls -la GoogleService-Info.plist
 
+      - name: Install CocoaPods dependencies (AFNetworking)
+        run: |
+          set -euo pipefail
+          cd Example
+          echo "📦 Installing CocoaPods dependencies..."
+          echo "    CocoaPods version: $(pod --version)"
+          pod install 2>&1 | tail -30
+          echo "✅ pod install completed"
+          echo ""
+          echo "📋 Workspace contents after pod install:"
+          cat DemoApp.xcworkspace/contents.xcworkspacedata
+
       - name: Build for testing
         run: |
           set -uo pipefail

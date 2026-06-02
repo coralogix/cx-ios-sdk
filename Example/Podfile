@@ -1,14 +1,16 @@
 platform :ios, '13.0'
 use_frameworks!
 
+# AFNetworking is the only Pod-managed dependency.
+# Alamofire and SDWebImage are linked via SwiftPM in DemoApp.xcodeproj.
+# AFNetworking went through CocoaPods because its SwiftPM distribution fails
+# to compile against the iOS 26.5 SDK ("Use of private header from outside its
+# module: 'netinet6/in6.h'"); CocoaPods builds it cleanly on the CI iOS 18 sim.
+
 target 'DemoAppSwift' do
-  pod 'Alamofire'
   pod 'AFNetworking'
-  pod 'SDWebImage'
 end
 
 target 'DemoAppSwiftUI' do
-  pod 'Alamofire'
   pod 'AFNetworking'
-  pod 'SDWebImage'
 end
