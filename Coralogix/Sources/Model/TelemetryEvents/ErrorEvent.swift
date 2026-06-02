@@ -26,6 +26,7 @@ struct ErrorEvent: TelemetryEvent {
     // convertJsonStringToArray).
     let userInfoJson: String?
     let stackTraceJson: String?
+    let dataJson: String?
 
     // NOTE: crash-path fields (exceptionType, crashTimestamp, processName,
     // applicationIdentifier, triggeredByThread, baseAddress, threads) are NOT
@@ -46,7 +47,8 @@ struct ErrorEvent: TelemetryEvent {
         buildId: String? = nil,
         stackTraceType: String? = nil,
         userInfoJson: String? = nil,
-        stackTraceJson: String? = nil
+        stackTraceJson: String? = nil,
+        dataJson: String? = nil
     ) {
         self.id = id
         self.timestamp = timestamp
@@ -60,6 +62,7 @@ struct ErrorEvent: TelemetryEvent {
         self.stackTraceType = stackTraceType
         self.userInfoJson = userInfoJson
         self.stackTraceJson = stackTraceJson
+        self.dataJson = dataJson
     }
 
     /// Ergonomic factory that accepts unencoded `userInfo` / `stackTrace`
@@ -85,7 +88,8 @@ struct ErrorEvent: TelemetryEvent {
         buildId: String? = nil,
         stackTraceType: String? = nil,
         userInfo: [String: Any]? = nil,
-        stackTrace: [[String: Any]]? = nil
+        stackTrace: [[String: Any]]? = nil,
+        customAttributes: [String: Any]? = nil
     ) -> ErrorEvent {
         let userInfoJson = userInfo
             .map { Helper.convertDictionaryToJsonString(dict: $0) }
@@ -93,6 +97,7 @@ struct ErrorEvent: TelemetryEvent {
         let stackTraceJson = stackTrace
             .map { Helper.convertArrayToJsonString(array: $0) }
             .flatMap { $0.isEmpty ? nil : $0 }
+        let dataJson = Helper.jsonAttributeString(dict: customAttributes)
         return ErrorEvent(
             id: id,
             timestamp: timestamp,
@@ -105,7 +110,8 @@ struct ErrorEvent: TelemetryEvent {
             buildId: buildId,
             stackTraceType: stackTraceType,
             userInfoJson: userInfoJson,
-            stackTraceJson: stackTraceJson
+            stackTraceJson: stackTraceJson,
+            dataJson: dataJson
         )
     }
 
@@ -123,6 +129,7 @@ struct ErrorEvent: TelemetryEvent {
         if let stackTraceType { attrs[Keys.stackTraceType.rawValue] = .string(stackTraceType) }
         if let userInfoJson   { attrs[Keys.userInfo.rawValue]       = .string(userInfoJson) }
         if let stackTraceJson { attrs[Keys.stackTrace.rawValue]     = .string(stackTraceJson) }
+        if let dataJson       { attrs[Keys.data.rawValue]           = .string(dataJson) }
         return attrs
     }
 }

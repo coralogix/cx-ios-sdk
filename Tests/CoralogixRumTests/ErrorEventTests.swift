@@ -38,6 +38,54 @@ final class ErrorEventTests: XCTestCase {
         XCTAssertNil(attrs[Keys.stackTraceType.rawValue])
         XCTAssertNil(attrs[Keys.userInfo.rawValue])
         XCTAssertNil(attrs[Keys.stackTrace.rawValue])
+        XCTAssertNil(attrs[Keys.data.rawValue])
+    }
+
+    func testAdapterEmitsDataAsEncodedJsonString() throws {
+        let event = ErrorEvent.make(
+            domain: "d",
+            errorMessage: "m",
+            customAttributes: ["fruit": "banana"]
+        )
+        let attrs = event.toOTelAttributes()
+        let dataAttr = try XCTUnwrap(attrs[Keys.data.rawValue])
+        // Encoded as a JSON string (same shape used by the log path).
+        guard case .string(let raw) = dataAttr else {
+            XCTFail("expected .string attribute, got \(dataAttr)")
+            return
+        }
+        let decoded = try XCTUnwrap(Helper.convertJsonStringToDict(jsonString: raw))
+        XCTAssertEqual(decoded["fruit"] as? String, "banana")
+    }
+
+    // Parity: pipe data through ErrorEvent → toOTelAttributes() → ErrorContext
+    // and assert the wire dict carries the data dictionary alongside the stack trace.
+    func testDictParityViaExistingContextPath_withDataAndStackTrace() throws {
+        let event = ErrorEvent.make(
+            domain: "io.app.network",
+            errorMessage: "boom",
+            stackTrace: [["function": "main", "file": "AppDelegate.swift", "line": 12]],
+            customAttributes: ["fruit": "banana", "count": 3]
+        )
+
+        let mockSpan = MockSpanData(attributes: event.toOTelAttributes())
+        let context = ErrorContext(otel: mockSpan)
+        let dict = context.getDictionary()
+
+        let data = try XCTUnwrap(dict[Keys.data.rawValue] as? [String: Any])
+        XCTAssertEqual(data["fruit"] as? String, "banana")
+        XCTAssertEqual(data["count"] as? Int, 3)
+
+        // Stack trace must still land alongside data (the bug this ticket fixes).
+        let stack = try XCTUnwrap(dict[Keys.originalStackTrace.rawValue] as? [[String: Any]])
+        XCTAssertEqual(stack.first?["function"] as? String, "main")
+    }
+
+    func testContextOmitsDataWhenAbsent() {
+        let event = ErrorEvent(domain: "d", errorMessage: "m")
+        let mockSpan = MockSpanData(attributes: event.toOTelAttributes())
+        let context = ErrorContext(otel: mockSpan)
+        XCTAssertNil(context.getDictionary()[Keys.data.rawValue])
     }
 
     func testAdapterEmitsCodeAsInt() {
@@ -129,7 +177,8 @@ final class ErrorEventTests: XCTestCase {
             buildId: nil,
             stackTraceType: "objc",
             userInfoJson: nil,
-            stackTraceJson: "[]"
+            stackTraceJson: "[]",
+            dataJson: "{\"fruit\":\"banana\"}"
         )
 
         let encoded = try JSONEncoder().encode(original)
@@ -148,5 +197,6 @@ final class ErrorEventTests: XCTestCase {
         XCTAssertEqual(decoded.stackTraceType, original.stackTraceType)
         XCTAssertNil(decoded.userInfoJson)
         XCTAssertEqual(decoded.stackTraceJson, original.stackTraceJson)
+        XCTAssertEqual(decoded.dataJson,       original.dataJson)
     }
 }
