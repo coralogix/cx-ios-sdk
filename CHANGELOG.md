@@ -12,7 +12,7 @@ omitted; the focus here is user-facing behavior changes. Tickets are referenced 
 ## [2.7.0] - 2026-06-02
 
 ### Added
-- `data: [String: Any]?` parameter on `reportError(message:, stackTrace:, ...)` and `reportError(message:, obfuscatedStackTrace:, ...)` overloads. Custom attributes now ride alongside the parsed stack frames on the emitted error event instead of being mutually exclusive with the stack trace (CX-44438, #TBD)
+- `customAttributes: [String: Any]?` parameter on `reportError(message:, stackTrace:, ...)` and `reportError(message:, obfuscatedStackTrace:, ...)` overloads. Custom attributes now ride alongside the parsed stack frames on the emitted error event instead of being mutually exclusive with the stack trace (CX-44438, #TBD)
 
 ## [2.6.4] - 2026-05-12
 

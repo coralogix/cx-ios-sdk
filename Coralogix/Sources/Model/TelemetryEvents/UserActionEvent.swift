@@ -65,12 +65,7 @@ struct UserActionEvent: TelemetryEvent {
         var attrs: [String: AttributeValue] = [
             Keys.eventType.rawValue: .string(type.rawValue),
         ]
-        // `Helper.convertDictionaryToJsonString` logs via `Log.e(...)` and
-        // returns "" on encoding failure. Omit the attribute on failure
-        // instead of emitting an empty string that the downstream parser
-        // would silently drop again (mirrors `ErrorEvent.make`).
-        let json = Helper.convertDictionaryToJsonString(dict: tapObject)
-        if !json.isEmpty {
+        if let json = Helper.jsonAttributeString(dict: tapObject) {
             attrs[Keys.tapObject.rawValue] = .string(json)
         }
         return attrs

@@ -45,7 +45,7 @@ final class ErrorEventTests: XCTestCase {
         let event = ErrorEvent.make(
             domain: "d",
             errorMessage: "m",
-            data: ["fruit": "banana"]
+            customAttributes: ["fruit": "banana"]
         )
         let attrs = event.toOTelAttributes()
         let dataAttr = try XCTUnwrap(attrs[Keys.data.rawValue])
@@ -65,7 +65,7 @@ final class ErrorEventTests: XCTestCase {
             domain: "io.app.network",
             errorMessage: "boom",
             stackTrace: [["function": "main", "file": "AppDelegate.swift", "line": 12]],
-            data: ["fruit": "banana", "count": 3]
+            customAttributes: ["fruit": "banana", "count": 3]
         )
 
         let mockSpan = MockSpanData(attributes: event.toOTelAttributes())

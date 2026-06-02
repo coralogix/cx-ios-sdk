@@ -94,6 +94,16 @@ class Helper {
         return ""
     }
 
+    /// JSON-encodes a non-empty dictionary for emission as a span attribute, returning `nil`
+    /// when the input is `nil`/empty or when encoding fails. `convertDictionaryToJsonString`
+    /// returns `""` on encoding failure; the downstream parser drops empty-string attributes
+    /// silently, so callers should suppress the attribute entirely rather than emit `""`.
+    internal static func jsonAttributeString(dict: [String: Any]?) -> String? {
+        guard let dict, !dict.isEmpty else { return nil }
+        let json = convertDictionaryToJsonString(dict: dict)
+        return json.isEmpty ? nil : json
+    }
+
     /// Builds a dictionary `JSONSerialization` accepts: unwraps nested `Optional`s, converts `Date`/`URL`/etc.,
     /// and replaces unknown types with `String(describing:)` so one bad value does not drop the whole payload.
     private static func jsonSerializationSafeDictionary(_ dict: [String: Any], keyPath: String) -> [String: Any] {

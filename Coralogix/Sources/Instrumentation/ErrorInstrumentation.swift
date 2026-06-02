@@ -70,7 +70,7 @@ extension CoralogixRum {
                          arch: String?,
                          buildId: String?,
                          stackTraceType: String?,
-                         data: [String: Any]? = nil) {
+                         customAttributes: [String: Any]? = nil) {
         let frames: [[String: Any]] = obfuscatedStackTrace.map { [Keys.virt.rawValue: $0] }
         let stackTraceJson = Helper.convertArrayToJsonString(array: frames)
         reportErrorInternal(message: message,
@@ -78,7 +78,7 @@ extension CoralogixRum {
                             arch: arch,
                             buildId: buildId,
                             stackTraceType: stackTraceType,
-                            data: data)
+                            customAttributes: customAttributes)
     }
 
     // MARK: - Used By React Native
@@ -89,7 +89,7 @@ extension CoralogixRum {
                          arch: String? = nil,
                          buildId: String? = nil,
                          stackTraceType: String? = nil,
-                         data: [String: Any]? = nil) {
+                         customAttributes: [String: Any]? = nil) {
         let stackTraceJson = Helper.convertArrayToJsonString(array: stackTrace)
         reportErrorInternal(message: message,
                             stackTraceJson: stackTraceJson,
@@ -98,7 +98,7 @@ extension CoralogixRum {
                             arch: arch,
                             buildId: buildId,
                             stackTraceType: stackTraceType,
-                            data: data)
+                            customAttributes: customAttributes)
     }
 
     private func reportErrorInternal(message: String,
@@ -108,7 +108,7 @@ extension CoralogixRum {
                                      arch: String? = nil,
                                      buildId: String? = nil,
                                      stackTraceType: String? = nil,
-                                     data: [String: Any]? = nil) {
+                                     customAttributes: [String: Any]? = nil) {
         guard isErrorsEnabled else { return }
         self.writeError(
             domain: "",
@@ -119,7 +119,7 @@ extension CoralogixRum {
             arch: arch,
             buildId: buildId,
             stackTraceType: stackTraceType,
-            data: data
+            customAttributes: customAttributes
         )
     }
 
@@ -177,7 +177,7 @@ extension CoralogixRum {
                             arch: String? = nil,
                             buildId: String? = nil,
                             stackTraceType: String? = nil,
-                            data: [String: Any]? = nil) {
+                            customAttributes: [String: Any]? = nil) {
         var span = makeSpan(event: .error, source: .console, severity: .error)
         span.setAttribute(key: Keys.domain.rawValue, value: domain)
         if let code { span.setAttribute(key: Keys.code.rawValue, value: code) }
@@ -191,15 +191,8 @@ extension CoralogixRum {
         if let arch, !arch.isEmpty { span.setAttribute(key: Keys.arch.rawValue, value: arch) }
         if let buildId, !buildId.isEmpty { span.setAttribute(key: Keys.buildId.rawValue, value: buildId) }
         if let stackTraceType, !stackTraceType.isEmpty { span.setAttribute(key: Keys.stackTraceType.rawValue, value: stackTraceType) }
-        if let data, !data.isEmpty {
-            // Helper.convertDictionaryToJsonString returns "" on encoding failure (e.g. non-JSON
-            // values inside `data`). Skip emitting the attribute in that case so the wire-side
-            // reader doesn't see a blank Keys.data — mirrors the "" → nil normalisation in
-            // ErrorEvent.make.
-            let json = Helper.convertDictionaryToJsonString(dict: data)
-            if !json.isEmpty {
-                span.setAttribute(key: Keys.data.rawValue, value: json)
-            }
+        if let json = Helper.jsonAttributeString(dict: customAttributes) {
+            span.setAttribute(key: Keys.data.rawValue, value: json)
         }
         // Note: hybrid error paths (Flutter/RN) intentionally omit the code attribute — there is
         // no meaningful error code in these contexts. Native paths pass an explicit code when relevant.

@@ -269,7 +269,7 @@ public class CoralogixRum {
                             arch: String? = nil,
                             buildId: String? = nil,
                             stackTraceType: String? = nil,
-                            data: [String: Any]? = nil) {
+                            customAttributes: [String: Any]? = nil) {
         guard CoralogixRum.isInitialized else { return }
         self.reportErrorWith(message: message,
                              stackTrace: stackTrace,
@@ -278,7 +278,7 @@ public class CoralogixRum {
                              arch: arch,
                              buildId: buildId,
                              stackTraceType: stackTraceType,
-                             data: data)
+                             customAttributes: customAttributes)
     }
 
     /// Reports a Dart obfuscated error from Flutter.
@@ -292,20 +292,20 @@ public class CoralogixRum {
     ///   - arch: The CPU architecture (e.g. `"arm64"`).
     ///   - buildId: The Dart snapshot build ID used for symbolication.
     ///   - stackTraceType: The stack trace type (e.g. `"obfuscated"`).
-    ///   - data: Optional custom attributes to attach to the error event.
+    ///   - customAttributes: Optional custom attributes to attach to the error event.
     public func reportError(message: String,
                             obfuscatedStackTrace: [String],
                             arch: String? = nil,
                             buildId: String? = nil,
                             stackTraceType: String? = Keys.obfuscated.rawValue,
-                            data: [String: Any]? = nil) {
+                            customAttributes: [String: Any]? = nil) {
         guard CoralogixRum.isInitialized else { return }
         self.reportErrorWith(message: message,
                              obfuscatedStackTrace: obfuscatedStackTrace,
                              arch: arch,
                              buildId: buildId,
                              stackTraceType: stackTraceType,
-                             data: data)
+                             customAttributes: customAttributes)
     }
     
     public func reportMobileVitalsMeasurement(type: String, metrics: [HybridMetric]) {
