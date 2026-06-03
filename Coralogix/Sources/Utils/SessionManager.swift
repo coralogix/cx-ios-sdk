@@ -51,12 +51,13 @@ public class SessionManager {
     private var errorCount: Int = 0
     private var clickCount: Int = 0
     private let countersLock = NSLock()
-    /// Serializes session-rotation read/write. NSRecursiveLock because
-    /// `getSessionMetadata` → `setupSessionMetadata` and `updateActivityTime`
-    /// → `setupSessionMetadata` both re-lock from the same thread. Network
-    /// instrumentation reads run on URLSession delegate threads, so concurrent
-    /// reads on stale sessions need to serialize to avoid two rotations
-    /// producing two different new session IDs.
+    /// Serializes session-rotation read/write. Network instrumentation reads
+    /// run on URLSession delegate threads, so concurrent reads on stale sessions
+    /// need to serialize to avoid two rotations producing two different new
+    /// session IDs. Kept as `NSRecursiveLock` defensively — callers must drop
+    /// the lock before invoking callbacks (see `setupSessionMetadata`), so no
+    /// recursion is intended on this path, but recursion-safe semantics protect
+    /// against future regressions.
     private let sessionLock = NSRecursiveLock()
     public var sessionChangedCallback: ((String) -> Void)?
     public var sessionEndedCallback: (() -> Void)?
@@ -124,22 +125,29 @@ public class SessionManager {
     /// attribute writes — keeps the rotation invariant and the prev-session breadcrumbs
     /// in one place.
     ///
-    /// Both reads happen under a single `sessionLock` acquisition so a concurrent rotation
-    /// cannot wedge between them and produce a span where `prev_session_id` equals the
-    /// just-emitted `session_id`.
+    /// Two-phase to keep both invariants:
+    ///   1. Trigger rotation first via `getSessionMetadata()` (which releases the lock
+    ///      before firing any rotation callbacks — see `setupSessionMetadata`).
+    ///   2. Briefly re-acquire the lock to snapshot current + prev together so a
+    ///      concurrent rotation can't wedge between them and produce a span where
+    ///      `prev_session_id` equals the just-emitted `session_id`.
     ///
     /// Returns an empty array when no current session is available; callers can still
     /// emit the span — only the session attributes are skipped.
     func sessionSpanAttributes() -> [(key: String, value: String)] {
+        _ = getSessionMetadata()
+
         sessionLock.lock()
-        defer { sessionLock.unlock() }
+        let current = self.sessionMetadata
+        let prev = self.prevSessionMetadata
+        sessionLock.unlock()
 
         var attrs: [(key: String, value: String)] = []
-        if let current = getSessionMetadata() {
+        if let current {
             attrs.append((Keys.sessionId.rawValue, current.sessionId))
             attrs.append((Keys.sessionCreationDate.rawValue, String(Int(current.sessionCreationDate))))
         }
-        if let prev = self.prevSessionMetadata {
+        if let prev {
             if let prevPid = prev.oldPid {
                 attrs.append((Keys.prevPid.rawValue, prevPid))
             }
@@ -166,20 +174,27 @@ public class SessionManager {
     }
     
     public func getSessionMetadata() -> SessionMetadata? {
-        sessionLock.lock()
-        defer { sessionLock.unlock() }
-
         // Rotation is purely time-based: if the session is older than 1h, rotate
         // regardless of activity state. Idle state gates *export* (see
         // CoralogixExporter.export), not rotation — the two concerns are
         // independent. The previous `isIdle == false` guard meant an idle session
         // could persist for days and then leak its stale ID onto the next
         // emitted span (24h-session bug).
-        if let sessionCreationDate = self.sessionMetadata?.sessionCreationDate,
-           self.hasAnHourPassed(since: sessionCreationDate) {
-            self.sessionEndedCallback?()
+        //
+        // The staleness check and the rotation step are deliberately split: the check
+        // happens under the lock, but `setupSessionMetadata()` is called *after* the
+        // lock is released. That keeps rotation callbacks (which may take foreign
+        // locks) out of any sessionLock-held window — see `setupSessionMetadata`.
+        sessionLock.lock()
+        let staleCreationDate = self.sessionMetadata?.sessionCreationDate
+        sessionLock.unlock()
+
+        if let staleCreationDate, self.hasAnHourPassed(since: staleCreationDate) {
             self.setupSessionMetadata()
         }
+
+        sessionLock.lock()
+        defer { sessionLock.unlock() }
         return self.sessionMetadata
     }
     
@@ -224,8 +239,17 @@ public class SessionManager {
     }
     
     internal func setupSessionMetadata() {
+        // Mutate state under the lock, capture callback refs + the new sessionId,
+        // then RELEASE the lock before firing any callback. `NSRecursiveLock`
+        // protects same-thread re-entry into `SessionManager`, but does NOT
+        // protect against lock-ordering deadlocks when a callback synchronously
+        // hops to another queue/thread (e.g., a SessionReplay listener) that
+        // takes its own lock and then waits on `sessionLock`. Firing outside the
+        // lock removes that vector.
         sessionLock.lock()
-        defer { sessionLock.unlock() }
+
+        let priorExisted = (self.sessionMetadata != nil)
+        let endedCb = self.sessionEndedCallback
 
         self.prevSessionMetadata = self.sessionMetadata
         self.sessionMetadata = SessionMetadata(sessionId: UUID().uuidString.lowercased(),
@@ -247,22 +271,42 @@ public class SessionManager {
         // sessionLock-aware accessors; tracked as a follow-up (CX-44589).
         self.lastSnapshotEventTime = nil
 
-        if let sessionId = self.sessionMetadata?.sessionId {
-            self.sessionChangedCallback?(sessionId)
-            self.samplingReevaluationCallback?(sessionId)
+        let newSessionId = self.sessionMetadata?.sessionId
+        let changedCb = self.sessionChangedCallback
+        let samplingCb = self.samplingReevaluationCallback
+
+        sessionLock.unlock()
+
+        // The "ended" callback only fires when we're rotating an existing
+        // session; the very first setup (from `init`) has no prior session
+        // to end.
+        if priorExisted {
+            endedCb?()
+        }
+        if let newSessionId {
+            changedCb?(newSessionId)
+            samplingCb?(newSessionId)
         }
     }
 
     internal func updateActivityTime() {
         sessionLock.lock()
-        defer { sessionLock.unlock() }
-
-        if isIdle {
+        let wasIdle = isIdle
+        if wasIdle {
             Log.d("[SDK] transitioning from idle to active state")
-            self.sessionEndedCallback?()
+        }
+        sessionLock.unlock()
+
+        // Rotate (and fire callbacks) before updating `lastActivity` so listeners
+        // that consult `isIdle` during their callback still see `true` — same
+        // ordering observable in the pre-refactor code.
+        if wasIdle {
             setupSessionMetadata()
         }
+
+        sessionLock.lock()
         lastActivity = Date()
+        sessionLock.unlock()
     }
     
     deinit {
