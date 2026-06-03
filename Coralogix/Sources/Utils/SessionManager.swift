@@ -199,9 +199,11 @@ public class SessionManager {
     }
     
     public func shutdown() {
+        sessionLock.lock()
         self.sessionMetadata = SessionMetadata(sessionId: "",
                                                sessionCreationDate: 0,
                                                using: KeychainManager())
+        sessionLock.unlock()
         self.reset()
     }
     
