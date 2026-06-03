@@ -181,21 +181,23 @@ public class SessionManager {
         // could persist for days and then leak its stale ID onto the next
         // emitted span (24h-session bug).
         //
-        // The staleness check and the rotation step are deliberately split: the check
-        // happens under the lock, but `setupSessionMetadata()` is called *after* the
-        // lock is released. That keeps rotation callbacks (which may take foreign
-        // locks) out of any sessionLock-held window — see `setupSessionMetadata`.
+        // Staleness check AND rotation happen under a single lock acquisition so
+        // two concurrent callers can't both see the stale gate and both rotate.
+        // Callbacks are captured here and fired AFTER the unlock — see
+        // `setupSessionMetadata` for the rationale.
         sessionLock.lock()
-        let staleCreationDate = self.sessionMetadata?.sessionCreationDate
+        var pending: RotationPendingCallbacks? = nil
+        if let creationDate = self.sessionMetadata?.sessionCreationDate,
+           self.hasAnHourPassed(since: creationDate) {
+            pending = performRotationLocked()
+        }
+        let result = self.sessionMetadata
         sessionLock.unlock()
 
-        if let staleCreationDate, self.hasAnHourPassed(since: staleCreationDate) {
-            self.setupSessionMetadata()
+        if let pending {
+            fireRotationCallbacks(pending)
         }
-
-        sessionLock.lock()
-        defer { sessionLock.unlock() }
-        return self.sessionMetadata
+        return result
     }
     
     public func shutdown() {
@@ -240,16 +242,23 @@ public class SessionManager {
         return timeDifference >= hourInSeconds
     }
     
-    internal func setupSessionMetadata() {
-        // Mutate state under the lock, capture callback refs + the new sessionId,
-        // then RELEASE the lock before firing any callback. `NSRecursiveLock`
-        // protects same-thread re-entry into `SessionManager`, but does NOT
-        // protect against lock-ordering deadlocks when a callback synchronously
-        // hops to another queue/thread (e.g., a SessionReplay listener) that
-        // takes its own lock and then waits on `sessionLock`. Firing outside the
-        // lock removes that vector.
-        sessionLock.lock()
+    /// Captured callback references + the new session id from a rotation that
+    /// happened under `sessionLock`. The caller must invoke `fireRotationCallbacks`
+    /// AFTER releasing `sessionLock` so callbacks never run while the lock is held.
+    private struct RotationPendingCallbacks {
+        let endedCallback: (() -> Void)?
+        let priorExisted: Bool
+        let newSessionId: String?
+        let changedCallback: ((String) -> Void)?
+        let samplingCallback: ((String) -> Void)?
+    }
 
+    /// Performs the session rotation. PRECONDITION: caller must already hold
+    /// `sessionLock`. Returns the captured callbacks so the caller can fire them
+    /// after releasing the lock. Keeping the gate-check (in the caller) and the
+    /// mutation here under the SAME lock acquisition prevents two concurrent
+    /// callers from both seeing a stale gate and both rotating.
+    private func performRotationLocked() -> RotationPendingCallbacks {
         let priorExisted = (self.sessionMetadata != nil)
         let endedCb = self.sessionEndedCallback
 
@@ -273,42 +282,64 @@ public class SessionManager {
         // sessionLock-aware accessors; tracked as a follow-up (CX-44589).
         self.lastSnapshotEventTime = nil
 
-        let newSessionId = self.sessionMetadata?.sessionId
-        let changedCb = self.sessionChangedCallback
-        let samplingCb = self.samplingReevaluationCallback
+        return RotationPendingCallbacks(
+            endedCallback: endedCb,
+            priorExisted: priorExisted,
+            newSessionId: self.sessionMetadata?.sessionId,
+            changedCallback: self.sessionChangedCallback,
+            samplingCallback: self.samplingReevaluationCallback
+        )
+    }
 
-        sessionLock.unlock()
-
+    /// Fires the callbacks captured by `performRotationLocked`. PRECONDITION:
+    /// caller must NOT hold `sessionLock`. `NSRecursiveLock` protects same-thread
+    /// re-entry into `SessionManager`, but does NOT protect against lock-ordering
+    /// deadlocks when a callback synchronously hops to another queue/thread
+    /// (e.g., a SessionReplay listener) that takes its own lock and then waits on
+    /// `sessionLock`. Firing outside the lock removes that vector.
+    private func fireRotationCallbacks(_ pending: RotationPendingCallbacks) {
         // The "ended" callback only fires when we're rotating an existing
         // session; the very first setup (from `init`) has no prior session
         // to end.
-        if priorExisted {
-            endedCb?()
+        if pending.priorExisted {
+            pending.endedCallback?()
         }
-        if let newSessionId {
-            changedCb?(newSessionId)
-            samplingCb?(newSessionId)
+        if let newId = pending.newSessionId {
+            pending.changedCallback?(newId)
+            pending.samplingCallback?(newId)
         }
     }
 
-    internal func updateActivityTime() {
+    internal func setupSessionMetadata() {
         sessionLock.lock()
-        let wasIdle = isIdle
-        if wasIdle {
-            Log.d("[SDK] transitioning from idle to active state")
-        }
+        let pending = performRotationLocked()
         sessionLock.unlock()
 
-        // Rotate (and fire callbacks) before updating `lastActivity` so listeners
-        // that consult `isIdle` during their callback still see `true` — same
-        // ordering observable in the pre-refactor code.
-        if wasIdle {
-            setupSessionMetadata()
-        }
+        fireRotationCallbacks(pending)
+    }
 
+    internal func updateActivityTime() {
+        // Both the idle check AND the rotation+gate-close happen under a single
+        // lock acquisition. The "gate" that prevents repeat rotation is
+        // `lastActivity` — until it's updated, every concurrent caller sees
+        // `isIdle == true` and would also rotate. Moving the `lastActivity = Date()`
+        // write inside the locked region closes the gate atomically with the
+        // rotation decision. A side effect: listeners that consult `isIdle`
+        // inside their callback now see `false` (lastActivity already updated)
+        // — accepted because preserving the old observation order would re-open
+        // the race window.
         sessionLock.lock()
+        var pending: RotationPendingCallbacks? = nil
+        if isIdle {
+            Log.d("[SDK] transitioning from idle to active state")
+            pending = performRotationLocked()
+        }
         lastActivity = Date()
         sessionLock.unlock()
+
+        if let pending {
+            fireRotationCallbacks(pending)
+        }
     }
     
     deinit {
