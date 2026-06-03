@@ -9,7 +9,9 @@ import Foundation
 import UIKit
 import Coralogix
 import Alamofire
+#if canImport(AFNetworking)
 import AFNetworking
+#endif
 import SDWebImage
 
 //https://github.com/AFNetworking/AFNetworking.git
@@ -81,6 +83,7 @@ class NetworkSim {
     }
     
     static func sendAFNetworkingRequest() {
+        #if canImport(AFNetworking)
         let manager = AFHTTPSessionManager()
         manager.responseSerializer = AFJSONResponseSerializer()
         manager.get(url, parameters: nil, headers: nil, progress: nil, success: { task, responseObject in
@@ -88,6 +91,9 @@ class NetworkSim {
         }) { task, error in
             print("Error: \(error.localizedDescription)")
         }
+        #else
+        print("[NetworkSim] AFNetworking not linked in this build — sendAFNetworkingRequest is a no-op.")
+        #endif
     }
     
     static func setNetworkRequestContextSuccsess() {

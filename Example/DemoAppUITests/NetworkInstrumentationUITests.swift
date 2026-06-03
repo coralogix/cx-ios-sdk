@@ -495,10 +495,17 @@ final class NetworkInstrumentationUITests: XCTestCase {
         
         // 7. Alamofire upload (takes longer)
         tapNetworkOption("Alamofire upload", waitTime: 5)
-        
-        // 8. AFNetworking
-        tapNetworkOption("AFNetworking request", waitTime: 3)
-        
+
+        // 8. AFNetworking — gated. The SDK can't currently link AFNetworking from
+        // SwiftPM (4.0.1 fails to compile against the iOS 26.5 SDK) nor from
+        // CocoaPods (Xcodeproj parser rejects objectVersion 70 — upstream
+        // cocoapods/cocoapods#12840). When either is fixed, set
+        // AFNETWORKING_LINKED=1 in the test environment to re-enable.
+        let afnetworkingLinked = ProcessInfo.processInfo.environment["AFNETWORKING_LINKED"] == "1"
+        if afnetworkingLinked {
+            tapNetworkOption("AFNetworking request", waitTime: 3)
+        }
+
         // 9. SDWebImage download
         tapNetworkOption("Download image (SDWebImage)", waitTime: 3)
         
@@ -536,19 +543,22 @@ final class NetworkInstrumentationUITests: XCTestCase {
         print("\n🔎 Phase 4: Verifying specific requests and status codes...")
         print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
         
-        // Expected requests in order they were triggered
-        let expectedRequests: [(url: String, statusCode: Int, description: String)] = [
+        // Expected requests in order they were triggered. Entry 8 is appended
+        // only when AFNetworking is actually linked (see gate above).
+        var expectedRequests: [(url: String, statusCode: Int, description: String)] = [
             ("jsonplaceholder.typicode.com/posts1", 404, "1. Failing GET"),
             ("jsonplaceholder.typicode.com/posts", 200, "2. Successful GET"),
             ("jsonplaceholder.typicode.com/posts", 200, "5. Alamofire success"),
             ("jsonplaceholder.typicode.com/posts1", 404, "6. Alamofire failure"),
             ("api.escuelajs.co/api/v1/files/upload", 201, "7. Alamofire upload"),
-            ("jsonplaceholder.typicode.com/posts", 200, "8. AFNetworking"),
-            // 9. SDWebImage - Skip verification (Google redirect URL, unpredictable)
-            ("jsonplaceholder.typicode.com/posts", 201, "10. POST request"),
-            ("jsonplaceholder.typicode.com/posts/1", 200, "11. GET request"),
-            ("jsonplaceholder.typicode.com/posts", 201, "12. Async/Await POST")
         ]
+        if afnetworkingLinked {
+            expectedRequests.append((url: "jsonplaceholder.typicode.com/posts", statusCode: 200, description: "8. AFNetworking"))
+        }
+        // 9. SDWebImage - Skip verification (Google redirect URL, unpredictable)
+        expectedRequests.append((url: "jsonplaceholder.typicode.com/posts",   statusCode: 201, description: "10. POST request"))
+        expectedRequests.append((url: "jsonplaceholder.typicode.com/posts/1", statusCode: 200, description: "11. GET request"))
+        expectedRequests.append((url: "jsonplaceholder.typicode.com/posts",   statusCode: 201, description: "12. Async/Await POST"))
         
         verifyExpectedRequests(expectedRequests)
         

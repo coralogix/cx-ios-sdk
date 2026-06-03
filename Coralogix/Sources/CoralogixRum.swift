@@ -547,20 +547,9 @@ public class CoralogixRum {
     }
 
     private func addSessionAndPrevSessionMetadata(to span: inout any Span) {
-        if let sessionMetadata = self.coralogixExporter?.getSessionManager().sessionMetadata {
-            span.setAttribute(key: Keys.sessionCreationDate.rawValue, value: String(Int(sessionMetadata.sessionCreationDate)))
-            span.setAttribute(key: Keys.sessionId.rawValue, value: sessionMetadata.sessionId)
-        }
-        if let prevSessionMetadata = self.coralogixExporter?.getSessionManager().getPrevSessionMetadata() {
-            if let prevPid = prevSessionMetadata.oldPid {
-                span.setAttribute(key: Keys.prevPid.rawValue, value: prevPid)
-            }
-            if let prevSessionId = prevSessionMetadata.oldSessionId {
-                span.setAttribute(key: Keys.prevSessionId.rawValue, value: prevSessionId)
-            }
-            if let prevSessionCreationDate = prevSessionMetadata.oldSessionTimeInterval {
-                span.setAttribute(key: Keys.prevSessionCreationDate.rawValue, value: String(Int(prevSessionCreationDate)))
-            }
+        guard let sessionManager = self.coralogixExporter?.getSessionManager() else { return }
+        for attr in sessionManager.sessionSpanAttributes() {
+            span.setAttribute(key: attr.key, value: attr.value)
         }
     }
     

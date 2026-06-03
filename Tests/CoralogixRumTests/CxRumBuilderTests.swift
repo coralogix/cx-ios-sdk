@@ -139,17 +139,35 @@ class CxRumBuilderTests: XCTestCase {
         guard let sut = makeSUT(currentTime: now) else { return XCTFail("Failed to instantiate CxRumBuilder") }
 
         mockSessionManager.lastSnapshotTime = now.addingTimeInterval(-61)
-        
+
         // WHEN: We build the snapshot context
         let snapshotContext = sut.buildSnapshotContextIfNeeded(for: eventContext)
-        
+
         // THEN: A snapshot should be created
         XCTAssertNotNil(snapshotContext, "Snapshot context should be created when one minute has passed.")
         XCTAssertEqual(mockSessionManager.incrementErrorCounterCallCount, 0, "Error counter should NOT be incremented.")
         XCTAssertNotNil(mockSessionManager.lastSnapshotTime, "Snapshot time should be updated.")
     }
-    
-    
+
+    func test_build_whenLastSnapshotEventTimeIsNil_createsSnapshotForGenericEvent() {
+        // GIVEN: No snapshot has been emitted yet (initial launch or just-rotated session)
+        //        and a non-error/non-navigation event arrives.
+        mockSessionManager.lastSnapshotTime = nil
+        let eventContext = makeEventContext(severity: 3, type: "log")
+        guard let sut = makeSUT() else { return XCTFail("Failed to instantiate CxRumBuilder") }
+
+        // WHEN: We build the snapshot context
+        let snapshotContext = sut.buildSnapshotContextIfNeeded(for: eventContext)
+
+        // THEN: A snapshot should be created — nil means "throttle expired" so the
+        // fresh session gets its first snapshot on the first qualifying event,
+        // matching the intent documented in SessionManager.setupSessionMetadata().
+        XCTAssertNotNil(snapshotContext, "Snapshot should be created when lastSnapshotEventTime is nil (fresh session).")
+        XCTAssertEqual(mockSessionManager.incrementErrorCounterCallCount, 0, "Error counter should NOT be incremented for a log event.")
+        XCTAssertNotNil(mockSessionManager.lastSnapshotTime, "Snapshot time should be updated after emission.")
+    }
+
+
     private func makeSUT(currentTime: Date = Date()) -> CxRumBuilder? {
         // This helper creates the System Under Test with a controlled start time
         let endTime = Date()

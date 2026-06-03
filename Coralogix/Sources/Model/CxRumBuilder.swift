@@ -110,9 +110,13 @@ class CxRumBuilder {
         let currentTime = otel.getStartTime() ?? Date().timeIntervalSince1970
         let isErrorSeverity = eventContext.severity == CoralogixLogSeverity.error.rawValue
         let isNavigationEvent = eventContext.type == .navigation
+        // nil means no snapshot has been emitted yet on this session (initial
+        // launch or just-rotated), so treat the throttle as expired and emit
+        // the next qualifying event. SessionManager.setupSessionMetadata()
+        // relies on this to give the fresh session its first snapshot.
         let oneMinuteHasPassed = sessionManager.lastSnapshotEventTime.map {
             abs($0.timeIntervalSince1970 - currentTime) > 60
-        } ?? false
+        } ?? true
         
         // Check if any of the conditions for creating a snapshot are met
         if isErrorSeverity || isNavigationEvent || oneMinuteHasPassed {
