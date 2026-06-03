@@ -225,9 +225,9 @@ public class SessionManager {
                                                sessionCreationDate: Date().timeIntervalSince1970,
                                                using: KeychainManager())
         // Reset snapshot-throttle so the fresh session can emit its first
-        // snapshot immediately; otherwise the previous session's timestamp
-        // would suppress the new session's first non-error/non-navigation
-        // event for up to 60s (see CxRumBuilder.buildSnapshotContextIfNeeded).
+        // snapshot immediately. CxRumBuilder.buildSnapshotContextIfNeeded
+        // treats nil as "throttle expired", so the next qualifying event
+        // (including non-error/non-navigation) fires a snapshot.
         //
         // KNOWN INCONSISTENCY: this write is under sessionLock, but the other
         // accesses to lastSnapshotEventTime in CxRumBuilder.buildSnapshotContextIfNeeded
@@ -237,7 +237,7 @@ public class SessionManager {
         // theoretically possible — worst case is one skipped or extra snapshot-
         // throttle decision, which is benign for best-effort telemetry. Full
         // synchronisation would require routing CxRumBuilder's accesses through
-        // sessionLock-aware accessors; tracked as a follow-up.
+        // sessionLock-aware accessors; tracked as a follow-up (CX-44589).
         self.lastSnapshotEventTime = nil
 
         if let sessionId = self.sessionMetadata?.sessionId {
