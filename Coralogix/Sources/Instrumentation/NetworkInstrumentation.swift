@@ -173,20 +173,17 @@ extension CoralogixRum {
     private static func spanCustomizationStatic(request: URLRequest, spanBuilder: SpanBuilder) {
         spanBuilder.setAttribute(key: Keys.eventType.rawValue, value: CoralogixEventType.networkRequest.rawValue)
         spanBuilder.setAttribute(key: Keys.source.rawValue, value: Keys.fetch.rawValue)
-        
-        // CRITICAL: Add session attributes to network spans using current instance (CX-37986).
-        // Without these, each network log creates a new random session ID
-        // This is a critical bug - network logs must share the same session as other events
-        //
-        // CRITICAL: go through getSessionMetadata(), NOT the .sessionMetadata
-        // property, so the 1-hour rotation check fires at span-emission time.
-        // Direct property reads bypass rotation and produce stale session_ids
-        // on every span (the 24h-session bug).
-        if let sessionMetadata = getCurrentInstance()?.sessionManager?.getSessionMetadata() {
-            spanBuilder.setAttribute(key: Keys.sessionId.rawValue, value: sessionMetadata.sessionId)
-            spanBuilder.setAttribute(key: Keys.sessionCreationDate.rawValue, value: String(Int(sessionMetadata.sessionCreationDate)))
-        } else {
-            Log.w("[Coralogix] ⚠️ Network span missing session attributes — CoralogixRum instance or sessionMetadata is nil. Session attributes will be skipped; span will still be exported.")
+
+        // Network spans must share the same session as the rest of the SDK's events
+        // (CX-37986). `sessionSpanAttributes()` routes through `getSessionMetadata()`
+        // so the 1-hour rotation check fires at span-emission time and the prev-session
+        // breadcrumbs land here too, matching CoralogixRum.addSessionAndPrevSessionMetadata.
+        guard let sessionManager = getCurrentInstance()?.sessionManager else {
+            Log.w("[Coralogix] ⚠️ Network span missing session attributes — CoralogixRum instance or sessionManager is nil. Span will still be exported without session_id.")
+            return
+        }
+        for attr in sessionManager.sessionSpanAttributes() {
+            spanBuilder.setAttribute(key: attr.key, value: attr.value)
         }
     }
     

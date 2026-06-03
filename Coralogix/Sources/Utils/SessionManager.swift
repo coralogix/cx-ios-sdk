@@ -114,7 +114,38 @@ public class SessionManager {
         defer { sessionLock.unlock() }
         return self.prevSessionMetadata
     }
-    
+
+    /// Key/value pairs to record on a span for the current and previous session.
+    ///
+    /// CRITICAL: routes through `getSessionMetadata()` so the 1-hour rotation check fires
+    /// at span-emission time. Direct `self.sessionMetadata` reads bypass rotation and
+    /// produce stale `session_id`s on every span (the 24h-session bug). Both `Span` and
+    /// `SpanBuilder` call sites should iterate this list rather than hand-rolling the
+    /// attribute writes — keeps the rotation invariant and the prev-session breadcrumbs
+    /// in one place.
+    ///
+    /// Returns an empty array when no current session is available; callers can still
+    /// emit the span — only the session attributes are skipped.
+    func sessionSpanAttributes() -> [(key: String, value: String)] {
+        var attrs: [(key: String, value: String)] = []
+        if let current = getSessionMetadata() {
+            attrs.append((Keys.sessionId.rawValue, current.sessionId))
+            attrs.append((Keys.sessionCreationDate.rawValue, String(Int(current.sessionCreationDate))))
+        }
+        if let prev = getPrevSessionMetadata() {
+            if let prevPid = prev.oldPid {
+                attrs.append((Keys.prevPid.rawValue, prevPid))
+            }
+            if let prevSessionId = prev.oldSessionId {
+                attrs.append((Keys.prevSessionId.rawValue, prevSessionId))
+            }
+            if let prevCreation = prev.oldSessionTimeInterval {
+                attrs.append((Keys.prevSessionCreationDate.rawValue, String(Int(prevCreation))))
+            }
+        }
+        return attrs
+    }
+
     public func getErrorCount() -> Int {
         countersLock.lock()
         defer { countersLock.unlock() }
