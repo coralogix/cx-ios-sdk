@@ -151,21 +151,31 @@ class SessionManagerTests: XCTestCase {
         XCTAssertEqual(prevMetadata?.sessionId, oldSessionId)
     }
 
-    // MARK: - Session rotation contract (24h-session bug)
+    // MARK: - Session rotation contract (regression coverage for the 24h-session bug)
     //
-    // These four tests characterise the rotation gap that produces 20–24h
-    // sessions in production:
-    //  - Bug #1: `getSessionMetadata` skips the 1h rotation while idle
-    //  - Bug #2: span-emission paths read `.sessionMetadata` directly,
-    //            never invoking rotation
-    //  - Bug #3: `lastSnapshotEventTime` carries over across rotations,
-    //            suppressing the first snapshot of a fresh session for ≤60s
+    // Production hit a stale-session bug that produced 20–24h sessions. Three
+    // independent gaps contributed; these tests pin each one as a regression:
+    //   1. `getSessionMetadata` must rotate stale sessions even when idle
+    //      (rotation is purely time-based; idle gates *export*, not rotation).
+    //   2. The rotation must fire `sessionEndedCallback` AND `sessionChangedCallback`
+    //      so SessionReplay and sampling listeners observe the transition.
+    //   3. `lastSnapshotEventTime` must reset on rotation so a fresh session can
+    //      emit its first snapshot immediately.
+    //   4. A stale rotation must carry the dropped session id forward as
+    //      `prevSessionMetadata` (the wire-side `prev_session_id` chain).
     //
-    // Each test is designed to FAIL on current code and PASS after the fix.
+    // Scope: these are sequential, single-thread contract tests — they verify
+    // state→outcome mappings, not concurrency. Several tests mutate
+    // `sessionMetadata`/`lastActivity` directly to set up the "stale + idle"
+    // precondition; those writes bypass `sessionLock`, which is safe here only
+    // because XCTest runs each test body single-threaded. Real concurrent
+    // rotation correctness lives in production paths (see the locking notes in
+    // `SessionManager.setupSessionMetadata` / `sessionSpanAttributes`).
 
-    /// Bug #1: an idle session that has lived longer than an hour must still rotate
-    /// when `getSessionMetadata()` is queried. Today the rotation branch is gated by
-    /// `isIdle == false`, so a stale idle session is returned unchanged.
+    /// Rotation contract: an idle session that has lived longer than an hour must
+    /// still rotate when `getSessionMetadata()` is queried. Regression guard for
+    /// the previous `isIdle == false` gate that let a stale idle session leak its
+    /// ID onto the next emitted span.
     func testHourPassed_whileIdle_rotatesSession() {
         sessionManager.setupSessionMetadata()
         guard var metadata = sessionManager.sessionMetadata else {
@@ -185,9 +195,10 @@ class SessionManagerTests: XCTestCase {
             "Session must rotate after 1h even when currently idle — otherwise background spans inherit a stale session ID")
     }
 
-    /// Bug #1 (callback wiring): the rotation that recovers a stale idle session
-    /// must also notify listeners (SessionReplay, sampling re-roll) via the two
-    /// callbacks. Today the rotation never fires, so neither callback runs.
+    /// Callback wiring contract: the rotation that recovers a stale idle session
+    /// must notify listeners (SessionReplay, sampling re-roll) via both
+    /// `sessionEndedCallback` and `sessionChangedCallback`. Regression guard for
+    /// the case where the rotation branch fired but the listeners were skipped.
     func testHourPassed_whileIdle_firesSessionCallbacks() {
         sessionManager.setupSessionMetadata()
         guard var metadata = sessionManager.sessionMetadata else {
@@ -215,10 +226,10 @@ class SessionManagerTests: XCTestCase {
         waitForExpectations(timeout: 1.0)
     }
 
-    /// Bug #3: `lastSnapshotEventTime` must reset on rotation so a fresh session
-    /// can emit its first snapshot immediately. Today the value carries over,
-    /// suppressing the first non-error/non-navigation snapshot of the new session
-    /// for up to 60s after rotation.
+    /// Snapshot-throttle contract: `lastSnapshotEventTime` must reset on rotation
+    /// so a fresh session can emit its first snapshot immediately. Regression
+    /// guard for the case where the value carried over and suppressed the first
+    /// non-error/non-navigation snapshot of the new session for up to 60s.
     func testRotationResetsLastSnapshotEventTime() {
         sessionManager.lastSnapshotEventTime = Date()
 
