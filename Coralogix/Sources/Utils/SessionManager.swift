@@ -124,15 +124,22 @@ public class SessionManager {
     /// attribute writes — keeps the rotation invariant and the prev-session breadcrumbs
     /// in one place.
     ///
+    /// Both reads happen under a single `sessionLock` acquisition so a concurrent rotation
+    /// cannot wedge between them and produce a span where `prev_session_id` equals the
+    /// just-emitted `session_id`.
+    ///
     /// Returns an empty array when no current session is available; callers can still
     /// emit the span — only the session attributes are skipped.
     func sessionSpanAttributes() -> [(key: String, value: String)] {
+        sessionLock.lock()
+        defer { sessionLock.unlock() }
+
         var attrs: [(key: String, value: String)] = []
         if let current = getSessionMetadata() {
             attrs.append((Keys.sessionId.rawValue, current.sessionId))
             attrs.append((Keys.sessionCreationDate.rawValue, String(Int(current.sessionCreationDate))))
         }
-        if let prev = getPrevSessionMetadata() {
+        if let prev = self.prevSessionMetadata {
             if let prevPid = prev.oldPid {
                 attrs.append((Keys.prevPid.rawValue, prevPid))
             }
