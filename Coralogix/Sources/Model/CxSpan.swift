@@ -66,12 +66,29 @@ public class CxSpan {
             if let editableCxRum = self.beforeSend?(subsetOfCxRum) {
                 var mergedDict = mergeDictionaries(original: originalCxRum, editable: editableCxRum)
 
-                // snapshotContext is stripped from the editable subset before beforeSend is called,
-                // but a callback could still inject it into the returned dict, causing mergeDictionaries
-                // to deep-merge corrupted counts into our internal value.
-                // Always restore from originalCxRum so errorCount/viewCount cannot be tampered with.
-                // Assigning nil removes the key when the original had no snapshot (no-snapshot spans).
-                mergedDict[Keys.snapshotContext.rawValue] = originalCxRum[Keys.snapshotContext.rawValue]
+                // CX-44686: read-only keys are stripped from the editable subset before
+                // beforeSend is called, but a callback could still inject them into the
+                // returned dict, causing mergeDictionaries to deep-merge tampered values.
+                // Always restore each from originalCxRum so span identity (traceId/spanId),
+                // dedup (fingerPrint), session continuity (prevSession), runtime constants
+                // (mobileSdk/timestamp/platform), and SDK-owned counters (snapshotContext /
+                // isSnapshotEvent) cannot be edited or forged.
+                for key in CxSpan.readOnlyCxRumKeys {
+                    if let original = originalCxRum[key] {
+                        mergedDict[key] = original
+                    } else {
+                        mergedDict.removeValue(forKey: key)
+                    }
+                }
+
+                // Restore stripped sessionContext fields (sessionId, sessionCreationDate)
+                // for the same reason — a callback could inject them inside sessionContext.
+                if var mergedSession = mergedDict[Keys.sessionContext.rawValue] as? [String: Any],
+                   let originalSession = originalCxRum[Keys.sessionContext.rawValue] as? [String: Any] {
+                    mergedSession[Keys.sessionId.rawValue] = originalSession[Keys.sessionId.rawValue]
+                    mergedSession[Keys.sessionCreationDate.rawValue] = originalSession[Keys.sessionCreationDate.rawValue]
+                    mergedDict[Keys.sessionContext.rawValue] = mergedSession
+                }
 
                 // Sync severity from editableCxRum to both the top-level field and
                 // mergedDict[eventContext][severity] so they remain consistent.
@@ -147,10 +164,27 @@ public class CxSpan {
     }
     
     private func addInstrumentationData(to result: inout [String: Any]) {
-        if cxRum.eventContext.type == .networkRequest || cxRum.eventContext.type == .customSpan,
-           let instrumentationData = self.instrumentationData?.getDictionary() {
-            result[Keys.instrumentationData.rawValue] = instrumentationData
+        guard cxRum.eventContext.type == .networkRequest || cxRum.eventContext.type == .customSpan,
+              var instrumentationData = self.instrumentationData?.getDictionary() else {
+            return
         }
+        // CX-44686: `instrumentationData` was built in init() from the pre-`beforeSend`
+        // cxRum, so its `otelSpan.attributes` carry the original values. Rebuild that
+        // attribute map from the FINAL cx_rum dictionary (text.cx_rum — which is either
+        // mergedDict after beforeSend or originalCxRum when no callback was supplied) so
+        // both serialized destinations of the span (text.cx_rum and instrumentation_data)
+        // carry the same final, beforeSend-modified attribute values.
+        if var otelSpanDict = instrumentationData[Keys.otelSpan.rawValue] as? [String: Any],
+           let textDict = result[Keys.text.rawValue] as? [String: Any],
+           let finalCxRumDict = textDict[Keys.cxRum.rawValue] as? [String: Any] {
+            otelSpanDict[Keys.attributes.rawValue] = OtelSpan.buildRumContextAttributes(
+                fromCxRumDict: finalCxRumDict,
+                viewManager: self.viewManager,
+                mobileSdkVersion: self.cxRum.mobileSDK.sdkFramework.version
+            )
+            instrumentationData[Keys.otelSpan.rawValue] = otelSpanDict
+        }
+        result[Keys.instrumentationData.rawValue] = instrumentationData
     }
     
     func mergeDictionaries(original: [String: Any], editable: [String: Any]) -> [String: Any] {
@@ -199,6 +233,22 @@ public class CxSpan {
         result[Keys.text.rawValue] = textDict
     }
 
+    // CX-44686: keys the customer's `beforeSend` callback must not see or modify.
+    // Restored from the original cx_rum after `mergeDictionaries` so a callback that
+    // injects any of them in its return dict cannot tamper with span identity, dedup,
+    // or SDK-owned counters.
+    static let readOnlyCxRumKeys: [String] = [
+        Keys.snapshotContext.rawValue,
+        Keys.isSnapshotEvent.rawValue,
+        Keys.mobileSdk.rawValue,
+        Keys.timestamp.rawValue,
+        Keys.traceId.rawValue,
+        Keys.spanId.rawValue,
+        Keys.fingerPrint.rawValue,
+        Keys.prevSession.rawValue,
+        Keys.platform.rawValue
+    ]
+
     func createSubsetOfCxRum(from originalCxRum: [String: Any]) -> [String: Any] {
         var editableCxRum = originalCxRum
         // Remove sessionCreationDate and sessionId form sessionContext
@@ -207,11 +257,11 @@ public class CxSpan {
             sessionContext.removeValue(forKey: Keys.sessionId.rawValue)
             editableCxRum[Keys.sessionContext.rawValue] = sessionContext
         }
-        
-        editableCxRum.removeValue(forKey: Keys.snapshotContext.rawValue)
-        editableCxRum.removeValue(forKey: Keys.mobileSdk.rawValue)
-        editableCxRum.removeValue(forKey: Keys.timestamp.rawValue)
-       
+
+        for key in CxSpan.readOnlyCxRumKeys {
+            editableCxRum.removeValue(forKey: key)
+        }
+
         return editableCxRum
     }
 }
