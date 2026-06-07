@@ -14,10 +14,9 @@ struct DemoAppSwiftUIApp: App {
     init() {
         CoralogixRumManager.shared.initialize()
         let sessionReplayOptions = SessionReplayOptions(recordingType: .image,
-                                                        captureTimeInterval: 10.0,
                                                         captureScale: 2.0,
                                                         captureCompressionQuality: 0.8,
-                                                        maskAllTexts: false,
+                                                        maskText: nil,
                                                         maskOnlyCreditCards: false,
                                                         maskAllImages: false,
                                                         autoStartSessionRecording: true)

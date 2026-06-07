@@ -25,7 +25,7 @@ class SessionReplayViewController: UITableViewController {
     // Stress content for the SR text-masking pipeline: multi-language paragraphs
     // (RTL + CJK) and short non-word tokens that the old en-US + language-corrected
     // VNRecognizeTextRequest used to silently drop. Scroll through this section to
-    // exercise the widened TextScanner config under maskAllTexts.
+    // exercise the text-masking pipeline with maskText.
     private static let stressTextLines: [String] = [
         "The quick brown fox jumps over the lazy dog. Pack my box with five dozen liquor jugs — abc123 OK.",
         "El veloz murciélago hindú comía feliz cardillo y kiwi. La cigüeña tocaba el saxofón detrás del palenque.",

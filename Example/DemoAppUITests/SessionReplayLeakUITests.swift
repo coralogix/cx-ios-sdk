@@ -34,8 +34,7 @@ final class SessionReplayLeakUITests: XCTestCase {
         if let mockPort = ProcessInfo.processInfo.environment["CX_MOCK_PORT"] {
             app.launchEnvironment["CX_MOCK_PORT"] = mockPort
         }
-        // Note: --leak-harness (and optional --leak-harness-60fps) are set
-        // per-test below so each test controls its own frame-rate config.
+        // Note: --leak-harness is set per-test below.
     }
 
     override func tearDown() {
@@ -63,36 +62,49 @@ final class SessionReplayLeakUITests: XCTestCase {
         }
 
         // Wait a few capture intervals for in-flight uploads to land
-        // at the mock server. captureTimeInterval is 1.0 s in 1fps mode.
+        // at the mock server (1 fps = 1.0 s between captures).
         usleep(5_000_000) // 5 s
     }
 
-    // MARK: - 60 fps scenario
+    // MARK: - Navigation transition scenario
 
-    func test_listSlowScroll_60fps() {
-        signalScenario("60fps")
-        app.launchArguments = ["--leak-harness", "--leak-harness-60fps"]
+    /// Rapidly pushes and pops between two sentinel-bearing screens.
+    ///
+    /// Session-replay frames captured mid-animation show half of ScreenA and
+    /// half of ScreenB. The mask walk must use the same coordinate frame as the
+    /// rendered bitmap; if it doesn't, ScreenA's sentinels appear unmasked
+    /// (magenta pixels leak) in those frames.
+    ///
+    /// Timing: 30 push+pop cycles at ~900 ms/cycle = ~27 s of transitions.
+    /// At 1 fps, ~27 frames captured; ~30% of transitions land mid-animation,
+    /// so ~8 mid-transition frames are expected. Any magenta pixel = leak.
+    func test_navigationTransition() {
+        signalScenario("navigate")
+        app.launchArguments = ["--leak-harness-navigate"]
         app.launch()
 
-        let table = app.tables[LeakHarnessTableId]
-        XCTAssertTrue(table.waitForExistence(timeout: 10),
-                      "Leak-harness table didn't appear — DemoAppSwift may not have entered --leak-harness mode")
+        let pushButton = app.buttons[NavPushButtonId]
+        XCTAssertTrue(pushButton.waitForExistence(timeout: 10),
+                      "Navigation leak harness Screen A didn't appear — is --leak-harness-navigate wired in SceneDelegate?")
 
-        // Match Android harness: 20 swipes with 300 ms pauses.
-        // The longer inter-swipe pause gives the SDK time to drain the
-        // upload queue between swipes — at 60 fps the encode+upload
-        // pipeline saturates quickly and frames are lost if swipes fire
-        // too fast. 300 ms ≈ 18 frames of headroom each gap.
-        for _ in 0..<20 {
-            table.swipeUp(velocity: .slow)
-            usleep(300_000) // 300 ms between swipes
+        for _ in 0..<30 {
+            pushButton.tap()
+
+            // Wait for Screen B to enter the hierarchy. `waitForExistence` returns
+            // as soon as the element is in the a11y tree — typically within the
+            // first 100–200 ms of the push animation (~300 ms total). Tapping pop
+            // this early means the pop animation starts while the push animation
+            // may still be finishing, maximising the mid-transition capture window.
+            let popButton = app.buttons[NavPopButtonId]
+            _ = popButton.waitForExistence(timeout: 2)
+            popButton.tap()
+
+            // Brief pause so Screen A is settled before the next push.
+            usleep(300_000) // 300 ms
         }
 
-        // Extended wait: the upload queue can hold many 60fps frames;
-        // 30 s gives the SDK enough time to drain it before the mock
-        // server is killed. Android uses 2 s but its SDK batches frames
-        // more aggressively — iOS needs more headroom.
-        usleep(30_000_000) // 30 s
+        // Let in-flight uploads reach the mock server before the server is killed.
+        usleep(5_000_000) // 5 s
     }
 
     // MARK: - Helpers
@@ -113,4 +125,6 @@ final class SessionReplayLeakUITests: XCTestCase {
     }
 
     private let LeakHarnessTableId = "cx_leak_harness_table"
+    private let NavPushButtonId    = "cx_leak_nav_push"
+    private let NavPopButtonId     = "cx_leak_nav_pop"
 }

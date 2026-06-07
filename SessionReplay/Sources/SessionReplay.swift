@@ -30,12 +30,10 @@ public struct SessionReplayOptions {
     /// The sampling rate for session recording events.
     public var sessionRecordingSampleRate: Int
 
-    /// When true, masks every UILabel, UITextField, and UITextView in the captured frame.
-    public var maskAllTexts: Bool
-
-    /// Masks UILabel/UITextField/UITextView whose text contains any of these substrings
-    /// (case-insensitive). Ignored when maskAllTexts is true.
-    public var textsToMask: [String]?
+    /// Text patterns to mask in the captured content. Each entry is either a plain literal
+    /// string (case-insensitive substring match) or a regular expression. Use `[".*"]` to mask
+    /// all text labels.
+    public var maskText: [String]?
 
     /// Whether all images should be masked in the captured content.
     public var maskAllImages: Bool
@@ -61,12 +59,37 @@ public struct SessionReplayOptions {
     public var flutterViewBitmapProvider: FlutterViewBitmapProvider?
 
     public init(recordingType: RecordingType = .image,
-                captureTimeInterval: TimeInterval = 10,
                 captureScale: CGFloat = 2.0,
                 captureCompressionQuality: CGFloat = 1.0,
                 sessionRecordingSampleRate: Int = 100,
-                maskAllTexts: Bool = false,
-                textsToMask: [String]? = nil,
+                maskText: [String]? = nil,
+                maskOnlyCreditCards: Bool = false,
+                maskAllImages: Bool = true,
+                maskFaces: Bool = false,
+                creditCardPredicate: [String]? = nil,
+                autoStartSessionRecording: Bool = false,
+                flutterViewBitmapProvider: FlutterViewBitmapProvider? = nil) {
+        self.recordingType = recordingType
+        self.captureTimeInterval = 1.0
+        self.captureScale = captureScale
+        self.captureCompressionQuality = captureCompressionQuality
+        self.maskText = maskText
+        self.maskOnlyCreditCards = maskOnlyCreditCards
+        self.maskFaces = maskFaces
+        self.maskAllImages = maskAllImages
+        self.creditCardPredicate = creditCardPredicate
+        self.autoStartSessionRecording = autoStartSessionRecording
+        self.sessionRecordingSampleRate = sessionRecordingSampleRate
+        self.flutterViewBitmapProvider = flutterViewBitmapProvider
+    }
+
+    @available(*, deprecated, message: "captureTimeInterval is deprecated and will be removed in a future release. 1 fps (1.0 s interval) is the only supported capture rate. Values below 1.0 s may cause performance and masking issues; values above 1.0 s will result in lower capture fidelity. Construct SessionReplayOptions without this parameter to use the supported default.")
+    public init(recordingType: RecordingType = .image,
+                captureTimeInterval: TimeInterval,
+                captureScale: CGFloat = 2.0,
+                captureCompressionQuality: CGFloat = 1.0,
+                sessionRecordingSampleRate: Int = 100,
+                maskText: [String]? = nil,
                 maskOnlyCreditCards: Bool = false,
                 maskAllImages: Bool = true,
                 maskFaces: Bool = false,
@@ -77,8 +100,7 @@ public struct SessionReplayOptions {
         self.captureTimeInterval = captureTimeInterval
         self.captureScale = captureScale
         self.captureCompressionQuality = captureCompressionQuality
-        self.maskAllTexts = maskAllTexts
-        self.textsToMask = textsToMask
+        self.maskText = maskText
         self.maskOnlyCreditCards = maskOnlyCreditCards
         self.maskFaces = maskFaces
         self.maskAllImages = maskAllImages

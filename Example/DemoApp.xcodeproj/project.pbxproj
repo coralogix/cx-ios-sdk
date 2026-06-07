@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 56;
+	objectVersion = 70;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -30,10 +30,6 @@
 		E6525B602E38C548006DB4AA /* envs.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6525B5A2E38BE3A006DB4AA /* envs.swift */; };
 		E6525B612E38C548006DB4AA /* envs.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6525B5A2E38BE3A006DB4AA /* envs.swift */; };
 		E6525B622E38C548006DB4AA /* envs.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6525B5A2E38BE3A006DB4AA /* envs.swift */; };
-		E65A5CA32EF17D5B008C58D3 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = E65A5CA22EF17D5B008C58D3 /* GoogleService-Info.plist */; };
-		E65A5CA42EF17D5B008C58D3 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = E65A5CA22EF17D5B008C58D3 /* GoogleService-Info.plist */; };
-		E65A5CA52EF17D5B008C58D3 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = E65A5CA22EF17D5B008C58D3 /* GoogleService-Info.plist */; };
-		E65A5CA62EF17D5B008C58D3 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = E65A5CA22EF17D5B008C58D3 /* GoogleService-Info.plist */; };
 		E669382A2C722EE60002335F /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = E66938292C722EE60002335F /* AppDelegate.swift */; };
 		E669382C2C722EE60002335F /* MainViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E669382B2C722EE60002335F /* MainViewController.swift */; };
 		E669382F2C722EE60002335F /* Base in Resources */ = {isa = PBXBuildFile; fileRef = E669382E2C722EE60002335F /* Base */; };
@@ -98,13 +94,17 @@
 		E6LSDC012F0C000010035952 /* LogSamplingDecouplingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6LSDC002F0C000010035952 /* LogSamplingDecouplingView.swift */; };
 		E6LSDM012F0C000010035951 /* LogSamplingDemoModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6LSDM002F0C000010035951 /* LogSamplingDemoModel.swift */; };
 		E6LSDM012F0C000010035952 /* LogSamplingDemoModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6LSDM002F0C000010035951 /* LogSamplingDemoModel.swift */; };
+		E6OTLP012F0C000010035951 /* OtlpSpan+EventType.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6OTLP002F0C000010035951 /* OtlpSpan+EventType.swift */; };
+		E6OTLP012F0C000010035952 /* OtlpSpan+EventType.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6OTLP002F0C000010035951 /* OtlpSpan+EventType.swift */; };
 		E6TMDM012F0C000010035951 /* TimeMeasurementDemoModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6TMDM002F0C000010035951 /* TimeMeasurementDemoModel.swift */; };
 		E6TMDM012F0C000010035952 /* TimeMeasurementDemoModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6TMDM002F0C000010035951 /* TimeMeasurementDemoModel.swift */; };
 		E6TMVC012F0C000010035951 /* TimeMeasurementViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6TMVC002F0C000010035951 /* TimeMeasurementViewController.swift */; };
 		E6TMVW012F0C000010035952 /* TimeMeasurementView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6TMVW002F0C000010035952 /* TimeMeasurementView.swift */; };
-		E6OTLP012F0C000010035951 /* OtlpSpan+EventType.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6OTLP002F0C000010035951 /* OtlpSpan+EventType.swift */; };
-		E6OTLP012F0C000010035952 /* OtlpSpan+EventType.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6OTLP002F0C000010035951 /* OtlpSpan+EventType.swift */; };
 		E6TRACES012F0C000010035951 /* TracesExporterViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6TRACES002F0C000010035951 /* TracesExporterViewController.swift */; };
+		E79419E72FC84F2000BC47CD /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = E79419E62FC84F2000BC47CD /* GoogleService-Info.plist */; };
+		E79419E82FC84F2000BC47CD /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = E79419E62FC84F2000BC47CD /* GoogleService-Info.plist */; };
+		E79419E92FC84F2000BC47CD /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = E79419E62FC84F2000BC47CD /* GoogleService-Info.plist */; };
+		E79419EA2FC84F2000BC47CD /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = E79419E62FC84F2000BC47CD /* GoogleService-Info.plist */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -161,6 +161,7 @@
 		1E8D067F2E27BBC8002C4FCE /* DemoAppUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DemoAppUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		1E8D068F2E27BC82002C4FCE /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		1E90A340190C0B87337E4053 /* Pods_DemoAppSwift.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_DemoAppSwift.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		2A8D067F2E27BBC8002C4FCE /* DemoAppSwiftUIUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DemoAppSwiftUIUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		2BFFDB5C0CEBD0009FE0ADC1 /* LeakHarnessViewController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LeakHarnessViewController.swift; sourceTree = "<group>"; };
 		2E11204B152575C210B226A4 /* Pods-DemoAppSwiftUI.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-DemoAppSwiftUI.release.xcconfig"; path = "Target Support Files/Pods-DemoAppSwiftUI/Pods-DemoAppSwiftUI.release.xcconfig"; sourceTree = "<group>"; };
 		7569CF6A4A46DF39A56A0F67 /* Pods_DemoAppSwiftUI.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_DemoAppSwiftUI.framework; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -181,7 +182,6 @@
 		E6320FB42BE7CE6800A4547E /* NetworkSim.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = NetworkSim.swift; sourceTree = "<group>"; };
 		E648914B2ED35B2600624978 /* FullImageCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FullImageCell.swift; sourceTree = "<group>"; };
 		E6525B5A2E38BE3A006DB4AA /* envs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = envs.swift; sourceTree = "<group>"; };
-		E65A5CA22EF17D5B008C58D3 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
 		E66938272C722EE60002335F /* DemoAppTvOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DemoAppTvOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		E66938292C722EE60002335F /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		E669382B2C722EE60002335F /* MainViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainViewController.swift; sourceTree = "<group>"; };
@@ -227,37 +227,17 @@
 		E6LSDC002F0C000010035951 /* LogSamplingDecouplingViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogSamplingDecouplingViewController.swift; sourceTree = "<group>"; };
 		E6LSDC002F0C000010035952 /* LogSamplingDecouplingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogSamplingDecouplingView.swift; sourceTree = "<group>"; };
 		E6LSDM002F0C000010035951 /* LogSamplingDemoModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogSamplingDemoModel.swift; sourceTree = "<group>"; };
+		E6OTLP002F0C000010035951 /* OtlpSpan+EventType.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "OtlpSpan+EventType.swift"; sourceTree = "<group>"; };
 		E6TMDM002F0C000010035951 /* TimeMeasurementDemoModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeMeasurementDemoModel.swift; sourceTree = "<group>"; };
 		E6TMVC002F0C000010035951 /* TimeMeasurementViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeMeasurementViewController.swift; sourceTree = "<group>"; };
 		E6TMVW002F0C000010035952 /* TimeMeasurementView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeMeasurementView.swift; sourceTree = "<group>"; };
-		2A8D067F2E27BBC8002C4FCE /* DemoAppSwiftUIUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DemoAppSwiftUIUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		E6OTLP002F0C000010035951 /* OtlpSpan+EventType.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "OtlpSpan+EventType.swift"; sourceTree = "<group>"; };
 		E6TRACES002F0C000010035951 /* TracesExporterViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TracesExporterViewController.swift; sourceTree = "<group>"; };
+		E79419E62FC84F2000BC47CD /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		1E8D06802E27BBC8002C4FCE /* DemoAppUITests */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-			);
-			explicitFileTypes = {
-			};
-			explicitFolders = (
-			);
-			path = DemoAppUITests;
-			sourceTree = "<group>";
-		};
-		2A8D06802E27BBC8002C4FCE /* DemoAppSwiftUIUITests */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-			);
-			explicitFileTypes = {
-			};
-			explicitFolders = (
-			);
-			path = DemoAppSwiftUIUITests;
-			sourceTree = "<group>";
-		};
+		1E8D06802E27BBC8002C4FCE /* DemoAppUITests */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = DemoAppUITests; sourceTree = "<group>"; };
+		2A8D06802E27BBC8002C4FCE /* DemoAppSwiftUIUITests */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = DemoAppSwiftUIUITests; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -322,7 +302,6 @@
 				7FC387C1751325704ADEFC63 /* Pods-DemoAppSwiftUI.debug.xcconfig */,
 				2E11204B152575C210B226A4 /* Pods-DemoAppSwiftUI.release.xcconfig */,
 			);
-			name = Pods;
 			path = Pods;
 			sourceTree = "<group>";
 		};
@@ -364,7 +343,7 @@
 		E6320F792BE7C94F00A4547E = {
 			isa = PBXGroup;
 			children = (
-				E65A5CA22EF17D5B008C58D3 /* GoogleService-Info.plist */,
+				E79419E62FC84F2000BC47CD /* GoogleService-Info.plist */,
 				E6525B5A2E38BE3A006DB4AA /* envs.swift */,
 				E68681D52BFA2FEC00B127E7 /* Shared */,
 				E62211592BFDEB8B00052682 /* DemoAppSwiftUI */,
@@ -640,7 +619,7 @@
 			);
 			mainGroup = E6320F792BE7C94F00A4547E;
 			packageReferences = (
-				E66E3B662DA7F76C00FBC86B /* XCLocalSwiftPackageReference "cx-ios-sdk" */,
+				E66E3B662DA7F76C00FBC86B /* XCLocalSwiftPackageReference "../../cx-ios-sdk" */,
 				E690EADA2EF182F60011C147 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
 				E64ABB292F3C5ECB00D990A9 /* XCRemoteSwiftPackageReference "SDWebImage" */,
 				E64ABB2C2F3C5F0300D990A9 /* XCRemoteSwiftPackageReference "Alamofire" */,
@@ -663,7 +642,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				E65A5CA52EF17D5B008C58D3 /* GoogleService-Info.plist in Resources */,
+				E79419E92FC84F2000BC47CD /* GoogleService-Info.plist in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -679,8 +658,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				E62211622BFDEB8C00052682 /* Preview Assets.xcassets in Resources */,
+				E79419EA2FC84F2000BC47CD /* GoogleService-Info.plist in Resources */,
 				E622115F2BFDEB8C00052682 /* Assets.xcassets in Resources */,
-				E65A5CA32EF17D5B008C58D3 /* GoogleService-Info.plist in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -689,7 +668,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				E66938312C722EE60002335F /* Assets.xcassets in Resources */,
-				E65A5CA62EF17D5B008C58D3 /* GoogleService-Info.plist in Resources */,
+				E79419E82FC84F2000BC47CD /* GoogleService-Info.plist in Resources */,
 				E66938342C722EE60002335F /* Base in Resources */,
 				E669382F2C722EE60002335F /* Base in Resources */,
 			);
@@ -700,7 +679,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				E68681B12BFA279600B127E7 /* Base in Resources */,
-				E65A5CA42EF17D5B008C58D3 /* GoogleService-Info.plist in Resources */,
+				E79419E72FC84F2000BC47CD /* GoogleService-Info.plist in Resources */,
 				E6B60A062DB4EAAC003AD35D /* Assets.xcassets in Resources */,
 				E68681AC2BFA279500B127E7 /* Base in Resources */,
 			);
@@ -717,9 +696,13 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-DemoAppSwiftUI/Pods-DemoAppSwiftUI-frameworks-${CONFIGURATION}-input-files.xcfilelist",
 			);
+			inputPaths = (
+			);
 			name = "[CP] Embed Pods Frameworks";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-DemoAppSwiftUI/Pods-DemoAppSwiftUI-frameworks-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -778,9 +761,13 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-DemoAppSwift/Pods-DemoAppSwift-frameworks-${CONFIGURATION}-input-files.xcfilelist",
 			);
+			inputPaths = (
+			);
 			name = "[CP] Embed Pods Frameworks";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-DemoAppSwift/Pods-DemoAppSwift-frameworks-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -1407,7 +1394,7 @@
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
-		E66E3B662DA7F76C00FBC86B /* XCLocalSwiftPackageReference "cx-ios-sdk" */ = {
+		E66E3B662DA7F76C00FBC86B /* XCLocalSwiftPackageReference "../../cx-ios-sdk" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = "../../cx-ios-sdk";
 		};
@@ -1467,12 +1454,12 @@
 		};
 		E66E3B692DA7FAE900FBC86B /* Coralogix */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = E66E3B662DA7F76C00FBC86B /* XCLocalSwiftPackageReference "cx-ios-sdk" */;
+			package = E66E3B662DA7F76C00FBC86B /* XCLocalSwiftPackageReference "../../cx-ios-sdk" */;
 			productName = Coralogix;
 		};
 		E66E3B6B2DA7FB6400FBC86B /* Coralogix */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = E66E3B662DA7F76C00FBC86B /* XCLocalSwiftPackageReference "cx-ios-sdk" */;
+			package = E66E3B662DA7F76C00FBC86B /* XCLocalSwiftPackageReference "../../cx-ios-sdk" */;
 			productName = Coralogix;
 		};
 		E690EADB2EF182F60011C147 /* FirebaseAnalytics */ = {
@@ -1492,17 +1479,17 @@
 		};
 		E6B609FF2DB4E531003AD35D /* SessionReplay */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = E66E3B662DA7F76C00FBC86B /* XCLocalSwiftPackageReference "cx-ios-sdk" */;
+			package = E66E3B662DA7F76C00FBC86B /* XCLocalSwiftPackageReference "../../cx-ios-sdk" */;
 			productName = SessionReplay;
 		};
 		E6B60A012DB4E53F003AD35D /* SessionReplay */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = E66E3B662DA7F76C00FBC86B /* XCLocalSwiftPackageReference "cx-ios-sdk" */;
+			package = E66E3B662DA7F76C00FBC86B /* XCLocalSwiftPackageReference "../../cx-ios-sdk" */;
 			productName = SessionReplay;
 		};
 		E6B60A032DB4E544003AD35D /* SessionReplay */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = E66E3B662DA7F76C00FBC86B /* XCLocalSwiftPackageReference "cx-ios-sdk" */;
+			package = E66E3B662DA7F76C00FBC86B /* XCLocalSwiftPackageReference "../../cx-ios-sdk" */;
 			productName = SessionReplay;
 		};
 /* End XCSwiftPackageProductDependency section */

@@ -52,31 +52,65 @@ public extension UIView {
 
     // MARK: - UIView-walk mask collectors
 
+    /// Returns the view's rect in rootView's coordinate space using the
+    /// presentation layer position at every level of the hierarchy.
+    ///
+    /// drawHierarchy captures the compositor frame (presentation layer positions).
+    /// A single-step superlayer.convert(…, to: rootView.layer) only reads the
+    /// presentation layer of the leaf view; any ancestor that is mid-animation
+    /// (e.g. the entire VC view during a navigation push/pop) is still read at
+    /// its model position, causing mask skew (BUGV2-6045).
+    ///
+    /// Walking one superview at a time and using presentation() ?? layer at
+    /// each hop ensures the full animated coordinate chain is reflected.
+    private func presentationRect(of view: UIView, in rootView: UIView) -> CGRect {
+        var rect = view.bounds
+        var cur  = view
+        while cur !== rootView {
+            guard let parent = cur.superview else {
+                return view.convert(view.bounds, to: rootView).intersection(rootView.bounds)
+            }
+            let from = cur.layer.presentation()    ?? cur.layer
+            let to   = parent.layer.presentation() ?? parent.layer
+            rect = from.convert(rect, to: to)
+            cur  = parent
+        }
+        return rect.intersection(rootView.bounds)
+    }
+
     /// Collects rects for text-bearing views (UILabel, UITextField, UITextView) in `rootView`'s
     /// coordinate space. Short-circuits at FlutterView subtrees — those arrive pre-masked
     /// via the Dart bitmap provider.
-    func collectTextViewRects(in rootView: UIView, maskAllTexts: Bool, textsToMask: [String]) -> [CGRect] {
+    func collectTextViewRects(in rootView: UIView, maskText: [String]?) -> [CGRect] {
         var rects: [CGRect] = []
+        guard let maskText = maskText, !maskText.isEmpty else { return rects }
 
         func traverse(_ view: UIView) {
             guard !view.isHidden, view.alpha > 0 else { return }
             if let cls = _flutterViewClass, view.isKind(of: cls) { return }
 
             var shouldMask = false
-            if maskAllTexts {
-                shouldMask = view is UILabel || view is UITextField || view is UITextView
-            } else if !textsToMask.isEmpty {
-                if let label = view as? UILabel, let text = label.text {
-                    shouldMask = textsToMask.contains { text.localizedCaseInsensitiveContains($0) }
-                } else if let field = view as? UITextField, let text = field.text {
-                    shouldMask = textsToMask.contains { text.localizedCaseInsensitiveContains($0) }
-                } else if let tv = view as? UITextView, let text = tv.text {
-                    shouldMask = textsToMask.contains { text.localizedCaseInsensitiveContains($0) }
+            let matchesAnyPattern: (String) -> Bool = { text in
+                maskText.contains { pattern in
+                    // Each entry may be a plain literal string or a regular expression.
+                    // Regex is matched case-insensitively; fall back to a case-insensitive
+                    // substring check when the pattern is not valid regex.
+                    guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) else {
+                        return text.localizedCaseInsensitiveContains(pattern)
+                    }
+                    return regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) != nil
                 }
+            }
+            if let label = view as? UILabel, let text = label.text {
+                shouldMask = matchesAnyPattern(text)
+            } else if let field = view as? UITextField, let text = field.text {
+                shouldMask = matchesAnyPattern(text)
+            } else if let tv = view as? UITextView, let text = tv.text {
+                shouldMask = matchesAnyPattern(text)
             }
 
             if shouldMask {
-                let rect = view.convert(view.bounds, to: rootView).intersection(rootView.bounds)
+                let rect = presentationRect(of: view, in: rootView)
                 if !rect.isNull && !rect.isEmpty { rects.append(rect) }
             }
 
@@ -97,7 +131,7 @@ public extension UIView {
             if let cls = _flutterViewClass, view.isKind(of: cls) { return }
 
             if view is UIImageView {
-                let rect = view.convert(view.bounds, to: rootView).intersection(rootView.bounds)
+                let rect = presentationRect(of: view, in: rootView)
                 if !rect.isNull && !rect.isEmpty { rects.append(rect) }
             }
 
@@ -110,6 +144,31 @@ public extension UIView {
 
     // MARK: - Screenshot capture
 
+    /// Returns true when a UIKit-managed transition (push, pop, modal) is in progress
+    /// for any view controller in the active scene.
+    ///
+    /// `UIViewController.transitionCoordinator` is non-nil exactly while UIKit is running
+    /// a transition animation and nil at rest. Inside `UIGraphicsImageRenderer`,
+    /// `layer.presentation()` always returns nil, so mask-rect walks use model-layer
+    /// positions which diverge from the composited frame during animations. Skipping the
+    /// capture and waiting for the next timer tick avoids that mismatch entirely.
+    static func isNavigationTransitionActive() -> Bool {
+        guard let scene = UIApplication.shared.connectedScenes
+            .compactMap({ $0 as? UIWindowScene })
+            .first(where: { $0.activationState == .foregroundActive }) else { return false }
+        return scene.windows.contains { win in
+            guard let root = win.rootViewController else { return false }
+            return Self.vcHasActiveTransition(root)
+        }
+    }
+
+    private static func vcHasActiveTransition(_ vc: UIViewController) -> Bool {
+        if vc.transitionCoordinator != nil { return true }
+        for child in vc.children where vcHasActiveTransition(child) { return true }
+        if let presented = vc.presentedViewController, vcHasActiveTransition(presented) { return true }
+        return false
+    }
+
     /// Renders a composite screenshot of all visible windows with masking applied.
     ///
     /// Per-window routing:
@@ -118,17 +177,24 @@ public extension UIView {
     /// - All other windows → `drawHierarchy(afterScreenUpdates:false)` + synchronous UIView
     ///   walks for text, image, and `cxMask` views.
     ///
+    /// Returns nil (skipped) when a navigation transition is in progress — see
+    /// `isNavigationTransitionActive()`.
+    ///
     /// Must be called on the main thread.
     func captureScreenshotImage(
         scale: CGFloat = UIScreen.main.scale,
-        maskAllTexts: Bool = false,
-        textsToMask: [String] = [],
+        maskText: [String]? = nil,
         maskAllImages: Bool = false,
         flutterCGImage: CGImage? = nil,
         flutterViewRect: CGRect? = nil
     ) -> UIImage? {
         guard Thread.isMainThread else {
             Log.e("captureScreenshotImage must be called on the main thread")
+            return nil
+        }
+
+        guard !UIView.isNavigationTransitionActive() else {
+            Log.d("[SR] skipping capture — navigation transition in progress")
             return nil
         }
 
@@ -159,23 +225,22 @@ public extension UIView {
                         UIRectFill(flutterViewRect ?? win.bounds)
                     }
                 } else {
-                    // Native window: render from the model layer so that mask-rect
-                    // collection (which also reads model-layer positions via
-                    // view.convert) stays in the same coordinate frame.
-                    // drawHierarchy captures the presentation layer, which diverges
-                    // from the model layer during scroll animations and causes
-                    // mask-position skew (BUGV2-6045).
+                    // Native window: drawHierarchy goes through the screen compositor
+                    // and captures GPU-composited content (scrolled cells, etc.)
+                    // correctly. layer.render only sees CPU-backed layer content and
+                    // produces white output for GPU-composited views — do not use it
+                    // as the primary renderer.
                     let origin = win.frame.origin
                     let ctx = UIGraphicsGetCurrentContext()!
                     ctx.saveGState()
                     ctx.translateBy(x: origin.x, y: origin.y)
-                    win.layer.render(in: ctx)
+                    if !win.drawHierarchy(in: win.bounds, afterScreenUpdates: false) {
+                        win.layer.render(in: ctx)
+                    }
                     ctx.restoreGState()
 
-                    if maskAllTexts || !textsToMask.isEmpty {
-                        nativeMaskRects += collectTextViewRects(in: win,
-                                                                maskAllTexts: maskAllTexts,
-                                                                textsToMask: textsToMask)
+                    if let maskText = maskText, !maskText.isEmpty {
+                        nativeMaskRects += collectTextViewRects(in: win, maskText: maskText)
                             .map { $0.offsetBy(dx: origin.x, dy: origin.y) }
                     }
                     if maskAllImages {
@@ -210,8 +275,7 @@ public extension UIView {
             guard !view.isHidden, view.alpha > 0 else { return }
 
             if view.cxMask {
-                var rect = view.convert(view.bounds, to: rootView)
-                rect = rect.intersection(rootView.bounds)
+                let rect = presentationRect(of: view, in: rootView)
                 if !rect.isNull && !rect.isEmpty {
                     rects.append(rect)
                 }

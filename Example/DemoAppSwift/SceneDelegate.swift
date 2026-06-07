@@ -34,6 +34,18 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             }
             self.window?.rootViewController = LeakHarnessViewController()
             self.window?.makeKeyAndVisible()
+        } else if ProcessInfo.processInfo.arguments.contains("--leak-harness-navigate") {
+            // BUGV2-6045 navigation-transition leak scenario: two screens with
+            // sentinel labels pushed/popped rapidly by SessionReplayLeakUITests.
+            // Frames captured mid-animation should have both screens' sentinels
+            // masked. Any unmasked magenta pixel is a mask-position skew leak.
+            if self.window == nil {
+                self.window = UIWindow(windowScene: windowScene)
+            }
+            self.window?.rootViewController = UINavigationController(
+                rootViewController: NavigationLeakScreenA()
+            )
+            self.window?.makeKeyAndVisible()
         }
     }
 

@@ -4,11 +4,11 @@
 # Boots the host-side mock proxy server, runs the XCUITest in
 # Example/DemoAppUITests (which launches DemoAppSwift with
 # --leak-harness so it shows LeakHarnessViewController and scrolls a
-# UITableView of magenta sentinels under maskAllTexts), kills the
+# UITableView of magenta sentinels under maskText: [""]), kills the
 # server, scans captured frames for magenta pixels, exits with the
 # leak count.
 #
-# Self-contained — vendored tools under tool/leak-harness/. Sentinel
+# Self-contained — vendored Swift tools under tool/leak-harness/. Sentinel
 # format and pixel-detection contract are normative in
 # docs/session-replay-shared.md in the cx-flutter-plugin repo; the
 # implementation is copied here so this repo runs without depending on
@@ -55,12 +55,6 @@ if [ ! -d "$HARNESS_DIR" ]; then
   exit 2
 fi
 
-# Ensure Dart deps are installed
-if [ ! -d "$HARNESS_DIR/.dart_tool" ]; then
-  echo "[leak-harness] First-run pub get…"
-  (cd "$HARNESS_DIR" && dart pub get) || exit 2
-fi
-
 # ── 1. Start mock server ────────────────────────────────────────────────────
 SERVER_PID=""
 LOG_STREAM_PID=""
@@ -76,18 +70,18 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 rm -f "$LOG_FILE"
-cd "$HARNESS_DIR"
-dart run mock_upload_server.dart 0 > "$LOG_FILE" 2>&1 &
+swift "$HARNESS_DIR/mock_upload_server.swift" 0 > "$LOG_FILE" 2>&1 &
 SERVER_PID=$!
 
-for _ in $(seq 1 40); do
+# Allow up to 60 s: first-run Swift compilation can take ~10-20 s.
+for _ in $(seq 1 120); do
   if grep -q '^\[mock-upload\] ready' "$LOG_FILE" 2>/dev/null; then
     break
   fi
   sleep 0.5
 done
 if ! grep -q '^\[mock-upload\] ready' "$LOG_FILE" 2>/dev/null; then
-  echo "[leak-harness] FATAL: mock server failed to start within 20s" >&2
+  echo "[leak-harness] FATAL: mock server failed to start within 60s" >&2
   tail -40 "$LOG_FILE" >&2
   exit 2
 fi
@@ -151,16 +145,15 @@ if [ "$FRAME_COUNT" -eq 0 ]; then
   exit 2
 fi
 
-cd "$HARNESS_DIR"
 set +e
-dart run pixel_scanner.dart "$DIR"
+swift "$HARNESS_DIR/pixel_scanner.swift" "$DIR"
 SCAN_EXIT=$?
 set -e
 
 echo ""
 echo "[leak-harness] native-iOS summary: dest=$IOS_DESTINATION frames=$FRAME_COUNT scan-exit=$SCAN_EXIT"
 echo "[leak-harness] frames dir kept at: $DIR"
-echo "[leak-harness] re-scan with: dart run $HARNESS_DIR/pixel_scanner.dart $DIR"
+echo "[leak-harness] re-scan with: swift $HARNESS_DIR/pixel_scanner.swift $DIR"
 echo "[leak-harness] xcode log (SR-perf): grep '\[SR-perf\]' $XCODE_LOG"
 echo "[leak-harness] app log  (SR-perf): grep 'SR-perf' $APP_LOG"
 

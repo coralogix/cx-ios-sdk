@@ -48,7 +48,7 @@ final class SessionReplayModelTests: XCTestCase {
             recordingType: .image,
             captureScale: 1.0,
             captureCompressionQuality: 0.9,
-            maskAllTexts: false,
+            maskText: nil,
             maskAllImages: false,
             creditCardPredicate: nil
         )

@@ -76,8 +76,7 @@ public class SessionReplayModel {
         }
         return UIView().captureScreenshotImage(
             scale: options.captureScale,
-            maskAllTexts: options.maskAllTexts,
-            textsToMask: options.textsToMask ?? [],
+            maskText: options.maskText,
             maskAllImages: options.maskAllImages,
             flutterCGImage: flutterCGImage,
             flutterViewRect: flutterViewRect

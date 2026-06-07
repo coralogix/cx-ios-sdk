@@ -26,20 +26,31 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         CoralogixRumManager.shared.initialize()
 
         // BUGV2-6045 leak-harness mode: when launched with --leak-harness,
-        // SessionReplay uses maskAllTexts and auto-starts recording.
-        // --leak-harness-60fps switches captureTimeInterval to 1/60 s.
+        // SessionReplay auto-starts recording at 1 fps.
         // For normal launches, SR is initialized with demo defaults so the
         // Start/Stop Recording buttons in SessionReplayViewController work.
         let srOptions: SessionReplayOptions
-        if ProcessInfo.processInfo.arguments.contains("--leak-harness") {
-            let is60fps = ProcessInfo.processInfo.arguments.contains("--leak-harness-60fps")
+        let args = ProcessInfo.processInfo.arguments
+        if args.contains("--leak-harness") {
             srOptions = SessionReplayOptions(
                 recordingType: .image,
-                captureTimeInterval: is60fps ? (1.0 / 60.0) : 1.0,
                 captureScale: 1.0,
                 captureCompressionQuality: 1.0,
                 sessionRecordingSampleRate: 100,
-                maskAllTexts: true,
+                maskText: [".*"],      // regex wildcard — masks every text label
+                maskOnlyCreditCards: false,
+                maskAllImages: false,
+                autoStartSessionRecording: true
+            )
+        } else if args.contains("--leak-harness-navigate") {
+            // Navigation-transition scenario: 1 fps so each capture is likely
+            // to land during one of the rapid push/pop animations.
+            srOptions = SessionReplayOptions(
+                recordingType: .image,
+                captureScale: 1.0,
+                captureCompressionQuality: 1.0,
+                sessionRecordingSampleRate: 100,
+                maskText: [".*"],      // regex wildcard — masks every text label
                 maskOnlyCreditCards: false,
                 maskAllImages: false,
                 autoStartSessionRecording: true
@@ -47,10 +58,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         } else {
             srOptions = SessionReplayOptions(
                 recordingType: .image,
-                captureTimeInterval: 10.0,
                 captureScale: 2.0,
                 captureCompressionQuality: 0.8,
-                maskAllTexts: false,
+                maskText: nil,
                 maskOnlyCreditCards: false,
                 maskAllImages: false,
                 autoStartSessionRecording: false
@@ -62,7 +72,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         // Skipped in leak-harness mode because the harness uses a stub plist
         // that doesn't pass Firebase's API-key validation; the harness doesn't
         // exercise Firebase anyway.
-        let isLeakHarness = ProcessInfo.processInfo.arguments.contains("--leak-harness")
+        let isLeakHarness = args.contains("--leak-harness") || args.contains("--leak-harness-navigate")
         if !isLeakHarness,
            let path = Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist"),
            FileManager.default.fileExists(atPath: path) {
