@@ -430,13 +430,20 @@ final class BeforeSendInstrumentationDataTests: XCTestCase {
     }
 
     func test_fingerPrint_injectionIsIgnored() throws {
+        // fingerPrint is a UUID generated per CxRumBuilder via the keychain, which
+        // doesn't persist across separate CxSpan builds in this test env — so a
+        // probe-run pattern (like test_isSnapshotEvent) would compare two different
+        // SDK-generated UUIDs. Use XCTUnwrap to catch accidental removal, then
+        // XCTAssertNotEqual to catch the forgery.
         let result = try runSpan { cxRum in
             var edit = cxRum
             edit[Keys.fingerPrint.rawValue] = "FORGED-FINGERPRINT"
             return edit
         }
-        let fp = result.text[Keys.fingerPrint.rawValue] as? String
-        XCTAssertNotEqual(fp, "FORGED-FINGERPRINT", "fingerPrint must not be forgeable")
+        let fp = try XCTUnwrap(result.text[Keys.fingerPrint.rawValue] as? String,
+                               "fingerPrint must remain present after a callback that injects a forgery")
+        XCTAssertNotEqual(fp, "FORGED-FINGERPRINT",
+                          "fingerPrint must be restored from the original cx_rum, not the callback's injected value")
     }
 
     func test_sessionContext_replacedByNonDict_isRestoredWholesale() throws {
@@ -458,6 +465,9 @@ final class BeforeSendInstrumentationDataTests: XCTestCase {
     }
 
     func test_sessionId_injectionIsIgnored() throws {
+        // The mock span fixture sets sessionId = "session_001" — assert the SDK
+        // restored that value rather than just "not the forgery", which would
+        // pass vacuously if sessionId were nil.
         let result = try runSpan { cxRum in
             var edit = cxRum
             var session = (edit[Keys.sessionContext.rawValue] as? [String: Any]) ?? [:]
@@ -466,27 +476,44 @@ final class BeforeSendInstrumentationDataTests: XCTestCase {
             return edit
         }
         let sessionId = (result.text[Keys.sessionContext.rawValue] as? [String: Any])?[Keys.sessionId.rawValue] as? String
-        XCTAssertNotEqual(sessionId, "FORGED-SESSION", "sessionId must be restored from the original cx_rum")
+        XCTAssertEqual(sessionId, "session_001",
+                       "sessionId must be restored to the original mock value, not the forgery")
     }
 
     func test_platform_injectionIsIgnored() throws {
-        let result = try runSpan { cxRum in
+        // Probe the SDK-computed platform first, then assert the injection run
+        // produces the same value. NotEqual-against-"console" would pass vacuously
+        // if platform were nil — this catches both forgery AND accidental removal.
+        let probe = try runSpan(sessionManager: SessionManager()) { $0 }
+        let sdkPlatform = try XCTUnwrap(probe.text[Keys.platform.rawValue] as? String,
+                                        "Probe should produce a platform — regression in CxRumPayloadBuilder")
+
+        let result = try runSpan(sessionManager: SessionManager()) { cxRum in
             var edit = cxRum
             edit[Keys.platform.rawValue] = "console"
             return edit
         }
-        let platform = result.text[Keys.platform.rawValue] as? String
-        XCTAssertNotEqual(platform, "console", "platform must be restored from the original cx_rum")
+        XCTAssertEqual(result.text[Keys.platform.rawValue] as? String, sdkPlatform,
+                       "platform must be restored from the original cx_rum, not the callback's injected value")
     }
 
     func test_mobileSdk_injectionIsIgnored() throws {
-        let result = try runSpan { cxRum in
+        // Probe the SDK-emitted mobileSdk dict first, then assert the injection run
+        // preserves it. NotEqual-against-the-forgery would pass vacuously if the key
+        // were missing entirely — this catches both forgery AND accidental removal.
+        let probe = try runSpan(sessionManager: SessionManager()) { $0 }
+        let sdkMobileSdk = try XCTUnwrap(probe.text[Keys.mobileSdk.rawValue] as? [String: Any],
+                                         "Probe should produce a mobileSdk dict — regression in CxRumPayloadBuilder")
+
+        let result = try runSpan(sessionManager: SessionManager()) { cxRum in
             var edit = cxRum
             edit[Keys.mobileSdk.rawValue] = ["sdk_version": "9.9.9-forged"]
             return edit
         }
-        let injected = (result.text[Keys.mobileSdk.rawValue] as? [String: Any])?["sdk_version"] as? String
-        XCTAssertNotEqual(injected, "9.9.9-forged", "mobileSdk must be restored from the original cx_rum")
+        let restored = try XCTUnwrap(result.text[Keys.mobileSdk.rawValue] as? [String: Any],
+                                     "mobileSdk must remain a dict, not be replaced by the forged version")
+        XCTAssertEqual(NSDictionary(dictionary: restored), NSDictionary(dictionary: sdkMobileSdk),
+                       "mobileSdk must be restored from the original cx_rum, not the callback's injected value")
     }
 
     // MARK: - Baseline parity: no beforeSend → mirror still matches the cx_rum dict.
