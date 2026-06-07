@@ -121,6 +121,81 @@ struct OtelSpan {
 
     // Mirrors the web SDK's buildRumContextAttributes(), using cx_rum.* prefixed keys.
     // N/A mobile fields (browser, browserVersion, url_blueprint, resource_context) are omitted.
+    //
+    // CX-44686: dictionary variant — reads the same fields from the post-`beforeSend`
+    // cx_rum dictionary (as produced by `CxRumPayloadBuilder.build()` / `mergeDictionaries`)
+    // so that customer modifications applied via `beforeSend` propagate into
+    // `instrumentation_data.otelSpan.attributes` and not just into `text.cx_rum`.
+    // The two destinations of a span must carry the same final attribute values.
+    internal static func buildRumContextAttributes(
+        fromCxRumDict cxRumDict: [String: Any],
+        viewManager: ViewManager?,
+        mobileSdkVersion: String
+    ) -> [String: Any] {
+        var attrs = [String: Any]()
+
+        attrs[AttrKey.mobileSdkVersion] = mobileSdkVersion
+
+        if let env = cxRumDict[Keys.environment.rawValue] as? String, !env.isEmpty {
+            attrs[AttrKey.environment] = env
+        }
+        let platform = (Global.getOs() == Keys.tvos.rawValue) ? Keys.television.rawValue : Keys.mobile.rawValue
+        attrs[AttrKey.platform] = platform
+
+        if let vm = cxRumDict[Keys.versionMetaData.rawValue] as? [String: Any] {
+            attrs[AttrKey.versionMetadataAppName]    = vm[Keys.appName.rawValue]
+            attrs[AttrKey.versionMetadataAppVersion] = vm[Keys.appVersion.rawValue]
+        }
+
+        if let labels = cxRumDict[Keys.labels.rawValue] as? [String: Any], !labels.isEmpty {
+            attrs[AttrKey.labels] = labels
+        }
+
+        if let session = cxRumDict[Keys.sessionContext.rawValue] as? [String: Any] {
+            if let v = session[Keys.sessionId.rawValue] as? String { attrs[AttrKey.sessionId] = v }
+            if let v = session[Keys.sessionCreationDate.rawValue] { attrs[AttrKey.sessionCreationDate] = v }
+            if let v = session[Keys.hasRecording.rawValue] as? Bool { attrs[AttrKey.hasRecording] = v }
+            if let v = session[Keys.userId.rawValue] as? String, !v.isEmpty { attrs[AttrKey.userId] = v }
+            if let v = session[Keys.userName.rawValue] as? String, !v.isEmpty { attrs[AttrKey.userName] = v }
+            if let v = session[Keys.userEmail.rawValue] as? String, !v.isEmpty { attrs[AttrKey.userEmail] = v }
+        }
+        attrs[AttrKey.os]        = Global.getOs()
+        attrs[AttrKey.osVersion] = Global.osVersionInfo()
+        attrs[AttrKey.device]    = Global.getDeviceModel()
+        attrs[AttrKey.userAgent] = UserAgentManager.shared.getUserAgent()
+
+        if let event = cxRumDict[Keys.eventContext.rawValue] as? [String: Any] {
+            if let v = event[Keys.type.rawValue]     { attrs[AttrKey.eventType]     = v }
+            if let v = event[Keys.severity.rawValue] { attrs[AttrKey.eventSeverity] = v }
+            if let v = event[Keys.source.rawValue] as? String, !v.isEmpty { attrs[AttrKey.eventSource] = v }
+        }
+
+        if let err = cxRumDict[Keys.errorContext.rawValue] as? [String: Any] {
+            if let v = err[Keys.errorType.rawValue] as? String, !v.isEmpty { attrs[AttrKey.errorType] = v }
+            if let v = err[Keys.errorMessage.rawValue] as? String, !v.isEmpty { attrs[AttrKey.errorMessage] = v }
+        }
+
+        if let net = cxRumDict[Keys.networkRequestContext.rawValue] as? [String: Any],
+           let url = net[Keys.url.rawValue] as? String, !url.isEmpty {
+            attrs[AttrKey.networkUrl]        = url
+            attrs[AttrKey.networkMethod]     = net[Keys.method.rawValue]
+            attrs[AttrKey.networkStatusCode] = net[Keys.statusCode.rawValue]
+            attrs[AttrKey.networkStatusText] = net[Keys.statusText.rawValue]
+            attrs[AttrKey.networkFragments]  = net[Keys.fragments.rawValue]
+            if let h = net[Keys.requestHeaders.rawValue]  { attrs[AttrKey.networkRequestHeaders]  = h }
+            if let h = net[Keys.responseHeaders.rawValue] { attrs[AttrKey.networkResponseHeaders] = h }
+            if let p = net[Keys.requestPayload.rawValue]  { attrs[AttrKey.networkRequestPayload]  = p }
+            if let p = net[Keys.responsePayload.rawValue] { attrs[AttrKey.networkResponsePayload] = p }
+        }
+
+        if let pageUrl = viewManager?.getDictionary()[Keys.view.rawValue] as? String, !pageUrl.isEmpty {
+            attrs[AttrKey.pageUrl]       = pageUrl
+            attrs[AttrKey.pageFragments] = pageUrl
+        }
+
+        return attrs
+    }
+
     private static func buildRumContextAttributes(cxRum: CxRum, viewManager: ViewManager?) -> [String: Any] {
         var attrs = [String: Any]()
 
