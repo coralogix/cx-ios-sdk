@@ -83,11 +83,18 @@ public class CxSpan {
 
                 // Restore stripped sessionContext fields (sessionId, sessionCreationDate)
                 // for the same reason — a callback could inject them inside sessionContext.
-                if var mergedSession = mergedDict[Keys.sessionContext.rawValue] as? [String: Any],
-                   let originalSession = originalCxRum[Keys.sessionContext.rawValue] as? [String: Any] {
-                    mergedSession[Keys.sessionId.rawValue] = originalSession[Keys.sessionId.rawValue]
-                    mergedSession[Keys.sessionCreationDate.rawValue] = originalSession[Keys.sessionCreationDate.rawValue]
-                    mergedDict[Keys.sessionContext.rawValue] = mergedSession
+                // If the callback corrupted sessionContext to a non-dict value
+                // (e.g. returned a string), mergeDictionaries replaced our dict with it
+                // entirely; restore the whole original sessionContext in that case so
+                // sessionId/sessionCreationDate aren't lost downstream.
+                if let originalSession = originalCxRum[Keys.sessionContext.rawValue] as? [String: Any] {
+                    if var mergedSession = mergedDict[Keys.sessionContext.rawValue] as? [String: Any] {
+                        mergedSession[Keys.sessionId.rawValue] = originalSession[Keys.sessionId.rawValue]
+                        mergedSession[Keys.sessionCreationDate.rawValue] = originalSession[Keys.sessionCreationDate.rawValue]
+                        mergedDict[Keys.sessionContext.rawValue] = mergedSession
+                    } else {
+                        mergedDict[Keys.sessionContext.rawValue] = originalSession
+                    }
                 }
 
                 // Sync severity from editableCxRum to both the top-level field and

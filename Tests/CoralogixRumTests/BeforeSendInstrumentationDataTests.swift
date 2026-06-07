@@ -427,6 +427,24 @@ final class BeforeSendInstrumentationDataTests: XCTestCase {
         XCTAssertNotEqual(fp, "FORGED-FINGERPRINT", "fingerPrint must not be forgeable")
     }
 
+    func test_sessionContext_replacedByNonDict_isRestoredWholesale() throws {
+        // Callback corrupts sessionContext into a non-dict value.
+        // The SDK must restore the entire original sessionContext so sessionId /
+        // sessionCreationDate (and downstream ingestion's structural assumptions)
+        // survive the malformed return.
+        let result = try runSpan { cxRum in
+            var edit = cxRum
+            edit[Keys.sessionContext.rawValue] = "haha"
+            return edit
+        }
+        let session = result.text[Keys.sessionContext.rawValue] as? [String: Any]
+        XCTAssertNotNil(session, "sessionContext must be restored to a dict, not left as the callback's string")
+        XCTAssertEqual(session?[Keys.sessionId.rawValue] as? String, "session_001",
+                       "sessionId must be restored from the original sessionContext after a non-dict corruption")
+        XCTAssertNotNil(session?[Keys.sessionCreationDate.rawValue],
+                        "sessionCreationDate must be restored after a non-dict corruption")
+    }
+
     func test_sessionId_injectionIsIgnored() throws {
         let result = try runSpan { cxRum in
             var edit = cxRum
