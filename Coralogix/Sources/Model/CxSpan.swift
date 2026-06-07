@@ -175,13 +175,14 @@ public class CxSpan {
               var instrumentationData = self.instrumentationData?.getDictionary() else {
             return
         }
-        // CX-44686: `instrumentationData` was built in init() from the pre-`beforeSend`
-        // cxRum, so its `otelSpan.attributes` carry the original values. Rebuild that
-        // attribute map from the FINAL cx_rum dictionary (text.cx_rum — which is either
-        // mergedDict after beforeSend or originalCxRum when no callback was supplied) so
-        // both serialized destinations of the span (text.cx_rum and instrumentation_data)
-        // carry the same final, beforeSend-modified attribute values.
-        if var otelSpanDict = instrumentationData[Keys.otelSpan.rawValue] as? [String: Any],
+        // CX-44686: rebuild `otelSpan.attributes` from the FINAL cx_rum dictionary
+        // (post-`beforeSend` mergedDict) so customer modifications propagate into both
+        // `text.cx_rum` and `instrumentation_data`. Gated on `beforeSend != nil` because
+        // the cx_rum dict is a lossy view of the struct (e.g. CxRumPayloadBuilder omits
+        // `error_context` for non-`.error` events) — rebuilding unconditionally would
+        // silently drop those struct-only fields for customers who don't use beforeSend.
+        if self.beforeSend != nil,
+           var otelSpanDict = instrumentationData[Keys.otelSpan.rawValue] as? [String: Any],
            let textDict = result[Keys.text.rawValue] as? [String: Any],
            let finalCxRumDict = textDict[Keys.cxRum.rawValue] as? [String: Any] {
             otelSpanDict[Keys.attributes.rawValue] = OtelSpan.buildRumContextAttributes(
