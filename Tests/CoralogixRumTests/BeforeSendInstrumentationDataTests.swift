@@ -95,12 +95,18 @@ final class BeforeSendInstrumentationDataTests: XCTestCase {
 
     /// Helper: spins a `CxSpan` through `beforeSend` and returns
     /// `(textCxRum, otelSpanAttributes)` — the two destinations a span lands in.
-    private func runSpan(beforeSend: @escaping ([String: Any]) -> [String: Any]?) throws -> (text: [String: Any], otel: [String: Any]) {
+    /// `sessionManager` defaults to the shared fixture; tests that need
+    /// independent SessionManager state (e.g. snapshot-emission ordering)
+    /// can pass a fresh one.
+    private func runSpan(
+        sessionManager: SessionManager? = nil,
+        beforeSend: @escaping ([String: Any]) -> [String: Any]?
+    ) throws -> (text: [String: Any], otel: [String: Any]) {
         let options = makeOptions(beforeSend: beforeSend)
         guard let cxSpan = CxSpan(
             otel: mockSpanData,
             versionMetadata: mockVersionMetadata,
-            sessionManager: mockSessionManager,
+            sessionManager: sessionManager ?? mockSessionManager,
             networkManager: mockNetworkManager,
             viewManager: mockViewManager,
             metricsManager: mockMetricsManager,
@@ -378,18 +384,24 @@ final class BeforeSendInstrumentationDataTests: XCTestCase {
     }
 
     func test_isSnapshotEvent_injectionIsIgnored() throws {
-        // First capture whether the SDK emitted a snapshot for this fixture (depends on
-        // SessionManager state — a fresh session always emits one). The test then asserts
-        // the SDK's value wins regardless of what the customer injects.
-        var sdkValue: Bool?
-        _ = try runSpan { cxRum in
-            sdkValue = cxRum[Keys.isSnapshotEvent.rawValue] as? Bool   // captured before injection
-            return cxRum
-        }
+        // Each run gets a fresh SessionManager so the SDK's snapshot decision is
+        // independent — sharing one would mean the probe run sets
+        // lastSnapshotEventTime and the second run skips snapshot emission,
+        // collapsing the assertion to nil == nil (which would pass even if
+        // the restore code were deleted).
 
-        let result = try runSpan { cxRum in
+        // 1) Probe run: read the SDK's emitted isSnapshotEvent from the FINAL
+        //    payload (text.cx_rum), not from inside the callback — the callback
+        //    sees the subset, which has isSnapshotEvent stripped.
+        let probe = try runSpan(sessionManager: SessionManager()) { $0 }
+        let sdkValue = probe.text[Keys.isSnapshotEvent.rawValue] as? Bool
+        XCTAssertEqual(sdkValue, true,
+                       "Fresh SessionManager + network event should emit a snapshot — guard against regressions in CxRumBuilder")
+
+        // 2) Forgery run: inject the OPPOSITE of what the SDK produced and
+        //    assert the SDK's value still wins after restore.
+        let result = try runSpan(sessionManager: SessionManager()) { cxRum in
             var edit = cxRum
-            // Inject the OPPOSITE of whatever the SDK produced, so any leak is detectable.
             edit[Keys.isSnapshotEvent.rawValue] = !(sdkValue ?? false)
             return edit
         }
