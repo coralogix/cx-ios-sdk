@@ -195,14 +195,11 @@ public extension UIView {
         }
 
         guard isClickFrame || !UIView.isNavigationTransitionActive() else {
-            Log.d("[SR] skipping capture — navigation transition in progress (isClickFrame=\(isClickFrame))")
+            Log.d("[SR] skipping capture — navigation transition in progress")
             return nil
         }
 
-        guard let scene = activeForegroundWindowScene() else {
-            Log.d("[SR] skipping capture — no foreground window scene")
-            return nil
-        }
+        guard let scene = activeForegroundWindowScene() else { return nil }
 
         let windows = scene.windows
             .filter { !$0.isHidden && $0.alpha > 0 }

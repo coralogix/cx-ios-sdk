@@ -25,19 +25,7 @@ struct DemoAppSwiftUIApp: App {
 
     var body: some Scene {
         WindowGroup {
-            TabView {
-                ContentView()
-                    .tabItem {
-                        Label("Demo", systemImage: "list.bullet")
-                    }
-                Text("Tap the tab bar below to test click marks")
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding()
-                    .tabItem {
-                        Label("More", systemImage: "ellipsis.circle")
-                    }
-            }
+            ContentView()
         }
     }
 }

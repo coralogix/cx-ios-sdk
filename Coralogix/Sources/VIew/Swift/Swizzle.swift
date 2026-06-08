@@ -208,11 +208,8 @@ extension UIApplication {
             switch touch.phase {
             case .began:
                 // Store the originating view — it will be nil by the time .cancelled fires.
-                if let view = touch.view {
-                    ScrollTracker.shared.recordBegan(touch, view: view)
-                } else {
-                    Log.d("[CX-touch] .began: touch.view nil (view=\(String(describing: touch.view)))")
-                }
+                guard let view = touch.view else { continue }
+                ScrollTracker.shared.recordBegan(touch, view: view)
 
             case .moved:
                 // Keep current position updated so processCancelled has accurate data.
@@ -230,25 +227,10 @@ extension UIApplication {
                             object: TouchEvent(view: result.view, touch: touch, eventType: result.eventType, scrollDirection: result.direction)
                         )
                     case .tap(let view, let location):
-                        Log.d("[CX-touch] .ended tap at \(location) view=\(type(of: view))")
                         NotificationCenter.default.post(
                             name: .cxRumNotificationUserActions,
                             object: TouchEvent(view: view, location: location, eventType: .click)
                         )
-                    }
-                } else if isSingleTouch {
-                    // No stored state: touch.view was nil at .began because UIScrollView's
-                    // delaysContentTouches held the touch (e.g. UITabBar). UIKit assigns
-                    // touch.view when it finally forwards the delayed touch at .ended.
-                    if let view = touch.view {
-                        let location = touch.location(in: nil)
-                        Log.d("[CX-touch] .ended delayed-delivery tap at \(location) view=\(type(of: view))")
-                        NotificationCenter.default.post(
-                            name: .cxRumNotificationUserActions,
-                            object: TouchEvent(view: view, location: location, eventType: .click)
-                        )
-                    } else {
-                        Log.d("[CX-touch] .ended: no state and touch.view nil — tap dropped")
                     }
                 }
 
@@ -266,14 +248,11 @@ extension UIApplication {
                             object: TouchEvent(view: result.view, touch: touch, eventType: result.eventType, scrollDirection: result.direction)
                         )
                     case .tap(let view, let location):
-                        Log.d("[CX-touch] .cancelled tap at \(location) view=\(type(of: view))")
                         NotificationCenter.default.post(
                             name: .cxRumNotificationUserActions,
                             object: TouchEvent(view: view, location: location, eventType: .click)
                         )
                     }
-                } else if isSingleTouch {
-                    Log.d("[CX-touch] .cancelled: processCancelled returned nil (no state or above threshold)")
                 }
 
             default:
