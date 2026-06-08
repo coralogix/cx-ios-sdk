@@ -456,7 +456,9 @@ final class InstrumentationDataTests: XCTestCase {
             screenShotContext: nil,
             internalContext: nil,
             measurementContext: nil,
-            fingerPrint: "test-fingerprint"
+            fingerPrint: "test-fingerprint",
+            isNavigationEvent: false,
+            viewNumber: nil
         )
     }
 }

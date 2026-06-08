@@ -128,6 +128,13 @@ public enum Keys: String {
     case actionCount
     case isViewUnique
     case isSnapshotEvent
+    // CX-44687: product-analytics fields at the cx_rum top level.
+    // Per-field naming chosen to match Browser's wire shape (Daniel, 2026-06-08):
+    //   - view_number  → snake_case
+    //   - isNavigationEvent → camelCase
+    case viewNumber = "view_number"
+    case isNavigationEvent
+    case keyViewNumber = "viewNumber"
     case threads
     case httpResponseBodySize = "http_response_body_size"
     case stackTrace

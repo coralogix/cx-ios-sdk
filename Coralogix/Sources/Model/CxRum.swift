@@ -31,4 +31,9 @@ struct CxRum {
     let internalContext: InternalContext?
     let measurementContext: MeasurementContext?
     let fingerPrint: String
+    // CX-44687: product-analytics fields at cx_rum top level.
+    // `isNavigationEvent` is always emitted; `viewNumber` is nil until the first
+    // view appears (early-launch spans omit it).
+    let isNavigationEvent: Bool
+    let viewNumber: Int?
 }
