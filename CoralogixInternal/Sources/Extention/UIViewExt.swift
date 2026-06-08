@@ -186,19 +186,23 @@ public extension UIView {
         maskText: [String]? = nil,
         maskAllImages: Bool = false,
         flutterCGImage: CGImage? = nil,
-        flutterViewRect: CGRect? = nil
+        flutterViewRect: CGRect? = nil,
+        isClickFrame: Bool = false
     ) -> UIImage? {
         guard Thread.isMainThread else {
             Log.e("captureScreenshotImage must be called on the main thread")
             return nil
         }
 
-        guard !UIView.isNavigationTransitionActive() else {
-            Log.d("[SR] skipping capture — navigation transition in progress")
+        guard isClickFrame || !UIView.isNavigationTransitionActive() else {
+            Log.d("[SR] skipping capture — navigation transition in progress (isClickFrame=\(isClickFrame))")
             return nil
         }
 
-        guard let scene = activeForegroundWindowScene() else { return nil }
+        guard let scene = activeForegroundWindowScene() else {
+            Log.d("[SR] skipping capture — no foreground window scene")
+            return nil
+        }
 
         let windows = scene.windows
             .filter { !$0.isHidden && $0.alpha > 0 }

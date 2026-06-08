@@ -18,14 +18,26 @@ struct DemoAppSwiftUIApp: App {
                                                         captureCompressionQuality: 0.8,
                                                         maskText: nil,
                                                         maskOnlyCreditCards: false,
-                                                        maskAllImages: false,
+                                                        maskAllImages: true,
                                                         autoStartSessionRecording: true)
         SessionReplay.initializeWithOptions(sessionReplayOptions: sessionReplayOptions)
     }
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            TabView {
+                ContentView()
+                    .tabItem {
+                        Label("Demo", systemImage: "list.bullet")
+                    }
+                Text("Tap the tab bar below to test click marks")
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding()
+                    .tabItem {
+                        Label("More", systemImage: "ellipsis.circle")
+                    }
+            }
         }
     }
 }

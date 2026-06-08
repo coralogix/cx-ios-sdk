@@ -46,6 +46,25 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
                 rootViewController: NavigationLeakScreenA()
             )
             self.window?.makeKeyAndVisible()
+        } else {
+            // Wrap the storyboard-provided navigation root in a UITabBarController so
+            // the UITabBar is present for testing cancelled-touch click mark recording.
+            if let existingRoot = self.window?.rootViewController {
+                let tabBar = UITabBarController()
+                existingRoot.tabBarItem = UITabBarItem(
+                    title: "Demo",
+                    image: UIImage(systemName: "list.bullet"),
+                    tag: 0
+                )
+                let placeholder = UINavigationController(rootViewController: TabPlaceholderViewController())
+                placeholder.tabBarItem = UITabBarItem(
+                    title: "More",
+                    image: UIImage(systemName: "ellipsis.circle"),
+                    tag: 1
+                )
+                tabBar.viewControllers = [existingRoot, placeholder]
+                self.window?.rootViewController = tabBar
+            }
         }
     }
 
@@ -75,6 +94,27 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         // Called as the scene transitions from the foreground to the background.
         // Use this method to save data, release shared resources, and store enough scene-specific state information
         // to restore the scene back to its current state.
+    }
+}
+
+private final class TabPlaceholderViewController: UIViewController {
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        view.backgroundColor = .systemBackground
+        navigationItem.title = "More"
+        let label = UILabel()
+        label.text = "Tap the tab bar below to test click marks"
+        label.textColor = .secondaryLabel
+        label.textAlignment = .center
+        label.numberOfLines = 0
+        label.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(label)
+        NSLayoutConstraint.activate([
+            label.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            label.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+            label.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 32),
+            label.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -32)
+        ])
     }
 }
 

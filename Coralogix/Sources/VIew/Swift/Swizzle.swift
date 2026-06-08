@@ -208,30 +208,47 @@ extension UIApplication {
             switch touch.phase {
             case .began:
                 // Store the originating view — it will be nil by the time .cancelled fires.
-                guard let view = touch.view else { continue }
-                ScrollTracker.shared.recordBegan(touch, view: view)
+                if let view = touch.view {
+                    ScrollTracker.shared.recordBegan(touch, view: view)
+                } else {
+                    Log.d("[CX-touch] .began: touch.view nil (view=\(String(describing: touch.view)))")
+                }
 
             case .moved:
                 // Keep current position updated so processCancelled has accurate data.
                 ScrollTracker.shared.recordMoved(touch)
 
             case .ended:
-                if let result = ScrollTracker.shared.processEnded(touch), isSingleTouch {
-                    NotificationCenter.default.post(
-                        name: .cxRumNotificationUserActions,
-                        object: TouchEvent(view: result.view, touch: touch, eventType: result.eventType, scrollDirection: result.direction)
-                    )
-                } else if isSingleTouch {
-                    if let view = touch.view {
+                // processEnded returns EndedGesture using state.view stored at .began —
+                // touch.view is not used here because UIKit may clear it after delivering
+                // the .ended event inside the original sendEvent call above.
+                if let ended = ScrollTracker.shared.processEnded(touch), isSingleTouch {
+                    switch ended {
+                    case .scroll(let result):
                         NotificationCenter.default.post(
                             name: .cxRumNotificationUserActions,
-                            object: TouchEvent(view: view, touch: touch, eventType: .click)
+                            object: TouchEvent(view: result.view, touch: touch, eventType: result.eventType, scrollDirection: result.direction)
+                        )
+                    case .tap(let view, let location):
+                        Log.d("[CX-touch] .ended tap at \(location) view=\(type(of: view))")
+                        NotificationCenter.default.post(
+                            name: .cxRumNotificationUserActions,
+                            object: TouchEvent(view: view, location: location, eventType: .click)
+                        )
+                    }
+                } else if isSingleTouch {
+                    // No stored state: touch.view was nil at .began because UIScrollView's
+                    // delaysContentTouches held the touch (e.g. UITabBar). UIKit assigns
+                    // touch.view when it finally forwards the delayed touch at .ended.
+                    if let view = touch.view {
+                        let location = touch.location(in: nil)
+                        Log.d("[CX-touch] .ended delayed-delivery tap at \(location) view=\(type(of: view))")
+                        NotificationCenter.default.post(
+                            name: .cxRumNotificationUserActions,
+                            object: TouchEvent(view: view, location: location, eventType: .click)
                         )
                     } else {
-                        // touch.view can be nil at .ended if the view was removed from
-                        // the hierarchy between .began and .ended (e.g. a modal dismissed
-                        // during the gesture). Dropping the tap is the correct behaviour.
-                        Log.w("cx_sendEvent .ended: touch.view is nil — tap event dropped")
+                        Log.d("[CX-touch] .ended: no state and touch.view nil — tap dropped")
                     }
                 }
 
@@ -239,13 +256,25 @@ extension UIApplication {
                 // Gesture recognisers (UIScrollView pan, UIScreenEdgePanGestureRecognizer, etc.)
                 // cancel the touch instead of ending it. touch.view is nil here; the view and
                 // event type are resolved from the state recorded at .began time.
-                if let result = ScrollTracker.shared.processCancelled(touch), isSingleTouch {
-                    NotificationCenter.default.post(
-                        name: .cxRumNotificationUserActions,
-                        object: TouchEvent(view: result.view, touch: touch, eventType: result.eventType, scrollDirection: result.direction)
-                    )
+                // UIKit controls with internal recognisers (UINavigationBar, UITabBar, UIToolbar)
+                // also cancel, but with below-threshold movement — those are taps and get a click event.
+                if let cancelled = ScrollTracker.shared.processCancelled(touch), isSingleTouch {
+                    switch cancelled {
+                    case .scroll(let result):
+                        NotificationCenter.default.post(
+                            name: .cxRumNotificationUserActions,
+                            object: TouchEvent(view: result.view, touch: touch, eventType: result.eventType, scrollDirection: result.direction)
+                        )
+                    case .tap(let view, let location):
+                        Log.d("[CX-touch] .cancelled tap at \(location) view=\(type(of: view))")
+                        NotificationCenter.default.post(
+                            name: .cxRumNotificationUserActions,
+                            object: TouchEvent(view: view, location: location, eventType: .click)
+                        )
+                    }
+                } else if isSingleTouch {
+                    Log.d("[CX-touch] .cancelled: processCancelled returned nil (no state or above threshold)")
                 }
-                // processCancelled is always called (cleans up touchStates) but no event is posted for multi-touch.
 
             default:
                 break

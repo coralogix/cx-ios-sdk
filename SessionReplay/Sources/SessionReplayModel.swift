@@ -67,7 +67,8 @@ public class SessionReplayModel {
     private func prepareScreenshotImageOnMain(
         options: SessionReplayOptions,
         flutterCGImage: CGImage?,
-        flutterViewRect: CGRect?
+        flutterViewRect: CGRect?,
+        isClickFrame: Bool = false
     ) -> UIImage? {
         guard Thread.isMainThread else { return nil }
         guard isValidSessionReplayOptions(options) else {
@@ -79,14 +80,16 @@ public class SessionReplayModel {
             maskText: options.maskText,
             maskAllImages: options.maskAllImages,
             flutterCGImage: flutterCGImage,
-            flutterViewRect: flutterViewRect
+            flutterViewRect: flutterViewRect,
+            isClickFrame: isClickFrame
         )
     }
 
     /// Legacy signature kept for test compatibility and the synchronous captureAutomatic path.
     internal func prepareScreenshotImageOnMain(properties: [String: Any]?) -> UIImage? {
         guard let options = sessionReplayOptions else { return nil }
-        return prepareScreenshotImageOnMain(options: options, flutterCGImage: nil, flutterViewRect: nil)
+        let isClickFrame = getClickPoint(from: properties) != nil
+        return prepareScreenshotImageOnMain(options: options, flutterCGImage: nil, flutterViewRect: nil, isClickFrame: isClickFrame)
     }
 
     /// Synchronous capture-and-encode, retained as a back-compat shim.
@@ -186,6 +189,7 @@ public class SessionReplayModel {
         captureFrameCounter &+= 1
         let frameId = captureFrameCounter
         let callerIncrementedCounter = properties?[Keys.segmentIndex.rawValue] as? Int != nil
+        let isClickFrame = getClickPoint(from: properties) != nil
 
         // Locate the FlutterView on screen synchronously before yielding.
         let flutterViewRect = findFlutterViewRect()
@@ -193,7 +197,7 @@ public class SessionReplayModel {
         // No FlutterView visible — capture native windows only.
         guard let rect = flutterViewRect else {
             guard let image = prepareScreenshotImageOnMain(
-                options: options, flutterCGImage: nil, flutterViewRect: nil
+                options: options, flutterCGImage: nil, flutterViewRect: nil, isClickFrame: isClickFrame
             ) else {
                 if callerIncrementedCounter {
                     SdkManager.shared.getCoralogixSdk()?.revertScreenshotCounter()
@@ -217,7 +221,7 @@ public class SessionReplayModel {
             let compositeRect = self.findFlutterViewRect() ?? rect
 
             guard let image = self.prepareScreenshotImageOnMain(
-                options: options, flutterCGImage: flutterCGImage, flutterViewRect: compositeRect
+                options: options, flutterCGImage: flutterCGImage, flutterViewRect: compositeRect, isClickFrame: isClickFrame
             ) else {
                 if callerIncrementedCounter {
                     SdkManager.shared.getCoralogixSdk()?.revertScreenshotCounter()
@@ -292,7 +296,8 @@ public class SessionReplayModel {
             let encodeMs = Date().timeIntervalSince(encodeStart) * 1_000
             Log.d("[SR-perf] encode \(String(format: "%.1f", encodeMs))ms size=\(screenshotData.count)B")
 
-            let shouldSkip = self.screenshotDataQueue.sync { () -> Bool in
+            let isClickFrame = self.getClickPoint(from: properties) != nil
+            let shouldSkip = !isClickFrame && self.screenshotDataQueue.sync { () -> Bool in
                 if let prvData = self._prvScreenshotData,
                    !self.imagesAreDifferent(screenshotData, prvData) {
                     return true
@@ -472,8 +477,8 @@ public class SessionReplayModel {
 
     internal func getClickPoint(from properties: [String: Any]?) -> CGPoint? {
         guard let properties = properties else { return nil }
-        if let positionX = properties[Keys.positionX.rawValue] as? CGFloat,
-           let positionY = properties[Keys.positionY.rawValue] as? CGFloat {
+        if let positionX = properties[Keys.positionX.rawValue] as? Double,
+           let positionY = properties[Keys.positionY.rawValue] as? Double {
             return CGPoint(x: positionX, y: positionY)
         }
         return nil
