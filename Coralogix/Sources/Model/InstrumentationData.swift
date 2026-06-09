@@ -117,6 +117,13 @@ struct OtelSpan {
         static let networkResponsePayload    = "cx_rum.network_request_context.response_payload"
         static let pageUrl                   = "cx_rum.page_context.page_url"
         static let pageFragments             = "cx_rum.page_context.page_fragments"
+        // CX-44687: product-analytics fields. Snake-case under `cx_rum.*` per the
+        // AttrKey convention — the matching cx_rum top-level wire key for
+        // `isNavigationEvent` is camelCase (Browser parity, see Keys.swift), but
+        // the otelSpan.attributes mirror follows the snake-case convention used
+        // by every other entry in this enum.
+        static let isNavigationEvent         = "cx_rum.is_navigation_event"
+        static let viewNumber                = "cx_rum.view_number"
     }
 
     // Mirrors the web SDK's buildRumContextAttributes(), using cx_rum.* prefixed keys.
@@ -191,6 +198,16 @@ struct OtelSpan {
         if let pageUrl = viewManager?.getDictionary()[Keys.view.rawValue] as? String, !pageUrl.isEmpty {
             attrs[AttrKey.pageUrl]       = pageUrl
             attrs[AttrKey.pageFragments] = pageUrl
+        }
+
+        // CX-44687: mirror product-analytics fields from the post-`beforeSend`
+        // cx_rum dict. Reads use the wire keys (camelCase / snake_case mix
+        // matching `Keys.isNavigationEvent` / `Keys.viewNumber`).
+        if let v = cxRumDict[Keys.isNavigationEvent.rawValue] as? Bool {
+            attrs[AttrKey.isNavigationEvent] = v
+        }
+        if let v = cxRumDict[Keys.viewNumber.rawValue] as? Int {
+            attrs[AttrKey.viewNumber] = v
         }
 
         return attrs
@@ -269,6 +286,13 @@ struct OtelSpan {
            !pageUrl.isEmpty {
             attrs[AttrKey.pageUrl]       = pageUrl
             attrs[AttrKey.pageFragments] = pageUrl
+        }
+
+        // CX-44687: product-analytics fields. `isNavigationEvent` is always emitted;
+        // `view_number` is omitted on spans fired before any view has appeared.
+        attrs[AttrKey.isNavigationEvent] = cxRum.isNavigationEvent
+        if let viewNumber = cxRum.viewNumber {
+            attrs[AttrKey.viewNumber] = viewNumber
         }
 
         return attrs

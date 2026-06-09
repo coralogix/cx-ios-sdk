@@ -545,5 +545,16 @@ final class BeforeSendInstrumentationDataTests: XCTestCase {
 
         let textUrl = (cxRum[Keys.networkRequestContext.rawValue] as? [String: Any])?[Keys.url.rawValue] as? String
         XCTAssertEqual(attrs["cx_rum.network_request_context.url"] as? String, textUrl)
+
+        // CX-44687: product-analytics fields must mirror through the post-`beforeSend`
+        // dict path. `is_navigation_event` is always present on both sides;
+        // `view_number` is present on both or absent on both (omitted before any view).
+        let textIsNav = cxRum[Keys.isNavigationEvent.rawValue] as? Bool
+        XCTAssertEqual(attrs["cx_rum.is_navigation_event"] as? Bool, textIsNav,
+                       "is_navigation_event must mirror cx_rum → instrumentation_data.otelSpan.attributes")
+
+        let textViewNumber = cxRum[Keys.viewNumber.rawValue] as? Int
+        XCTAssertEqual(attrs["cx_rum.view_number"] as? Int, textViewNumber,
+                       "view_number must mirror cx_rum → otelSpan.attributes when present, and be absent on both sides when not")
     }
 }

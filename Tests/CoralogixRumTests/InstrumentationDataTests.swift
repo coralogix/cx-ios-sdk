@@ -317,6 +317,40 @@ final class InstrumentationDataTests: XCTestCase {
         XCTAssertNil(attrs["cx_rum.error_context.error_message"])
     }
 
+    // MARK: - CX-44687: product-analytics fields mirror to otelSpan.attributes
+    //
+    // Pins the contract that `isNavigationEvent` / `view_number` reach
+    // `instrumentation_data.otelSpan.attributes` (and not only `text.cx_rum`),
+    // matching the centralised AttrKey mapping established in CX-44686.
+
+    func testBuildRumContextAttributes_isNavigationEvent_truePropagates() {
+        let cxRum = makeCxRum(isNavigationEvent: true)
+        let attrs = OtelSpan(otel: mockSpan, cxRum: cxRum, viewManager: nil).attributes
+        XCTAssertEqual(attrs["cx_rum.is_navigation_event"] as? Bool, true)
+    }
+
+    func testBuildRumContextAttributes_isNavigationEvent_falseStillEmitted() {
+        // The flag must be present (true/false) on every span — never absent.
+        let cxRum = makeCxRum(isNavigationEvent: false)
+        let attrs = OtelSpan(otel: mockSpan, cxRum: cxRum, viewManager: nil).attributes
+        XCTAssertNotNil(attrs["cx_rum.is_navigation_event"],
+                        "cx_rum.is_navigation_event must be emitted unconditionally, including when false")
+        XCTAssertEqual(attrs["cx_rum.is_navigation_event"] as? Bool, false)
+    }
+
+    func testBuildRumContextAttributes_viewNumber_presentWhenSet() {
+        let cxRum = makeCxRum(viewNumber: 3)
+        let attrs = OtelSpan(otel: mockSpan, cxRum: cxRum, viewManager: nil).attributes
+        XCTAssertEqual(attrs["cx_rum.view_number"] as? Int, 3)
+    }
+
+    func testBuildRumContextAttributes_viewNumber_absentWhenNil() {
+        let cxRum = makeCxRum(viewNumber: nil)
+        let attrs = OtelSpan(otel: mockSpan, cxRum: cxRum, viewManager: nil).attributes
+        XCTAssertNil(attrs["cx_rum.view_number"],
+                     "view_number must be omitted from otelSpan.attributes when no view has appeared yet")
+    }
+
     // MARK: - OTLP serialization regression tests (fix: network spans 422)
     // Backend requires i32 for status.code and kind — string enum names cause HTTP 422.
 
@@ -401,7 +435,9 @@ final class InstrumentationDataTests: XCTestCase {
         labels: [String: Any]? = nil,
         errorType: String = "",
         errorMessage: String = "",
-        hasRecording: Bool = false
+        hasRecording: Bool = false,
+        isNavigationEvent: Bool = false,
+        viewNumber: Int? = nil
     ) -> CxRum {
         let eventSpan = MockSpanData(attributes: [
             Keys.eventType.rawValue: AttributeValue(eventType.rawValue),
@@ -457,8 +493,8 @@ final class InstrumentationDataTests: XCTestCase {
             internalContext: nil,
             measurementContext: nil,
             fingerPrint: "test-fingerprint",
-            isNavigationEvent: false,
-            viewNumber: nil
+            isNavigationEvent: isNavigationEvent,
+            viewNumber: viewNumber
         )
     }
 }
