@@ -38,7 +38,21 @@ public class ViewManager {
         if let viewName = keyChain?.readStringFromKeychain(service: Keys.service.rawValue, key: Keys.view.rawValue) {
             self.prevViewName = viewName
         }
-        if let persisted = keyChain?.readStringFromKeychain(service: Keys.service.rawValue,
+        // CX-44687: only restore view_number when the persisted PID matches the
+        // current process — i.e. the SDK is being re-initialized in-process and
+        // SessionContext will roll back to the previous session via pid match.
+        // Ordering note: stored-property initializers run before CoralogixRum.init's
+        // body, so SessionMetadata has not yet written getpid() to the keychain when
+        // we read it here. On a fresh cold launch the keychain still holds the OLD
+        // process's PID, which won't match getpid() — and we correctly skip the
+        // restore so the first event of the new session doesn't carry a stale
+        // counter (sessionEndedCallback does NOT fire on first-init: see
+        // SessionManager.fireRotationCallbacks gating on priorExisted).
+        let currentPid = String(getpid())
+        let storedPid = keyChain?.readStringFromKeychain(service: Keys.service.rawValue,
+                                                          key: Keys.pid.rawValue)
+        if storedPid == currentPid,
+           let persisted = keyChain?.readStringFromKeychain(service: Keys.service.rawValue,
                                                              key: Keys.keyViewNumber.rawValue),
            let value = Int(persisted) {
             self.viewNumber = value

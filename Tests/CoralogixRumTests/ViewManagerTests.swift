@@ -109,6 +109,17 @@ final class ViewManagerTests: XCTestCase {
 
     // MARK: - CX-44687: view_number sequence
 
+    /// Pre-seeds the mock keychain with the current process's PID so that
+    /// `ViewManager.init` treats a restored counter as in-process-continuation.
+    /// In production, `SessionMetadata.loadPrevSession` writes `getpid()` to the
+    /// same key during normal init; tests that exercise restore behavior must
+    /// stage that state explicitly.
+    private func seedKeychainWithCurrentPid() {
+        mockKeyChain.writeStringToKeychain(service: Keys.service.rawValue,
+                                            key: Keys.pid.rawValue,
+                                            value: String(getpid()))
+    }
+
     func testViewNumber_isNilBeforeAnyView() {
         XCTAssertNil(viewManager.getViewNumber(),
                      "view_number must be nil until the first view appears")
@@ -149,6 +160,7 @@ final class ViewManagerTests: XCTestCase {
         // We avoid reading the mock dict directly because that race-conditions with
         // the syncQueue barrier writes — the production restore path goes through
         // `readStringFromKeychain` and is what we actually ship.
+        seedKeychainWithCurrentPid()  // simulates in-process continuation
         viewManager.set(cxView: CXView(state: .notifyOnAppear, name: "A"))
         viewManager.set(cxView: CXView(state: .notifyOnAppear, name: "B"))
         viewManager.set(cxView: CXView(state: .notifyOnAppear, name: "C"))
@@ -158,16 +170,33 @@ final class ViewManagerTests: XCTestCase {
 
         let restored = ViewManager(keyChain: mockKeyChain)
         XCTAssertEqual(restored.getViewNumber(), 2,
-                       "every increment must be persisted; a fresh ViewManager built from the same keychain restores the latest value")
+                       "every increment must be persisted; a fresh ViewManager built from the same keychain restores the latest value when the PID matches")
     }
 
     func testViewNumber_restoresFromKeychainOnInit() {
+        seedKeychainWithCurrentPid()  // simulates in-process continuation
         mockKeyChain.writeStringToKeychain(service: Keys.service.rawValue,
                                             key: Keys.keyViewNumber.rawValue,
                                             value: "7")
         let restored = ViewManager(keyChain: mockKeyChain)
         XCTAssertEqual(restored.getViewNumber(), 7,
-                       "ViewManager init must restore view_number from keychain so a same-session restore keeps the sequence intact")
+                       "ViewManager init must restore view_number from keychain so a same-process restore keeps the sequence intact")
+    }
+
+    func testViewNumber_isNotRestored_whenPidDoesNotMatch() {
+        // CX-44687 regression guard: stale Keychain values from a previous process
+        // must NOT leak into a new session. SessionEndedCallback does NOT fire on
+        // first-init (SessionManager.fireRotationCallbacks gates on priorExisted),
+        // so the gating MUST happen at the ViewManager.init restore step.
+        mockKeyChain.writeStringToKeychain(service: Keys.service.rawValue,
+                                            key: Keys.pid.rawValue,
+                                            value: "PID_FROM_PREVIOUS_PROCESS")
+        mockKeyChain.writeStringToKeychain(service: Keys.service.rawValue,
+                                            key: Keys.keyViewNumber.rawValue,
+                                            value: "5")
+        let restored = ViewManager(keyChain: mockKeyChain)
+        XCTAssertNil(restored.getViewNumber(),
+                     "view_number must NOT be restored when the persisted PID doesn't match the current process — the previous session is over and the stored counter is stale")
     }
 
     func testViewNumber_initWithoutPersistedValue_isNil() {
@@ -176,6 +205,7 @@ final class ViewManagerTests: XCTestCase {
     }
 
     func testViewNumber_reset_withVisibleView_setsToZero() {
+        seedKeychainWithCurrentPid()  // restored ViewManager below must be treated as in-process
         viewManager.set(cxView: CXView(state: .notifyOnAppear, name: "A"))
         viewManager.set(cxView: CXView(state: .notifyOnAppear, name: "B"))
         XCTAssertEqual(viewManager.getViewNumber(), 1)
@@ -191,6 +221,7 @@ final class ViewManagerTests: XCTestCase {
 
     func testViewNumber_reset_withoutVisibleView_clearsToNil() {
         // No view ever set → reset should leave the counter nil and clear the keychain entry.
+        seedKeychainWithCurrentPid()  // probe ViewManager below must be treated as in-process
         mockKeyChain.writeStringToKeychain(service: Keys.service.rawValue,
                                             key: Keys.keyViewNumber.rawValue,
                                             value: "5")
@@ -206,6 +237,7 @@ final class ViewManagerTests: XCTestCase {
     }
 
     func testViewNumber_shutdown_clears() {
+        seedKeychainWithCurrentPid()
         viewManager.set(cxView: CXView(state: .notifyOnAppear, name: "Home"))
         XCTAssertEqual(viewManager.getViewNumber(), 0)
 
