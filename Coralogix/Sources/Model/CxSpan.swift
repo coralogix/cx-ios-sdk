@@ -259,13 +259,18 @@ public class CxSpan {
     // injects any of them in its return dict cannot tamper with span identity, dedup,
     // or SDK-owned counters.
     //
-    // CX-44687: `view_number` is an SDK-owned sequence counter (per-session
-    // navigation step). Treated as read-only because a callback injecting a value
-    // would silently corrupt downstream funnel analysis. `isNavigationEvent` is
-    // deliberately NOT here: it's a pure function of `event_context.type` and is
-    // recomputed from the post-merge type in `getDictionary()` instead. Read-only
-    // treatment would only block direct forgery of the flag, leaving customer
-    // type-edits desynced; post-merge recompute handles both vectors uniformly.
+    // CX-44687:
+    // - `view_number` is an SDK-owned sequence counter (per-session navigation
+    //   step); read-only because a callback injecting a value would silently
+    //   corrupt downstream funnel analysis.
+    // - `isNavigationEvent` is a derived field (pure function of
+    //   `event_context.type`); read-only so it's stripped from the editable
+    //   subset the customer sees in `beforeSend(cxRum)` — exposing it would be
+    //   misleading API surface since the customer can't actually change it. The
+    //   post-merge recompute in `getDictionary()` is what keeps it in sync with
+    //   `event_context.type` when the customer edits the type itself; read-only
+    //   alone would restore the original/pre-edit flag value and leave the two
+    //   desynced.
     static let readOnlyCxRumKeys: [String] = [
         Keys.snapshotContext.rawValue,
         Keys.isSnapshotEvent.rawValue,
@@ -276,7 +281,8 @@ public class CxSpan {
         Keys.fingerPrint.rawValue,
         Keys.prevSession.rawValue,
         Keys.platform.rawValue,
-        Keys.viewNumber.rawValue
+        Keys.viewNumber.rawValue,
+        Keys.isNavigationEvent.rawValue
     ]
 
     func createSubsetOfCxRum(from originalCxRum: [String: Any]) -> [String: Any] {

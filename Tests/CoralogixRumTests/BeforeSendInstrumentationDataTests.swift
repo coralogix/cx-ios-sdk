@@ -382,6 +382,7 @@ final class BeforeSendInstrumentationDataTests: XCTestCase {
         XCTAssertNil(captured[Keys.mobileSdk.rawValue], "mobileSdk must not be editable")
         XCTAssertNil(captured[Keys.timestamp.rawValue], "timestamp must not be editable")
         XCTAssertNil(captured[Keys.viewNumber.rawValue], "view_number must not be editable")
+        XCTAssertNil(captured[Keys.isNavigationEvent.rawValue], "isNavigationEvent must not be editable")
 
         if let session = captured[Keys.sessionContext.rawValue] as? [String: Any] {
             XCTAssertNil(session[Keys.sessionId.rawValue], "sessionContext.sessionId must not be editable")
