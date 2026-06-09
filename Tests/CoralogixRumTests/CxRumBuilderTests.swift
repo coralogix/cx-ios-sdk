@@ -227,4 +227,155 @@ class CxRumBuilderTests: XCTestCase {
         ])
         return EventContext(otel: mockSpanData)
     }
+
+    // MARK: - CX-44687: isNavigationEvent + viewNumber wire emission
+
+    func test_build_isNavigationEvent_trueForNavigationType() {
+        guard let cxRum = makeSUT(currentTime: Date(), eventType: "navigation")?.build() else {
+            return XCTFail("build() returned nil for navigation event")
+        }
+        XCTAssertTrue(cxRum.isNavigationEvent)
+    }
+
+    func test_build_isNavigationEvent_falseForLog() {
+        guard let cxRum = makeSUT(currentTime: Date(), eventType: "log")?.build() else {
+            return XCTFail("build() returned nil for log event")
+        }
+        XCTAssertFalse(cxRum.isNavigationEvent)
+    }
+
+    func test_build_isNavigationEvent_falseForError() {
+        guard let cxRum = makeSUT(currentTime: Date(), eventType: "error")?.build() else {
+            return XCTFail("build() returned nil for error event")
+        }
+        XCTAssertFalse(cxRum.isNavigationEvent)
+    }
+
+    func test_build_isNavigationEvent_falseForNetworkRequest() {
+        guard let cxRum = makeSUT(currentTime: Date(), eventType: "network-request")?.build() else {
+            return XCTFail("build() returned nil for network-request event")
+        }
+        XCTAssertFalse(cxRum.isNavigationEvent)
+    }
+
+    func test_build_viewNumber_nilBeforeAnyView() {
+        // ViewManager fresh — no view has been set.
+        mockViewManager = MockViewManager(keyChain: MockKeyChain())
+        guard let cxRum = makeSUT(currentTime: Date(), eventType: "log")?.build() else {
+            return XCTFail("build() returned nil")
+        }
+        XCTAssertNil(cxRum.viewNumber,
+                     "events fired before any view appears must omit view_number")
+    }
+
+    func test_build_viewNumber_propagatesFromViewManager() {
+        // Drive ViewManager through 3 distinct appearances → expect view_number = 2.
+        mockViewManager = MockViewManager(keyChain: MockKeyChain())
+        mockViewManager.set(cxView: CXView(state: .notifyOnAppear, name: "A"))
+        mockViewManager.set(cxView: CXView(state: .notifyOnAppear, name: "B"))
+        mockViewManager.set(cxView: CXView(state: .notifyOnAppear, name: "C"))
+
+        guard let cxRum = makeSUT(currentTime: Date(), eventType: "log")?.build() else {
+            return XCTFail("build() returned nil")
+        }
+        XCTAssertEqual(cxRum.viewNumber, 2)
+    }
+
+    func test_payload_emitsIsNavigationEventAtTopLevel() {
+        guard let cxRum = makeSUT(currentTime: Date(), eventType: "log")?.build() else {
+            return XCTFail("build() returned nil")
+        }
+        var builder = CxRumPayloadBuilder(rum: cxRum, viewManager: mockViewManager)
+        let payload = builder.build()
+
+        // Must appear at cx_rum top level, NOT inside view_context / event_context.
+        XCTAssertNotNil(payload[Keys.isNavigationEvent.rawValue],
+                        "isNavigationEvent must be emitted at the cx_rum top level on every event")
+        XCTAssertEqual(payload[Keys.isNavigationEvent.rawValue] as? Bool, false)
+
+        // Confirm it's NOT nested under event_context.
+        let ec = payload[Keys.eventContext.rawValue] as? [String: Any]
+        XCTAssertNil(ec?[Keys.isNavigationEvent.rawValue],
+                     "isNavigationEvent must not be nested under event_context")
+    }
+
+    func test_payload_emitsViewNumberAtTopLevelWhenPresent() {
+        mockViewManager = MockViewManager(keyChain: MockKeyChain())
+        mockViewManager.set(cxView: CXView(state: .notifyOnAppear, name: "Home"))
+        mockViewManager.set(cxView: CXView(state: .notifyOnAppear, name: "Settings"))
+
+        guard let cxRum = makeSUT(currentTime: Date(), eventType: "log")?.build() else {
+            return XCTFail("build() returned nil")
+        }
+        var builder = CxRumPayloadBuilder(rum: cxRum, viewManager: mockViewManager)
+        let payload = builder.build()
+
+        XCTAssertEqual(payload[Keys.viewNumber.rawValue] as? Int, 1)
+
+        // Must NOT be nested under view_context.
+        let vc = payload[Keys.viewContext.rawValue] as? [String: Any]
+        XCTAssertNil(vc?[Keys.viewNumber.rawValue],
+                     "view_number must not be nested under view_context")
+    }
+
+    func test_payload_omitsViewNumberWhenNoViewYet() {
+        mockViewManager = MockViewManager(keyChain: MockKeyChain())
+        // No views set — viewNumber should be nil.
+
+        guard let cxRum = makeSUT(currentTime: Date(), eventType: "log")?.build() else {
+            return XCTFail("build() returned nil")
+        }
+        var builder = CxRumPayloadBuilder(rum: cxRum, viewManager: mockViewManager)
+        let payload = builder.build()
+
+        XCTAssertNil(payload[Keys.viewNumber.rawValue],
+                     "view_number must be entirely absent from the payload when no view has appeared yet")
+    }
+
+    // Convenience overload that lets the new tests vary event type without touching the
+    // original makeSUT() / its existing callers (which pin a "log" event for snapshot tests).
+    private func makeSUT(currentTime: Date, eventType: String) -> CxRumBuilder? {
+        let endTime = Date()
+        self.mockOtel = MockSpanData(attributes: [Keys.severity.rawValue: AttributeValue("3"),
+                                                  Keys.eventType.rawValue: AttributeValue(eventType),
+                                                  Keys.source.rawValue: AttributeValue("console"),
+                                                  Keys.environment.rawValue: AttributeValue("prod"),
+                                                  Keys.userId.rawValue: AttributeValue("12345"),
+                                                  Keys.userName.rawValue: AttributeValue("John Doe"),
+                                                  Keys.userEmail.rawValue: AttributeValue("john.doe@example.com"),
+                                                  Keys.sessionId.rawValue: AttributeValue("session_001"),
+                                                  Keys.sessionCreationDate.rawValue: AttributeValue(1609459200)],
+                                     startTime: currentTime,
+                                     endTime: endTime,
+                                     spanId: "20",
+                                     traceId: "30",
+                                     name: "testSpan",
+                                     kind: 1,
+                                     statusCode: ["status": "ok"],
+                                     resources: [:])
+
+        let userContext = UserContext(userId: "12345",
+                                      userName: "John Doe",
+                                      userEmail: "john.doe@example.com",
+                                      userMetadata: ["userId": "12345"])
+
+        options = CoralogixExporterOptions(coralogixDomain: CoralogixDomain.US2,
+                                           userContext: userContext,
+                                           environment: "PROD",
+                                           application: "TestApp-iOS",
+                                           version: "1.0",
+                                           publicKey: "token",
+                                           ignoreUrls: [],
+                                           ignoreErrors: [],
+                                           labels: ["key": "value"],
+                                           debug: true)
+        guard let options = options else { return nil }
+
+        return CxRumBuilder(otel: mockOtel,
+                            versionMetadata: VersionMetadata(appName: "Test", appVersion: "1.0"),
+                            sessionManager: mockSessionManager,
+                            viewManager: mockViewManager,
+                            networkManager: NetworkManager(),
+                            options: options)
+    }
 }

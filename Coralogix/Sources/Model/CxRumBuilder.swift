@@ -89,7 +89,10 @@ class CxRumBuilder {
                      screenShotContext: ScreenshotContext(otel: otel),
                      internalContext: internalContext,
                      measurementContext: MeasurementContext(otel: otel),
-                     fingerPrint: FingerprintManager(using: KeychainManager()).fingerprint
+                     fingerPrint: FingerprintManager(using: KeychainManager()).fingerprint,
+                     // CX-44687: pure function of current event type — no cross-event state.
+                     isNavigationEvent: eventContext.type == .navigation,
+                     viewNumber: viewManager.getViewNumber()
         )
     }
     

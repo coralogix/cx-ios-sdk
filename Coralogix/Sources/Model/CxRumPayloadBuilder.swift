@@ -40,6 +40,7 @@ struct CxRumPayloadBuilder {
         addPlatform(to: &result)
         addDeviceContext(to: &result)
         addDeviceState(to: &result)
+        addProductAnalyticsFields(to: &result)
     }
     
     private mutating func addConditionalContexts(to result: inout [String: Any]) {
@@ -120,6 +121,17 @@ struct CxRumPayloadBuilder {
 
     private func addDeviceState(to result: inout [String: Any]) {
         result[Keys.deviceState.rawValue] = rum.deviceState.getDictionary()
+    }
+
+    // CX-44687: product-analytics fields at cx_rum top level.
+    // `isNavigationEvent` is always emitted (true/false). `view_number` is omitted
+    // entirely on spans fired before any view has appeared so consumers can
+    // distinguish "no view yet" from "view #0".
+    private func addProductAnalyticsFields(to result: inout [String: Any]) {
+        result[Keys.isNavigationEvent.rawValue] = rum.isNavigationEvent
+        if let viewNumber = rum.viewNumber {
+            result[Keys.viewNumber.rawValue] = viewNumber
+        }
     }
     
     private func addErrorContext(to result: inout [String: Any]) {

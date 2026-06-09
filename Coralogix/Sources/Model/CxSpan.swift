@@ -245,6 +245,20 @@ public class CxSpan {
     // Restored from the original cx_rum after `mergeDictionaries` so a callback that
     // injects any of them in its return dict cannot tamper with span identity, dedup,
     // or SDK-owned counters.
+    //
+    // CX-44687:
+    // - `view_number` is an SDK-owned sequence counter (per-session navigation
+    //   step); read-only because a callback injecting a value would silently
+    //   corrupt downstream funnel analysis.
+    // - `isNavigationEvent` records the SDK's observation at build time — "did
+    //   the SDK detect a navigation?". Read-only so the SDK's value survives
+    //   the merge regardless of what the customer does. Deliberately NOT
+    //   recomputed from the post-merge `event_context.type`: the flag is an
+    //   immutable historical fact about what the SDK saw, not a derived
+    //   property of the (possibly customer-relabeled) final type. If the
+    //   customer rewrites the type via `beforeSend`, the two fields can
+    //   diverge — that's by design (product-analytics consumers should filter
+    //   on the flag for "was this actually a navigation").
     static let readOnlyCxRumKeys: [String] = [
         Keys.snapshotContext.rawValue,
         Keys.isSnapshotEvent.rawValue,
@@ -254,7 +268,9 @@ public class CxSpan {
         Keys.spanId.rawValue,
         Keys.fingerPrint.rawValue,
         Keys.prevSession.rawValue,
-        Keys.platform.rawValue
+        Keys.platform.rawValue,
+        Keys.viewNumber.rawValue,
+        Keys.isNavigationEvent.rawValue
     ]
 
     func createSubsetOfCxRum(from originalCxRum: [String: Any]) -> [String: Any] {
@@ -286,6 +302,12 @@ public struct VersionMetadata {
 protocol KeyChainProtocol: AnyObject {
     func readStringFromKeychain(service: String, key: String) -> String?
     func writeStringToKeychain(service: String, key: String, value: String)
+    /// CX-44687: removes the entry entirely. Use when an optional value transitions
+    /// to nil — writing an empty-string sentinel is fragile (a future presence-check
+    /// caller would mistake "" for a real value, and a protocol impl that no-ops on
+    /// empty writes would leave stale data behind). Implementations must treat
+    /// "entry not found" as success (the post-condition is "entry absent").
+    func deleteFromKeychain(service: String, key: String)
 }
 
 public struct SessionMetadata {
@@ -322,6 +344,11 @@ public struct SessionMetadata {
         keychain.writeStringToKeychain(service: Keys.service.rawValue,
                                         key: Keys.pid.rawValue,
                                         value: String(newPid))
+        // CX-44687: companion to PID — uniquely identifies this process instance
+        // for PID-recycling detection (see ViewManager.init).
+        keychain.writeStringToKeychain(service: Keys.service.rawValue,
+                                        key: Keys.bootUUID.rawValue,
+                                        value: Global.processBootUUID)
         keychain.writeStringToKeychain(service: Keys.service.rawValue,
                                         key: Keys.keySessionId.rawValue,
                                         value: sessionId)

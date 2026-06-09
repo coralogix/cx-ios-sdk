@@ -103,6 +103,10 @@ public enum Keys: String {
     case data
     case logContext = "log_context"
     case pid
+    // CX-44687: keychain slot for the per-process boot UUID written alongside
+    // `pid` in SessionMetadata.loadPrevSession. Used by ViewManager.init as a
+    // PID-recycling defense — see Global.processBootUUID.
+    case bootUUID
     case frameNumber = "frame_number"
     case binary
     case functionAddressCalled = "function_address_called"
@@ -128,6 +132,17 @@ public enum Keys: String {
     case actionCount
     case isViewUnique
     case isSnapshotEvent
+    // CX-44687: product-analytics fields at the cx_rum top level.
+    // Per-field naming chosen to match Browser's wire shape (Daniel, 2026-06-08):
+    //   - view_number  → snake_case
+    //   - isNavigationEvent → camelCase
+    case viewNumber = "view_number"
+    case isNavigationEvent
+    // Keychain slot (NOT a wire key). The rawValue "viewNumber" is the SecItem
+    // account name we read/write — distinct from `Keys.viewNumber` above whose
+    // rawValue is "view_number". Confusing them at a callsite would silently
+    // store the counter under the wrong slot and break the restore path.
+    case storedViewNumber = "viewNumber"
     case threads
     case httpResponseBodySize = "http_response_body_size"
     case stackTrace

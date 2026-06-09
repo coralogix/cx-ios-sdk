@@ -58,4 +58,19 @@ class KeychainManager: KeyChainProtocol {
             Log.e("Failed to save data to Keychain")
         }
     }
+
+    // CX-44687: see KeyChainProtocol.deleteFromKeychain. Treats "not found" as
+    // success — the post-condition is "entry absent", and an entry that was
+    // never there satisfies that already.
+    func deleteFromKeychain(service: String, key: String) {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: key
+        ]
+        let status = SecItemDelete(query as CFDictionary)
+        if status != errSecSuccess && status != errSecItemNotFound {
+            Log.e("Failed to delete data from Keychain")
+        }
+    }
 }

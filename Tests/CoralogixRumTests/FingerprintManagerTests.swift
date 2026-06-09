@@ -131,6 +131,10 @@ final class FakeKeychain: KeyChainProtocol {
         lock.unlock()
     }
 
+    func deleteFromKeychain(service: String, key: String) {
+        lock.lock(); value = nil; lock.unlock()
+    }
+
     // Helpers for tests
     func setStoredValue(_ v: String?) {
         lock.lock(); value = v; lock.unlock()

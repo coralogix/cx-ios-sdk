@@ -127,6 +127,16 @@ class MockKeyschainManager: KeyChainProtocol {
             self.sessionTimeInterval = value
         }
     }
+
+    func deleteFromKeychain(service: String, key: String) {
+        if key == "pid" {
+            self.pid = ""
+        } else if key == "sessionId" {
+            self.sessionId = ""
+        } else if key == "sessionTimeInterval" {
+            self.sessionTimeInterval = ""
+        }
+    }
 }
 
 class MockNetworkManager: NetworkProtocol {
