@@ -109,15 +109,19 @@ final class ViewManagerTests: XCTestCase {
 
     // MARK: - CX-44687: view_number sequence
 
-    /// Pre-seeds the mock keychain with the current process's PID so that
-    /// `ViewManager.init` treats a restored counter as in-process-continuation.
-    /// In production, `SessionMetadata.loadPrevSession` writes `getpid()` to the
-    /// same key during normal init; tests that exercise restore behavior must
-    /// stage that state explicitly.
+    /// Pre-seeds the mock keychain with the current process's identity (PID +
+    /// boot UUID) so that `ViewManager.init` treats a restored counter as
+    /// in-process-continuation. In production, `SessionMetadata.loadPrevSession`
+    /// writes both during normal init; tests that exercise restore behavior must
+    /// stage that state explicitly. Both fields are checked — PID alone is not
+    /// enough (see CX-44687 / Dan's PR feedback on PID recycling).
     private func seedKeychainWithCurrentPid() {
         mockKeyChain.writeStringToKeychain(service: Keys.service.rawValue,
                                             key: Keys.pid.rawValue,
                                             value: String(getpid()))
+        mockKeyChain.writeStringToKeychain(service: Keys.service.rawValue,
+                                            key: Keys.bootUUID.rawValue,
+                                            value: Global.processBootUUID)
     }
 
     func testViewNumber_isNilBeforeAnyView() {
@@ -192,11 +196,35 @@ final class ViewManagerTests: XCTestCase {
                                             key: Keys.pid.rawValue,
                                             value: "PID_FROM_PREVIOUS_PROCESS")
         mockKeyChain.writeStringToKeychain(service: Keys.service.rawValue,
+                                            key: Keys.bootUUID.rawValue,
+                                            value: "BOOT_UUID_FROM_PREVIOUS_PROCESS")
+        mockKeyChain.writeStringToKeychain(service: Keys.service.rawValue,
                                             key: Keys.keyViewNumber.rawValue,
                                             value: "5")
         let restored = ViewManager(keyChain: mockKeyChain)
         XCTAssertNil(restored.getViewNumber(),
                      "view_number must NOT be restored when the persisted PID doesn't match the current process — the previous session is over and the stored counter is stale")
+    }
+
+    func testViewNumber_isNotRestored_whenBootUUIDDoesNotMatch_evenIfPidCollides() {
+        // CX-44687 / Dan's PR review: PID alone isn't enough — iOS recycles PIDs
+        // across cold launches and a new process can receive a previously-stored
+        // PID by coincidence. The per-process boot UUID is the defense.
+        // Simulate the worst case: PID happens to match the current process
+        // (recycling collision) but the boot UUID still belongs to the previous
+        // process. Restore must be skipped.
+        mockKeyChain.writeStringToKeychain(service: Keys.service.rawValue,
+                                            key: Keys.pid.rawValue,
+                                            value: String(getpid()))
+        mockKeyChain.writeStringToKeychain(service: Keys.service.rawValue,
+                                            key: Keys.bootUUID.rawValue,
+                                            value: "BOOT_UUID_FROM_PREVIOUS_PROCESS")
+        mockKeyChain.writeStringToKeychain(service: Keys.service.rawValue,
+                                            key: Keys.keyViewNumber.rawValue,
+                                            value: "5")
+        let restored = ViewManager(keyChain: mockKeyChain)
+        XCTAssertNil(restored.getViewNumber(),
+                     "view_number must NOT be restored on PID collision — the boot UUID is the defense-in-depth discriminator that catches PID recycling")
     }
 
     func testViewNumber_initWithoutPersistedValue_isNil() {

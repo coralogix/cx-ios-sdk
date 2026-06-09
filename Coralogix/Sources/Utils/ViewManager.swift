@@ -38,20 +38,24 @@ public class ViewManager {
         if let viewName = keyChain?.readStringFromKeychain(service: Keys.service.rawValue, key: Keys.view.rawValue) {
             self.prevViewName = viewName
         }
-        // CX-44687: only restore view_number when the persisted PID matches the
-        // current process — i.e. the SDK is being re-initialized in-process and
-        // SessionContext will roll back to the previous session via pid match.
+        // CX-44687: only restore view_number when BOTH discriminators agree the
+        // keychain entry came from this same process instance — PID alone can
+        // yield a false positive after PID recycling (iOS reuses low PIDs after
+        // reboot), so we pair it with a per-process UUID that cannot collide.
         // Ordering note: stored-property initializers run before CoralogixRum.init's
-        // body, so SessionMetadata has not yet written getpid() to the keychain when
-        // we read it here. On a fresh cold launch the keychain still holds the OLD
-        // process's PID, which won't match getpid() — and we correctly skip the
-        // restore so the first event of the new session doesn't carry a stale
-        // counter (sessionEndedCallback does NOT fire on first-init: see
+        // body, so SessionMetadata has not yet written its identity record to the
+        // keychain when we read it here. On a fresh cold launch the keychain still
+        // holds the OLD process's identity, neither field matches, and we correctly
+        // skip the restore (sessionEndedCallback does NOT fire on first-init: see
         // SessionManager.fireRotationCallbacks gating on priorExisted).
         let currentPid = String(getpid())
+        let currentBootUUID = Global.processBootUUID
         let storedPid = keyChain?.readStringFromKeychain(service: Keys.service.rawValue,
                                                           key: Keys.pid.rawValue)
+        let storedBootUUID = keyChain?.readStringFromKeychain(service: Keys.service.rawValue,
+                                                                key: Keys.bootUUID.rawValue)
         if storedPid == currentPid,
+           storedBootUUID == currentBootUUID,
            let persisted = keyChain?.readStringFromKeychain(service: Keys.service.rawValue,
                                                              key: Keys.keyViewNumber.rawValue),
            let value = Int(persisted) {

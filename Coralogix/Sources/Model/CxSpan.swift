@@ -344,6 +344,11 @@ public struct SessionMetadata {
         keychain.writeStringToKeychain(service: Keys.service.rawValue,
                                         key: Keys.pid.rawValue,
                                         value: String(newPid))
+        // CX-44687: companion to PID — uniquely identifies this process instance
+        // for PID-recycling detection (see ViewManager.init).
+        keychain.writeStringToKeychain(service: Keys.service.rawValue,
+                                        key: Keys.bootUUID.rawValue,
+                                        value: Global.processBootUUID)
         keychain.writeStringToKeychain(service: Keys.service.rawValue,
                                         key: Keys.keySessionId.rawValue,
                                         value: sessionId)

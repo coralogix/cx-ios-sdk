@@ -103,6 +103,10 @@ public enum Keys: String {
     case data
     case logContext = "log_context"
     case pid
+    // CX-44687: keychain slot for the per-process boot UUID written alongside
+    // `pid` in SessionMetadata.loadPrevSession. Used by ViewManager.init as a
+    // PID-recycling defense — see Global.processBootUUID.
+    case bootUUID
     case frameNumber = "frame_number"
     case binary
     case functionAddressCalled = "function_address_called"
