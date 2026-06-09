@@ -97,19 +97,6 @@ public class CxSpan {
                     }
                 }
 
-                // CX-44687: isNavigationEvent is a pure function of event_context.type and
-                // has no independent identity — recompute from the post-merge type so the
-                // derived flag stays consistent no matter what the customer edited (type
-                // alone, flag alone, both, or neither). Treating it as read-only would only
-                // defeat direct forgery of the flag while leaving customer type-edits
-                // desynced; deriving it post-merge fixes both vectors. Both destinations
-                // (`text.cx_rum` and `otelSpan.attributes`) read this final value, so they
-                // stay in lockstep. Falls back to false when type is missing or non-string
-                // (e.g. customer corrupted event_context to a non-dict) — a span without a
-                // navigation type can't be a navigation event by any reasonable reading.
-                let mergedType = (mergedDict[Keys.eventContext.rawValue] as? [String: Any])?[Keys.type.rawValue] as? String
-                mergedDict[Keys.isNavigationEvent.rawValue] = (mergedType == CoralogixEventType.navigation.rawValue)
-
                 // Sync severity from editableCxRum to both the top-level field and
                 // mergedDict[eventContext][severity] so they remain consistent.
                 // parseSeverity accepts Int or numeric String (matching the OTEL init path)
@@ -263,14 +250,15 @@ public class CxSpan {
     // - `view_number` is an SDK-owned sequence counter (per-session navigation
     //   step); read-only because a callback injecting a value would silently
     //   corrupt downstream funnel analysis.
-    // - `isNavigationEvent` is a derived field (pure function of
-    //   `event_context.type`); read-only so it's stripped from the editable
-    //   subset the customer sees in `beforeSend(cxRum)` — exposing it would be
-    //   misleading API surface since the customer can't actually change it. The
-    //   post-merge recompute in `getDictionary()` is what keeps it in sync with
-    //   `event_context.type` when the customer edits the type itself; read-only
-    //   alone would restore the original/pre-edit flag value and leave the two
-    //   desynced.
+    // - `isNavigationEvent` records the SDK's observation at build time — "did
+    //   the SDK detect a navigation?". Read-only so the SDK's value survives
+    //   the merge regardless of what the customer does. Deliberately NOT
+    //   recomputed from the post-merge `event_context.type`: the flag is an
+    //   immutable historical fact about what the SDK saw, not a derived
+    //   property of the (possibly customer-relabeled) final type. If the
+    //   customer rewrites the type via `beforeSend`, the two fields can
+    //   diverge — that's by design (product-analytics consumers should filter
+    //   on the flag for "was this actually a navigation").
     static let readOnlyCxRumKeys: [String] = [
         Keys.snapshotContext.rawValue,
         Keys.isSnapshotEvent.rawValue,

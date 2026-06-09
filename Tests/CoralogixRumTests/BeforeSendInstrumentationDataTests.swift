@@ -558,31 +558,34 @@ final class BeforeSendInstrumentationDataTests: XCTestCase {
                      "view_number must not leak into otelSpan.attributes when the SDK emitted no value")
     }
 
-    // CX-44687: isNavigationEvent is a pure function of event_context.type, recomputed
-    // from the post-merge type in CxSpan.getDictionary(). The four tests below pin the
-    // four edit shapes a customer can produce — direct forgery, type-only edit toward
-    // navigation, type-only edit away from navigation, and contradictory edits to both
-    // — and assert that text.cx_rum and otelSpan.attributes always end up consistent
-    // with the final event_context.type.
+    // CX-44687: isNavigationEvent records the SDK's build-time observation of
+    // whether the event was a navigation. Read-only; preserved across every
+    // customer edit shape. The flag is NOT derived from the (possibly
+    // customer-relabeled) final event_context.type — it's an immutable
+    // historical fact about what the SDK saw. The four tests below pin that
+    // contract across direct flag forgery, type-edit toward navigation,
+    // type-edit away from navigation, and contradictory edits to both.
 
     func test_isNavigationEvent_directInjection_isIgnored() throws {
-        // Customer flips only the flag; original type was "network-request". The
-        // post-merge derivation must override the forgery in BOTH destinations.
+        // Customer flips only the flag; SDK original type was "network-request"
+        // (→ original flag = false). The read-only restore loop must put the
+        // SDK's original value back.
         let result = try runSpan { cxRum in
             var edit = cxRum
             edit[Keys.isNavigationEvent.rawValue] = true
             return edit
         }
         XCTAssertEqual(result.text[Keys.isNavigationEvent.rawValue] as? Bool, false,
-                       "direct forgery of isNavigationEvent must be overridden by the recompute from event_context.type")
+                       "direct forgery of isNavigationEvent must be overridden by the readOnly restore — SDK's original value wins")
         XCTAssertEqual(result.otel["cx_rum.is_navigation_event"] as? Bool, false,
-                       "otelSpan.attributes mirror must reflect the recomputed (not forged) value")
+                       "otelSpan.attributes mirror must reflect the SDK's original value, not the forgery")
     }
 
-    func test_isNavigationEvent_followsTypeEdit_towardNavigation() throws {
-        // Customer rewrites event_context.type to "navigation" without touching the
-        // flag. The flag must be recomputed to true in both destinations — without
-        // the post-merge derivation it would stay at the SDK-original `false`.
+    func test_isNavigationEvent_isPreservedAcrossTypeEdit_toNavigation() throws {
+        // Customer rewrites event_context.type to "navigation" without touching
+        // the flag. SDK original type was "network-request" (→ original flag =
+        // false). The flag must STAY false: it records what the SDK saw, not
+        // what the customer relabeled the payload to.
         let result = try runSpan { cxRum in
             var edit = cxRum
             if var ec = edit[Keys.eventContext.rawValue] as? [String: Any] {
@@ -591,20 +594,24 @@ final class BeforeSendInstrumentationDataTests: XCTestCase {
             }
             return edit
         }
-        XCTAssertEqual(result.text[Keys.isNavigationEvent.rawValue] as? Bool, true,
-                       "isNavigationEvent must follow a customer edit to event_context.type → navigation")
-        XCTAssertEqual(result.otel["cx_rum.is_navigation_event"] as? Bool, true,
-                       "otelSpan.attributes mirror must reflect the post-merge derivation")
+        XCTAssertEqual(result.text[Keys.isNavigationEvent.rawValue] as? Bool, false,
+                       "isNavigationEvent must NOT follow a customer type-edit — it records the SDK's original observation, not the relabeled final type")
+        XCTAssertEqual(result.otel["cx_rum.is_navigation_event"] as? Bool, false,
+                       "otelSpan.attributes mirror must reflect the SDK's original value")
+        // Sanity: the customer's type edit IS still visible in event_context.type.
+        XCTAssertEqual(
+            (result.text[Keys.eventContext.rawValue] as? [String: Any])?[Keys.type.rawValue] as? String,
+            CoralogixEventType.navigation.rawValue,
+            "the customer's type edit must propagate (we're not locking type — only the flag)"
+        )
     }
 
-    func test_isNavigationEvent_followsTypeEdit_awayFromNavigation() throws {
-        // Inverse direction: customer rewrites a navigation event to "log" without
-        // touching the flag. The flag must flip to false in text.cx_rum.
+    func test_isNavigationEvent_isPreservedAcrossTypeEdit_awayFromNavigation() throws {
+        // Inverse direction: SDK original type = "navigation" (→ original flag
+        // = true). Customer rewrites to "log". Flag must STAY true.
+        //
         // Navigation spans don't carry `instrumentation_data` (only network-request
-        // and custom-span do — see CxSpan.init), so we bypass the runSpan helper
-        // and assert text-only. The otelSpan.attributes mirror direction is already
-        // covered by the toward-navigation / direct-injection / contradictory tests
-        // on the network-request fixture.
+        // and custom-span do — see CxSpan.init), so bypass runSpan and assert text-only.
         let navSpan = MockSpanData(
             attributes: [
                 Keys.severity.rawValue: AttributeValue("3"),
@@ -647,13 +654,20 @@ final class BeforeSendInstrumentationDataTests: XCTestCase {
         let dict = try XCTUnwrap(cxSpan.getDictionary())
         let textCxRum = try XCTUnwrap((dict[Keys.text.rawValue] as? [String: Any])?[Keys.cxRum.rawValue] as? [String: Any])
 
-        XCTAssertEqual(textCxRum[Keys.isNavigationEvent.rawValue] as? Bool, false,
-                       "isNavigationEvent must follow a customer edit to event_context.type → log (was navigation)")
+        XCTAssertEqual(textCxRum[Keys.isNavigationEvent.rawValue] as? Bool, true,
+                       "isNavigationEvent must STAY true — SDK saw a navigation; customer relabeling the type to 'log' doesn't change that historical fact")
+        // Sanity: the customer's type edit IS still visible.
+        XCTAssertEqual(
+            (textCxRum[Keys.eventContext.rawValue] as? [String: Any])?[Keys.type.rawValue] as? String,
+            CoralogixEventType.log.rawValue,
+            "the customer's type edit must propagate (we're not locking type — only the flag)"
+        )
     }
 
-    func test_isNavigationEvent_contradictoryEdits_typeWins() throws {
-        // Customer sets type="log" AND isNavigationEvent=true. The derived field
-        // is determined by the final type, so isNavigationEvent must be false.
+    func test_isNavigationEvent_isPreservedAcrossBothEdits() throws {
+        // Customer edits type to "log" AND injects isNavigationEvent=true. SDK
+        // original type was "network-request" (→ original flag = false). Neither
+        // edit affects the flag: it stays at the SDK's original value.
         let result = try runSpan { cxRum in
             var edit = cxRum
             if var ec = edit[Keys.eventContext.rawValue] as? [String: Any] {
@@ -664,9 +678,9 @@ final class BeforeSendInstrumentationDataTests: XCTestCase {
             return edit
         }
         XCTAssertEqual(result.text[Keys.isNavigationEvent.rawValue] as? Bool, false,
-                       "event_context.type is the source of truth — contradictory flag edit must lose")
+                       "neither type-edit nor flag-injection moves isNavigationEvent — SDK's original observation wins")
         XCTAssertEqual(result.otel["cx_rum.is_navigation_event"] as? Bool, false,
-                       "otelSpan.attributes mirror must reflect the type-derived value, not the flag forgery")
+                       "otelSpan.attributes mirror must reflect the SDK's original value")
     }
 
     // MARK: - Baseline parity: no beforeSend → mirror still matches the cx_rum dict.
