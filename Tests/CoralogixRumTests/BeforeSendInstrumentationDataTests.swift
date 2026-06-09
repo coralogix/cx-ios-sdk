@@ -360,6 +360,11 @@ final class BeforeSendInstrumentationDataTests: XCTestCase {
     // through to the final payload.
 
     func test_subset_doesNotContainReadOnlyFields() throws {
+        // Drive the viewManager so the SDK emits a real view_number. Without this,
+        // the SDK omits the field entirely and the view_number assertion below
+        // would trivially pass even if the key were missing from readOnlyCxRumKeys.
+        mockViewManager.set(cxView: CXView(state: .notifyOnAppear, name: "Home"))
+
         // Capture the subset by spying through a no-op beforeSend.
         var captured: [String: Any] = [:]
         _ = try runSpan { cxRum in
@@ -376,6 +381,7 @@ final class BeforeSendInstrumentationDataTests: XCTestCase {
         XCTAssertNil(captured[Keys.snapshotContext.rawValue], "snapshotContext must not be editable")
         XCTAssertNil(captured[Keys.mobileSdk.rawValue], "mobileSdk must not be editable")
         XCTAssertNil(captured[Keys.timestamp.rawValue], "timestamp must not be editable")
+        XCTAssertNil(captured[Keys.viewNumber.rawValue], "view_number must not be editable")
 
         if let session = captured[Keys.sessionContext.rawValue] as? [String: Any] {
             XCTAssertNil(session[Keys.sessionId.rawValue], "sessionContext.sessionId must not be editable")
@@ -514,6 +520,63 @@ final class BeforeSendInstrumentationDataTests: XCTestCase {
                                      "mobileSdk must remain a dict, not be replaced by the forged version")
         XCTAssertEqual(NSDictionary(dictionary: restored), NSDictionary(dictionary: sdkMobileSdk),
                        "mobileSdk must be restored from the original cx_rum, not the callback's injected value")
+    }
+
+    // CX-44687: view_number is an SDK-owned navigation-step counter. A customer
+    // callback injecting a value (e.g. `view_number: 999` on every span) would
+    // silently corrupt downstream funnel analysis — protect like other counters.
+    func test_viewNumber_injectionIsIgnored() throws {
+        // Drive the SDK to emit a known view_number (first appearance → 0).
+        mockViewManager.set(cxView: CXView(state: .notifyOnAppear, name: "Home"))
+
+        let result = try runSpan { cxRum in
+            var edit = cxRum
+            edit[Keys.viewNumber.rawValue] = 999
+            return edit
+        }
+        XCTAssertEqual(result.text[Keys.viewNumber.rawValue] as? Int, 0,
+                       "view_number must be restored from the original cx_rum, not the callback's injected value")
+        // The cx_rum.* attribute mirror must also reflect the restored SDK value.
+        XCTAssertEqual(result.otel["cx_rum.view_number"] as? Int, 0,
+                       "view_number mirror in otelSpan.attributes must reflect the SDK-restored value")
+    }
+
+    // The "no view yet → omit" contract must survive forgery: if the SDK didn't
+    // emit view_number, a callback injecting one must NOT leak it into either
+    // destination. CxSpan's restore loop removes keys whose original was nil.
+    func test_viewNumber_injectionIsRemoved_whenNoViewEmitted() throws {
+        // mockViewManager has never had a view set → SDK omits view_number.
+        let result = try runSpan { cxRum in
+            var edit = cxRum
+            edit[Keys.viewNumber.rawValue] = 999
+            return edit
+        }
+        XCTAssertNil(result.text[Keys.viewNumber.rawValue],
+                     "view_number must be removed from text.cx_rum when the SDK emitted no value, even if the callback injects one")
+        XCTAssertNil(result.otel["cx_rum.view_number"],
+                     "view_number must not leak into otelSpan.attributes when the SDK emitted no value")
+    }
+
+    // CX-44687: pin that `isNavigationEvent` is NOT in readOnlyCxRumKeys. It
+    // derives from `event_context.type` which is already customer-editable, so
+    // the two must move together. A future PR that accidentally tightens this
+    // (by adding `isNavigationEvent` to the read-only list) will fail here.
+    func test_isNavigationEvent_isEditableByBeforeSend() throws {
+        // Probe the SDK-emitted value first so the forgery is unambiguously distinct.
+        let probe = try runSpan { $0 }
+        let sdkValue = probe.text[Keys.isNavigationEvent.rawValue] as? Bool
+        XCTAssertEqual(sdkValue, false,
+                       "Network-request fixture is not a navigation event — probe regression in CxRumBuilder")
+
+        let result = try runSpan { cxRum in
+            var edit = cxRum
+            edit[Keys.isNavigationEvent.rawValue] = true
+            return edit
+        }
+        XCTAssertEqual(result.text[Keys.isNavigationEvent.rawValue] as? Bool, true,
+                       "isNavigationEvent must remain customer-editable via beforeSend (parity with event_context.type)")
+        XCTAssertEqual(result.otel["cx_rum.is_navigation_event"] as? Bool, true,
+                       "the otelSpan.attributes mirror must reflect the customer's edit")
     }
 
     // MARK: - Baseline parity: no beforeSend → mirror still matches the cx_rum dict.

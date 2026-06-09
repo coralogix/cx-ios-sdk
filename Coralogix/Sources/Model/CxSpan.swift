@@ -245,6 +245,12 @@ public class CxSpan {
     // Restored from the original cx_rum after `mergeDictionaries` so a callback that
     // injects any of them in its return dict cannot tamper with span identity, dedup,
     // or SDK-owned counters.
+    //
+    // CX-44687: `view_number` is an SDK-owned sequence counter (per-session
+    // navigation step). Treated as read-only because a callback injecting a value
+    // would silently corrupt downstream funnel analysis. `isNavigationEvent` is
+    // NOT in this list: it derives from `event_context.type` which is already
+    // customer-editable, so the two must move together.
     static let readOnlyCxRumKeys: [String] = [
         Keys.snapshotContext.rawValue,
         Keys.isSnapshotEvent.rawValue,
@@ -254,7 +260,8 @@ public class CxSpan {
         Keys.spanId.rawValue,
         Keys.fingerPrint.rawValue,
         Keys.prevSession.rawValue,
-        Keys.platform.rawValue
+        Keys.platform.rawValue,
+        Keys.viewNumber.rawValue
     ]
 
     func createSubsetOfCxRum(from originalCxRum: [String: Any]) -> [String: Any] {
