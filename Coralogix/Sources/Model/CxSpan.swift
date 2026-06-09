@@ -308,6 +308,12 @@ public struct VersionMetadata {
 protocol KeyChainProtocol: AnyObject {
     func readStringFromKeychain(service: String, key: String) -> String?
     func writeStringToKeychain(service: String, key: String, value: String)
+    /// CX-44687: removes the entry entirely. Use when an optional value transitions
+    /// to nil — writing an empty-string sentinel is fragile (a future presence-check
+    /// caller would mistake "" for a real value, and a protocol impl that no-ops on
+    /// empty writes would leave stale data behind). Implementations must treat
+    /// "entry not found" as success (the post-condition is "entry absent").
+    func deleteFromKeychain(service: String, key: String)
 }
 
 public struct SessionMetadata {

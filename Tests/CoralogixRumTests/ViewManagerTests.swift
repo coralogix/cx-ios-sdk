@@ -248,7 +248,8 @@ final class ViewManagerTests: XCTestCase {
     }
 
     func testViewNumber_reset_withoutVisibleView_clearsToNil() {
-        // No view ever set → reset should leave the counter nil and clear the keychain entry.
+        // No view ever set → reset should leave the counter nil and delete the
+        // keychain entry entirely (not write "" — see CX-44687 / Dan's review).
         seedKeychainWithCurrentPid()  // probe ViewManager below must be treated as in-process
         mockKeyChain.writeStringToKeychain(service: Keys.service.rawValue,
                                             key: Keys.keyViewNumber.rawValue,
@@ -258,7 +259,10 @@ final class ViewManagerTests: XCTestCase {
 
         manager.reset()
         XCTAssertNil(manager.getViewNumber())
-        // End-to-end: a restored ViewManager sees nil (the persisted "" parses to nil).
+        // Keychain entry must be ABSENT, not present-with-empty-string.
+        XCTAssertNil(mockKeyChain.storage[Keys.keyViewNumber.rawValue],
+                     "reset with no visible view must DELETE the keychain entry, not write \"\"")
+        // End-to-end: a restored ViewManager sees nil because the entry is gone.
         let restored = ViewManager(keyChain: mockKeyChain)
         XCTAssertNil(restored.getViewNumber(),
                      "reset with no visible view must clear the persisted counter")
@@ -271,6 +275,9 @@ final class ViewManagerTests: XCTestCase {
 
         viewManager.shutdown()
         XCTAssertNil(viewManager.getViewNumber())
+        // Keychain entry must be ABSENT after shutdown — CX-44687 / Dan's review.
+        XCTAssertNil(mockKeyChain.storage[Keys.keyViewNumber.rawValue],
+                     "shutdown must DELETE the keychain entry, not write \"\"")
         // End-to-end persistence check.
         let restored = ViewManager(keyChain: mockKeyChain)
         XCTAssertNil(restored.getViewNumber(),
@@ -291,12 +298,16 @@ final class ViewManagerTests: XCTestCase {
 
 class MockKeyChain: KeyChainProtocol {
     var storage: [String: String] = [:]
-    
+
     func readStringFromKeychain(service: String, key: String) -> String? {
         return storage[key]
     }
-    
+
     func writeStringToKeychain(service: String, key: String, value: String) {
         storage[key] = value
+    }
+
+    func deleteFromKeychain(service: String, key: String) {
+        storage.removeValue(forKey: key)
     }
 }

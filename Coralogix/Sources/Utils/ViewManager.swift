@@ -109,11 +109,20 @@ public class ViewManager {
         return syncSafe { self.viewNumber }
     }
 
+    // CX-44687: nil → delete the keychain entry, non-nil → write the value. Avoids
+    // the empty-string-as-nil sentinel that would (a) collide with a future presence-
+    // check caller and (b) leave stale data if the protocol impl ever no-ops on
+    // empty-string writes. PRECONDITION: caller holds the syncQueue barrier (true
+    // for set/reset/shutdown — all three execute inside async(flags: .barrier)).
     private func persistViewNumber() {
-        let value = self.viewNumber.map(String.init) ?? ""
-        self.keyChain?.writeStringToKeychain(service: Keys.service.rawValue,
-                                             key: Keys.keyViewNumber.rawValue,
-                                             value: value)
+        if let viewNumber = self.viewNumber {
+            self.keyChain?.writeStringToKeychain(service: Keys.service.rawValue,
+                                                 key: Keys.keyViewNumber.rawValue,
+                                                 value: String(viewNumber))
+        } else {
+            self.keyChain?.deleteFromKeychain(service: Keys.service.rawValue,
+                                              key: Keys.keyViewNumber.rawValue)
+        }
     }
     
     func getDictionary() -> [String: Any] {
