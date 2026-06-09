@@ -180,7 +180,7 @@ final class ViewManagerTests: XCTestCase {
     func testViewNumber_restoresFromKeychainOnInit() {
         seedKeychainWithCurrentPid()  // simulates in-process continuation
         mockKeyChain.writeStringToKeychain(service: Keys.service.rawValue,
-                                            key: Keys.keyViewNumber.rawValue,
+                                            key: Keys.storedViewNumber.rawValue,
                                             value: "7")
         let restored = ViewManager(keyChain: mockKeyChain)
         XCTAssertEqual(restored.getViewNumber(), 7,
@@ -199,7 +199,7 @@ final class ViewManagerTests: XCTestCase {
                                             key: Keys.bootUUID.rawValue,
                                             value: "BOOT_UUID_FROM_PREVIOUS_PROCESS")
         mockKeyChain.writeStringToKeychain(service: Keys.service.rawValue,
-                                            key: Keys.keyViewNumber.rawValue,
+                                            key: Keys.storedViewNumber.rawValue,
                                             value: "5")
         let restored = ViewManager(keyChain: mockKeyChain)
         XCTAssertNil(restored.getViewNumber(),
@@ -220,7 +220,7 @@ final class ViewManagerTests: XCTestCase {
                                             key: Keys.bootUUID.rawValue,
                                             value: "BOOT_UUID_FROM_PREVIOUS_PROCESS")
         mockKeyChain.writeStringToKeychain(service: Keys.service.rawValue,
-                                            key: Keys.keyViewNumber.rawValue,
+                                            key: Keys.storedViewNumber.rawValue,
                                             value: "5")
         let restored = ViewManager(keyChain: mockKeyChain)
         XCTAssertNil(restored.getViewNumber(),
@@ -252,7 +252,7 @@ final class ViewManagerTests: XCTestCase {
         // keychain entry entirely (not write "" — see CX-44687 / Dan's review).
         seedKeychainWithCurrentPid()  // probe ViewManager below must be treated as in-process
         mockKeyChain.writeStringToKeychain(service: Keys.service.rawValue,
-                                            key: Keys.keyViewNumber.rawValue,
+                                            key: Keys.storedViewNumber.rawValue,
                                             value: "5")
         let manager = ViewManager(keyChain: mockKeyChain)
         XCTAssertEqual(manager.getViewNumber(), 5)
@@ -260,7 +260,7 @@ final class ViewManagerTests: XCTestCase {
         manager.reset()
         XCTAssertNil(manager.getViewNumber())
         // Keychain entry must be ABSENT, not present-with-empty-string.
-        XCTAssertNil(mockKeyChain.storage[Keys.keyViewNumber.rawValue],
+        XCTAssertNil(mockKeyChain.storage[Keys.storedViewNumber.rawValue],
                      "reset with no visible view must DELETE the keychain entry, not write \"\"")
         // End-to-end: a restored ViewManager sees nil because the entry is gone.
         let restored = ViewManager(keyChain: mockKeyChain)
@@ -276,7 +276,7 @@ final class ViewManagerTests: XCTestCase {
         viewManager.shutdown()
         XCTAssertNil(viewManager.getViewNumber())
         // Keychain entry must be ABSENT after shutdown — CX-44687 / Dan's review.
-        XCTAssertNil(mockKeyChain.storage[Keys.keyViewNumber.rawValue],
+        XCTAssertNil(mockKeyChain.storage[Keys.storedViewNumber.rawValue],
                      "shutdown must DELETE the keychain entry, not write \"\"")
         // End-to-end persistence check.
         let restored = ViewManager(keyChain: mockKeyChain)

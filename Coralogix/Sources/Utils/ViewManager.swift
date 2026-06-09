@@ -57,7 +57,7 @@ public class ViewManager {
         if storedPid == currentPid,
            storedBootUUID == currentBootUUID,
            let persisted = keyChain?.readStringFromKeychain(service: Keys.service.rawValue,
-                                                             key: Keys.keyViewNumber.rawValue),
+                                                             key: Keys.storedViewNumber.rawValue),
            let value = Int(persisted) {
             self.viewNumber = value
         }
@@ -117,11 +117,11 @@ public class ViewManager {
     private func persistViewNumber() {
         if let viewNumber = self.viewNumber {
             self.keyChain?.writeStringToKeychain(service: Keys.service.rawValue,
-                                                 key: Keys.keyViewNumber.rawValue,
+                                                 key: Keys.storedViewNumber.rawValue,
                                                  value: String(viewNumber))
         } else {
             self.keyChain?.deleteFromKeychain(service: Keys.service.rawValue,
-                                              key: Keys.keyViewNumber.rawValue)
+                                              key: Keys.storedViewNumber.rawValue)
         }
     }
     

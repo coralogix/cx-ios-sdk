@@ -138,7 +138,11 @@ public enum Keys: String {
     //   - isNavigationEvent → camelCase
     case viewNumber = "view_number"
     case isNavigationEvent
-    case keyViewNumber = "viewNumber"
+    // Keychain slot (NOT a wire key). The rawValue "viewNumber" is the SecItem
+    // account name we read/write — distinct from `Keys.viewNumber` above whose
+    // rawValue is "view_number". Confusing them at a callsite would silently
+    // store the counter under the wrong slot and break the restore path.
+    case storedViewNumber = "viewNumber"
     case threads
     case httpResponseBodySize = "http_response_body_size"
     case stackTrace
