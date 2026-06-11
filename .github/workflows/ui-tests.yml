@@ -340,14 +340,22 @@ jobs:
           echo "✅ Tests passed!"
           echo "⏱️  End time: $(date)"
 
-      - name: Install Dart
-        if: always()
-        uses: dart-lang/setup-dart@65eb853c7ba17dde3be364c3d2858773e7144260 # v1
-        with:
-          sdk: stable
-
       - name: Run session-replay leak harness
         if: always()
+        env:
+          # Pin the harness temp root so the frames dir is a known,
+          # uploadable path (NSTemporaryDirectory honors TMPDIR).
+          TMPDIR: ${{ runner.temp }}
         run: |
           set -euo pipefail
           CX_IOS_DESTINATION="$DESTINATION_SPEC" bash tool/run_leak_harness.sh
+
+      - name: Upload leak-harness frames + logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: leak-harness-artifacts
+          if-no-files-found: ignore
+          path: |
+            ${{ runner.temp }}/cx_leak_harness_*
+            ${{ runner.temp }}/cx-leak-harness-*.log
