@@ -27,14 +27,22 @@ class ScannerPipeline {
             return
         }
 
-        // ImageScanner: credit-card image detection only (uses Vision rectangle + OCR).
-        // General image masking is handled synchronously by the UIImageView walk in UIViewExt.
-        // TextScanner removed: native text masking is done by the synchronous UILabel walk;
-        // Flutter text masking is handled by the Dart bitmap provider (pre-masked bitmap).
-        let isImageScannerEnabled = options.maskOnlyCreditCards
+        // Masking responsibilities by content type:
+        // - UIKit text/images: synchronous UILabel/UIImageView walk in UIViewExt (deterministic).
+        // - Flutter: Dart bitmap provider delivers a pre-masked bitmap.
+        // - SwiftUI: the UIView walk cannot see inside hosting views, so captures whose
+        //   scene contains SwiftUI content (urlEntry.containsSwiftUIContent) additionally
+        //   run the Vision-based TextScanner (OCR) and ImageScanner maskAll (rectangle
+        //   detection) stages here. Probabilistic — accepted interim trade-off (BUGV2-6045).
+        // - Credit-card image detection (ImageScanner, maskAll: false) runs for everyone
+        //   when enabled.
+        let needsSwiftUIMasking = urlEntry.containsSwiftUIContent
+        let isTextScannerEnabled = needsSwiftUIMasking && !(options.maskText?.isEmpty ?? true)
+        let isImageScannerEnabled = options.maskOnlyCreditCards || (needsSwiftUIMasking && options.maskAllImages)
         let isFaceScannerEnabled = options.maskFaces
 
         let imageScanner = ImageScanner()
+        let textScanner = TextScanner()
         let faceScanner = FaceScanner()
         let clickScanner = ClickScanner()
 
@@ -46,10 +54,21 @@ class ScannerPipeline {
 
             imageScanner.processImage(
                 screenshotData: urlEntry.screenshotData,
-                maskAll: false,
+                maskAll: needsSwiftUIMasking && options.maskAllImages && !options.maskOnlyCreditCards,
                 creditCardPredicate: options.creditCardPredicate
             ) { outputImage in
                 completion(outputImage ?? input)
+            }
+        }
+
+        func runTextScanner(input: CIImage, completion: @escaping (CIImage) -> Void) {
+            guard isTextScannerEnabled else {
+                completion(input)
+                return
+            }
+
+            textScanner.processImage(ciImage: input, maskText: options.maskText) { outputImage in
+                completion(outputImage)
             }
         }
 
@@ -82,9 +101,11 @@ class ScannerPipeline {
         }
 
         runImageScanner(input: originalImage) { img1 in
-            runFaceScanner(input: img1) { img2 in
-                runClickScanner(input: img2) { finalImage in
-                    completion(finalImage, urlEntry)
+            runTextScanner(input: img1) { img2 in
+                runFaceScanner(input: img2) { img3 in
+                    runClickScanner(input: img3) { finalImage in
+                        completion(finalImage, urlEntry)
+                    }
                 }
             }
         }

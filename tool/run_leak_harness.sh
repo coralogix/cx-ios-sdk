@@ -96,18 +96,29 @@ echo "[leak-harness] mock server: port=$PORT dir=$DIR"
 cd "$EXAMPLE_DIR"
 
 # ── 2a. Capture app NSLog output via the system log ─────────────────────────
-# Extract booted UDID so we can stream the sim's log regardless of how
-# IOS_DESTINATION was set.
-SIM_UDID=$(xcrun simctl list devices booted 2>/dev/null \
-  | grep "Booted" | head -1 \
-  | sed -E 's/.*\(([0-9A-F-]+)\) \(Booted\).*/\1/')
+# Resolve the sim UDID from the destination we'll actually test on (it may
+# not be booted yet when CX_IOS_SIM_UDID/CX_IOS_DESTINATION was supplied);
+# fall back to the first booted device. Boot it if needed so the log stream
+# starts before xcodebuild does — otherwise the stream is silently skipped
+# and $APP_LOG ends up empty.
+case "$IOS_DESTINATION" in
+  *id=*) SIM_UDID=$(printf '%s' "$IOS_DESTINATION" | sed -E 's/.*id=([0-9A-Fa-f-]+).*/\1/') ;;
+  *)     SIM_UDID=$(xcrun simctl list devices booted 2>/dev/null \
+           | grep "Booted" | head -1 \
+           | sed -E 's/.*\(([0-9A-F-]+)\) \(Booted\).*/\1/') ;;
+esac
 rm -f "$APP_LOG"
 if [ -n "$SIM_UDID" ]; then
+  xcrun simctl bootstatus "$SIM_UDID" -b >/dev/null 2>&1 || true
+  # BEGINSWITH instead of == so the stream survives process-name variants
+  # (e.g. a future DemoAppSwiftUI phase would be captured too).
   xcrun simctl spawn "$SIM_UDID" log stream \
-    --predicate 'process == "DemoAppSwift"' \
+    --predicate 'process BEGINSWITH "DemoAppSwift"' \
     --level debug 2>/dev/null > "$APP_LOG" &
   LOG_STREAM_PID=$!
   echo "[leak-harness] app log stream: PID=$LOG_STREAM_PID → $APP_LOG"
+else
+  echo "[leak-harness] WARNING: could not resolve sim UDID — app log stream disabled" >&2
 fi
 
 echo "[leak-harness] Running XCUITest on ${IOS_DESTINATION}..."
@@ -127,7 +138,7 @@ CX_MOCK_PORT="$PORT" TEST_RUNNER_CX_MOCK_PORT="$PORT" xcodebuild \
   DEVELOPMENT_TEAM="" \
   test 2>&1 | tee "$XCODE_LOG" | tail -50
 TEST_EXIT=${PIPESTATUS[0]}
-echo "[leak-harness] xcodebuild test exit=$TEST_EXIT"
+echo "[leak-harness] UIKit xcodebuild test exit=$TEST_EXIT"
 
 # ── 3. Stop server + scan ───────────────────────────────────────────────────
 kill -TERM "$LOG_STREAM_PID" 2>/dev/null || true
@@ -158,7 +169,7 @@ echo "[leak-harness] xcode log (SR-perf): grep '\[SR-perf\]' $XCODE_LOG"
 echo "[leak-harness] app log  (SR-perf): grep 'SR-perf' $APP_LOG"
 
 if [ "$TEST_EXIT" -ne 0 ]; then
-  echo "[leak-harness] FAIL: xcodebuild exited $TEST_EXIT" >&2
+  echo "[leak-harness] FAIL: UIKit xcodebuild exited $TEST_EXIT" >&2
   exit "$TEST_EXIT"
 fi
 exit $SCAN_EXIT

@@ -122,8 +122,6 @@ private final class SentinelCell: UITableViewCell {
         sentinelView.font = UIFont.monospacedSystemFont(ofSize: 16, weight: .bold)
         sentinelView.textColor = UIColor(red: 1.0, green: 0.0, blue: 1.0, alpha: 1.0)
         sentinelView.textAlignment = .right
-        // Mark this label for masking via the SDK's public API.
-        sentinelView.cxMask = true
         contentView.addSubview(sentinelView)
 
         NSLayoutConstraint.activate([
@@ -283,7 +281,6 @@ private func makeSentinelRow(label: String, sentinel: String) -> UIView {
     sentinelView.textColor = UIColor(red: 1.0, green: 0.0, blue: 1.0, alpha: 1.0)
     sentinelView.textAlignment = .right
     sentinelView.text = sentinel
-    sentinelView.cxMask = true
 
     container.addSubview(labelView)
     container.addSubview(sentinelView)

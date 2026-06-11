@@ -23,6 +23,7 @@ import Darwin
 let stateQueue = DispatchQueue(label: "cx.mock.state")
 var currentScenario = "unknown"
 var sequenceNumber = 0
+var warnedContentTypes = Set<String>()
 let framesDir: URL = {
     let tmp = URL(fileURLWithPath: NSTemporaryDirectory())
     let d = tmp.appendingPathComponent("cx_leak_harness_\(Int.random(in: 10000...99999))")
@@ -222,7 +223,16 @@ func handle(req: HTTPRequest) {
 
     let ct = req.headers["content-type"] ?? ""
     guard ct.contains("multipart/form-data"), let boundary = extractBoundary(from: ct) else {
-        if !ct.isEmpty { fputs("[mock-upload] WARNING: unexpected content-type: \(ct)\n", stderr) }
+        // Non-multipart POSTs are expected: the SDK sends span/log telemetry
+        // (application/json) to the same endpoint. Warn once per distinct
+        // content-type so a genuinely unexpected type is still visible
+        // without drowning the frame lines.
+        if !ct.isEmpty {
+            let firstSeen = stateQueue.sync { warnedContentTypes.insert(ct).inserted }
+            if firstSeen {
+                fputs("[mock-upload] ignoring non-multipart content-type: \(ct) (suppressing repeats)\n", stderr)
+            }
+        }
         return
     }
 

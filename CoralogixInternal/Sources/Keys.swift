@@ -207,6 +207,7 @@ public enum Keys: String {
     case screenshotId
     case page
     case screenshotData
+    case containsSwiftUIContent
     case screenshotContext = "screenshot_context"
     case queueScreenshotManager = "com.coralogix.screenshotmanager.queue"
     case queueExporter = "com.coralogix.exporter.queue"

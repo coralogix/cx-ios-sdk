@@ -20,6 +20,10 @@ struct URLEntry {
     let page: String
     let screenshotData: Data
     let point: CGPoint?
+    /// True when the captured scene contained a SwiftUI hosting view at capture
+    /// time (detected on the main thread). Gates the SwiftUI-scoped OCR text /
+    /// image maskAll stages in ScannerPipeline.
+    var containsSwiftUIContent: Bool = false
     let completion: URLProcessingCompletion?
     var finalImage: CIImage? = nil
     var ciImage: CIImage? {

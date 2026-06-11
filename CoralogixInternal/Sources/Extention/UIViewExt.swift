@@ -50,6 +50,22 @@ public extension UIView {
         return nil
     }
 
+    // MARK: - SwiftUI hosting-view detection
+
+    /// True when any view in the subtree is a SwiftUI hosting view.
+    /// Class-name string matching (no NSClassFromString — avoids +initialize side
+    /// effects; see Sentry's SentryUIRedactBuilder for precedent). The mangled
+    /// name of SwiftUI's hosting view (`_TtGC7SwiftUI14_UIHostingView…`) contains
+    /// "UIHostingView" for both root hosting views in pure-SwiftUI apps and
+    /// `UIHostingController` embeddings in hybrid apps.
+    /// Short-circuits at FlutterView subtrees — those arrive pre-masked.
+    static func subtreeContainsSwiftUIHostingView(_ view: UIView) -> Bool {
+        if let cls = _flutterViewClass, view.isKind(of: cls) { return false }
+        if NSStringFromClass(type(of: view)).contains("UIHostingView") { return true }
+        for sub in view.subviews where subtreeContainsSwiftUIHostingView(sub) { return true }
+        return false
+    }
+
     // MARK: - UIView-walk mask collectors
 
     /// Returns the view's rect in rootView's coordinate space using the

@@ -9,6 +9,11 @@ Release-mechanics commits (version bumps, podspec/script tweaks, README edits) a
 omitted; the focus here is user-facing behavior changes. Tickets are referenced as
 `CX-XXXXX` (Jira) or `ALPH-XXXX` (legacy). Pull request numbers are in parentheses.
 
+## [Unreleased]
+
+### Fixed
+- SwiftUI text and images were not masked in session replay (BUGV2-6045): the synchronous UIView walk cannot see inside SwiftUI hosting views. Interim fix: restored the Vision-based `TextScanner` (OCR) and `ImageScanner` `maskAll` (rectangle detection) pipeline stages, scoped to captures whose scene contains a SwiftUI hosting view (`URLEntry.containsSwiftUIContent`). UIKit and Flutter capture paths are unchanged. Note: OCR masking is probabilistic (e.g. rows clipped at the viewport edge mid-scroll escape recognition) — a deterministic class-name-matching approach is planned follow-up (see `docs/swiftui-masking-investigation.md`).
+
 ## [2.8.0] - 2026-05-26
 
 ### Fixed

@@ -170,7 +170,7 @@ public class SessionReplayModel {
         encodeAndProcess(
             image: image,
             compressionQuality: options.captureCompressionQuality,
-            properties: properties,
+            properties: propertiesWithSwiftUIFlag(properties),
             callerIncrementedCounter: callerIncrementedCounter
         )
         return .success(())
@@ -205,7 +205,8 @@ public class SessionReplayModel {
                 return
             }
             encodeAndProcess(image: image, compressionQuality: options.captureCompressionQuality,
-                             properties: properties, callerIncrementedCounter: callerIncrementedCounter)
+                             properties: propertiesWithSwiftUIFlag(properties),
+                             callerIncrementedCounter: callerIncrementedCounter)
             return
         }
 
@@ -230,7 +231,8 @@ public class SessionReplayModel {
             }
 
             self.encodeAndProcess(image: image, compressionQuality: options.captureCompressionQuality,
-                                  properties: properties, callerIncrementedCounter: callerIncrementedCounter)
+                                  properties: self.propertiesWithSwiftUIFlag(properties),
+                                  callerIncrementedCounter: callerIncrementedCounter)
         }
     }
 
@@ -273,6 +275,29 @@ public class SessionReplayModel {
             }
         }
         return nil
+    }
+
+    /// True when any visible window in the active scene contains a SwiftUI
+    /// hosting view. Must be called on the main thread at capture time —
+    /// returns false otherwise. The result flows with the capture properties
+    /// into `URLEntry.containsSwiftUIContent` (same pattern as the click point).
+    internal func detectSwiftUIContentOnMain() -> Bool {
+        guard Thread.isMainThread else { return false }
+        guard let scene = UIApplication.shared.connectedScenes
+            .compactMap({ $0 as? UIWindowScene })
+            .first(where: { $0.activationState == .foregroundActive }) else { return false }
+
+        return scene.windows
+            .filter { !$0.isHidden && $0.alpha > 0 }
+            .contains { UIView.subtreeContainsSwiftUIHostingView($0) }
+    }
+
+    /// Merges the SwiftUI-content flag (detected on the main thread) into the
+    /// capture properties so it reaches `handleCapturedData` → `URLEntry`.
+    private func propertiesWithSwiftUIFlag(_ properties: [String: Any]?) -> [String: Any] {
+        var props = properties ?? [:]
+        props[Keys.containsSwiftUIContent.rawValue] = detectSwiftUIContentOnMain()
+        return props
     }
 
     /// JPEG-encodes the captured image off the main thread, performs the
@@ -450,6 +475,7 @@ public class SessionReplayModel {
             let segmentIndex = self.getSegmentIndex(from: properties)
             let page = self.getPage(from: properties)
             let point = self.getClickPoint(from: properties)
+            let containsSwiftUIContent = (properties?[Keys.containsSwiftUIContent.rawValue] as? Bool) ?? false
 
             let completion: URLProcessingCompletion = { [weak self] ciImage, urlEntry in
                 if let ciImage = ciImage,
@@ -468,6 +494,7 @@ public class SessionReplayModel {
                                     page: page,
                                     screenshotData: data,
                                     point: point,
+                                    containsSwiftUIContent: containsSwiftUIContent,
                                     completion: completion)
 
             self.urlManager.addURL(urlEntry: urlEntry)
