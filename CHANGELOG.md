@@ -9,14 +9,10 @@ Release-mechanics commits (version bumps, podspec/script tweaks, README edits) a
 omitted; the focus here is user-facing behavior changes. Tickets are referenced as
 `CX-XXXXX` (Jira) or `ALPH-XXXX` (legacy). Pull request numbers are in parentheses.
 
-## [Unreleased]
+## [2.8.0] - 2026-06-11
 
 ### Fixed
 - SwiftUI text and images were not masked in session replay (BUGV2-6045): the synchronous UIView walk cannot see inside SwiftUI hosting views. Interim fix: restored the Vision-based `TextScanner` (OCR) and `ImageScanner` `maskAll` (rectangle detection) pipeline stages, scoped to captures whose scene contains a SwiftUI hosting view (`URLEntry.containsSwiftUIContent`). UIKit and Flutter capture paths are unchanged. Note: OCR masking is probabilistic (e.g. rows clipped at the viewport edge mid-scroll escape recognition) — a deterministic class-name-matching approach is planned follow-up (see `docs/swiftui-masking-investigation.md`).
-
-## [2.8.0] - 2026-05-26
-
-### Fixed
 - Session replay mask-skew bug (BUGV2-6045): during scroll animations, mask rects drifted 16–80+ px behind the text they covered. Root cause: `drawHierarchy` captured the presentation layer while mask rects were read from the model layer — the two diverge during `CAAnimation`. Fix: native-window capture now uses `layer.render(in:)` (model layer) and collects mask rects synchronously in the same render pass. Leak rate: 47% of frames → 0.
 - Flutter content appeared as a transparent hole in session-replay frames. Fix: new `flutterViewBitmapProvider` requests a pre-masked RGBA8888 bitmap from the Flutter plugin's Dart rasteriser, which captures and masks in a single synchronous frame slice. Flutter leak rate: 77% → 0.
 - Session replay capture timer silently never fired when initialised via Flutter's background MethodChannel task queue (background threads have no run loop). Fix: all `SessionReplay` entry points now dispatch to `DispatchQueue.main`.
