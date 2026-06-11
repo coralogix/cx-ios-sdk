@@ -30,7 +30,15 @@ public enum Global: String {
         Global.coralogixPath.rawValue,
         Global.sessionReplayPath.rawValue
     ]
-    
+
+    /// CX-44687: per-process unique identifier, generated exactly once per process
+    /// via Swift's `static let` initialization semantics. Used alongside `getpid()`
+    /// as a defense-in-depth discriminator for in-process SDK re-init detection —
+    /// iOS/macOS recycle PIDs across cold launches, so PID alone can yield a false
+    /// "same process" match if the new process happens to receive the dead one's PID.
+    /// A UUID generated in-memory at first access cannot collide.
+    public static let processBootUUID: String = UUID().uuidString
+
     // Function to check if the URL contains any monitored path
     public static func containsMonitoredPath(_ urlString: String) -> Bool {
         return monitoredPaths.contains { path in
