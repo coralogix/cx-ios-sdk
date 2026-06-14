@@ -158,13 +158,10 @@ public class SessionReplayModel {
         }
 
         // Native path: synchronous UIView walk on main thread, encode off-main.
-        let renderStart = Date()
         guard let image = prepareScreenshotImageOnMain(properties: properties),
               let options = sessionReplayOptions else {
             return .failure(.captureFailed)
         }
-        let renderMs = Date().timeIntervalSince(renderStart) * 1_000
-        Log.d("[SR-perf] render \(String(format: "%.1f", renderMs))ms")
 
         let callerIncrementedCounter = properties?[Keys.segmentIndex.rawValue] as? Int != nil
         encodeAndProcess(
@@ -311,15 +308,12 @@ public class SessionReplayModel {
         encodingQueue.async { [weak self] in
             guard let self = self else { return }
 
-            let encodeStart = Date()
             guard let screenshotData = image.jpegData(compressionQuality: compressionQuality) else {
                 if callerIncrementedCounter {
                     SdkManager.shared.getCoralogixSdk()?.revertScreenshotCounter()
                 }
                 return
             }
-            let encodeMs = Date().timeIntervalSince(encodeStart) * 1_000
-            Log.d("[SR-perf] encode \(String(format: "%.1f", encodeMs))ms size=\(screenshotData.count)B")
 
             let isClickFrame = self.getClickPoint(from: properties) != nil
             let shouldSkip = !isClickFrame && self.screenshotDataQueue.sync { () -> Bool in
@@ -332,14 +326,12 @@ public class SessionReplayModel {
             }
 
             if shouldSkip {
-                Log.d("[SR-perf] SKIP duplicate frame")
                 if callerIncrementedCounter {
                     SdkManager.shared.getCoralogixSdk()?.revertScreenshotCounter()
                 }
                 return
             }
 
-            Log.d("[SR-perf] dispatching upload \(screenshotData.count)B")
             self.saveScreenshotToFileSystem(screenshotData: screenshotData, properties: properties)
         }
     }
