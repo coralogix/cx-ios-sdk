@@ -503,12 +503,27 @@ public class SessionReplayModel {
     }
 
     internal func getClickPoint(from properties: [String: Any]?) -> CGPoint? {
-        guard let properties = properties else { return nil }
-        if let positionX = properties[Keys.positionX.rawValue] as? Double,
-           let positionY = properties[Keys.positionY.rawValue] as? Double {
-            return CGPoint(x: positionX, y: positionY)
+        guard let properties = properties,
+              let positionX = Self.coordinate(from: properties[Keys.positionX.rawValue]),
+              let positionY = Self.coordinate(from: properties[Keys.positionY.rawValue]) else {
+            return nil
         }
-        return nil
+        return CGPoint(x: positionX, y: positionY)
+    }
+
+    /// Coerces a coordinate stored in the capture properties into a CGFloat.
+    /// The value may arrive boxed as Double (production tap path), CGFloat, Int, or
+    /// NSNumber. On iOS 26 a boxed `CGFloat as? Double` no longer succeeds, so each
+    /// numeric representation is handled explicitly rather than relying on a single
+    /// Double cast (BUGV2-6045).
+    private static func coordinate(from value: Any?) -> CGFloat? {
+        switch value {
+        case let d as Double: return CGFloat(d)
+        case let f as CGFloat: return f
+        case let i as Int: return CGFloat(i)
+        case let n as NSNumber: return CGFloat(truncating: n)
+        default: return nil
+        }
     }
 
     internal func saveImageToDocumentIfDebug(fileURL: URL, data: Data) -> SessionReplayResultCode {
