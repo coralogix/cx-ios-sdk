@@ -19,8 +19,7 @@ Holds the configuration used to initialize SessionReplay. This includes capture 
 - `captureScale`: Scale factor for image resolution.
 - `captureCompressionQuality`: Compression level for image quality (0.0–1.0).
 - `sessionRecordingSampleRate`: Sampling percentage (0–100) to determine whether the session is recorded.
-- `maskText`: Text patterns (strings or regex) to redact from captured content.
-- `maskCreditCard`: Only credit card images will be masked.
+- `maskText`: List of strings to mask by case-insensitive substring match (UILabel, UITextField, UITextView).
 - `maskAllImages`: Whether all images should be masked.
 - `maskFaces`: Whether faces should be masked (default: `false`).
 - `creditCardPredicate`: Custom text patterns to identify images that may contain credit card content.
@@ -34,7 +33,6 @@ public init(
     captureCompressionQuality: CGFloat = 1.0,
     sessionRecordingSampleRate: Int = 100,
     maskText: [String]? = nil,
-    maskImages: Bool = false,
     maskAllImages: Bool = true,
     maskFaces: Bool = false,
     creditCardPredicate: [String]? = nil,
@@ -44,11 +42,12 @@ public init(
 
 #### Example Usage
 ```swift
+// Mask specific strings
 let options = SessionReplayOptions(
     recordingType: .image,
     captureTimeInterval: 5.0,
-    maskText: ["Confidential", ".*"], // ".*" mask all text
-    maskImages: true,
+    maskText: ["Confidential", "Account Number"],
+    maskAllImages: true,
     maskFaces: true,
     autoStartSessionRecording: true
 )
@@ -99,8 +98,8 @@ let result = SessionReplay.shared.captureEvent()
 let options = SessionReplayOptions(
     recordingType: .image,
     captureTimeInterval: 5.0,
-    maskText: [".*"], // ".*" mask all text
-    maskImages: true,
+    maskText: ["password", "card"],
+    maskAllImages: true,
     maskFaces: true,
     autoStartSessionRecording: false
 )

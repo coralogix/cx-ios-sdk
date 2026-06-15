@@ -45,9 +45,6 @@ public protocol SessionReplayInterface {
     func update(sessionId: String)
     func isRecording() -> Bool
     func isInitialized() -> Bool
-    func registerMaskRegion(_ id: String)
-    func unregisterMaskRegion(_ id: String)
-    func getMaskedRegionIds() -> Set<String>
     func getSessionReplayFolderPath() -> String?
 }
 

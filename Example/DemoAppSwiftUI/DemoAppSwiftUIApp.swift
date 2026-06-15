@@ -14,12 +14,11 @@ struct DemoAppSwiftUIApp: App {
     init() {
         CoralogixRumManager.shared.initialize()
         let sessionReplayOptions = SessionReplayOptions(recordingType: .image,
-                                                        captureTimeInterval: 10.0,
                                                         captureScale: 2.0,
                                                         captureCompressionQuality: 0.8,
-                                                        maskText: [],
+                                                        maskText: nil,
                                                         maskOnlyCreditCards: false,
-                                                        maskAllImages: false,
+                                                        maskAllImages: true,
                                                         autoStartSessionRecording: true)
         SessionReplay.initializeWithOptions(sessionReplayOptions: sessionReplayOptions)
     }

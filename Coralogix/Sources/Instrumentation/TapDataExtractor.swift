@@ -107,12 +107,27 @@ final class ScrollTracker {
         let eventType: InteractionEventName
     }
 
-    /// Returns a `GestureResult` if movement exceeded the threshold, or `nil` for a tap.
+    /// Return type for `processEnded` and `processCancelled`.
+    /// UIKit clears `touch.view` after delivering terminal touch phases, so both paths
+    /// use the view stored at `.began` time rather than reading `touch.view` at call time.
+    enum EndedGesture {
+        case scroll(GestureResult)
+        case tap(view: UIView, location: CGPoint)
+    }
+
+    /// Alias kept so call sites that use the `.cancelled` name remain readable.
+    typealias CancelledGesture = EndedGesture
+
+    /// Returns an `EndedGesture`: `.scroll` if movement exceeded the threshold, `.tap` otherwise.
+    ///
+    /// Always uses `state.view` (stored at `.began`) as the interaction view because
+    /// `touch.view` may be nil by the time `.ended` fires — UIKit can clear the reference
+    /// after delivering the event to the responder chain inside the original `sendEvent`.
     ///
     /// For paged scroll views a lower threshold (5 pt) is used because a fast page-flip
     /// flick lifts the finger before `UIPanGestureRecognizer` can formally recognise the
     /// gesture — the displacement at `.ended` time is small even though the intent is clear.
-    func processEnded(_ touch: UITouch) -> GestureResult? {
+    func processEnded(_ touch: UITouch) -> EndedGesture? {
         guard Thread.isMainThread else {
             Log.w("ScrollTracker.processEnded called off the main thread — event ignored")
             return nil
@@ -121,10 +136,12 @@ final class ScrollTracker {
         let nearestScroll = Self.nearestScrollAncestor(state.view)
         let isPaged = nearestScroll?.isPagingEnabled == true
         let threshold: CGFloat = isPaged ? Self.pagedThreshold : Self.threshold
-        guard let dir = Self.direction(from: state.start, to: touch.location(in: nil),
-                                       threshold: threshold) else { return nil }
+        let endLocation = touch.location(in: nil)
+        guard let dir = Self.direction(from: state.start, to: endLocation, threshold: threshold) else {
+            return .tap(view: state.view, location: endLocation)
+        }
         let eventType: InteractionEventName = isPaged ? .swipe : .scroll
-        return GestureResult(view: state.view, direction: dir, eventType: eventType)
+        return .scroll(GestureResult(view: state.view, direction: dir, eventType: eventType))
     }
 
     /// Called when UIKit cancels a touch because a gesture recogniser took over.
@@ -135,7 +152,7 @@ final class ScrollTracker {
     /// whose pan recogniser can claim the gesture before the first `.moved` event fires.
     /// `touch.location(in: nil)` returns window-relative coordinates and is valid at `.cancelled`
     /// time because it does not depend on `touch.view`.
-    func processCancelled(_ touch: UITouch) -> GestureResult? {
+    func processCancelled(_ touch: UITouch) -> CancelledGesture? {
         guard Thread.isMainThread else {
             Log.w("ScrollTracker.processCancelled called off the main thread — event ignored")
             return nil
@@ -152,10 +169,15 @@ final class ScrollTracker {
         // 5 pt is always less than any recogniser's own threshold, so it never fires
         // for accidental micro-movements that a recogniser would have rejected.
         guard let dir = Self.direction(from: state.start, to: endPoint,
-                                       threshold: Self.pagedThreshold) else { return nil }
+                                       threshold: Self.pagedThreshold) else {
+            // Below threshold — the touch was a tap on a control whose gesture recogniser
+            // cancelled delivery (UINavigationBar, UITabBar, UIToolbar, etc.).
+            // Return the stored view and tap location so the caller can emit a click event.
+            return .tap(view: state.view, location: endPoint)
+        }
         let isPaged = Self.nearestScrollAncestor(state.view)?.isPagingEnabled == true
         let eventType: InteractionEventName = isPaged ? .swipe : .scroll
-        return GestureResult(view: state.view, direction: dir, eventType: eventType)
+        return .scroll(GestureResult(view: state.view, direction: dir, eventType: eventType))
     }
 
     /// Walks the view hierarchy upward and returns the first `UIScrollView` ancestor

@@ -13,28 +13,33 @@ class ScannerPipeline {
     func runPipeline(
         options: SessionReplayOptions,
         urlEntry: URLEntry? = nil,
-        completion: @escaping (CIImage?,URLEntry?) -> Void
+        completion: @escaping (CIImage?, URLEntry?) -> Void
     ) {
         guard let urlEntry = urlEntry else {
             Log.e("Missing urlEntry")
             completion(nil, urlEntry)
             return
         }
-        
-        // Decode CIImage once and reuse it
+
         guard let originalImage = urlEntry.ciImage else {
             Log.e("Failed to decode screenshot data into CIImage.")
             completion(nil, urlEntry)
             return
         }
-        
-        var isTextScannerEnabled = false
-        var isFaceScannerEnabled = false
-        var isImageScannerEnabled = false
-        
-        isTextScannerEnabled = !(options.maskText?.isEmpty ?? true)
-        isFaceScannerEnabled = options.maskFaces
-        isImageScannerEnabled = options.maskAllImages
+
+        // Masking responsibilities by content type:
+        // - UIKit text/images: synchronous UILabel/UIImageView walk in UIViewExt (deterministic).
+        // - Flutter: Dart bitmap provider delivers a pre-masked bitmap.
+        // - SwiftUI: the UIView walk cannot see inside hosting views, so captures whose
+        //   scene contains SwiftUI content (urlEntry.containsSwiftUIContent) additionally
+        //   run the Vision-based TextScanner (OCR) and ImageScanner maskAll (rectangle
+        //   detection) stages here. Probabilistic — accepted interim trade-off (BUGV2-6045).
+        // - Credit-card image detection (ImageScanner, maskAll: false) runs for everyone
+        //   when enabled.
+        let needsSwiftUIMasking = urlEntry.containsSwiftUIContent
+        let isTextScannerEnabled = needsSwiftUIMasking && !(options.maskText?.isEmpty ?? true)
+        let isImageScannerEnabled = options.maskOnlyCreditCards || (needsSwiftUIMasking && options.maskAllImages)
+        let isFaceScannerEnabled = options.maskFaces
 
         let imageScanner = ImageScanner()
         let textScanner = TextScanner()
@@ -49,7 +54,7 @@ class ScannerPipeline {
 
             imageScanner.processImage(
                 screenshotData: urlEntry.screenshotData,
-                maskAll: !options.maskOnlyCreditCards,
+                maskAll: needsSwiftUIMasking && options.maskAllImages && !options.maskOnlyCreditCards,
                 creditCardPredicate: options.creditCardPredicate
             ) { outputImage in
                 completion(outputImage ?? input)

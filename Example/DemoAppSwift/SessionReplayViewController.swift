@@ -11,8 +11,6 @@ class SessionReplayViewController: UITableViewController {
         Keys.isInitialized.rawValue,
         Keys.updateSessionId.rawValue,
         Keys.creditCardElement.rawValue,
-        Keys.registerMaskRegion.rawValue,
-        Keys.unregisterMaskRegion.rawValue,
         Keys.creditCardImgElement.rawValue,
         Keys.creditCardImgElement.rawValue,
         Keys.creditCardImgElement.rawValue,
@@ -27,7 +25,7 @@ class SessionReplayViewController: UITableViewController {
     // Stress content for the SR text-masking pipeline: multi-language paragraphs
     // (RTL + CJK) and short non-word tokens that the old en-US + language-corrected
     // VNRecognizeTextRequest used to silently drop. Scroll through this section to
-    // exercise the widened TextScanner config under maskAllTexts.
+    // exercise the text-masking pipeline with maskText.
     private static let stressTextLines: [String] = [
         "The quick brown fox jumps over the lazy dog. Pack my box with five dozen liquor jugs — abc123 OK.",
         "El veloz murciélago hindú comía feliz cardillo y kiwi. La cigüeña tocaba el saxofón detrás del palenque.",
@@ -87,11 +85,19 @@ class SessionReplayViewController: UITableViewController {
         let container = UIView(frame: CGRect(x: 0, y: 0, width: tableView.bounds.width, height: 0))
         container.addSubview(label)
 
+        // The container starts at width/height 0; trailing and bottom can't
+        // be satisfied until the first layout pass widens it. Drop those two
+        // to .defaultHigh so UIKit relaxes them silently instead of logging.
+        let trailing = label.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -20)
+        trailing.priority = .defaultHigh
+        let bottom = label.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -8)
+        bottom.priority = .defaultHigh
+
         NSLayoutConstraint.activate([
             label.topAnchor.constraint(equalTo: container.topAnchor, constant: 12),
             label.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 20),
-            label.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -20),
-            label.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -8)
+            trailing,
+            bottom
         ])
 
         container.layoutIfNeeded()
@@ -209,14 +215,6 @@ class SessionReplayViewController: UITableViewController {
             showAlertView(message: "isRecording: \(CoralogixRumManager.shared.sdk.isSRRecording())")
         } else if item == Keys.isInitialized.rawValue {
             showAlertView(message: "isInitialized: \(CoralogixRumManager.shared.sdk.isSRInitialized())")
-        } else if item == Keys.registerMaskRegion.rawValue {
-            let maskRegionId = "demoMaskRegion"
-            CoralogixRumManager.shared.sdk.registerMaskRegion(maskRegionId)
-            showAlertView(message: "Registered mask region with id: \(maskRegionId)")
-        } else if item == Keys.unregisterMaskRegion.rawValue {
-            let maskRegionId = "demoMaskRegion"
-            CoralogixRumManager.shared.sdk.unregisterMaskRegion(maskRegionId)
-            showAlertView(message: "Unregistered mask region with id: \(maskRegionId)")
         }
 
         tableView.deselectRow(at: indexPath, animated: true)
@@ -252,8 +250,6 @@ class SessionReplayViewController: UITableViewController {
         case Keys.isRecording.rawValue:        return "Is Recording?"
         case Keys.isInitialized.rawValue:      return "Is Initialized?"
         case Keys.updateSessionId.rawValue:    return "Update Session ID"
-        case Keys.registerMaskRegion.rawValue: return "Register Mask Region"
-        case Keys.unregisterMaskRegion.rawValue: return "Unregister Mask Region"
         default: return raw
         }
     }
@@ -272,10 +268,6 @@ class SessionReplayViewController: UITableViewController {
             return "Check if the SDK has been initialized."
         case Keys.updateSessionId.rawValue:
             return "Generate and apply a fresh session identifier."
-        case Keys.registerMaskRegion.rawValue:
-            return "Mask a region of the screen from recording."
-        case Keys.unregisterMaskRegion.rawValue:
-            return "Remove the mask from the demo region."
         default:
             return ""
         }
@@ -289,8 +281,6 @@ class SessionReplayViewController: UITableViewController {
         case Keys.isRecording.rawValue:        return "waveform.circle"
         case Keys.isInitialized.rawValue:      return "checkmark.seal"
         case Keys.updateSessionId.rawValue:    return "arrow.triangle.2.circlepath"
-        case Keys.registerMaskRegion.rawValue: return "eye.slash"
-        case Keys.unregisterMaskRegion.rawValue: return "eye"
         default: return nil
         }
     }

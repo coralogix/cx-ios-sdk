@@ -16,7 +16,37 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         // Use this method to optionally configure and attach the UIWindow `window` to the provided UIWindowScene `scene`.
         // If using a storyboard, the `window` property will automatically be initialized and attached to the scene.
         // This delegate does not imply the connecting scene or session are new (see `application:configurationForConnectingSceneSession` instead).
-        guard let _ = (scene as? UIWindowScene) else { return }
+        guard let windowScene = (scene as? UIWindowScene) else { return }
+
+        // BUGV2-6045 leak-harness mode: when launched with `--leak-harness`,
+        // swap the storyboard root for LeakHarnessViewController. Triggered
+        // by the XCUITest in DemoAppUITests/SessionReplayLeakUITests; never
+        // reachable from a normal demo-app launch (no UI affordance).
+        //
+        // The storyboard auto-loads Main.storyboard into self.window before
+        // this method runs (per UISceneStoryboardFile in Info.plist), so
+        // swap the existing window's root VC rather than creating a fresh
+        // UIWindow — iOS keeps using the storyboard-managed window even if
+        // we assign self.window to a new instance.
+        if ProcessInfo.processInfo.arguments.contains("--leak-harness") {
+            if self.window == nil {
+                self.window = UIWindow(windowScene: windowScene)
+            }
+            self.window?.rootViewController = LeakHarnessViewController()
+            self.window?.makeKeyAndVisible()
+        } else if ProcessInfo.processInfo.arguments.contains("--leak-harness-navigate") {
+            // BUGV2-6045 navigation-transition leak scenario: two screens with
+            // sentinel labels pushed/popped rapidly by SessionReplayLeakUITests.
+            // Frames captured mid-animation should have both screens' sentinels
+            // masked. Any unmasked magenta pixel is a mask-position skew leak.
+            if self.window == nil {
+                self.window = UIWindow(windowScene: windowScene)
+            }
+            self.window?.rootViewController = UINavigationController(
+                rootViewController: NavigationLeakScreenA()
+            )
+            self.window?.makeKeyAndVisible()
+        }
     }
 
     func sceneDidDisconnect(_ scene: UIScene) {
@@ -47,4 +77,5 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         // to restore the scene back to its current state.
     }
 }
+
 

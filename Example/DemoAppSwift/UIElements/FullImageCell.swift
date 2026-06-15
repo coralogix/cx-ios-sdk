@@ -84,7 +84,9 @@ class FullImageCell: UITableViewCell {
             multiplier: ratio
         )
 
-        aspectConstraint?.priority = .required
+        // Aspect ratio yields to a fixed cell height when they conflict;
+        // scaleAspectFit letterboxes without distortion.
+        aspectConstraint?.priority = .defaultHigh
         aspectConstraint?.isActive = true
     }
 }

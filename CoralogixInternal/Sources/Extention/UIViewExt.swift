@@ -10,6 +10,12 @@ import ObjectiveC
 
 private var kCxMaskKey: UInt8 = 0
 
+// Resolved once; safe when Flutter is not on the classpath.
+private let _flutterViewClass: AnyClass? =
+    NSClassFromString("FlutterView")
+    ?? NSClassFromString("FlutterSurfaceView")
+    ?? NSClassFromString("FlutterImageView")
+
 public extension UIView {
     /// When true, this view will be masked (redacted) in captured session frames.
     var cxMask: Bool {
@@ -23,17 +29,189 @@ public extension UIView {
             .first(where: { $0.activationState == .foregroundActive })
     }
 
-    /// Renders a screenshot of the active window scene with all `cxMask` views and
-    /// any rectangles passed via `regions` blacked out, in a single
-    /// `UIGraphicsImageRenderer` pass. Must be called on the main thread.
-    /// JPEG encoding is intentionally NOT performed here — callers can encode
-    /// off-main since `UIImage`/`CGImage` are not main-thread bound.
+    // MARK: - FlutterView detection
+
+    /// Returns true when any view in the subtree is a FlutterView (or surface/image variant).
+    /// Safe to call when Flutter is not on the classpath — returns false.
+    static func subtreeContainsFlutterView(_ view: UIView) -> Bool {
+        guard let cls = _flutterViewClass else { return false }
+        if view.isKind(of: cls) { return true }
+        for sub in view.subviews where subtreeContainsFlutterView(sub) { return true }
+        return false
+    }
+
+    /// Depth-first search for the first FlutterView in a subtree. Returns nil when not found.
+    static func findFlutterViewInSubtree(_ view: UIView) -> UIView? {
+        guard let cls = _flutterViewClass else { return nil }
+        if view.isKind(of: cls) { return view }
+        for sub in view.subviews {
+            if let found = findFlutterViewInSubtree(sub) { return found }
+        }
+        return nil
+    }
+
+    // MARK: - SwiftUI hosting-view detection
+
+    /// True when any view in the subtree is a SwiftUI hosting view.
+    /// Class-name string matching (no NSClassFromString — avoids +initialize side
+    /// effects; see Sentry's SentryUIRedactBuilder for precedent). The mangled
+    /// name of SwiftUI's hosting view (`_TtGC7SwiftUI14_UIHostingView…`) contains
+    /// "UIHostingView" for both root hosting views in pure-SwiftUI apps and
+    /// `UIHostingController` embeddings in hybrid apps.
+    /// Short-circuits at FlutterView subtrees — those arrive pre-masked.
+    static func subtreeContainsSwiftUIHostingView(_ view: UIView) -> Bool {
+        if let cls = _flutterViewClass, view.isKind(of: cls) { return false }
+        if NSStringFromClass(type(of: view)).contains("UIHostingView") { return true }
+        for sub in view.subviews where subtreeContainsSwiftUIHostingView(sub) { return true }
+        return false
+    }
+
+    // MARK: - UIView-walk mask collectors
+
+    /// Returns the view's rect in rootView's coordinate space using the
+    /// presentation layer position at every level of the hierarchy.
+    ///
+    /// drawHierarchy captures the compositor frame (presentation layer positions).
+    /// A single-step superlayer.convert(…, to: rootView.layer) only reads the
+    /// presentation layer of the leaf view; any ancestor that is mid-animation
+    /// (e.g. the entire VC view during a navigation push/pop) is still read at
+    /// its model position, causing mask skew (BUGV2-6045).
+    ///
+    /// Walking one superview at a time and using presentation() ?? layer at
+    /// each hop ensures the full animated coordinate chain is reflected.
+    private func presentationRect(of view: UIView, in rootView: UIView) -> CGRect {
+        var rect = view.bounds
+        var cur  = view
+        while cur !== rootView {
+            guard let parent = cur.superview else {
+                return view.convert(view.bounds, to: rootView).intersection(rootView.bounds)
+            }
+            let from = cur.layer.presentation()    ?? cur.layer
+            let to   = parent.layer.presentation() ?? parent.layer
+            rect = from.convert(rect, to: to)
+            cur  = parent
+        }
+        return rect.intersection(rootView.bounds)
+    }
+
+    /// Collects rects for text-bearing views (UILabel, UITextField, UITextView) in `rootView`'s
+    /// coordinate space. Short-circuits at FlutterView subtrees — those arrive pre-masked
+    /// via the Dart bitmap provider.
+    func collectTextViewRects(in rootView: UIView, maskText: [String]?) -> [CGRect] {
+        var rects: [CGRect] = []
+        guard let maskText = maskText, !maskText.isEmpty else { return rects }
+
+        func traverse(_ view: UIView) {
+            guard !view.isHidden, view.alpha > 0 else { return }
+            if let cls = _flutterViewClass, view.isKind(of: cls) { return }
+
+            var shouldMask = false
+            let matchesAnyPattern: (String) -> Bool = { text in
+                maskText.contains { pattern in
+                    // Each entry may be a plain literal string or a regular expression.
+                    // Regex is matched case-insensitively; fall back to a case-insensitive
+                    // substring check when the pattern is not valid regex.
+                    guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) else {
+                        return text.localizedCaseInsensitiveContains(pattern)
+                    }
+                    return regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) != nil
+                }
+            }
+            if let label = view as? UILabel, let text = label.text {
+                shouldMask = matchesAnyPattern(text)
+            } else if let field = view as? UITextField, let text = field.text {
+                shouldMask = matchesAnyPattern(text)
+            } else if let tv = view as? UITextView, let text = tv.text {
+                shouldMask = matchesAnyPattern(text)
+            }
+
+            if shouldMask {
+                let rect = presentationRect(of: view, in: rootView)
+                if !rect.isNull && !rect.isEmpty { rects.append(rect) }
+            }
+
+            for sub in view.subviews { traverse(sub) }
+        }
+
+        traverse(rootView)
+        return rects
+    }
+
+    /// Collects rects for UIImageView instances in `rootView`'s coordinate space.
+    /// Short-circuits at FlutterView subtrees.
+    func collectImageViewRects(in rootView: UIView) -> [CGRect] {
+        var rects: [CGRect] = []
+
+        func traverse(_ view: UIView) {
+            guard !view.isHidden, view.alpha > 0 else { return }
+            if let cls = _flutterViewClass, view.isKind(of: cls) { return }
+
+            if view is UIImageView {
+                let rect = presentationRect(of: view, in: rootView)
+                if !rect.isNull && !rect.isEmpty { rects.append(rect) }
+            }
+
+            for sub in view.subviews { traverse(sub) }
+        }
+
+        traverse(rootView)
+        return rects
+    }
+
+    // MARK: - Screenshot capture
+
+    /// Returns true when a UIKit-managed transition (push, pop, modal) is in progress
+    /// for any view controller in the active scene.
+    ///
+    /// `UIViewController.transitionCoordinator` is non-nil exactly while UIKit is running
+    /// a transition animation and nil at rest. Inside `UIGraphicsImageRenderer`,
+    /// `layer.presentation()` always returns nil, so mask-rect walks use model-layer
+    /// positions which diverge from the composited frame during animations. Skipping the
+    /// capture and waiting for the next timer tick avoids that mismatch entirely.
+    static func isNavigationTransitionActive() -> Bool {
+        guard let scene = UIApplication.shared.connectedScenes
+            .compactMap({ $0 as? UIWindowScene })
+            .first(where: { $0.activationState == .foregroundActive }) else { return false }
+        return scene.windows.contains { win in
+            guard let root = win.rootViewController else { return false }
+            return Self.vcHasActiveTransition(root)
+        }
+    }
+
+    private static func vcHasActiveTransition(_ vc: UIViewController) -> Bool {
+        if vc.transitionCoordinator != nil { return true }
+        for child in vc.children where vcHasActiveTransition(child) { return true }
+        if let presented = vc.presentedViewController, vcHasActiveTransition(presented) { return true }
+        return false
+    }
+
+    /// Renders a composite screenshot of all visible windows with masking applied.
+    ///
+    /// Per-window routing:
+    /// - Windows whose subtree contains a FlutterView → composite `flutterCGImage` at
+    ///   `flutterViewRect`; if either is nil → black fill.
+    /// - All other windows → `drawHierarchy(afterScreenUpdates:false)` + synchronous UIView
+    ///   walks for text, image, and `cxMask` views.
+    ///
+    /// Returns nil (skipped) when a navigation transition is in progress — see
+    /// `isNavigationTransitionActive()`.
+    ///
+    /// Must be called on the main thread.
     func captureScreenshotImage(
         scale: CGFloat = UIScreen.main.scale,
-        regions: [CGRect]? = nil
+        maskText: [String]? = nil,
+        maskAllImages: Bool = false,
+        flutterCGImage: CGImage? = nil,
+        flutterViewRect: CGRect? = nil,
+        isClickFrame: Bool = false
     ) -> UIImage? {
         guard Thread.isMainThread else {
             Log.e("captureScreenshotImage must be called on the main thread")
+            return nil
+        }
+
+        guard isClickFrame || !UIView.isNavigationTransitionActive() else {
+            Log.d("[SR] skipping capture — navigation transition in progress")
             return nil
         }
 
@@ -43,49 +221,72 @@ public extension UIView {
             .filter { !$0.isHidden && $0.alpha > 0 }
             .sorted(by: { $0.windowLevel < $1.windowLevel })
 
-        var allMaskRects: [CGRect] = []
-        for window in windows {
-            let rects = collectCxMaskRects(in: window).map {
-                $0.offsetBy(dx: window.frame.origin.x, dy: window.frame.origin.y)
-            }
-            allMaskRects.append(contentsOf: rects)
-        }
-        if let regions = regions, !regions.isEmpty {
-            allMaskRects.append(contentsOf: regions)
-        }
-
+        var nativeMaskRects: [CGRect] = []
         let bounds = scene.screen.bounds
         let format = UIGraphicsImageRendererFormat()
         format.scale = scale
         let renderer = UIGraphicsImageRenderer(bounds: bounds, format: format)
 
-        return renderer.image { ctx in
+        return renderer.image { rendererContext in
             for win in windows {
-                ctx.cgContext.saveGState()
-                ctx.cgContext.translateBy(x: win.frame.origin.x, y: win.frame.origin.y)
-                if !win.drawHierarchy(in: win.bounds, afterScreenUpdates: false) {
-                    win.layer.render(in: ctx.cgContext)
+                if UIView.subtreeContainsFlutterView(win) {
+                    // Flutter window: paste Dart pre-masked bitmap; black-fill on nil/missing rect.
+                    // Never fall through to win.layer.render — GPU surfaces produce transparent holes.
+                    if let rect = flutterViewRect, let cgImage = flutterCGImage {
+                        let uiImage = UIImage(cgImage: cgImage,
+                                              scale: UIScreen.main.scale,
+                                              orientation: .up)
+                        uiImage.draw(in: rect)
+                    } else {
+                        // Screen-space fallback: flutterViewRect is already in screen
+                        // coordinates (flutterView.convert(_, to: nil)); win.frame matches
+                        // the renderer's screen-coordinate space, win.bounds (origin 0,0)
+                        // would black-fill the wrong spot for an offset window (BUGV2-6045).
+                        UIColor.black.setFill()
+                        UIRectFill(flutterViewRect ?? win.frame)
+                    }
+                } else {
+                    // Native window: drawHierarchy goes through the screen compositor
+                    // and captures GPU-composited content (scrolled cells, etc.)
+                    // correctly. layer.render only sees CPU-backed layer content and
+                    // produces white output for GPU-composited views — do not use it
+                    // as the primary renderer.
+                    let origin = win.frame.origin
+                    let ctx = rendererContext.cgContext
+                    ctx.saveGState()
+                    ctx.translateBy(x: origin.x, y: origin.y)
+                    if !win.drawHierarchy(in: win.bounds, afterScreenUpdates: false) {
+                        win.layer.render(in: ctx)
+                    }
+                    ctx.restoreGState()
+
+                    if let maskText = maskText, !maskText.isEmpty {
+                        nativeMaskRects += collectTextViewRects(in: win, maskText: maskText)
+                            .map { $0.offsetBy(dx: origin.x, dy: origin.y) }
+                    }
+                    if maskAllImages {
+                        nativeMaskRects += collectImageViewRects(in: win)
+                            .map { $0.offsetBy(dx: origin.x, dy: origin.y) }
+                    }
+                    nativeMaskRects += collectCxMaskRects(in: win)
+                        .map { $0.offsetBy(dx: origin.x, dy: origin.y) }
                 }
-                ctx.cgContext.restoreGState()
             }
-            if !allMaskRects.isEmpty {
-                ctx.cgContext.setFillColor(UIColor.black.cgColor)
-                for rect in allMaskRects {
-                    ctx.cgContext.fill(rect)
-                }
+
+            if !nativeMaskRects.isEmpty {
+                UIColor.black.setFill()
+                for rect in nativeMaskRects { UIRectFill(rect) }
             }
         }
     }
 
-    /// Synchronous wrapper that captures the image and JPEG-encodes inline.
-    /// Hot paths should call `captureScreenshotImage` and encode off-main instead.
+    /// Convenience wrapper — captures and JPEG-encodes inline. Prefer calling
+    /// `captureScreenshotImage` and encoding off-main on hot paths.
     func captureScreenshot(
         scale: CGFloat = UIScreen.main.scale,
-        compressionQuality: CGFloat = 0.8,
-        regions: [CGRect]? = nil
+        compressionQuality: CGFloat = 0.8
     ) -> Data? {
-        return captureScreenshotImage(scale: scale, regions: regions)?
-            .jpegData(compressionQuality: compressionQuality)
+        return captureScreenshotImage(scale: scale)?.jpegData(compressionQuality: compressionQuality)
     }
 
     func collectCxMaskRects(in rootView: UIView) -> [CGRect] {
@@ -95,8 +296,7 @@ public extension UIView {
             guard !view.isHidden, view.alpha > 0 else { return }
 
             if view.cxMask {
-                var rect = view.convert(view.bounds, to: rootView)
-                rect = rect.intersection(rootView.bounds)
+                let rect = presentationRect(of: view, in: rootView)
                 if !rect.isNull && !rect.isEmpty {
                     rects.append(rect)
                 }

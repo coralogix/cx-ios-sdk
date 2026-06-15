@@ -25,26 +25,62 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
         CoralogixRumManager.shared.initialize()
 
-        // Only configure Firebase if GoogleService-Info.plist exists and is valid
-        // This allows the app to run in CI without Firebase
-        if let path = Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist"),
+        // BUGV2-6045 leak-harness mode: when launched with --leak-harness,
+        // SessionReplay auto-starts recording at 1 fps.
+        // For normal launches, SR is initialized with demo defaults so the
+        // Start/Stop Recording buttons in SessionReplayViewController work.
+        let srOptions: SessionReplayOptions
+        let args = ProcessInfo.processInfo.arguments
+        if args.contains("--leak-harness") {
+            srOptions = SessionReplayOptions(
+                recordingType: .image,
+                captureScale: 1.0,
+                captureCompressionQuality: 1.0,
+                sessionRecordingSampleRate: 100,
+                maskText: [".*"],      // regex wildcard — masks every text label
+                maskOnlyCreditCards: false,
+                maskAllImages: false,
+                autoStartSessionRecording: true
+            )
+        } else if args.contains("--leak-harness-navigate") {
+            // Navigation-transition scenario: 1 fps so each capture is likely
+            // to land during one of the rapid push/pop animations.
+            srOptions = SessionReplayOptions(
+                recordingType: .image,
+                captureScale: 1.0,
+                captureCompressionQuality: 1.0,
+                sessionRecordingSampleRate: 100,
+                maskText: [".*"],      // regex wildcard — masks every text label
+                maskOnlyCreditCards: false,
+                maskAllImages: false,
+                autoStartSessionRecording: true
+            )
+        } else {
+            srOptions = SessionReplayOptions(
+                recordingType: .image,
+                captureScale: 2.0,
+                captureCompressionQuality: 0.8,
+                maskText: nil,
+                maskOnlyCreditCards: false,
+                maskAllImages: false,
+                autoStartSessionRecording: false
+            )
+        }
+        SessionReplay.initializeWithOptions(sessionReplayOptions: srOptions)
+
+        // Only configure Firebase if GoogleService-Info.plist exists and is valid.
+        // Skipped in leak-harness mode because the harness uses a stub plist
+        // that doesn't pass Firebase's API-key validation; the harness doesn't
+        // exercise Firebase anyway.
+        let isLeakHarness = args.contains("--leak-harness") || args.contains("--leak-harness-navigate")
+        if !isLeakHarness,
+           let path = Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist"),
            FileManager.default.fileExists(atPath: path) {
             FirebaseApp.configure()
-        } else {
+        } else if !isLeakHarness {
             print("⚠️ Firebase not configured: GoogleService-Info.plist not found (this is expected in CI)")
         }
 
-
-//        // Must be initialized after CoralogixRum
-//        let sessionReplayOptions = SessionReplayOptions(recordingType: .image,
-//                                                        captureTimeInterval: 10.0,
-//                                                        captureScale: 2.0,
-//                                                        captureCompressionQuality: 0.8,
-//                                                        maskText: [],
-//                                                        maskOnlyCreditCards: false,
-//                                                        maskAllImages: false,
-//                                                        autoStartSessionRecording: true)
-//        SessionReplay.initializeWithOptions(sessionReplayOptions:sessionReplayOptions)
         return true
     }
     

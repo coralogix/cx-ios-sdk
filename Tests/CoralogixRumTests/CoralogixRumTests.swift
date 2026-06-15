@@ -882,18 +882,6 @@ final class MockSpanBuilder: SpanBuilder {
 }
 
 final class MockSessionReplay: SessionReplayInterface {
-    func registerMaskRegion(_ id: String) {
-        
-    }
-    
-    func unregisterMaskRegion(_ id: String) {
-        
-    }
-    
-    func getMaskedRegionIds() -> Set<String> {
-        return Set<String>()
-    }
-    
     func getSessionReplayFolderPath() -> String? {
         return nil
     }

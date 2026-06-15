@@ -11,7 +11,7 @@ struct SessionReplayView: View {
     // Stress content for the SR text-masking pipeline: multi-language paragraphs
     // (RTL + CJK) and short non-word tokens that the old en-US + language-corrected
     // VNRecognizeTextRequest used to silently drop. Scroll through this section to
-    // exercise the widened TextScanner config under maskAllTexts.
+    // exercise the text-masking pipeline with maskText.
     private static let stressTextLines: [String] = [
         "The quick brown fox jumps over the lazy dog. Pack my box with five dozen liquor jugs — abc123 OK.",
         "El veloz murciélago hindú comía feliz cardillo y kiwi. La cigüeña tocaba el saxofón detrás del palenque.",
@@ -78,21 +78,6 @@ struct SessionReplayView: View {
                     toastMessage = "Session ID updated"
                 }
 
-                actionRow(icon: "eye.slash", title: "Register Mask Region",
-                          subtitle: "Mask a region of the screen from recording.") {
-                    let id = "demoMaskRegion"
-                    CoralogixRumManager.shared.sdk.registerMaskRegion(id)
-                    alertMessage = "Registered mask region with id: \(id)"
-                    showAlert = true
-                }
-
-                actionRow(icon: "eye", title: "Unregister Mask Region",
-                          subtitle: "Remove the mask from the demo region.") {
-                    let id = "demoMaskRegion"
-                    CoralogixRumManager.shared.sdk.unregisterMaskRegion(id)
-                    alertMessage = "Unregistered mask region with id: \(id)"
-                    showAlert = true
-                }
             }
 
             Section("Credit Card Input") {

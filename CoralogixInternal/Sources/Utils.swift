@@ -16,7 +16,7 @@ public enum ImageFormat {
 }
 
 public enum Global: String {
-    case sdk = "2.7.0"
+    case sdk = "2.8.0"
     case swiftVersion = "5.9"
     case coralogixPath = "/browser/v1beta/logs"
     case sessionReplayPath = "/browser/alpha/sessionrecording"
@@ -38,7 +38,7 @@ public enum Global: String {
     /// "same process" match if the new process happens to receive the dead one's PID.
     /// A UUID generated in-memory at first access cannot collide.
     public static let processBootUUID: String = UUID().uuidString
-    
+
     // Function to check if the URL contains any monitored path
     public static func containsMonitoredPath(_ urlString: String) -> Bool {
         return monitoredPaths.contains { path in
