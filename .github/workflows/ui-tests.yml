@@ -235,6 +235,31 @@ jobs:
           echo "✅ Created placeholder GoogleService-Info.plist (app will skip Firebase init)"
           ls -la GoogleService-Info.plist
 
+      - name: Patch Xcodeproj for objectVersion 70 (Xcode 16 project format)
+        run: |
+          set -euo pipefail
+          # DemoApp.xcodeproj uses objectVersion 70 (Xcode 16 format, required by
+          # PBXFileSystemSynchronizedRootGroup). CocoaPods' bundled Xcodeproj
+          # (<= 1.27.0, the latest release) lacks the 70 -> compatibility-version
+          # mapping, so `pod install` aborts with "[Xcodeproj] Unable to find
+          # compatibility version string for object version `70`". Inject the
+          # mapping until a fixed gem ships. Idempotent; patches every Xcodeproj
+          # copy on the runner so it works regardless of which Ruby pod resolves.
+          patched=0
+          for CONST in $(find /opt/homebrew /usr/local /Library/Ruby "$HOME/.gem" \
+              -path '*/gems/xcodeproj-*/lib/xcodeproj/constants.rb' 2>/dev/null); do
+            echo "Patching: $CONST"
+            ruby -e '
+              f = ARGV[0]; s = File.read(f)
+              unless s =~ /^\s*70\s*=>/
+                s = s.sub("COMPATIBILITY_VERSION_BY_OBJECT_VERSION = {",
+                          "COMPATIBILITY_VERSION_BY_OBJECT_VERSION = {\n      70 => \x27Xcode 16.0\x27,")
+                File.write(f, s)
+              end' "$CONST"
+            grep -nE "^\s*70 =>" "$CONST" && patched=1 || true
+          done
+          [ "$patched" = 1 ] || echo "WARNING: no Xcodeproj constants.rb patched — pod install may fail on objectVersion 70"
+
       - name: Install CocoaPods dependencies
         run: |
           set -euo pipefail
