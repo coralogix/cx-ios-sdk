@@ -45,7 +45,17 @@ public struct FlutterViewBitmap {
             Log.w("FlutterViewBitmap: invalid dimensions \(width)x\(height) — treating as missing bitmap")
             return nil
         }
-        guard bytes.count == width * height * 4 else {
+        // width/height arrive from the Flutter plugin (untrusted cross-boundary data);
+        // Swift traps on signed-integer overflow, so compute the byte count with
+        // overflow-reporting math and treat any overflow as a missing bitmap rather
+        // than crashing the host app.
+        let (pixels, pixelsOverflow)  = width.multipliedReportingOverflow(by: height)
+        let (expected, bytesOverflow) = pixels.multipliedReportingOverflow(by: 4)
+        guard !pixelsOverflow, !bytesOverflow else {
+            Log.w("FlutterViewBitmap: dimensions \(width)x\(height) overflow — treating as missing bitmap")
+            return nil
+        }
+        guard bytes.count == expected else {
             Log.w("FlutterViewBitmap: byte count \(bytes.count) ≠ \(width)×\(height)×4 — treating as missing bitmap")
             return nil
         }

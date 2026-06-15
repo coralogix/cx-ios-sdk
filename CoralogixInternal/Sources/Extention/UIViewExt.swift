@@ -227,7 +227,7 @@ public extension UIView {
         format.scale = scale
         let renderer = UIGraphicsImageRenderer(bounds: bounds, format: format)
 
-        return renderer.image { _ in
+        return renderer.image { rendererContext in
             for win in windows {
                 if UIView.subtreeContainsFlutterView(win) {
                     // Flutter window: paste Dart pre-masked bitmap; black-fill on nil/missing rect.
@@ -238,8 +238,12 @@ public extension UIView {
                                               orientation: .up)
                         uiImage.draw(in: rect)
                     } else {
+                        // Screen-space fallback: flutterViewRect is already in screen
+                        // coordinates (flutterView.convert(_, to: nil)); win.frame matches
+                        // the renderer's screen-coordinate space, win.bounds (origin 0,0)
+                        // would black-fill the wrong spot for an offset window (BUGV2-6045).
                         UIColor.black.setFill()
-                        UIRectFill(flutterViewRect ?? win.bounds)
+                        UIRectFill(flutterViewRect ?? win.frame)
                     }
                 } else {
                     // Native window: drawHierarchy goes through the screen compositor
@@ -248,7 +252,7 @@ public extension UIView {
                     // produces white output for GPU-composited views — do not use it
                     // as the primary renderer.
                     let origin = win.frame.origin
-                    let ctx = UIGraphicsGetCurrentContext()!
+                    let ctx = rendererContext.cgContext
                     ctx.saveGState()
                     ctx.translateBy(x: origin.x, y: origin.y)
                     if !win.drawHierarchy(in: win.bounds, afterScreenUpdates: false) {

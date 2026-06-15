@@ -89,6 +89,11 @@ fi
 PORT=$(grep '^CX_MOCK_PORT=' "$LOG_FILE" | head -1 | sed 's/^CX_MOCK_PORT=//')
 DIR=$(grep '^CX_MOCK_DIR=' "$LOG_FILE" | head -1 | sed 's/^CX_MOCK_DIR=//')
 echo "[leak-harness] mock server: port=$PORT dir=$DIR"
+if [ -z "$PORT" ] || [ -z "$DIR" ]; then
+  echo "[leak-harness] FATAL: could not parse CX_MOCK_PORT/CX_MOCK_DIR from mock server output" >&2
+  tail -40 "$LOG_FILE" >&2
+  exit 2
+fi
 
 # ── 2. Run the XCUITest ─────────────────────────────────────────────────────
 # CX_MOCK_PORT is exported so the test process sees it in
