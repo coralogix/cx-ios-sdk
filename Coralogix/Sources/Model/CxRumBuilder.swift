@@ -103,10 +103,20 @@ class CxRumBuilder {
     }
     
     private func buildInternalContext(for eventContext: EventContext) -> InternalContext? {
-        if eventContext.type == .internalKey {
-            return InternalContext(eventName: Keys.initKey.rawValue, options: options)
+        guard eventContext.type == .internalKey else { return nil }
+
+        // session_replay_init carries its own snapshot as a span attribute (it lives in the
+        // SessionReplay module, which the exporter can't reach). The SDK-init log carries no
+        // sub-type attribute and reconstructs its payload from the live exporter options.
+        // CX-44984 lesson #1: without this branch the span has the right attributes but
+        // internal_context never lands on the wire.
+        if let internalEventType = otel.getAttribute(forKey: Keys.internalEventType.rawValue) as? String,
+           internalEventType == Keys.sessionReplayInit.rawValue {
+            let data = (otel.getAttribute(forKey: Keys.internalEventData.rawValue) as? String)
+                .flatMap { Helper.convertJsonStringToDict(jsonString: $0) } ?? [:]
+            return InternalContext(eventName: internalEventType, data: data)
         }
-        return nil
+        return InternalContext(eventName: Keys.initKey.rawValue, data: options.getInitData())
     }
     
     internal func buildSnapshotContextIfNeeded(for eventContext: EventContext) -> SnapshotContext? {

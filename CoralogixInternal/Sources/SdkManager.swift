@@ -36,6 +36,11 @@ public protocol CoralogixInterface {
     
     /// Reverts the screenshot counter when a capture is skipped.
     func revertScreenshotCounter()
+
+    /// Emits the one-shot session-replay init log carrying the SessionReplayOptions snapshot.
+    /// SessionReplay builds the snapshot (it owns the options type) and passes it as a dictionary,
+    /// since the Coralogix module can't reference SessionReplayOptions.
+    func reportSessionReplayInit(snapshot: [String: Any])
 }
 
 public protocol SessionReplayInterface {

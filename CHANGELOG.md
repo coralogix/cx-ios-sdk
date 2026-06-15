@@ -9,6 +9,11 @@ Release-mechanics commits (version bumps, podspec/script tweaks, README edits) a
 omitted; the focus here is user-facing behavior changes. Tickets are referenced as
 `CX-XXXXX` (Jira) or `ALPH-XXXX` (legacy). Pull request numbers are in parentheses.
 
+## [2.9.0] - 2026-06-15
+
+### Added
+- Session-replay init log (CX-44984): when Session Replay comes up, the SDK now emits a one-shot internal event capturing the `SessionReplayOptions` configuration — mirroring the existing SDK init log and the Android counterpart (CX-44992) so the backend ingests one cross-platform schema. The event carries `event_context.type = "internal"` and an `internal_context` of `{ event: "session_replay_init", data: <snapshot> }`. The snapshot includes `recordingType`, `captureScale`, `captureCompressQuality`, `sessionRecordingSampleRate`, `autoStartSessionRecording`, `textsToMask`, `maskAllImages`, `maskOnlyCreditCards`, `maskFaces`, `creditCardPredicate`, and `hasFlutterViewBitmapProvider` (a presence flag — the closure is never serialised); the deprecated `captureTimeInterval` is excluded. The log fires only when the session was not dropped by `sessionRecordingSampleRate` and the subsystem actually initialised, and is isolated from auto-start so a diagnostic-log failure can never disable recording.
+
 ## [2.8.0] - 2026-06-11
 
 ### Fixed

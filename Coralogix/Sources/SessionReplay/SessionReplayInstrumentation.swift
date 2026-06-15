@@ -125,4 +125,8 @@ extension CoralogixRum: CoralogixInterface {
     public func revertScreenshotCounter() {
         self.coralogixExporter?.getScreenshotManager().revertScreenshotCounter()
     }
+
+    public func reportSessionReplayInit(snapshot: [String: Any]) {
+        self.createSessionReplayInitSpan(snapshot: snapshot)
+    }
 }

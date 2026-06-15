@@ -148,6 +148,12 @@ public class SessionReplay: SessionReplayInterface {
         let sessionId = coralogixSdk.getSessionID()
         self.update(sessionId: sessionId)
 
+        // CX-44984: emit the init log now that the subsystem is up. This runs only for the real
+        // instance — the sampled-out dummy path (sessionRecordingSampleRate) never reaches here.
+        // Kept ahead of and independent from the auto-start dispatch below so a diagnostic-log
+        // issue can never disable recording (lesson #4 from Android CX-44992).
+        coralogixSdk.reportSessionReplayInit(snapshot: sessionReplayOptions.toSessionReplayInitLogSnapshot())
+
         if sessionReplayOptions.autoStartSessionRecording {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
                 self.startRecording()

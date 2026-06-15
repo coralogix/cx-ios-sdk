@@ -307,7 +307,8 @@ class MockCoralogix: CoralogixInterface {
     var idle: Bool = false
     var reportedErrors: [String] = []
     var periodicallyCaptureEventCalled = false
-    
+    var reportedSessionReplayInitSnapshots: [[String: Any]] = []
+
     func periodicallyCaptureEventTriggered() {
         periodicallyCaptureEventCalled = true
     }
@@ -365,6 +366,10 @@ class MockCoralogix: CoralogixInterface {
     
     func revertScreenshotCounter() {
         // No-op for mock
+    }
+
+    func reportSessionReplayInit(snapshot: [String: Any]) {
+        reportedSessionReplayInitSnapshots.append(snapshot)
     }
 }
 
