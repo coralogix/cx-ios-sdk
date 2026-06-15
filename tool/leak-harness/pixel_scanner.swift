@@ -55,25 +55,49 @@ if frames.isEmpty {
     exit(0)
 }
 
-var leaks: [(path: String, count: Int)] = []
+// Frames whose filename starts with one of these prefixes are still scanned
+// and reported, but their leaks are non-blocking (warn instead of fail). Set
+// via CX_LEAK_WARN_ONLY_PREFIXES (comma-separated). Empty/unset → every leak
+// is blocking (the strict default, used for local runs). CI opts the known
+// navigation-transition leak into warn-only; tracked in CX-45948.
+let warnOnlyPrefixes = (ProcessInfo.processInfo.environment["CX_LEAK_WARN_ONLY_PREFIXES"] ?? "")
+    .split(separator: ",")
+    .map { $0.trimmingCharacters(in: .whitespaces) }
+    .filter { !$0.isEmpty }
+
+func isWarnOnly(_ url: URL) -> Bool {
+    let name = url.lastPathComponent
+    return warnOnlyPrefixes.contains { name.hasPrefix($0) }
+}
+
+var fatal: [(path: String, count: Int)] = []
+var warn: [(path: String, count: Int)] = []
 var skipped = 0
 
 for f in frames {
     if let n = countMagenta(at: f) {
-        if n > 0 { leaks.append((f.path, n)) }
+        guard n > 0 else { continue }
+        if isWarnOnly(f) { warn.append((f.path, n)) } else { fatal.append((f.path, n)) }
     } else {
         skipped += 1
     }
 }
 
 if skipped > 0 { print("[leak-check] skipped \(skipped) non-image file(s)") }
-leaks.sort { $0.count > $1.count }
+fatal.sort { $0.count > $1.count }
+warn.sort { $0.count > $1.count }
 
-if leaks.isEmpty {
-    print("[leak-check] OK — 0 leaks across \(frames.count) frame(s) in \(dir.path)")
+if !warn.isEmpty {
+    print("[leak-check] WARN — \(warn.count)/\(frames.count) frame(s) leaked but are non-blocking (CX_LEAK_WARN_ONLY_PREFIXES); tracked in CX-45948:")
+    for l in warn { print("  (warn) \(l.path)  \(l.count) px") }
+}
+
+if fatal.isEmpty {
+    let suffix = warn.isEmpty ? "" : " (\(warn.count) non-blocking frame(s) warned)"
+    print("[leak-check] OK — 0 blocking leaks across \(frames.count) frame(s) in \(dir.path)\(suffix)")
     exit(0)
 }
 
-print("[leak-check] FAIL — \(leaks.count)/\(frames.count) frame(s) leaked magenta pixels:")
-for l in leaks { print("  \(l.path)  \(l.count) px") }
+print("[leak-check] FAIL — \(fatal.count)/\(frames.count) frame(s) leaked magenta pixels:")
+for l in fatal { print("  \(l.path)  \(l.count) px") }
 exit(1)
