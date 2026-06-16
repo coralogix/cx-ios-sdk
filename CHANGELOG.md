@@ -9,6 +9,11 @@ Release-mechanics commits (version bumps, podspec/script tweaks, README edits) a
 omitted; the focus here is user-facing behavior changes. Tickets are referenced as
 `CX-XXXXX` (Jira) or `ALPH-XXXX` (legacy). Pull request numbers are in parentheses.
 
+## [2.9.0] - 2026-06-15
+
+### Added
+- Session Replay now emits a one-shot init log capturing its configuration when recording starts, so the active Session Replay settings are visible in the backend.
+
 ## [2.8.0] - 2026-06-11
 
 ### Fixed
