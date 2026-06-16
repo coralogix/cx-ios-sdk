@@ -72,6 +72,9 @@ class ColdDetectorTests: XCTestCase {
     /// fires `handleColdClosure` with the correct dictionary structure and a positive duration.
     func testDidBecomeActive_afterStartMonitoring_reportsColdStart() {
         sut.startMonitoring()
+        // Pin a recent start so the duration is deterministic and under the cap regardless
+        // of how long the test process has been alive (kernel birth time could exceed it).
+        sut.launchStartTime = CFAbsoluteTimeGetCurrent() - 1
 
         var receivedMetric: [String: Any]?
         sut.handleColdClosure = { receivedMetric = $0 }
@@ -96,6 +99,8 @@ class ColdDetectorTests: XCTestCase {
     /// The observer is removed on first delivery so subsequent fires are ignored.
     func testDidBecomeActive_firesOnlyOnce() {
         sut.startMonitoring()
+        // Pin a recent start so the (single) report isn't dropped by the cap.
+        sut.launchStartTime = CFAbsoluteTimeGetCurrent() - 1
 
         var callCount = 0
         sut.handleColdClosure = { _ in callCount += 1 }
@@ -144,6 +149,77 @@ class ColdDetectorTests: XCTestCase {
         NotificationCenter.default.post(name: UIApplication.didBecomeActiveNotification, object: nil)
 
         XCTAssertNotNil(sut.launchEndTime, "launchEndTime must be set after cold start is reported")
+    }
+
+    // MARK: - Prewarm / background-launch filtering
+
+    /// Verifies that a prewarmed launch (iOS spawns the process in the background ahead of
+    /// user intent) is dropped — the kernel-birth → didBecomeActive delta is not a real cold
+    /// start and would otherwise report multi-hour durations.
+    func testDidBecomeActive_whenPrewarmed_doesNotReport() {
+        sut.startMonitoring()
+        sut.isPrewarmedLaunch = { true }
+
+        var called = false
+        sut.handleColdClosure = { _ in called = true }
+
+        NotificationCenter.default.post(name: UIApplication.didBecomeActiveNotification, object: nil)
+
+        XCTAssertFalse(called, "Prewarmed launch must not emit a cold-start metric")
+    }
+
+    /// Verifies a non-prewarmed launch still reports normally — proves the prewarm guard
+    /// doesn't suppress legitimate cold starts.
+    func testDidBecomeActive_whenNotPrewarmed_reports() {
+        sut.startMonitoring()
+        sut.isPrewarmedLaunch = { false }
+        // Pin a recent start so the cap can't drop the report — isolates the prewarm path.
+        sut.launchStartTime = CFAbsoluteTimeGetCurrent() - 1
+
+        var called = false
+        sut.handleColdClosure = { _ in called = true }
+
+        NotificationCenter.default.post(name: UIApplication.didBecomeActiveNotification, object: nil)
+
+        XCTAssertTrue(called, "A normal (non-prewarmed) launch must emit a cold-start metric")
+    }
+
+    /// Verifies a launch whose duration exceeds the sane ceiling (background launch skew) is
+    /// dropped. `launchStartTime` is set far enough in the past to push the delta over the cap.
+    func testDidBecomeActive_whenDurationExceedsCap_doesNotReport() {
+        sut.startMonitoring()
+        // Start time well beyond the 60s cap (cap is ms; CFAbsoluteTime is seconds).
+        let secondsOverCap = (ColdDetector.maxReasonableColdStartMs / 1000) + 60
+        sut.launchStartTime = CFAbsoluteTimeGetCurrent() - secondsOverCap
+
+        var called = false
+        sut.handleColdClosure = { _ in called = true }
+
+        NotificationCenter.default.post(name: UIApplication.didBecomeActiveNotification, object: nil)
+
+        XCTAssertFalse(called, "Cold-start durations beyond the cap must be dropped")
+    }
+
+    /// Verifies a launch just under the cap still reports — proves the cap doesn't drop
+    /// legitimate (if slow) cold starts.
+    func testDidBecomeActive_whenDurationUnderCap_reports() {
+        sut.startMonitoring()
+        // 1s ago → ~1000ms, comfortably under the cap.
+        sut.launchStartTime = CFAbsoluteTimeGetCurrent() - 1
+
+        var receivedDuration: Double?
+        sut.handleColdClosure = { dict in
+            let inner = dict[MobileVitalsType.cold.stringValue] as? [String: Any]
+            receivedDuration = inner?[Keys.value.rawValue] as? Double
+        }
+
+        NotificationCenter.default.post(name: UIApplication.didBecomeActiveNotification, object: nil)
+
+        let duration = try? XCTUnwrap(receivedDuration)
+        XCTAssertNotNil(duration, "A sub-cap launch must emit a cold-start metric")
+        XCTAssertLessThanOrEqual(duration ?? .greatestFiniteMagnitude,
+                                 ColdDetector.maxReasonableColdStartMs,
+                                 "Reported duration must be within the cap")
     }
 
     // MARK: - calculateTime()

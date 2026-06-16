@@ -10,9 +10,20 @@ import Foundation
 import UIKit
 
 final class ColdDetector {
+    // Launches longer than this are background/prewarm artifacts (the process was spawned
+    // long before the user foregrounded the app), not a user-perceived cold start. Dropping
+    // them keeps multi-hour bogus values out of the Cold Start AVG.
+    static let maxReasonableColdStartMs: Double = 60_000
+
     var launchStartTime: CFAbsoluteTime?
     var launchEndTime: CFAbsoluteTime?
     var handleColdClosure: (([String: Any]) -> Void)?
+
+    /// Whether iOS prewarmed (background-spawned) this process ahead of user intent.
+    /// In production it reads the OS `ActivePrewarm` env var; overridable in tests.
+    var isPrewarmedLaunch: () -> Bool = {
+        ProcessInfo.processInfo.environment["ActivePrewarm"] == "1"
+    }
 
     func startMonitoring() {
         // Use kernel process birth time for the most accurate cold-start start point.
@@ -43,9 +54,23 @@ final class ColdDetector {
         let launchEndTime = CFAbsoluteTimeGetCurrent()
         self.launchEndTime = launchEndTime
 
+        // A prewarmed process is spawned in the background before the user opens the app,
+        // so the kernel birth time → didBecomeActive delta isn't a real cold start. Skip it.
+        guard !isPrewarmedLaunch() else {
+            Log.d("ColdDetector: prewarmed launch — skipping cold-start metric")
+            return
+        }
+
         let epochStartTime = Helper.convertCFAbsoluteTimeToEpoch(launchStartTime)
         let epochEndTime = Helper.convertCFAbsoluteTimeToEpoch(launchEndTime)
         let duration = calculateTime(start: epochStartTime, stop: epochEndTime)
+
+        // Background launches (push, fetch, location) aren't flagged by ActivePrewarm but show
+        // the same multi-hour skew. Drop anything beyond the sane ceiling rather than emit it.
+        guard duration <= ColdDetector.maxReasonableColdStartMs else {
+            Log.d("ColdDetector: cold-start duration \(duration)ms exceeds cap — likely a background launch, dropping")
+            return
+        }
 
         let cold = [
             MobileVitalsType.cold.stringValue: [

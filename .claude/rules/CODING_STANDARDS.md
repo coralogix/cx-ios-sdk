@@ -299,14 +299,14 @@ Default to writing no comments. Identifiers already say what the code does — c
 **Worth commenting:**
 
 - Subtle invariants ("this static is intentionally not synchronised because writers are serialised by …")
-- Workarounds for specific bugs ("this delay is here because URLSession on iOS 17.0 has a race that drops the first response — FB12345")
+- Workarounds for specific bugs ("this delay is here because URLSession on iOS 17.0 has a race that drops the first response")
 - Decisions that diverge from the obvious approach and why
-- References to a Jira ticket or a previous fix that explains the choice
 
 **Not worth commenting:**
 
 - What the code obviously does (`// increment counter`)
 - The fix you just shipped (belongs in the PR description)
 - Who used to call this function
+- **Ticket numbers** (`CX-XXXXX`, `BUGV2-XXXX`, etc.) in code comments *or* `CHANGELOG.md` entries — git blame, the commit, and the PR already carry them. Comment the *why* in prose so it stands on its own without the reference.
 
 If removing the comment wouldn't confuse a future reader, don't write it.

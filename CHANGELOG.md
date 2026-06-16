@@ -9,6 +9,11 @@ Release-mechanics commits (version bumps, podspec/script tweaks, README edits) a
 omitted; the focus here is user-facing behavior changes. Tickets are referenced as
 `CX-XXXXX` (Jira) or `ALPH-XXXX` (legacy). Pull request numbers are in parentheses.
 
+## [2.9.1] - 2026-06-16
+
+### Fixed
+- Cold Start AVG reported multi-hour values. Prewarmed launches (iOS spawns the process in the background ahead of user intent, flagged by `ActivePrewarm`) and other background launches (push/fetch/location) were measured from kernel process birth time and counted as cold starts. Prewarmed launches are now skipped, and any cold-start duration beyond a 60s ceiling is dropped as a background-launch artifact.
+
 ## [2.9.0] - 2026-06-15
 
 ### Added
