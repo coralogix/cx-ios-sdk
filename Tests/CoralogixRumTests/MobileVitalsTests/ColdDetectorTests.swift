@@ -151,7 +151,7 @@ class ColdDetectorTests: XCTestCase {
         XCTAssertNotNil(sut.launchEndTime, "launchEndTime must be set after cold start is reported")
     }
 
-    // MARK: - Prewarm / background-launch filtering (CX-45771)
+    // MARK: - Prewarm / background-launch filtering
 
     /// Verifies that a prewarmed launch (iOS spawns the process in the background ahead of
     /// user intent) is dropped — the kernel-birth → didBecomeActive delta is not a real cold

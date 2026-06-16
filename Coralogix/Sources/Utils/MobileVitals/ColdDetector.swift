@@ -12,7 +12,7 @@ import UIKit
 final class ColdDetector {
     // Launches longer than this are background/prewarm artifacts (the process was spawned
     // long before the user foregrounded the app), not a user-perceived cold start. Dropping
-    // them keeps multi-hour bogus values out of the Cold Start AVG — CX-45771.
+    // them keeps multi-hour bogus values out of the Cold Start AVG.
     static let maxReasonableColdStartMs: Double = 60_000
 
     var launchStartTime: CFAbsoluteTime?
