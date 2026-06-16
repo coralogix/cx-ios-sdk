@@ -173,6 +173,8 @@ class ColdDetectorTests: XCTestCase {
     func testDidBecomeActive_whenNotPrewarmed_reports() {
         sut.startMonitoring()
         sut.isPrewarmedLaunch = { false }
+        // Pin a recent start so the cap can't drop the report — isolates the prewarm path.
+        sut.launchStartTime = CFAbsoluteTimeGetCurrent() - 1
 
         var called = false
         sut.handleColdClosure = { _ in called = true }
