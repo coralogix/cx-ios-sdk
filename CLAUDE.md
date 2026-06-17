@@ -78,6 +78,8 @@ Events carry context structs from `Coralogix/Sources/Model/Contexts/` (e.g., `De
 
 ## Rules
 
+The review rules in `AGENTS.md` apply **while writing code**, not only at PR time — read it and follow it as you work.
+
 - **Never use `assert`, `precondition`, or `fatalError` in SDK code.** An SDK must never crash the host app. Use early returns or `Log.e(...)` instead. (Commit `7d59641` was entirely dedicated to removing these.)
 
 - **Swizzling tests must restore original implementations in `tearDown`.** Swizzled state leaks between tests if not cleaned up — this caused a full test-isolation fix in `7d59641`.

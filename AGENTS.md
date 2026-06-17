@@ -147,6 +147,26 @@ If a public API or internal symbol is removed:
 - Don't add deprecation shims unless the user explicitly asks
 - The commit message and CHANGELOG explain the removal
 
+### 4.12 Content hygiene (🚫 BLOCK)
+
+The CHANGELOG and shipped code comments are read by customers. Anything internal that leaks here is a customer-facing leak. This is a high-priority rule — developers routinely leave ticket numbers in comments, commits, and the public CHANGELOG.
+
+**CHANGELOG (client-facing) — block on:**
+
+- Ticket numbers, issue IDs, or internal tracker references (e.g. `JIRA-1234`, `CX-44221`, `#4821`)
+- Long or rambling entries — each entry is one clear sentence describing the user-facing change
+- Internal jargon, team names, or links to internal tools
+
+Write in plain language: what changed and why it matters to the user.
+
+**Code comments — block on:**
+
+- Secrets of any kind: API keys, tokens, credentials, connection strings
+- Ticket numbers, issue IDs, or internal tracker references
+- Internal-only notes (private discussions, personal names, "ask X about this")
+
+Comments should be short and clear, added only when they earn their place — when intent or a trade-off isn't obvious from the code. Explain *why*, not *what*; if the code is self-explanatory, no comment.
+
 ## 5. Use the right skill
 
 When the diff matches one of these patterns, the PR author should use the registered skill rather than reinventing the flow:
