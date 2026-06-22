@@ -82,18 +82,24 @@ struct ErrorContext {
         var errorContext = [String: Any]()
 
         if let threads = self.threads, !threads.isEmpty {
-            errorContext[Keys.exceptionType.rawValue] = self.exceptionType
-            errorContext[Keys.crashTimestamp.rawValue] = self.crashTimestamp
-            errorContext[Keys.processName.rawValue] = self.processName
-            errorContext[Keys.applicationIdentifier.rawValue] = self.applicationIdentifier
-            errorContext[Keys.triggeredByThread.rawValue] = self.triggeredByThread
-            errorContext[Keys.baseAddress.rawValue] = self.baseAddress
-            errorContext[Keys.arch.rawValue] = self.arch
-            if let threads = self.threads {
-                errorContext[Keys.threads.rawValue] = threads
-            }
+            // A native crash. Every framework records the crash and its message.
             errorContext[Keys.isCrash.rawValue] = true
             errorContext[Keys.errorMessage.rawValue] = self.exceptionType
+
+            // The detailed native-crash fields are accepted by the RUM ingest
+            // schema for native iOS and Flutter, but rejected for React Native
+            // (HTTP 400 — see CX-46601). Attach them only when the framework
+            // allows it; otherwise the whole crash log is dropped at ingest.
+            if CoralogixRum.mobileSDK.sdkFramework.allowsNativeCrashContext {
+                errorContext[Keys.exceptionType.rawValue] = self.exceptionType
+                errorContext[Keys.crashTimestamp.rawValue] = self.crashTimestamp
+                errorContext[Keys.processName.rawValue] = self.processName
+                errorContext[Keys.applicationIdentifier.rawValue] = self.applicationIdentifier
+                errorContext[Keys.triggeredByThread.rawValue] = self.triggeredByThread
+                errorContext[Keys.baseAddress.rawValue] = self.baseAddress
+                errorContext[Keys.arch.rawValue] = self.arch
+                errorContext[Keys.threads.rawValue] = threads
+            }
         } else {
             if !self.domain.isEmpty {
                 errorContext[Keys.domain.rawValue] = self.domain
