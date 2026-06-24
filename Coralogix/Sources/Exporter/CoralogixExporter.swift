@@ -122,6 +122,10 @@ public class CoralogixExporter: SpanExporter {
     /// `CxRumPayloadBuilder` omits `error_context` for non-error events) intentionally matches
     /// what `text.cx_rum` carries: the hybrid path is always "edit in play," so consistency
     /// between the two destinations is the goal, not preserving struct-only fields.
+    ///
+    /// `page_url`/`page_fragments` are re-read from the live `viewManager` here (not the frozen
+    /// dict); hybrid hosts render in a single native view controller, so it stays stable between
+    /// encode and this callback.
     /// Events without `instrumentation_data` (anything but network-request / custom-span) are
     /// returned unchanged.
     private func rebuildOtelSpanAttributes(in event: [String: Any]) -> [String: Any] {
