@@ -165,6 +165,45 @@ final class HybridBeforeSendInstrumentationDataTests: XCTestCase {
                        "custom-span otelSpan.attributes must be rebuilt from the edited cx_rum")
     }
 
+    /// `page_url` reflects the view active when the span was created. If the native view
+    /// advances between encode and the bridge callback (e.g. a host using native navigation),
+    /// the rebuild must keep the encode-time page — not the live view — so otelSpan.attributes
+    /// stays consistent with the span's origin instead of drifting to wherever the user landed.
+    func test_hybridPath_pageUrl_preservedFromEncodeTime_notLiveView() throws {
+        var captured: [[String: Any]] = []
+        coralogixRum = makeHybridRum { captured = $0 }
+        let exporter = try XCTUnwrap(coralogixRum.coralogixExporter)
+        let uploader = CapturingUploader()
+        exporter.spanUploader = uploader
+
+        // Span is created while "ScreenA" is visible → encode-time page_url == "ScreenA".
+        exporter.set(cxView: CXView(state: .notifyOnAppear, name: "ScreenA"))
+        _ = exporter.export(spans: [makeHybridSpan(eventType: .networkRequest)], explicitTimeout: nil)
+        XCTAssertEqual(captured.count, 1)
+        let preEdit = try otelAttributes(of: captured[0])
+        XCTAssertEqual(preEdit["cx_rum.page_context.page_url"] as? String, "ScreenA", "encode-time page must be ScreenA")
+
+        // User navigates to "ScreenB" during the JS round-trip, then the bridge edits and
+        // calls back. The rebuilt attributes must still carry ScreenA, not the live ScreenB.
+        exporter.set(cxView: CXView(state: .notifyOnAppear, name: "ScreenB"))
+        let edited = try editingCxRum(captured[0]) { cxRum in
+            var c = cxRum
+            var session = (c[Keys.sessionContext.rawValue] as? [String: Any]) ?? [:]
+            session[Keys.userEmail.rawValue] = "redacted@coralogix.com"
+            c[Keys.sessionContext.rawValue] = session
+            return c
+        }
+        exporter.sendBeforeSendData(data: [edited])
+
+        let attrs = try otelAttributes(of: try XCTUnwrap(uploader.uploaded?.first))
+        XCTAssertEqual(attrs["cx_rum.page_context.page_url"] as? String, "ScreenA",
+                       "page_url must be preserved from encode time, not re-read from the live viewManager")
+        XCTAssertEqual(attrs["cx_rum.page_context.page_fragments"] as? String, "ScreenA",
+                       "page_fragments must be preserved from encode time")
+        // The edit itself still propagates — preservation is scoped to page fields only.
+        XCTAssertEqual(attrs["cx_rum.session_context.user_email"] as? String, "redacted@coralogix.com")
+    }
+
     /// Events without instrumentation_data (anything but network-request / custom-span) must
     /// pass through sendBeforeSendData unchanged — no otelSpan section to rebuild, and the
     /// edited text must be uploaded verbatim.

@@ -213,6 +213,28 @@ struct OtelSpan {
         return attrs
     }
 
+    /// Hybrid (`beforeSendCallBack`) rebuild: produce `otelSpan.attributes` from the edited
+    /// `cx_rum` dict, but keep the encode-time `page_url`/`page_fragments` carried in
+    /// `previousAttributes`. A span belongs to the view that was active when it was created —
+    /// the same snapshot `text.cx_rum.view_context` froze — so the page is taken from the
+    /// original attributes rather than the live `viewManager`, which could advance during the
+    /// bridge round-trip (e.g. a host using native navigation) and make the two destinations
+    /// disagree on the page.
+    internal static func rebuiltAttributes(fromCxRumDict cxRumDict: [String: Any],
+                                           preservingPageFrom previousAttributes: [String: Any],
+                                           mobileSdkVersion: String) -> [String: Any] {
+        var attrs = buildRumContextAttributes(fromCxRumDict: cxRumDict,
+                                              viewManager: nil,
+                                              mobileSdkVersion: mobileSdkVersion)
+        if let pageUrl = previousAttributes[AttrKey.pageUrl] {
+            attrs[AttrKey.pageUrl] = pageUrl
+        }
+        if let pageFragments = previousAttributes[AttrKey.pageFragments] {
+            attrs[AttrKey.pageFragments] = pageFragments
+        }
+        return attrs
+    }
+
     private static func buildRumContextAttributes(cxRum: CxRum, viewManager: ViewManager?) -> [String: Any] {
         var attrs = [String: Any]()
 
