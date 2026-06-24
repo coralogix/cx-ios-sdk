@@ -9,6 +9,11 @@ Release-mechanics commits (version bumps, podspec/script tweaks, README edits) a
 omitted; the focus here is user-facing behavior changes. Tickets are referenced as
 `CX-XXXXX` (Jira) or `ALPH-XXXX` (legacy). Pull request numbers are in parentheses.
 
+## [2.9.2] - 2026-06-24
+
+### Fixed
+- On the hybrid (React Native / Flutter) path, a `beforeSend` edit to an editable `cx_rum` field (e.g. redacting `session_context.user_email`, or rewriting `labels`) was reflected in `text.cx_rum` but not in `instrumentation_data.otelSpan.attributes`: the encoded spans were uploaded verbatim after the callback, so the tracing mirror stayed stale and a redacted value still leaked through tracing. The OTEL attributes are now rebuilt from the edited `cx_rum` before upload — the same rebuild the native single-event path performs — so both destinations carry identical values.
+
 ## [2.9.1] - 2026-06-16
 
 ### Fixed
