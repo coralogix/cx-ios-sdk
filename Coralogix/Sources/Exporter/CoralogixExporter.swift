@@ -108,7 +108,37 @@ public class CoralogixExporter: SpanExporter {
     }
     
     internal func sendBeforeSendData(data: [[String: Any]]) {
-        self.spanUploader.upload(data, endPoint: self.endPoint)
+        let rebuilt = data.map { self.rebuildOtelSpanAttributes(in: $0) }
+        self.spanUploader.upload(rebuilt, endPoint: self.endPoint)
+    }
+
+    /// Hybrid (`beforeSendCallBack`) path: spans are encoded *before* the JS edit and the
+    /// edited batch is handed back here to upload verbatim, so `otelSpan.attributes` would
+    /// otherwise stay stale while `text.cx_rum` reflects the edit. Rebuild the attributes from
+    /// the final (edited) `cx_rum` — the same call the native single-event path makes in
+    /// `CxSpan.getDictionary()` — so both destinations of a span carry identical values.
+    ///
+    /// Rebuilding from the `cx_rum` dict (a lossy view of the `CxRum` struct, e.g.
+    /// `CxRumPayloadBuilder` omits `error_context` for non-error events) intentionally matches
+    /// what `text.cx_rum` carries: the hybrid path is always "edit in play," so consistency
+    /// between the two destinations is the goal, not preserving struct-only fields.
+    /// Events without `instrumentation_data` (anything but network-request / custom-span) are
+    /// returned unchanged.
+    private func rebuildOtelSpanAttributes(in event: [String: Any]) -> [String: Any] {
+        guard var instrumentationData = event[Keys.instrumentationData.rawValue] as? [String: Any],
+              var otelSpan = instrumentationData[Keys.otelSpan.rawValue] as? [String: Any],
+              let cxRum = (event[Keys.text.rawValue] as? [String: Any])?[Keys.cxRum.rawValue] as? [String: Any] else {
+            return event
+        }
+        otelSpan[Keys.attributes.rawValue] = OtelSpan.buildRumContextAttributes(
+            fromCxRumDict: cxRum,
+            viewManager: self.viewManager,
+            mobileSdkVersion: CoralogixRum.mobileSDK.sdkFramework.version
+        )
+        instrumentationData[Keys.otelSpan.rawValue] = otelSpan
+        var result = event
+        result[Keys.instrumentationData.rawValue] = instrumentationData
+        return result
     }
     
     #if DEBUG
