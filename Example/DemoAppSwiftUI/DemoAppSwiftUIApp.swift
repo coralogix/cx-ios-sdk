@@ -13,12 +13,18 @@ import SessionReplay
 struct DemoAppSwiftUIApp: App {
     init() {
         CoralogixRumManager.shared.initialize()
+
+        // `--mask-all-text` mirrors the customer config (maskAllTexts: true,
+        // maskAllImages: false) so the Masking Transitions screen can reproduce
+        // the bottom-sheet / back-move masking leak. SwiftUI masks through the
+        // Vision-OCR pipeline — the same path used for Flutter.
+        let maskAllText = ProcessInfo.processInfo.arguments.contains("--mask-all-text")
         let sessionReplayOptions = SessionReplayOptions(recordingType: .image,
-                                                        captureScale: 2.0,
-                                                        captureCompressionQuality: 0.8,
-                                                        maskText: nil,
+                                                        captureScale: maskAllText ? 1.0 : 2.0,
+                                                        captureCompressionQuality: maskAllText ? 1.0 : 0.8,
+                                                        maskText: maskAllText ? [".*"] : nil,
                                                         maskOnlyCreditCards: false,
-                                                        maskAllImages: true,
+                                                        maskAllImages: !maskAllText,
                                                         autoStartSessionRecording: true)
         SessionReplay.initializeWithOptions(sessionReplayOptions: sessionReplayOptions)
     }

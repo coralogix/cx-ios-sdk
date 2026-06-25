@@ -69,6 +69,12 @@ struct ContentView: View {
                 destination: AnyView(MaskDemoView())
             ),
             MenuItem(
+                title: "Masking Transitions",
+                subtitle: "SR masking during bottom sheet & back navigation",
+                icon: "rectangle.bottomthird.inset.filled",
+                destination: AnyView(MaskingTransitionsView())
+            ),
+            MenuItem(
                 title: "Traces Exporter",
                 subtitle: "Test OTLP trace export callback",
                 icon: "arrow.up.doc",

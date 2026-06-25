@@ -55,6 +55,20 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
                 maskAllImages: false,
                 autoStartSessionRecording: true
             )
+        } else if args.contains("--mask-all-text") {
+            // Mirrors the customer config (maskAllTexts: true, maskAllImages: false)
+            // while keeping the normal menu UI, so the Masking Transitions screen
+            // can be driven by hand to reproduce the bottom-sheet / back-move leak.
+            srOptions = SessionReplayOptions(
+                recordingType: .image,
+                captureScale: 1.0,
+                captureCompressionQuality: 1.0,
+                sessionRecordingSampleRate: 100,
+                maskText: [".*"],
+                maskOnlyCreditCards: false,
+                maskAllImages: false,
+                autoStartSessionRecording: true
+            )
         } else {
             srOptions = SessionReplayOptions(
                 recordingType: .image,

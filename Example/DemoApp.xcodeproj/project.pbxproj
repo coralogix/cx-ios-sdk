@@ -99,7 +99,9 @@
 		E6TMDM012F0C000010035951 /* TimeMeasurementDemoModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6TMDM002F0C000010035951 /* TimeMeasurementDemoModel.swift */; };
 		E6TMDM012F0C000010035952 /* TimeMeasurementDemoModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6TMDM002F0C000010035951 /* TimeMeasurementDemoModel.swift */; };
 		E6TMVC012F0C000010035951 /* TimeMeasurementViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6TMVC002F0C000010035951 /* TimeMeasurementViewController.swift */; };
+		E6MTVC012F0C000010035951 /* MaskingTransitionsViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6MTVC002F0C000010035951 /* MaskingTransitionsViewController.swift */; };
 		E6TMVW012F0C000010035952 /* TimeMeasurementView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6TMVW002F0C000010035952 /* TimeMeasurementView.swift */; };
+		E6MTVW012F0C000010035952 /* MaskingTransitionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6MTVW002F0C000010035952 /* MaskingTransitionsView.swift */; };
 		E6TRACES012F0C000010035951 /* TracesExporterViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6TRACES002F0C000010035951 /* TracesExporterViewController.swift */; };
 		E79419E72FC84F2000BC47CD /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = E79419E62FC84F2000BC47CD /* GoogleService-Info.plist */; };
 		E79419E82FC84F2000BC47CD /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = E79419E62FC84F2000BC47CD /* GoogleService-Info.plist */; };
@@ -230,7 +232,9 @@
 		E6OTLP002F0C000010035951 /* OtlpSpan+EventType.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "OtlpSpan+EventType.swift"; sourceTree = "<group>"; };
 		E6TMDM002F0C000010035951 /* TimeMeasurementDemoModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeMeasurementDemoModel.swift; sourceTree = "<group>"; };
 		E6TMVC002F0C000010035951 /* TimeMeasurementViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeMeasurementViewController.swift; sourceTree = "<group>"; };
+		E6MTVC002F0C000010035951 /* MaskingTransitionsViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MaskingTransitionsViewController.swift; sourceTree = "<group>"; };
 		E6TMVW002F0C000010035952 /* TimeMeasurementView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeMeasurementView.swift; sourceTree = "<group>"; };
+		E6MTVW002F0C000010035952 /* MaskingTransitionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MaskingTransitionsView.swift; sourceTree = "<group>"; };
 		E6TRACES002F0C000010035951 /* TracesExporterViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TracesExporterViewController.swift; sourceTree = "<group>"; };
 		E79419E62FC84F2000BC47CD /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -326,6 +330,7 @@
 				E6CF000A2BFDEB8C00000001 /* TracesExporterView.swift */,
 				E6LSDC002F0C000010035952 /* LogSamplingDecouplingView.swift */,
 				E6TMVW002F0C000010035952 /* TimeMeasurementView.swift */,
+				E6MTVW002F0C000010035952 /* MaskingTransitionsView.swift */,
 				E622115E2BFDEB8C00052682 /* Assets.xcassets */,
 				E62211602BFDEB8C00052682 /* Preview Content */,
 			);
@@ -424,6 +429,7 @@
 				E6LSDC002F0C000010035951 /* LogSamplingDecouplingViewController.swift */,
 				E6TMVC002F0C000010035951 /* TimeMeasurementViewController.swift */,
 				E6E515FD2EBB8644008EC19A /* MaskViewController.swift */,
+				E6MTVC002F0C000010035951 /* MaskingTransitionsViewController.swift */,
 				E6B60A052DB4EAAC003AD35D /* Assets.xcassets */,
 				E68681AA2BFA279500B127E7 /* Main.storyboard */,
 				E68681AF2BFA279600B127E7 /* LaunchScreen.storyboard */,
@@ -838,6 +844,7 @@
 				E6CF00152BFDEB8C00000001 /* CustomSpansView.swift in Sources */,
 				E6CF00162BFDEB8C00000001 /* UserActionsView.swift in Sources */,
 				E6CF00172BFDEB8C00000001 /* SessionReplayView.swift in Sources */,
+				E6MTVW012F0C000010035952 /* MaskingTransitionsView.swift in Sources */,
 				E6CF00182BFDEB8C00000001 /* ClockView.swift in Sources */,
 				E6CF00192BFDEB8C00000001 /* SchemaValidationView.swift in Sources */,
 				E6CF001A2BFDEB8C00000001 /* TracesExporterView.swift in Sources */,
@@ -885,6 +892,7 @@
 				E6TMDM012F0C000010035951 /* TimeMeasurementDemoModel.swift in Sources */,
 				E669384F2C747E860002335F /* CustomView.swift in Sources */,
 				E6E515FE2EBB8644008EC19A /* MaskViewController.swift in Sources */,
+				E6MTVC012F0C000010035951 /* MaskingTransitionsViewController.swift in Sources */,
 				E66938572C74A8830002335F /* UserActionsViewController.swift in Sources */,
 				E674E7F82CD7C6480041784E /* SessionReplayViewController.swift in Sources */,
 				E66938512C74842D0002335F /* ErrorViewController.swift in Sources */,

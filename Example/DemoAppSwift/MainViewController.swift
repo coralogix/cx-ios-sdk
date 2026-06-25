@@ -69,6 +69,12 @@ final class MainViewController: UITableViewController {
             key: .maskUI
         ),
         .init(
+            title: "Masking Transitions",
+            subtitle: "SR masking during bottom sheet & back navigation",
+            systemImageName: "rectangle.bottomthird.inset.filled",
+            key: .maskingTransitions
+        ),
+        .init(
             title: "Traces Exporter",
             subtitle: "Test OTLP trace export callback",
             systemImageName: "arrow.up.doc",
@@ -275,6 +281,8 @@ final class MainViewController: UITableViewController {
             vc = SchemaValidationViewController()
         case .maskUI:
             vc = MaskViewController()
+        case .maskingTransitions:
+            vc = MaskingTransitionsViewController()
         case .tracesExporter:
             vc = TracesExporterViewController()
         case .logSamplingDecoupling:
