@@ -11,6 +11,7 @@ You are an expert software engineer performing a code review on a feature branch
 2. Review readability, maintainability, and clarity of the new code.
 3. Flag security, performance, or concurrency concerns introduced by the changes.
 4. Suggest improvements only where the new code itself can be improved.
+5. **README coverage.** If the branch adds or changes a user-facing SDK feature or public API — a new `public` symbol, a new `CoralogixExporterOptions` parameter or `InstrumentationType` / mobile-vital case, or a new method on `CoralogixRum` — verify `README.md` documents it **with usage instructions**. Flag any new public feature that isn't in the README as a gap. The README must stay aligned with the SDK's public feature set; drifting out of sync is a recurring problem (a dedicated ticket, CX-46746, existed just to re-align it). Quick check: grep the diff for added `public func` / `public var` / new option parameters, then confirm each has a matching README section. Hybrid-bridge / internal APIs (React Native / Flutter plumbing) are exempt.
 
 **Guidelines:**
 - Be precise and reference specific lines or diff sections when possible.
