@@ -6,7 +6,7 @@ The SDK provides mobile Telemetry instrumentation that captures:
 
 1. HTTP requests, using URLSession instrumentation
 2. Unhandled exceptions (NSException, NSError, Error)
-3. Custom Logs ()
+3. Custom Logs
 4. Crashes - using PLCrashReporter
 5. Page navigation (Swift use swizzling / SwiftUI use modifier)
 6. User Actions (Clicks - UI elements)
@@ -344,6 +344,91 @@ let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
 
 ### Session Recording
 See the [Session Recording Guide](SessionReplay/Sources/Docs/README.md) for installation steps and examples.
+
+### Error Reporting
+Report handled errors, caught exceptions, or custom error messages manually — this is separate from the automatic crash / unhandled-exception capture. Each call produces an error event in RUM.
+```swift
+// An NSException you caught
+coralogixRum.reportError(exception: someNSException)
+
+// A Swift Error / NSError
+do {
+    try riskyOperation()
+} catch {
+    coralogixRum.reportError(error: error)
+}
+
+// A custom message with optional structured data
+coralogixRum.reportError(message: "Checkout failed",
+                         data: ["cart_size": 3, "reason": "timeout"])
+```
+
+### User Context
+Attach the current user's identity to every subsequent event. Call it after sign-in; pass a new `UserContext` to replace it (e.g. on account switch), and an empty context to clear it on sign-out.
+```swift
+coralogixRum.setUserContext(
+    userContext: UserContext(userId: "user-123",
+                             userName: "Jane Doe",
+                             userEmail: "jane.doe@example.com",
+                             userMetadata: ["plan": "premium", "role": "admin"])
+)
+```
+
+### Custom Logs
+Send a structured log at a chosen severity, with optional structured `data` and `labels`.
+```swift
+coralogixRum.log(severity: .info,
+                 message: "User completed onboarding",
+                 data: ["step_count": 4],
+                 labels: ["flow": "onboarding"])
+```
+Severity levels: `.debug`, `.verbose`, `.info`, `.warn`, `.error`, `.critical`.
+
+### Custom Spans
+Create your own OpenTelemetry spans to trace app-specific work (e.g. a checkout flow) with full control over attributes, events, and status. The custom tracer requires `traceParentInHeader` to be enabled in the options.
+```swift
+// 1. Enable the custom tracer in your options
+let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
+                                        environment: "ENVIRONMENT",
+                                        application: "APP-NAME",
+                                        version: "APP-VERSION",
+                                        publicKey: "API-KEY",
+                                        traceParentInHeader: ["enable": true])
+
+// 2. Open a global span, then child spans under it
+guard let tracer = coralogixRum.getCustomTracer() else { return }
+guard let global = tracer.startGlobalSpan(name: "checkout.flow",
+                                          labels: ["screen": "cart"]) else { return }
+
+let child = global.startCustomSpan(name: "checkout.authorize")
+child.setAttribute(key: "step", value: "authorize")
+child.addEvent(name: "authorized")
+child.setStatus(.ok)
+child.endSpan()
+
+global.endSpan()
+```
+**Notes:**
+- `getCustomTracer()` returns `nil` unless `traceParentInHeader: ["enable": true]` is set.
+- While a global span is open it becomes OpenTelemetry's active context, so auto-instrumentation (e.g. `URLSession`) shares the same `traceId` until you call `endSpan()`.
+- Only one global span may be open at a time — a second `startGlobalSpan` returns `nil` until the first one ends.
+- Use `getCustomTracer(ignoredInstruments: [.networkRequests, .errors])` to exclude specific auto-instruments from the span's trace.
+
+### Custom Measurement
+Report a one-off numeric measurement (e.g. a computed score or payload size) as a `custom-measurement` event. To time a span of work instead, use [Custom Time Measurement](#custom-time-measurement).
+```swift
+coralogixRum.sendCustomMeasurement(name: "image_load_score", value: 43.0)
+```
+
+### Manual View & Application Context
+Override the automatically-tracked screen name, or update the reported application name / version at runtime.
+```swift
+// Set the current screen/view name manually (useful for custom navigation)
+coralogixRum.setView(name: "CheckoutScreen")
+
+// Update the application name / version reported on subsequent events
+coralogixRum.setApplicationContext(application: "MyApp", version: "2.5.0")
+```
 
 ### Custom Time Measurement
 Time arbitrary spans of work in your app code with `startTimeMeasure(name:labels:)` and `endTimeMeasure(name:)`. Use this when you need to measure something the SDK can't auto-instrument — checkout flows, custom render passes, asset loading, etc. The duration is reported as a `custom-measurement` span (milliseconds).
