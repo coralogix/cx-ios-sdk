@@ -9,6 +9,11 @@ Release-mechanics commits (version bumps, podspec/script tweaks, README edits) a
 omitted; the focus here is user-facing behavior changes. Tickets are referenced as
 `CX-XXXXX` (Jira) or `ALPH-XXXX` (legacy). Pull request numbers are in parentheses.
 
+## [2.10.0] - 2026-07-05
+
+### Added
+- `createNewSession()` on `CoralogixRum` — force-starts a fresh RUM session on demand (e.g. on user logout) without a full `shutdown()` + `init()`. Issues a new session ID and resets the per-session state (views, error/click counters, snapshot throttle, Session Replay) — the same reset the automatic idle / max-age rotation performs.
+
 ## [2.9.2] - 2026-06-24
 
 ### Fixed

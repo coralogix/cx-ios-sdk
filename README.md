@@ -374,6 +374,14 @@ coralogixRum.setUserContext(
 )
 ```
 
+### New Session on Logout
+Force-start a fresh RUM session on demand — typically on user logout — without a full `shutdown()` + `init()`. A new session ID is issued and the per-session state (views, error/click counters, snapshot throttle, Session Replay) resets, exactly like the automatic idle / max-age rotation.
+```swift
+// e.g. when the user logs out
+coralogixRum.createNewSession()
+```
+On a logout → login flow, pair it with `setUserContext` for the new user. The current view carries into the new session automatically (as view #0), so events keep their view context without any extra call.
+
 ### Custom Logs
 Send a structured log at a chosen severity, with optional structured `data` and `labels`.
 ```swift

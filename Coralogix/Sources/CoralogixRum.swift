@@ -376,6 +376,18 @@ public class CoralogixRum {
     public var isInitialized: Bool { return CoralogixRum.isInitialized }
     
     public var getSessionId: String? { return self.sessionManager?.getSessionMetadata()?.sessionId }
+
+    /// Ends the current RUM session and immediately starts a fresh one —
+    /// e.g. on user logout — without a full `shutdown()` + `init()`. Behaves
+    /// exactly like the automatic idle / max-age rotation: a new session ID is
+    /// issued and the per-session state (error/click counters, snapshot
+    /// throttle, Session Replay, view counter) resets. The current view is
+    /// carried into the new session as view #0, so its events keep their view
+    /// context automatically — no follow-up call needed.
+    public func createNewSession() {
+        guard CoralogixRum.isInitialized else { return }
+        self.sessionManager?.setupSessionMetadata()
+    }
     
     public func setApplicationContext(application: String, version: String) {
         guard CoralogixRum.isInitialized else { return }
