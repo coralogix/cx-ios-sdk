@@ -380,7 +380,7 @@ Force-start a fresh RUM session on demand — typically on user logout — witho
 // e.g. when the user logs out
 coralogixRum.createNewSession()
 ```
-On a logout → login flow, pair it with `setUserContext` for the new user, and call `setView(name:)` after the first screen appears so that session's first span carries a view number.
+On a logout → login flow, pair it with `setUserContext` for the new user. The current view carries into the new session automatically (as view #0), so events keep their view context without any extra call.
 
 ### Custom Logs
 Send a structured log at a chosen severity, with optional structured `data` and `labels`.
