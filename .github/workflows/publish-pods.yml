@@ -61,7 +61,10 @@ jobs:
         run: |
           set -euo pipefail
           echo "Target version: ${TAG_RAW}"
-          if pod trunk info CoralogixInternal | grep -Eq "^[[:space:]]*-[[:space:]]*${TAG_RAW}([[:space:]]|\(|$)"; then
+          # Escape the tag for literal use in the version-match regexes below
+          # (a bare semver like 2.10.0 contains regex-special dots).
+          TAG_RE=$(printf '%s' "$TAG_RAW" | sed 's/[^[:alnum:]]/\\&/g')
+          if pod trunk info CoralogixInternal | grep -Eq "^[[:space:]]*-[[:space:]]*${TAG_RE}([[:space:]]|\(|$)"; then
             echo "ℹ️  CoralogixInternal ${TAG_RAW} already on Trunk. Skipping push."
           else
             echo "🚀 Pushing CoralogixInternal.podspec..."
@@ -72,32 +75,38 @@ jobs:
             
             if [ $push_exit_code -eq 0 ]; then
               echo "✅ CoralogixInternal.podspec pushed!"
-              
-              # Wait for CoralogixInternal to become available
-              echo "⏳ Waiting for CoralogixInternal to be available in CocoaPods Specs..."
-              timeout=1800
-              elapsed=0
-              until pod trunk info CoralogixInternal | grep -q "${TAG_RAW}"; do
-                if [ "$elapsed" -ge "$timeout" ]; then
-                  echo "❌ Timeout: CoralogixInternal not available after $timeout seconds."
-                  exit 1
-                fi
-                echo "⏳ CoralogixInternal not yet available, waiting 30 seconds..."
-                sleep 30
-                elapsed=$((elapsed + 30))
-              done
-              echo "✅ CoralogixInternal is now available on trunk. Updating local CDN cache..."
-              pod repo update
-              echo "✅ Local CDN cache updated."
+            elif echo "$push_output" | grep -q "Unable to accept duplicate entry"; then
+              echo "⚠️ Duplicate entry detected for CoralogixInternal (already on Trunk)."
+            elif pod trunk info CoralogixInternal | grep -Eq "^[[:space:]]*-[[:space:]]*${TAG_RE}([[:space:]]|\(|$)"; then
+              # A client-side failure (e.g. "Calling the GitHub commit API timed out")
+              # frequently still lands the spec server-side. Trust Trunk, not the exit code.
+              echo "✅ CoralogixInternal ${TAG_RAW} is on Trunk — push landed despite a client error."
             else
-              if echo "$push_output" | grep -q "Unable to accept duplicate entry"; then
-                echo "⚠️ Duplicate entry detected for CoralogixInternal, skipping to next phase..."
-              else
-                echo "❌ Error pushing CoralogixInternal.podspec:"
-                echo "$push_output"
+              echo "❌ Error pushing CoralogixInternal.podspec:"
+              echo "$push_output"
+              exit 1
+            fi
+
+            # CoralogixInternal is on Trunk now — fresh push, duplicate, or a client
+            # error that still landed server-side. SessionReplay/Coralogix depend on it,
+            # so wait for it to become available and refresh the local CDN cache before
+            # proceeding, regardless of which branch above confirmed it. (The genuine
+            # error case already exited.)
+            echo "⏳ Waiting for CoralogixInternal to be available in CocoaPods Specs..."
+            timeout=1800
+            elapsed=0
+            until pod trunk info CoralogixInternal | grep -Eq "^[[:space:]]*-[[:space:]]*${TAG_RE}([[:space:]]|\(|$)"; do
+              if [ "$elapsed" -ge "$timeout" ]; then
+                echo "❌ Timeout: CoralogixInternal not available after $timeout seconds."
                 exit 1
               fi
-            fi
+              echo "⏳ CoralogixInternal not yet available, waiting 30 seconds..."
+              sleep 30
+              elapsed=$((elapsed + 30))
+            done
+            echo "✅ CoralogixInternal is now available on trunk. Updating local CDN cache..."
+            pod repo update
+            echo "✅ Local CDN cache updated."
           fi
 
       # Clear CocoaPods cache
@@ -112,7 +121,10 @@ jobs:
         run: |
           set -euo pipefail
           echo "Target version: ${TAG_RAW}"
-          if pod trunk info SessionReplay | grep -Eq "^[[:space:]]*-[[:space:]]*${TAG_RAW}([[:space:]]|\(|$)"; then
+          # Escape the tag for literal use in the version-match regexes below
+          # (a bare semver like 2.10.0 contains regex-special dots).
+          TAG_RE=$(printf '%s' "$TAG_RAW" | sed 's/[^[:alnum:]]/\\&/g')
+          if pod trunk info SessionReplay | grep -Eq "^[[:space:]]*-[[:space:]]*${TAG_RE}([[:space:]]|\(|$)"; then
             echo "ℹ️ SessionReplay ${TAG_RAW} already on Trunk. Skipping push."
           else
             echo "🚀 Pushing SessionReplay.podspec..."
@@ -140,11 +152,19 @@ jobs:
                 break
               fi
 
-              # CocoaPods CDN/spec propagation can lag after pushing dependencies.
-              # Retry only on dependency-resolution errors.
-              if echo "$push_output" | grep -Eq "Unable to find a specification for|None of your spec sources contain|required by"; then
+              # A client-side failure (e.g. "Calling the GitHub commit API timed out")
+              # frequently still lands the spec server-side. Trust Trunk, not the exit code.
+              if pod trunk info SessionReplay | grep -Eq "^[[:space:]]*-[[:space:]]*${TAG_RE}([[:space:]]|\(|$)"; then
+                echo "✅ SessionReplay ${TAG_RAW} is on Trunk — push landed despite a client error."
+                pushed=true
+                break
+              fi
+
+              # Retry on CDN/spec propagation lag AND transient Trunk/GitHub failures
+              # (the GitHub commit API times out intermittently mid-push).
+              if echo "$push_output" | grep -Eq "Unable to find a specification for|None of your spec sources contain|required by|GitHub commit API timed out|timed out|Timeout|50[234]|Net::|Connection reset|getaddrinfo"; then
                 if [ "$attempt" -lt "$max_attempts" ]; then
-                  echo "⏳ Dependency not resolvable yet (likely CDN propagation). Retrying in ${retry_sleep_seconds}s..."
+                  echo "⏳ Not resolvable yet (CDN propagation or transient Trunk/GitHub error). Retrying in ${retry_sleep_seconds}s..."
                   sleep "$retry_sleep_seconds"
                   attempt=$((attempt + 1))
                   continue
@@ -167,7 +187,10 @@ jobs:
         run: |
           set -euo pipefail
           echo "Target version: ${TAG_RAW}"
-          if pod trunk info Coralogix | grep -Eq "^[[:space:]]*-[[:space:]]*${TAG_RAW}([[:space:]]|\(|$)"; then
+          # Escape the tag for literal use in the version-match regexes below
+          # (a bare semver like 2.10.0 contains regex-special dots).
+          TAG_RE=$(printf '%s' "$TAG_RAW" | sed 's/[^[:alnum:]]/\\&/g')
+          if pod trunk info Coralogix | grep -Eq "^[[:space:]]*-[[:space:]]*${TAG_RE}([[:space:]]|\(|$)"; then
             echo "ℹ️ Coralogix ${TAG_RAW} already on Trunk. Skipping push."
           else
             echo "🚀 Pushing Coralogix.podspec..."
@@ -195,11 +218,19 @@ jobs:
                 break
               fi
 
-              # CocoaPods CDN/spec propagation can lag after pushing dependencies.
-              # Retry only on dependency-resolution errors.
-              if echo "$push_output" | grep -Eq "Unable to find a specification for|None of your spec sources contain|required by"; then
+              # A client-side failure (e.g. "Calling the GitHub commit API timed out")
+              # frequently still lands the spec server-side. Trust Trunk, not the exit code.
+              if pod trunk info Coralogix | grep -Eq "^[[:space:]]*-[[:space:]]*${TAG_RE}([[:space:]]|\(|$)"; then
+                echo "✅ Coralogix ${TAG_RAW} is on Trunk — push landed despite a client error."
+                pushed=true
+                break
+              fi
+
+              # Retry on CDN/spec propagation lag AND transient Trunk/GitHub failures
+              # (the GitHub commit API times out intermittently mid-push).
+              if echo "$push_output" | grep -Eq "Unable to find a specification for|None of your spec sources contain|required by|GitHub commit API timed out|timed out|Timeout|50[234]|Net::|Connection reset|getaddrinfo"; then
                 if [ "$attempt" -lt "$max_attempts" ]; then
-                  echo "⏳ Dependency not resolvable yet (likely CDN propagation). Retrying in ${retry_sleep_seconds}s..."
+                  echo "⏳ Not resolvable yet (CDN propagation or transient Trunk/GitHub error). Retrying in ${retry_sleep_seconds}s..."
                   sleep "$retry_sleep_seconds"
                   attempt=$((attempt + 1))
                   continue
