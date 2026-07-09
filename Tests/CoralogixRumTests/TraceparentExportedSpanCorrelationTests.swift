@@ -132,18 +132,36 @@ final class TraceparentExportedSpanCorrelationTests: XCTestCase {
         return nil
     }
 
-    /// Splits a W3C `traceparent` (version-traceid-spanid-flags) into its fields.
-    /// A malformed header is a real failure (not a skip): if the SDK ever injects a non-W3C
-    /// `traceparent`, this test should go red rather than quietly pass.
+    /// Splits a W3C `traceparent` (version-traceid-spanid-flags) into its fields, validating full W3C
+    /// compliance first (each field lowercase hex of the spec length: version 2, traceid 32, spanid 16,
+    /// flags 2). A malformed header — wrong field count, non-hex, wrong length, or uppercase — is a real
+    /// failure (not a skip), so the regression test can't silently pass if the SDK ever injects a
+    /// non-W3C `traceparent`.
     private func parseTraceparent(_ header: String,
                                   file: StaticString = #filePath,
                                   line: UInt = #line) throws -> (traceId: String, spanId: String, flags: String) {
         let parts = header.split(separator: "-", omittingEmptySubsequences: false).map(String.init)
         let fields: (traceId: String, spanId: String, flags: String)? =
-            parts.count == 4 ? (parts[1], parts[2], parts[3]) : nil
+            Self.isW3CTraceparent(header) ? (parts[1], parts[2], parts[3]) : nil
         return try XCTUnwrap(fields,
-                             "traceparent is not W3C-shaped (expected 4 '-'-separated fields): \(header)",
+                             "traceparent is not W3C-compliant (version-traceid-spanid-flags, lowercase hex, lengths 2/32/16/2): \(header)",
                              file: file, line: line)
+    }
+
+    /// True when `header` is a fully W3C-compliant `traceparent`: exactly four `-`-separated fields
+    /// (version, trace id, span id, flags), each lowercase hex of length 2 / 32 / 16 / 2.
+    private static func isW3CTraceparent(_ header: String) -> Bool {
+        let parts = header.split(separator: "-", omittingEmptySubsequences: false).map(String.init)
+        return parts.count == 4
+            && isLowercaseHex(parts[0], length: 2)    // version
+            && isLowercaseHex(parts[1], length: 32)   // trace id
+            && isLowercaseHex(parts[2], length: 16)   // span id (parent id)
+            && isLowercaseHex(parts[3], length: 2)    // trace flags
+    }
+
+    /// True when `s` is exactly `length` lowercase-hex characters (`[0-9a-f]`).
+    private static func isLowercaseHex(_ s: String, length: Int) -> Bool {
+        s.count == length && s.allSatisfy { $0.isASCII && $0.isHexDigit && !$0.isUppercase }
     }
 
     /// Force-flushes and polls the captured spans until a network span for `url` appears (or timeout),
@@ -174,9 +192,8 @@ final class TraceparentExportedSpanCorrelationTests: XCTestCase {
         let header = try XCTUnwrap(CorrelationTestURLProtocol.lastTraceparentHeader,
                                    "traceparent must be injected on the wire when enabled",
                                    file: file, line: line)
+        // parseTraceparent already validates W3C shape/lengths (version 2, traceid 32, spanid 16, flags 2).
         let wire = try parseTraceparent(header, file: file, line: line)
-        XCTAssertEqual(wire.traceId.count, 32, "wire trace id must be 32 hex chars, got: \(wire.traceId)", file: file, line: line)
-        XCTAssertEqual(wire.spanId.count, 16, "wire span id must be 16 hex chars, got: \(wire.spanId)", file: file, line: line)
 
         XCTAssertEqual(exportedSpans.count, 1,
                        "exactly one network span must be exported per request — more than one (or the wrong one) means the task was instrumented twice",
@@ -274,5 +291,30 @@ final class TraceparentExportedSpanCorrelationTests: XCTestCase {
 
         let spans = waitForNetworkSpans(url: url)
         try assertExportedSpanMatchesWire(url: url, exportedSpans: spans)
+    }
+
+    // MARK: - traceparent validation (unit)
+
+    /// The correlation assertions lean on `parseTraceparent` rejecting anything that isn't a W3C
+    /// `traceparent`; if it accepted malformed headers, a broken injection could slip through green.
+    /// Pins the validator: a valid header parses into its fields, and non-hex / uppercase / wrong-length
+    /// / short headers are rejected.
+    func test_parseTraceparent_acceptsW3C_rejectsMalformed() throws {
+        let valid = "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01"
+        let fields = try parseTraceparent(valid)
+        XCTAssertEqual(fields.traceId, "0af7651916cd43dd8448eb211c80319c")
+        XCTAssertEqual(fields.spanId, "b7ad6b7169203331")
+        XCTAssertEqual(fields.flags, "01")
+
+        XCTAssertFalse(Self.isW3CTraceparent("zz-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01"),
+                       "non-hex version (zz) must be rejected")
+        XCTAssertFalse(Self.isW3CTraceparent("00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-gg"),
+                       "non-hex flags (gg) must be rejected")
+        XCTAssertFalse(Self.isW3CTraceparent("00-0AF7651916CD43DD8448EB211C80319C-b7ad6b7169203331-01"),
+                       "uppercase trace id must be rejected")
+        XCTAssertFalse(Self.isW3CTraceparent("00-0af7651916cd43dd8448eb211c80319c-b7ad6b71692033-01"),
+                       "wrong-length span id must be rejected")
+        XCTAssertFalse(Self.isW3CTraceparent("00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331"),
+                       "missing flags field must be rejected")
     }
 }
