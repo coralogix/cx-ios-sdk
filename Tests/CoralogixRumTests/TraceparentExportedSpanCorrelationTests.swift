@@ -133,12 +133,17 @@ final class TraceparentExportedSpanCorrelationTests: XCTestCase {
     }
 
     /// Splits a W3C `traceparent` (version-traceid-spanid-flags) into its fields.
-    private func parseTraceparent(_ header: String) throws -> (traceId: String, spanId: String, flags: String) {
+    /// A malformed header is a real failure (not a skip): if the SDK ever injects a non-W3C
+    /// `traceparent`, this test should go red rather than quietly pass.
+    private func parseTraceparent(_ header: String,
+                                  file: StaticString = #filePath,
+                                  line: UInt = #line) throws -> (traceId: String, spanId: String, flags: String) {
         let parts = header.split(separator: "-", omittingEmptySubsequences: false).map(String.init)
-        guard parts.count == 4 else {
-            throw XCTSkip("traceparent is not W3C-shaped: \(header)")
-        }
-        return (parts[1], parts[2], parts[3])
+        let fields: (traceId: String, spanId: String, flags: String)? =
+            parts.count == 4 ? (parts[1], parts[2], parts[3]) : nil
+        return try XCTUnwrap(fields,
+                             "traceparent is not W3C-shaped (expected 4 '-'-separated fields): \(header)",
+                             file: file, line: line)
     }
 
     /// Force-flushes and polls the captured spans until a network span for `url` appears (or timeout),
@@ -169,7 +174,7 @@ final class TraceparentExportedSpanCorrelationTests: XCTestCase {
         let header = try XCTUnwrap(CorrelationTestURLProtocol.lastTraceparentHeader,
                                    "traceparent must be injected on the wire when enabled",
                                    file: file, line: line)
-        let wire = try parseTraceparent(header)
+        let wire = try parseTraceparent(header, file: file, line: line)
         XCTAssertEqual(wire.traceId.count, 32, "wire trace id must be 32 hex chars, got: \(wire.traceId)", file: file, line: line)
         XCTAssertEqual(wire.spanId.count, 16, "wire span id must be 16 hex chars, got: \(wire.spanId)", file: file, line: line)
 
