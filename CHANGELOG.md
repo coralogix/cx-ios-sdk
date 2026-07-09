@@ -9,6 +9,11 @@ Release-mechanics commits (version bumps, podspec/script tweaks, README edits) a
 omitted; the focus here is user-facing behavior changes. Tickets are referenced as
 `CX-XXXXX` (Jira) or `ALPH-XXXX` (legacy). Pull request numbers are in parentheses.
 
+## [2.10.1] - 2026-07-09
+
+### Fixed
+- The `traceparent` header sent on an outgoing request and the network span exported for that request could land on different traces, so RUM spans could never be stitched to their backend traces (`traceParentInHeader` was effectively broken for correlation). A task created through a URLSession factory method (`dataTask(with:)`, `dataTask(with:completionHandler:)`, upload/download variants) was instrumented twice: the factory swizzle started the span whose `traceparent` went on the wire, then the resume swizzle started a second span that overwrote the first in the running-spans map and became the one exported — while the first span leaked, never ended. The resume path now reuses the task's existing span instead of starting a second one, so the wire `traceparent` and the exported network span always share the same trace id and span id, across every task-creation path (including bare-URL tasks that inject their header at resume).
+
 ## [2.10.0] - 2026-07-05
 
 ### Added
