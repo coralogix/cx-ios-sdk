@@ -13,9 +13,10 @@
 //  A leaked, never ended). `TraceparentHeaderInjectionTests` only validate the header is W3C-shaped;
 //  they never compare it to the exported span — which is why that regression went unnoticed.
 //
-//  Coverage below spans the request-factory task paths that reach the resume swizzle. The completion-
-//  handler and no-completion request paths go red on the unfixed code (wire=A, exported=B); the
-//  bare-URL path is a regression guard for the same invariant (there the fix also stops span A leaking).
+//  Coverage below spans the task-creation paths that reach the resume swizzle. The completion-handler
+//  and no-completion request paths go red on the unfixed code (wire=A, exported=B); the bare-URL path
+//  is a regression guard for the same invariant (there the fix also stops span A leaking); the
+//  async/await `data(for:)` path confirms the invariant holds for Swift concurrency too.
 //
 
 import XCTest
@@ -237,6 +238,34 @@ final class TraceparentExportedSpanCorrelationTests: XCTestCase {
 
         let url = try XCTUnwrap(URL(string: "\(Self.baseURL)/bare-url"))
         URLSession.shared.dataTask(with: url).resume()
+
+        let spans = waitForNetworkSpans(url: url)
+        try assertExportedSpanMatchesWire(url: url, exportedSpans: spans)
+    }
+
+    // MARK: - async/await task
+
+    /// `data(for:)` — the async/await path. Routed through a dedicated session with the stub pinned in
+    /// `configuration.protocolClasses`; the globally registered stub is removed first so the async path
+    /// resolves solely via the session's protocol list (registering the same class both globally and on
+    /// the session does not route reliably for async `data(for:)`). Confirms the wire `traceparent` and
+    /// the exported span stay correlated on the async path too.
+    @available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, *)
+    func test_asyncAwaitTask_exportedSpanMatchesWire() async throws {
+        URLProtocol.unregisterClass(CorrelationTestURLProtocol.self)
+        CorrelationTestURLProtocol.stub = (200, ["Content-Type": "application/json"], Data("{}".utf8))
+        startRUM()
+
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [CorrelationTestURLProtocol.self]
+        let session = URLSession(configuration: config)
+        defer { session.finishTasksAndInvalidate() }
+
+        let url = try XCTUnwrap(URL(string: "\(Self.baseURL)/async-await"))
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+
+        _ = try await session.data(for: request)
 
         let spans = waitForNetworkSpans(url: url)
         try assertExportedSpanMatchesWire(url: url, exportedSpans: spans)
