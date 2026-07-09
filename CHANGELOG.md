@@ -9,6 +9,11 @@ Release-mechanics commits (version bumps, podspec/script tweaks, README edits) a
 omitted; the focus here is user-facing behavior changes. Tickets are referenced as
 `CX-XXXXX` (Jira) or `ALPH-XXXX` (legacy). Pull request numbers are in parentheses.
 
+## [2.10.1] - 2026-07-09
+
+### Fixed
+- The `traceparent` sent on an outgoing request now always shares the same trace as the network span the SDK reports for it, so RUM spans correlate with their backend traces instead of landing on a separate, unstitchable trace.
+
 ## [2.10.0] - 2026-07-05
 
 ### Added

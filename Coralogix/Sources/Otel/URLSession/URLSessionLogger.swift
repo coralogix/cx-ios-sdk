@@ -52,6 +52,22 @@ class URLSessionLogger {
             return nil
         }
 
+        // A single task reaches this method twice: the task-factory swizzle starts the span and puts its
+        // traceparent on the wire, then the resume swizzle calls again for the same task id. Starting a
+        // second span here would overwrite the first in `runningSpans`, so the span that gets exported
+        // would carry a different trace id than the traceparent already sent on the wire — and the first
+        // span would leak, never ended. Reuse the existing span: only (re)inject headers with its context
+        // and return, without starting a new one. Tasks created from a bare URL have a factory span but no
+        // header on the wire yet (there was no request to inject into then); reusing the span here injects
+        // that same span's traceparent, so the wire and the exported span stay on one trace.
+        let existingSpan: (any Span)? = runningSpansQueue.sync { runningSpans[sessionTaskId] }
+        if let existingSpan {
+            guard shouldInjectHeaders, effectiveConfig.shouldInjectTracingHeaders?(request) ?? true else {
+                return nil
+            }
+            return instrumentedRequest(for: request, span: existingSpan, effectiveConfig: effectiveConfig)
+        }
+
         var attributes = [String: AttributeValue]()
 
         attributes[SemanticAttributes.httpMethod.rawValue] = AttributeValue.string(request.httpMethod ?? "unknown_method")
