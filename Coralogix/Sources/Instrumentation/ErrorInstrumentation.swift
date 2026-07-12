@@ -121,6 +121,11 @@ extension CoralogixRum {
             stackTraceType: stackTraceType,
             customAttributes: customAttributes
         )
+        if isCrash {
+            // A crash report usually precedes process death — don't leave the event
+            // in the batch queue (up to 2s) where it would die with the process.
+            self.flush()
+        }
     }
 
     func logWith(severity: CoralogixLogSeverity,

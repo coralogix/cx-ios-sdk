@@ -12,6 +12,10 @@ extension Notification.Name {
 
 public class CoralogixRum {
     internal var coralogixExporter: CoralogixExporter?
+    /// The SDK's own tracer provider, kept so `flush()` can force-export without
+    /// reaching through the global `OpenTelemetry.instance` (which another OTel
+    /// consumer in the host app may have re-registered).
+    internal var tracerProviderSdk: TracerProviderSdk?
     internal var networkManager = NetworkManager()
     internal var viewManager = ViewManager(keyChain: KeychainManager())
     internal var sessionManager: SessionManager?
@@ -171,7 +175,8 @@ public class CoralogixRum {
             .with(resource: resource)
             .add(spanProcessor: spanProcessor)
             .build()
-        
+
+        self.tracerProviderSdk = tracerProvider
         OpenTelemetry.registerTracerProvider(tracerProvider: tracerProvider)
     }
     
@@ -360,6 +365,22 @@ public class CoralogixRum {
         self.logWith(severity: severity, message: message, data: data, labels: labels)
     }
     
+    /// Forces immediate export of every span still queued in the batch processor,
+    /// which otherwise holds spans for up to `Global.BatchSpan.scheduleDelay` seconds.
+    /// Uploads happen synchronously on a background queue; `completion` fires once the
+    /// flush attempt (successful or not) finishes. Called automatically when a crash
+    /// is reported; hybrid bridges call it before a fatal error terminates the process.
+    public func flush(completion: (() -> Void)? = nil) {
+        guard CoralogixRum.isInitialized, let tracerProviderSdk = self.tracerProviderSdk else {
+            completion?()
+            return
+        }
+        DispatchQueue.global(qos: .userInitiated).async {
+            tracerProviderSdk.forceFlush(timeout: TimeInterval(Global.BatchSpan.forceFlushTimeout.rawValue))
+            completion?()
+        }
+    }
+
     public func shutdown() {
         CoralogixCustomGlobalSpanRegistry.shared.teardownIfNeeded()
         Self.customTracerIssuanceLock.lock()

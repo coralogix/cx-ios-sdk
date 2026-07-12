@@ -24,6 +24,26 @@ public class CoralogixExporter: SpanExporter {
     private var currentSessionSampledIn: Bool = true
     private let samplingStateLock = NSLock()
 
+    /// `true` once a batch containing at least one crash event (`error_context.is_crash`)
+    /// uploaded successfully in this process. CrashInstrumentation consults this to decide
+    /// whether the pending PLCrashReporter report may be purged — kept pessimistic on
+    /// failure so the report survives on disk and is retried on the next launch.
+    private var crashUploadConfirmed = false
+    private let crashUploadLock = NSLock()
+
+    var didUploadCrashEvents: Bool {
+        crashUploadLock.lock()
+        defer { crashUploadLock.unlock() }
+        return crashUploadConfirmed
+    }
+
+    private func recordCrashUpload(succeeded: Bool) {
+        guard succeeded else { return }
+        crashUploadLock.lock()
+        crashUploadConfirmed = true
+        crashUploadLock.unlock()
+    }
+
     public init(options: CoralogixExporterOptions,
                 sessionManager: SessionManager,
                 networkManager: NetworkProtocol,
@@ -205,13 +225,42 @@ public class CoralogixExporter: SpanExporter {
             
             let sdk = CoralogixRum.mobileSDK.sdkFramework
             if !sdk.isNative, let callback = self.options.beforeSendCallBack {
-                let clonedSpans = cxSpansDictionary.deepCopy()
-                callback(clonedSpans)
-                return .success
+                // Crash events skip the hybrid JS round trip: when a crash is exported the
+                // process is usually about to terminate, and the extra native→JS→native hop
+                // loses the race. They upload verbatim; beforeSend cannot edit or drop them.
+                let crashSpans = cxSpansDictionary.filter { self.isCrashEvent($0) }
+                let editableSpans = cxSpansDictionary.filter { !self.isCrashEvent($0) }
+
+                var result: SpanExporterResultCode = .success
+                if !crashSpans.isEmpty {
+                    result = spanUploader.upload(crashSpans, endPoint: self.endPoint)
+                    recordCrashUpload(succeeded: result == .success)
+                }
+                if !editableSpans.isEmpty {
+                    let clonedSpans = editableSpans.deepCopy()
+                    callback(clonedSpans)
+                }
+                return result
             }
-            return spanUploader.upload(cxSpansDictionary, endPoint: self.endPoint)
+            let containsCrashEvent = cxSpansDictionary.contains { self.isCrashEvent($0) }
+            let result = spanUploader.upload(cxSpansDictionary, endPoint: self.endPoint)
+            if containsCrashEvent {
+                recordCrashUpload(succeeded: result == .success)
+            }
+            return result
         }
         return .failure
+    }
+
+    /// Whether an encoded span carries `error_context.is_crash == true` — a crash reported
+    /// through the hybrid bridge or rebuilt from a pending PLCrashReporter report.
+    private func isCrashEvent(_ encodedSpan: [String: Any]) -> Bool {
+        guard let text = encodedSpan[Keys.text.rawValue] as? [String: Any],
+              let cxRum = text[Keys.cxRum.rawValue] as? [String: Any],
+              let errorContext = cxRum[Keys.errorContext.rawValue] as? [String: Any] else {
+            return false
+        }
+        return errorContext[Keys.isCrash.rawValue] as? Bool ?? false
     }
 
     public func flush(explicitTimeout: TimeInterval?) -> SpanExporterResultCode {

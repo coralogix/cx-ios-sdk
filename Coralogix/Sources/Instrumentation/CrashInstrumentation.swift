@@ -30,16 +30,37 @@ extension CoralogixRum {
         }
         
         crashReporter.enable()
-        
+
         // Try loading the crash report.
         if crashReporter.hasPendingCrashReport() {
-            self.processPendingCrashReport(using: crashReporter)
-            // Purge the report.
+            if self.processPendingCrashReport(using: crashReporter) {
+                self.purgePendingReportAfterConfirmedUpload(crashReporter)
+            } else {
+                // Nothing recoverable was emitted — drop the corrupt report so it
+                // isn't reprocessed (and re-fails) on every launch.
+                crashReporter.purgePendingCrashReport()
+            }
+        }
+    }
+
+    /// Purges the pending PLCrashReporter report only once its event upload is
+    /// confirmed. On failure the report stays on disk and is retried on the next
+    /// launch (at-least-once delivery). Previously the purge was unconditional and
+    /// ran before the span even left the batch queue, so a short-lived relaunch or
+    /// an upload failure lost the crash permanently.
+    private func purgePendingReportAfterConfirmedUpload(_ crashReporter: PLCrashReporter) {
+        self.flush { [weak self] in
+            guard self?.coralogixExporter?.didUploadCrashEvents == true else {
+                Log.w("Crash-report upload not confirmed — keeping pending report for next launch")
+                return
+            }
             crashReporter.purgePendingCrashReport()
         }
     }
-    
-    private func processPendingCrashReport(using crashReporter: PLCrashReporter) {
+
+    /// Returns `true` when the report was parsed and emitted as a crash span,
+    /// `false` when the report could not be loaded or parsed.
+    private func processPendingCrashReport(using crashReporter: PLCrashReporter) -> Bool {
         do {
             let data = try crashReporter.loadPendingCrashReportDataAndReturnError()
             
@@ -86,8 +107,10 @@ extension CoralogixRum {
             } else {
                 span.end()
             }
+            return true
         } catch let error {
             Log.e("CrashReporter failed to load and parse with error: \(error)")
+            return false
         }
     }
 

@@ -24,6 +24,9 @@ public enum Global: String {
     public enum BatchSpan: Int {
         case maxExportBatchSize = 50
         case scheduleDelay = 2
+        // Upper bound for a forced flush (CoralogixRum.flush) — long enough for one
+        // synchronous upload attempt, short enough not to stall a dying process.
+        case forceFlushTimeout = 5
     }
     
     static let monitoredPaths: Set<String> = [
