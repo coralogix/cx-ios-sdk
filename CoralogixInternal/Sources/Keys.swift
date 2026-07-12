@@ -144,6 +144,7 @@ public enum Keys: String {
     // store the counter under the wrong slot and break the restore path.
     case storedViewNumber = "viewNumber"
     case threads
+    case totalThreads = "total_threads"
     case httpResponseBodySize = "http_response_body_size"
     case stackTrace
     case instrumentationData = "instrumentation_data"

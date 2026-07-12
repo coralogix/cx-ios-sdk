@@ -156,6 +156,25 @@ public struct CoralogixExporterOptions {
     /// ```
     public var tracesExporter: TracesExporterCallback?
 
+    /// Maximum stack-trace frames kept per thread on a native crash. Frames beyond this are
+    /// truncated middle-out (head + tail kept, middle dropped) so deep or recursive stacks
+    /// retain both the fault site and the entry point. Floored at 1.
+    public let maxStackTraceFramesPerThread: Int
+
+    /// Maximum number of threads kept on a native crash report. Clamped to `1...4`: a single
+    /// thread at the frame cap serializes to a few KB and the backend drops any log over ~10 KB,
+    /// so higher values only invite truncation. The crashed thread is always retained.
+    public let maxThreads: Int
+
+    public static let defaultMaxStackTraceFramesPerThread = 20
+    public static let defaultMaxThreads = 2
+    public static let maxThreadsRange = 1...4
+
+    /// Byte budget for the serialized `threads` attribute, sized so the whole crash event
+    /// (threads + the surrounding cx_rum envelope) clears the backend's ~10 KB hard limit with
+    /// headroom. Conservative; to be confirmed against a real customer crash log.
+    public static let crashThreadsByteBudget = 6_000
+
     public init(coralogixDomain: CoralogixDomain,
                 userContext: UserContext? = nil,
                 environment: String,
@@ -178,6 +197,8 @@ public struct CoralogixExporterOptions {
                 tracesExporter: TracesExporterCallback? = nil,
                 shouldSendText: ((UIView, String) -> Bool)? = nil,
                 resolveTargetName: ((UIView) -> String?)? = nil,
+                maxStackTraceFramesPerThread: Int = CoralogixExporterOptions.defaultMaxStackTraceFramesPerThread,
+                maxThreads: Int = CoralogixExporterOptions.defaultMaxThreads,
                 debug: Bool = false) {
         self.coralogixDomain = coralogixDomain
         self.userContext = userContext
@@ -202,6 +223,14 @@ public struct CoralogixExporterOptions {
         self.tracesExporter = tracesExporter
         self.shouldSendText = shouldSendText
         self.resolveTargetName = resolveTargetName
+        self.maxStackTraceFramesPerThread = max(1, maxStackTraceFramesPerThread)
+
+        let range = CoralogixExporterOptions.maxThreadsRange
+        let clampedMaxThreads = min(range.upperBound, max(range.lowerBound, maxThreads))
+        if clampedMaxThreads != maxThreads {
+            Log.w("maxThreads \(maxThreads) is out of range \(range.lowerBound)...\(range.upperBound); clamped to \(clampedMaxThreads)")
+        }
+        self.maxThreads = clampedMaxThreads
     }
     
     internal func shouldInitInstrumentation(instrumentation: InstrumentationType) -> Bool {

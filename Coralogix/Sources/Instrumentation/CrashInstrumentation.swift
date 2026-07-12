@@ -80,17 +80,34 @@ extension CoralogixRum {
     }
     
     private func createStackTrace(report: PLCrashReport, span: any Span) {
-        var threads = [String]()
+        var allThreads = [PLCrashReportThreadInfo]()
         for case let thread as PLCrashReportThreadInfo in report.threads {
-            if thread.crashed {
-                span.setAttribute(key: Keys.triggeredByThread.rawValue, value: thread.threadNumber)
-            }
-            
-            let crashedThreadFrames = crashedThread(report: report, thread: thread)
-            let data = self.parseFrameArray(crashedThreadFrameArray: crashedThreadFrames)
-            threads.append(Helper.convertArrayToJsonString(array: data))
+            allThreads.append(thread)
         }
-        span.setAttribute(key: Keys.threads.rawValue, value: Helper.convertArrayOfStringToJsonString(array: threads))
+
+        var crashedIndex: Int?
+        for (index, thread) in allThreads.enumerated() where thread.crashed {
+            span.setAttribute(key: Keys.triggeredByThread.rawValue, value: thread.threadNumber)
+            crashedIndex = index
+        }
+        span.setAttribute(key: Keys.totalThreads.rawValue, value: allThreads.count)
+
+        // Frames per thread, in report order — order is never changed, because the backend locates
+        // the crashed thread positionally via triggered_by_thread. Truncation only removes frames
+        // within each thread and, under the byte guard, drops tail threads past the crashed one.
+        let allFrames = allThreads.map {
+            self.parseFrameArray(crashedThreadFrameArray: self.crashedThread(report: report, thread: $0))
+        }
+
+        let options = self.options
+        let threadsJson = Helper.buildTruncatedThreads(
+            allFrames: allFrames,
+            crashedIndex: crashedIndex,
+            maxThreads: options?.maxThreads ?? CoralogixExporterOptions.defaultMaxThreads,
+            frameCap: options?.maxStackTraceFramesPerThread ?? CoralogixExporterOptions.defaultMaxStackTraceFramesPerThread,
+            byteBudget: CoralogixExporterOptions.crashThreadsByteBudget
+        )
+        span.setAttribute(key: Keys.threads.rawValue, value: threadsJson)
     }
     
     func parseFrameArray(crashedThreadFrameArray: [StackFrame]) -> [[String: Any]] {

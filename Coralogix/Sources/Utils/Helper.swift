@@ -71,6 +71,63 @@ class Helper {
         return ""
     }
     
+    /// Truncates a frame list middle-out: keeps the head (75%) and tail (25%), drops the middle.
+    /// The head is weighted heavier because the fault site and its immediate callers matter most;
+    /// a short tail anchors the entry point and reveals recursion boundaries. No marker is inserted —
+    /// the array keeps its existing element shape, and a gap in the frames' own `frame_number` values
+    /// is the self-describing signal that frames were dropped. Returns the input unchanged when
+    /// `frames.count <= cap`.
+    internal static func truncateMiddleOut<T>(_ frames: [T], cap: Int) -> [T] {
+        guard cap > 0, frames.count > cap else { return frames }
+        let head = Int((Double(cap) * 0.75).rounded())
+        let tail = cap - head
+        var result = Array(frames.prefix(head))
+        if tail > 0 { result.append(contentsOf: frames.suffix(tail)) }
+        return result
+    }
+
+    /// Builds the serialized `threads` attribute for a native crash, applying in order:
+    ///   1. a contiguous-prefix thread cap that always retains the crashed thread and never
+    ///      reorders threads — positions stay stable so `triggered_by_thread` cannot desync;
+    ///   2. middle-out frame truncation per kept thread;
+    ///   3. a deterministic byte guard that shrinks — first dropping tail threads (never past the
+    ///      crashed thread), then trimming frames harder — until the serialized string fits `byteBudget`.
+    /// `allFrames` holds every thread's full frame array in report order; `crashedIndex` is the
+    /// position of the crashed thread in that array, or nil if unknown.
+    internal static func buildTruncatedThreads(allFrames: [[[String: Any]]],
+                                               crashedIndex: Int?,
+                                               maxThreads: Int,
+                                               frameCap: Int,
+                                               byteBudget: Int) -> String {
+        guard !allFrames.isEmpty else { return convertArrayOfStringToJsonString(array: []) }
+
+        let frameFloor = 4
+        let frameTrimStep = 4
+        let minKept = min(allFrames.count, crashedIndex.map { $0 + 1 } ?? 1)
+        var keptCount = min(allFrames.count, max(maxThreads, minKept))
+        var cap = max(1, frameCap)
+
+        func serialize() -> String {
+            let kept = allFrames.prefix(keptCount).map {
+                convertArrayToJsonString(array: truncateMiddleOut($0, cap: cap))
+            }
+            return convertArrayOfStringToJsonString(array: Array(kept))
+        }
+
+        var json = serialize()
+        while json.utf8.count > byteBudget {
+            if keptCount > minKept {
+                keptCount -= 1
+            } else if cap > frameFloor {
+                cap = max(frameFloor, cap - frameTrimStep)
+            } else {
+                break // floor reached — cannot shrink further without dropping the crashed thread
+            }
+            json = serialize()
+        }
+        return json
+    }
+
     internal static func convertDictionaryToJsonString(dict: [String: Any]) -> String {
         func encode(_ d: [String: Any]) -> String? {
             // `isValidJSONObject` rejects `Date` and other non-JSON types without raising an Obj‑C
