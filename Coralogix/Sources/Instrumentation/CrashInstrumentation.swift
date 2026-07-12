@@ -80,15 +80,11 @@ extension CoralogixRum {
     }
     
     private func createStackTrace(report: PLCrashReport, span: any Span) {
-        var allThreads = [PLCrashReportThreadInfo]()
-        for case let thread as PLCrashReportThreadInfo in report.threads {
-            allThreads.append(thread)
-        }
+        let allThreads = report.threads.compactMap { $0 as? PLCrashReportThreadInfo }
 
-        var crashedIndex: Int?
-        for (index, thread) in allThreads.enumerated() where thread.crashed {
-            span.setAttribute(key: Keys.triggeredByThread.rawValue, value: thread.threadNumber)
-            crashedIndex = index
+        let crashedIndex = allThreads.firstIndex(where: { $0.crashed })
+        if let crashedIndex {
+            span.setAttribute(key: Keys.triggeredByThread.rawValue, value: allThreads[crashedIndex].threadNumber)
         }
         span.setAttribute(key: Keys.totalThreads.rawValue, value: allThreads.count)
 
