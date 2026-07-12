@@ -167,6 +167,21 @@ final class StackTraceTruncationTests: XCTestCase {
         }
     }
 
+    func test_byteGuard_emptiesContextThreadsWhenCrashedIsHighIndex() {
+        // Crash on a high-index thread among many: positional alignment forces keeping 26 threads,
+        // which can't fit even at the frame floor. The guard must empty the context threads (keeping
+        // their positions) so the payload still fits, while the crashed thread retains its frames.
+        let all = (0..<30).map { makeThread(id: $0, frames: 10) }
+        let budget = 3_000
+        let json = Helper.buildTruncatedThreads(allFrames: all, crashedIndex: 25,
+                                                frameCap: 20, byteBudget: budget)
+        XCTAssertLessThanOrEqual(json.utf8.count, budget)   // guarantee holds even in this case
+        let decoded = decodeThreads(json)
+        XCTAssertEqual(decoded.count, 26)                   // positions preserved through the crashed thread
+        XCTAssertEqual(binaryTag(decoded[25]), "T25")       // crashed thread retained with its frames
+        XCTAssertTrue(decoded[0].isEmpty)                   // a context thread emptied to fit
+    }
+
     func test_emptyThreadsProducesEmptyArray() {
         let json = Helper.buildTruncatedThreads(allFrames: [], crashedIndex: nil,
                                                 frameCap: 20, byteBudget: 9_000)

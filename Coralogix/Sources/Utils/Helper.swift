@@ -87,13 +87,18 @@ class Helper {
     }
 
     /// Builds the serialized `threads` attribute for a native crash. It keeps every thread in
-    /// report order and applies:
-    ///   1. middle-out frame truncation per thread;
-    ///   2. a deterministic byte guard that shrinks — first dropping tail threads (never past the
-    ///      crashed thread), then trimming frames harder — until the serialized string fits `byteBudget`.
-    /// The number of threads reported is bounded solely by the byte guard (there is no separate
-    /// thread-count knob): threads are never reordered, and the crashed thread plus everything
-    /// before it are always retained, so positions stay stable and `triggered_by_thread` cannot desync.
+    /// report order and applies a deterministic byte guard that shrinks until the serialized string
+    /// fits `byteBudget`:
+    ///   1. drop tail threads (never past the crashed thread);
+    ///   2. trim every kept thread's frames middle-out down to a floor;
+    ///   3. last resort — when positional alignment forces keeping more threads than fit even at the
+    ///      floor, empty the context (before-crashed) threads' frame arrays and, if still needed,
+    ///      trim the crashed thread below the floor toward a single frame.
+    /// Threads are never reordered and the crashed thread plus its positional slot are always
+    /// retained, so `triggered_by_thread` cannot desync. The number of threads reported is bounded
+    /// solely by this guard (there is no separate thread-count knob). The result always fits
+    /// `byteBudget` unless even the minimal positional-safe form (one frame + empty context slots)
+    /// exceeds it, in which case that minimal form is returned as a best effort.
     /// `allFrames` holds every thread's full frame array in report order; `crashedIndex` is the
     /// position of the crashed thread in that array, or nil if unknown.
     internal static func buildTruncatedThreads(allFrames: [[[String: Any]]],
@@ -104,17 +109,26 @@ class Helper {
 
         let frameFloor = 4
         let frameTrimStep = 4
-        let minKept = min(allFrames.count, crashedIndex.map { $0 + 1 } ?? 1)
+        let crashed = crashedIndex.map { min(max(0, $0), allFrames.count - 1) }
+        let keepIndex = crashed ?? 0                          // thread whose frames we protect longest
+        let minKept = (crashed.map { $0 + 1 }) ?? 1
         var keptCount = allFrames.count
         var cap = max(1, frameCap)
 
-        func serialize() -> String {
-            let kept = allFrames.prefix(keptCount).map {
-                convertArrayToJsonString(array: truncateMiddleOut($0, cap: cap))
+        // When `emptyContext` is set, every kept thread except `keepIndex` is serialized as an empty
+        // frame array. This shrinks the payload while preserving array positions, so the crashed
+        // thread stays at its index and `triggered_by_thread` cannot desync.
+        func serialize(emptyContext: Bool = false) -> String {
+            let kept = allFrames.prefix(keptCount).enumerated().map { index, frames -> String in
+                if emptyContext && index != keepIndex {
+                    return convertArrayToJsonString(array: [])
+                }
+                return convertArrayToJsonString(array: truncateMiddleOut(frames, cap: cap))
             }
             return convertArrayOfStringToJsonString(array: Array(kept))
         }
 
+        // Stages 1–2: drop tail threads, then trim frames to the floor.
         var json = serialize()
         while json.utf8.count > byteBudget {
             if keptCount > minKept {
@@ -122,9 +136,19 @@ class Helper {
             } else if cap > frameFloor {
                 cap = max(frameFloor, cap - frameTrimStep)
             } else {
-                break // floor reached — cannot shrink further without dropping the crashed thread
+                break
             }
             json = serialize()
+        }
+        if json.utf8.count <= byteBudget { return json }
+
+        // Stage 3 (last resort): positional alignment forces keeping `minKept` threads that still
+        // exceed the budget at the floor. Empty the context threads (positions preserved) and, if
+        // needed, trim the crashed thread below the floor toward a single frame.
+        json = serialize(emptyContext: true)
+        while json.utf8.count > byteBudget && cap > 1 {
+            cap -= 1
+            json = serialize(emptyContext: true)
         }
         return json
     }
