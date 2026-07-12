@@ -12,7 +12,7 @@ omitted; the focus here is user-facing behavior changes. Tickets are referenced 
 ## [2.11.0] - 2026-07-12
 
 ### Added
-- `maxStackTraceFramesPerThread` (default 20) and `maxThreads` (default 2) on `CoralogixExporterOptions` bound the size of a native crash report. Each thread's stack is truncated middle-out — the top frames and the bottom frames are kept — so deep and recursive crashes still show both the crash site and the entry point, and the number of reported threads is capped with the crashing thread always retained. Oversized reports are then trimmed deterministically, so a large crash is no longer at risk of being cut mid-payload and corrupted on ingestion.
+- `maxStackTraceFramesPerThread` (default 20) on `CoralogixExporterOptions` bounds the size of a native crash report. Each thread's stack is truncated middle-out — the top frames and the bottom frames are kept — so deep and recursive crashes still show both the crash site and the entry point. If a report is still too large, the SDK deterministically reduces the number of threads it includes (always keeping the thread that crashed) until it fits, so a large crash is no longer at risk of being cut mid-payload and corrupted on ingestion.
 
 ## [2.10.1] - 2026-07-09
 

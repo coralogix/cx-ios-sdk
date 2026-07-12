@@ -86,17 +86,18 @@ class Helper {
         return result
     }
 
-    /// Builds the serialized `threads` attribute for a native crash, applying in order:
-    ///   1. a contiguous-prefix thread cap that always retains the crashed thread and never
-    ///      reorders threads — positions stay stable so `triggered_by_thread` cannot desync;
-    ///   2. middle-out frame truncation per kept thread;
-    ///   3. a deterministic byte guard that shrinks — first dropping tail threads (never past the
+    /// Builds the serialized `threads` attribute for a native crash. It keeps every thread in
+    /// report order and applies:
+    ///   1. middle-out frame truncation per thread;
+    ///   2. a deterministic byte guard that shrinks — first dropping tail threads (never past the
     ///      crashed thread), then trimming frames harder — until the serialized string fits `byteBudget`.
+    /// The number of threads reported is bounded solely by the byte guard (there is no separate
+    /// thread-count knob): threads are never reordered, and the crashed thread plus everything
+    /// before it are always retained, so positions stay stable and `triggered_by_thread` cannot desync.
     /// `allFrames` holds every thread's full frame array in report order; `crashedIndex` is the
     /// position of the crashed thread in that array, or nil if unknown.
     internal static func buildTruncatedThreads(allFrames: [[[String: Any]]],
                                                crashedIndex: Int?,
-                                               maxThreads: Int,
                                                frameCap: Int,
                                                byteBudget: Int) -> String {
         guard !allFrames.isEmpty else { return convertArrayOfStringToJsonString(array: []) }
@@ -104,7 +105,7 @@ class Helper {
         let frameFloor = 4
         let frameTrimStep = 4
         let minKept = min(allFrames.count, crashedIndex.map { $0 + 1 } ?? 1)
-        var keptCount = min(allFrames.count, max(maxThreads, minKept))
+        var keptCount = allFrames.count
         var cap = max(1, frameCap)
 
         func serialize() -> String {

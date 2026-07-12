@@ -160,17 +160,15 @@ let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
 Bound the size of a native crash report so it stays within the backend's ingestion limit (crash logs above the limit are truncated by the pipeline and can be corrupted).
 
 - `maxStackTraceFramesPerThread` (default `20`) — maximum frames kept per thread. When a thread has more, its stack is truncated **middle-out**: the top frames (the crash site and its immediate callers) and the bottom frames (the entry point) are kept, and the middle is dropped. This keeps deep and recursive stacks useful instead of showing one repeated frame.
-- `maxThreads` (default `2`, clamped to `1...4`) — maximum number of threads reported. The thread that crashed is always kept.
 
-The reported thread order is unchanged; only the volume of frames and threads is reduced. Hybrid (Flutter / React Native) crash paths are unaffected — those SDKs apply their own limits.
+If a report is still too large, the SDK automatically reduces the number of threads it includes — always keeping the thread that crashed — until it fits under the ingestion limit. Thread order is never changed; only the volume of frames and threads is reduced. Hybrid (Flutter / React Native) crash paths are unaffected — those SDKs apply their own limits.
 ```swift
 let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
                                         environment: "ENVIRONMENT",
                                         application: "APP-NAME",
                                         version: "APP-VERSION",
                                         publicKey: "API-KEY",
-                                        maxStackTraceFramesPerThread: 20,
-                                        maxThreads: 2)
+                                        maxStackTraceFramesPerThread: 20)
 ```
 
 ### Excluding Instrumentations from Session Sampling

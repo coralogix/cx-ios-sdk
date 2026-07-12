@@ -2,7 +2,7 @@
 //  StackTraceTruncationTests.swift
 //
 //  Covers CX-48437 — native-crash stack-trace truncation: middle-out frame truncation,
-//  maxThreads clamping, and the contiguous-prefix thread cap + deterministic byte guard.
+//  frame-cap flooring, and the contiguous-prefix thread retention + deterministic byte guard.
 //
 
 import XCTest
@@ -82,31 +82,19 @@ final class StackTraceTruncationTests: XCTestCase {
 
     // MARK: - Options clamping
 
-    private func options(maxThreads: Int? = nil, framesPerThread: Int? = nil) -> CoralogixExporterOptions {
+    private func options(framesPerThread: Int? = nil) -> CoralogixExporterOptions {
         CoralogixExporterOptions(
             coralogixDomain: .US2,
             environment: "PROD",
             application: "TestApp-iOS",
             version: "1.0",
             publicKey: "token",
-            maxStackTraceFramesPerThread: framesPerThread ?? CoralogixExporterOptions.defaultMaxStackTraceFramesPerThread,
-            maxThreads: maxThreads ?? CoralogixExporterOptions.defaultMaxThreads
+            maxStackTraceFramesPerThread: framesPerThread ?? CoralogixExporterOptions.defaultMaxStackTraceFramesPerThread
         )
     }
 
     func test_options_defaults() {
-        let opts = options()
-        XCTAssertEqual(opts.maxThreads, 2)
-        XCTAssertEqual(opts.maxStackTraceFramesPerThread, 20)
-    }
-
-    func test_options_maxThreads_clampedToCeiling() {
-        XCTAssertEqual(options(maxThreads: 10).maxThreads, 4)
-    }
-
-    func test_options_maxThreads_clampedToFloor() {
-        XCTAssertEqual(options(maxThreads: 0).maxThreads, 1)
-        XCTAssertEqual(options(maxThreads: -5).maxThreads, 1)
+        XCTAssertEqual(options().maxStackTraceFramesPerThread, 20)
     }
 
     func test_options_framesPerThread_flooredAtOne() {
@@ -114,35 +102,28 @@ final class StackTraceTruncationTests: XCTestCase {
         XCTAssertEqual(options(framesPerThread: -9).maxStackTraceFramesPerThread, 1)
     }
 
-    // MARK: - buildTruncatedThreads: thread cap
+    // MARK: - buildTruncatedThreads: threads
 
-    func test_threadCap_keepsMaxThreadsWhenCrashedIsFirst() {
+    func test_underBudget_keepsAllThreadsInOrder() {
+        // Ample budget → the byte guard drops nothing: every thread is kept, in report order.
         let all = (0..<5).map { makeThread(id: $0, frames: 10) }
         let json = Helper.buildTruncatedThreads(allFrames: all, crashedIndex: 0,
-                                                maxThreads: 2, frameCap: 20, byteBudget: 1_000_000)
+                                                frameCap: 20, byteBudget: 1_000_000)
         let decoded = decodeThreads(json)
-        XCTAssertEqual(decoded.count, 2)
-        XCTAssertEqual(binaryTag(decoded[0]), "T0")
-        XCTAssertEqual(binaryTag(decoded[1]), "T1")
+        XCTAssertEqual(decoded.map { binaryTag($0) }, ["T0", "T1", "T2", "T3", "T4"])
         XCTAssertEqual(decoded[0].count, 10) // under frame cap → untouched
     }
 
-    func test_threadCap_extendsPrefixToIncludeCrashedThread() {
-        // crashed thread at index 3, maxThreads 2 → contiguous prefix must reach index 3.
-        let all = (0..<6).map { makeThread(id: $0, frames: 8) }
+    func test_byteGuard_neverDropsBelowCrashedThreadPrefix() {
+        // crashed thread at index 3; under byte pressure the guard drops only tail threads and
+        // never reorders, so the contiguous prefix through the crashed thread (T0…T3) is retained.
+        let all = (0..<8).map { makeThread(id: $0, frames: 5) }
         let json = Helper.buildTruncatedThreads(allFrames: all, crashedIndex: 3,
-                                                maxThreads: 2, frameCap: 20, byteBudget: 1_000_000)
+                                                frameCap: 20, byteBudget: 3_000)
         let decoded = decodeThreads(json)
-        XCTAssertEqual(decoded.count, 4)
-        XCTAssertEqual(binaryTag(decoded[3]), "T3") // crashed thread present at its original position
-    }
-
-    func test_threadOrder_isNeverChanged() {
-        let all = (0..<3).map { makeThread(id: $0, frames: 5) }
-        let json = Helper.buildTruncatedThreads(allFrames: all, crashedIndex: 0,
-                                                maxThreads: 4, frameCap: 20, byteBudget: 1_000_000)
-        let decoded = decodeThreads(json)
-        XCTAssertEqual(decoded.map { binaryTag($0) }, ["T0", "T1", "T2"])
+        XCTAssertLessThan(decoded.count, 8)          // guard engaged: some tail threads dropped
+        XCTAssertGreaterThanOrEqual(decoded.count, 4) // never below the crashed-thread prefix
+        XCTAssertEqual(Array(decoded.prefix(4)).map { binaryTag($0) }, ["T0", "T1", "T2", "T3"])
     }
 
     // MARK: - buildTruncatedThreads: frame truncation
@@ -150,7 +131,7 @@ final class StackTraceTruncationTests: XCTestCase {
     func test_frameTruncation_appliedPerThread() {
         let all = [makeThread(id: 0, frames: 100)]
         let json = Helper.buildTruncatedThreads(allFrames: all, crashedIndex: 0,
-                                                maxThreads: 1, frameCap: 20, byteBudget: 1_000_000)
+                                                frameCap: 20, byteBudget: 1_000_000)
         let decoded = decodeThreads(json)
         XCTAssertEqual(decoded.count, 1)
         XCTAssertEqual(decoded[0].count, 20)
@@ -166,7 +147,7 @@ final class StackTraceTruncationTests: XCTestCase {
         let all = (0..<5).map { makeThread(id: $0, frames: 30) }
         let budget = 2_500
         let json = Helper.buildTruncatedThreads(allFrames: all, crashedIndex: 0,
-                                                maxThreads: 4, frameCap: 20, byteBudget: budget)
+                                                frameCap: 20, byteBudget: budget)
         XCTAssertLessThanOrEqual(json.utf8.count, budget)
         let decoded = decodeThreads(json)
         XCTAssertGreaterThanOrEqual(decoded.count, 1)
@@ -177,7 +158,7 @@ final class StackTraceTruncationTests: XCTestCase {
         // crashed thread is last → no tail threads may be dropped; guard must trim frames instead.
         let all = (0..<5).map { makeThread(id: $0, frames: 40) }
         let json = Helper.buildTruncatedThreads(allFrames: all, crashedIndex: 4,
-                                                maxThreads: 2, frameCap: 20, byteBudget: 2_000)
+                                                frameCap: 20, byteBudget: 2_000)
         let decoded = decodeThreads(json)
         XCTAssertEqual(decoded.count, 5)                  // all threads retained (crashed is last)
         XCTAssertEqual(binaryTag(decoded[4]), "T4")       // crashed thread present
@@ -188,7 +169,7 @@ final class StackTraceTruncationTests: XCTestCase {
 
     func test_emptyThreadsProducesEmptyArray() {
         let json = Helper.buildTruncatedThreads(allFrames: [], crashedIndex: nil,
-                                                maxThreads: 2, frameCap: 20, byteBudget: 9_000)
+                                                frameCap: 20, byteBudget: 9_000)
         XCTAssertTrue(decodeThreads(json).isEmpty)
     }
 }

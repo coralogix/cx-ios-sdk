@@ -103,7 +103,6 @@ extension CoralogixRum {
         let threadsJson = Helper.buildTruncatedThreads(
             allFrames: allFrames,
             crashedIndex: crashedIndex,
-            maxThreads: options?.maxThreads ?? CoralogixExporterOptions.defaultMaxThreads,
             frameCap: options?.maxStackTraceFramesPerThread ?? CoralogixExporterOptions.defaultMaxStackTraceFramesPerThread,
             byteBudget: CoralogixExporterOptions.crashThreadsByteBudget
         )
