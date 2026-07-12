@@ -170,10 +170,15 @@ public struct CoralogixExporterOptions {
     public static let defaultMaxThreads = 2
     public static let maxThreadsRange = 1...4
 
-    /// Byte budget for the serialized `threads` attribute, sized so the whole crash event
-    /// (threads + the surrounding cx_rum envelope) clears the backend's ~10 KB hard limit with
-    /// headroom. Conservative; to be confirmed against a real customer crash log.
-    public static let crashThreadsByteBudget = 6_000
+    /// Byte budget for the serialized `threads` attribute, measured at build time — before the
+    /// span is OTLP-encoded. It deliberately leaves room for the two things the wire payload adds
+    /// on top of this string: (1) the OTLP/JSON re-escaping of the attribute value (~1.25x), and
+    /// (2) the rest of the crash event — span envelope, cx_rum contexts, other attributes (~2.5–4 KB).
+    /// Sized so `~1.25 * budget + envelope` clears the backend's ~10 KB hard limit with headroom
+    /// (~1.25 * 4500 + ~3000 ≈ 8.6 KB). Under-budgeting is the safe direction: worst case the stack
+    /// is a little shorter, whereas over-budgeting risks a mid-payload cut. Conservative placeholder —
+    /// to be confirmed against a real customer crash log.
+    public static let crashThreadsByteBudget = 4_500
 
     public init(coralogixDomain: CoralogixDomain,
                 userContext: UserContext? = nil,
