@@ -112,6 +112,7 @@ final class ErrorContextTests: XCTestCase {
             Keys.processName.rawValue: AttributeValue("ExampleApp"),
             Keys.applicationIdentifier.rawValue: AttributeValue("com.myapp"),
             Keys.triggeredByThread.rawValue: AttributeValue("1"),
+            Keys.totalThreads.rawValue: AttributeValue("40"),
             Keys.baseAddress.rawValue: AttributeValue("0x1000000"),
             Keys.arch.rawValue: AttributeValue("x86_64")
         ])
@@ -137,6 +138,8 @@ final class ErrorContextTests: XCTestCase {
         XCTAssertEqual(dictionary[Keys.exceptionType.rawValue] as? String, "Fatal")
         XCTAssertEqual(dictionary[Keys.arch.rawValue] as? String, "x86_64")
         XCTAssertEqual(dictionary[Keys.baseAddress.rawValue] as? String, "0x1000000")
+        XCTAssertEqual(errorStruct.totalThreads, 40)
+        XCTAssertEqual(dictionary[Keys.totalThreads.rawValue] as? Int, 40)
         XCTAssertEqual(dictionary[Keys.triggeredByThread.rawValue] as? Int, 1)
         XCTAssertEqual(dictionary[Keys.applicationIdentifier.rawValue] as? String, "com.myapp")
         XCTAssertEqual(dictionary[Keys.processName.rawValue] as? String, "ExampleApp")
