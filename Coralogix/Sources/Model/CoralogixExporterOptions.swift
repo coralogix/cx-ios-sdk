@@ -163,15 +163,21 @@ public struct CoralogixExporterOptions {
 
     public static let defaultMaxStackTraceFramesPerThread = 20
 
-    /// Byte budget for the serialized `threads` attribute, measured at build time — before the
-    /// span is OTLP-encoded. It deliberately leaves room for the two things the wire payload adds
-    /// on top of this string: (1) the OTLP/JSON re-escaping of the attribute value (~1.25x), and
-    /// (2) the rest of the crash event — span envelope, cx_rum contexts, other attributes (~2.5–4 KB).
-    /// Sized so `~1.25 * budget + envelope` clears the backend's ~10 KB hard limit with headroom
-    /// (~1.25 * 4500 + ~3000 ≈ 8.6 KB). Under-budgeting is the safe direction: worst case the stack
-    /// is a little shorter, whereas over-budgeting risks a mid-payload cut. Conservative placeholder —
-    /// to be confirmed against a real customer crash log.
-    public static let crashThreadsByteBudget = 4_500
+    /// Byte budget for the *fully-assembled* crash log record, enforced at export time against the
+    /// exact JSON that goes on the wire (post-`beforeSend`, post-assembly). Because the guard now
+    /// measures the real record — envelope, cx_rum contexts, and the `threads` array together —
+    /// there is no estimate to under-count: whatever the user context, view name, or labels add is
+    /// already included. Kept under the backend's ~10 KB hard limit with headroom for the batch
+    /// wrapper. Under-budgeting is the safe direction (a slightly shorter stack) versus a mid-payload
+    /// cut. Conservative placeholder — to be confirmed against a real customer crash log.
+    public static let crashLogRecordByteBudget = 9_000
+
+    /// Upper bound on how many threads a native crash report is parsed into, applied before the byte
+    /// guard runs. The export-time byte guard already bounds how many threads reach the wire, so this
+    /// only caps worst-case parse/serialize work when a process crashes with an unusually large thread
+    /// count (e.g. GCD thread explosion). The crashed thread and every thread before it are always
+    /// retained, so the ceiling can never drop past the crash site.
+    public static let crashThreadCountCeiling = 50
 
     public init(coralogixDomain: CoralogixDomain,
                 userContext: UserContext? = nil,

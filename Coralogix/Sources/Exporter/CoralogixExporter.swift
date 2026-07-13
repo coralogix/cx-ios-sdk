@@ -257,8 +257,23 @@ public class CoralogixExporter: SpanExporter {
                                   options: self.options) else {
             return nil  // Span will be filtered out by compactMap
         }
-        
-        return cxSpan.getDictionary()
+
+        guard let record = cxSpan.getDictionary() else { return nil }
+
+        // Enforce the crash-payload byte budget against the fully-assembled record (post-beforeSend),
+        // so the measurement reflects the exact JSON that goes on the wire — not a build-time estimate.
+        // No-op for non-crash records (they carry no crash `threads`).
+        // Read via getAttribute (which stringifies the stored Int) — matching how ErrorContext reads
+        // triggered_by_thread; getAttributes()/attributeStringValue would surface it as a raw Int and
+        // miss it, leaving crashedIndex nil and risking a drop of the real crashed thread.
+        let crashedIndex = (otelSpan.getAttribute(forKey: Keys.crashedThreadIndex.rawValue) as? String)
+            .flatMap { Int($0) }
+        return Helper.fitCrashRecordToByteBudget(
+            record: record,
+            crashedIndex: crashedIndex,
+            frameCap: self.options.maxStackTraceFramesPerThread,
+            byteBudget: CoralogixExporterOptions.crashLogRecordByteBudget
+        )
     }
     
     private func isMatchesRegexPattern(string: String, regexs: [String]) -> Bool {

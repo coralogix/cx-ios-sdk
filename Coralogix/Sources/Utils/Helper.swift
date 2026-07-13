@@ -79,7 +79,10 @@ class Helper {
     /// `frames.count <= cap`.
     internal static func truncateMiddleOut<T>(_ frames: [T], cap: Int) -> [T] {
         guard cap > 0, frames.count > cap else { return frames }
-        let head = Int((Double(cap) * 0.75).rounded())
+        // Clamp head to cap - 1 whenever cap >= 2 so at least one tail frame (the entry point) is
+        // always kept — rounding could otherwise take the whole budget as head (e.g. cap == 2 →
+        // head 2, tail 0, dropping the entry frame).
+        let head = cap == 1 ? 1 : min(Int((Double(cap) * 0.75).rounded()), cap - 1)
         let tail = cap - head
         var result = Array(frames.prefix(head))
         if tail > 0 { result.append(contentsOf: frames.suffix(tail)) }
@@ -151,6 +154,84 @@ class Helper {
             json = serialize(emptyContext: true)
         }
         return json
+    }
+
+    /// Trims a fully-assembled native-crash log record so its serialized JSON fits `byteBudget`.
+    /// Export-time counterpart to `buildTruncatedThreads`: rather than budgeting the `threads` string
+    /// alone and *estimating* the rest of the payload, it measures the actual record that goes on the
+    /// wire (post-assembly, post-`beforeSend`) and derives the space left for `threads` from that
+    /// measurement — so whatever the user context, view name, or labels add is already accounted for.
+    /// The trimming itself is `buildTruncatedThreads`, unchanged; it just receives a record-derived
+    /// budget instead of a fixed constant.
+    ///
+    /// `crashedIndex` is the crashed thread's position within the record's `threads` array (carried
+    /// from crash-parse time via `Keys.crashedThreadIndex`); the guard never drops past it. Returns
+    /// the record untouched when it already fits, carries no crash `threads`, or can't be measured —
+    /// best effort, never crashing the host app.
+    internal static func fitCrashRecordToByteBudget(record: [String: Any],
+                                                    crashedIndex: Int?,
+                                                    frameCap: Int,
+                                                    byteBudget: Int) -> [String: Any] {
+        // Cheap crash-detection first (dict lookups only) so non-crash spans — the overwhelming
+        // majority — return before paying for any JSON serialization.
+        guard let threads = crashThreads(in: record), !threads.isEmpty else { return record }
+        guard let recordBytes = jsonByteCount(record), recordBytes > byteBudget else { return record }
+        guard let envelopeBytes = jsonByteCount(replacingCrashThreads(in: record, with: [])) else {
+            return record
+        }
+
+        // `buildTruncatedThreads` fits the escaped transport form (array-of-strings) to its budget,
+        // while the record embeds `threads` as a plain nested array (smaller) — so fitting the
+        // transport form to `byteBudget - envelope` lands the reassembled record at or under budget.
+        // The bounded loop re-measures the real record and tightens the budget on the off chance the
+        // two encodings diverge enough to matter.
+        var budget = max(0, byteBudget - envelopeBytes)
+        var result = record
+        for _ in 0..<5 {
+            let trimmedJson = buildTruncatedThreads(allFrames: threads, crashedIndex: crashedIndex,
+                                                    frameCap: frameCap, byteBudget: budget)
+            result = replacingCrashThreads(in: record, with: decodeThreadsTransport(trimmedJson))
+            guard let bytes = jsonByteCount(result), bytes > byteBudget, budget > 0 else { return result }
+            budget = Int(Double(budget) * 0.85)
+        }
+        return result
+    }
+
+    /// Decodes the `threads` transport form produced by `buildTruncatedThreads` (a JSON array of
+    /// per-thread JSON strings) back into the nested frame arrays the record embeds. An empty
+    /// per-thread string decodes to an empty frame array, preserving the thread's position.
+    private static func decodeThreadsTransport(_ json: String) -> [[[String: Any]]] {
+        guard let threadStrings = convertJsonStringToArrayOfStrings(jsonString: json) else { return [] }
+        return threadStrings.map { convertJsonStringToArray(jsonString: $0) ?? [] }
+    }
+
+    private static func crashThreads(in record: [String: Any]) -> [[[String: Any]]]? {
+        guard let text = record[Keys.text.rawValue] as? [String: Any],
+              let cxRum = text[Keys.cxRum.rawValue] as? [String: Any],
+              let errorContext = cxRum[Keys.errorContext.rawValue] as? [String: Any] else {
+            return nil
+        }
+        return errorContext[Keys.threads.rawValue] as? [[[String: Any]]]
+    }
+
+    private static func replacingCrashThreads(in record: [String: Any],
+                                              with threads: [[[String: Any]]]) -> [String: Any] {
+        guard var text = record[Keys.text.rawValue] as? [String: Any],
+              var cxRum = text[Keys.cxRum.rawValue] as? [String: Any],
+              var errorContext = cxRum[Keys.errorContext.rawValue] as? [String: Any] else {
+            return record
+        }
+        errorContext[Keys.threads.rawValue] = threads
+        cxRum[Keys.errorContext.rawValue] = errorContext
+        text[Keys.cxRum.rawValue] = cxRum
+        var result = record
+        result[Keys.text.rawValue] = text
+        return result
+    }
+
+    private static func jsonByteCount(_ object: [String: Any]) -> Int? {
+        guard JSONSerialization.isValidJSONObject(object) else { return nil }
+        return (try? JSONSerialization.data(withJSONObject: object, options: []))?.count
     }
 
     internal static func convertDictionaryToJsonString(dict: [String: Any]) -> String {

@@ -84,25 +84,33 @@ extension CoralogixRum {
 
         let crashedIndex = allThreads.firstIndex(where: { $0.crashed })
         if let crashedIndex {
+            // triggered_by_thread carries the original crash report's thread *number* (unchanged).
             span.setAttribute(key: Keys.triggeredByThread.rawValue, value: allThreads[crashedIndex].threadNumber)
+            // The positional index is carried separately so the export-time byte guard can trim
+            // without dropping past the crashed thread, independent of the thread-number value.
+            span.setAttribute(key: Keys.crashedThreadIndex.rawValue, value: crashedIndex)
         }
+        // total_threads reports the true count — before the ceiling below — so a truncated report
+        // still reads "N of M threads".
         span.setAttribute(key: Keys.totalThreads.rawValue, value: allThreads.count)
 
-        // Frames per thread, in report order — order is never changed, because the backend locates
-        // the crashed thread positionally via triggered_by_thread. Truncation only removes frames
-        // within each thread and, under the byte guard, drops tail threads past the crashed one.
-        let allFrames = allThreads.map {
-            self.parseFrameArray(crashedThreadFrameArray: self.crashedThread(report: report, thread: $0))
-        }
+        // Cap how many threads we parse before doing any work, to bound worst-case parse/serialize
+        // cost on a process with an unusually large thread count. The crashed thread and every thread
+        // before it are always kept, so this can never drop past the crash site.
+        let requiredPrefix = crashedIndex.map { $0 + 1 } ?? 0
+        let keptThreadCount = min(allThreads.count,
+                                  max(CoralogixExporterOptions.crashThreadCountCeiling, requiredPrefix))
 
-        let options = self.options
-        let threadsJson = Helper.buildTruncatedThreads(
-            allFrames: allFrames,
-            crashedIndex: crashedIndex,
-            frameCap: options?.maxStackTraceFramesPerThread ?? CoralogixExporterOptions.defaultMaxStackTraceFramesPerThread,
-            byteBudget: CoralogixExporterOptions.crashThreadsByteBudget
-        )
-        span.setAttribute(key: Keys.threads.rawValue, value: threadsJson)
+        // Frames per thread, in report order (never reordered). Each thread is truncated middle-out to
+        // the per-thread frame cap; the byte guard that fits the whole payload runs later at export,
+        // against the fully-assembled record (see Helper.fitCrashRecordToByteBudget).
+        let frameCap = self.options?.maxStackTraceFramesPerThread
+            ?? CoralogixExporterOptions.defaultMaxStackTraceFramesPerThread
+        let threads = allThreads.prefix(keptThreadCount).map { thread -> String in
+            let frames = self.parseFrameArray(crashedThreadFrameArray: self.crashedThread(report: report, thread: thread))
+            return Helper.convertArrayToJsonString(array: Helper.truncateMiddleOut(frames, cap: frameCap))
+        }
+        span.setAttribute(key: Keys.threads.rawValue, value: Helper.convertArrayOfStringToJsonString(array: threads))
     }
     
     func parseFrameArray(crashedThreadFrameArray: [StackFrame]) -> [[String: Any]] {
