@@ -608,9 +608,12 @@ public class CoralogixRum {
         }
     }
 
-    internal func makeSpan(event: CoralogixEventType, source: Keys, severity: CoralogixLogSeverity) -> any Span {
+    internal func makeSpan(event: CoralogixEventType, source: Keys, severity: CoralogixLogSeverity, startTime: Date? = nil) -> any Span {
         let builder = tracerProvider().spanBuilder(spanName: Keys.iosSdk.rawValue)
         Self.applyAutoInstrumentationParentPolicy(builder: builder, event: event)
+        if let startTime {
+            _ = builder.setStartTime(time: startTime)
+        }
         var span = builder.startSpan()
         span.setAttribute(key: Keys.eventType.rawValue, value: event.rawValue)
         span.setAttribute(key: Keys.source.rawValue, value: source.rawValue)
