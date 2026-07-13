@@ -179,9 +179,16 @@ final class MainViewController: UITableViewController {
             copyButton.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -12)
         ])
 
-        // Size header explicitly
+        // Size the header to fit its Auto Layout content so the session ID isn't clipped.
         let headerWidth = view.bounds.width
-        container.frame = CGRect(x: 0, y: 0, width: headerWidth, height: 80)
+        container.frame = CGRect(x: 0, y: 0, width: headerWidth, height: 0)
+        container.layoutIfNeeded()
+        let fittingHeight = container.systemLayoutSizeFitting(
+            CGSize(width: headerWidth, height: UIView.layoutFittingCompressedSize.height),
+            withHorizontalFittingPriority: .required,
+            verticalFittingPriority: .fittingSizeLevel
+        ).height
+        container.frame = CGRect(x: 0, y: 0, width: headerWidth, height: fittingHeight)
         tableView.tableHeaderView = container
     }
 
