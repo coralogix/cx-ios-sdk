@@ -19,6 +19,7 @@ struct ErrorContext {
     let processName: String
     let applicationIdentifier: String
     var triggeredByThread: Int = 0
+    var totalThreads: Int = 0
     var threads: [[[String: Any]]]?
     var stackTrace: [[String: Any]]?
     let baseAddress: String
@@ -47,6 +48,9 @@ struct ErrorContext {
         self.applicationIdentifier = otel.getAttribute(forKey: Keys.applicationIdentifier.rawValue) as? String ?? ""
         if let triggeredByThread = otel.getAttribute(forKey: Keys.triggeredByThread.rawValue) as? String {
             self.triggeredByThread = Int(triggeredByThread) ?? -1
+        }
+        if let totalThreads = otel.getAttribute(forKey: Keys.totalThreads.rawValue) as? String {
+            self.totalThreads = Int(totalThreads) ?? 0
         }
     
         if let jsonString = otel.getAttribute(forKey: Keys.stackTrace.rawValue) as? String,
@@ -87,6 +91,7 @@ struct ErrorContext {
             errorContext[Keys.processName.rawValue] = self.processName
             errorContext[Keys.applicationIdentifier.rawValue] = self.applicationIdentifier
             errorContext[Keys.triggeredByThread.rawValue] = self.triggeredByThread
+            errorContext[Keys.totalThreads.rawValue] = self.totalThreads
             errorContext[Keys.baseAddress.rawValue] = self.baseAddress
             errorContext[Keys.arch.rawValue] = self.arch
             if let threads = self.threads {

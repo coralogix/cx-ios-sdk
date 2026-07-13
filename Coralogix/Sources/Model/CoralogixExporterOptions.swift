@@ -156,6 +156,29 @@ public struct CoralogixExporterOptions {
     /// ```
     public var tracesExporter: TracesExporterCallback?
 
+    /// Maximum stack-trace frames kept per thread on a native crash. Frames beyond this are
+    /// truncated middle-out (head + tail kept, middle dropped) so deep or recursive stacks
+    /// retain both the fault site and the entry point. Floored at 1.
+    public let maxStackTraceFramesPerThread: Int
+
+    public static let defaultMaxStackTraceFramesPerThread = 20
+
+    /// Byte budget for the *fully-assembled* crash log record, enforced at export time against the
+    /// exact JSON that goes on the wire (post-`beforeSend`, post-assembly). Because the guard now
+    /// measures the real record — envelope, cx_rum contexts, and the `threads` array together —
+    /// there is no estimate to under-count: whatever the user context, view name, or labels add is
+    /// already included. Kept under the backend's ~10 KB hard limit with headroom for the batch
+    /// wrapper. Under-budgeting is the safe direction (a slightly shorter stack) versus a mid-payload
+    /// cut. Conservative placeholder — to be confirmed against a real customer crash log.
+    public static let crashLogRecordByteBudget = 9_000
+
+    /// Upper bound on how many threads a native crash report is parsed into, applied before the byte
+    /// guard runs. The export-time byte guard already bounds how many threads reach the wire, so this
+    /// only caps worst-case parse/serialize work when a process crashes with an unusually large thread
+    /// count (e.g. GCD thread explosion). The crashed thread and every thread before it are always
+    /// retained, so the ceiling can never drop past the crash site.
+    public static let crashThreadCountCeiling = 50
+
     public init(coralogixDomain: CoralogixDomain,
                 userContext: UserContext? = nil,
                 environment: String,
@@ -178,6 +201,7 @@ public struct CoralogixExporterOptions {
                 tracesExporter: TracesExporterCallback? = nil,
                 shouldSendText: ((UIView, String) -> Bool)? = nil,
                 resolveTargetName: ((UIView) -> String?)? = nil,
+                maxStackTraceFramesPerThread: Int = CoralogixExporterOptions.defaultMaxStackTraceFramesPerThread,
                 debug: Bool = false) {
         self.coralogixDomain = coralogixDomain
         self.userContext = userContext
@@ -202,6 +226,7 @@ public struct CoralogixExporterOptions {
         self.tracesExporter = tracesExporter
         self.shouldSendText = shouldSendText
         self.resolveTargetName = resolveTargetName
+        self.maxStackTraceFramesPerThread = max(1, maxStackTraceFramesPerThread)
     }
     
     internal func shouldInitInstrumentation(instrumentation: InstrumentationType) -> Bool {

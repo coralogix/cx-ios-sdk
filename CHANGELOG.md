@@ -9,6 +9,11 @@ Release-mechanics commits (version bumps, podspec/script tweaks, README edits) a
 omitted; the focus here is user-facing behavior changes. Tickets are referenced as
 `CX-XXXXX` (Jira) or `ALPH-XXXX` (legacy). Pull request numbers are in parentheses.
 
+## [2.11.0] - 2026-07-12
+
+### Added
+- `maxStackTraceFramesPerThread` (default 20) on `CoralogixExporterOptions` bounds the size of a native crash report. Each thread's stack is truncated middle-out — the top frames and the bottom frames are kept — so deep and recursive crashes still show both the crash site and the entry point. If a report is still too large, the SDK deterministically reduces the number of threads it includes (always keeping the thread that crashed) until it fits, so a large crash is no longer at risk of being cut mid-payload and corrupted on ingestion.
+
 ## [2.10.1] - 2026-07-09
 
 ### Fixed

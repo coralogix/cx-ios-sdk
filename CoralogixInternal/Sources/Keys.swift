@@ -144,6 +144,12 @@ public enum Keys: String {
     // store the counter under the wrong slot and break the restore path.
     case storedViewNumber = "viewNumber"
     case threads
+    case totalThreads = "total_threads"
+    // Array index of the crashed thread within `threads`, carried from crash-parse time to
+    // export time so the byte guard can trim without dropping past the crashed thread. Internal
+    // only — never emitted on the wire (crash records carry `triggered_by_thread`, the original
+    // crash thread *number*, not this positional index).
+    case crashedThreadIndex = "crashed_thread_index"
     case httpResponseBodySize = "http_response_body_size"
     case stackTrace
     case instrumentationData = "instrumentation_data"
