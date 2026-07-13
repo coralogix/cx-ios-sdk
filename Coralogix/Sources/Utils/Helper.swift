@@ -161,23 +161,34 @@ class Helper {
     /// alone and *estimating* the rest of the payload, it measures the actual record that goes on the
     /// wire (post-assembly, post-`beforeSend`) and derives the space left for `threads` from that
     /// measurement — so whatever the user context, view name, or labels add is already accounted for.
-    /// The trimming itself is `buildTruncatedThreads`, unchanged; it just receives a record-derived
-    /// budget instead of a fixed constant.
+    /// The trimming itself is `buildTruncatedThreads`, unchanged; it just receives a record-derived budget.
     ///
-    /// `crashedIndex` is the crashed thread's position within the record's `threads` array (carried
-    /// from crash-parse time via `Keys.crashedThreadIndex`); the guard never drops past it. Returns
-    /// the record untouched when it already fits, carries no crash `threads`, or can't be measured —
-    /// best effort, never crashing the host app.
+    /// `threadsTransport` is the SDK's own `threads` attribute (from `Keys.threads`, in report order)
+    /// and is the source of truth for the array — NOT the record's `error_context.threads`, which
+    /// `beforeSend` can reorder, drop, or reshape (either would desync `crashedIndex` or hide the array
+    /// from the guard). Crash threads are SDK-owned diagnostic data, so the guard rebases the record on
+    /// them and `beforeSend` edits to the array don't survive. `crashedIndex` is the crashed thread's
+    /// position in that array (from `Keys.crashedThreadIndex`); the guard never drops past it. Returns
+    /// the record untouched when it carries no crash threads or already fits, and logs when even the
+    /// minimal form can't fit (the envelope alone exceeds the budget) — best effort, never crashing.
     internal static func fitCrashRecordToByteBudget(record: [String: Any],
+                                                    threadsTransport: String?,
                                                     crashedIndex: Int?,
                                                     frameCap: Int,
                                                     byteBudget: Int) -> [String: Any] {
-        // Cheap crash-detection first (dict lookups only) so non-crash spans — the overwhelming
-        // majority — return before paying for any JSON serialization.
-        guard let threads = crashThreads(in: record), !threads.isEmpty else { return record }
-        guard let recordBytes = jsonByteCount(record), recordBytes > byteBudget else { return record }
-        guard let envelopeBytes = jsonByteCount(replacingCrashThreads(in: record, with: [])) else {
-            return record
+        // Only native crashes carry the threads transport attribute; non-crash spans return here for
+        // free (a nil check, no record traversal or serialization).
+        guard let threadsTransport else { return record }
+        let threads = decodeThreadsTransport(threadsTransport)
+        guard !threads.isEmpty else { return record }
+
+        // Rebase the record on the SDK's own threads so measurement, trimming, and crashedIndex stay
+        // consistent no matter what beforeSend did to error_context.threads. A no-op (returns the input)
+        // when beforeSend removed the crash context entirely — there's nothing to write into.
+        let base = replacingCrashThreads(in: record, with: threads)
+        guard let recordBytes = jsonByteCount(base), recordBytes > byteBudget else { return base }
+        guard let envelopeBytes = jsonByteCount(replacingCrashThreads(in: base, with: [])) else {
+            return base
         }
 
         // `buildTruncatedThreads` fits the escaped transport form (array-of-strings) to its budget,
@@ -186,13 +197,20 @@ class Helper {
         // The bounded loop re-measures the real record and tightens the budget on the off chance the
         // two encodings diverge enough to matter.
         var budget = max(0, byteBudget - envelopeBytes)
-        var result = record
+        var result = base
         for _ in 0..<5 {
             let trimmedJson = buildTruncatedThreads(allFrames: threads, crashedIndex: crashedIndex,
                                                     frameCap: frameCap, byteBudget: budget)
-            result = replacingCrashThreads(in: record, with: decodeThreadsTransport(trimmedJson))
-            guard let bytes = jsonByteCount(result), bytes > byteBudget, budget > 0 else { return result }
+            result = replacingCrashThreads(in: base, with: decodeThreadsTransport(trimmedJson))
+            let bytes = jsonByteCount(result) ?? Int.max
+            if bytes <= byteBudget || budget == 0 { break }
             budget = Int(Double(budget) * 0.85)
+        }
+        if let bytes = jsonByteCount(result), bytes > byteBudget {
+            // A fat envelope (large session context / labels / user context) can leave no room even
+            // after threads shrink to the minimum. We don't drop customer-owned envelope fields —
+            // surface it so it's diagnosable rather than silently over budget.
+            Log.w("[Crash] log record is \(bytes)B after trimming, over the \(byteBudget)B budget — the envelope alone may exceed it")
         }
         return result
     }
@@ -203,15 +221,6 @@ class Helper {
     private static func decodeThreadsTransport(_ json: String) -> [[[String: Any]]] {
         guard let threadStrings = convertJsonStringToArrayOfStrings(jsonString: json) else { return [] }
         return threadStrings.map { convertJsonStringToArray(jsonString: $0) ?? [] }
-    }
-
-    private static func crashThreads(in record: [String: Any]) -> [[[String: Any]]]? {
-        guard let text = record[Keys.text.rawValue] as? [String: Any],
-              let cxRum = text[Keys.cxRum.rawValue] as? [String: Any],
-              let errorContext = cxRum[Keys.errorContext.rawValue] as? [String: Any] else {
-            return nil
-        }
-        return errorContext[Keys.threads.rawValue] as? [[[String: Any]]]
     }
 
     private static func replacingCrashThreads(in record: [String: Any],

@@ -222,11 +222,17 @@ final class StackTraceTruncationTests: XCTestCase {
         (try? JSONSerialization.data(withJSONObject: record)).map { $0.count } ?? -1
     }
 
+    /// The SDK's `threads` span-attribute transport form (array of per-thread JSON strings) — the
+    /// trusted source the export guard reads, matching what CrashInstrumentation emits.
+    private func threadsTransport(_ threads: [[[String: Any]]]) -> String {
+        Helper.convertArrayOfStringToJsonString(array: threads.map { Helper.convertArrayToJsonString(array: $0) })
+    }
+
     func test_fitRecord_underBudget_returnedUnchanged() {
         let threads = (0..<3).map { makeThread(id: $0, frames: 5) }
         let record = crashRecord(threads: threads, crashedThreadIndex: 0)
-        let out = Helper.fitCrashRecordToByteBudget(record: record, crashedIndex: 0,
-                                                    frameCap: 20, byteBudget: 100_000)
+        let out = Helper.fitCrashRecordToByteBudget(record: record, threadsTransport: threadsTransport(threads),
+                                                    crashedIndex: 0, frameCap: 20, byteBudget: 100_000)
         XCTAssertEqual(extractThreads(out).count, 3)
         XCTAssertEqual(extractThreads(out)[0].count, 5) // nothing trimmed
     }
@@ -235,9 +241,9 @@ final class StackTraceTruncationTests: XCTestCase {
         let record: [String: Any] = [
             Keys.text.rawValue: [Keys.cxRum.rawValue: [Keys.logContext.rawValue: ["message": "hello"]]]
         ]
-        // Tiny budget, but no crash `threads` to trim → the record is left alone rather than mangled.
-        let out = Helper.fitCrashRecordToByteBudget(record: record, crashedIndex: nil,
-                                                    frameCap: 20, byteBudget: 5)
+        // Tiny budget, but no threads attribute → not a native crash → left alone rather than mangled.
+        let out = Helper.fitCrashRecordToByteBudget(record: record, threadsTransport: nil,
+                                                    crashedIndex: nil, frameCap: 20, byteBudget: 5)
         let cxRum = (out[Keys.text.rawValue] as? [String: Any])?[Keys.cxRum.rawValue] as? [String: Any]
         XCTAssertNotNil(cxRum?[Keys.logContext.rawValue])
         XCTAssertTrue(extractThreads(out).isEmpty)
@@ -248,8 +254,8 @@ final class StackTraceTruncationTests: XCTestCase {
         let record = crashRecord(threads: threads, crashedThreadIndex: 0)
         let budget = 4_000
         XCTAssertGreaterThan(recordBytes(record), budget) // precondition: starts oversized
-        let out = Helper.fitCrashRecordToByteBudget(record: record, crashedIndex: 0,
-                                                    frameCap: 20, byteBudget: budget)
+        let out = Helper.fitCrashRecordToByteBudget(record: record, threadsTransport: threadsTransport(threads),
+                                                    crashedIndex: 0, frameCap: 20, byteBudget: budget)
         XCTAssertLessThanOrEqual(recordBytes(out), budget) // the entire assembled record now fits
         XCTAssertGreaterThanOrEqual(extractThreads(out).count, 1)
         XCTAssertEqual(binaryTag(extractThreads(out)[0]), "T0") // crashed thread never dropped
@@ -260,14 +266,14 @@ final class StackTraceTruncationTests: XCTestCase {
         let budget = 6_000
         let lean = Helper.fitCrashRecordToByteBudget(
             record: crashRecord(threads: threads, crashedThreadIndex: 0),
-            crashedIndex: 0, frameCap: 20, byteBudget: budget)
+            threadsTransport: threadsTransport(threads), crashedIndex: 0, frameCap: 20, byteBudget: budget)
         let fat = Helper.fitCrashRecordToByteBudget(
             record: crashRecord(threads: threads, crashedThreadIndex: 0, envelopePadding: 3_000),
-            crashedIndex: 0, frameCap: 20, byteBudget: budget)
+            threadsTransport: threadsTransport(threads), crashedIndex: 0, frameCap: 20, byteBudget: budget)
         XCTAssertLessThanOrEqual(recordBytes(lean), budget)
         XCTAssertLessThanOrEqual(recordBytes(fat), budget)
         // The only difference is envelope size. Fewer threads survive the fat envelope — proof the
-        // guard responds to the real payload, not a fixed threads-only budget (Daniel's point).
+        // guard responds to the real assembled payload, not a fixed threads-only budget.
         XCTAssertLessThan(extractThreads(fat).count, extractThreads(lean).count)
     }
 
@@ -275,10 +281,57 @@ final class StackTraceTruncationTests: XCTestCase {
         let threads = (0..<8).map { makeThread(id: $0, frames: 10) }
         let record = crashRecord(threads: threads, crashedThreadIndex: 3)
         let budget = 6_000
-        let out = Helper.fitCrashRecordToByteBudget(record: record, crashedIndex: 3,
-                                                    frameCap: 20, byteBudget: budget)
+        let out = Helper.fitCrashRecordToByteBudget(record: record, threadsTransport: threadsTransport(threads),
+                                                    crashedIndex: 3, frameCap: 20, byteBudget: budget)
         XCTAssertLessThanOrEqual(recordBytes(out), budget)
         XCTAssertGreaterThanOrEqual(extractThreads(out).count, 4) // prefix through the crashed thread
         XCTAssertEqual(binaryTag(extractThreads(out)[3]), "T3")   // crashed thread retained with frames
+    }
+
+    func test_fitRecord_sourcesThreadsFromAttributeNotRecord() {
+        // Simulate beforeSend having reordered the record's threads: the record carries the array
+        // REVERSED, so the build-time crashedIndex would point at the wrong thread. The guard must
+        // trim the SDK's own attribute (correct order), keeping the real crashed thread T3.
+        let trusted = (0..<8).map { makeThread(id: $0, frames: 10) }
+        let record = crashRecord(threads: Array(trusted.reversed()), crashedThreadIndex: 3)
+        let budget = 6_000
+        let out = Helper.fitCrashRecordToByteBudget(record: record, threadsTransport: threadsTransport(trusted),
+                                                    crashedIndex: 3, frameCap: 20, byteBudget: budget)
+        XCTAssertLessThanOrEqual(recordBytes(out), budget)
+        XCTAssertEqual(binaryTag(extractThreads(out)[0]), "T0") // trusted order, not the reversed record
+        XCTAssertGreaterThanOrEqual(extractThreads(out).count, 4)
+        XCTAssertEqual(binaryTag(extractThreads(out)[3]), "T3") // the real crashed thread survives
+    }
+
+    func test_fitRecord_trimsEvenWhenRecordThreadsAreWrongShape() {
+        // Simulate beforeSend having left error_context.threads as a string. A cast off the record
+        // would fail and skip the guard; sourcing from the transport attribute still trims to fit.
+        let trusted = (0..<10).map { makeThread(id: $0, frames: 30) }
+        var record = crashRecord(threads: trusted, crashedThreadIndex: 0)
+        if var text = record[Keys.text.rawValue] as? [String: Any],
+           var cxRum = text[Keys.cxRum.rawValue] as? [String: Any],
+           var ec = cxRum[Keys.errorContext.rawValue] as? [String: Any] {
+            ec[Keys.threads.rawValue] = "corrupted-string"
+            cxRum[Keys.errorContext.rawValue] = ec
+            text[Keys.cxRum.rawValue] = cxRum
+            record[Keys.text.rawValue] = text
+        }
+        let budget = 4_000
+        let out = Helper.fitCrashRecordToByteBudget(record: record, threadsTransport: threadsTransport(trusted),
+                                                    crashedIndex: 0, frameCap: 20, byteBudget: budget)
+        XCTAssertLessThanOrEqual(recordBytes(out), budget) // trimmed, not skipped
+        XCTAssertGreaterThanOrEqual(extractThreads(out).count, 1)
+        XCTAssertEqual(binaryTag(extractThreads(out)[0]), "T0")
+    }
+
+    func test_fitRecord_envelopeExceedsBudget_bestEffort() {
+        // Envelope alone blows the budget → threads shrink to the minimum but can't save it. Best
+        // effort: return with the crashed thread intact rather than crashing or looping forever.
+        let trusted = (0..<5).map { makeThread(id: $0, frames: 20) }
+        let record = crashRecord(threads: trusted, crashedThreadIndex: 0, envelopePadding: 5_000)
+        let out = Helper.fitCrashRecordToByteBudget(record: record, threadsTransport: threadsTransport(trusted),
+                                                    crashedIndex: 0, frameCap: 20, byteBudget: 3_000)
+        XCTAssertLessThanOrEqual(extractThreads(out).count, trusted.count) // threads trimmed hard
+        XCTAssertEqual(binaryTag(extractThreads(out)[0]), "T0")            // crashed thread still present
     }
 }
