@@ -9,6 +9,11 @@ Release-mechanics commits (version bumps, podspec/script tweaks, README edits) a
 omitted; the focus here is user-facing behavior changes. Tickets are referenced as
 `CX-XXXXX` (Jira) or `ALPH-XXXX` (legacy). Pull request numbers are in parentheses.
 
+## [2.10.2] - 2026-07-13
+
+### Fixed
+- Crash reports are now attributed to the session active at the time of the crash (not the next app launch's session), and use the actual crash timestamp instead of the relaunch time.
+
 ## [2.10.1] - 2026-07-09
 
 ### Fixed

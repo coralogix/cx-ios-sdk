@@ -260,4 +260,41 @@ class SessionManagerTests: XCTestCase {
         XCTAssertEqual(prev?.sessionId, staleSessionId,
             "Rotation must retain the stale session ID as the previous session so spans carry correct prev_session_id attribution")
     }
+
+    // MARK: - Crash attribution to the previous-launch session
+    //
+    // A crash is captured on the *next* launch, after a fresh session has already
+    // been created. `lastLaunchSessionSpanAttributes` surfaces the session that was
+    // live in the previous launch (recovered from the keychain into
+    // `sessionMetadata.old*` at init) so crash instrumentation can burn the crash
+    // under the session that actually crashed.
+
+    func testLastLaunchSessionSpanAttributes_returnsPreviousLaunchSession() {
+        guard var metadata = sessionManager.sessionMetadata else {
+            XCTFail("Session metadata should not be nil")
+            return
+        }
+        metadata.oldSessionId = "crashed-session-abc"
+        metadata.oldSessionTimeInterval = TimeInterval(1_600_000_000)
+        sessionManager.sessionMetadata = metadata
+
+        let attrs = Dictionary(uniqueKeysWithValues: sessionManager.lastLaunchSessionSpanAttributes())
+        XCTAssertEqual(attrs[Keys.sessionId.rawValue], "crashed-session-abc",
+            "Crash span must carry the crashed session id, not the session created on relaunch")
+        XCTAssertEqual(attrs[Keys.sessionCreationDate.rawValue], "1600000000",
+            "Crash span must carry the crashed session's creation date")
+    }
+
+    func testLastLaunchSessionSpanAttributes_emptyWhenNoPreviousLaunch() {
+        guard var metadata = sessionManager.sessionMetadata else {
+            XCTFail("Session metadata should not be nil")
+            return
+        }
+        metadata.oldSessionId = nil
+        metadata.oldSessionTimeInterval = nil
+        sessionManager.sessionMetadata = metadata
+
+        XCTAssertTrue(sessionManager.lastLaunchSessionSpanAttributes().isEmpty,
+            "With no previous-launch session on record, no override attributes should be produced")
+    }
 }

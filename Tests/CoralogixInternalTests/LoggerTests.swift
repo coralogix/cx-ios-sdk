@@ -293,4 +293,21 @@ final class LoggerTests: XCTestCase {
 
         XCTAssertEqual(rec.entries.count, 0, "Log.e(Error)/Log.error(Error) must be gated at the façade, not rely on the underlying logger")
     }
+
+    // MARK: - OSLogger oversized-message fallback
+
+    // os_log truncates a single oversized entry, so OSLogger routes messages
+    // above the limit to print() instead. These pin the size policy that decides
+    // which path a message takes.
+
+    func test_exceedsOSLogLimit_falseForShortMessage() {
+        XCTAssertFalse(OSLogger.exceedsOSLogLimit("🟪 a short debug line"),
+            "normal-sized logs must keep going through os_log")
+    }
+
+    func test_exceedsOSLogLimit_trueForOversizedMessage() {
+        let oversized = String(repeating: "a", count: 4096)
+        XCTAssertTrue(OSLogger.exceedsOSLogLimit(oversized),
+            "a payload larger than the os_log limit must fall back to print() so it isn't truncated")
+    }
 }

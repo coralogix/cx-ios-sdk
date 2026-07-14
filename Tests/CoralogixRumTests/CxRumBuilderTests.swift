@@ -332,6 +332,76 @@ class CxRumBuilderTests: XCTestCase {
                      "view_number must be entirely absent from the payload when no view has appeared yet")
     }
 
+    // MARK: - Crash span timestamp is anchored to the crash time
+    //
+    // The RUM event timestamp is derived from the span start time, but build()
+    // clamps it up to session_creation_date. These pin the coupling behind the
+    // crash fix: only when the crash span is attributed to the session that was
+    // live *before* the crash (creation date < crash time) does the crash-time
+    // timestamp survive. Leaving it under the relaunch session drags it forward.
+
+    func test_build_crashSpan_keepsCrashTimestamp_whenSessionPredatesCrash() {
+        let crashTime = Date(timeIntervalSince1970: 1_700_000_000)
+        let sessionCreatedBeforeCrash = crashTime.addingTimeInterval(-120).timeIntervalSince1970
+
+        guard let cxRum = makeCrashSUT(startTime: crashTime,
+                                       sessionId: "crashed-session",
+                                       sessionCreationDate: sessionCreatedBeforeCrash)?.build() else {
+            return XCTFail("build() returned nil")
+        }
+
+        XCTAssertEqual(cxRum.sessionContext?.sessionId, "crashed-session",
+            "Crash span must be attributed to the session that crashed")
+        XCTAssertEqual(cxRum.timeStamp, crashTime.timeIntervalSince1970, accuracy: 0.001,
+            "Crash event must report the crash time, not be clamped forward to the session creation date")
+    }
+
+    func test_build_crashSpan_timestampClampedForward_whenSessionPostdatesCrash() {
+        // Pre-fix behaviour: the crash is left under the relaunch session, whose
+        // creation date is AFTER the crash. build() then clamps the crash time
+        // forward — which is why the session fix is a prerequisite for the timestamp.
+        let crashTime = Date(timeIntervalSince1970: 1_700_000_000)
+        let sessionCreatedAfterCrash = crashTime.addingTimeInterval(120).timeIntervalSince1970
+
+        guard let cxRum = makeCrashSUT(startTime: crashTime,
+                                       sessionId: "relaunch-session",
+                                       sessionCreationDate: sessionCreatedAfterCrash)?.build() else {
+            return XCTFail("build() returned nil")
+        }
+
+        XCTAssertEqual(cxRum.timeStamp, sessionCreatedAfterCrash, accuracy: 0.001,
+            "A relaunch session created after the crash drags the crash timestamp forward — the bug the session fix prevents")
+    }
+
+    private func makeCrashSUT(startTime: Date,
+                              sessionId: String,
+                              sessionCreationDate: TimeInterval) -> CxRumBuilder? {
+        let otel = MockSpanData(attributes: [
+            Keys.severity.rawValue: AttributeValue("5"),
+            Keys.eventType.rawValue: AttributeValue("error"),
+            Keys.source.rawValue: AttributeValue("console"),
+            Keys.environment.rawValue: AttributeValue("prod"),
+            Keys.sessionId.rawValue: AttributeValue(sessionId),
+            Keys.sessionCreationDate.rawValue: AttributeValue("\(Int(sessionCreationDate))")
+        ], startTime: startTime, endTime: startTime, spanId: "20", traceId: "30", name: "testSpan", kind: 1)
+
+        let userContext = UserContext(userId: "12345", userName: "John Doe",
+                                      userEmail: "john.doe@example.com", userMetadata: [:])
+        let options = CoralogixExporterOptions(coralogixDomain: CoralogixDomain.US2,
+                                               userContext: userContext,
+                                               environment: "PROD",
+                                               application: "TestApp-iOS",
+                                               version: "1.0",
+                                               publicKey: "token",
+                                               debug: true)
+        return CxRumBuilder(otel: otel,
+                            versionMetadata: VersionMetadata(appName: "Test", appVersion: "1.0"),
+                            sessionManager: mockSessionManager,
+                            viewManager: mockViewManager,
+                            networkManager: NetworkManager(),
+                            options: options)
+    }
+
     // Convenience overload that lets the new tests vary event type without touching the
     // original makeSUT() / its existing callers (which pin a "log" event for snapshot tests).
     private func makeSUT(currentTime: Date, eventType: String) -> CxRumBuilder? {

@@ -9,6 +9,11 @@ public final class OSLogger: CXLogger {
     public static let defaultSubsystem = "com.coralogix.rum"
     public static let defaultCategory = "default"
 
+    /// os_log truncates a single entry beyond an internal size limit (~1 KB on
+    /// the legacy path used pre-iOS 14). Messages larger than this fall back to
+    /// print() so they survive intact — see `log(...)`.
+    private static let maxOSLogMessageBytes = 1024
+
     private let subsystem: String
     private let category: String
     private let legacyLog: OSLog
@@ -30,6 +35,18 @@ public final class OSLogger: CXLogger {
                     function: String,
                     line: Int) {
         let formatted = "\(level.emojiPrefix) \(Self.format(message: message(), metadata: metadata))"
+
+        // os_log clips a single oversized entry (e.g. a crash span's full thread
+        // stacks), so for large messages fall back to print(), which has no size
+        // limit and keeps the payload intact as one blob. This path is only
+        // reachable when logging is enabled (Log.emit gates on isDebug), so it
+        // never runs in a release/production app. Normal-sized logs keep going
+        // through os_log to retain levels, subsystem/category, and Console.app
+        // capture on detached devices.
+        if Self.exceedsOSLogLimit(formatted) {
+            print(formatted)
+            return
+        }
 
         if #available(iOS 14.0, *) {
             let logger = modernLogger()
@@ -56,6 +73,13 @@ public final class OSLogger: CXLogger {
         let made = os.Logger(subsystem: subsystem, category: category)
         Self.modernCache[key] = made
         return made
+    }
+
+    /// Whether `formatted` is large enough that os_log would truncate it and the
+    /// logger should fall back to print(). Extracted so the size policy is testable
+    /// without capturing os_log/stdout side effects.
+    static func exceedsOSLogLimit(_ formatted: String) -> Bool {
+        formatted.utf8.count > maxOSLogMessageBytes
     }
 
     private static func format(message: String, metadata: [String: Any]?) -> String {

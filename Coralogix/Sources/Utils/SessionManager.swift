@@ -161,6 +161,29 @@ public class SessionManager {
         return attrs
     }
 
+    /// Session-identity attributes for the session that was live in the *previous*
+    /// process launch, recovered from the keychain into `sessionMetadata.old*` at
+    /// init (before the keychain was overwritten with this launch's identity).
+    /// Empty when there is no prior launch on record.
+    ///
+    /// Crash instrumentation overrides the crash span's `session_id` /
+    /// `session_creation_date` with these: a crash captured on relaunch belongs to
+    /// the session that actually crashed, not the freshly-created one. This is the
+    /// only in-memory copy of the crashed session's identity — the keychain itself
+    /// already holds the current launch's session by the time crashes are processed.
+    func lastLaunchSessionSpanAttributes() -> [(key: String, value: String)] {
+        sessionLock.lock()
+        let oldSessionId = self.sessionMetadata?.oldSessionId
+        let oldCreationDate = self.sessionMetadata?.oldSessionTimeInterval
+        sessionLock.unlock()
+
+        guard let oldSessionId, let oldCreationDate else { return [] }
+        return [
+            (Keys.sessionId.rawValue, oldSessionId),
+            (Keys.sessionCreationDate.rawValue, String(Int(oldCreationDate)))
+        ]
+    }
+
     public func getErrorCount() -> Int {
         countersLock.lock()
         defer { countersLock.unlock() }

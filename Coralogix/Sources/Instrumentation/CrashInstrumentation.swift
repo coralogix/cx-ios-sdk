@@ -45,9 +45,17 @@ extension CoralogixRum {
             
             // Retrieving crash reporter data.
             let report = try PLCrashReport(data: data)
-            let span = makeSpan(event: .error, source: .console, severity: .error)
+
+            // A crash is captured on the *next* launch, after a fresh session has
+            // already been created. Anchor the span to the crash time (not relaunch
+            // time) and burn it under the session that was live when it crashed —
+            // recovered from the keychain into SessionManager at init.
+            let crashTimestamp = report.systemInfo.timestamp
+            let span = makeSpan(event: .error, source: .console, severity: .error, startTime: crashTimestamp)
+            self.overrideSessionForCrashedSession(on: span)
+
             span.setAttribute(key: Keys.exceptionType.rawValue, value: report.signalInfo.name)
-            if let crashTimestamp = report.systemInfo.timestamp {
+            if let crashTimestamp {
                 span.setAttribute(key: Keys.crashTimestamp.rawValue, value: "\(crashTimestamp.timeIntervalSince1970.milliseconds)")
             }
             span.setAttribute(key: Keys.processName.rawValue, value: report.processInfo.processName)
@@ -73,9 +81,23 @@ extension CoralogixRum {
             } else {
                 Log.e("CrashReporter: can't convert report to text")
             }
-            span.end()
+            if let crashTimestamp {
+                span.end(time: crashTimestamp)
+            } else {
+                span.end()
+            }
         } catch let error {
             Log.e("CrashReporter failed to load and parse with error: \(error)")
+        }
+    }
+
+    /// Replaces the current-session attributes `makeSpan` stamped on the crash span
+    /// with the session that was live when the crash happened. No-op when there is
+    /// no previous-launch session on record — the span keeps the current session.
+    private func overrideSessionForCrashedSession(on span: any Span) {
+        guard let sessionManager = self.coralogixExporter?.getSessionManager() else { return }
+        for attr in sessionManager.lastLaunchSessionSpanAttributes() {
+            span.setAttribute(key: attr.key, value: attr.value)
         }
     }
     
