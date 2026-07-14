@@ -12,7 +12,7 @@ omitted; the focus here is user-facing behavior changes. Tickets are referenced 
 ## [2.10.2] - 2026-07-13
 
 ### Fixed
-- A crash is captured by PLCrashReporter and only turned into a RUM event on the *next* app launch — after a new session has already started. The crash event was being reported under that new session and stamped with the relaunch time instead of the moment of the crash. Crashes are now attributed to the session that was active when they happened and carry the actual crash timestamp, so they land in the right session and at the right point on the timeline.
+- Crash reports are now attributed to the session active at the time of the crash (not the next app launch's session), and use the actual crash timestamp instead of the relaunch time.
 
 ## [2.10.1] - 2026-07-09
 

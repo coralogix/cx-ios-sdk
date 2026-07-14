@@ -261,7 +261,7 @@ class SessionManagerTests: XCTestCase {
             "Rotation must retain the stale session ID as the previous session so spans carry correct prev_session_id attribution")
     }
 
-    // MARK: - CX-49308: crash attribution to the previous-launch session
+    // MARK: - Crash attribution to the previous-launch session
     //
     // A crash is captured on the *next* launch, after a fresh session has already
     // been created. `lastLaunchSessionSpanAttributes` surfaces the session that was

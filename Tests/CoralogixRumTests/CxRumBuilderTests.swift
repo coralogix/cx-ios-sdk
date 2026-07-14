@@ -332,7 +332,7 @@ class CxRumBuilderTests: XCTestCase {
                      "view_number must be entirely absent from the payload when no view has appeared yet")
     }
 
-    // MARK: - CX-49308: crash span timestamp is anchored to the crash time
+    // MARK: - Crash span timestamp is anchored to the crash time
     //
     // The RUM event timestamp is derived from the span start time, but build()
     // clamps it up to session_creation_date. These pin the coupling behind the
