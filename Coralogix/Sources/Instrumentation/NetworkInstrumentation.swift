@@ -251,6 +251,30 @@ extension CoralogixRum {
     
     // MARK: - Hybrid Network API
 
+    /// Resolves the (traceId, spanId) the exported RUM span should carry for a hybrid network request.
+    ///
+    /// Hybrid layers (Flutter `CxDioInterceptor`, React Native) inject the `traceparent` on the wire
+    /// themselves and report the ids they used. A request made while a global custom span is active
+    /// reports them under `customTraceId`/`customSpanId`; every other request reports the per-request
+    /// wire ids under `traceId`/`spanId`. Prefer the custom-span pair, then fall back to the per-request
+    /// pair, so the exported span's trace id matches the `traceparent` actually sent to the backend and
+    /// the mobile request stitches to its backend trace. Resolved as a pair to avoid mixing a trace id
+    /// from one source with a span id from another. Android resolves the same way; iOS previously read
+    /// only `customTraceId`/`customSpanId`, dropping the wire ids for ordinary requests.
+    internal static func resolveHybridTraceContext(from dictionary: [String: Any]) -> (traceId: String, spanId: String) {
+        func nonEmpty(_ key: Keys) -> String? {
+            guard let value = dictionary[key.rawValue] as? String, !value.isEmpty else { return nil }
+            return value
+        }
+        if let traceId = nonEmpty(.customTraceId), let spanId = nonEmpty(.customSpanId) {
+            return (traceId, spanId)
+        }
+        if let traceId = nonEmpty(.traceId), let spanId = nonEmpty(.spanId) {
+            return (traceId, spanId)
+        }
+        return ("", "")
+    }
+
     /// Implementation called by `CoralogixRum.setNetworkRequestContext(dictionary:)`.
     internal func reportHybridNetworkRequest(_ dictionary: [String: Any]) {
         guard validateHybridNetworkRequest(dictionary) else { return }
@@ -272,8 +296,9 @@ extension CoralogixRum {
         span.setAttribute(key: SemanticAttributes.httpResponseBodySize.rawValue, value: dictionary[Keys.httpResponseBodySize.rawValue] as? Int ?? 0)
         span.setAttribute(key: SemanticAttributes.httpTarget.rawValue, value: dictionary[Keys.fragments.rawValue] as? String ?? "")
         span.setAttribute(key: SemanticAttributes.httpScheme.rawValue, value: dictionary[Keys.schema.rawValue] as? String ?? "")
-        span.setAttribute(key: Keys.customSpanId.rawValue, value: dictionary[Keys.customSpanId.rawValue] as? String ?? "")
-        span.setAttribute(key: Keys.customTraceId.rawValue, value: dictionary[Keys.customTraceId.rawValue] as? String ?? "")
+        let traceContext = Self.resolveHybridTraceContext(from: dictionary)
+        span.setAttribute(key: Keys.customSpanId.rawValue, value: traceContext.spanId)
+        span.setAttribute(key: Keys.customTraceId.rawValue, value: traceContext.traceId)
 
         let requestUrl = dictionary[Keys.url.rawValue] as? String ?? ""
         var options: CoralogixExporterOptions?
