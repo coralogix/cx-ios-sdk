@@ -2,7 +2,7 @@
 //  HybridNetworkTraceContextTests.swift
 //  Coralogix
 //
-//  Created by Tomer Har Yoffi on 14/07/2026.
+//  Created by Coralogix DEV TEAM on 14/07/2026.
 //
 
 import XCTest
