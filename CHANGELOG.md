@@ -9,6 +9,11 @@ Release-mechanics commits (version bumps, podspec/script tweaks, README edits) a
 omitted; the focus here is user-facing behavior changes. Tickets are referenced as
 `CX-XXXXX` (Jira) or `ALPH-XXXX` (legacy). Pull request numbers are in parentheses.
 
+## [2.10.3] - 2026-07-14
+
+### Fixed
+- On the hybrid (Flutter / React Native) path, a network request's RUM span now carries the same trace ID that was injected into its outgoing `traceparent` header, so the mobile request correlates with its backend trace. Previously iOS only applied the reported trace/span IDs when a global custom span was active and dropped the per-request IDs otherwise, leaving ordinary requests on a separate, unstitchable trace (Android already applied them).
+
 ## [2.10.2] - 2026-07-13
 
 ### Fixed
