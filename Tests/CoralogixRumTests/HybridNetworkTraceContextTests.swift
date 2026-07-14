@@ -90,7 +90,7 @@ final class HybridNetworkTraceContextTests: XCTestCase {
 
     /// Guards the whole chain: reportHybridNetworkRequest sets customTraceId/customSpanId from the
     /// resolved pair, and the exporter reads them back via getTraceAndSpanId. A wire-id-only payload
-    /// must surface the wire ids on the exported span — not a fresh native id (the BUGV2-6662 symptom).
+    /// must surface the wire ids on the exported span — not a fresh, native auto-generated id that was never on the wire.
     func testWireIdsSurfaceOnExportedSpan() {
         let resolved = CoralogixRum.resolveHybridTraceContext(from: [
             Keys.traceId.rawValue: "wire-trace",
