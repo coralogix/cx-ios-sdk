@@ -180,4 +180,121 @@ final class CrashDeliveryTests: XCTestCase {
         rum.flush { flushed.fulfill() }
         wait(for: [flushed], timeout: 2)
     }
+
+    // MARK: - Crash-event persistence (CrashEventStore)
+
+    private func makeTempStore() -> CrashEventStore {
+        return CrashEventStore(
+            directory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        )
+    }
+
+    /// Spins the run loop until `condition` holds or `timeout` elapses.
+    private func waitUntil(timeout: TimeInterval = 5, _ condition: () -> Bool) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while !condition() && Date() < deadline {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        }
+        return condition()
+    }
+
+    func test_crashEventStore_roundtripAndClear() {
+        let store = makeTempStore()
+        XCTAssertTrue(store.loadAll().isEmpty)
+
+        store.append(["error_message": "boom", "crash_timestamp": "123"])
+        let loaded = store.loadAll()
+        XCTAssertEqual(loaded.count, 1)
+        XCTAssertEqual(loaded.first?["error_message"] as? String, "boom")
+
+        store.clear()
+        XCTAssertTrue(store.loadAll().isEmpty)
+    }
+
+    func test_reportCrash_persistsToDisk_evenWhenUploadFails() {
+        coralogixRum = CoralogixRum(options: makeSamplingOptions(sampleRate: 100, exclude: []))
+        let uploader = StubUploader()
+        uploader.result = .failure
+        coralogixRum.coralogixExporter?.spanUploader = uploader
+        let store = makeTempStore()
+        coralogixRum.crashEventStore = store
+
+        coralogixRum.reportError(message: "fatal-js-error",
+                                 stackTrace: [],
+                                 errorType: "Error",
+                                 isCrash: true)
+
+        // Persisting happens synchronously inside reportError, before any upload
+        // attempt — this is the delivery guarantee for a dying process.
+        let persisted = store.loadAll()
+        XCTAssertEqual(persisted.count, 1)
+        XCTAssertEqual(persisted.first?[Keys.errorMessage.rawValue] as? String, "fatal-js-error")
+        XCTAssertNotNil(persisted.first?[Keys.crashTimestamp.rawValue])
+
+        // The upload failed, so the stored copy must survive for the next launch.
+        _ = waitUntil(timeout: 2) { !uploader.uploadedBatches.isEmpty }
+        XCTAssertEqual(store.loadAll().count, 1)
+    }
+
+    func test_reportCrash_clearsStore_onceUploadIsConfirmed() {
+        coralogixRum = CoralogixRum(options: makeSamplingOptions(sampleRate: 100, exclude: []))
+        let uploader = StubUploader()
+        coralogixRum.coralogixExporter?.spanUploader = uploader
+        let store = makeTempStore()
+        coralogixRum.crashEventStore = store
+
+        coralogixRum.reportError(message: "fatal-js-error",
+                                 stackTrace: [],
+                                 errorType: "Error",
+                                 isCrash: true)
+
+        XCTAssertTrue(waitUntil { store.loadAll().isEmpty },
+                      "the stored copy must be cleared after the upload is confirmed")
+        XCTAssertTrue(coralogixRum.coralogixExporter?.didUploadCrashEvents == true)
+    }
+
+    func test_resendStoredCrashEvents_uploadsWithOriginalTimestamp_andClearsOnConfirm() throws {
+        coralogixRum = CoralogixRum(options: makeSamplingOptions(sampleRate: 100, exclude: []))
+        let uploader = StubUploader()
+        coralogixRum.coralogixExporter?.spanUploader = uploader
+        let store = makeTempStore()
+        coralogixRum.crashEventStore = store
+        store.append([
+            Keys.errorMessage.rawValue: "crash-from-previous-launch",
+            Keys.errorType.rawValue: "Error",
+            Keys.crashTimestamp.rawValue: "1700000000000"
+        ])
+
+        coralogixRum.resendPendingStoredCrashEvents()
+        coralogixRum.completeCrashRecovery()
+
+        XCTAssertTrue(waitUntil { store.loadAll().isEmpty },
+                      "confirmed recovery upload must clear the store")
+        // The recovery flush also drains other queued spans (e.g. the init span) —
+        // locate the crash event rather than assuming batch order.
+        let uploaded = try XCTUnwrap(uploader.uploadedEvents.first(where: { isCrashEvent($0) }))
+        let text = uploaded[Keys.text.rawValue] as? [String: Any]
+        let cxRum = text?[Keys.cxRum.rawValue] as? [String: Any]
+        let errorContext = cxRum?[Keys.errorContext.rawValue] as? [String: Any]
+        XCTAssertEqual(errorContext?[Keys.errorMessage.rawValue] as? String, "crash-from-previous-launch")
+        XCTAssertEqual(errorContext?[Keys.crashTimestamp.rawValue] as? String, "1700000000000",
+                       "re-sent events must keep the original crash time")
+    }
+
+    func test_resendStoredCrashEvents_keepsStore_whenUploadFails() {
+        coralogixRum = CoralogixRum(options: makeSamplingOptions(sampleRate: 100, exclude: []))
+        let uploader = StubUploader()
+        uploader.result = .failure
+        coralogixRum.coralogixExporter?.spanUploader = uploader
+        let store = makeTempStore()
+        coralogixRum.crashEventStore = store
+        store.append([Keys.errorMessage.rawValue: "crash-from-previous-launch"])
+
+        coralogixRum.resendPendingStoredCrashEvents()
+        coralogixRum.completeCrashRecovery()
+
+        _ = waitUntil(timeout: 2) { !uploader.uploadedBatches.isEmpty }
+        XCTAssertEqual(store.loadAll().count, 1,
+                       "unconfirmed recovery must keep the stored copy for the next launch")
+    }
 }

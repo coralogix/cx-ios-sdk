@@ -16,6 +16,16 @@ public class CoralogixRum {
     /// reaching through the global `OpenTelemetry.instance` (which another OTel
     /// consumer in the host app may have re-registered).
     internal var tracerProviderSdk: TracerProviderSdk?
+    /// Disk store for hybrid crash events (see `CrashEventStore`).
+    internal lazy var crashEventStore = CrashEventStore()
+    /// Deferred purge of the pending PLCrashReporter report. Set by
+    /// `initializeCrashInstrumentation`, executed by `completeCrashRecovery()`
+    /// after init finishes — the uploader rejects requests while
+    /// `isInitialized` is false, so upload confirmation is only possible then.
+    internal var pendingCrashPurge: (() -> Void)?
+    /// Whether stored crash events from a previous process were re-emitted
+    /// during this init and await upload confirmation before being cleared.
+    internal var didEmitStoredCrashEvents = false
     internal var networkManager = NetworkManager()
     internal var viewManager = ViewManager(keyChain: KeychainManager())
     internal var sessionManager: SessionManager?
@@ -126,6 +136,10 @@ public class CoralogixRum {
         self.createInitSpan()
 
         CoralogixRum.isInitialized = true
+
+        // Must run after isInitialized flips: SpanUploader rejects uploads and
+        // flush() no-ops before that, so crash recovery could never be confirmed.
+        self.completeCrashRecovery()
     }
     
     private func initializeEnabledInstrumentations(using options: CoralogixExporterOptions) {

@@ -110,6 +110,18 @@ extension CoralogixRum {
                                      stackTraceType: String? = nil,
                                      customAttributes: [String: Any]? = nil) {
         guard isErrorsEnabled else { return }
+        if isCrash {
+            // Persisted BEFORE the span is created: the process is usually about to
+            // die, and only a disk write is guaranteed to finish in time. The stored
+            // copy is cleared once an upload is confirmed — or re-sent next launch.
+            self.persistCrashEvent(message: message,
+                                   stackTraceJson: stackTraceJson,
+                                   errorType: errorType,
+                                   arch: arch,
+                                   buildId: buildId,
+                                   stackTraceType: stackTraceType,
+                                   customAttributes: customAttributes)
+        }
         self.writeError(
             domain: "",
             message: message,
@@ -124,8 +136,57 @@ extension CoralogixRum {
         if isCrash {
             // A crash report usually precedes process death — don't leave the event
             // in the batch queue (up to 2s) where it would die with the process.
-            self.flush()
+            self.flush { [weak self] in
+                guard let self, self.coralogixExporter?.didUploadCrashEvents == true else { return }
+                self.crashEventStore.clear()
+            }
         }
+    }
+
+    private func persistCrashEvent(message: String,
+                                   stackTraceJson: String?,
+                                   errorType: String?,
+                                   arch: String?,
+                                   buildId: String?,
+                                   stackTraceType: String?,
+                                   customAttributes: [String: Any]?) {
+        var event: [String: Any] = [
+            Keys.errorMessage.rawValue: message,
+            Keys.crashTimestamp.rawValue: String(Date().timeIntervalSince1970.milliseconds)
+        ]
+        if let stackTraceJson { event[Keys.stackTrace.rawValue] = stackTraceJson }
+        if let errorType { event[Keys.errorType.rawValue] = errorType }
+        if let arch { event[Keys.arch.rawValue] = arch }
+        if let buildId { event[Keys.buildId.rawValue] = buildId }
+        if let stackTraceType { event[Keys.stackTraceType.rawValue] = stackTraceType }
+        if let customAttributes { event[Keys.data.rawValue] = customAttributes }
+        crashEventStore.append(event)
+    }
+
+    /// Re-emits crash events persisted by a previous process whose upload was never
+    /// confirmed — the hybrid analogue of PLCrashReporter's pending report. Emits
+    /// spans only; upload confirmation and store clearing happen in
+    /// `completeCrashRecovery()` once init has finished. The re-emitted event keeps
+    /// the original `crash_timestamp`; session attribution follows the same
+    /// prev-session stitching as PLCR crash reports.
+    internal func resendPendingStoredCrashEvents() {
+        let pending = crashEventStore.loadAll()
+        guard !pending.isEmpty else { return }
+        for event in pending {
+            self.writeError(
+                domain: "",
+                message: event[Keys.errorMessage.rawValue] as? String ?? "",
+                stackTraceJson: event[Keys.stackTrace.rawValue] as? String,
+                errorType: event[Keys.errorType.rawValue] as? String,
+                isCrash: true,
+                arch: event[Keys.arch.rawValue] as? String,
+                buildId: event[Keys.buildId.rawValue] as? String,
+                stackTraceType: event[Keys.stackTraceType.rawValue] as? String,
+                customAttributes: event[Keys.data.rawValue] as? [String: Any],
+                crashTimestamp: event[Keys.crashTimestamp.rawValue] as? String
+            )
+        }
+        self.didEmitStoredCrashEvents = true
     }
 
     func logWith(severity: CoralogixLogSeverity,
@@ -182,12 +243,16 @@ extension CoralogixRum {
                             arch: String? = nil,
                             buildId: String? = nil,
                             stackTraceType: String? = nil,
-                            customAttributes: [String: Any]? = nil) {
+                            customAttributes: [String: Any]? = nil,
+                            crashTimestamp: String? = nil) {
         var span = makeSpan(event: .error, source: .console, severity: .error)
         span.setAttribute(key: Keys.domain.rawValue, value: domain)
         if let code { span.setAttribute(key: Keys.code.rawValue, value: code) }
         span.setAttribute(key: Keys.errorMessage.rawValue, value: message)
         span.setAttribute(key: Keys.isCrash.rawValue, value: isCrash)
+        if let crashTimestamp, !crashTimestamp.isEmpty {
+            span.setAttribute(key: Keys.crashTimestamp.rawValue, value: crashTimestamp)
+        }
         if let errorType { span.setAttribute(key: Keys.errorType.rawValue, value: errorType) }
         if let stackTraceJson { span.setAttribute(key: Keys.stackTrace.rawValue, value: stackTraceJson) }
         if let userInfo, !userInfo.isEmpty {

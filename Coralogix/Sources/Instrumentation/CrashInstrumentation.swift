@@ -34,27 +34,42 @@ extension CoralogixRum {
         // Try loading the crash report.
         if crashReporter.hasPendingCrashReport() {
             if self.processPendingCrashReport(using: crashReporter) {
-                self.purgePendingReportAfterConfirmedUpload(crashReporter)
+                // Purge is deferred to completeCrashRecovery(): it must only happen
+                // after the upload is confirmed, and the uploader rejects requests
+                // until init finishes. Previously the purge was unconditional and ran
+                // before the span even left the batch queue, so a short-lived relaunch
+                // or an upload failure lost the crash permanently.
+                self.pendingCrashPurge = { crashReporter.purgePendingCrashReport() }
             } else {
                 // Nothing recoverable was emitted — drop the corrupt report so it
                 // isn't reprocessed (and re-fails) on every launch.
                 crashReporter.purgePendingCrashReport()
             }
         }
+
+        // Hybrid crash events persisted by a previous process (see CrashEventStore).
+        self.resendPendingStoredCrashEvents()
     }
 
-    /// Purges the pending PLCrashReporter report only once its event upload is
-    /// confirmed. On failure the report stays on disk and is retried on the next
-    /// launch (at-least-once delivery). Previously the purge was unconditional and
-    /// ran before the span even left the batch queue, so a short-lived relaunch or
-    /// an upload failure lost the crash permanently.
-    private func purgePendingReportAfterConfirmedUpload(_ crashReporter: PLCrashReporter) {
+    /// Final step of crash recovery, run right after init completes: force-flushes
+    /// the crash spans emitted during `initializeCrashInstrumentation` and, only
+    /// once their upload is confirmed, purges the pending PLCrashReporter report
+    /// and clears the hybrid crash-event store. Unconfirmed data stays on disk and
+    /// is retried on the next launch (at-least-once delivery).
+    internal func completeCrashRecovery() {
+        guard self.pendingCrashPurge != nil || self.didEmitStoredCrashEvents else { return }
         self.flush { [weak self] in
-            guard self?.coralogixExporter?.didUploadCrashEvents == true else {
-                Log.w("Crash-report upload not confirmed — keeping pending report for next launch")
+            guard let self else { return }
+            guard self.coralogixExporter?.didUploadCrashEvents == true else {
+                Log.w("Crash-report upload not confirmed — keeping pending crash data for next launch")
                 return
             }
-            crashReporter.purgePendingCrashReport()
+            self.pendingCrashPurge?()
+            self.pendingCrashPurge = nil
+            if self.didEmitStoredCrashEvents {
+                self.crashEventStore.clear()
+                self.didEmitStoredCrashEvents = false
+            }
         }
     }
 
