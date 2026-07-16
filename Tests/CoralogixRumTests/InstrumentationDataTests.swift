@@ -437,7 +437,8 @@ final class InstrumentationDataTests: XCTestCase {
         errorMessage: String = "",
         hasRecording: Bool = false,
         isNavigationEvent: Bool = false,
-        viewNumber: Int? = nil
+        viewNumber: Int? = nil,
+        viewName: String? = nil
     ) -> CxRum {
         let eventSpan = MockSpanData(attributes: [
             Keys.eventType.rawValue: AttributeValue(eventType.rawValue),
@@ -494,7 +495,8 @@ final class InstrumentationDataTests: XCTestCase {
             measurementContext: nil,
             fingerPrint: "test-fingerprint",
             isNavigationEvent: isNavigationEvent,
-            viewNumber: viewNumber
+            viewNumber: viewNumber,
+            viewName: viewName
         )
     }
 }

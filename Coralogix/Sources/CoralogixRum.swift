@@ -556,6 +556,18 @@ public class CoralogixRum {
     internal func addRumCorrelationMetadata(to span: inout any Span) {
         addSessionAndPrevSessionMetadata(to: &span)
         addUserMetadata(to: &span)
+        addViewMetadata(to: &span)
+    }
+
+    /// Freezes the active view onto the span at creation so export attributes it to the screen
+    /// it happened on, not the live view up to 2s later. Name is always stamped (empty when no
+    /// view) so its presence marks an SDK span; absent → CxRumBuilder reads the live ViewManager.
+    internal func addViewMetadata(to span: inout any Span) {
+        guard let viewManager = self.coralogixExporter?.getViewManager() else { return }
+        span.setAttribute(key: Keys.spanViewName.rawValue, value: viewManager.currentViewName ?? Keys.undefined.rawValue)
+        if let viewNumber = viewManager.getViewNumber() {
+            span.setAttribute(key: Keys.spanViewNumber.rawValue, value: AttributeValue.int(viewNumber))
+        }
     }
 
     private func addSessionAndPrevSessionMetadata(to span: inout any Span) {

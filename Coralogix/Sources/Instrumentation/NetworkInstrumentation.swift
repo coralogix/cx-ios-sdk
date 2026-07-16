@@ -178,12 +178,20 @@ extension CoralogixRum {
         // (CX-37986). `sessionSpanAttributes()` routes through `getSessionMetadata()`
         // so the 1-hour rotation check fires at span-emission time and the prev-session
         // breadcrumbs land here too, matching CoralogixRum.addSessionAndPrevSessionMetadata.
-        guard let sessionManager = getCurrentInstance()?.sessionManager else {
+        guard let instance = getCurrentInstance(), let sessionManager = instance.sessionManager else {
             Log.w("[Coralogix] ⚠️ Network span missing session attributes — CoralogixRum instance or sessionManager is nil. Span will still be exported without session_id.")
             return
         }
         for attr in sessionManager.sessionSpanAttributes() {
             spanBuilder.setAttribute(key: attr.key, value: attr.value)
+        }
+
+        // Freeze the view at request-start (the screen that launched it). See addViewMetadata.
+        if let viewManager = instance.coralogixExporter?.getViewManager() {
+            spanBuilder.setAttribute(key: Keys.spanViewName.rawValue, value: viewManager.currentViewName ?? Keys.undefined.rawValue)
+            if let viewNumber = viewManager.getViewNumber() {
+                spanBuilder.setAttribute(key: Keys.spanViewNumber.rawValue, value: AttributeValue.int(viewNumber))
+            }
         }
     }
     

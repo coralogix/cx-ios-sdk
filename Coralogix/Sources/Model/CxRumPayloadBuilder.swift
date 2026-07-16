@@ -58,13 +58,19 @@ struct CxRumPayloadBuilder {
     }
     
     private func addViewManagerContext(to result: inout [String: Any]) {
-        if let viewManager = self.viewManager {
-            if let sessionContext = rum.sessionContext,
-               sessionContext.isPidEqualToOldPid == true {
-                result[Keys.viewContext.rawValue] = viewManager.getPrevDictionary()
-            } else {
-                result[Keys.viewContext.rawValue] = viewManager.getDictionary()
-            }
+        // Frozen view wins; only non-SDK spans (no frozen view) fall back to the live ViewManager.
+        // Native and hybrid (RN/Flutter setView-fed) events both carry a frozen view.
+        if let viewName = rum.viewName {
+            result[Keys.viewContext.rawValue] = [Keys.view.rawValue: viewName]
+            return
+        }
+
+        guard let viewManager = self.viewManager else { return }
+        if let sessionContext = rum.sessionContext,
+           sessionContext.isPidEqualToOldPid == true {
+            result[Keys.viewContext.rawValue] = viewManager.getPrevDictionary()
+        } else {
+            result[Keys.viewContext.rawValue] = viewManager.getDictionary()
         }
     }
     

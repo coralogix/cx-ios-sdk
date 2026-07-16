@@ -109,6 +109,14 @@ public class ViewManager {
         return syncSafe { self.viewNumber }
     }
 
+    /// Active view name, or nil when none — unlike `getDictionary()`'s `""` sentinel.
+    var currentViewName: String? {
+        return syncSafe {
+            guard let name = self.visibleView?.name, !name.isEmpty else { return nil }
+            return name
+        }
+    }
+
     // CX-44687: nil → delete the keychain entry, non-nil → write the value. Avoids
     // the empty-string-as-nil sentinel that would (a) collide with a future presence-
     // check caller and (b) leave stale data if the protocol impl ever no-ops on

@@ -9,6 +9,12 @@ Release-mechanics commits (version bumps, podspec/script tweaks, README edits) a
 omitted; the focus here is user-facing behavior changes. Tickets are referenced as
 `CX-XXXXX` (Jira) or `ALPH-XXXX` (legacy). Pull request numbers are in parentheses.
 
+## [2.10.4] - 2026-07-16
+
+### Fixed
+- Events now report the screen that was on-screen when they occurred, instead of whatever screen happened to be active up to two seconds later when the batch was exported. Previously the view name (and view number / page URL) were read from the live view state at export time, so events that fired around a screen transition — logs, user interactions, mobile vitals, custom measurements, errors, and network requests — were frequently tagged with an empty or wrong view. The active view is now frozen onto each event the moment it is recorded.
+- Crash reports again carry the screen the app was on when it crashed. A crash is recorded on the following launch, where no view has appeared yet, so it now recovers the crash-time screen from the previous session instead of reporting an empty view.
+
 ## [2.10.3] - 2026-07-14
 
 ### Fixed

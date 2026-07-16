@@ -195,7 +195,10 @@ struct OtelSpan {
             if let p = net[Keys.responsePayload.rawValue] { attrs[AttrKey.networkResponsePayload] = p }
         }
 
-        if let pageUrl = viewManager?.getDictionary()[Keys.view.rawValue] as? String, !pageUrl.isEmpty {
+        // Page from the frozen view_context so it agrees with text.cx_rum; else live ViewManager.
+        let pageUrl = (cxRumDict[Keys.viewContext.rawValue] as? [String: Any])?[Keys.view.rawValue] as? String
+            ?? viewManager?.getDictionary()[Keys.view.rawValue] as? String
+        if let pageUrl = pageUrl, !pageUrl.isEmpty {
             attrs[AttrKey.pageUrl]       = pageUrl
             attrs[AttrKey.pageFragments] = pageUrl
         }
@@ -302,10 +305,9 @@ struct OtelSpan {
             }
         }
 
-        // Page context — iOS uses the visible view-controller name as the page URL.
-        // Guard against empty string returned when no view is active.
-        if let pageUrl = viewManager?.getDictionary()[Keys.view.rawValue] as? String,
-           !pageUrl.isEmpty {
+        // Page from the frozen view (cxRum.viewName); else live ViewManager. Empty = no view.
+        let pageUrl = cxRum.viewName ?? (viewManager?.getDictionary()[Keys.view.rawValue] as? String)
+        if let pageUrl = pageUrl, !pageUrl.isEmpty {
             attrs[AttrKey.pageUrl]       = pageUrl
             attrs[AttrKey.pageFragments] = pageUrl
         }
