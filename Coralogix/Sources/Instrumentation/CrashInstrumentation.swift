@@ -39,7 +39,9 @@ extension CoralogixRum {
                 // until init finishes. Previously the purge was unconditional and ran
                 // before the span even left the batch queue, so a short-lived relaunch
                 // or an upload failure lost the crash permanently.
+                crashRecoveryLock.lock()
                 self.pendingCrashPurge = { crashReporter.purgePendingCrashReport() }
+                crashRecoveryLock.unlock()
             } else {
                 // Nothing recoverable was emitted — drop the corrupt report so it
                 // isn't reprocessed (and re-fails) on every launch.
@@ -57,18 +59,28 @@ extension CoralogixRum {
     /// and clears the hybrid crash-event store. Unconfirmed data stays on disk and
     /// is retried on the next launch (at-least-once delivery).
     internal func completeCrashRecovery() {
-        guard self.pendingCrashPurge != nil || self.didEmitStoredCrashEvents else { return }
+        crashRecoveryLock.lock()
+        let hasPendingWork = pendingCrashPurge != nil || didEmitStoredCrashEvents
+        crashRecoveryLock.unlock()
+        guard hasPendingWork else { return }
+
         self.flush { [weak self] in
             guard let self else { return }
             guard self.coralogixExporter?.didUploadCrashEvents == true else {
                 Log.w("Crash-report upload not confirmed — keeping pending crash data for next launch")
                 return
             }
-            self.pendingCrashPurge?()
+            // Snapshot-and-clear under the lock; run the purge (file IO) outside it.
+            self.crashRecoveryLock.lock()
+            let purge = self.pendingCrashPurge
+            let clearStore = self.didEmitStoredCrashEvents
             self.pendingCrashPurge = nil
-            if self.didEmitStoredCrashEvents {
+            self.didEmitStoredCrashEvents = false
+            self.crashRecoveryLock.unlock()
+
+            purge?()
+            if clearStore {
                 self.crashEventStore.clear()
-                self.didEmitStoredCrashEvents = false
             }
         }
     }

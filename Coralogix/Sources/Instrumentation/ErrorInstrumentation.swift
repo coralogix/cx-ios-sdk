@@ -159,7 +159,12 @@ extension CoralogixRum {
         if let arch { event[Keys.arch.rawValue] = arch }
         if let buildId { event[Keys.buildId.rawValue] = buildId }
         if let stackTraceType { event[Keys.stackTraceType.rawValue] = stackTraceType }
-        if let customAttributes { event[Keys.data.rawValue] = customAttributes }
+        // Stored as a JSON string (not the raw dictionary): callers can pass values
+        // JSONSerialization rejects (e.g. Date), which would abort the whole store
+        // write and silently drop the crash backup.
+        if let json = Helper.jsonAttributeString(dict: customAttributes) {
+            event[Keys.data.rawValue] = json
+        }
         crashEventStore.append(event)
     }
 
@@ -182,11 +187,14 @@ extension CoralogixRum {
                 arch: event[Keys.arch.rawValue] as? String,
                 buildId: event[Keys.buildId.rawValue] as? String,
                 stackTraceType: event[Keys.stackTraceType.rawValue] as? String,
-                customAttributes: event[Keys.data.rawValue] as? [String: Any],
+                customAttributes: (event[Keys.data.rawValue] as? String)
+                    .flatMap { Helper.convertJsonStringToDict(jsonString: $0) },
                 crashTimestamp: event[Keys.crashTimestamp.rawValue] as? String
             )
         }
+        crashRecoveryLock.lock()
         self.didEmitStoredCrashEvents = true
+        crashRecoveryLock.unlock()
     }
 
     func logWith(severity: CoralogixLogSeverity,

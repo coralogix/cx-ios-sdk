@@ -26,6 +26,9 @@ public class CoralogixRum {
     /// Whether stored crash events from a previous process were re-emitted
     /// during this init and await upload confirmation before being cleared.
     internal var didEmitStoredCrashEvents = false
+    /// Guards `pendingCrashPurge` and `didEmitStoredCrashEvents`: they are written
+    /// during init and read-and-cleared on `flush`'s background completion.
+    internal let crashRecoveryLock = NSLock()
     internal var networkManager = NetworkManager()
     internal var viewManager = ViewManager(keyChain: KeychainManager())
     internal var sessionManager: SessionManager?

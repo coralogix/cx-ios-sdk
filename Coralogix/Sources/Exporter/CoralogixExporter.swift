@@ -227,7 +227,8 @@ public class CoralogixExporter: SpanExporter {
             if !sdk.isNative, let callback = self.options.beforeSendCallBack {
                 // Crash events skip the hybrid JS round trip: when a crash is exported the
                 // process is usually about to terminate, and the extra native→JS→native hop
-                // loses the race. They upload verbatim; beforeSend cannot edit or drop them.
+                // loses the race. The hybrid beforeSend callback cannot edit or drop them;
+                // the native beforeSend option (applied during encoding) still can.
                 let crashSpans = cxSpansDictionary.filter { self.isCrashEvent($0) }
                 let editableSpans = cxSpansDictionary.filter { !self.isCrashEvent($0) }
 

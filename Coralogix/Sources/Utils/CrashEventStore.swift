@@ -52,8 +52,14 @@ final class CrashEventStore {
     }
 
     private func readAllLocked() -> [[String: Any]] {
-        guard let data = try? Data(contentsOf: fileUrl),
-              let events = (try? JSONSerialization.jsonObject(with: data)) as? [[String: Any]] else {
+        guard let data = try? Data(contentsOf: fileUrl) else {
+            return []
+        }
+        guard let events = (try? JSONSerialization.jsonObject(with: data)) as? [[String: Any]] else {
+            // A corrupt store is unrecoverable — discard it so it isn't rescanned
+            // (and re-fails) on every launch.
+            Log.e("[CrashEventStore] pending file is corrupt, discarding")
+            try? FileManager.default.removeItem(at: fileUrl)
             return []
         }
         return events

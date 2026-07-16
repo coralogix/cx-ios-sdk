@@ -211,6 +211,37 @@ final class CrashDeliveryTests: XCTestCase {
         XCTAssertTrue(store.loadAll().isEmpty)
     }
 
+    func test_crashEventStore_discardsCorruptFile() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let store = CrashEventStore(directory: dir)
+        let file = dir.appendingPathComponent("CoralogixRum/pending_crash_events.json")
+        try XCTUnwrap("not-json".data(using: .utf8)).write(to: file)
+
+        XCTAssertTrue(store.loadAll().isEmpty)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: file.path),
+                       "a corrupt store must be discarded so it isn't rescanned every launch")
+    }
+
+    func test_reportCrash_persistsEvenWithNonJsonSafeCustomAttributes() {
+        coralogixRum = CoralogixRum(options: makeSamplingOptions(sampleRate: 100, exclude: []))
+        let uploader = StubUploader()
+        uploader.result = .failure
+        coralogixRum.coralogixExporter?.spanUploader = uploader
+        let store = makeTempStore()
+        coralogixRum.crashEventStore = store
+
+        coralogixRum.reportError(message: "fatal-with-date-attr",
+                                 stackTrace: [],
+                                 errorType: "Error",
+                                 isCrash: true,
+                                 customAttributes: ["when": Date(), "tag": "x"])
+
+        let persisted = store.loadAll()
+        XCTAssertEqual(persisted.count, 1,
+                       "attributes JSONSerialization rejects must not abort the crash persist")
+        XCTAssertEqual(persisted.first?[Keys.errorMessage.rawValue] as? String, "fatal-with-date-attr")
+    }
+
     func test_reportCrash_persistsToDisk_evenWhenUploadFails() {
         coralogixRum = CoralogixRum(options: makeSamplingOptions(sampleRate: 100, exclude: []))
         let uploader = StubUploader()
