@@ -245,7 +245,18 @@ extension CoralogixRum {
                             stackTraceType: String? = nil,
                             customAttributes: [String: Any]? = nil,
                             crashTimestamp: String? = nil) {
-        var span = makeSpan(event: .error, source: .console, severity: .error)
+        // `crashTimestamp` is set only for events recovered from CrashEventStore on
+        // the launch after a crash. Anchor those to the original crash time and to
+        // the session that was live when the process died — the same attribution
+        // PLCrashReporter reports get in processPendingCrashReport. Without it the
+        // event would surface under the relaunch time and the recovery session.
+        let recoveredCrashDate = crashTimestamp
+            .flatMap { Double($0) }
+            .map { Date(timeIntervalSince1970: $0 / 1000.0) }
+        var span = makeSpan(event: .error, source: .console, severity: .error, startTime: recoveredCrashDate)
+        if recoveredCrashDate != nil {
+            self.overrideSessionForCrashedSession(on: span)
+        }
         span.setAttribute(key: Keys.domain.rawValue, value: domain)
         if let code { span.setAttribute(key: Keys.code.rawValue, value: code) }
         span.setAttribute(key: Keys.errorMessage.rawValue, value: message)
@@ -267,6 +278,10 @@ extension CoralogixRum {
         // Note: hybrid error paths (Flutter/RN) intentionally omit the code attribute — there is
         // no meaningful error code in these contexts. Native paths pass an explicit code when relevant.
         recordScreenshotForSpan(to: &span)
-        span.end()
+        if let recoveredCrashDate {
+            span.end(time: recoveredCrashDate)
+        } else {
+            span.end()
+        }
     }
 }

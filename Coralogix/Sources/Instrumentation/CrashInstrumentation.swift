@@ -132,7 +132,9 @@ extension CoralogixRum {
     /// Replaces the current-session attributes `makeSpan` stamped on the crash span
     /// with the session that was live when the crash happened. No-op when there is
     /// no previous-launch session on record — the span keeps the current session.
-    private func overrideSessionForCrashedSession(on span: any Span) {
+    /// Internal: the CrashEventStore resend path (ErrorInstrumentation) applies the
+    /// same attribution to recovered hybrid crash events.
+    internal func overrideSessionForCrashedSession(on span: any Span) {
         guard let sessionManager = self.coralogixExporter?.getSessionManager() else { return }
         for attr in sessionManager.lastLaunchSessionSpanAttributes() {
             span.setAttribute(key: attr.key, value: attr.value)

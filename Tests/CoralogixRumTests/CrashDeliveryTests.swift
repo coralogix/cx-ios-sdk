@@ -265,6 +265,14 @@ final class CrashDeliveryTests: XCTestCase {
             Keys.crashTimestamp.rawValue: "1700000000000"
         ])
 
+        var recoveredSpanStart: Date?
+        CoralogixExporter.testExportCallback = { spans in
+            if let crashSpan = spans.first(where: { $0.attributes[Keys.isCrash.rawValue]?.description == "true" }) {
+                recoveredSpanStart = crashSpan.startTime
+            }
+        }
+        defer { CoralogixExporter.testExportCallback = nil }
+
         coralogixRum.resendPendingStoredCrashEvents()
         coralogixRum.completeCrashRecovery()
 
@@ -279,6 +287,12 @@ final class CrashDeliveryTests: XCTestCase {
         XCTAssertEqual(errorContext?[Keys.errorMessage.rawValue] as? String, "crash-from-previous-launch")
         XCTAssertEqual(errorContext?[Keys.crashTimestamp.rawValue] as? String, "1700000000000",
                        "re-sent events must keep the original crash time")
+        // The recovered span itself is anchored to the crash time (not resend time),
+        // mirroring the PLCrashReporter treatment — this is what puts the event
+        // under the crash's own timestamp in the platform.
+        let spanStart = try XCTUnwrap(recoveredSpanStart)
+        XCTAssertEqual(spanStart.timeIntervalSince1970, 1_700_000_000.0, accuracy: 0.001,
+                       "re-sent crash span must start at the original crash time")
     }
 
     func test_resendStoredCrashEvents_keepsStore_whenUploadFails() {
