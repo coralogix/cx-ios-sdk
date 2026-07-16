@@ -724,4 +724,42 @@ final class BeforeSendInstrumentationDataTests: XCTestCase {
         XCTAssertEqual(attrs["cx_rum.view_number"] as? Int, textViewNumber,
                        "view_number must mirror cx_rum → otelSpan.attributes when present, and be absent on both sides when not")
     }
+
+    // MARK: - Hybrid (RN/Flutter): frozen setView screen survives to both destinations
+
+    // Hybrid events reach the SDK through makeSpan (log/reportError/reportMobileVitals/
+    // reportHybridNetworkRequest), which freezes the current view — the JS/Dart screen the
+    // host set via setView(). This pins that a network event which fired on "JSScreenA"
+    // exports view_context = "JSScreenA" and its instrumentation_data page agrees, even after
+    // the JS side navigates on (live ViewManager = "JSScreenB") before the batch exports.
+    func test_hybrid_frozenSetViewScreen_winsOverLiveViewManager_inBothDestinations() throws {
+        // Span carries the view frozen at event time (what addViewMetadata stamped).
+        mockSpanData = MockSpanData(
+            attributes: [
+                Keys.severity.rawValue: AttributeValue("3"),
+                Keys.eventType.rawValue: AttributeValue(CoralogixEventType.networkRequest.rawValue),
+                Keys.source.rawValue: AttributeValue("fetch"),
+                Keys.sessionId.rawValue: AttributeValue("session_001"),
+                Keys.sessionCreationDate.rawValue: AttributeValue(1609459200),
+                SemanticAttributes.httpUrl.rawValue: AttributeValue("https://example.com/orig"),
+                SemanticAttributes.httpMethod.rawValue: AttributeValue("GET"),
+                Keys.spanViewName.rawValue: AttributeValue("JSScreenA"),
+                Keys.spanViewNumber.rawValue: AttributeValue.int(2)
+            ],
+            startTime: Date(), endTime: Date(), spanId: "20", traceId: "30",
+            name: "testSpan", kind: 2, statusCode: ["status": "ok"], resources: [:]
+        )
+        // The JS side has since navigated on — live ViewManager holds a later screen.
+        mockViewManager.set(cxView: CXView(state: .notifyOnAppear, name: "JSScreenB"))
+
+        let result = try runSpan { $0 }
+
+        let viewContext = try XCTUnwrap(result.text[Keys.viewContext.rawValue] as? [String: Any])
+        XCTAssertEqual(viewContext[Keys.view.rawValue] as? String, "JSScreenA",
+                       "hybrid event must report the setView screen frozen at event time, not the live view at export")
+        XCTAssertEqual(result.text[Keys.viewNumber.rawValue] as? Int, 2,
+                       "hybrid view_number must be the frozen value, not the live count")
+        XCTAssertEqual(result.otel["cx_rum.page_context.page_url"] as? String, "JSScreenA",
+                       "instrumentation_data page must agree with the frozen view_context")
+    }
 }

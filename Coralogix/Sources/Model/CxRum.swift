@@ -36,4 +36,6 @@ struct CxRum {
     // view appears (early-launch spans omit it).
     let isNavigationEvent: Bool
     let viewNumber: Int?
+    // View frozen at span creation; nil → CxRumPayloadBuilder falls back to the live ViewManager.
+    let viewName: String?
 }

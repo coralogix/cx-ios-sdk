@@ -54,9 +54,26 @@ final class ViewManagerTests: XCTestCase {
     func testGetDictionary() {
         let view = CXView(state: .notifyOnAppear, name: "View1")
         viewManager.set(cxView: view)
-        
+
         let dict = viewManager.getDictionary()
         XCTAssertEqual(dict[Keys.view.rawValue] as? String, "View1")
+    }
+
+    func testCurrentViewName_nilWhenNoViewActive() {
+        // Unlike getDictionary()'s "" sentinel, currentViewName distinguishes "no view" as nil
+        // so callers can omit the frozen attribute instead of stamping an empty string.
+        XCTAssertNil(viewManager.currentViewName)
+    }
+
+    func testCurrentViewName_returnsActiveViewName() {
+        viewManager.set(cxView: CXView(state: .notifyOnAppear, name: "Checkout"))
+        XCTAssertEqual(viewManager.currentViewName, "Checkout")
+    }
+
+    func testCurrentViewName_nilAfterViewDisappears() {
+        viewManager.set(cxView: CXView(state: .notifyOnAppear, name: "Checkout"))
+        viewManager.set(cxView: nil)
+        XCTAssertNil(viewManager.currentViewName)
     }
     
     func testGetPrevDictionary() {
