@@ -53,6 +53,7 @@ extension CoralogixRum {
             let crashTimestamp = report.systemInfo.timestamp
             let span = makeSpan(event: .error, source: .console, severity: .error, startTime: crashTimestamp)
             self.overrideSessionForCrashedSession(on: span)
+            self.overrideViewForCrashedSession(on: span)
 
             span.setAttribute(key: Keys.exceptionType.rawValue, value: report.signalInfo.name)
             if let crashTimestamp {
@@ -99,6 +100,18 @@ extension CoralogixRum {
         for attr in sessionManager.lastLaunchSessionSpanAttributes() {
             span.setAttribute(key: attr.key, value: attr.value)
         }
+    }
+
+    /// Replaces the view `makeSpan` froze onto the crash span — the relaunch process's
+    /// live view, which is empty this early in init — with the view that was on-screen
+    /// when the crash happened, recovered from the keychain into `ViewManager.prevViewName`.
+    /// No-op when the crashed session never showed a view, so the span keeps the empty
+    /// frozen view rather than inventing one.
+    /// Internal (rather than private) so unit tests can exercise it directly.
+    internal func overrideViewForCrashedSession(on span: any Span) {
+        guard let prevView = self.coralogixExporter?.getViewManager().getPrevDictionary()[Keys.view.rawValue] as? String,
+              !prevView.isEmpty else { return }
+        span.setAttribute(key: Keys.spanViewName.rawValue, value: prevView)
     }
     
     private func createStackTrace(report: PLCrashReport, span: any Span) {
