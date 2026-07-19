@@ -13,6 +13,11 @@ import CoralogixInternal
 /// Mirrors PLCrashReporter's pending-report model: the stored copy is removed
 /// only after an upload is confirmed, otherwise it is re-sent on the next launch.
 final class CrashEventStore {
+    /// Store-internal identity field, stamped by `append`. Removal is by id so a
+    /// confirmed upload deletes only its own event — never an unconfirmed backlog
+    /// entry from an earlier launch that happens to share the store.
+    static let eventIdKey = "store_event_id"
+
     private let fileUrl: URL
     private let lock = NSLock()
     /// Crashes are near-singular events; the cap only bounds pathological growth
@@ -28,21 +33,45 @@ final class CrashEventStore {
         self.fileUrl = folder.appendingPathComponent("pending_crash_events.json")
     }
 
-    func append(_ event: [String: Any]) {
+    /// Persists the event and returns the identity to pass to `remove(ids:)`
+    /// once its upload is confirmed.
+    @discardableResult
+    func append(_ event: [String: Any]) -> String {
         lock.lock()
         defer { lock.unlock() }
+        let id = UUID().uuidString
+        var stamped = event
+        stamped[Self.eventIdKey] = id
         var events = readAllLocked()
-        events.append(event)
+        events.append(stamped)
         if events.count > maxStoredEvents {
             events.removeFirst(events.count - maxStoredEvents)
         }
         writeLocked(events)
+        return id
     }
 
     func loadAll() -> [[String: Any]] {
         lock.lock()
         defer { lock.unlock() }
         return readAllLocked()
+    }
+
+    /// Removes only the events with the given identities, keeping any other
+    /// entries (e.g. an unconfirmed backlog from a previous launch) intact.
+    func remove(ids: Set<String>) {
+        guard !ids.isEmpty else { return }
+        lock.lock()
+        defer { lock.unlock() }
+        let remaining = readAllLocked().filter { event in
+            guard let id = event[Self.eventIdKey] as? String else { return true }
+            return !ids.contains(id)
+        }
+        if remaining.isEmpty {
+            try? FileManager.default.removeItem(at: fileUrl)
+        } else {
+            writeLocked(remaining)
+        }
     }
 
     func clear() {

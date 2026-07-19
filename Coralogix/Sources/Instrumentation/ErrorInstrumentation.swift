@@ -110,17 +110,18 @@ extension CoralogixRum {
                                      stackTraceType: String? = nil,
                                      customAttributes: [String: Any]? = nil) {
         guard isErrorsEnabled else { return }
+        var persistedEventId: String?
         if isCrash {
             // Persisted BEFORE the span is created: the process is usually about to
             // die, and only a disk write is guaranteed to finish in time. The stored
-            // copy is cleared once an upload is confirmed — or re-sent next launch.
-            self.persistCrashEvent(message: message,
-                                   stackTraceJson: stackTraceJson,
-                                   errorType: errorType,
-                                   arch: arch,
-                                   buildId: buildId,
-                                   stackTraceType: stackTraceType,
-                                   customAttributes: customAttributes)
+            // copy is removed once an upload is confirmed — or re-sent next launch.
+            persistedEventId = self.persistCrashEvent(message: message,
+                                                      stackTraceJson: stackTraceJson,
+                                                      errorType: errorType,
+                                                      arch: arch,
+                                                      buildId: buildId,
+                                                      stackTraceType: stackTraceType,
+                                                      customAttributes: customAttributes)
         }
         self.writeError(
             domain: "",
@@ -136,9 +137,13 @@ extension CoralogixRum {
         if isCrash {
             // A crash report usually precedes process death — don't leave the event
             // in the batch queue (up to 2s) where it would die with the process.
+            // On confirmation, remove only THIS event: the store may still hold an
+            // unconfirmed backlog from a previous launch awaiting its own delivery.
             self.flush { [weak self] in
                 guard let self, self.coralogixExporter?.didUploadCrashEvents == true else { return }
-                self.crashEventStore.clear()
+                if let persistedEventId {
+                    self.crashEventStore.remove(ids: [persistedEventId])
+                }
             }
         }
     }
@@ -149,7 +154,7 @@ extension CoralogixRum {
                                    arch: String?,
                                    buildId: String?,
                                    stackTraceType: String?,
-                                   customAttributes: [String: Any]?) {
+                                   customAttributes: [String: Any]?) -> String {
         var event: [String: Any] = [
             Keys.errorMessage.rawValue: message,
             Keys.crashTimestamp.rawValue: String(Date().timeIntervalSince1970.milliseconds)
@@ -165,7 +170,7 @@ extension CoralogixRum {
         if let json = Helper.jsonAttributeString(dict: customAttributes) {
             event[Keys.data.rawValue] = json
         }
-        crashEventStore.append(event)
+        return crashEventStore.append(event)
     }
 
     /// Re-emits crash events persisted by a previous process whose upload was never
@@ -192,8 +197,9 @@ extension CoralogixRum {
                 crashTimestamp: event[Keys.crashTimestamp.rawValue] as? String
             )
         }
+        let resentIds = Set(pending.compactMap { $0[CrashEventStore.eventIdKey] as? String })
         crashRecoveryLock.lock()
-        self.didEmitStoredCrashEvents = true
+        self.pendingRecoveryCrashEventIds = resentIds
         crashRecoveryLock.unlock()
     }
 

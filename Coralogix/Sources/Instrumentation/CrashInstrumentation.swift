@@ -56,11 +56,13 @@ extension CoralogixRum {
     /// Final step of crash recovery, run right after init completes: force-flushes
     /// the crash spans emitted during `initializeCrashInstrumentation` and, only
     /// once their upload is confirmed, purges the pending PLCrashReporter report
-    /// and clears the hybrid crash-event store. Unconfirmed data stays on disk and
-    /// is retried on the next launch (at-least-once delivery).
+    /// and removes the re-sent events from the crash-event store. Removal is by
+    /// event id, so an event persisted after the resend (a fresh runtime crash)
+    /// is untouched. Unconfirmed data stays on disk and is retried on the next
+    /// launch (at-least-once delivery).
     internal func completeCrashRecovery() {
         crashRecoveryLock.lock()
-        let hasPendingWork = pendingCrashPurge != nil || didEmitStoredCrashEvents
+        let hasPendingWork = pendingCrashPurge != nil || !pendingRecoveryCrashEventIds.isEmpty
         crashRecoveryLock.unlock()
         guard hasPendingWork else { return }
 
@@ -73,15 +75,13 @@ extension CoralogixRum {
             // Snapshot-and-clear under the lock; run the purge (file IO) outside it.
             self.crashRecoveryLock.lock()
             let purge = self.pendingCrashPurge
-            let clearStore = self.didEmitStoredCrashEvents
+            let confirmedIds = self.pendingRecoveryCrashEventIds
             self.pendingCrashPurge = nil
-            self.didEmitStoredCrashEvents = false
+            self.pendingRecoveryCrashEventIds = []
             self.crashRecoveryLock.unlock()
 
             purge?()
-            if clearStore {
-                self.crashEventStore.clear()
-            }
+            self.crashEventStore.remove(ids: confirmedIds)
         }
     }
 

@@ -211,6 +211,40 @@ final class CrashDeliveryTests: XCTestCase {
         XCTAssertTrue(store.loadAll().isEmpty)
     }
 
+    func test_crashEventStore_removeByIds_keepsOtherEvents() {
+        let store = makeTempStore()
+        let keepId = store.append(["error_message": "keep"])
+        let dropId = store.append(["error_message": "drop"])
+
+        store.remove(ids: [dropId])
+
+        let remaining = store.loadAll()
+        XCTAssertEqual(remaining.count, 1)
+        XCTAssertEqual(remaining.first?["error_message"] as? String, "keep")
+        XCTAssertEqual(remaining.first?[CrashEventStore.eventIdKey] as? String, keepId)
+    }
+
+    func test_reportCrash_confirmedUpload_keepsUnconfirmedBacklog() {
+        coralogixRum = CoralogixRum(options: makeSamplingOptions(sampleRate: 100, exclude: []))
+        let uploader = StubUploader()
+        coralogixRum.coralogixExporter?.spanUploader = uploader
+        let store = makeTempStore()
+        coralogixRum.crashEventStore = store
+        // Undelivered backlog from a previous launch whose recovery upload failed.
+        store.append([Keys.errorMessage.rawValue: "old-unconfirmed-crash"])
+
+        coralogixRum.reportError(message: "fresh-crash",
+                                 stackTrace: [],
+                                 errorType: "Error",
+                                 isCrash: true)
+
+        XCTAssertTrue(waitUntil { store.loadAll().count == 1 },
+                      "the confirmed fresh crash must be removed — and only it")
+        XCTAssertEqual(store.loadAll().first?[Keys.errorMessage.rawValue] as? String,
+                       "old-unconfirmed-crash",
+                       "an unconfirmed backlog entry must survive another event's confirmation")
+    }
+
     func test_crashEventStore_discardsCorruptFile() throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         let store = CrashEventStore(directory: dir)
