@@ -132,18 +132,19 @@ extension CoralogixRum {
             arch: arch,
             buildId: buildId,
             stackTraceType: stackTraceType,
-            customAttributes: customAttributes
+            customAttributes: customAttributes,
+            crashEventId: persistedEventId
         )
         if isCrash {
             // A crash report usually precedes process death — don't leave the event
             // in the batch queue (up to 2s) where it would die with the process.
-            // On confirmation, remove only THIS event: the store may still hold an
-            // unconfirmed backlog from a previous launch awaiting its own delivery.
+            // Remove only THIS event, and only once ITS OWN upload is confirmed:
+            // the store may hold an unconfirmed backlog from a previous launch, and
+            // an earlier crash's success must not delete a later crash that failed.
             self.flush { [weak self] in
-                guard let self, self.coralogixExporter?.didUploadCrashEvents == true else { return }
-                if let persistedEventId {
-                    self.crashEventStore.remove(ids: [persistedEventId])
-                }
+                guard let self, let persistedEventId,
+                      self.coralogixExporter?.didConfirmCrashUpload(id: persistedEventId) == true else { return }
+                self.crashEventStore.remove(ids: [persistedEventId])
             }
         }
     }
@@ -194,7 +195,8 @@ extension CoralogixRum {
                 stackTraceType: event[Keys.stackTraceType.rawValue] as? String,
                 customAttributes: (event[Keys.data.rawValue] as? String)
                     .flatMap { Helper.convertJsonStringToDict(jsonString: $0) },
-                crashTimestamp: event[Keys.crashTimestamp.rawValue] as? String
+                crashTimestamp: event[Keys.crashTimestamp.rawValue] as? String,
+                crashEventId: event[CrashEventStore.eventIdKey] as? String
             )
         }
         let resentIds = Set(pending.compactMap { $0[CrashEventStore.eventIdKey] as? String })
@@ -258,7 +260,8 @@ extension CoralogixRum {
                             buildId: String? = nil,
                             stackTraceType: String? = nil,
                             customAttributes: [String: Any]? = nil,
-                            crashTimestamp: String? = nil) {
+                            crashTimestamp: String? = nil,
+                            crashEventId: String? = nil) {
         // `crashTimestamp` is set only for events recovered from CrashEventStore on
         // the launch after a crash. Anchor those to the original crash time and to
         // the session that was live when the process died — the same attribution
@@ -275,6 +278,11 @@ extension CoralogixRum {
         if let code { span.setAttribute(key: Keys.code.rawValue, value: code) }
         span.setAttribute(key: Keys.errorMessage.rawValue, value: message)
         span.setAttribute(key: Keys.isCrash.rawValue, value: isCrash)
+        // Correlation id for per-event upload confirmation (read by the exporter,
+        // not mapped into cx_rum, so it stays off the wire).
+        if let crashEventId {
+            span.setAttribute(key: Keys.crashEventId.rawValue, value: crashEventId)
+        }
         if let crashTimestamp, !crashTimestamp.isEmpty {
             span.setAttribute(key: Keys.crashTimestamp.rawValue, value: crashTimestamp)
         }

@@ -33,7 +33,10 @@ extension CoralogixRum {
 
         // Try loading the crash report.
         if crashReporter.hasPendingCrashReport() {
-            if self.processPendingCrashReport(using: crashReporter) {
+            // Correlation id tying the emitted crash span to its upload confirmation,
+            // so the purge is gated on THIS report's own delivery.
+            let reportId = UUID().uuidString
+            if self.processPendingCrashReport(using: crashReporter, crashEventId: reportId) {
                 // Purge is deferred to completeCrashRecovery(): it must only happen
                 // after the upload is confirmed, and the uploader rejects requests
                 // until init finishes. Previously the purge was unconditional and ran
@@ -41,6 +44,7 @@ extension CoralogixRum {
                 // or an upload failure lost the crash permanently.
                 crashRecoveryLock.lock()
                 self.pendingCrashPurge = { crashReporter.purgePendingCrashReport() }
+                self.pendingCrashReportId = reportId
                 crashRecoveryLock.unlock()
             } else {
                 // Nothing recoverable was emitted — drop the corrupt report so it
@@ -54,12 +58,12 @@ extension CoralogixRum {
     }
 
     /// Final step of crash recovery, run right after init completes: force-flushes
-    /// the crash spans emitted during `initializeCrashInstrumentation` and, only
-    /// once their upload is confirmed, purges the pending PLCrashReporter report
-    /// and removes the re-sent events from the crash-event store. Removal is by
-    /// event id, so an event persisted after the resend (a fresh runtime crash)
-    /// is untouched. Unconfirmed data stays on disk and is retried on the next
-    /// launch (at-least-once delivery).
+    /// the crash spans emitted during `initializeCrashInstrumentation`, then decides
+    /// per-event what to clean up. Each recovered crash is confirmed independently by
+    /// its correlation id, so the PLCrashReporter report is purged only if its own
+    /// span uploaded, and only the stored events whose own upload succeeded are
+    /// removed. Anything unconfirmed stays on disk / on the pending report and is
+    /// retried on the next launch (at-least-once delivery).
     internal func completeCrashRecovery() {
         crashRecoveryLock.lock()
         let hasPendingWork = pendingCrashPurge != nil || !pendingRecoveryCrashEventIds.isEmpty
@@ -67,27 +71,38 @@ extension CoralogixRum {
         guard hasPendingWork else { return }
 
         self.flush { [weak self] in
-            guard let self else { return }
-            guard self.coralogixExporter?.didUploadCrashEvents == true else {
-                Log.w("Crash-report upload not confirmed — keeping pending crash data for next launch")
-                return
-            }
-            // Snapshot-and-clear under the lock; run the purge (file IO) outside it.
+            guard let self, let exporter = self.coralogixExporter else { return }
+
+            // Snapshot-and-clear the process-scoped recovery state under the lock;
+            // do the confirmation checks and file IO outside it. Cleared state is
+            // repopulated from the store / pending report on the next launch, so an
+            // unconfirmed item is retried rather than lost.
             self.crashRecoveryLock.lock()
             let purge = self.pendingCrashPurge
-            let confirmedIds = self.pendingRecoveryCrashEventIds
+            let reportId = self.pendingCrashReportId
+            let recoveryIds = self.pendingRecoveryCrashEventIds
             self.pendingCrashPurge = nil
+            self.pendingCrashReportId = nil
             self.pendingRecoveryCrashEventIds = []
             self.crashRecoveryLock.unlock()
 
-            purge?()
-            self.crashEventStore.remove(ids: confirmedIds)
+            // PLCrashReporter report: purge only if its own span uploaded.
+            if let reportId, exporter.didConfirmCrashUpload(id: reportId) {
+                purge?()
+            } else if reportId != nil {
+                Log.w("Crash-report upload not confirmed — keeping pending report for next launch")
+            }
+
+            // Stored hybrid crashes: remove only the ones whose own upload succeeded.
+            let confirmedStoreIds = recoveryIds.filter { exporter.didConfirmCrashUpload(id: $0) }
+            self.crashEventStore.remove(ids: confirmedStoreIds)
         }
     }
 
     /// Returns `true` when the report was parsed and emitted as a crash span,
-    /// `false` when the report could not be loaded or parsed.
-    private func processPendingCrashReport(using crashReporter: PLCrashReporter) -> Bool {
+    /// `false` when the report could not be loaded or parsed. `crashEventId`
+    /// correlates the emitted span with its upload confirmation.
+    private func processPendingCrashReport(using crashReporter: PLCrashReporter, crashEventId: String) -> Bool {
         do {
             let data = try crashReporter.loadPendingCrashReportDataAndReturnError()
             
@@ -103,6 +118,7 @@ extension CoralogixRum {
             self.overrideSessionForCrashedSession(on: span)
             self.overrideViewForCrashedSession(on: span)
 
+            span.setAttribute(key: Keys.crashEventId.rawValue, value: crashEventId)
             span.setAttribute(key: Keys.exceptionType.rawValue, value: report.signalInfo.name)
             if let crashTimestamp {
                 span.setAttribute(key: Keys.crashTimestamp.rawValue, value: "\(crashTimestamp.timeIntervalSince1970.milliseconds)")

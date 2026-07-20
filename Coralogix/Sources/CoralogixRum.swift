@@ -23,12 +23,16 @@ public class CoralogixRum {
     /// after init finishes — the uploader rejects requests while
     /// `isInitialized` is false, so upload confirmation is only possible then.
     internal var pendingCrashPurge: (() -> Void)?
+    /// Correlation id of the pending PLCrashReporter report's span, so its purge
+    /// is gated on that report's own upload rather than any crash upload.
+    internal var pendingCrashReportId: String?
     /// Store identities of the crash events re-emitted during this init, awaiting
     /// upload confirmation. Only these are removed on confirm — an event persisted
     /// after the resend (e.g. a fresh runtime crash) keeps its own lifecycle.
     internal var pendingRecoveryCrashEventIds: Set<String> = []
-    /// Guards `pendingCrashPurge` and `pendingRecoveryCrashEventIds`: they are
-    /// written during init and read-and-cleared on `flush`'s background completion.
+    /// Guards `pendingCrashPurge`, `pendingCrashReportId`, and
+    /// `pendingRecoveryCrashEventIds`: written during init and read-and-cleared on
+    /// `flush`'s background completion.
     internal let crashRecoveryLock = NSLock()
     internal var networkManager = NetworkManager()
     internal var viewManager = ViewManager(keyChain: KeychainManager())

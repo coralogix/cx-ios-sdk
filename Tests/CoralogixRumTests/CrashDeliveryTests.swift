@@ -4,7 +4,7 @@
 //  Crash events (`error_context.is_crash`) must survive process death:
 //  - hybrid path: they bypass the beforeSend JS round trip and upload directly,
 //    since the process is usually dying when a crash is exported
-//  - the exporter confirms a successful crash upload (`didUploadCrashEvents`),
+//  - the exporter confirms each crash upload per correlation id (`didConfirmCrashUpload(id:)`),
 //    which gates purging the pending PLCrashReporter report on next launch
 //  - `CoralogixRum.flush()` force-exports spans still queued in the batch
 //    processor instead of waiting out the schedule delay
@@ -41,8 +41,8 @@ final class CrashDeliveryTests: XCTestCase {
     /// An error-event `SpanData` that survives the encoding pipeline
     /// (`CxRumBuilder.build()` requires session attributes) and carries the
     /// `is_crash` flag under test.
-    private func makeErrorSpan(isCrash: Bool) -> SpanData {
-        let attributes: [String: AttributeValue] = [
+    private func makeErrorSpan(isCrash: Bool, crashEventId: String = "crash-id") -> SpanData {
+        var attributes: [String: AttributeValue] = [
             Keys.eventType.rawValue: AttributeValue(CoralogixEventType.error.rawValue),
             Keys.severity.rawValue: AttributeValue("5"),
             Keys.source.rawValue: AttributeValue("console"),
@@ -52,6 +52,9 @@ final class CrashDeliveryTests: XCTestCase {
             Keys.errorMessage.rawValue: AttributeValue("crash-delivery-test"),
             Keys.isCrash.rawValue: AttributeValue.bool(isCrash)
         ]
+        if isCrash {
+            attributes[Keys.crashEventId.rawValue] = AttributeValue(crashEventId)
+        }
         return SpanData(traceId: TraceId.random(),
                         spanId: SpanId.random(),
                         name: "errorSpan_isCrash_\(isCrash)",
@@ -96,8 +99,16 @@ final class CrashDeliveryTests: XCTestCase {
         XCTAssertEqual(captured.count, 1,
                        "the non-crash event must still take the beforeSend path")
         XCTAssertFalse(isCrashEvent(try XCTUnwrap(captured.first)))
-        XCTAssertTrue(exporter.didUploadCrashEvents,
+        XCTAssertTrue(exporter.didConfirmCrashUpload(id: "crash-id"),
                       "a successful direct upload must confirm crash delivery")
+
+        // The correlation id must NOT reach the wire — it's an internal span
+        // attribute used only for confirmation, not mapped into cx_rum.
+        let uploadedDescription = String(describing: uploader.uploadedEvents)
+        XCTAssertFalse(uploadedDescription.contains("crash-id"),
+                       "crash_event_id must not appear in the uploaded payload")
+        XCTAssertFalse(uploadedDescription.contains(Keys.crashEventId.rawValue),
+                       "crash_event_id key must not appear in the uploaded payload")
     }
 
     func test_hybridExport_nonCrashError_stillTakesBeforeSendPath() throws {
@@ -113,7 +124,7 @@ final class CrashDeliveryTests: XCTestCase {
         XCTAssertTrue(uploader.uploadedEvents.isEmpty,
                       "non-crash errors must not upload before the JS edit")
         XCTAssertEqual(captured.count, 1)
-        XCTAssertFalse(exporter.didUploadCrashEvents)
+        XCTAssertFalse(exporter.didConfirmCrashUpload(id: "crash-id"))
     }
 
     func test_hybridExport_failedCrashUpload_isNotConfirmed_andPropagatesFailure() throws {
@@ -126,8 +137,31 @@ final class CrashDeliveryTests: XCTestCase {
         let result = exporter.export(spans: [makeErrorSpan(isCrash: true)], explicitTimeout: nil)
 
         XCTAssertEqual(result, .failure)
-        XCTAssertFalse(exporter.didUploadCrashEvents,
+        XCTAssertFalse(exporter.didConfirmCrashUpload(id: "crash-id"),
                        "a failed upload must keep the purge gate closed so the pending report is retried")
+    }
+
+    func test_secondCrashFailingUpload_isNotConfirmed_afterFirstCrashSucceeded() throws {
+        // Regression for the process-wide-flag bug: a crash that uploads OK must not
+        // let a *later* crash whose upload fails be treated as delivered.
+        coralogixRum = CoralogixRum(options: makeSamplingOptions(sampleRate: 100, exclude: []))
+        let exporter = try XCTUnwrap(coralogixRum.coralogixExporter)
+        let uploader = StubUploader()
+        exporter.spanUploader = uploader
+
+        // Crash A uploads successfully.
+        uploader.result = .success
+        _ = exporter.export(spans: [makeErrorSpan(isCrash: true, crashEventId: "crash-A")], explicitTimeout: nil)
+        XCTAssertTrue(exporter.didConfirmCrashUpload(id: "crash-A"))
+
+        // Crash B's upload fails.
+        uploader.result = .failure
+        _ = exporter.export(spans: [makeErrorSpan(isCrash: true, crashEventId: "crash-B")], explicitTimeout: nil)
+
+        XCTAssertFalse(exporter.didConfirmCrashUpload(id: "crash-B"),
+                       "B's failed upload must not inherit A's confirmation")
+        XCTAssertTrue(exporter.didConfirmCrashUpload(id: "crash-A"),
+                      "A stays confirmed independently")
     }
 
     // MARK: - Native path confirmation
@@ -143,7 +177,7 @@ final class CrashDeliveryTests: XCTestCase {
         XCTAssertEqual(result, .success)
         XCTAssertEqual(uploader.uploadedEvents.count, 1)
         XCTAssertTrue(isCrashEvent(try XCTUnwrap(uploader.uploadedEvents.first)))
-        XCTAssertTrue(exporter.didUploadCrashEvents)
+        XCTAssertTrue(exporter.didConfirmCrashUpload(id: "crash-id"))
     }
 
     // MARK: - flush()
@@ -315,7 +349,6 @@ final class CrashDeliveryTests: XCTestCase {
 
         XCTAssertTrue(waitUntil { store.loadAll().isEmpty },
                       "the stored copy must be cleared after the upload is confirmed")
-        XCTAssertTrue(coralogixRum.coralogixExporter?.didUploadCrashEvents == true)
     }
 
     func test_resendStoredCrashEvents_uploadsWithOriginalTimestamp_andClearsOnConfirm() throws {

@@ -24,24 +24,39 @@ public class CoralogixExporter: SpanExporter {
     private var currentSessionSampledIn: Bool = true
     private let samplingStateLock = NSLock()
 
-    /// `true` once a batch containing at least one crash event (`error_context.is_crash`)
-    /// uploaded successfully in this process. CrashInstrumentation consults this to decide
-    /// whether the pending PLCrashReporter report may be purged — kept pessimistic on
-    /// failure so the report survives on disk and is retried on the next launch.
-    private var crashUploadConfirmed = false
+    /// Correlation ids (`crash_event_id`) of crash events whose upload was confirmed
+    /// in this process. Confirmation is per-event, not a process-wide flag: a crash
+    /// is only removed from disk / its PLCrashReporter report purged once THAT crash's
+    /// own upload succeeded, so a later failed crash can't be dropped just because an
+    /// earlier one delivered.
+    private var confirmedCrashEventIds: Set<String> = []
     private let crashUploadLock = NSLock()
 
-    var didUploadCrashEvents: Bool {
+    func didConfirmCrashUpload(id: String) -> Bool {
         crashUploadLock.lock()
         defer { crashUploadLock.unlock() }
-        return crashUploadConfirmed
+        return confirmedCrashEventIds.contains(id)
     }
 
-    private func recordCrashUpload(succeeded: Bool) {
-        guard succeeded else { return }
+    private func recordCrashUpload(ids: Set<String>, succeeded: Bool) {
+        guard succeeded, !ids.isEmpty else { return }
         crashUploadLock.lock()
-        crashUploadConfirmed = true
+        confirmedCrashEventIds.formUnion(ids)
         crashUploadLock.unlock()
+    }
+
+    /// Correlation ids of the crash events in this batch, read from the raw span
+    /// attribute. The attribute is not mapped into cx_rum, so it stays off the wire.
+    private func crashEventIds(in spans: [SpanData]) -> Set<String> {
+        var ids: Set<String> = []
+        for span in spans {
+            guard (span.getAttribute(forKey: Keys.isCrash.rawValue) as? String) == "true",
+                  let id = span.getAttribute(forKey: Keys.crashEventId.rawValue) as? String else {
+                continue
+            }
+            ids.insert(id)
+        }
+        return ids
     }
 
     public init(options: CoralogixExporterOptions,
@@ -223,6 +238,9 @@ public class CoralogixExporter: SpanExporter {
                 return .success
             }
             
+            // Crash correlation ids present in this batch, read from the raw spans.
+            let crashIds = self.crashEventIds(in: uniqueSpans)
+
             let sdk = CoralogixRum.mobileSDK.sdkFramework
             if !sdk.isNative, let callback = self.options.beforeSendCallBack {
                 // Crash events skip the hybrid JS round trip: when a crash is exported the
@@ -235,7 +253,7 @@ public class CoralogixExporter: SpanExporter {
                 var result: SpanExporterResultCode = .success
                 if !crashSpans.isEmpty {
                     result = spanUploader.upload(crashSpans, endPoint: self.endPoint)
-                    recordCrashUpload(succeeded: result == .success)
+                    recordCrashUpload(ids: crashIds, succeeded: result == .success)
                 }
                 if !editableSpans.isEmpty {
                     let clonedSpans = editableSpans.deepCopy()
@@ -243,10 +261,9 @@ public class CoralogixExporter: SpanExporter {
                 }
                 return result
             }
-            let containsCrashEvent = cxSpansDictionary.contains { self.isCrashEvent($0) }
             let result = spanUploader.upload(cxSpansDictionary, endPoint: self.endPoint)
-            if containsCrashEvent {
-                recordCrashUpload(succeeded: result == .success)
+            if !crashIds.isEmpty {
+                recordCrashUpload(ids: crashIds, succeeded: result == .success)
             }
             return result
         }
