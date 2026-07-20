@@ -9,6 +9,11 @@ Release-mechanics commits (version bumps, podspec/script tweaks, README edits) a
 omitted; the focus here is user-facing behavior changes. Tickets are referenced as
 `CX-XXXXX` (Jira) or `ALPH-XXXX` (legacy). Pull request numbers are in parentheses.
 
+## [2.11.1] - 2026-07-20
+
+### Fixed
+- Session Replay no longer renders Flutter content as a solid black rectangle when a masked frame isn't ready yet (e.g. at app launch); it reuses the last captured frame, or skips that frame until one is available.
+
 ## [2.11.0] - 2026-07-20
 
 ### Added

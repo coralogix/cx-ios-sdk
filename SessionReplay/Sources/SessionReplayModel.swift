@@ -39,6 +39,22 @@ public class SessionReplayModel {
     /// Monotonic counter passed to flutterViewBitmapProvider as frameId.
     private var captureFrameCounter: Int64 = 0
 
+    // Guards the three fields below (same serial-queue-as-mutex pattern as
+    // `screenshotDataQueue`). The provider callback runs on main; `updateSessionId`
+    // runs off-main, so these are genuinely cross-thread.
+    private let flutterFrameQueue = DispatchQueue(label: "com.coralogix.sessionReplay.flutterFrameQueue")
+
+    // Last frame the provider delivered; reused when a later frame is nil.
+    private var _lastFlutterCGImage: CGImage?
+    // frameId of the delivery cached above. An out-of-order (older) callback must
+    // not overwrite a newer frame.
+    private var _latestAcceptedFlutterFrameId: Int64 = 0
+    // Bumped on every session rotation. A callback whose captured generation no
+    // longer matches was requested in a previous session — its frame must not leak
+    // forward into the new session.
+    private var _flutterFrameGeneration: Int64 = 0
+    internal var flutterFrameGeneration: Int64 { flutterFrameQueue.sync { _flutterFrameGeneration } }
+
     internal var getKeyWindow: () -> UIWindow? = {
         Global.getKeyWindow()
     }
@@ -207,12 +223,27 @@ public class SessionReplayModel {
             return
         }
 
+        let requestGeneration = flutterFrameGeneration
+
         // viewId is intentionally "implicit_view" — the cx-flutter-plugin ignores it (uses `_`)
         // and routes all captures to Flutter's single implicit view. Only frameId matters.
         provider("implicit_view", frameId) { [weak self] bitmap in
             guard let self = self, let options = self.sessionReplayOptions else { return }
 
-            let flutterCGImage = bitmap.flatMap { Self.makeCGImage(from: $0) }
+            // Drop a callback that outlived its session: its frame belongs to a
+            // previous session and must not poison the new one. No counter revert —
+            // after a rotation the counter belongs to the new session, so reverting
+            // would corrupt it; a one-index gap in the old session is the lesser evil.
+            guard self.flutterFrameGeneration == requestGeneration else { return }
+
+            // nil = no fresh frame: reuse the last one, or skip if none yet. Never black.
+            guard let flutterCGImage = self.resolveFlutterCGImage(freshBitmap: bitmap, frameId: frameId) else {
+                if callerIncrementedCounter {
+                    SdkManager.shared.getCoralogixSdk()?.revertScreenshotCounter()
+                }
+                return
+            }
+
             // Re-snapshot rect at compositing time — Flutter view may have moved
             // during the async Dart round-trip. Fall back to pre-snapshotted rect
             // if the view is no longer visible (e.g., navigation transition).
@@ -230,6 +261,22 @@ public class SessionReplayModel {
             self.encodeAndProcess(image: image, compressionQuality: options.captureCompressionQuality,
                                   properties: self.propertiesWithSwiftUIFlag(properties),
                                   callerIncrementedCounter: callerIncrementedCounter)
+        }
+    }
+
+    // Returns the frame to composite. A fresh bitmap is cached and returned only when
+    // its frameId is newer than the last cached one; a nil — or an out-of-order older
+    // delivery — reuses the newest cached frame. nil only before any frame is cached.
+    internal func resolveFlutterCGImage(freshBitmap: FlutterViewBitmap?, frameId: Int64) -> CGImage? {
+        // Wrap the bytes outside the lock (cheap — no decode).
+        let freshCGImage = freshBitmap.flatMap { Self.makeCGImage(from: $0) }
+        return flutterFrameQueue.sync {
+            if let freshCGImage, frameId > _latestAcceptedFlutterFrameId {
+                _latestAcceptedFlutterFrameId = frameId
+                _lastFlutterCGImage = freshCGImage
+                return freshCGImage
+            }
+            return _lastFlutterCGImage
         }
     }
 
@@ -344,6 +391,11 @@ public class SessionReplayModel {
         if sessionId != self.sessionId {
             self.sessionId = sessionId
             screenshotDataQueue.sync { _prvScreenshotData = nil }
+            flutterFrameQueue.sync {
+                _lastFlutterCGImage = nil
+                _latestAcceptedFlutterFrameId = 0
+                _flutterFrameGeneration &+= 1
+            }
             _ = self.clearSessionReplayFolder()
             SRUtils.deleteURLsFromDisk()
         }
