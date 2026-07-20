@@ -12,6 +12,28 @@ extension Notification.Name {
 
 public class CoralogixRum {
     internal var coralogixExporter: CoralogixExporter?
+    /// The SDK's own tracer provider, kept so `flush()` can force-export without
+    /// reaching through the global `OpenTelemetry.instance` (which another OTel
+    /// consumer in the host app may have re-registered).
+    internal var tracerProviderSdk: TracerProviderSdk?
+    /// Disk store for hybrid crash events (see `CrashEventStore`).
+    internal lazy var crashEventStore = CrashEventStore()
+    /// Deferred purge of the pending PLCrashReporter report. Set by
+    /// `initializeCrashInstrumentation`, executed by `completeCrashRecovery()`
+    /// after init finishes — the uploader rejects requests while
+    /// `isInitialized` is false, so upload confirmation is only possible then.
+    internal var pendingCrashPurge: (() -> Void)?
+    /// Correlation id of the pending PLCrashReporter report's span, so its purge
+    /// is gated on that report's own upload rather than any crash upload.
+    internal var pendingCrashReportId: String?
+    /// Store identities of the crash events re-emitted during this init, awaiting
+    /// upload confirmation. Only these are removed on confirm — an event persisted
+    /// after the resend (e.g. a fresh runtime crash) keeps its own lifecycle.
+    internal var pendingRecoveryCrashEventIds: Set<String> = []
+    /// Guards `pendingCrashPurge`, `pendingCrashReportId`, and
+    /// `pendingRecoveryCrashEventIds`: written during init and read-and-cleared on
+    /// `flush`'s background completion.
+    internal let crashRecoveryLock = NSLock()
     internal var networkManager = NetworkManager()
     internal var viewManager = ViewManager(keyChain: KeychainManager())
     internal var sessionManager: SessionManager?
@@ -122,6 +144,10 @@ public class CoralogixRum {
         self.createInitSpan()
 
         CoralogixRum.isInitialized = true
+
+        // Must run after isInitialized flips: SpanUploader rejects uploads and
+        // flush() no-ops before that, so crash recovery could never be confirmed.
+        self.completeCrashRecovery()
     }
     
     private func initializeEnabledInstrumentations(using options: CoralogixExporterOptions) {
@@ -171,7 +197,8 @@ public class CoralogixRum {
             .with(resource: resource)
             .add(spanProcessor: spanProcessor)
             .build()
-        
+
+        self.tracerProviderSdk = tracerProvider
         OpenTelemetry.registerTracerProvider(tracerProvider: tracerProvider)
     }
     
@@ -360,6 +387,22 @@ public class CoralogixRum {
         self.logWith(severity: severity, message: message, data: data, labels: labels)
     }
     
+    /// Forces immediate export of every span still queued in the batch processor,
+    /// which otherwise holds spans for up to `Global.BatchSpan.scheduleDelay` seconds.
+    /// Uploads happen synchronously on a background queue; `completion` fires once the
+    /// flush attempt (successful or not) finishes. Called automatically when a crash
+    /// is reported; hybrid bridges call it before a fatal error terminates the process.
+    public func flush(completion: (() -> Void)? = nil) {
+        guard CoralogixRum.isInitialized, let tracerProviderSdk = self.tracerProviderSdk else {
+            completion?()
+            return
+        }
+        DispatchQueue.global(qos: .userInitiated).async {
+            tracerProviderSdk.forceFlush(timeout: TimeInterval(Global.BatchSpan.forceFlushTimeout.rawValue))
+            completion?()
+        }
+    }
+
     public func shutdown() {
         CoralogixCustomGlobalSpanRegistry.shared.teardownIfNeeded()
         Self.customTracerIssuanceLock.lock()

@@ -171,6 +171,9 @@ public enum Keys: String {
     case click
     case errorMessage = "error_message"
     case isCrash = "is_crash"
+    // Internal correlation id for crash-upload confirmation. Set as a span
+    // attribute only; not mapped into cx_rum, so it never reaches the wire.
+    case crashEventId = "crash_event_id"
     case buildId = "build_id"
     case stackTraceType = "stack_trace_type"
     case virt = "virt"

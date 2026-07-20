@@ -16,7 +16,7 @@ public enum ImageFormat {
 }
 
 public enum Global: String {
-    case sdk = "2.10.4"
+    case sdk = "2.11.0"
     case swiftVersion = "5.9"
     case coralogixPath = "/browser/v1beta/logs"
     case sessionReplayPath = "/browser/alpha/sessionrecording"
@@ -24,6 +24,9 @@ public enum Global: String {
     public enum BatchSpan: Int {
         case maxExportBatchSize = 50
         case scheduleDelay = 2
+        // Upper bound for a forced flush (CoralogixRum.flush) — long enough for one
+        // synchronous upload attempt, short enough not to stall a dying process.
+        case forceFlushTimeout = 5
     }
     
     static let monitoredPaths: Set<String> = [

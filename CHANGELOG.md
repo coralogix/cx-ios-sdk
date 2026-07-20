@@ -9,6 +9,16 @@ Release-mechanics commits (version bumps, podspec/script tweaks, README edits) a
 omitted; the focus here is user-facing behavior changes. Tickets are referenced as
 `CX-XXXXX` (Jira) or `ALPH-XXXX` (legacy). Pull request numbers are in parentheses.
 
+## [2.11.0] - 2026-07-20
+
+### Added
+- `CoralogixRum.flush(completion:)` — forces an immediate export of queued telemetry and calls the completion once the upload attempt finishes, so a crash can be delivered before the process terminates.
+
+### Fixed
+- Crash events reported through the hybrid (React Native / Flutter) bridge are now written to disk before upload and re-sent on the next launch when delivery was not confirmed, so a crash is no longer lost if the process dies before its network upload completes.
+- Crash events upload directly instead of taking the hybrid `beforeSend` round trip to JS and back, so a dying process is not racing the extra native→JS→native hop.
+- The pending crash report is purged (and re-sent stored events removed) only after their upload is confirmed, so an unconfirmed crash from an earlier launch is no longer dropped when a later crash succeeds.
+
 ## [2.10.4] - 2026-07-16
 
 ### Fixed

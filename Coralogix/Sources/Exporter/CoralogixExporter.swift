@@ -24,6 +24,41 @@ public class CoralogixExporter: SpanExporter {
     private var currentSessionSampledIn: Bool = true
     private let samplingStateLock = NSLock()
 
+    /// Correlation ids (`crash_event_id`) of crash events whose upload was confirmed
+    /// in this process. Confirmation is per-event, not a process-wide flag: a crash
+    /// is only removed from disk / its PLCrashReporter report purged once THAT crash's
+    /// own upload succeeded, so a later failed crash can't be dropped just because an
+    /// earlier one delivered.
+    private var confirmedCrashEventIds: Set<String> = []
+    private let crashUploadLock = NSLock()
+
+    func didConfirmCrashUpload(id: String) -> Bool {
+        crashUploadLock.lock()
+        defer { crashUploadLock.unlock() }
+        return confirmedCrashEventIds.contains(id)
+    }
+
+    private func recordCrashUpload(ids: Set<String>, succeeded: Bool) {
+        guard succeeded, !ids.isEmpty else { return }
+        crashUploadLock.lock()
+        confirmedCrashEventIds.formUnion(ids)
+        crashUploadLock.unlock()
+    }
+
+    /// Correlation ids of the crash events in this batch, read from the raw span
+    /// attribute. The attribute is not mapped into cx_rum, so it stays off the wire.
+    private func crashEventIds(in spans: [SpanData]) -> Set<String> {
+        var ids: Set<String> = []
+        for span in spans {
+            guard (span.getAttribute(forKey: Keys.isCrash.rawValue) as? String) == "true",
+                  let id = span.getAttribute(forKey: Keys.crashEventId.rawValue) as? String else {
+                continue
+            }
+            ids.insert(id)
+        }
+        return ids
+    }
+
     public init(options: CoralogixExporterOptions,
                 sessionManager: SessionManager,
                 networkManager: NetworkProtocol,
@@ -203,15 +238,47 @@ public class CoralogixExporter: SpanExporter {
                 return .success
             }
             
+            // Crash correlation ids present in this batch, read from the raw spans.
+            let crashIds = self.crashEventIds(in: uniqueSpans)
+
             let sdk = CoralogixRum.mobileSDK.sdkFramework
             if !sdk.isNative, let callback = self.options.beforeSendCallBack {
-                let clonedSpans = cxSpansDictionary.deepCopy()
-                callback(clonedSpans)
-                return .success
+                // Crash events skip the hybrid JS round trip: when a crash is exported the
+                // process is usually about to terminate, and the extra native→JS→native hop
+                // loses the race. The hybrid beforeSend callback cannot edit or drop them;
+                // the native beforeSend option (applied during encoding) still can.
+                let crashSpans = cxSpansDictionary.filter { self.isCrashEvent($0) }
+                let editableSpans = cxSpansDictionary.filter { !self.isCrashEvent($0) }
+
+                var result: SpanExporterResultCode = .success
+                if !crashSpans.isEmpty {
+                    result = spanUploader.upload(crashSpans, endPoint: self.endPoint)
+                    recordCrashUpload(ids: crashIds, succeeded: result == .success)
+                }
+                if !editableSpans.isEmpty {
+                    let clonedSpans = editableSpans.deepCopy()
+                    callback(clonedSpans)
+                }
+                return result
             }
-            return spanUploader.upload(cxSpansDictionary, endPoint: self.endPoint)
+            let result = spanUploader.upload(cxSpansDictionary, endPoint: self.endPoint)
+            if !crashIds.isEmpty {
+                recordCrashUpload(ids: crashIds, succeeded: result == .success)
+            }
+            return result
         }
         return .failure
+    }
+
+    /// Whether an encoded span carries `error_context.is_crash == true` — a crash reported
+    /// through the hybrid bridge or rebuilt from a pending PLCrashReporter report.
+    private func isCrashEvent(_ encodedSpan: [String: Any]) -> Bool {
+        guard let text = encodedSpan[Keys.text.rawValue] as? [String: Any],
+              let cxRum = text[Keys.cxRum.rawValue] as? [String: Any],
+              let errorContext = cxRum[Keys.errorContext.rawValue] as? [String: Any] else {
+            return false
+        }
+        return errorContext[Keys.isCrash.rawValue] as? Bool ?? false
     }
 
     public func flush(explicitTimeout: TimeInterval?) -> SpanExporterResultCode {
