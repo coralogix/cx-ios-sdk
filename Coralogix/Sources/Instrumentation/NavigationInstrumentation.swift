@@ -24,14 +24,18 @@ extension CoralogixRum {
         if cxView.state == .notifyOnAppear,
            let viewManager = coralogixExporter?.getViewManager() {
             if viewManager.isUniqueView(name: cxView.name) {
-                // Only send mobile vitals if instrumentation is enabled
+                // Flush vitals first (freezes ORIGIN, synchronously), then advance so the
+                // navigation span freezes the DESTINATION.
                 if options?.shouldInitInstrumentation(instrumentation: .mobileVitals) == true {
                     metricsManager.flushAll()
                 }
-                
+
+                coralogixExporter?.set(cxView: cxView)
+
                 var span = makeSpan(event: .navigation, source: .console, severity: .info)
                 handleAppearStateIfNeeded(cxView: cxView, span: &span)
                 span.end()
+                return
             }
         }
         coralogixExporter?.set(cxView: cxView)

@@ -402,6 +402,106 @@ class CxRumBuilderTests: XCTestCase {
                             options: options)
     }
 
+    // MARK: - View frozen at creation wins over the live ViewManager at export
+
+    func test_build_viewName_frozenAttributeWins_overLiveViewManager() {
+        // Live ViewManager has moved to a different screen since the event fired.
+        let live = MockViewManager(keyChain: MockKeyChain())
+        live.set(cxView: CXView(state: .notifyOnAppear, name: "HomeAfterNavigation"))
+
+        guard let cxRum = makeFrozenSUT(frozenViewName: "CheckoutAtEventTime", viewManager: live)?.build() else {
+            return XCTFail("build() returned nil")
+        }
+        XCTAssertEqual(cxRum.viewName, "CheckoutAtEventTime")
+
+        var builder = CxRumPayloadBuilder(rum: cxRum, viewManager: live)
+        let payload = builder.build()
+        let vc = payload[Keys.viewContext.rawValue] as? [String: Any]
+        XCTAssertEqual(vc?[Keys.view.rawValue] as? String, "CheckoutAtEventTime",
+                       "view_context must reflect the screen frozen at event time, not the live view at export")
+    }
+
+    func test_build_viewNumber_frozenAttributeWins_andParsesFromStringDescription() {
+        let live = MockViewManager(keyChain: MockKeyChain())
+        live.set(cxView: CXView(state: .notifyOnAppear, name: "Home")) // live number would be 0
+
+        guard let cxRum = makeFrozenSUT(frozenViewName: "Checkout", frozenViewNumber: 7, viewManager: live)?.build() else {
+            return XCTFail("build() returned nil")
+        }
+        XCTAssertEqual(cxRum.viewNumber, 7,
+                       "frozen view_number must win and parse back from its AttributeValue String description")
+    }
+
+    func test_build_viewName_frozenEmptyString_staysEmptyEvenIfViewAppearsByExport() {
+        let live = MockViewManager(keyChain: MockKeyChain())
+        live.set(cxView: CXView(state: .notifyOnAppear, name: "AppearedByExportTime"))
+
+        // Event fired before any view appeared: the SDK freezes "" (Keys.undefined).
+        guard let cxRum = makeFrozenSUT(frozenViewName: "", viewManager: live)?.build() else {
+            return XCTFail("build() returned nil")
+        }
+        var builder = CxRumPayloadBuilder(rum: cxRum, viewManager: live)
+        let payload = builder.build()
+        let vc = payload[Keys.viewContext.rawValue] as? [String: Any]
+        XCTAssertEqual(vc?[Keys.view.rawValue] as? String, "",
+                       "a pre-first-view event stays empty and must not be back-filled from the live view at export")
+    }
+
+    func test_build_noFrozenView_fallsBackToLiveViewManager() {
+        let live = MockViewManager(keyChain: MockKeyChain())
+        live.set(cxView: CXView(state: .notifyOnAppear, name: "Home"))
+        live.set(cxView: CXView(state: .notifyOnAppear, name: "Settings")) // number 1
+
+        // No frozen attribute on the span (e.g. a hybrid-bridge span).
+        guard let cxRum = makeFrozenSUT(frozenViewName: nil, viewManager: live)?.build() else {
+            return XCTFail("build() returned nil")
+        }
+        XCTAssertNil(cxRum.viewName, "hybrid/external spans carry no frozen view")
+
+        var builder = CxRumPayloadBuilder(rum: cxRum, viewManager: live)
+        let payload = builder.build()
+        let vc = payload[Keys.viewContext.rawValue] as? [String: Any]
+        XCTAssertEqual(vc?[Keys.view.rawValue] as? String, "Settings",
+                       "with no frozen view, view_context falls back to the live ViewManager (pre-freeze parity)")
+        XCTAssertEqual(cxRum.viewNumber, 1, "view_number also falls back to the live ViewManager")
+    }
+
+    private func makeFrozenSUT(eventType: String = "log",
+                               frozenViewName: String?,
+                               frozenViewNumber: Int? = nil,
+                               viewManager: ViewManager) -> CxRumBuilder? {
+        var attrs: [String: Any] = [
+            Keys.severity.rawValue: AttributeValue("3"),
+            Keys.eventType.rawValue: AttributeValue(eventType),
+            Keys.source.rawValue: AttributeValue("console"),
+            Keys.environment.rawValue: AttributeValue("prod"),
+            Keys.sessionId.rawValue: AttributeValue("session_001"),
+            Keys.sessionCreationDate.rawValue: AttributeValue(1609459200)
+        ]
+        // Mirror production: view name is a string attribute, view number an int — both come
+        // back through getAttribute as their String description.
+        if let frozenViewName { attrs[Keys.spanViewName.rawValue] = AttributeValue(frozenViewName) }
+        if let frozenViewNumber { attrs[Keys.spanViewNumber.rawValue] = AttributeValue.int(frozenViewNumber) }
+
+        let otel = MockSpanData(attributes: attrs,
+                                startTime: Date(), endTime: Date(),
+                                spanId: "20", traceId: "30", name: "testSpan", kind: 1)
+
+        let options = CoralogixExporterOptions(coralogixDomain: CoralogixDomain.US2,
+                                               userContext: nil,
+                                               environment: "PROD",
+                                               application: "TestApp-iOS",
+                                               version: "1.0",
+                                               publicKey: "token",
+                                               debug: true)
+        return CxRumBuilder(otel: otel,
+                            versionMetadata: VersionMetadata(appName: "Test", appVersion: "1.0"),
+                            sessionManager: mockSessionManager,
+                            viewManager: viewManager,
+                            networkManager: NetworkManager(),
+                            options: options)
+    }
+
     // Convenience overload that lets the new tests vary event type without touching the
     // original makeSUT() / its existing callers (which pin a "log" event for snapshot tests).
     private func makeSUT(currentTime: Date, eventType: String) -> CxRumBuilder? {

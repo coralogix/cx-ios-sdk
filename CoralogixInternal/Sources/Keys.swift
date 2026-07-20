@@ -143,6 +143,9 @@ public enum Keys: String {
     // rawValue is "view_number". Confusing them at a callsite would silently
     // store the counter under the wrong slot and break the restore path.
     case storedViewNumber = "viewNumber"
+    // Span-attr slots (not wire keys): view frozen at creation, read back at export.
+    case spanViewName = "cx.span.view_name"
+    case spanViewNumber = "cx.span.view_number"
     case threads
     case httpResponseBodySize = "http_response_body_size"
     case stackTrace

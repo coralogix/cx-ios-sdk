@@ -66,7 +66,14 @@ class CxRumBuilder {
         if sessionContext.sessionCreationDate > timeStamp {
             timeStamp = sessionContext.sessionCreationDate
         }
-        
+
+        // Frozen view wins (native AND hybrid go through makeSpan → addViewMetadata); only
+        // non-SDK spans lack it and fall back to the live ViewManager. view_number is frozen
+        // alongside the name, so a present name means the frozen number is authoritative.
+        let frozenViewName = otel.getAttribute(forKey: Keys.spanViewName.rawValue) as? String
+        let frozenViewNumber = Self.frozenViewNumber(from: otel)
+        let resolvedViewNumber = frozenViewName == nil ? viewManager.getViewNumber() : frozenViewNumber
+
         return CxRum(timeStamp: timeStamp,
                      networkRequestContext: NetworkRequestContext(otel: otel),
                      versionMetadata: versionMetadata,
@@ -92,8 +99,17 @@ class CxRumBuilder {
                      fingerPrint: FingerprintManager(using: KeychainManager()).fingerprint,
                      // CX-44687: pure function of current event type — no cross-event state.
                      isNavigationEvent: eventContext.type == .navigation,
-                     viewNumber: viewManager.getViewNumber()
+                     viewNumber: resolvedViewNumber,
+                     viewName: frozenViewName
         )
+    }
+
+    /// `getAttribute` returns the `AttributeValue` String description; accept Int too for mocks.
+    private static func frozenViewNumber(from otel: SpanDataProtocol) -> Int? {
+        guard let raw = otel.getAttribute(forKey: Keys.spanViewNumber.rawValue) else { return nil }
+        if let intValue = raw as? Int { return intValue }
+        if let stringValue = raw as? String { return Int(stringValue) }
+        return nil
     }
     
     private func updateSessionCounters(for eventContext: EventContext) {
