@@ -73,11 +73,10 @@ public struct FlutterViewBitmap {
 /// SDK-generated counter (see §2 — opaque to the provider; do not
 /// interpret as a timestamp).
 ///
-/// The completion handler must be called with the bytes, or with `nil`
-/// if the FlutterView isn't ready (e.g. first 200 ms after attach).
-/// Returning `nil` causes the SDK to fill the FlutterView region with
-/// a solid black rectangle — never falling back to the raw FlutterView
-/// pixels, which is the leak case.
+/// The completion handler must be called with the bytes, or `nil` if the
+/// FlutterView isn't ready yet. On `nil` the SDK reuses the last delivered
+/// bitmap, or skips the frame if none has arrived — never black, and never
+/// the raw FlutterView pixels (the leak case).
 public typealias FlutterViewBitmapProvider =
     (_ viewId: String, _ frameId: Int64,
      _ completion: @escaping (FlutterViewBitmap?) -> Void) -> Void
