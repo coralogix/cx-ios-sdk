@@ -94,9 +94,8 @@ public extension UIView {
         return rect.intersection(rootView.bounds)
     }
 
-    /// True when `text` matches any entry in `patterns`. Each entry is treated as a
-    /// case-insensitive regular expression, falling back to a case-insensitive substring
-    /// match when the entry is not valid regex.
+    /// Matches `text` against `patterns` as case-insensitive regex, falling back to a
+    /// case-insensitive substring check for entries that aren't valid regex.
     internal static func textMatchesAny(_ text: String, _ patterns: [String]) -> Bool {
         patterns.contains { pattern in
             guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) else {
@@ -138,16 +137,11 @@ public extension UIView {
         return rects
     }
 
-    /// Collects a mask rect for any visible `UINavigationBar` whose title text matches
-    /// `maskText`.
+    /// Masks a `UINavigationBar` by its (stable) geometry when its title matches `maskText`.
     ///
-    /// During a push/pop UIKit renders the navigation-bar title with a snapshot *layer* that
-    /// has no backing `UIView`, so the text-view walk above can't redact it and the title
-    /// leaks for the frames the transition guard misses (iOS 18.5; iOS 26 composites the
-    /// title in place, so it never leaks there). The bar's own frame is stable through the
-    /// transition, and the title string is readable from `UINavigationItem` regardless of how
-    /// it is being composited, so mask the whole bar by geometry when its title matches.
-    /// Scoped to bars whose title actually matches `maskText`, so unrelated bars are untouched.
+    /// During a push/pop UIKit draws the title with a snapshot layer that has no backing
+    /// `UIView`, so the text-view walk can't redact it and the title leaks (iOS 18.5). The
+    /// title string stays readable from `UINavigationItem`, so mask by geometry instead.
     internal func collectNavigationBarTitleRects(in rootView: UIView, maskText: [String]?) -> [CGRect] {
         guard let maskText = maskText, !maskText.isEmpty else { return [] }
         var rects: [CGRect] = []
@@ -193,18 +187,11 @@ public extension UIView {
 
     // MARK: - Screenshot capture
 
-    /// Returns true when a screenshot taken right now would mask at the wrong place because
-    /// view-controller content in the active scene is mid-transition.
-    ///
-    /// Two complementary signals — a frame is unsafe if either fires:
-    /// - `transitionCoordinator != nil` catches a transition's leading edge, where the
-    ///   coordinator is set before the compositor has moved anything.
-    /// - Composited-vs-model displacement of a view-controller's view catches the trailing
-    ///   edge: the coordinator clears a frame or two before the slide finishes settling, and
-    ///   the mask-rect walk lands off the still-moving content, leaking a sliver.
-    ///
-    /// (The navigation-bar *title* leak is handled separately, by masking the bar's geometry
-    /// in `collectNavigationBarTitleRects` — its snapshot layer can't be caught here.)
+    /// True while view-controller content is mid-transition, when the mask-rect walk would
+    /// land off the moving content. `transitionCoordinator` catches the leading edge;
+    /// composited-vs-model displacement catches the trailing edge, where the coordinator
+    /// clears a frame or two before the slide settles. (The nav-bar title leak is handled
+    /// separately in `collectNavigationBarTitleRects`.)
     static func isNavigationTransitionActive() -> Bool {
         guard let scene = UIApplication.shared.connectedScenes
             .compactMap({ $0 as? UIWindowScene })
@@ -222,10 +209,9 @@ public extension UIView {
         return false
     }
 
-    /// True when a loaded view controller's view is composited away from its model position
-    /// in `window` — i.e. mid-slide. Walks only view-controller views (one layer per VC),
-    /// so ordinary in-content animations don't trip it. `viewIfLoaded` avoids forcing
-    /// `loadView` during capture.
+    /// True when a loaded VC's view is composited away from its model position (mid-slide).
+    /// Checks only VC views, so ordinary in-content animations don't trip it; `viewIfLoaded`
+    /// avoids forcing `loadView` during capture.
     private static func vcContentIsDisplaced(_ vc: UIViewController, in window: UIWindow) -> Bool {
         if let view = vc.viewIfLoaded, view.window === window, Self.isDisplaced(view, in: window) {
             return true
@@ -237,9 +223,8 @@ public extension UIView {
         return false
     }
 
-    /// True when `view`'s composited (presentation) origin diverges from its model origin in
-    /// `root` coordinates. Must run on the main thread outside a render pass, where
-    /// `presentation()` reflects the in-flight animated values.
+    /// True when `view`'s presentation-layer origin diverges from its model origin in `root`.
+    /// Call on the main thread outside a render pass, where `presentation()` is in-flight.
     private static func isDisplaced(_ view: UIView, in root: UIView, epsilon: CGFloat = 0.5) -> Bool {
         var point = CGPoint.zero
         var cur: UIView = view
