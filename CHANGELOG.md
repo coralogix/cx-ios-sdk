@@ -9,6 +9,11 @@ Release-mechanics commits (version bumps, podspec/script tweaks, README edits) a
 omitted; the focus here is user-facing behavior changes. Tickets are referenced as
 `CX-XXXXX` (Jira) or `ALPH-XXXX` (legacy). Pull request numbers are in parentheses.
 
+## [2.11.2] - 2026-07-22
+
+### Fixed
+- Session Replay no longer leaks the navigation-bar title during screen transitions on iOS 18.5. UIKit composites the title cross-fade with a snapshot layer that the view-based masking couldn't see; the bar is now masked by geometry whenever its title matches a `maskText` pattern. Also closes a rare one-frame sliver where view-controller content was still settling after a push/pop.
+
 ## [2.11.1] - 2026-07-20
 
 ### Fixed
