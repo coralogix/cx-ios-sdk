@@ -137,12 +137,14 @@ public extension UIView {
         return rects
     }
 
-    /// Masks a `UINavigationBar` by its (stable) geometry when its title matches `maskText`.
+    /// Returns the whole `UINavigationBar` bounds (not the title's text frame) for each bar
+    /// whose title matches `maskText`.
     ///
     /// During a push/pop UIKit draws the title with a snapshot layer that has no backing
     /// `UIView`, so the text-view walk can't redact it and the title leaks (iOS 18.5). The
-    /// title string stays readable from `UINavigationItem`, so mask by geometry instead.
-    internal func collectNavigationBarTitleRects(in rootView: UIView, maskText: [String]?) -> [CGRect] {
+    /// title string stays readable from `UINavigationItem`, so mask the bar's whole (stable)
+    /// geometry instead of trying to locate the moving title.
+    internal func collectMatchingNavigationBarRects(in rootView: UIView, maskText: [String]?) -> [CGRect] {
         guard let maskText = maskText, !maskText.isEmpty else { return [] }
         var rects: [CGRect] = []
 
@@ -191,7 +193,7 @@ public extension UIView {
     /// land off the moving content. `transitionCoordinator` catches the leading edge;
     /// composited-vs-model displacement catches the trailing edge, where the coordinator
     /// clears a frame or two before the slide settles. (The nav-bar title leak is handled
-    /// separately in `collectNavigationBarTitleRects`.)
+    /// separately in `collectMatchingNavigationBarRects`.)
     static func isNavigationTransitionActive() -> Bool {
         guard let scene = UIApplication.shared.connectedScenes
             .compactMap({ $0 as? UIWindowScene })
@@ -317,7 +319,7 @@ public extension UIView {
                     if let maskText = maskText, !maskText.isEmpty {
                         nativeMaskRects += collectTextViewRects(in: win, maskText: maskText)
                             .map { $0.offsetBy(dx: origin.x, dy: origin.y) }
-                        nativeMaskRects += collectNavigationBarTitleRects(in: win, maskText: maskText)
+                        nativeMaskRects += collectMatchingNavigationBarRects(in: win, maskText: maskText)
                             .map { $0.offsetBy(dx: origin.x, dy: origin.y) }
                     }
                     if maskAllImages {

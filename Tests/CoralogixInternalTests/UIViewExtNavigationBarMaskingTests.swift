@@ -25,38 +25,38 @@ final class UIViewExtNavigationBarMaskingTests: XCTestCase {
         XCTAssertFalse(UIView.textMatchesAny("Order ABC", ["#\\d+"]))
     }
 
-    // MARK: - collectNavigationBarTitleRects
+    // MARK: - collectMatchingNavigationBarRects
 
-    func testNavigationBarTitleRects_masksBarWhenTitleMatches() {
+    func testMatchingNavigationBarRects_masksBarWhenTitleMatches() {
         let bar = UINavigationBar(frame: CGRect(x: 0, y: 0, width: 320, height: 44))
         bar.items = [UINavigationItem(title: "Secret Screen")]
         let root = UIView(frame: CGRect(x: 0, y: 0, width: 320, height: 480))
         root.addSubview(bar)
 
-        let rects = UIView().collectNavigationBarTitleRects(in: root, maskText: ["Secret"])
+        let rects = UIView().collectMatchingNavigationBarRects(in: root, maskText: ["Secret"])
 
         XCTAssertEqual(rects.count, 1)
         XCTAssertEqual(rects.first, bar.convert(bar.bounds, to: root))
     }
 
-    func testNavigationBarTitleRects_ignoresBarWhenTitleDoesNotMatch() {
+    func testMatchingNavigationBarRects_ignoresBarWhenTitleDoesNotMatch() {
         let bar = UINavigationBar(frame: CGRect(x: 0, y: 0, width: 320, height: 44))
         bar.items = [UINavigationItem(title: "Home")]
         let root = UIView(frame: CGRect(x: 0, y: 0, width: 320, height: 480))
         root.addSubview(bar)
 
-        let rects = UIView().collectNavigationBarTitleRects(in: root, maskText: ["password"])
+        let rects = UIView().collectMatchingNavigationBarRects(in: root, maskText: ["password"])
 
         XCTAssertTrue(rects.isEmpty)
     }
 
-    func testNavigationBarTitleRects_emptyWhenNoMaskText() {
+    func testMatchingNavigationBarRects_emptyWhenNoMaskText() {
         let bar = UINavigationBar(frame: CGRect(x: 0, y: 0, width: 320, height: 44))
         bar.items = [UINavigationItem(title: "Secret Screen")]
         let root = UIView(frame: CGRect(x: 0, y: 0, width: 320, height: 480))
         root.addSubview(bar)
 
-        XCTAssertTrue(UIView().collectNavigationBarTitleRects(in: root, maskText: nil).isEmpty)
-        XCTAssertTrue(UIView().collectNavigationBarTitleRects(in: root, maskText: []).isEmpty)
+        XCTAssertTrue(UIView().collectMatchingNavigationBarRects(in: root, maskText: nil).isEmpty)
+        XCTAssertTrue(UIView().collectMatchingNavigationBarRects(in: root, maskText: []).isEmpty)
     }
 }
