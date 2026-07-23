@@ -9,27 +9,29 @@ import Foundation
 import CrashReporter
 import CoralogixInternal
 
+/// The subset of `PLCrashReporter` the pending-report recovery flow depends on.
+/// A protocol (rather than the concrete type) so tests can drive recovery with a
+/// canned report and observe whether the report is purged.
+protocol CrashReporting: AnyObject {
+    func hasPendingCrashReport() -> Bool
+    func loadPendingCrashReportDataAndReturnError() throws -> Data
+    @discardableResult func purgePendingCrashReport() -> Bool
+}
+
+extension PLCrashReporter: CrashReporting {}
+
 extension CoralogixRum {
+    #if DEBUG
+    /// Test seam: when set, supplies the crash reporter used for pending-report
+    /// recovery instead of creating a real `PLCrashReporter`. Static because crash
+    /// instrumentation, like all instrumentation here, is installed once during
+    /// init — there is no instance to reach beforehand. `#if DEBUG` so it never
+    /// ships in a release binary, matching `CoralogixExporter.testExportCallback`.
+    static var crashReporterProvider: (() -> CrashReporting?)?
+    #endif
+
     public func initializeCrashInstrumentation() {
-        
-        // It is strongly recommended that local symbolication only be enabled for non-release builds.
-        // Use [] for release versions.
-        let config = PLCrashReporterConfig(signalHandlerType: .BSD, symbolicationStrategy: .all)
-        guard let crashReporter = PLCrashReporter(configuration: config) else {
-            Log.e("Could not create an instance of PLCrashReporter")
-            return
-        }
-        
-        switch FirebaseRuntimeDetector.presence() {
-        case .configured:
-            Log.d("host app called FirebaseApp.configure() before your Coralogix SDK init, some crash reports may be dropped")
-        case .linkedButNotConfigured:
-            Log.d("Firebase exists, but not configured yet (or you checked too early)")
-        case .notLinked:
-            Log.d("host app didn't include Firebase at all")
-        }
-        
-        crashReporter.enable()
+        guard let crashReporter = Self.makePendingCrashReporter() else { return }
 
         // Try loading the crash report.
         if crashReporter.hasPendingCrashReport() {
@@ -55,6 +57,36 @@ extension CoralogixRum {
 
         // Hybrid crash events persisted by a previous process (see CrashEventStore).
         self.resendPendingStoredCrashEvents()
+    }
+
+    /// Returns the crash reporter used for recovery: the injected test reporter when
+    /// one is set, otherwise a real, enabled `PLCrashReporter`.
+    private static func makePendingCrashReporter() -> CrashReporting? {
+        #if DEBUG
+        if let provider = crashReporterProvider {
+            return provider()
+        }
+        #endif
+
+        // It is strongly recommended that local symbolication only be enabled for non-release builds.
+        // Use [] for release versions.
+        let config = PLCrashReporterConfig(signalHandlerType: .BSD, symbolicationStrategy: .all)
+        guard let crashReporter = PLCrashReporter(configuration: config) else {
+            Log.e("Could not create an instance of PLCrashReporter")
+            return nil
+        }
+
+        switch FirebaseRuntimeDetector.presence() {
+        case .configured:
+            Log.d("host app called FirebaseApp.configure() before your Coralogix SDK init, some crash reports may be dropped")
+        case .linkedButNotConfigured:
+            Log.d("Firebase exists, but not configured yet (or you checked too early)")
+        case .notLinked:
+            Log.d("host app didn't include Firebase at all")
+        }
+
+        crashReporter.enable()
+        return crashReporter
     }
 
     /// Final step of crash recovery, run right after init completes: force-flushes
@@ -102,10 +134,22 @@ extension CoralogixRum {
     /// Returns `true` when the report was parsed and emitted as a crash span,
     /// `false` when the report could not be loaded or parsed. `crashEventId`
     /// correlates the emitted span with its upload confirmation.
-    private func processPendingCrashReport(using crashReporter: PLCrashReporter, crashEventId: String) -> Bool {
+    private func processPendingCrashReport(using crashReporter: CrashReporting, crashEventId: String) -> Bool {
         do {
             let data = try crashReporter.loadPendingCrashReportDataAndReturnError()
-            
+            return self.emitCrashSpan(fromReportData: data, crashEventId: crashEventId)
+        } catch let error {
+            Log.e("CrashReporter failed to load report with error: \(error)")
+            return false
+        }
+    }
+
+    /// Parses raw `PLCrashReport` data into a crash span and emits it, returning
+    /// `true` on success and `false` when the data cannot be parsed. Split out of
+    /// `processPendingCrashReport` (rather than private) so tests can drive the
+    /// parse/emit path with a canned report without a live `PLCrashReporter`.
+    internal func emitCrashSpan(fromReportData data: Data, crashEventId: String) -> Bool {
+        do {
             // Retrieving crash reporter data.
             let report = try PLCrashReport(data: data)
 
@@ -118,6 +162,12 @@ extension CoralogixRum {
             self.overrideSessionForCrashedSession(on: span)
             self.overrideViewForCrashedSession(on: span)
 
+            // Raw crash marker read back by the exporter to confirm this report's
+            // upload (crashEventIds/didConfirmCrashUpload) — the encoded is_crash
+            // derived from `threads` at build time is off the wire and not visible
+            // there, so without this the pending report is never purged and the
+            // crash re-sends on every launch.
+            span.setAttribute(key: Keys.isCrash.rawValue, value: true)
             span.setAttribute(key: Keys.crashEventId.rawValue, value: crashEventId)
             span.setAttribute(key: Keys.exceptionType.rawValue, value: report.signalInfo.name)
             if let crashTimestamp {
@@ -153,7 +203,7 @@ extension CoralogixRum {
             }
             return true
         } catch let error {
-            Log.e("CrashReporter failed to load and parse with error: \(error)")
+            Log.e("CrashReporter failed to parse report with error: \(error)")
             return false
         }
     }

@@ -41,8 +41,14 @@ let package = Package(
         ),
         .testTarget(
             name: "CoralogixRumTests",
-            dependencies: ["Coralogix"],
-            path: "Tests/CoralogixRumTests/"
+            dependencies: [
+                "Coralogix",
+                .product(name: "CrashReporter", package: "plcrashreporter")
+            ],
+            path: "Tests/CoralogixRumTests/",
+            resources: [
+                .process("Resources")
+            ]
         ),
         .testTarget(
             name: "CoralogixInternalTests",
