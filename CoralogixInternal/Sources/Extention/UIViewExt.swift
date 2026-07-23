@@ -94,6 +94,17 @@ public extension UIView {
         return rect.intersection(rootView.bounds)
     }
 
+    /// Matches `text` against `patterns` as case-insensitive regex, falling back to a
+    /// case-insensitive substring check for entries that aren't valid regex.
+    internal static func textMatchesAny(_ text: String, _ patterns: [String]) -> Bool {
+        patterns.contains { pattern in
+            guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) else {
+                return text.localizedCaseInsensitiveContains(pattern)
+            }
+            return regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) != nil
+        }
+    }
+
     /// Collects rects for text-bearing views (UILabel, UITextField, UITextView) in `rootView`'s
     /// coordinate space. Short-circuits at FlutterView subtrees — those arrive pre-masked
     /// via the Dart bitmap provider.
@@ -106,23 +117,12 @@ public extension UIView {
             if let cls = _flutterViewClass, view.isKind(of: cls) { return }
 
             var shouldMask = false
-            let matchesAnyPattern: (String) -> Bool = { text in
-                maskText.contains { pattern in
-                    // Each entry may be a plain literal string or a regular expression.
-                    // Regex is matched case-insensitively; fall back to a case-insensitive
-                    // substring check when the pattern is not valid regex.
-                    guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) else {
-                        return text.localizedCaseInsensitiveContains(pattern)
-                    }
-                    return regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) != nil
-                }
-            }
             if let label = view as? UILabel, let text = label.text {
-                shouldMask = matchesAnyPattern(text)
+                shouldMask = UIView.textMatchesAny(text, maskText)
             } else if let field = view as? UITextField, let text = field.text {
-                shouldMask = matchesAnyPattern(text)
+                shouldMask = UIView.textMatchesAny(text, maskText)
             } else if let tv = view as? UITextView, let text = tv.text {
-                shouldMask = matchesAnyPattern(text)
+                shouldMask = UIView.textMatchesAny(text, maskText)
             }
 
             if shouldMask {
@@ -130,6 +130,35 @@ public extension UIView {
                 if !rect.isNull && !rect.isEmpty { rects.append(rect) }
             }
 
+            for sub in view.subviews { traverse(sub) }
+        }
+
+        traverse(rootView)
+        return rects
+    }
+
+    /// Returns the whole `UINavigationBar` bounds (not the title's text frame) for each bar
+    /// whose title matches `maskText`.
+    ///
+    /// During a push/pop UIKit draws the title with a snapshot layer that has no backing
+    /// `UIView`, so the text-view walk can't redact it and the title leaks (iOS 18.5). The
+    /// title string stays readable from `UINavigationItem`, so mask the bar's whole (stable)
+    /// geometry instead of trying to locate the moving title.
+    internal func collectMatchingNavigationBarRects(in rootView: UIView, maskText: [String]?) -> [CGRect] {
+        guard let maskText = maskText, !maskText.isEmpty else { return [] }
+        var rects: [CGRect] = []
+
+        func traverse(_ view: UIView) {
+            guard !view.isHidden, view.alpha > 0 else { return }
+            if let bar = view as? UINavigationBar {
+                let titles = ([bar.topItem?.title, bar.topItem?.prompt, bar.backItem?.title]
+                    .compactMap { $0 }) + (bar.items ?? []).compactMap { $0.title }
+                if titles.contains(where: { UIView.textMatchesAny($0, maskText) }) {
+                    let rect = bar.convert(bar.bounds, to: rootView).intersection(rootView.bounds)
+                    if !rect.isNull && !rect.isEmpty { rects.append(rect) }
+                }
+                return
+            }
             for sub in view.subviews { traverse(sub) }
         }
 
@@ -160,21 +189,18 @@ public extension UIView {
 
     // MARK: - Screenshot capture
 
-    /// Returns true when a UIKit-managed transition (push, pop, modal) is in progress
-    /// for any view controller in the active scene.
-    ///
-    /// `UIViewController.transitionCoordinator` is non-nil exactly while UIKit is running
-    /// a transition animation and nil at rest. Inside `UIGraphicsImageRenderer`,
-    /// `layer.presentation()` always returns nil, so mask-rect walks use model-layer
-    /// positions which diverge from the composited frame during animations. Skipping the
-    /// capture and waiting for the next timer tick avoids that mismatch entirely.
+    /// True while view-controller content is mid-transition, when the mask-rect walk would
+    /// land off the moving content. `transitionCoordinator` catches the leading edge;
+    /// composited-vs-model displacement catches the trailing edge, where the coordinator
+    /// clears a frame or two before the slide settles. (The nav-bar title leak is handled
+    /// separately in `collectMatchingNavigationBarRects`.)
     static func isNavigationTransitionActive() -> Bool {
         guard let scene = UIApplication.shared.connectedScenes
             .compactMap({ $0 as? UIWindowScene })
             .first(where: { $0.activationState == .foregroundActive }) else { return false }
         return scene.windows.contains { win in
             guard let root = win.rootViewController else { return false }
-            return Self.vcHasActiveTransition(root)
+            return Self.vcHasActiveTransition(root) || Self.vcContentIsDisplaced(root, in: win)
         }
     }
 
@@ -183,6 +209,36 @@ public extension UIView {
         for child in vc.children where vcHasActiveTransition(child) { return true }
         if let presented = vc.presentedViewController, vcHasActiveTransition(presented) { return true }
         return false
+    }
+
+    /// True when a loaded VC's view is composited away from its model position (mid-slide).
+    /// Checks only VC views, so ordinary in-content animations don't trip it; `viewIfLoaded`
+    /// avoids forcing `loadView` during capture.
+    private static func vcContentIsDisplaced(_ vc: UIViewController, in window: UIWindow) -> Bool {
+        if let view = vc.viewIfLoaded, view.window === window, Self.isDisplaced(view, in: window) {
+            return true
+        }
+        for child in vc.children where vcContentIsDisplaced(child, in: window) { return true }
+        if let presented = vc.presentedViewController, vcContentIsDisplaced(presented, in: window) {
+            return true
+        }
+        return false
+    }
+
+    /// True when `view`'s presentation-layer origin diverges from its model origin in `root`.
+    /// Call on the main thread outside a render pass, where `presentation()` is in-flight.
+    private static func isDisplaced(_ view: UIView, in root: UIView, epsilon: CGFloat = 0.5) -> Bool {
+        var point = CGPoint.zero
+        var cur: UIView = view
+        while cur !== root {
+            guard let parent = cur.superview else { break }
+            let from = cur.layer.presentation() ?? cur.layer
+            let to = parent.layer.presentation() ?? parent.layer
+            point = from.convert(point, to: to)
+            cur = parent
+        }
+        let model = view.convert(CGPoint.zero, to: root)
+        return abs(point.x - model.x) > epsilon || abs(point.y - model.y) > epsilon
     }
 
     /// Renders a composite screenshot of all visible windows with masking applied.
@@ -262,6 +318,8 @@ public extension UIView {
 
                     if let maskText = maskText, !maskText.isEmpty {
                         nativeMaskRects += collectTextViewRects(in: win, maskText: maskText)
+                            .map { $0.offsetBy(dx: origin.x, dy: origin.y) }
+                        nativeMaskRects += collectMatchingNavigationBarRects(in: win, maskText: maskText)
                             .map { $0.offsetBy(dx: origin.x, dy: origin.y) }
                     }
                     if maskAllImages {

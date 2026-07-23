@@ -9,6 +9,11 @@ Release-mechanics commits (version bumps, podspec/script tweaks, README edits) a
 omitted; the focus here is user-facing behavior changes. Tickets are referenced as
 `CX-XXXXX` (Jira) or `ALPH-XXXX` (legacy). Pull request numbers are in parentheses.
 
+## [2.11.2] - 2026-07-22
+
+### Fixed
+- Session Replay no longer leaks navigation-bar titles that should be masked, or a thin edge of screen content, during screen transitions on iOS 18.5.
+
 ## [2.11.1] - 2026-07-20
 
 ### Fixed
