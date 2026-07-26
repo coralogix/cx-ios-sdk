@@ -12,7 +12,7 @@ omitted; the focus here is user-facing behavior changes. Tickets are referenced 
 ## [2.12.0] - 2026-07-26
 
 ### Added
-- `reportError` now accepts optional `message`, `data`, and `labels` on the `error:`, `NSError`, and `exception:` overloads, so a handled error can carry an overriding message, structured data, and per-event labels in a single call instead of a separate `log()`. A non-nil `message` overrides the error's own description; `data` attaches to the error event and `labels` merge into the event's labels.
+- `reportError` now accepts optional `data` and `labels` on the `error:`, `NSError`, and `exception:` overloads, so a handled error can carry structured data and per-event labels in a single call instead of a separate `log()`. `data` attaches to the error event and `labels` merge into the event's labels.
 
 ## [2.11.2] - 2026-07-22
 

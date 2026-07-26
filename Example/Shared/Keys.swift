@@ -14,7 +14,7 @@ enum Keys: String {
     case sendNSError = "NSError"
     case sendError = "Error"
     case sendMessageDataError = "Message Data Error (custom log)"
-    case sendErrorWithDataLabels = "Error + message, data & labels"
+    case sendErrorWithDataLabels = "Error + data & labels"
     case sendMessageStackTraceTypeIsCarshError = "Message StackTrace, Type, isCarsh Error"
     case sendLogError = "Log Error"
     case sendErrorString = "Error String"

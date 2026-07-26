@@ -270,27 +270,24 @@ public class CoralogixRum {
     }
     
     public func reportError(exception: NSException,
-                            message: String? = nil,
                             data: [String: Any]? = nil,
                             labels: [String: Any]? = nil) {
         guard CoralogixRum.isInitialized else { return }
-        self.reportErrorWith(exception: exception, message: message, data: data, labels: labels)
+        self.reportErrorWith(exception: exception, data: data, labels: labels)
     }
 
     public func reportError(error: NSError,
-                            message: String? = nil,
                             data: [String: Any]? = nil,
                             labels: [String: Any]? = nil) {
         guard CoralogixRum.isInitialized else { return }
-        self.reportErrorWith(error: error, message: message, data: data, labels: labels)
+        self.reportErrorWith(error: error, data: data, labels: labels)
     }
 
     public func reportError(error: Error,
-                            message: String? = nil,
                             data: [String: Any]? = nil,
                             labels: [String: Any]? = nil) {
         guard CoralogixRum.isInitialized else { return }
-        self.reportErrorWith(error: error, message: message, data: data, labels: labels)
+        self.reportErrorWith(error: error, data: data, labels: labels)
     }
 
     public func reportError(message: String, data: [String: Any]? = nil, labels: [String: Any]? = nil) {

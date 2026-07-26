@@ -21,7 +21,6 @@ extension CoralogixRum {
     }
     
     func reportErrorWith(exception: NSException,
-                         message: String? = nil,
                          data: [String: Any]? = nil,
                          labels: [String: Any]? = nil) {
         guard isErrorsEnabled else { return }
@@ -29,7 +28,7 @@ extension CoralogixRum {
         self.writeError(
             domain: exception.name.rawValue,
             code: 0,
-            message: message ?? exception.reason ?? "",
+            message: exception.reason ?? "",
             userInfo: userInfo,
             customAttributes: data,
             labels: labels
@@ -37,14 +36,13 @@ extension CoralogixRum {
     }
 
     func reportErrorWith(error: NSError,
-                         message: String? = nil,
                          data: [String: Any]? = nil,
                          labels: [String: Any]? = nil) {
         guard isErrorsEnabled else { return }
         self.writeError(
             domain: error.domain,
             code: error.code,
-            message: message ?? error.localizedDescription,
+            message: error.localizedDescription,
             userInfo: error.userInfo,
             customAttributes: data,
             labels: labels
@@ -52,14 +50,13 @@ extension CoralogixRum {
     }
 
     func reportErrorWith(error: Error,
-                         message: String? = nil,
                          data: [String: Any]? = nil,
                          labels: [String: Any]? = nil) {
         guard isErrorsEnabled else { return }
         self.writeError(
             domain: String(describing: type(of: error)),
             code: 0,
-            message: message ?? error.localizedDescription,
+            message: error.localizedDescription,
             customAttributes: data,
             labels: labels
         )

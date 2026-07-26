@@ -45,7 +45,7 @@ final class ErrorViewController: UITableViewController {
         ),
         .init(
             title: "Error + Data & Labels",
-            subtitle: "reportError(error:) with message override, data & labels",
+            subtitle: "reportError(error:) with data & labels",
             systemImageName: "tag",
             key: .sendErrorWithDataLabels
         ),
@@ -172,7 +172,7 @@ final class ErrorViewController: UITableViewController {
             ErrorSim.sendMessageDataError()
 
         case .sendErrorWithDataLabels:
-            ErrorSim.sendErrorWithMessageDataLabels()
+            ErrorSim.sendErrorWithDataLabels()
 
         case .sendMessageStackTraceTypeIsCarshError:
             ErrorSim.sendMessageStackTraceTypeIsCarshError()

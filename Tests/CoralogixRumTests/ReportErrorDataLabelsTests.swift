@@ -1,9 +1,9 @@
 //
 //  ReportErrorDataLabelsTests.swift
 //
-//  reportError can bundle a message override, a `data` dictionary, and a `labels`
-//  dictionary onto a single error event — so callers no longer need a separate
-//  log() call alongside reportError() to attach context.
+//  reportError can bundle a `data` dictionary and a `labels` dictionary onto a single
+//  error event — so callers no longer need a separate log() call alongside reportError()
+//  to attach context.
 //
 
 import XCTest
@@ -94,23 +94,8 @@ final class ReportErrorDataLabelsTests: XCTestCase {
         XCTAssertEqual(labels["team"] as? String, "payments")
     }
 
-    // MARK: - message override
-
-    func test_reportError_error_message_overridesErrorDescription() throws {
-        // The override wins over the error's own localizedDescription.
-        let result = try reportAndCaptureErrorEvent(expectedMessage: "custom summary") { rum in
-            rum.reportError(
-                error: NSError(domain: "Checkout", code: 7,
-                               userInfo: [NSLocalizedDescriptionKey: "raw underlying description"]),
-                message: "custom summary"
-            )
-        }
-        XCTAssertEqual(result.errorContext[Keys.errorMessage.rawValue] as? String, "custom summary")
-    }
-
-    func test_reportError_error_noMessage_keepsErrorDescription() throws {
-        // With no override, the error's own description remains the error_message —
-        // proving the override in the previous test is conditional, not unconditional.
+    func test_reportError_error_usesErrorDescriptionAsMessage() throws {
+        // The error's own description is the event's error_message.
         let result = try reportAndCaptureErrorEvent(expectedMessage: "the original description") { rum in
             rum.reportError(
                 error: NSError(domain: "Checkout", code: 7,
@@ -120,19 +105,18 @@ final class ReportErrorDataLabelsTests: XCTestCase {
         XCTAssertEqual(result.errorContext[Keys.errorMessage.rawValue] as? String, "the original description")
     }
 
-    // MARK: - NSException overload carries data/labels + message override
+    // MARK: - NSException overload carries data/labels
 
-    func test_reportError_exception_withMessageDataLabels() throws {
-        let result = try reportAndCaptureErrorEvent(expectedMessage: "handled gracefully") { rum in
+    func test_reportError_exception_withDataAndLabels() throws {
+        let result = try reportAndCaptureErrorEvent(expectedMessage: "unhandled reason") { rum in
             let exception = NSException(name: .genericException,
                                         reason: "unhandled reason",
                                         userInfo: nil)
             rum.reportError(exception: exception,
-                            message: "handled gracefully",
                             data: ["screen": "cart"],
                             labels: ["severity_tag": "high"])
         }
-        XCTAssertEqual(result.errorContext[Keys.errorMessage.rawValue] as? String, "handled gracefully")
+        XCTAssertEqual(result.errorContext[Keys.errorMessage.rawValue] as? String, "unhandled reason")
         let data = try XCTUnwrap(result.errorContext[Keys.data.rawValue] as? [String: Any])
         XCTAssertEqual(data["screen"] as? String, "cart")
         let labels = try XCTUnwrap(result.cxRum[Keys.labels.rawValue] as? [String: Any])

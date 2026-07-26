@@ -36,15 +36,14 @@ class ErrorSim {
             data: ["gender": "female", "height": "1.30"])
     }
 
-    // Reports a caught error and bundles an overriding message, structured `data`,
-    // and per-event `labels` into the same error event — no separate log() needed.
-    static func sendErrorWithMessageDataLabels() {
+    // Reports a caught error and bundles structured `data` and per-event `labels`
+    // into the same error event — no separate log() needed.
+    static func sendErrorWithDataLabels() {
         let error = NSError(domain: "Checkout",
                             code: 500,
-                            userInfo: [NSLocalizedDescriptionKey: "raw underlying description"])
+                            userInfo: [NSLocalizedDescriptionKey: "Checkout failed at payment step"])
         CoralogixRumManager.shared.sdk.reportError(
             error: error,
-            message: "Checkout failed at payment step",
             data: ["order_id": "A-1001", "cart_size": 3, "retryable": true],
             labels: ["team": "payments", "severity_tag": "high"])
     }
