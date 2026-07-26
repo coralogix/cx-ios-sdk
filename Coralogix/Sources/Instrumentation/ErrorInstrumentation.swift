@@ -20,39 +20,54 @@ extension CoralogixRum {
         || (opts?.shouldInitInstrumentation(instrumentation: .lifeCycle) ?? false)
     }
     
-    func reportErrorWith(exception: NSException) {
+    func reportErrorWith(exception: NSException,
+                         message: String? = nil,
+                         data: [String: Any]? = nil,
+                         labels: [String: Any]? = nil) {
         guard isErrorsEnabled else { return }
         let userInfo = Helper.convertDictionary(exception.userInfo ?? [:])
         self.writeError(
             domain: exception.name.rawValue,
             code: 0,
-            message: exception.reason ?? "",
-            userInfo: userInfo
+            message: message ?? exception.reason ?? "",
+            userInfo: userInfo,
+            customAttributes: data,
+            labels: labels
         )
     }
-    
-    func reportErrorWith(error: NSError) {
+
+    func reportErrorWith(error: NSError,
+                         message: String? = nil,
+                         data: [String: Any]? = nil,
+                         labels: [String: Any]? = nil) {
         guard isErrorsEnabled else { return }
         self.writeError(
             domain: error.domain,
             code: error.code,
-            message: error.localizedDescription,
-            userInfo: error.userInfo
+            message: message ?? error.localizedDescription,
+            userInfo: error.userInfo,
+            customAttributes: data,
+            labels: labels
         )
     }
-    
-    func reportErrorWith(error: Error) {
+
+    func reportErrorWith(error: Error,
+                         message: String? = nil,
+                         data: [String: Any]? = nil,
+                         labels: [String: Any]? = nil) {
         guard isErrorsEnabled else { return }
         self.writeError(
             domain: String(describing: type(of: error)),
             code: 0,
-            message: error.localizedDescription
+            message: message ?? error.localizedDescription,
+            customAttributes: data,
+            labels: labels
         )
     }
 
-    func reportErrorWith(message: String, data: [String: Any]?) {
+    func reportErrorWith(message: String, data: [String: Any]?, labels: [String: Any]? = nil) {
         guard isErrorsEnabled else { return }
-        self.log(severity: CoralogixLogSeverity.error, message: message, data: data)
+        self.log(severity: CoralogixLogSeverity.error, message: message, data: data, labels: labels)
     }
     
     // MARK: - Used By Flutter (symbolicated)
@@ -260,6 +275,7 @@ extension CoralogixRum {
                             buildId: String? = nil,
                             stackTraceType: String? = nil,
                             customAttributes: [String: Any]? = nil,
+                            labels: [String: Any]? = nil,
                             crashTimestamp: String? = nil,
                             crashEventId: String? = nil) {
         // `crashTimestamp` is set only for events recovered from CrashEventStore on
@@ -296,6 +312,9 @@ extension CoralogixRum {
         if let stackTraceType, !stackTraceType.isEmpty { span.setAttribute(key: Keys.stackTraceType.rawValue, value: stackTraceType) }
         if let json = Helper.jsonAttributeString(dict: customAttributes) {
             span.setAttribute(key: Keys.data.rawValue, value: json)
+        }
+        if let json = Helper.jsonAttributeString(dict: labels) {
+            span.setAttribute(key: Keys.customLabels.rawValue, value: json)
         }
         // Note: hybrid error paths (Flutter/RN) intentionally omit the code attribute — there is
         // no meaningful error code in these contexts. Native paths pass an explicit code when relevant.

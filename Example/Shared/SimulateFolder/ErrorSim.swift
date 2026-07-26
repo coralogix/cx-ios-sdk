@@ -35,7 +35,20 @@ class ErrorSim {
             message: "errorcode=500 Im cusom Error",
             data: ["gender": "female", "height": "1.30"])
     }
-    
+
+    // Reports a caught error and bundles an overriding message, structured `data`,
+    // and per-event `labels` into the same error event — no separate log() needed.
+    static func sendErrorWithMessageDataLabels() {
+        let error = NSError(domain: "Checkout",
+                            code: 500,
+                            userInfo: [NSLocalizedDescriptionKey: "raw underlying description"])
+        CoralogixRumManager.shared.sdk.reportError(
+            error: error,
+            message: "Checkout failed at payment step",
+            data: ["order_id": "A-1001", "cart_size": 3, "retryable": true],
+            labels: ["team": "payments", "severity_tag": "high"])
+    }
+
    static func sendMessageStackTraceTypeIsCarshError() {
         CoralogixRumManager.shared.sdk.reportError(
             message: "im custom error",

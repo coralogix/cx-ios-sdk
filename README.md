@@ -361,7 +361,15 @@ do {
 // A custom message with optional structured data
 coralogixRum.reportError(message: "Checkout failed",
                          data: ["cart_size": 3, "reason": "timeout"])
+
+// Bundle an error together with an overriding message, structured `data`, and
+// per-event `labels` in a single call — no separate log() needed.
+coralogixRum.reportError(error: error,
+                         message: "Checkout failed at payment step",
+                         data: ["cart_size": 3, "reason": "timeout"],
+                         labels: ["team": "payments"])
 ```
+`message`, `data`, and `labels` are optional on every `reportError(error:)`, `reportError(error: NSError)`, and `reportError(exception:)` overload. A non-nil `message` overrides the error's own description; `data` is attached to the error event and `labels` are merged into the event's labels.
 
 ### User Context
 Attach the current user's identity to every subsequent event. Call it after sign-in; pass a new `UserContext` to replace it (e.g. on account switch), and an empty context to clear it on sign-out.
