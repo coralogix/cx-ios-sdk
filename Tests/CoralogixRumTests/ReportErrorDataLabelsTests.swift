@@ -84,8 +84,8 @@ final class ReportErrorDataLabelsTests: XCTestCase {
             )
         }
 
-        let data = try XCTUnwrap(result.errorContext[Keys.data.rawValue] as? [String: Any],
-                                 "data must be attached to the error event's error_context")
+        let data = try XCTUnwrap(result.errorContext[Keys.errorCustomData.rawValue] as? [String: Any],
+                                 "data must be attached to the error event's error_context under error_custom_data")
         XCTAssertEqual(data["order_id"] as? String, "A-1001")
         XCTAssertEqual(data["retryable"] as? Bool, true)
 
@@ -117,7 +117,7 @@ final class ReportErrorDataLabelsTests: XCTestCase {
                             labels: ["severity_tag": "high"])
         }
         XCTAssertEqual(result.errorContext[Keys.errorMessage.rawValue] as? String, "unhandled reason")
-        let data = try XCTUnwrap(result.errorContext[Keys.data.rawValue] as? [String: Any])
+        let data = try XCTUnwrap(result.errorContext[Keys.errorCustomData.rawValue] as? [String: Any])
         XCTAssertEqual(data["screen"] as? String, "cart")
         let labels = try XCTUnwrap(result.cxRum[Keys.labels.rawValue] as? [String: Any])
         XCTAssertEqual(labels["severity_tag"] as? String, "high")

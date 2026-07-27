@@ -72,7 +72,7 @@ final class ErrorEventTests: XCTestCase {
         let context = ErrorContext(otel: mockSpan)
         let dict = context.getDictionary()
 
-        let data = try XCTUnwrap(dict[Keys.data.rawValue] as? [String: Any])
+        let data = try XCTUnwrap(dict[Keys.errorCustomData.rawValue] as? [String: Any])
         XCTAssertEqual(data["fruit"] as? String, "banana")
         XCTAssertEqual(data["count"] as? Int, 3)
 
@@ -85,7 +85,7 @@ final class ErrorEventTests: XCTestCase {
         let event = ErrorEvent(domain: "d", errorMessage: "m")
         let mockSpan = MockSpanData(attributes: event.toOTelAttributes())
         let context = ErrorContext(otel: mockSpan)
-        XCTAssertNil(context.getDictionary()[Keys.data.rawValue])
+        XCTAssertNil(context.getDictionary()[Keys.errorCustomData.rawValue])
     }
 
     func testAdapterEmitsCodeAsInt() {

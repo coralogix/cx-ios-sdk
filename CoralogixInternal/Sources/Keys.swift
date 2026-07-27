@@ -101,6 +101,8 @@ public enum Keys: String {
     case triggeredByThread = "triggered_by_thread"
     case message
     case data
+    // Error-event custom data ships under `error_custom_data`; the log path uses `data`.
+    case errorCustomData = "error_custom_data"
     case logContext = "log_context"
     case pid
     // CX-44687: keychain slot for the per-process boot UUID written alongside
