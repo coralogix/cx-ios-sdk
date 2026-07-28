@@ -9,6 +9,11 @@ Release-mechanics commits (version bumps, podspec/script tweaks, README edits) a
 omitted; the focus here is user-facing behavior changes. Tickets are referenced as
 `CX-XXXXX` (Jira) or `ALPH-XXXX` (legacy). Pull request numbers are in parentheses.
 
+## [2.13.0] - 2026-07-28
+
+### Added
+- Every event now carries `session_context.isSessionSampledIn` (read-only, also mirrored on `instrumentation_data.otelSpan.attributes`): `false` marks events that reached export only via `excludeFromSampling` while the session itself was sampled out. Lets a `beforeSend` callback keep just crashes/ANRs (or any subset) at low session sample rates without reflecting into SDK internals. The decision is stamped on each span at creation, so events buffered across a session rotation keep the sampling decision of the session they belong to.
+
 ## [2.12.0] - 2026-07-26
 
 ### Added

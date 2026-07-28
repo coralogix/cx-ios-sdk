@@ -83,6 +83,9 @@ public class CxSpan {
 
                 // Restore stripped sessionContext fields (sessionId, sessionCreationDate)
                 // for the same reason — a callback could inject them inside sessionContext.
+                // isSessionSampledIn stays VISIBLE in the subset (callbacks filter on it —
+                // that's its purpose) but is restored here so it's read-only: it records
+                // the SDK's sampling decision for the session, not an editable field.
                 // If the callback corrupted sessionContext to a non-dict value
                 // (e.g. returned a string), mergeDictionaries replaced our dict with it
                 // entirely; restore the whole original sessionContext in that case so
@@ -91,6 +94,7 @@ public class CxSpan {
                     if var mergedSession = mergedDict[Keys.sessionContext.rawValue] as? [String: Any] {
                         mergedSession[Keys.sessionId.rawValue] = originalSession[Keys.sessionId.rawValue]
                         mergedSession[Keys.sessionCreationDate.rawValue] = originalSession[Keys.sessionCreationDate.rawValue]
+                        mergedSession[Keys.isSessionSampledIn.rawValue] = originalSession[Keys.isSessionSampledIn.rawValue]
                         mergedDict[Keys.sessionContext.rawValue] = mergedSession
                     } else {
                         mergedDict[Keys.sessionContext.rawValue] = originalSession
@@ -316,6 +320,11 @@ public struct SessionMetadata {
     var oldPid: String?
     var oldSessionId: String?
     var oldSessionTimeInterval: TimeInterval?
+    /// Sampling decision of the previous launch's session, recovered from the keychain.
+    /// nil when the prior launch predates the persisted value — treated as sampled-in,
+    /// since a recovered crash misclassified as sampled-out could be dropped by a
+    /// customer's beforeSend filter.
+    var oldSessionSampledIn: Bool?
     
     init(sessionId: String, sessionCreationDate: TimeInterval, using keychain: KeyChainProtocol) {
         self.sessionId = sessionId
@@ -339,6 +348,11 @@ public struct SessionMetadata {
             self.oldPid = oldPid
             self.oldSessionId = oldSessionId
             self.oldSessionTimeInterval = TimeInterval(oldSessionTimeInterval)
+            // Optional on purpose: launches recorded by SDK versions that predate the
+            // persisted decision have no entry; SessionManager defaults those to true.
+            self.oldSessionSampledIn = keychain.readStringFromKeychain(service: Keys.service.rawValue,
+                                                                       key: Keys.keySessionSampledIn.rawValue)
+                .map { $0 == "true" }
         }
         
         keychain.writeStringToKeychain(service: Keys.service.rawValue,

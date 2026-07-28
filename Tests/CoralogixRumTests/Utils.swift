@@ -106,7 +106,10 @@ class MockKeyschainManager: KeyChainProtocol {
     var pid = ""
     var sessionId = ""
     var sessionTimeInterval = ""
-    
+    /// nil (unlike the "" sentinels above) so tests can distinguish "never written"
+    /// from "written empty" — loadPrevSession treats absence as a legacy launch.
+    var sessionSampledIn: String?
+
     func readStringFromKeychain(service: String, key: String) -> String? {
         if key == "pid" {
             return self.pid
@@ -114,10 +117,12 @@ class MockKeyschainManager: KeyChainProtocol {
             return self.sessionId
         } else if key == "sessionTimeInterval" {
             return self.sessionTimeInterval
+        } else if key == "sessionSampledIn" {
+            return self.sessionSampledIn
         }
         return nil
     }
-    
+
     func writeStringToKeychain(service: String, key: String, value: String) {
         if key == "pid" {
             self.pid = value
@@ -125,6 +130,8 @@ class MockKeyschainManager: KeyChainProtocol {
             self.sessionId = value
         } else if key == "sessionTimeInterval" {
             self.sessionTimeInterval = value
+        } else if key == "sessionSampledIn" {
+            self.sessionSampledIn = value
         }
     }
 
@@ -135,6 +142,8 @@ class MockKeyschainManager: KeyChainProtocol {
             self.sessionId = ""
         } else if key == "sessionTimeInterval" {
             self.sessionTimeInterval = ""
+        } else if key == "sessionSampledIn" {
+            self.sessionSampledIn = nil
         }
     }
 }

@@ -183,6 +183,23 @@ Accepted `ExcludableInstrumentation` cases:
 
 Parity note: the Coralogix Browser SDK exposes the same option with matching semantics.
 
+#### Telling excluded events apart in `beforeSend`
+Every event carries `session_context.isSessionSampledIn` (read-only). `false` means the event reached export only because its category is listed in `excludeFromSampling` — the session itself was sampled out. Use it in `beforeSend` to apply your own filtering on top of the exclude list, e.g. keep only crashes and ANRs from sampled-out sessions:
+
+```swift
+beforeSend: { cxRum in
+    let session = cxRum["session_context"] as? [String: Any]
+    let sampledIn = session?["isSessionSampledIn"] as? Bool ?? true
+    let severity = (cxRum["event_context"] as? [String: Any])?["severity"] as? Int
+
+    // Session sampled out: forward only error-severity events, drop the rest.
+    if !sampledIn && severity != 5 {
+        return nil
+    }
+    return cxRum
+}
+```
+
 ### Before Send
 Enable event access and modification before sending to Coralogix, supporting content modification.
 ```swift
