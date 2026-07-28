@@ -9,6 +9,11 @@ Release-mechanics commits (version bumps, podspec/script tweaks, README edits) a
 omitted; the focus here is user-facing behavior changes. Tickets are referenced as
 `CX-XXXXX` (Jira) or `ALPH-XXXX` (legacy). Pull request numbers are in parentheses.
 
+## [2.12.1] - 2026-07-28
+
+### Added
+- The hybrid `reportError(message:stackTrace:…)` (React Native) and `reportError(message:obfuscatedStackTrace:…)` (Flutter) overloads now accept an optional `labels` dictionary, so a handled error reported through a hybrid bridge can carry per-event labels in the same call — bringing them in line with the native `error:` / `NSError` / `exception:` overloads. Labels are also preserved for crash events recovered on the next launch.
+
 ## [2.12.0] - 2026-07-26
 
 ### Added

@@ -302,7 +302,8 @@ public class CoralogixRum {
                             arch: String? = nil,
                             buildId: String? = nil,
                             stackTraceType: String? = nil,
-                            customAttributes: [String: Any]? = nil) {
+                            customAttributes: [String: Any]? = nil,
+                            labels: [String: Any]? = nil) {
         guard CoralogixRum.isInitialized else { return }
         self.reportErrorWith(message: message,
                              stackTrace: stackTrace,
@@ -311,7 +312,8 @@ public class CoralogixRum {
                              arch: arch,
                              buildId: buildId,
                              stackTraceType: stackTraceType,
-                             customAttributes: customAttributes)
+                             customAttributes: customAttributes,
+                             labels: labels)
     }
 
     /// Reports a Dart obfuscated error from Flutter.
@@ -331,14 +333,16 @@ public class CoralogixRum {
                             arch: String? = nil,
                             buildId: String? = nil,
                             stackTraceType: String? = Keys.obfuscated.rawValue,
-                            customAttributes: [String: Any]? = nil) {
+                            customAttributes: [String: Any]? = nil,
+                            labels: [String: Any]? = nil) {
         guard CoralogixRum.isInitialized else { return }
         self.reportErrorWith(message: message,
                              obfuscatedStackTrace: obfuscatedStackTrace,
                              arch: arch,
                              buildId: buildId,
                              stackTraceType: stackTraceType,
-                             customAttributes: customAttributes)
+                             customAttributes: customAttributes,
+                             labels: labels)
     }
     
     public func reportMobileVitalsMeasurement(type: String, metrics: [HybridMetric]) {
