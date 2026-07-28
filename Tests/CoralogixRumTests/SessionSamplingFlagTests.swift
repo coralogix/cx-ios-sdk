@@ -99,6 +99,64 @@ final class SessionSamplingFlagTests: XCTestCase {
         XCTAssertEqual(attrs[Keys.spanSessionSampledIn.rawValue], "true")
     }
 
+    // MARK: - Crash attribution: recovered crashes carry the crashed session's decision
+
+    func testLastLaunchAttributes_carryCrashedSessionSamplingDecision() throws {
+        let sessionManager = SessionManager()
+        var metadata = try XCTUnwrap(sessionManager.sessionMetadata)
+        metadata.oldSessionId = "crashed-session-abc"
+        metadata.oldSessionTimeInterval = TimeInterval(1_600_000_000)
+        metadata.oldSessionSampledIn = false
+        sessionManager.sessionMetadata = metadata
+
+        let attrs = Dictionary(uniqueKeysWithValues: sessionManager.lastLaunchSessionSpanAttributes())
+        XCTAssertEqual(attrs[Keys.spanSessionSampledIn.rawValue], "false",
+                       "A recovered crash must be stamped with the crashed session's decision, not the relaunch roll.")
+        XCTAssertEqual(attrs[Keys.sessionId.rawValue], "crashed-session-abc")
+    }
+
+    func testLastLaunchAttributes_missingPersistedDecision_defaultsToSampledIn() throws {
+        // Prior launch recorded by an SDK version that predates the persisted decision.
+        let sessionManager = SessionManager()
+        var metadata = try XCTUnwrap(sessionManager.sessionMetadata)
+        metadata.oldSessionId = "crashed-session-abc"
+        metadata.oldSessionTimeInterval = TimeInterval(1_600_000_000)
+        metadata.oldSessionSampledIn = nil
+        sessionManager.sessionMetadata = metadata
+
+        let attrs = Dictionary(uniqueKeysWithValues: sessionManager.lastLaunchSessionSpanAttributes())
+        XCTAssertEqual(attrs[Keys.spanSessionSampledIn.rawValue], "true",
+                       "Unknown prior decision must default to sampled-in so the crash can't be dropped by a beforeSend filter.")
+    }
+
+    func testLoadPrevSession_recoversPersistedSamplingDecision() {
+        // First "launch" leaves its identity + sampling decision in the keychain.
+        let keychain = MockKeyschainManager()
+        _ = SessionMetadata(sessionId: "crashed-session", sessionCreationDate: 1_600_000_000, using: keychain)
+        keychain.writeStringToKeychain(service: Keys.service.rawValue,
+                                       key: Keys.keySessionSampledIn.rawValue,
+                                       value: "false")
+
+        // Relaunch: the fresh session's metadata recovers the crashed launch's state.
+        let relaunch = SessionMetadata(sessionId: "fresh-session", sessionCreationDate: 1_700_000_000, using: keychain)
+
+        XCTAssertEqual(relaunch.oldSessionId, "crashed-session")
+        XCTAssertEqual(relaunch.oldSessionSampledIn, false,
+                       "The crashed launch's sampling decision must be recovered alongside its identity.")
+    }
+
+    func testLoadPrevSession_withoutPersistedDecision_leavesNil() {
+        // Prior launch written by an SDK version that predates the persisted decision.
+        let keychain = MockKeyschainManager()
+        _ = SessionMetadata(sessionId: "legacy-session", sessionCreationDate: 1_600_000_000, using: keychain)
+
+        let relaunch = SessionMetadata(sessionId: "fresh-session", sessionCreationDate: 1_700_000_000, using: keychain)
+
+        XCTAssertEqual(relaunch.oldSessionId, "legacy-session")
+        XCTAssertNil(relaunch.oldSessionSampledIn,
+                     "Absent keychain entry must stay nil so lastLaunchSessionSpanAttributes applies the sampled-in default.")
+    }
+
     // MARK: - SessionContext parses the stamp (wire payload)
 
     func testSessionContext_parsesSampledOutStamp() throws {

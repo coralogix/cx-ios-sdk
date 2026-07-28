@@ -89,6 +89,18 @@ public class SessionManager {
         sessionLock.lock()
         defer { sessionLock.unlock() }
         _isSessionSampledIn = sampledIn
+        persistSessionSampledInLocked(sampledIn)
+    }
+
+    /// Mirrors the live decision into the keychain next to the session identity, so a
+    /// crash captured on the next launch can be attributed with the crashed session's
+    /// decision (`lastLaunchSessionSpanAttributes`) instead of the relaunch's fresh roll.
+    /// PRECONDITION: caller holds `sessionLock` (same discipline as the identity writes
+    /// in `SessionMetadata.loadPrevSession`, which also run under the lock).
+    private func persistSessionSampledInLocked(_ sampledIn: Bool) {
+        KeychainManager().writeStringToKeychain(service: Keys.service.rawValue,
+                                                key: Keys.keySessionSampledIn.rawValue,
+                                                value: String(sampledIn))
     }
 
     public var hasRecording: Bool = false
@@ -202,12 +214,17 @@ public class SessionManager {
         sessionLock.lock()
         let oldSessionId = self.sessionMetadata?.oldSessionId
         let oldCreationDate = self.sessionMetadata?.oldSessionTimeInterval
+        let oldSampledIn = self.sessionMetadata?.oldSessionSampledIn
         sessionLock.unlock()
 
         guard let oldSessionId, let oldCreationDate else { return [] }
+        // nil (prior launch predates the persisted decision) defaults to true: a
+        // recovered crash misclassified as sampled-out could be dropped by a
+        // customer's beforeSend filter — the failure mode this feature exists to avoid.
         return [
             (Keys.sessionId.rawValue, oldSessionId),
-            (Keys.sessionCreationDate.rawValue, String(Int(oldCreationDate)))
+            (Keys.sessionCreationDate.rawValue, String(Int(oldCreationDate))),
+            (Keys.spanSessionSampledIn.rawValue, String(oldSampledIn ?? true))
         ]
     }
 
@@ -322,6 +339,7 @@ public class SessionManager {
         // startup installs it) keeps the seeded/default value.
         if let samplingRoller = self.samplingRoller {
             self._isSessionSampledIn = samplingRoller()
+            persistSessionSampledInLocked(self._isSessionSampledIn)
         }
         // Reset snapshot-throttle so the fresh session can emit its first
         // snapshot immediately. CxRumBuilder.buildSnapshotContextIfNeeded

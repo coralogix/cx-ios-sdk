@@ -320,6 +320,11 @@ public struct SessionMetadata {
     var oldPid: String?
     var oldSessionId: String?
     var oldSessionTimeInterval: TimeInterval?
+    /// Sampling decision of the previous launch's session, recovered from the keychain.
+    /// nil when the prior launch predates the persisted value — treated as sampled-in,
+    /// since a recovered crash misclassified as sampled-out could be dropped by a
+    /// customer's beforeSend filter.
+    var oldSessionSampledIn: Bool?
     
     init(sessionId: String, sessionCreationDate: TimeInterval, using keychain: KeyChainProtocol) {
         self.sessionId = sessionId
@@ -343,6 +348,11 @@ public struct SessionMetadata {
             self.oldPid = oldPid
             self.oldSessionId = oldSessionId
             self.oldSessionTimeInterval = TimeInterval(oldSessionTimeInterval)
+            // Optional on purpose: launches recorded by SDK versions that predate the
+            // persisted decision have no entry; SessionManager defaults those to true.
+            self.oldSessionSampledIn = keychain.readStringFromKeychain(service: Keys.service.rawValue,
+                                                                       key: Keys.keySessionSampledIn.rawValue)
+                .map { $0 == "true" }
         }
         
         keychain.writeStringToKeychain(service: Keys.service.rawValue,

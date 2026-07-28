@@ -135,6 +135,10 @@ public enum Keys: String {
     case service = "com.coralogix.sdk"
     case keySessionId = "sessionId"
     case keySessionTimeInterval = "sessionTimeInterval"
+    // Keychain slot for the live session's sampling decision. Persisted so a crash
+    // recovered on the next launch can be stamped with the crashed session's decision
+    // instead of inheriting the relaunch session's roll.
+    case keySessionSampledIn = "sessionSampledIn"
     case snapshotContext = "snapshot_context"
     case errorCount
     case viewCount
