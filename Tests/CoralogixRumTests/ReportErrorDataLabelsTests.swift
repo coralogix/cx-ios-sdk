@@ -122,4 +122,43 @@ final class ReportErrorDataLabelsTests: XCTestCase {
         let labels = try XCTUnwrap(result.cxRum[Keys.labels.rawValue] as? [String: Any])
         XCTAssertEqual(labels["severity_tag"] as? String, "high")
     }
+
+    // MARK: - Hybrid stack-trace paths (React Native / Flutter) carry data + labels
+
+    func test_reportError_stackTrace_customAttributesUnderErrorCustomData_andLabels() throws {
+        let result = try reportAndCaptureErrorEvent(expectedMessage: "rn boom") { rum in
+            rum.reportError(
+                message: "rn boom",
+                stackTrace: [["functionName": "doThing", "fileName": "index.js", "lineNumber": 42]],
+                errorType: "Error",
+                customAttributes: ["order_id": "A-1001"],
+                labels: ["team": "payments"]
+            )
+        }
+        let data = try XCTUnwrap(result.errorContext[Keys.errorCustomData.rawValue] as? [String: Any],
+                                 "hybrid stackTrace customAttributes must ship under error_custom_data")
+        XCTAssertEqual(data["order_id"] as? String, "A-1001")
+        let labels = try XCTUnwrap(result.cxRum[Keys.labels.rawValue] as? [String: Any],
+                                   "hybrid stackTrace labels must merge into cx_rum.labels")
+        XCTAssertEqual(labels["team"] as? String, "payments")
+    }
+
+    func test_reportError_obfuscatedStackTrace_customAttributesUnderErrorCustomData_andLabels() throws {
+        let result = try reportAndCaptureErrorEvent(expectedMessage: "flutter boom") { rum in
+            rum.reportError(
+                message: "flutter boom",
+                obfuscatedStackTrace: ["0x00000000003da15f"],
+                arch: "arm64",
+                buildId: "abc123",
+                customAttributes: ["screen": "cart"],
+                labels: ["severity_tag": "high"]
+            )
+        }
+        let data = try XCTUnwrap(result.errorContext[Keys.errorCustomData.rawValue] as? [String: Any],
+                                 "hybrid obfuscated customAttributes must ship under error_custom_data")
+        XCTAssertEqual(data["screen"] as? String, "cart")
+        let labels = try XCTUnwrap(result.cxRum[Keys.labels.rawValue] as? [String: Any],
+                                   "hybrid obfuscated labels must merge into cx_rum.labels")
+        XCTAssertEqual(labels["severity_tag"] as? String, "high")
+    }
 }

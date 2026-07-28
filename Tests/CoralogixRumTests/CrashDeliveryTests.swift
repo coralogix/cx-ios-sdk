@@ -310,6 +310,29 @@ final class CrashDeliveryTests: XCTestCase {
         XCTAssertEqual(persisted.first?[Keys.errorMessage.rawValue] as? String, "fatal-with-date-attr")
     }
 
+    func test_reportCrash_persistsLabelsForReEmit() throws {
+        coralogixRum = CoralogixRum(options: makeSamplingOptions(sampleRate: 100, exclude: []))
+        let uploader = StubUploader()
+        uploader.result = .failure
+        coralogixRum.coralogixExporter?.spanUploader = uploader
+        let store = makeTempStore()
+        coralogixRum.crashEventStore = store
+
+        coralogixRum.reportError(message: "fatal-with-labels",
+                                 stackTrace: [],
+                                 errorType: "Error",
+                                 isCrash: true,
+                                 customAttributes: ["order_id": "A-1001"],
+                                 labels: ["team": "payments"])
+
+        // Labels must be persisted alongside the crash so the re-emit on the next
+        // launch carries them — the same durability guarantee as customAttributes.
+        let event = try XCTUnwrap(store.loadAll().first)
+        let labelsJson = try XCTUnwrap(event[Keys.customLabels.rawValue] as? String)
+        let labels = try XCTUnwrap(Helper.convertJsonStringToDict(jsonString: labelsJson))
+        XCTAssertEqual(labels["team"] as? String, "payments")
+    }
+
     func test_reportCrash_persistsToDisk_evenWhenUploadFails() {
         coralogixRum = CoralogixRum(options: makeSamplingOptions(sampleRate: 100, exclude: []))
         let uploader = StubUploader()

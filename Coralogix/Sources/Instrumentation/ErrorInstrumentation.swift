@@ -82,7 +82,8 @@ extension CoralogixRum {
                          arch: String?,
                          buildId: String?,
                          stackTraceType: String?,
-                         customAttributes: [String: Any]? = nil) {
+                         customAttributes: [String: Any]? = nil,
+                         labels: [String: Any]? = nil) {
         let frames: [[String: Any]] = obfuscatedStackTrace.map { [Keys.virt.rawValue: $0] }
         let stackTraceJson = Helper.convertArrayToJsonString(array: frames)
         reportErrorInternal(message: message,
@@ -90,7 +91,8 @@ extension CoralogixRum {
                             arch: arch,
                             buildId: buildId,
                             stackTraceType: stackTraceType,
-                            customAttributes: customAttributes)
+                            customAttributes: customAttributes,
+                            labels: labels)
     }
 
     // MARK: - Used By React Native
@@ -101,7 +103,8 @@ extension CoralogixRum {
                          arch: String? = nil,
                          buildId: String? = nil,
                          stackTraceType: String? = nil,
-                         customAttributes: [String: Any]? = nil) {
+                         customAttributes: [String: Any]? = nil,
+                         labels: [String: Any]? = nil) {
         let stackTraceJson = Helper.convertArrayToJsonString(array: stackTrace)
         reportErrorInternal(message: message,
                             stackTraceJson: stackTraceJson,
@@ -110,7 +113,8 @@ extension CoralogixRum {
                             arch: arch,
                             buildId: buildId,
                             stackTraceType: stackTraceType,
-                            customAttributes: customAttributes)
+                            customAttributes: customAttributes,
+                            labels: labels)
     }
 
     private func reportErrorInternal(message: String,
@@ -120,7 +124,8 @@ extension CoralogixRum {
                                      arch: String? = nil,
                                      buildId: String? = nil,
                                      stackTraceType: String? = nil,
-                                     customAttributes: [String: Any]? = nil) {
+                                     customAttributes: [String: Any]? = nil,
+                                     labels: [String: Any]? = nil) {
         guard isErrorsEnabled else { return }
         var persistedEventId: String?
         if isCrash {
@@ -133,7 +138,8 @@ extension CoralogixRum {
                                                       arch: arch,
                                                       buildId: buildId,
                                                       stackTraceType: stackTraceType,
-                                                      customAttributes: customAttributes)
+                                                      customAttributes: customAttributes,
+                                                      labels: labels)
         }
         self.writeError(
             domain: "",
@@ -145,6 +151,7 @@ extension CoralogixRum {
             buildId: buildId,
             stackTraceType: stackTraceType,
             customAttributes: customAttributes,
+            labels: labels,
             crashEventId: persistedEventId
         )
         if isCrash {
@@ -167,7 +174,8 @@ extension CoralogixRum {
                                    arch: String?,
                                    buildId: String?,
                                    stackTraceType: String?,
-                                   customAttributes: [String: Any]?) -> String {
+                                   customAttributes: [String: Any]?,
+                                   labels: [String: Any]?) -> String {
         var event: [String: Any] = [
             Keys.errorMessage.rawValue: message,
             Keys.crashTimestamp.rawValue: String(Date().timeIntervalSince1970.milliseconds)
@@ -182,6 +190,9 @@ extension CoralogixRum {
         // write and silently drop the crash backup.
         if let json = Helper.jsonAttributeString(dict: customAttributes) {
             event[Keys.data.rawValue] = json
+        }
+        if let json = Helper.jsonAttributeString(dict: labels) {
+            event[Keys.customLabels.rawValue] = json
         }
         return crashEventStore.append(event)
     }
@@ -206,6 +217,8 @@ extension CoralogixRum {
                 buildId: event[Keys.buildId.rawValue] as? String,
                 stackTraceType: event[Keys.stackTraceType.rawValue] as? String,
                 customAttributes: (event[Keys.data.rawValue] as? String)
+                    .flatMap { Helper.convertJsonStringToDict(jsonString: $0) },
+                labels: (event[Keys.customLabels.rawValue] as? String)
                     .flatMap { Helper.convertJsonStringToDict(jsonString: $0) },
                 crashTimestamp: event[Keys.crashTimestamp.rawValue] as? String,
                 crashEventId: event[CrashEventStore.eventIdKey] as? String
