@@ -127,14 +127,22 @@ public class CoralogixRum {
         self.setupExporter(sessionManager: sessionManager, options: options)
         self.timeMeasurementTracker = TimeMeasurementTracker(sessionManager: sessionManager)
 
-        // Seed the exporter and install the reroll callback immediately after the exporter
+        // Seed the exporter and install the reroll hooks immediately after the exporter
         // exists, before swizzling or instrumentation init can drive a session rotation
         // (e.g. a tap or foreground notification arriving mid-startup). Re-rolling on every
         // rotation gives long-running apps a fresh probability per session.
+        //
+        // SessionManager owns the roll: it happens inside the rotation lock so the decision
+        // is atomic with the session identity and gets stamped on every span
+        // (is_session_sampled_in). The callback only propagates the stored decision to the
+        // exporter's filter — rolling again here would let the filter and the stamp disagree.
+        sessionManager.setSessionSampledIn(initialSampledIn)
+        sessionManager.samplingRoller = { options.sdkSampler.shouldInitialized() }
         self.coralogixExporter?.updateSessionSampling(sampledIn: initialSampledIn)
-        sessionManager.samplingReevaluationCallback = { [weak self] _ in
-            self?.coralogixExporter?.updateSessionSampling(
-                sampledIn: options.sdkSampler.shouldInitialized()
+        sessionManager.samplingReevaluationCallback = { [weak self, weak sessionManager] _ in
+            guard let self, let sessionManager else { return }
+            self.coralogixExporter?.updateSessionSampling(
+                sampledIn: sessionManager.isSessionSampledIn
             )
         }
 

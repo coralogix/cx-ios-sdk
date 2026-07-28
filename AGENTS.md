@@ -94,6 +94,8 @@ The protection is two layers:
 1. **Strip** the field from the editable subset that `beforeSend(cxRum)` receives (so customers don't see fields they can't change).
 2. **Restore** the original value after the merge step (so a callback that injects the field into its return dict can't tamper with it).
 
+**Exception — visible read-only fields.** A field whose purpose is to inform the callback's decision (e.g. `session_context.isSessionSampledIn`, which `beforeSend` reads to filter events from sampled-out sessions) must stay VISIBLE in the subset — stripping it would defeat the feature. Such fields skip layer 1 but keep layer 2: the SDK's value is always restored after the merge, so they remain tamper-proof. Integrity comes from the restore; the strip layer is only a UX courtesy. A PR adding a visible read-only field must include a test proving the restore survives a callback that rewrites it.
+
 ### 4.5 Wire-shape parity (`text.cx_rum` ↔ `otelSpan.attributes`)
 
 Any field emitted at `text.cx_rum.*` must also be mirrored into `instrumentation_data.otelSpan.attributes` under the corresponding `cx_rum.*` snake_case key. The mapping lives in `Coralogix/Sources/Model/InstrumentationData.swift` (`AttrKey` enum + the two `buildRumContextAttributes` variants — live and post-`beforeSend` dict).
