@@ -83,6 +83,9 @@ public class CxSpan {
 
                 // Restore stripped sessionContext fields (sessionId, sessionCreationDate)
                 // for the same reason — a callback could inject them inside sessionContext.
+                // isSessionSampledIn stays VISIBLE in the subset (callbacks filter on it —
+                // that's its purpose) but is restored here so it's read-only: it records
+                // the SDK's sampling decision for the session, not an editable field.
                 // If the callback corrupted sessionContext to a non-dict value
                 // (e.g. returned a string), mergeDictionaries replaced our dict with it
                 // entirely; restore the whole original sessionContext in that case so
@@ -91,6 +94,7 @@ public class CxSpan {
                     if var mergedSession = mergedDict[Keys.sessionContext.rawValue] as? [String: Any] {
                         mergedSession[Keys.sessionId.rawValue] = originalSession[Keys.sessionId.rawValue]
                         mergedSession[Keys.sessionCreationDate.rawValue] = originalSession[Keys.sessionCreationDate.rawValue]
+                        mergedSession[Keys.isSessionSampledIn.rawValue] = originalSession[Keys.isSessionSampledIn.rawValue]
                         mergedDict[Keys.sessionContext.rawValue] = mergedSession
                     } else {
                         mergedDict[Keys.sessionContext.rawValue] = originalSession

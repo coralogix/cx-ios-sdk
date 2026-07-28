@@ -23,6 +23,13 @@ public enum Keys: String {
     case nativeVersion = "native_version"
     case sessionId = "session_id"
     case sessionCreationDate = "session_creation_date"
+    // Span attribute stamped at creation alongside session_id: the sampling decision
+    // belongs to the session the span was created in, and reading the live flag at
+    // export time would mis-attribute spans buffered across a session rotation
+    // (the flag is re-rolled per session). Matches the Android SDK attribute name.
+    case spanSessionSampledIn = "is_session_sampled_in"
+    // session_context payload key; camelCase matches hasRecording and the Android wire format.
+    case isSessionSampledIn = "isSessionSampledIn"
     case prevSessionCreationDate
     case prevSessionId
     case prevPid

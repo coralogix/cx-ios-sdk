@@ -66,6 +66,31 @@ public class SessionManager {
     /// SessionReplay listener that owns `sessionChangedCallback`. Internal-only — host apps
     /// have no use for setting this, and a public slot would invite accidental clobber.
     internal var samplingReevaluationCallback: ((String) -> Void)?
+
+    /// Rolls the sampling decision for a newly rotated session. Installed once at startup;
+    /// invoked inside `performRotationLocked` so the decision is replaced atomically with
+    /// the session identity — the single roll per rotation is what both the exporter's
+    /// sampling filter and the per-span stamp observe, so they can never disagree.
+    internal var samplingRoller: (() -> Bool)?
+    private var _isSessionSampledIn: Bool = true
+
+    /// Whether the current session was sampled in. Per-session: re-rolled on every
+    /// rotation. Defaults to `true` until the SDK seeds it (sessions created before the
+    /// roller is installed inherit the init-time roll via `setSessionSampledIn`).
+    internal var isSessionSampledIn: Bool {
+        sessionLock.lock()
+        defer { sessionLock.unlock() }
+        return _isSessionSampledIn
+    }
+
+    /// Seeds the decision for the session that already exists when the SDK starts up
+    /// (created by `init` before `samplingRoller` could be installed).
+    internal func setSessionSampledIn(_ sampledIn: Bool) {
+        sessionLock.lock()
+        defer { sessionLock.unlock() }
+        _isSessionSampledIn = sampledIn
+    }
+
     public var hasRecording: Bool = false
     
     public var lastSnapshotEventTime: Date?
@@ -140,12 +165,14 @@ public class SessionManager {
         sessionLock.lock()
         let current = self.sessionMetadata
         let prev = self.prevSessionMetadata
+        let sampledIn = self._isSessionSampledIn
         sessionLock.unlock()
 
         var attrs: [(key: String, value: String)] = []
         if let current {
             attrs.append((Keys.sessionId.rawValue, current.sessionId))
             attrs.append((Keys.sessionCreationDate.rawValue, String(Int(current.sessionCreationDate))))
+            attrs.append((Keys.spanSessionSampledIn.rawValue, String(sampledIn)))
         }
         if let prev {
             if let prevPid = prev.oldPid {
@@ -289,6 +316,13 @@ public class SessionManager {
         self.sessionMetadata = SessionMetadata(sessionId: UUID().uuidString.lowercased(),
                                                sessionCreationDate: Date().timeIntervalSince1970,
                                                using: KeychainManager())
+        // Roll the new session's sampling decision under the same lock acquisition that
+        // replaces the session identity, so no span can observe a fresh session_id with
+        // the previous session's sampling decision (or vice versa). Absent roller (before
+        // startup installs it) keeps the seeded/default value.
+        if let samplingRoller = self.samplingRoller {
+            self._isSessionSampledIn = samplingRoller()
+        }
         // Reset snapshot-throttle so the fresh session can emit its first
         // snapshot immediately. CxRumBuilder.buildSnapshotContextIfNeeded
         // treats nil as "throttle expired", so the next qualifying event
