@@ -132,7 +132,7 @@ struct ErrorContext {
             }
 
             if let data = self.data {
-                errorContext[Keys.data.rawValue] = data
+                errorContext[Keys.errorCustomData.rawValue] = data
             }
 
             // Set for crash events re-sent from a previous process (CrashEventStore):

@@ -116,7 +116,13 @@ final class DemoAppUITests: XCTestCase {
         XCTAssertTrue(messageDataErrorButtonExists, "❌ 'Message Data Error' button not found")
         messageDataErrorButton.tap()
         Thread.sleep(forTimeInterval: shortDelay)  // Wait for event processing
-        
+
+        let errorDataLabelsButton = app.staticTexts["Error + Data & Labels"].firstMatch
+        let errorDataLabelsButtonExists = errorDataLabelsButton.waitForExistence(timeout: elementTimeout)
+        XCTAssertTrue(errorDataLabelsButtonExists, "❌ 'Error + Data & Labels' button not found")
+        errorDataLabelsButton.tap()
+        Thread.sleep(forTimeInterval: shortDelay)  // Wait for event processing
+
         let logErrorButton = app.staticTexts["Log Error"].firstMatch
         let logErrorButtonExists = logErrorButton.waitForExistence(timeout: elementTimeout)
         XCTAssertTrue(logErrorButtonExists, "❌ 'Log Error' button not found")

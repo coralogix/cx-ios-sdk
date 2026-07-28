@@ -269,24 +269,30 @@ public class CoralogixRum {
         self.coralogixExporter?.update(labels: labels)
     }
     
-    public func reportError(exception: NSException) {
+    public func reportError(exception: NSException,
+                            data: [String: Any]? = nil,
+                            labels: [String: Any]? = nil) {
         guard CoralogixRum.isInitialized else { return }
-        self.reportErrorWith(exception: exception)
+        self.reportErrorWith(exception: exception, data: data, labels: labels)
     }
-    
-    public func reportError(error: NSError) {
+
+    public func reportError(error: NSError,
+                            data: [String: Any]? = nil,
+                            labels: [String: Any]? = nil) {
         guard CoralogixRum.isInitialized else { return }
-        self.reportErrorWith(error: error)
+        self.reportErrorWith(error: error, data: data, labels: labels)
     }
-    
-    public func reportError(error: Error) {
+
+    public func reportError(error: Error,
+                            data: [String: Any]? = nil,
+                            labels: [String: Any]? = nil) {
         guard CoralogixRum.isInitialized else { return }
-        self.reportErrorWith(error: error)
+        self.reportErrorWith(error: error, data: data, labels: labels)
     }
-    
-    public func reportError(message: String, data: [String: Any]?) {
+
+    public func reportError(message: String, data: [String: Any]? = nil, labels: [String: Any]? = nil) {
         guard CoralogixRum.isInitialized else { return }
-        self.reportErrorWith(message: message, data: data)
+        self.reportErrorWith(message: message, data: data, labels: labels)
     }
     
     public func reportError(message: String,
