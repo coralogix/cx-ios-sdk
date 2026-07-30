@@ -150,6 +150,30 @@ final class LogSamplingDecouplingTests: XCTestCase {
                        "Sampled-out + exclude=[.logs, .errors] must let exactly those two categories through.")
     }
 
+    // MARK: - Reverse rotation: live sampled-in must not over-include a stale sampled-out span
+
+    func testReverseRotation_liveSampledIn_staleSampledOutSpanDropped() throws {
+        // Mirror of the rotation guard: the live session is sampled IN, but the batch still carries
+        // a stale non-excluded span stamped sampled-OUT (created before a rotation into this session).
+        // It must be dropped from its own stamp, not over-included because the live session is sampled in.
+        let capture = EventTypeCapture()
+        let rum = CoralogixRum(options: makeSamplingOptions(sampleRate: 100,
+                                                            exclude: [],
+                                                            tracesExporter: capture.tracesExporterCallback()))
+        defer { rum.shutdown() }
+
+        let exporter = try requireExporter(rum)
+        exporter.spanUploader = SamplingMockSpanUploader()
+
+        _ = exporter.export(spans: [
+            makeSamplingSpan(eventType: .networkRequest, sampledIn: false), // stale, sampled-out
+            makeSamplingSpan(eventType: .error, sampledIn: true)            // current, sampled-in
+        ], explicitTimeout: nil)
+
+        XCTAssertEqual(capture.eventTypes, ["error"],
+                       "Live session sampled-in must not over-include a stale sampled-out span; only the sampled-in span survives.")
+    }
+
     // MARK: - Case 6: thread-safety smoke — rotate on one queue while exporting on another
 
     func testCase6_sessionRotation_concurrentWithExport_threadSafetySmoke() throws {
