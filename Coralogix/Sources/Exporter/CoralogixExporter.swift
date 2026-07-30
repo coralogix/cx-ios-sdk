@@ -360,12 +360,19 @@ public class CoralogixExporter: SpanExporter {
     }
 
     /// Returns `true` if the span should proceed past the per-session sampling filter.
-    /// When the session is sampled in, every span passes. When sampled out, only spans whose
-    /// `event_type` attribute matches an opt-in entry in `options.excludeFromSampling` pass.
-    /// Spans missing an `event_type` attribute are dropped on sampled-out sessions.
+    /// When the span's own `is_session_sampled_in` stamp is true, every span passes. When it is
+    /// false, only spans whose `event_type` attribute matches an opt-in entry in
+    /// `options.excludeFromSampling` pass. Spans missing an `event_type` attribute are dropped
+    /// when stamped sampled-out.
     /// Internal (rather than private per the ticket) so unit tests can exercise it directly.
     internal func passesSessionSampling(_ span: SpanDataProtocol) -> Bool {
-        if isCurrentSessionSampledIn() { return true }
+        // The sampling decision belongs to the session the span was created in, not the live one.
+        // Read the per-span stamp SessionManager burns at creation rather than the live
+        // `currentSessionSampledIn` flag: a span created in a sampled-in session but exported
+        // after a rotation to a sampled-out session must still be kept. A missing stamp (older
+        // spans) defaults to sampled-in so nothing is dropped by omission.
+        let sampledIn = attributeStringValue(forKey: Keys.spanSessionSampledIn.rawValue, span: span).map { $0 == "true" } ?? true
+        if sampledIn { return true }
 
         guard let eventType = attributeStringValue(forKey: Keys.eventType.rawValue, span: span) else {
             return false

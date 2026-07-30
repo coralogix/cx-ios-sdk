@@ -9,6 +9,11 @@ Release-mechanics commits (version bumps, podspec/script tweaks, README edits) a
 omitted; the focus here is user-facing behavior changes. Tickets are referenced as
 `CX-XXXXX` (Jira) or `ALPH-XXXX` (legacy). Pull request numbers are in parentheses.
 
+## [2.13.2] - 2026-07-30
+
+### Fixed
+- Per-session sampling no longer drops events that were buffered across a session rotation. The keep/drop decision at export now uses the sampling decision stamped on each event when it was created, instead of the current session's live decision — so an event from a sampled-in session is not lost when the session rotates to a sampled-out one (with `sessionSampleRate < 100` and `excludeFromSampling` set) before the event is sent.
+
 ## [2.13.1] - 2026-07-28
 
 ### Added

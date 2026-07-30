@@ -53,9 +53,9 @@ final class LogSamplingDecouplingTests: XCTestCase {
         exporter.spanUploader = SamplingMockSpanUploader()
 
         _ = exporter.export(spans: [
-            makeSamplingSpan(eventType: .log),
-            makeSamplingSpan(eventType: .error),
-            makeSamplingSpan(eventType: .networkRequest)
+            makeSamplingSpan(eventType: .log, sampledIn: false),
+            makeSamplingSpan(eventType: .error, sampledIn: false),
+            makeSamplingSpan(eventType: .networkRequest, sampledIn: false)
         ], explicitTimeout: nil)
 
         XCTAssertEqual(capture.eventTypes, ["log"],
@@ -140,10 +140,10 @@ final class LogSamplingDecouplingTests: XCTestCase {
         exporter.spanUploader = SamplingMockSpanUploader()
 
         _ = exporter.export(spans: [
-            makeSamplingSpan(eventType: .log),
-            makeSamplingSpan(eventType: .error),
-            makeSamplingSpan(eventType: .networkRequest),
-            makeSamplingSpan(eventType: .mobileVitals)
+            makeSamplingSpan(eventType: .log, sampledIn: false),
+            makeSamplingSpan(eventType: .error, sampledIn: false),
+            makeSamplingSpan(eventType: .networkRequest, sampledIn: false),
+            makeSamplingSpan(eventType: .mobileVitals, sampledIn: false)
         ], explicitTimeout: nil)
 
         XCTAssertEqual(Set(capture.eventTypes), Set(["log", "error"]),
@@ -179,7 +179,7 @@ final class LogSamplingDecouplingTests: XCTestCase {
         // not across calls, so the duplicate spanId here is harmless.
         group.enter()
         DispatchQueue.global(qos: .userInitiated).async {
-            let span = makeSamplingSpan(eventType: .log)
+            let span = makeSamplingSpan(eventType: .log, sampledIn: false)
             for _ in 0..<iterations {
                 _ = exporter.export(spans: [span], explicitTimeout: nil)
             }

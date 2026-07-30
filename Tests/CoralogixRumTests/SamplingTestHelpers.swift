@@ -105,9 +105,14 @@ func makeSamplingOptions(sampleRate: Int,
 /// Builds a `SpanData` that survives the encoding pipeline (`CxRumBuilder.build()` requires
 /// session attributes) and carries the `event_type` under test. No `httpUrl`, no
 /// `errorMessage`, so the URL and error filters in `export()` are no-ops.
-func makeSamplingSpan(eventType: CoralogixEventType) -> SpanData {
+///
+/// Carries the per-span `is_session_sampled_in` stamp SessionManager burns at creation, since
+/// the export sampling filter reads that stamp (not the exporter's live flag). Defaults to
+/// `sampledIn: true` — the sampled-in / filter-no-op case; sampled-out sessions pass `false`.
+func makeSamplingSpan(eventType: CoralogixEventType, sampledIn: Bool = true) -> SpanData {
     let attributes: [String: AttributeValue] = [
         Keys.eventType.rawValue: AttributeValue(eventType.rawValue),
+        Keys.spanSessionSampledIn.rawValue: AttributeValue(sampledIn ? "true" : "false"),
         Keys.severity.rawValue: AttributeValue("3"),
         Keys.source.rawValue: AttributeValue("console"),
         Keys.environment.rawValue: AttributeValue("test"),
