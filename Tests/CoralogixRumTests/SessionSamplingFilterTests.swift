@@ -1,12 +1,14 @@
 //
 //  SessionSamplingFilterTests.swift
 //
-//  Verifies the per-span sampling filter at the top of CoralogixExporter.export():
-//    - Sampled in: every span passes regardless of event_type.
-//    - Sampled out: only spans whose event_type is in options.excludeFromSampling pass.
-//    - Sampled out + missing event_type: dropped (failsafe).
-//    - Sampled out + empty excludes: nothing passes (production-unreachable but invariant
-//      holds when the flag is flipped manually, e.g. on a rotation that happens to roll out).
+//  Verifies the per-span sampling filter at the top of CoralogixExporter.export(). The
+//  decision is driven by each span's own `is_session_sampled_in` stamp (burned at creation),
+//  NOT the exporter's live flag — so a span keeps the decision of the session it was born in
+//  even after a rotation flips the live flag:
+//    - Stamped sampled-in: every span passes regardless of event_type.
+//    - Stamped sampled-out: only spans whose event_type is in options.excludeFromSampling pass.
+//    - Stamped sampled-out + missing event_type: dropped (failsafe).
+//    - Stamped sampled-out + empty excludes: nothing passes.
 //
 
 import XCTest
@@ -25,11 +27,11 @@ final class SessionSamplingFilterTests: XCTestCase {
     func testPassesSessionSampling_sampledIn_passesEverySpan() {
         let exporter = makeExporter(sampleRate: 100, exclude: [])
 
-        XCTAssertTrue(exporter.passesSessionSampling(span(eventType: "log")))
-        XCTAssertTrue(exporter.passesSessionSampling(span(eventType: "network-request")))
-        XCTAssertTrue(exporter.passesSessionSampling(span(eventType: "error")))
-        XCTAssertTrue(exporter.passesSessionSampling(span(eventType: nil)),
-                      "Sampled-in must pass even spans missing event_type — only sampled-out enforces it.")
+        XCTAssertTrue(exporter.passesSessionSampling(span(eventType: "log", sampledIn: true)))
+        XCTAssertTrue(exporter.passesSessionSampling(span(eventType: "network-request", sampledIn: true)))
+        XCTAssertTrue(exporter.passesSessionSampling(span(eventType: "error", sampledIn: true)))
+        XCTAssertTrue(exporter.passesSessionSampling(span(eventType: nil, sampledIn: true)),
+                      "A sampled-in stamp must pass even spans missing event_type — only sampled-out enforces it.")
     }
 
     // MARK: - Sampled out + non-empty excludes
@@ -84,11 +86,10 @@ final class SessionSamplingFilterTests: XCTestCase {
     // MARK: - Sampled out + empty excludes (manually flipped)
 
     func testPassesSessionSampling_sampledOutEmptyExcludes_dropsEverything() {
-        // sampleRate=100 + exclude=[] inits with sampledIn=true; manually flip to false to
-        // exercise the "empty excludes + sampled out" invariant. (Production cannot reach this
-        // pair because init would short-circuit, but the filter must still hold.)
+        // Sampled-out stamp with no opt-ins: every span drops, whatever its event_type.
+        // (Production cannot reach a sampled-out session with empty excludes because init
+        // short-circuits, but the filter must still hold.)
         let exporter = makeExporter(sampleRate: 100, exclude: [])
-        exporter.updateSessionSampling(sampledIn: false)
 
         XCTAssertFalse(exporter.passesSessionSampling(span(eventType: "error")))
         XCTAssertFalse(exporter.passesSessionSampling(span(eventType: "log")))
@@ -99,13 +100,38 @@ final class SessionSamplingFilterTests: XCTestCase {
 
     func testPassesSessionSampling_sampledOut_eventTypeAsRawString_stillMatches() {
         // Belt-and-suspenders: the extraction helper supports both AttributeValue and raw String
-        // attribute encodings. Default span() uses AttributeValue; build one with a raw String
-        // to confirm the fallback branch.
+        // attribute encodings. Build both the stamp and the event_type as raw Strings to confirm
+        // the fallback branch on each — the sampled-out stamp forces the event_type match to run.
         let exporter = makeExporter(sampleRate: 0, exclude: [.logs])
-        let mock = MockSpanData(attributes: [Keys.eventType.rawValue: "log"],
+        let mock = MockSpanData(attributes: [Keys.spanSessionSampledIn.rawValue: "false",
+                                             Keys.eventType.rawValue: "log"],
                                 statusCode: nil, resources: nil)
 
         XCTAssertTrue(exporter.passesSessionSampling(mock))
+    }
+
+    // MARK: - Stamp drives the decision, not the exporter's live flag
+
+    func testPassesSessionSampling_stampSampledIn_survivesRotationToSampledOut() {
+        // Data-loss regression: a span created in a sampled-in session and exported only after a
+        // rotation flipped the live flag to sampled-out must still be kept. The decision rides on
+        // the span's own stamp, not the current session's flag.
+        let exporter = makeExporter(sampleRate: 100, exclude: [])
+        exporter.updateSessionSampling(sampledIn: false) // simulate a rotation to a sampled-out session
+
+        XCTAssertTrue(exporter.passesSessionSampling(span(eventType: "network-request", sampledIn: true)),
+                      "A span stamped sampled-in must not be dropped because the live session rotated out.")
+    }
+
+    func testPassesSessionSampling_stampSampledOut_droppedEvenWhenLiveFlagSampledIn() {
+        // Mirror image: a span stamped sampled-out with a non-excluded event_type must still be
+        // dropped while the live session is sampled in — proving the filter reads the stamp and
+        // isn't simply always-true.
+        let exporter = makeExporter(sampleRate: 0, exclude: [.errors])
+        exporter.updateSessionSampling(sampledIn: true) // live session is sampled in
+
+        XCTAssertFalse(exporter.passesSessionSampling(span(eventType: "network-request", sampledIn: false)),
+                       "A span stamped sampled-out with a non-excluded event_type must drop regardless of the live flag.")
     }
 
     // MARK: - Helpers
@@ -142,8 +168,13 @@ final class SessionSamplingFilterTests: XCTestCase {
         return exporter
     }
 
-    private func span(eventType: String?) -> MockSpanData {
-        var attrs: [String: Any] = [:]
+    /// Builds a span carrying the per-span sampling stamp the filter now reads. Defaults to
+    /// `sampledIn: false` since most cases here exercise the sampled-out branch; the sampled-in
+    /// case passes `true` explicitly.
+    private func span(eventType: String?, sampledIn: Bool = false) -> MockSpanData {
+        var attrs: [String: Any] = [
+            Keys.spanSessionSampledIn.rawValue: AttributeValue(sampledIn ? "true" : "false")
+        ]
         if let eventType = eventType {
             attrs[Keys.eventType.rawValue] = AttributeValue(eventType)
         }

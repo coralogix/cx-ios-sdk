@@ -438,8 +438,8 @@ final class HybridAPITests: XCTestCase {
         exporter.spanUploader = SamplingMockSpanUploader()
 
         _ = exporter.export(spans: [
-            makeSamplingSpan(eventType: .log),
-            makeSamplingSpan(eventType: .networkRequest)
+            makeSamplingSpan(eventType: .log, sampledIn: false),
+            makeSamplingSpan(eventType: .networkRequest, sampledIn: false)
         ], explicitTimeout: nil)
 
         XCTAssertEqual(capture.eventTypes, ["log"],

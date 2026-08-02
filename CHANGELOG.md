@@ -9,6 +9,11 @@ Release-mechanics commits (version bumps, podspec/script tweaks, README edits) a
 omitted; the focus here is user-facing behavior changes. Tickets are referenced as
 `CX-XXXXX` (Jira) or `ALPH-XXXX` (legacy). Pull request numbers are in parentheses.
 
+## [2.13.2] - 2026-07-30
+
+### Fixed
+- Fixed events being dropped during a session change when per-session sampling is in use.
+
 ## [2.13.1] - 2026-07-28
 
 ### Added
