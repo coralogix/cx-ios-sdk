@@ -83,15 +83,43 @@ while :; do
 done
 END=$(now)
 
+QUEUE=$(( ${FIRST_RUNNING:-$END} - SUBMIT ))
+EXEC=$(( END - ${FIRST_RUNNING:-$SUBMIT} ))
+TOTAL=$(( END - SUBMIT ))
+
+# Device-minutes = billed cost. Best-effort from per-session durations reported
+# by BrowserStack; fall back to (execution x shards) when the field is absent.
+SESSION_SECS=$(echo "$ST" | jq '[.. | .duration? // empty | numbers] | add // 0' 2>/dev/null || echo 0)
+SHARDS_EFF=$(( ${BS_SHARDS:-0} > 0 ? ${BS_SHARDS} : 1 ))
+if [ "${SESSION_SECS%.*}" -gt 0 ] 2>/dev/null; then
+  DEVICE_SECS=${SESSION_SECS%.*}
+else
+  DEVICE_SECS=$(( EXEC * SHARDS_EFF ))   # estimate
+fi
+
 echo "===================== TIMING ====================="
 echo "  devices        : $DEVICES_JSON"
 echo "  shards         : ${BS_SHARDS:-0}"
-echo "  queue+setup    : $(( ${FIRST_RUNNING:-$END} - SUBMIT ))s   (submit -> first 'running')"
-echo "  execution      : $(( END - ${FIRST_RUNNING:-$SUBMIT} ))s   (running -> finish)"
-echo "  TOTAL wall     : $(( END - SUBMIT ))s   (submit -> finish)"
+echo "  queue+setup    : ${QUEUE}s   (submit -> first 'running')"
+echo "  execution      : ${EXEC}s   (running -> finish, wall-clock)"
+echo "  TOTAL wall     : ${TOTAL}s   (submit -> finish)"
+echo "  device-minutes : $(( DEVICE_SECS / 60 ))m ${DEVICE_SECS}s   (billed cost)"
 echo "  final status   : $STATUS"
 echo "=================================================="
 echo "$ST" | jq '{status, duration, devices}' 2>/dev/null || true
+
+# Append a comparison row to the GitHub job summary when running in Actions.
+if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+  {
+    echo "### BrowserStack run — shards=${BS_SHARDS:-0}"
+    echo ""
+    echo "| macOS build | queue+setup | execution (wall) | TOTAL wall | device-minutes | status |"
+    echo "|---|---|---|---|---|---|"
+    echo "| ${T_BUILD_SECONDS:-?}s | ${QUEUE}s | ${EXEC}s | ${TOTAL}s | $(( DEVICE_SECS / 60 ))m | ${STATUS} |"
+    echo ""
+    echo "[Dashboard](https://app-automate.browserstack.com/builds/$BUILD_ID)"
+  } >> "$GITHUB_STEP_SUMMARY"
+fi
 
 # Surface failures to the CI job, but the POC's real output is the timing above.
 case "$STATUS" in
