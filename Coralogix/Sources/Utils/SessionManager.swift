@@ -11,6 +11,13 @@ import CoralogixInternal
 #if canImport(UIKit)
 import UIKit
 #endif
+
+/// One-shot token representing a pending snapshot promotion requested by
+/// `setUserContext`. Its presence *is* the state: `SessionManager` holds at most one,
+/// consuming it yields it exactly once, and `CxRum` carries the consumed token so the
+/// `beforeSend` drop path can hand it back (re-arm) when the promoted span never ships.
+struct PendingSnapshotTrigger {}
+
 /**
  * When Is a New Session Created?
  *
@@ -107,26 +114,26 @@ public class SessionManager {
 
     public var lastSnapshotEventTime: Date?
 
-    /// One-shot flag armed by `setUserContext` so the next exported event is promoted
+    /// One-shot token armed by `setUserContext` so the next exported event is promoted
     /// to a snapshot event. Mirrors the browser SDK's `shouldTriggerSnapshotContext`:
     /// user data reaches the backend on events, and the backend refreshes session-level
     /// user info from snapshot events — promoting the next event is exactly sufficient,
     /// with no synthetic event type on the wire.
-    private var _pendingSnapshotTrigger = false
+    private var _pendingSnapshotTrigger: PendingSnapshotTrigger?
 
     func triggerSnapshotOnNextEvent() {
         sessionLock.lock()
         defer { sessionLock.unlock() }
-        _pendingSnapshotTrigger = true
+        _pendingSnapshotTrigger = PendingSnapshotTrigger()
     }
 
-    /// One-shot: returns true at most once per arm. Test-and-clear is atomic so
+    /// One-shot: yields the token at most once per arm. Take-and-clear is atomic so
     /// concurrent span exports cannot both consume it.
-    func consumePendingSnapshotTrigger() -> Bool {
+    func consumePendingSnapshotTrigger() -> PendingSnapshotTrigger? {
         sessionLock.lock()
         defer { sessionLock.unlock() }
         let pending = _pendingSnapshotTrigger
-        _pendingSnapshotTrigger = false
+        _pendingSnapshotTrigger = nil
         return pending
     }
 
@@ -383,7 +390,7 @@ public class SessionManager {
         // A pending user-context snapshot must not leak into the fresh session — the
         // nil throttle above already guarantees the new session's first qualifying
         // event emits a snapshot carrying the current user context.
-        self._pendingSnapshotTrigger = false
+        self._pendingSnapshotTrigger = nil
 
         return RotationPendingCallbacks(
             endedCallback: endedCb,

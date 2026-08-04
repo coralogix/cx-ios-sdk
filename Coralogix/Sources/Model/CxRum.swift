@@ -24,10 +24,10 @@ struct CxRum {
     let deviceState: DeviceState
     let labels: [String: Any]?
     let snapshotContext: SnapshotContext?
-    // True when this event's snapshot promotion consumed the one-shot setUserContext
-    // trigger — lets the beforeSend drop path in CxSpan.getDictionary() re-arm it so
-    // the next accepted event still carries the promotion.
-    var consumedPendingSnapshotTrigger: Bool = false
+    // The one-shot setUserContext token this event's snapshot promotion consumed, if
+    // any — the beforeSend drop path in CxSpan.getDictionary() hands it back (re-arms)
+    // so the next accepted event still carries the promotion.
+    var consumedSnapshotTrigger: PendingSnapshotTrigger? = nil
     let interactionContext: InteractionContext?
     let mobileVitalsContext: MobileVitalsContext?
     let lifeCycleContext: LifeCycleContext?

@@ -156,9 +156,9 @@ public class CxSpan {
                     sessionManager?.decrementErrorCounter()
                 }
                 // Same compensation for the setUserContext promotion: this span consumed
-                // the one-shot trigger, so re-arm it and let the next accepted event
+                // the one-shot token, so hand it back and let the next accepted event
                 // carry the snapshot.
-                if self.cxRum.consumedPendingSnapshotTrigger {
+                if self.cxRum.consumedSnapshotTrigger != nil {
                     sessionManager?.triggerSnapshotOnNextEvent()
                 }
                 return nil

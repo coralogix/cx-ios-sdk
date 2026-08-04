@@ -170,7 +170,7 @@ class CxRumBuilderTests: XCTestCase {
 
     // MARK: - setUserContext snapshot promotion (pending trigger consumed at build)
 
-    func test_buildSnapshotContext_userContextChanged_promotesPlainEvent() {
+    func test_buildSnapshotContext_pendingTrigger_promotesPlainEvent() {
         // GIVEN: A plain event (non-error, non-navigation) with the throttle active,
         // so only the user-context promotion can produce a snapshot.
         let now = Date()
@@ -178,7 +178,7 @@ class CxRumBuilderTests: XCTestCase {
         let eventContext = makeEventContext(severity: 3, type: "log")
         guard let sut = makeSUT(currentTime: now) else { return XCTFail("Failed to instantiate CxRumBuilder") }
 
-        XCTAssertNil(sut.buildSnapshotContextIfNeeded(for: eventContext, userContextChanged: false),
+        XCTAssertNil(sut.buildSnapshotContextIfNeeded(for: eventContext, pendingTrigger: nil),
                      "A plain event with an active throttle must not emit a snapshot")
 
         mockSessionManager.errorCount = 3
@@ -186,7 +186,7 @@ class CxRumBuilderTests: XCTestCase {
         mockSessionManager.incrementClickCounter()
         mockViewManager.uniqueViewCount = 5
 
-        let promoted = sut.buildSnapshotContextIfNeeded(for: eventContext, userContextChanged: true)
+        let promoted = sut.buildSnapshotContextIfNeeded(for: eventContext, pendingTrigger: PendingSnapshotTrigger())
         XCTAssertNotNil(promoted, "A user-context change must promote the same plain event to a snapshot")
         XCTAssertEqual(promoted?.errorCount, 3, "Promoted snapshot must carry the current error count")
         XCTAssertEqual(promoted?.actionCount, 2, "Promoted snapshot must carry the current click count")
@@ -205,15 +205,15 @@ class CxRumBuilderTests: XCTestCase {
         let promoted = sut.build()
         XCTAssertNotNil(promoted?.snapshotContext,
                         "An armed trigger must promote the next built event to a snapshot")
-        XCTAssertEqual(promoted?.consumedPendingSnapshotTrigger, true,
-                       "The built event must record that it consumed the pending trigger")
+        XCTAssertNotNil(promoted?.consumedSnapshotTrigger,
+                        "The built event must record the token it consumed")
 
         // One-shot: with the throttle re-activated, the next build yields no snapshot.
         mockSessionManager.lastSnapshotTime = now
         let following = sut.build()
         XCTAssertNil(following?.snapshotContext,
                      "The trigger is one-shot — the event after the promoted one must not emit a snapshot")
-        XCTAssertEqual(following?.consumedPendingSnapshotTrigger, false)
+        XCTAssertNil(following?.consumedSnapshotTrigger)
     }
 
     func test_build_errorEvent_alsoConsumesPendingTrigger() {
@@ -228,8 +228,8 @@ class CxRumBuilderTests: XCTestCase {
 
         let errorRum = errorSut.build()
         XCTAssertNotNil(errorRum?.snapshotContext, "The error event emits a snapshot via its own trigger")
-        XCTAssertEqual(errorRum?.consumedPendingSnapshotTrigger, true,
-                       "The error-driven snapshot must also consume the pending trigger")
+        XCTAssertNotNil(errorRum?.consumedSnapshotTrigger,
+                        "The error-driven snapshot must also consume the pending trigger")
 
         mockSessionManager.lastSnapshotTime = now
         guard let plainSut = makeSUT(currentTime: now, eventType: "log") else { return XCTFail("Failed to instantiate CxRumBuilder") }
@@ -247,8 +247,8 @@ class CxRumBuilderTests: XCTestCase {
         mockSessionManager.triggerSnapshotOnNextEvent()
 
         XCTAssertNil(sut.build(), "A span without session attributes must be dropped")
-        XCTAssertTrue(mockSessionManager.consumePendingSnapshotTrigger(),
-                      "The dropped span must leave the pending trigger armed for the next accepted event")
+        XCTAssertNotNil(mockSessionManager.consumePendingSnapshotTrigger(),
+                        "The dropped span must leave the pending trigger armed for the next accepted event")
     }
 
     func test_payload_afterArmingTrigger_emitsIsSnapshotEventAndSnapshotContext() throws {

@@ -269,16 +269,16 @@ class SessionManagerTests: XCTestCase {
     // across a session rotation.
 
     func testConsumePendingSnapshotTrigger_falseWhenNeverArmed() {
-        XCTAssertFalse(sessionManager.consumePendingSnapshotTrigger(),
+        XCTAssertNil(sessionManager.consumePendingSnapshotTrigger(),
             "An unarmed trigger must not promote any event to a snapshot")
     }
 
     func testConsumePendingSnapshotTrigger_trueExactlyOnceAfterArming() {
         sessionManager.triggerSnapshotOnNextEvent()
 
-        XCTAssertTrue(sessionManager.consumePendingSnapshotTrigger(),
+        XCTAssertNotNil(sessionManager.consumePendingSnapshotTrigger(),
             "The first consume after arming must report the pending trigger")
-        XCTAssertFalse(sessionManager.consumePendingSnapshotTrigger(),
+        XCTAssertNil(sessionManager.consumePendingSnapshotTrigger(),
             "Consume is one-shot — a second consume must not promote another event")
     }
 
@@ -286,9 +286,9 @@ class SessionManagerTests: XCTestCase {
         sessionManager.triggerSnapshotOnNextEvent()
         sessionManager.triggerSnapshotOnNextEvent()
 
-        XCTAssertTrue(sessionManager.consumePendingSnapshotTrigger(),
+        XCTAssertNotNil(sessionManager.consumePendingSnapshotTrigger(),
             "Repeated arming before the next event still promotes exactly one snapshot")
-        XCTAssertFalse(sessionManager.consumePendingSnapshotTrigger(),
+        XCTAssertNil(sessionManager.consumePendingSnapshotTrigger(),
             "Repeated arming must not queue additional promotions")
     }
 
@@ -297,7 +297,7 @@ class SessionManagerTests: XCTestCase {
 
         sessionManager.setupSessionMetadata()
 
-        XCTAssertFalse(sessionManager.consumePendingSnapshotTrigger(),
+        XCTAssertNil(sessionManager.consumePendingSnapshotTrigger(),
             "A stale trigger must not leak into a fresh session — the rotation's nil throttle already grants the first snapshot")
     }
 

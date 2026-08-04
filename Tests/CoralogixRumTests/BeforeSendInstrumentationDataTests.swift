@@ -144,8 +144,8 @@ final class BeforeSendInstrumentationDataTests: XCTestCase {
         ))
 
         XCTAssertNil(cxSpan.getDictionary(), "beforeSend returning nil must drop the span")
-        XCTAssertTrue(sessionManager.consumePendingSnapshotTrigger(),
-                      "Dropping the promoted span must re-arm the trigger so the next accepted event carries the snapshot")
+        XCTAssertNotNil(sessionManager.consumePendingSnapshotTrigger(),
+                        "Dropping the promoted span must re-arm the trigger so the next accepted event carries the snapshot")
     }
 
     func test_beforeSendDrop_doesNotArmTriggerItNeverConsumed() throws {
@@ -164,8 +164,8 @@ final class BeforeSendInstrumentationDataTests: XCTestCase {
         ))
 
         XCTAssertNil(cxSpan.getDictionary(), "beforeSend returning nil must drop the span")
-        XCTAssertFalse(sessionManager.consumePendingSnapshotTrigger(),
-                       "Dropping a span that never consumed the trigger must not arm a promotion")
+        XCTAssertNil(sessionManager.consumePendingSnapshotTrigger(),
+                     "Dropping a span that never consumed the trigger must not arm a promotion")
     }
 
     // MARK: - Editable field propagation (text.cx_rum ↔ instrumentation_data parity)

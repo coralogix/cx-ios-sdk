@@ -56,28 +56,31 @@ Current triggers: error severity, navigation event, 1-minute throttle
 (`lastSnapshotEventTime == nil` means "expired" — used by session rotation,
 `SessionManager.swift:~345`).
 
-1. **`SessionManager`** (owns the snapshot throttle state already): add a locked
-   one-shot flag next to the existing session state, using the established
-   lock-guarded accessor pattern:
+1. **`SessionManager`** (owns the snapshot throttle state already): hold an optional
+   one-shot `PendingSnapshotTrigger` token next to the existing session state, using
+   the established lock-guarded accessor pattern (a token rather than a Bool, per the
+   AGENTS.md no-boolean-flags convention):
    ```swift
-   private var _pendingSnapshotTrigger = false
+   struct PendingSnapshotTrigger {}
+
+   private var _pendingSnapshotTrigger: PendingSnapshotTrigger?
 
    func triggerSnapshotOnNextEvent() {
        sessionLock.lock(); defer { sessionLock.unlock() }
-       _pendingSnapshotTrigger = true
+       _pendingSnapshotTrigger = PendingSnapshotTrigger()
    }
 
-   /// One-shot: returns true at most once per arm. Test-and-clear is atomic so
+   /// One-shot: yields the token at most once per arm. Take-and-clear is atomic so
    /// concurrent span exports cannot both consume it.
-   func consumePendingSnapshotTrigger() -> Bool {
+   func consumePendingSnapshotTrigger() -> PendingSnapshotTrigger? {
        sessionLock.lock(); defer { sessionLock.unlock() }
        let pending = _pendingSnapshotTrigger
-       _pendingSnapshotTrigger = false
+       _pendingSnapshotTrigger = nil
        return pending
    }
    ```
    Clear it in the session-rotation path (`performRotationLocked`) — a fresh session
-   already emits its first snapshot via `lastSnapshotEventTime = nil`, so a stale flag
+   already emits its first snapshot via `lastSnapshotEventTime = nil`, so a stale token
    must not leak across sessions.
 
 2. **`CoralogixRum.setUserContext`** (`Coralogix/Sources/CoralogixRum.swift:270`) —
@@ -90,17 +93,20 @@ Current triggers: error severity, navigation event, 1-minute throttle
    }
    ```
 
-3. **`CxRumBuilder.buildSnapshotContextIfNeeded`** (`CxRumBuilder.swift:138`) — add the
-   flag as a fourth trigger. Consume it **only when a snapshot will actually be built**,
-   i.e. read it as part of the condition:
+3. **`CxRumBuilder.build()`** — consume the token only after the session-attributes
+   drop guard, then pass it to the (pure) decision helper as a fourth trigger, and
+   carry it on the built `CxRum` so the beforeSend drop path can hand it back:
    ```swift
-   let userContextChanged = sessionManager.consumePendingSnapshotTrigger()
-   if isErrorSeverity || isNavigationEvent || oneMinuteHasPassed || userContextChanged {
+   let pendingSnapshotTrigger = sessionManager.consumePendingSnapshotTrigger()
+   let snapshotContext = buildSnapshotContextIfNeeded(for: eventContext,
+                                                      pendingTrigger: pendingSnapshotTrigger)
+   // inside buildSnapshotContextIfNeeded:
+   if isErrorSeverity || isNavigationEvent || oneMinuteHasPassed || pendingTrigger != nil {
        ...existing body unchanged...
    }
    ```
-   (`consume...` is unconditional-read like the browser's — because when it returns
-   true the branch always emits, consume-on-read == consume-on-emit. Keep
+   (The take is unconditional like the browser's flag-clear — when a token is present
+   the snapshot always emits, so consume-on-take == consume-on-emit. Keep
    `lastSnapshotEventTime = Date()` as-is; deviating from the browser's
    "don't refresh throttle" nuance is harmless and simpler.)
 
@@ -112,8 +118,8 @@ Current triggers: error severity, navigation event, 1-minute throttle
 
 ### iOS tests (`CoralogixRumTests`)
 
-- `SessionManager`: `consumePendingSnapshotTrigger` returns false untouched; true
-  exactly once after `triggerSnapshotOnNextEvent`; false again after consumption;
+- `SessionManager`: `consumePendingSnapshotTrigger` yields nil untouched; a token
+  exactly once after `triggerSnapshotOnNextEvent`; nil again after consumption;
   cleared by session rotation.
 - `CxRumBuilder`: a plain event (non-error, non-navigation, `lastSnapshotEventTime`
   recent) yields `snapshotContext == nil`; after arming the flag the same event yields
@@ -174,7 +180,7 @@ through the native pipeline where the flag is consumed. Work is:
   event would have carried the user data either. Identical to browser behavior.
 - **`beforeSend` drops the carrier event** *(iOS: closed after PR review)*: on iOS the
   consume now happens only after the session-attributes drop guard, and a native
-  `beforeSend` drop re-arms the trigger (`CxRum.consumedPendingSnapshotTrigger` →
+  `beforeSend` drop re-arms the trigger (`CxRum.consumedSnapshotTrigger` →
   `CxSpan.getDictionary()` drop branch), following the same compensation pattern as the
   error-counter undo. Hybrid JS `beforeSend` drops and upload failures remain
   browser-parity best-effort. Android keeps the browser-parity behavior.
