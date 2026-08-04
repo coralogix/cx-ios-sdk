@@ -38,7 +38,6 @@ jobs:
         run: |
           python3 - <<'PY'
           import os, re, json
-          from collections import Counter
           # Test targets the DemoAppSwift scheme runs -> {(target, class): [methods]}.
           roots = {
               "DemoAppUITests": "Example/DemoAppUITests",
@@ -60,40 +59,19 @@ jobs:
                               if fm and cls:
                                   suites.setdefault((target, cls), []).append(fm.group(1))
           total = sum(len(v) for v in suites.values())
-          def label_for(t, c):
-              return c if t == "DemoAppUITests" else f"{c}-SwiftUI"
-          # Shard at the METHOD level: round-robin each class's methods across
-          # the least-full shards. A single slow class no longer bounds
-          # wall-clock, and its methods land in DIFFERENT shards instead of
-          # clustering (so e.g. the two slow SessionReplay tests split apart).
-          N = min(6, total) or 1
+          # Keep each test class (suite) whole so every shard has a clear,
+          # self-describing name. Balance whole suites across shards by test
+          # count (largest-first).
+          N = min(4, len(suites)) or 1
           shards = [{"labels": [], "ids": [], "n": 0} for _ in range(N)]
           for (target, cls), methods in sorted(suites.items(), key=lambda kv: -len(kv[1])):
-              lbl = label_for(target, cls)
-              for m in methods:
-                  s = min(shards, key=lambda s: s["n"])
-                  s["labels"].append(lbl)
-                  s["ids"].append(f"{target}/{cls}/{m}")
-                  s["n"] += 1
-          # Name each shard by the distinct classes it holds (most-common
-          # first); a numeric suffix guarantees uniqueness when names repeat.
-          raw = []
-          for s in shards:
-              if not s["ids"]:
-                  raw.append(None); continue
-              ordered = [c for c, _ in Counter(s["labels"]).most_common()]
-              raw.append("+".join(ordered[:2]) + ("+etc" if len(ordered) > 2 else ""))
-          basecount = Counter(n for n in raw if n); seen = {}; names = []
-          for nm in raw:
-              if nm is None:
-                  names.append(None); continue
-              if basecount[nm] > 1:
-                  seen[nm] = seen.get(nm, 0) + 1; names.append(f"{nm}-{seen[nm]}")
-              else:
-                  names.append(nm)
+              s = min(shards, key=lambda s: s["n"])
+              s["labels"].append(cls if target == "DemoAppUITests" else f"{cls}-SwiftUI")
+              s["ids"] += [f"{target}/{cls}/{m}" for m in methods]
+              s["n"] += len(methods)
           include = [
-              {"name": names[i], "only": " ".join("-only-testing:" + t for t in s["ids"])}
-              for i, s in enumerate(shards) if s["ids"]
+              {"name": "+".join(s["labels"]), "only": " ".join("-only-testing:" + t for t in s["ids"])}
+              for s in shards if s["ids"]
           ]
           out = os.environ["GITHUB_OUTPUT"]
           with open(out, "a") as f:
@@ -168,21 +146,6 @@ jobs:
           path: Example/Pods
           key: ui-pods-${{ runner.os }}-${{ hashFiles('Example/Podfile') }}
           restore-keys: ui-pods-${{ runner.os }}-
-
-      # Incremental compile: persist Xcode's build intermediates + clang module
-      # cache. restore-keys pulls the newest bundle even when sources change, so
-      # xcodebuild recompiles only what moved (the biggest reliable win is the
-      # clang module cache — Firebase/OTel modules aren't rebuilt every run).
-      # NOTE: this is the GitHub-hosted-cache approximation; a sticky-disk runner
-      # (Depot/Namespace) would make this materially faster still.
-      - name: Cache DerivedData (incremental build)
-        uses: actions/cache@v4
-        with:
-          path: |
-            DerivedData/Build/Intermediates.noindex
-            DerivedData/ModuleCache.noindex
-          key: ui-dd-${{ runner.os }}-${{ hashFiles('**/Sources/**/*.swift', 'Example/**/*.swift', 'Example/Podfile') }}
-          restore-keys: ui-dd-${{ runner.os }}-
 
       - name: Install CocoaPods dependencies
         run: cd Example && pod install --no-repo-update
