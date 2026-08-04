@@ -223,9 +223,11 @@ jobs:
       - name: Unpack products
         run: tar -xzf products.tar.gz && ls Products/*.xctestrun
 
-      - name: Pick & boot iOS 18 simulator
+      - name: Pick & boot iOS simulator (18+)
         run: |
           set -euo pipefail
+          # Build is pinned to IPHONEOS_DEPLOYMENT_TARGET=18.0, so the app can
+          # only launch on iOS 18+. Never fall back to iOS 17.
           UDID=$(xcrun simctl list devices available -j | jq -r '
             .devices | to_entries[]
             | select(.key | test("SimRuntime.iOS-18"))
@@ -233,7 +235,7 @@ jobs:
           if [ -z "$UDID" ]; then
             UDID=$(xcrun simctl list devices available -j | jq -r '
               .devices | to_entries[]
-              | select(.key | test("SimRuntime.iOS-(1[789]|2[0-9])"))
+              | select(.key | test("SimRuntime.iOS-(19|2[0-9])"))
               | .value[] | select(.name | test("iPhone")) | .udid' | head -1)
           fi
           [ -n "$UDID" ] || { echo "❌ no simulator"; exit 1; }
@@ -265,7 +267,9 @@ jobs:
           # them triple-counts the per-class/per-bundle/all-tests repeats.)
           COUNT=$(grep -oE "Executed [0-9]+ test" shard.log | grep -oE "[0-9]+" | tail -1)
           COUNT=${COUNT:-0}
-          if [ "${EXIT:-1}" -eq 0 ] && grep -qE "with 0 failures" shard.log && ! grep -qE "with [1-9][0-9]* failures" shard.log; then ST=passed; else ST=failed; fi
+          # Passed requires: clean exit, a POSITIVE executed count (reject
+          # "Executed 0 tests" from an empty filter), and zero failures.
+          if [ "${EXIT:-1}" -eq 0 ] && [ "${COUNT:-0}" -gt 0 ] && grep -qE "with 0 failures" shard.log && ! grep -qE "with [1-9][0-9]* failures" shard.log; then ST=passed; else ST=failed; fi
           echo "$COUNT" > "count-${{ matrix.name }}.txt"
           {
             echo "### ${{ matrix.name }}"
