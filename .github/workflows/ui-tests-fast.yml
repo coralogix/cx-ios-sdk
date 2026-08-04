@@ -19,8 +19,13 @@ on:
 permissions:
   contents: read
 
+# A new push supersedes older in-flight runs (no duplicate shard checks).
+concurrency:
+  group: ui-tests-fast-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  # ---- Enumerate every test from source and partition into balanced shards ----
+  # ---- Enumerate every test from source and partition into named shards ----
   plan:
     name: Plan shards
     runs-on: ubuntu-latest
@@ -33,12 +38,12 @@ jobs:
         run: |
           python3 - <<'PY'
           import os, re, json
-          # Test targets that the DemoAppSwift scheme runs.
+          # Test targets the DemoAppSwift scheme runs -> {(target, class): [methods]}.
           roots = {
               "DemoAppUITests": "Example/DemoAppUITests",
               "DemoAppSwiftUIUITests": "Example/DemoAppSwiftUIUITests",
           }
-          ids = []
+          suites = {}
           for target, root in roots.items():
               for dp, _, files in os.walk(root):
                   for fn in files:
@@ -52,23 +57,29 @@ jobs:
                                   cls = m.group(1)
                               fm = re.search(r'func\s+(test[A-Za-z0-9_]*)\s*\(', line)
                               if fm and cls:
-                                  ids.append(f"{target}/{cls}/{fm.group(1)}")
-          ids = sorted(set(ids))
-          N = 4
-          shards = [[] for _ in range(N)]
-          for i, t in enumerate(ids):          # round-robin: complete + roughly balanced
-              shards[i % N].append(t)
+                                  suites.setdefault((target, cls), []).append(fm.group(1))
+          total = sum(len(v) for v in suites.values())
+          # Keep each test class (suite) whole so every shard has a clear,
+          # self-describing name. Balance whole suites across shards by test
+          # count (largest-first).
+          N = min(4, len(suites)) or 1
+          shards = [{"labels": [], "ids": [], "n": 0} for _ in range(N)]
+          for (target, cls), methods in sorted(suites.items(), key=lambda kv: -len(kv[1])):
+              s = min(shards, key=lambda s: s["n"])
+              s["labels"].append(cls if target == "DemoAppUITests" else f"{cls}-SwiftUI")
+              s["ids"] += [f"{target}/{cls}/{m}" for m in methods]
+              s["n"] += len(methods)
           include = [
-              {"name": f"shard{i+1}", "only": " ".join("-only-testing:" + t for t in s)}
-              for i, s in enumerate(shards) if s
+              {"name": "+".join(s["labels"]), "only": " ".join("-only-testing:" + t for t in s["ids"])}
+              for s in shards if s["ids"]
           ]
           out = os.environ["GITHUB_OUTPUT"]
           with open(out, "a") as f:
               f.write(f"matrix={json.dumps({'include': include})}\n")
-              f.write(f"total={len(ids)}\n")
-          print(f"Enumerated {len(ids)} tests across {len(include)} shards")
+              f.write(f"total={total}\n")
+          print(f"{total} tests across {len(include)} shards:")
           for it in include:
-              print(f"  {it['name']}: {it['only'].count('-only-testing:')} tests")
+              print(f"  [{it['name']}] {it['only'].count('-only-testing:')} tests")
           PY
 
   # ---- Build the app + tests once; share slim products as an artifact ----
