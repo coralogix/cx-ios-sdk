@@ -65,9 +65,12 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .derivedData
-          key: dd-${{ runner.os }}-xc16-${{ hashFiles('**/Sources/**/*.swift', 'Tests/**/*.swift', 'Package.resolved') }}
+          # Include Package.swift + this workflow in the key so a manifest or
+          # build-config change busts the cache; pin the Xcode-minor prefix so
+          # DerivedData is never restored across a different toolchain.
+          key: dd-${{ runner.os }}-xc162-${{ hashFiles('Package.swift', 'Package.resolved', '**/Sources/**/*.swift', 'Tests/**/*.swift', '.github/workflows/unit-test-fast.yml') }}
           restore-keys: |
-            dd-${{ runner.os }}-xc16-
+            dd-${{ runner.os }}-xc162-
 
       - name: Pick an iPhone simulator (fast, no SPM resolution)
         run: |
@@ -78,8 +81,11 @@ jobs:
             | .value[] | select(.name | test("iPhone")) | .udid' | head -1)
           if [ -z "$UDID" ]; then echo "❌ no iOS iPhone simulator available"; exit 1; fi
           xcrun simctl boot "$UDID" 2>/dev/null || true
+          # `boot` returns before the sim is usable — wait, or xcodebuild races
+          # a half-booted destination and fails intermittently.
+          xcrun simctl bootstatus "$UDID" -b || true
           echo "SIM_ID=$UDID" >> $GITHUB_ENV
-          echo "✅ simulator $UDID"
+          echo "✅ simulator $UDID booted"
 
       - name: Build & run unit tests (cached, no clean)
         run: |
@@ -99,7 +105,9 @@ jobs:
           END=$(date +%s)
           TOTAL=$((END - START))
 
-          if grep -q "TEST SUCCEEDED" test-output.log || grep -Eq "Executed [0-9]+ tests, with 0 failures" test-output.log; then
+          # Require BOTH a clean exit code AND textual success — a nonzero
+          # xcodebuild exit must never be reported as passed.
+          if [ "${EXIT:-1}" -eq 0 ] && grep -Eq "TEST SUCCEEDED|Executed [0-9]+ tests, with 0 failures" test-output.log; then
             STATUS="passed"
           else
             STATUS="failed"
@@ -114,8 +122,8 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
           if [ "$STATUS" != "passed" ]; then
-            echo "❌ unit tests failed"
+            echo "❌ unit tests failed (exit=${EXIT:-?})"
             grep -iE "error:|failed|failure" test-output.log | tail -30 || true
-            exit "${EXIT:-1}"
+            exit 1
           fi
           echo "✅ unit tests passed in ${TOTAL}s"
