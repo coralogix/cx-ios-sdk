@@ -1,23 +1,75 @@
 name: UI Tests (fast — cache + shard)
 
-# Speedup variant of ui-tests.yml. Same DemoAppUITests + DemoAppSwiftUIUITests,
-# same serial execution WITHIN a shard (SDK swizzles global state), but:
-#   - builds ONCE (build-for-testing) and shares the products as an artifact
-#   - fans out to 4 parallel shards running test-without-building (no rebuild)
-#   - caches SPM (Firebase) + CocoaPods so the single build is cheaper
-# Shards are balanced by measured per-test duration (LPT bin-packing); the
-# busiest shard is ~4 min vs ~19 min serial today. Side-by-side with
-# ui-tests.yml to measure wall-clock before replacing it.
+# Replaces ui-tests.yml (legacy is workflow_dispatch-only now). Same coverage,
+# faster wall-clock:
+#   - shards are GENERATED from source at runtime (no hand-maintained list to
+#     drift), so every test method is assigned to exactly one shard
+#   - a final `verify` job fails CI if tests-executed != tests-that-exist,
+#     so a dropped/renamed test can never silently reduce coverage
+#   - build once (cached SPM + Pods, arm64) → fan out to parallel shards
+#     running test-without-building
 
 on:
   workflow_dispatch:
-  push:
-    branches: [ perf/unit-tests-ci-speedup ]
+  pull_request:
+    branches: [ main, master ]
 
 permissions:
   contents: read
 
 jobs:
+  # ---- Enumerate every test from source and partition into balanced shards ----
+  plan:
+    name: Plan shards
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.gen.outputs.matrix }}
+      total: ${{ steps.gen.outputs.total }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: gen
+        run: |
+          python3 - <<'PY'
+          import os, re, json
+          # Test targets that the DemoAppSwift scheme runs.
+          roots = {
+              "DemoAppUITests": "Example/DemoAppUITests",
+              "DemoAppSwiftUIUITests": "Example/DemoAppSwiftUIUITests",
+          }
+          ids = []
+          for target, root in roots.items():
+              for dp, _, files in os.walk(root):
+                  for fn in files:
+                      if not fn.endswith(".swift"):
+                          continue
+                      cls = None
+                      with open(os.path.join(dp, fn), encoding="utf-8") as fh:
+                          for line in fh:
+                              m = re.search(r'class\s+([A-Za-z0-9_]+)\s*:\s*[^\{]*XCTestCase', line)
+                              if m:
+                                  cls = m.group(1)
+                              fm = re.search(r'func\s+(test[A-Za-z0-9_]*)\s*\(', line)
+                              if fm and cls:
+                                  ids.append(f"{target}/{cls}/{fm.group(1)}")
+          ids = sorted(set(ids))
+          N = 4
+          shards = [[] for _ in range(N)]
+          for i, t in enumerate(ids):          # round-robin: complete + roughly balanced
+              shards[i % N].append(t)
+          include = [
+              {"name": f"shard{i+1}", "only": " ".join("-only-testing:" + t for t in s)}
+              for i, s in enumerate(shards) if s
+          ]
+          out = os.environ["GITHUB_OUTPUT"]
+          with open(out, "a") as f:
+              f.write(f"matrix={json.dumps({'include': include})}\n")
+              f.write(f"total={len(ids)}\n")
+          print(f"Enumerated {len(ids)} tests across {len(include)} shards")
+          for it in include:
+              print(f"  {it['name']}: {it['only'].count('-only-testing:')} tests")
+          PY
+
+  # ---- Build the app + tests once; share slim products as an artifact ----
   build:
     name: Build once (cached)
     runs-on: macos-15
@@ -101,7 +153,6 @@ jobs:
             ARCHS=arm64 ONLY_ACTIVE_ARCH=YES \
             -jobs $(sysctl -n hw.ncpu)
           END=$(date +%s)
-          echo "T_BUILD=$((END - START))" >> $GITHUB_ENV
           {
             echo "### Build once"
             echo "| build wall-clock |"
@@ -109,10 +160,18 @@ jobs:
             echo "| $((END - START))s (~$(((END-START)/60))m) |"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Package test products (preserve symlinks)
+      # Slim: ship only the app bundles + xctestrun (each .app already embeds its
+      # frameworks). Drops the duplicated standalone *.framework/*.bundle so the
+      # per-shard download is much smaller.
+      - name: Package test products (apps + xctestrun only)
         run: |
-          tar -czf products.tar.gz -C DerivedData/Build Products
-          ls -lh products.tar.gz
+          cd DerivedData/Build
+          tar -czf ../../products.tar.gz \
+            Products/*.xctestrun \
+            Products/Debug-iphonesimulator/DemoAppSwift.app \
+            Products/Debug-iphonesimulator/DemoAppSwiftUI.app \
+            Products/Debug-iphonesimulator/*-Runner.app
+          cd ../.. && ls -lh products.tar.gz
 
       - name: Upload test products
         uses: actions/upload-artifact@v4
@@ -121,23 +180,15 @@ jobs:
           path: products.tar.gz
           retention-days: 1
 
+  # ---- Run each shard in parallel ----
   ui-tests:
     name: ${{ matrix.name }}
-    needs: build
+    needs: [plan, build]
     runs-on: macos-15
     timeout-minutes: 25
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - name: shard1
-            only: "-only-testing:DemoAppUITests/SessionReplayLeakUITests/test_navigationTransition -only-testing:DemoAppUITests/UserInteractionUITests/testShouldSendText_sensitiveLabel_noInnerTextInBackend"
-          - name: shard2
-            only: "-only-testing:DemoAppSwiftUIUITests/UserInteractionUITests/testAllUserInteractionEvents_combinedSchemaValidation -only-testing:DemoAppUITests/UserInteractionUITests/testAllUserInteractionEvents_combinedSchemaValidation -only-testing:DemoAppUITests/UserInteractionUITests/testResolveTargetName_tapLoginButton_customNameInBackend"
-          - name: shard3
-            only: "-only-testing:DemoAppUITests/SessionReplayLeakUITests/test_listSlowScroll_1fps -only-testing:DemoAppUITests/UserInteractionUITests/testAllInteractionEvents_areAttributedToActiveSession -only-testing:DemoAppUITests/UserInteractionUITests/testScrollEvents_downAndUp_areCorrectlyCaptured"
-          - name: shard4
-            only: "-only-testing:DemoAppUITests/NetworkInstrumentationUITests/testAllNetworkInstrumentationWithSchemaValidation -only-testing:DemoAppUITests/DemoAppUITests/testSchemaValidationFlow -only-testing:DemoAppUITests/UserInteractionUITests/testSwipeEvents_leftAndRight_areCorrectlyCaptured"
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
     steps:
       - name: Select Xcode
         run: |
@@ -193,8 +244,10 @@ jobs:
           EXIT=${PIPESTATUS[0]}
           set -e
           END=$(date +%s)
-          COUNT=$(grep -oE "Executed [0-9]+ test" shard.log | grep -oE "[0-9]+" | tail -1 || echo "?")
-          if grep -Eq "Executed [0-9]+ tests, with 0 failures" shard.log; then ST=passed; else ST=failed; fi
+          # Sum across targets (a shard can span two test targets → two summary lines).
+          COUNT=$(grep -oE "Executed [0-9]+ test" shard.log | grep -oE "[0-9]+" | awk '{s+=$1} END{print s+0}')
+          if grep -qE "with 0 failures" shard.log && ! grep -qE "with [1-9][0-9]* failures" shard.log; then ST=passed; else ST=failed; fi
+          echo "$COUNT" > "count-${{ matrix.name }}.txt"
           {
             echo "### ${{ matrix.name }}"
             echo "| tests | wall-clock | status |"
@@ -203,3 +256,42 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
           [ "$ST" = passed ] || { echo "❌ shard failed"; grep -iE "error:|failed|failure" shard.log | tail -20; exit "${EXIT:-1}"; }
           echo "✅ ${{ matrix.name }}: ${COUNT} tests in $((END - START))s"
+
+      - name: Upload shard count
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: count-${{ matrix.name }}
+          path: count-${{ matrix.name }}.txt
+          retention-days: 1
+
+  # ---- Coverage guard: executed across shards MUST equal tests that exist ----
+  verify:
+    name: Verify no test was dropped
+    needs: [plan, ui-tests]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download shard counts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: count-*
+          merge-multiple: true
+          path: counts
+      - name: Compare executed vs expected
+        run: |
+          set -euo pipefail
+          EXPECTED="${{ needs.plan.outputs.total }}"
+          EXECUTED=$(cat counts/count-*.txt | awk '{s+=$1} END{print s+0}')
+          echo "expected (tests in source): $EXPECTED"
+          echo "executed (summed shards):   $EXECUTED"
+          {
+            echo "### Coverage guard"
+            echo "| expected | executed | verdict |"
+            echo "|---|---|---|"
+            echo "| $EXPECTED | $EXECUTED | $([ "$EXECUTED" -eq "$EXPECTED" ] && echo '✅ full coverage' || echo '❌ MISMATCH') |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$EXECUTED" -ne "$EXPECTED" ]; then
+            echo "❌ Coverage regression: $EXECUTED executed but $EXPECTED exist. A test was dropped or double-counted."
+            exit 1
+          fi
+          echo "✅ All $EXPECTED UI tests ran."

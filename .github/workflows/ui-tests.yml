@@ -3,11 +3,9 @@ name: UI Tests
 permissions:
   contents: read
 
+# Superseded by ui-tests-fast.yml (build-once + sharded). Kept for manual
+# fallback only — no longer runs on push/PR.
 on:
-  push:
-    branches: [ main, master ]
-  pull_request:
-    branches: [ main, master ]
   workflow_dispatch:
 
 jobs:
