@@ -1,0 +1,202 @@
+name: UI Tests (fast — cache + shard)
+
+# Speedup variant of ui-tests.yml. Same DemoAppUITests + DemoAppSwiftUIUITests,
+# same serial execution WITHIN a shard (SDK swizzles global state), but:
+#   - builds ONCE (build-for-testing) and shares the products as an artifact
+#   - fans out to 4 parallel shards running test-without-building (no rebuild)
+#   - caches SPM (Firebase) + CocoaPods so the single build is cheaper
+# Shards are balanced by measured per-test duration (LPT bin-packing); the
+# busiest shard is ~4 min vs ~19 min serial today. Side-by-side with
+# ui-tests.yml to measure wall-clock before replacing it.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ perf/unit-tests-ci-speedup ]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build once (cached)
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: |
+          for v in 16.4 16.3 16.2 16.1 16.0; do
+            if [ -d "/Applications/Xcode_$v.app" ]; then
+              echo "DEVELOPER_DIR=/Applications/Xcode_$v.app/Contents/Developer" >> $GITHUB_ENV; break
+            fi
+          done
+
+      - name: Configure Xcode
+        run: |
+          if [ -n "${DEVELOPER_DIR:-}" ]; then sudo xcode-select -s "$DEVELOPER_DIR"; fi
+          sudo xcodebuild -license accept || true
+          sudo xcodebuild -runFirstLaunch || true
+          xcodebuild -version
+
+      - name: Generate envs.swift (CI)
+        run: |
+          cd Example
+          PUBLIC_KEY="${{ secrets.DEMOAPP_API_KEY || 'CI_DUMMY' }}"
+          printf 'import Foundation\n\npublic enum Envs: String {\n    case PUBLIC_KEY = "%s"\n    case PROXY_URL = "https://schema-validator-latest.onrender.com/logs"\n}\n' "$PUBLIC_KEY" > envs.swift
+
+      - name: Create placeholder GoogleService-Info.plist (CI)
+        run: |
+          cd Example
+          printf '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0">\n<dict>\n  <key>BUNDLE_ID</key>\n  <string>com.coralogix.DemoAppSwift</string>\n  <key>PROJECT_ID</key>\n  <string>placeholder-project</string>\n  <key>GOOGLE_APP_ID</key>\n  <string>1:000000000000:ios:0000000000000000000000</string>\n  <key>GCM_SENDER_ID</key>\n  <string>000000000000</string>\n  <key>API_KEY</key>\n  <string>AIzaSyAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA</string>\n  <key>IS_ANALYTICS_ENABLED</key>\n  <false/>\n</dict>\n</plist>\n' > GoogleService-Info.plist
+
+      - name: Patch Xcodeproj for objectVersion 70
+        run: |
+          for CONST in $(find /opt/homebrew /usr/local /Library/Ruby "$HOME/.gem" \
+              -path '*/gems/xcodeproj-*/lib/xcodeproj/constants.rb' 2>/dev/null); do
+            ruby -e '
+              f = ARGV[0]; s = File.read(f)
+              unless s =~ /^\s*70\s*=>/
+                s = s.sub("COMPATIBILITY_VERSION_BY_OBJECT_VERSION = {",
+                          "COMPATIBILITY_VERSION_BY_OBJECT_VERSION = {\n      70 => \x27Xcode 16.0\x27,")
+                File.write(f, s)
+              end' "$CONST" || true
+          done
+
+      - name: Cache SPM checkouts (Firebase etc.)
+        uses: actions/cache@v4
+        with:
+          path: SourcePackages
+          key: ui-spm-${{ runner.os }}-${{ hashFiles('Example/DemoApp.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+          restore-keys: ui-spm-${{ runner.os }}-
+
+      - name: Cache CocoaPods
+        uses: actions/cache@v4
+        with:
+          path: Example/Pods
+          key: ui-pods-${{ runner.os }}-${{ hashFiles('Example/Podfile') }}
+          restore-keys: ui-pods-${{ runner.os }}-
+
+      - name: Install CocoaPods dependencies
+        run: cd Example && pod install --no-repo-update
+
+      - name: Build for testing (simulator, once)
+        run: |
+          set -o pipefail
+          cd Example
+          START=$(date +%s)
+          xcodebuild build-for-testing \
+            -workspace DemoApp.xcworkspace \
+            -scheme DemoAppSwift \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath ../DerivedData \
+            -clonedSourcePackagesDirPath ../SourcePackages \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY="" DEVELOPMENT_TEAM="" \
+            IPHONEOS_DEPLOYMENT_TARGET="18.0" \
+            -jobs $(sysctl -n hw.ncpu)
+          END=$(date +%s)
+          echo "T_BUILD=$((END - START))" >> $GITHUB_ENV
+          {
+            echo "### Build once"
+            echo "| build wall-clock |"
+            echo "|---|"
+            echo "| $((END - START))s (~$(((END-START)/60))m) |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Package test products (preserve symlinks)
+        run: |
+          tar -czf products.tar.gz -C DerivedData/Build Products
+          ls -lh products.tar.gz
+
+      - name: Upload test products
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-products
+          path: products.tar.gz
+          retention-days: 1
+
+  ui-tests:
+    name: ${{ matrix.name }}
+    needs: build
+    runs-on: macos-15
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: shard1
+            only: "-only-testing:DemoAppUITests/SessionReplayLeakUITests/test_navigationTransition -only-testing:DemoAppUITests/UserInteractionUITests/testShouldSendText_sensitiveLabel_noInnerTextInBackend"
+          - name: shard2
+            only: "-only-testing:DemoAppSwiftUIUITests/UserInteractionUITests/testAllUserInteractionEvents_combinedSchemaValidation -only-testing:DemoAppUITests/UserInteractionUITests/testAllUserInteractionEvents_combinedSchemaValidation -only-testing:DemoAppUITests/UserInteractionUITests/testResolveTargetName_tapLoginButton_customNameInBackend"
+          - name: shard3
+            only: "-only-testing:DemoAppUITests/SessionReplayLeakUITests/test_listSlowScroll_1fps -only-testing:DemoAppUITests/UserInteractionUITests/testAllInteractionEvents_areAttributedToActiveSession -only-testing:DemoAppUITests/UserInteractionUITests/testScrollEvents_downAndUp_areCorrectlyCaptured"
+          - name: shard4
+            only: "-only-testing:DemoAppUITests/NetworkInstrumentationUITests/testAllNetworkInstrumentationWithSchemaValidation -only-testing:DemoAppUITests/DemoAppUITests/testSchemaValidationFlow -only-testing:DemoAppUITests/UserInteractionUITests/testSwipeEvents_leftAndRight_areCorrectlyCaptured"
+    steps:
+      - name: Select Xcode
+        run: |
+          for v in 16.4 16.3 16.2 16.1 16.0; do
+            if [ -d "/Applications/Xcode_$v.app" ]; then
+              echo "DEVELOPER_DIR=/Applications/Xcode_$v.app/Contents/Developer" >> $GITHUB_ENV; break
+            fi
+          done
+      - name: Configure Xcode
+        run: |
+          if [ -n "${DEVELOPER_DIR:-}" ]; then sudo xcode-select -s "$DEVELOPER_DIR"; fi
+          gem install xcpretty || true
+
+      - name: Download test products
+        uses: actions/download-artifact@v4
+        with:
+          name: test-products
+
+      - name: Unpack products
+        run: tar -xzf products.tar.gz && ls Products/*.xctestrun
+
+      - name: Pick & boot iOS 18 simulator
+        run: |
+          set -euo pipefail
+          UDID=$(xcrun simctl list devices available -j | jq -r '
+            .devices | to_entries[]
+            | select(.key | test("SimRuntime.iOS-18"))
+            | .value[] | select(.name | test("iPhone")) | .udid' | head -1)
+          if [ -z "$UDID" ]; then
+            UDID=$(xcrun simctl list devices available -j | jq -r '
+              .devices | to_entries[]
+              | select(.key | test("SimRuntime.iOS-(1[789]|2[0-9])"))
+              | .value[] | select(.name | test("iPhone")) | .udid' | head -1)
+          fi
+          [ -n "$UDID" ] || { echo "❌ no simulator"; exit 1; }
+          xcrun simctl boot "$UDID" 2>/dev/null || true
+          echo "SIM_ID=$UDID" >> $GITHUB_ENV
+
+      - name: Run shard (test-without-building, timed)
+        env:
+          ONLY: ${{ matrix.only }}
+        run: |
+          set -o pipefail
+          XCTESTRUN=$(ls Products/*.xctestrun | head -1)
+          START=$(date +%s)
+          set +e
+          xcodebuild test-without-building \
+            -xctestrun "$XCTESTRUN" \
+            -destination "platform=iOS Simulator,id=${SIM_ID}" \
+            $ONLY \
+            -parallel-testing-enabled NO \
+            2>&1 | tee shard.log | xcpretty
+          EXIT=${PIPESTATUS[0]}
+          set -e
+          END=$(date +%s)
+          COUNT=$(grep -oE "Executed [0-9]+ test" shard.log | grep -oE "[0-9]+" | tail -1 || echo "?")
+          if grep -Eq "Executed [0-9]+ tests, with 0 failures" shard.log; then ST=passed; else ST=failed; fi
+          {
+            echo "### ${{ matrix.name }}"
+            echo "| tests | wall-clock | status |"
+            echo "|---|---|---|"
+            echo "| ${COUNT} | $((END - START))s | ${ST} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          [ "$ST" = passed ] || { echo "❌ shard failed"; grep -iE "error:|failed|failure" shard.log | tail -20; exit "${EXIT:-1}"; }
+          echo "✅ ${{ matrix.name }}: ${COUNT} tests in $((END - START))s"
