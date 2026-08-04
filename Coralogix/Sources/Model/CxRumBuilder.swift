@@ -36,8 +36,7 @@ class CxRumBuilder {
         let eventContext = EventContext(otel: otel)
         
         updateSessionCounters(for: eventContext)
-        
-        let snapshotContext = buildSnapshotContextIfNeeded(for: eventContext)
+
         let internalContext = buildInternalContext(for: eventContext)
         
         let traceContext = Helper.getTraceAndSpanId(otel: otel)
@@ -53,7 +52,16 @@ class CxRumBuilder {
             Log.w("[CxRumBuilder] Dropping span due to missing session attributes")
             return nil
         }
-        
+
+        // Consumed only after the drop-guard above: a span that never exports must not
+        // swallow the one-shot promotion armed by setUserContext. Read unconditionally
+        // (not short-circuited behind the other triggers) — the browser clears its flag
+        // whenever any snapshot is emitted, and when this returns true the snapshot
+        // always emits, so consume-on-read == consume-on-emit.
+        let userContextChanged = sessionManager.consumePendingSnapshotTrigger()
+        let snapshotContext = buildSnapshotContextIfNeeded(for: eventContext,
+                                                           userContextChanged: userContextChanged)
+
         if SessionContext.shouldRestorePreviousSession(from: otel){
             // Note: prevSessionContext can be nil if session attributes are missing
             // This is acceptable - we'll use the current session instead
@@ -90,6 +98,7 @@ class CxRumBuilder {
                      deviceState: DeviceState(networkManager: networkManager),
                      labels: Helper.getLabels(otel: otel, labels: options.labels),
                      snapshotContext: snapshotContext,
+                     consumedPendingSnapshotTrigger: userContextChanged,
                      interactionContext: InteractionContext(otel: otel),
                      mobileVitalsContext: MobileVitalsContext(otel: otel),
                      lifeCycleContext: LifeCycleContext(otel: otel),
@@ -135,7 +144,11 @@ class CxRumBuilder {
         return InternalContext(eventName: Keys.initKey.rawValue, data: options.getInitData())
     }
     
-    internal func buildSnapshotContextIfNeeded(for eventContext: EventContext) -> SnapshotContext? {
+    /// Pure decision: the caller (`build()`) owns consuming the pending setUserContext
+    /// trigger and passes the result in, so a span dropped before this point can never
+    /// swallow the one-shot promotion.
+    internal func buildSnapshotContextIfNeeded(for eventContext: EventContext,
+                                               userContextChanged: Bool = false) -> SnapshotContext? {
         let currentTime = otel.getStartTime() ?? Date().timeIntervalSince1970
         let isErrorSeverity = eventContext.severity == CoralogixLogSeverity.error.rawValue
         let isNavigationEvent = eventContext.type == .navigation
@@ -147,12 +160,6 @@ class CxRumBuilder {
             abs($0.timeIntervalSince1970 - currentTime) > 60
         } ?? true
         
-        // Unconditional read (not inlined in the `if`): `||` short-circuiting would
-        // leave the flag armed when an earlier trigger already fires, and the browser
-        // clears it whenever any snapshot is emitted — mirror that. When it returns
-        // true the branch always emits, so consume-on-read == consume-on-emit.
-        let userContextChanged = sessionManager.consumePendingSnapshotTrigger()
-
         // Check if any of the conditions for creating a snapshot are met
         if isErrorSeverity || isNavigationEvent || oneMinuteHasPassed || userContextChanged {
             

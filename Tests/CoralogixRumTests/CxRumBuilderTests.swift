@@ -170,56 +170,85 @@ class CxRumBuilderTests: XCTestCase {
 
     // MARK: - setUserContext snapshot promotion (pending trigger consumed at build)
 
-    func test_buildSnapshotContext_pendingTrigger_promotesPlainEventExactlyOnce() {
+    func test_buildSnapshotContext_userContextChanged_promotesPlainEvent() {
         // GIVEN: A plain event (non-error, non-navigation) with the throttle active,
-        // so only the armed trigger can produce a snapshot.
+        // so only the user-context promotion can produce a snapshot.
         let now = Date()
         mockSessionManager.lastSnapshotTime = now
         let eventContext = makeEventContext(severity: 3, type: "log")
         guard let sut = makeSUT(currentTime: now) else { return XCTFail("Failed to instantiate CxRumBuilder") }
 
-        // Baseline: no trigger armed — no snapshot.
-        XCTAssertNil(sut.buildSnapshotContextIfNeeded(for: eventContext),
+        XCTAssertNil(sut.buildSnapshotContextIfNeeded(for: eventContext, userContextChanged: false),
                      "A plain event with an active throttle must not emit a snapshot")
 
-        // WHEN: The trigger is armed (what setUserContext does), the same plain event
-        // is promoted, carrying the current session counters.
         mockSessionManager.errorCount = 3
         mockSessionManager.incrementClickCounter()
         mockSessionManager.incrementClickCounter()
         mockViewManager.uniqueViewCount = 5
-        mockSessionManager.triggerSnapshotOnNextEvent()
 
-        let promoted = sut.buildSnapshotContextIfNeeded(for: eventContext)
-        XCTAssertNotNil(promoted, "An armed trigger must promote the next plain event to a snapshot")
+        let promoted = sut.buildSnapshotContextIfNeeded(for: eventContext, userContextChanged: true)
+        XCTAssertNotNil(promoted, "A user-context change must promote the same plain event to a snapshot")
         XCTAssertEqual(promoted?.errorCount, 3, "Promoted snapshot must carry the current error count")
         XCTAssertEqual(promoted?.actionCount, 2, "Promoted snapshot must carry the current click count")
         XCTAssertEqual(promoted?.viewCount, 5, "Promoted snapshot must carry the current unique-view count")
         XCTAssertEqual(mockSessionManager.incrementErrorCounterCallCount, 0,
                        "Promotion of a non-error event must not touch the error counter")
-
-        // THEN: One-shot — the following plain event yields no snapshot again.
-        mockSessionManager.lastSnapshotTime = now
-        XCTAssertNil(sut.buildSnapshotContextIfNeeded(for: eventContext),
-                     "The trigger is one-shot — the event after the promoted one must not emit a snapshot")
     }
 
-    func test_buildSnapshotContext_pendingTrigger_consumedEvenWhenAnotherTriggerFires() {
-        // Browser parity: any emitted snapshot clears the pending flag. If the flag
-        // read were short-circuited behind the other triggers, an error-driven
-        // snapshot would leave it armed and promote a second, spurious snapshot.
+    func test_build_armedTrigger_promotesAndConsumesExactlyOnce() {
         let now = Date()
         mockSessionManager.lastSnapshotTime = now
-        guard let sut = makeSUT(currentTime: now) else { return XCTFail("Failed to instantiate CxRumBuilder") }
+        guard let sut = makeSUT(currentTime: now, eventType: "log") else { return XCTFail("Failed to instantiate CxRumBuilder") }
 
         mockSessionManager.triggerSnapshotOnNextEvent()
 
-        XCTAssertNotNil(sut.buildSnapshotContextIfNeeded(for: makeEventContext(severity: 5, type: "log")),
-                        "The error event emits a snapshot via its own trigger")
+        let promoted = sut.build()
+        XCTAssertNotNil(promoted?.snapshotContext,
+                        "An armed trigger must promote the next built event to a snapshot")
+        XCTAssertEqual(promoted?.consumedPendingSnapshotTrigger, true,
+                       "The built event must record that it consumed the pending trigger")
+
+        // One-shot: with the throttle re-activated, the next build yields no snapshot.
+        mockSessionManager.lastSnapshotTime = now
+        let following = sut.build()
+        XCTAssertNil(following?.snapshotContext,
+                     "The trigger is one-shot — the event after the promoted one must not emit a snapshot")
+        XCTAssertEqual(following?.consumedPendingSnapshotTrigger, false)
+    }
+
+    func test_build_errorEvent_alsoConsumesPendingTrigger() {
+        // Browser parity: any emitted snapshot satisfies the pending request. The
+        // consume is unconditional in build(), so an error-driven snapshot clears
+        // the flag and no second, spurious promotion follows.
+        let now = Date()
+        mockSessionManager.lastSnapshotTime = now
+        guard let errorSut = makeSUT(currentTime: now, eventType: "error") else { return XCTFail("Failed to instantiate CxRumBuilder") }
+
+        mockSessionManager.triggerSnapshotOnNextEvent()
+
+        let errorRum = errorSut.build()
+        XCTAssertNotNil(errorRum?.snapshotContext, "The error event emits a snapshot via its own trigger")
+        XCTAssertEqual(errorRum?.consumedPendingSnapshotTrigger, true,
+                       "The error-driven snapshot must also consume the pending trigger")
 
         mockSessionManager.lastSnapshotTime = now
-        XCTAssertNil(sut.buildSnapshotContextIfNeeded(for: makeEventContext(severity: 3, type: "log")),
-                     "The error-driven snapshot must also consume the pending trigger — no second promotion")
+        guard let plainSut = makeSUT(currentTime: now, eventType: "log") else { return XCTFail("Failed to instantiate CxRumBuilder") }
+        XCTAssertNil(plainSut.build()?.snapshotContext,
+                     "No second promotion after the error-driven snapshot consumed the trigger")
+    }
+
+    func test_build_droppedSpan_missingSessionAttributes_keepsTriggerArmed() {
+        // A span dropped by the session-attributes guard never exports, so it must
+        // not swallow the one-shot promotion — the next accepted event still carries it.
+        let now = Date()
+        mockSessionManager.lastSnapshotTime = now
+        guard let sut = makeNoSessionSUT(currentTime: now) else { return XCTFail("Failed to instantiate CxRumBuilder") }
+
+        mockSessionManager.triggerSnapshotOnNextEvent()
+
+        XCTAssertNil(sut.build(), "A span without session attributes must be dropped")
+        XCTAssertTrue(mockSessionManager.consumePendingSnapshotTrigger(),
+                      "The dropped span must leave the pending trigger armed for the next accepted event")
     }
 
     func test_payload_afterArmingTrigger_emitsIsSnapshotEventAndSnapshotContext() throws {
@@ -246,6 +275,29 @@ class CxRumBuilderTests: XCTestCase {
         XCTAssertEqual(snapshot[Keys.hasRecording.rawValue] as? Bool, true)
         let timestamp = try XCTUnwrap(snapshot[Keys.timestamp.rawValue] as? Int, "snapshot_context must carry a millisecond timestamp")
         XCTAssertGreaterThan(timestamp, 0)
+    }
+
+    /// A span with no session attributes — build() drops it at the SessionContext guard.
+    private func makeNoSessionSUT(currentTime: Date) -> CxRumBuilder? {
+        let otel = MockSpanData(attributes: [
+            Keys.severity.rawValue: AttributeValue("3"),
+            Keys.eventType.rawValue: AttributeValue("log"),
+            Keys.source.rawValue: AttributeValue("console")
+        ], startTime: currentTime, endTime: currentTime, spanId: "20", traceId: "30", name: "testSpan", kind: 1)
+
+        let options = CoralogixExporterOptions(coralogixDomain: CoralogixDomain.US2,
+                                               userContext: nil,
+                                               environment: "PROD",
+                                               application: "TestApp-iOS",
+                                               version: "1.0",
+                                               publicKey: "token",
+                                               debug: true)
+        return CxRumBuilder(otel: otel,
+                            versionMetadata: VersionMetadata(appName: "Test", appVersion: "1.0"),
+                            sessionManager: mockSessionManager,
+                            viewManager: mockViewManager,
+                            networkManager: NetworkManager(),
+                            options: options)
     }
 
     private func makeSUT(currentTime: Date = Date()) -> CxRumBuilder? {

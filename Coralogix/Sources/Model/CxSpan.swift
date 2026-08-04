@@ -155,6 +155,12 @@ public class CxSpan {
                 if self.cxRum.eventContext.severity == CoralogixLogSeverity.error.rawValue {
                     sessionManager?.decrementErrorCounter()
                 }
+                // Same compensation for the setUserContext promotion: this span consumed
+                // the one-shot trigger, so re-arm it and let the next accepted event
+                // carry the snapshot.
+                if self.cxRum.consumedPendingSnapshotTrigger {
+                    sessionManager?.triggerSnapshotOnNextEvent()
+                }
                 return nil
             }
         } else {
