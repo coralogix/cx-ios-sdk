@@ -262,10 +262,13 @@ jobs:
           EXIT=${PIPESTATUS[0]}
           set -e
           END=$(date +%s)
-          # The final "All tests" summary already aggregates every target in
-          # this shard; it is the last "Executed N tests" line. (Summing all of
-          # them triple-counts the per-class/per-bundle/all-tests repeats.)
-          COUNT=$(grep -oE "Executed [0-9]+ test" shard.log | grep -oE "[0-9]+" | tail -1)
+          # Count finished test cases directly. A shard can span two test
+          # TARGETS (a UIKit class + a SwiftUI class), and xcodebuild then emits
+          # one "Executed N tests" summary PER bundle — so the last summary line
+          # under-counts by dropping the earlier bundle(s). One "Test Case '…'
+          # passed/failed/skipped" line per test is bundle-agnostic and exact
+          # (skipped is included so this matches the source-scanned plan total).
+          COUNT=$(grep -cE "Test Case '.*' (passed|failed|skipped)" shard.log || true)
           COUNT=${COUNT:-0}
           # Passed requires: clean exit, a POSITIVE executed count (reject
           # "Executed 0 tests" from an empty filter), and zero failures.
