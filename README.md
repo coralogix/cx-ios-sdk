@@ -388,7 +388,7 @@ coralogixRum.reportError(error: error,
 `data` and `labels` are optional on every `reportError(error:)`, `reportError(error: NSError)`, and `reportError(exception:)` overload. `data` is attached to the error event and `labels` are merged into the event's labels.
 
 ### User Context
-Attach the current user's identity to every subsequent event. Call it after sign-in; pass a new `UserContext` to replace it (e.g. on account switch), and an empty context to clear it on sign-out.
+Attach the current user's identity to every subsequent event. Call it after sign-in; pass a new `UserContext` to replace it (e.g. on account switch), and an empty context (or `nil`) to clear it on sign-out.
 ```swift
 coralogixRum.setUserContext(
     userContext: UserContext(userId: "user-123",
@@ -397,6 +397,7 @@ coralogixRum.setUserContext(
                              userMetadata: ["plan": "premium", "role": "admin"])
 )
 ```
+Each call — including a clear — also promotes the next exported event to a snapshot event carrying the new identity, so session-level user information in Coralogix refreshes immediately instead of waiting for the next error, navigation, or one-minute snapshot.
 
 ### New Session on Logout
 Force-start a fresh RUM session on demand — typically on user logout — without a full `shutdown()` + `init()`. A new session ID is issued and the per-session state (views, error/click counters, snapshot throttle, Session Replay) resets, exactly like the automatic idle / max-age rotation.

@@ -166,7 +166,11 @@ plugin code changes:
 
 The snapshot carrier also works for hybrids: all events (hybrid spans forwarded via
 `sendCxSpanData`, plus natively-instrumented network/lifecycle/error events) export
-through the native pipeline where the flag is consumed. Work is:
+through the native pipeline where the flag is consumed.
+
+Note the behavior reaches hybrid apps only once the plugin releases pin the fixed
+native versions (iOS ≥ 2.13.3, Android ≥ 2.19.4) — current plugin releases pin older
+natives and are unaffected until then. That rollout is exactly CX-52385 / CX-52386:
 
 1. Bump the iOS + Android native dependencies to the fixed versions.
 2. Verify end-to-end: call `setUserContext` from Dart/JS, observe the next event export

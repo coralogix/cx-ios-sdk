@@ -23,8 +23,17 @@ struct PendingSnapshotTrigger {
     /// session's user-context change.
     let sessionId: String?
 
-    init(sessionId: String? = nil) {
+    /// The user context captured at arm time. The promoted event's session context is
+    /// overridden with this, because neither of its usual sources is guaranteed fresh:
+    /// the carrier span's identity attributes were stamped at span creation, and the
+    /// exporter options are a struct copied per span at encode — both can predate the
+    /// `setUserContext` call that armed this token. `setUserContext` maps a nil (clear)
+    /// to an empty context before arming, so nil here strictly means "no override".
+    let userContext: UserContext?
+
+    init(sessionId: String? = nil, userContext: UserContext? = nil) {
         self.sessionId = sessionId
+        self.userContext = userContext
     }
 }
 
@@ -131,10 +140,11 @@ public class SessionManager {
     /// with no synthetic event type on the wire.
     private var _pendingSnapshotTrigger: PendingSnapshotTrigger?
 
-    func triggerSnapshotOnNextEvent() {
+    func triggerSnapshotOnNextEvent(userContext: UserContext? = nil) {
         sessionLock.lock()
         defer { sessionLock.unlock() }
-        _pendingSnapshotTrigger = PendingSnapshotTrigger(sessionId: sessionMetadata?.sessionId)
+        _pendingSnapshotTrigger = PendingSnapshotTrigger(sessionId: sessionMetadata?.sessionId,
+                                                         userContext: userContext)
     }
 
     /// One-shot: yields the token at most once per arm. Take-and-clear is atomic so

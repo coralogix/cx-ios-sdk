@@ -237,6 +237,58 @@ class CxRumBuilderTests: XCTestCase {
                      "No second promotion after the error-driven snapshot consumed the trigger")
     }
 
+    func test_build_promotedEvent_carriesArmTimeUserContext() {
+        // The carrier span's attributes and the options copy both hold the OLD user
+        // ("12345" / John Doe) — only the token knows the context that armed it. The
+        // promoted event must report the token's identity, not the span-stamped one.
+        let now = Date()
+        mockSessionManager.lastSnapshotTime = now
+        guard let sut = makeSUT(currentTime: now, eventType: "log") else { return XCTFail("Failed to instantiate CxRumBuilder") }
+
+        let newUser = UserContext(userId: "user-after-login",
+                                  userName: "New Name",
+                                  userEmail: "new@example.com",
+                                  userMetadata: ["plan": "pro"])
+        mockSessionManager.triggerSnapshotOnNextEvent(userContext: newUser)
+
+        guard let promoted = sut.build() else { return XCTFail("build() returned nil") }
+        XCTAssertNotNil(promoted.snapshotContext, "The armed token must promote the event")
+        XCTAssertEqual(promoted.sessionContext?.userId, "user-after-login")
+        XCTAssertEqual(promoted.sessionContext?.userName, "New Name")
+        XCTAssertEqual(promoted.sessionContext?.userEmail, "new@example.com")
+        XCTAssertEqual(promoted.sessionContext?.userMetadata, ["plan": "pro"])
+    }
+
+    func test_build_promotedEvent_clearedContext_reportsEmptyIdentity() {
+        // setUserContext(nil) arms the token with an empty context — the promoted
+        // event must report the cleared identity, not the span-stamped old user.
+        let now = Date()
+        mockSessionManager.lastSnapshotTime = now
+        guard let sut = makeSUT(currentTime: now, eventType: "log") else { return XCTFail("Failed to instantiate CxRumBuilder") }
+
+        mockSessionManager.triggerSnapshotOnNextEvent(
+            userContext: UserContext(userId: "", userName: "", userEmail: "", userMetadata: [:]))
+
+        guard let promoted = sut.build() else { return XCTFail("build() returned nil") }
+        XCTAssertNotNil(promoted.snapshotContext)
+        XCTAssertEqual(promoted.sessionContext?.userId, "")
+        XCTAssertEqual(promoted.sessionContext?.userName, "")
+        XCTAssertEqual(promoted.sessionContext?.userEmail, "")
+    }
+
+    func test_build_naturalSnapshot_keepsSpanStampedIdentity() {
+        // A snapshot emitted by the throttle (no token) must not have its identity
+        // touched — the override applies only to token-promoted events.
+        mockSessionManager.lastSnapshotTime = nil
+        guard let sut = makeSUT(currentTime: Date(), eventType: "log") else { return XCTFail("Failed to instantiate CxRumBuilder") }
+
+        guard let natural = sut.build() else { return XCTFail("build() returned nil") }
+        XCTAssertNotNil(natural.snapshotContext, "nil throttle must emit a natural snapshot")
+        XCTAssertEqual(natural.sessionContext?.userId, "12345",
+                       "A natural snapshot keeps the span-stamped identity")
+        XCTAssertEqual(natural.sessionContext?.userName, "John Doe")
+    }
+
     func test_build_droppedSpan_missingSessionAttributes_keepsTriggerArmed() {
         // A span dropped by the session-attributes guard never exports, so it must
         // not swallow the one-shot promotion — the next accepted event still carries it.

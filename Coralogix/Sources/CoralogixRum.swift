@@ -275,7 +275,14 @@ public class CoralogixRum {
         // between, the worst case is one non-snapshot event with the new user data —
         // the reverse order could promote a snapshot still carrying the old user.
         self.coralogixExporter?.update(userContext: userContext)
-        self.coralogixExporter?.getSessionManager().triggerSnapshotOnNextEvent()
+        // The token captures the context it was armed for: the promoted event's own
+        // identity sources (span attributes stamped at creation, options copied per
+        // span at encode) can predate this call, and the snapshot must reflect
+        // exactly the context that requested it. A clear (nil) maps to an empty
+        // context so the promoted event reports the cleared identity too.
+        let armedContext = userContext
+            ?? UserContext(userId: "", userName: "", userEmail: "", userMetadata: [:])
+        self.coralogixExporter?.getSessionManager().triggerSnapshotOnNextEvent(userContext: armedContext)
     }
     
     public func set(labels: [String: Any]) {

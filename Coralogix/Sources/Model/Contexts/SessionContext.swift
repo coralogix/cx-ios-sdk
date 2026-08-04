@@ -10,10 +10,10 @@ import CoralogixInternal
 struct SessionContext {
     var sessionId: String
     var sessionCreationDate: TimeInterval
-    let userId: String
-    let userName: String
-    let userEmail: String
-    let userMetadata: [String: String]?
+    private(set) var userId: String
+    private(set) var userName: String
+    private(set) var userEmail: String
+    private(set) var userMetadata: [String: String]?
     var isPidEqualToOldPid: Bool = false
     var hasRecording: Bool = false
     // Whether the session this event belongs to was sampled in. false means the event
@@ -68,6 +68,17 @@ struct SessionContext {
         return (sessionId, creationDate, false)
     }
     
+    /// Replaces the identity fields with the context a `PendingSnapshotTrigger` was
+    /// armed with. The usual sources (span attributes stamped at creation, exporter
+    /// options copied per span at encode) can predate the `setUserContext` call, and
+    /// the promoted snapshot must reflect exactly the context that requested it.
+    mutating func applyUserContextOverride(_ userContext: UserContext) {
+        self.userId = userContext.userId
+        self.userName = userContext.userName
+        self.userEmail = userContext.userEmail
+        self.userMetadata = userContext.userMetadata
+    }
+
     static func shouldRestorePreviousSession(from otel: SpanDataProtocol) -> Bool {
         guard let pid = otel.getString(forKey: .pid),
               let oldPid = otel.getString(forKey: .prevPid) else {

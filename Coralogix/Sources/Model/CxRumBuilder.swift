@@ -46,7 +46,7 @@ class CxRumBuilder {
         var prevSessionContext: SessionContext? = nil
         
         // CRITICAL: If SessionContext creation fails (missing session attributes), drop the span
-        guard let sessionContext = SessionContext(otel: otel,
+        guard var sessionContext = SessionContext(otel: otel,
                                                   userMetadata: userMetadata,
                                                   hasRecording: hasRecording) else {
             Log.w("[CxRumBuilder] Dropping span due to missing session attributes")
@@ -61,6 +61,14 @@ class CxRumBuilder {
         let pendingSnapshotTrigger = sessionManager.consumePendingSnapshotTrigger()
         let snapshotContext = buildSnapshotContextIfNeeded(for: eventContext,
                                                            pendingTrigger: pendingSnapshotTrigger)
+
+        // The promoted event reports the identity the token was armed with — the
+        // carrier span's own identity can predate the setUserContext call (attributes
+        // stamped at creation, options copied at encode). prevSessionContext is left
+        // untouched: it describes the prior session's historical identity.
+        if let armedContext = pendingSnapshotTrigger?.userContext {
+            sessionContext.applyUserContextOverride(armedContext)
+        }
 
         if SessionContext.shouldRestorePreviousSession(from: otel){
             // Note: prevSessionContext can be nil if session attributes are missing
