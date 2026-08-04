@@ -131,6 +131,11 @@ final class BeforeSendInstrumentationDataTests: XCTestCase {
 
     func test_beforeSendDrop_reArmsConsumedSnapshotTrigger() throws {
         let sessionManager = SessionManager()
+        // Align the active session with the span's stamped session so the armed token
+        // is consumable by this span (build() rejects cross-session tokens).
+        sessionManager.sessionMetadata = SessionMetadata(sessionId: "session_001",
+                                                         sessionCreationDate: 1609459200,
+                                                         using: MockKeyChain())
         sessionManager.triggerSnapshotOnNextEvent()
 
         let cxSpan = try XCTUnwrap(CxSpan(

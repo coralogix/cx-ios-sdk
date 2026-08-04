@@ -58,7 +58,18 @@ class CxRumBuilder {
         // (not short-circuited behind the other triggers) — the browser clears its flag
         // whenever any snapshot is emitted, and when a token is present the snapshot
         // always emits, so consume-on-take == consume-on-emit.
-        let pendingSnapshotTrigger = sessionManager.consumePendingSnapshotTrigger()
+        var pendingSnapshotTrigger = sessionManager.consumePendingSnapshotTrigger()
+
+        // The token only promotes spans of the session it was armed in. A buffered span
+        // from a rotated-out session exports after the arm; promoting it would stamp the
+        // new session's identity onto the old session's snapshot record — and burn the
+        // token meant for the new session's events. Hand it back (session-checked
+        // against the active session) and treat this span as unpromoted.
+        if let trigger = pendingSnapshotTrigger, trigger.sessionId != sessionContext.sessionId {
+            sessionManager.restorePendingSnapshotTrigger(trigger)
+            pendingSnapshotTrigger = nil
+        }
+
         let snapshotContext = buildSnapshotContextIfNeeded(for: eventContext,
                                                            pendingTrigger: pendingSnapshotTrigger)
 

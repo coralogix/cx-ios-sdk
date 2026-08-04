@@ -62,6 +62,12 @@ class CxRumBuilderTests: XCTestCase {
         super.setUp()
         
         mockSessionManager = MockSessionManager()
+        // Align the active session with the session stamped on the mock spans: tokens
+        // armed via triggerSnapshotOnNextEvent carry the active session's id, and build()
+        // rejects tokens whose session doesn't match the carrier span's.
+        mockSessionManager.sessionMetadata = SessionMetadata(sessionId: "session_001",
+                                                             sessionCreationDate: 1609459200,
+                                                             using: MockKeyChain())
         mockNetworkManager = NetworkManager()
         
         mockViewManager = MockViewManager(keyChain: KeychainManager())
@@ -287,6 +293,29 @@ class CxRumBuilderTests: XCTestCase {
         XCTAssertEqual(natural.sessionContext?.userId, "12345",
                        "A natural snapshot keeps the span-stamped identity")
         XCTAssertEqual(natural.sessionContext?.userName, "John Doe")
+    }
+
+    func test_build_tokenFromAnotherSession_isRejectedAndHandedBack() {
+        // A buffered span from a rotated-out session exports after the arm: it must not
+        // be promoted with the new session's identity, and must not burn the token
+        // meant for the new session's own events.
+        let now = Date()
+        mockSessionManager.lastSnapshotTime = now
+        guard let sut = makeSUT(currentTime: now, eventType: "log") else { return XCTFail("Failed to instantiate CxRumBuilder") }
+
+        // The active session moves past the span's stamped "session_001" before arming.
+        mockSessionManager.sessionMetadata = SessionMetadata(sessionId: "session-B",
+                                                             sessionCreationDate: now.timeIntervalSince1970,
+                                                             using: MockKeyChain())
+        mockSessionManager.triggerSnapshotOnNextEvent(
+            userContext: UserContext(userId: "user-B", userName: "B", userEmail: "b@example.com", userMetadata: [:]))
+
+        guard let rum = sut.build() else { return XCTFail("build() returned nil") }
+        XCTAssertNil(rum.snapshotContext, "A span from another session must not be promoted by the token")
+        XCTAssertEqual(rum.sessionContext?.userId, "12345",
+                       "The rotated-out session's span must keep its own stamped identity")
+        XCTAssertNotNil(mockSessionManager.consumePendingSnapshotTrigger(),
+                        "The rejected token must be handed back for the armed session's own events")
     }
 
     func test_build_droppedSpan_missingSessionAttributes_keepsTriggerArmed() {
