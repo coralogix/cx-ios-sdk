@@ -147,8 +147,14 @@ class CxRumBuilder {
             abs($0.timeIntervalSince1970 - currentTime) > 60
         } ?? true
         
+        // Unconditional read (not inlined in the `if`): `||` short-circuiting would
+        // leave the flag armed when an earlier trigger already fires, and the browser
+        // clears it whenever any snapshot is emitted — mirror that. When it returns
+        // true the branch always emits, so consume-on-read == consume-on-emit.
+        let userContextChanged = sessionManager.consumePendingSnapshotTrigger()
+
         // Check if any of the conditions for creating a snapshot are met
-        if isErrorSeverity || isNavigationEvent || oneMinuteHasPassed {
+        if isErrorSeverity || isNavigationEvent || oneMinuteHasPassed || userContextChanged {
             
             if isErrorSeverity {
                 sessionManager.incrementErrorCounter()

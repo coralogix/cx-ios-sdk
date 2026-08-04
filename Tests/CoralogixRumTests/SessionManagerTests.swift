@@ -261,6 +261,46 @@ class SessionManagerTests: XCTestCase {
             "Rotation must retain the stale session ID as the previous session so spans carry correct prev_session_id attribution")
     }
 
+    // MARK: - Pending snapshot trigger (setUserContext promotion)
+    //
+    // `setUserContext` arms a one-shot flag so the next exported event is promoted
+    // to a snapshot event. These pin the flag's lifecycle: unarmed by default,
+    // consumed exactly once, idempotent under repeated arming, and never leaking
+    // across a session rotation.
+
+    func testConsumePendingSnapshotTrigger_falseWhenNeverArmed() {
+        XCTAssertFalse(sessionManager.consumePendingSnapshotTrigger(),
+            "An unarmed trigger must not promote any event to a snapshot")
+    }
+
+    func testConsumePendingSnapshotTrigger_trueExactlyOnceAfterArming() {
+        sessionManager.triggerSnapshotOnNextEvent()
+
+        XCTAssertTrue(sessionManager.consumePendingSnapshotTrigger(),
+            "The first consume after arming must report the pending trigger")
+        XCTAssertFalse(sessionManager.consumePendingSnapshotTrigger(),
+            "Consume is one-shot — a second consume must not promote another event")
+    }
+
+    func testConsumePendingSnapshotTrigger_repeatedArmingConsumesOnce() {
+        sessionManager.triggerSnapshotOnNextEvent()
+        sessionManager.triggerSnapshotOnNextEvent()
+
+        XCTAssertTrue(sessionManager.consumePendingSnapshotTrigger(),
+            "Repeated arming before the next event still promotes exactly one snapshot")
+        XCTAssertFalse(sessionManager.consumePendingSnapshotTrigger(),
+            "Repeated arming must not queue additional promotions")
+    }
+
+    func testPendingSnapshotTrigger_clearedBySessionRotation() {
+        sessionManager.triggerSnapshotOnNextEvent()
+
+        sessionManager.setupSessionMetadata()
+
+        XCTAssertFalse(sessionManager.consumePendingSnapshotTrigger(),
+            "A stale trigger must not leak into a fresh session — the rotation's nil throttle already grants the first snapshot")
+    }
+
     // MARK: - Crash attribution to the previous-launch session
     //
     // A crash is captured on the *next* launch, after a fresh session has already

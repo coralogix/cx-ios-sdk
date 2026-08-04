@@ -265,11 +265,17 @@ public class CoralogixRum {
     /// - This call has no effect if the SDK has not been initialized.
     /// - The provided `UserContext` is propagated to the underlying exporter and will
     ///   be applied to future events only; previously sent data is not modified.
+    /// - The next exported event is promoted to a snapshot event so the backend
+    ///   refreshes its session-level user info immediately.
     ///
     /// - Parameter userContext: The new user context to associate with telemetry, or `nil` to clear it.
     public func setUserContext(userContext: UserContext?) {
         guard CoralogixRum.isInitialized else { return }
+        // Store the context before arming the snapshot trigger: if a span races in
+        // between, the worst case is one non-snapshot event with the new user data —
+        // the reverse order could promote a snapshot still carrying the old user.
         self.coralogixExporter?.update(userContext: userContext)
+        self.coralogixExporter?.getSessionManager().triggerSnapshotOnNextEvent()
     }
     
     public func set(labels: [String: Any]) {

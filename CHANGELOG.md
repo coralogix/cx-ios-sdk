@@ -9,6 +9,11 @@ Release-mechanics commits (version bumps, podspec/script tweaks, README edits) a
 omitted; the focus here is user-facing behavior changes. Tickets are referenced as
 `CX-XXXXX` (Jira) or `ALPH-XXXX` (legacy). Pull request numbers are in parentheses.
 
+## [2.13.3] - 2026-08-04
+
+### Fixed
+- `setUserContext` now promotes the next exported event to a snapshot event, so the session's user information refreshes immediately instead of waiting for the next error, navigation, or one-minute interval — matching the browser SDK's behavior.
+
 ## [2.13.2] - 2026-07-30
 
 ### Fixed
