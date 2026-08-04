@@ -65,10 +65,13 @@ jobs:
               end' "$CONST" || true
           done
 
+      # NOTE: keep SPM at its default DerivedData/SourcePackages location.
+      # Firebase's Crashlytics run-script phase hardcodes that path, so
+      # relocating checkouts (-clonedSourcePackagesDirPath) breaks the build.
       - name: Cache SPM checkouts (Firebase etc.)
         uses: actions/cache@v4
         with:
-          path: SourcePackages
+          path: DerivedData/SourcePackages
           key: ui-spm-${{ runner.os }}-${{ hashFiles('Example/DemoApp.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
           restore-keys: ui-spm-${{ runner.os }}-
 
@@ -93,9 +96,9 @@ jobs:
             -sdk iphonesimulator \
             -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath ../DerivedData \
-            -clonedSourcePackagesDirPath ../SourcePackages \
             CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY="" DEVELOPMENT_TEAM="" \
             IPHONEOS_DEPLOYMENT_TARGET="18.0" \
+            ARCHS=arm64 ONLY_ACTIVE_ARCH=YES \
             -jobs $(sysctl -n hw.ncpu)
           END=$(date +%s)
           echo "T_BUILD=$((END - START))" >> $GITHUB_ENV
