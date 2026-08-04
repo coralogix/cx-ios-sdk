@@ -260,8 +260,11 @@ jobs:
           EXIT=${PIPESTATUS[0]}
           set -e
           END=$(date +%s)
-          # Sum across targets (a shard can span two test targets → two summary lines).
-          COUNT=$(grep -oE "Executed [0-9]+ test" shard.log | grep -oE "[0-9]+" | awk '{s+=$1} END{print s+0}')
+          # The final "All tests" summary already aggregates every target in
+          # this shard; it is the last "Executed N tests" line. (Summing all of
+          # them triple-counts the per-class/per-bundle/all-tests repeats.)
+          COUNT=$(grep -oE "Executed [0-9]+ test" shard.log | grep -oE "[0-9]+" | tail -1)
+          COUNT=${COUNT:-0}
           if [ "${EXIT:-1}" -eq 0 ] && grep -qE "with 0 failures" shard.log && ! grep -qE "with [1-9][0-9]* failures" shard.log; then ST=passed; else ST=failed; fi
           echo "$COUNT" > "count-${{ matrix.name }}.txt"
           {
