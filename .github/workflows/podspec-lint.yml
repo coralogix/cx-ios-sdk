@@ -12,9 +12,27 @@ on:
   workflow_dispatch:
 
 jobs:
-  lint:
+  # The three lints are independent `pod lib lint` invocations (each is
+  # self-contained; --include-podspecs supplies the local dependency), so run
+  # them in parallel instead of serially. Wall-clock drops from Σ(all lints)
+  # to max(single lint).
+  lint-spec:
+    name: Lint ${{ matrix.name }}
     runs-on: macos-14
-    timeout-minutes: 45
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: CoralogixInternal
+            spec: CoralogixInternal.podspec
+            extra: ""
+          - name: SessionReplay
+            spec: SessionReplay.podspec
+            extra: "--include-podspecs=CoralogixInternal.podspec"
+          - name: Coralogix
+            spec: Coralogix.podspec
+            extra: "--include-podspecs=CoralogixInternal.podspec"
 
     steps:
       - name: Checkout code
@@ -43,79 +61,49 @@ jobs:
           ruby -v
           pod env
 
-      # Lint CoralogixInternal (base pod)
-      - name: Lint CoralogixInternal.podspec
+      - name: Lint ${{ matrix.spec }}
         run: |
           set -euo pipefail
-          echo "🔍 Linting CoralogixInternal.podspec (iOS, static frameworks)…"
-          pod lib lint CoralogixInternal.podspec \
+          echo "🔍 Linting ${{ matrix.spec }} (iOS, static frameworks)…"
+          pod lib lint ${{ matrix.spec }} \
+            ${{ matrix.extra }} \
             --platforms=iOS \
             --use-static-frameworks \
             --allow-warnings \
             --fail-fast \
             --no-clean \
-            --verbose 2>&1 | tee lint_internal.log
-          echo "✅ CoralogixInternal.podspec passed lint."
+            --verbose 2>&1 | tee "lint_${{ matrix.name }}.log"
+          echo "✅ ${{ matrix.spec }} passed lint."
 
-      - name: Show Internal lint error summary (if any)
+      - name: Show lint error summary (if any)
         if: failure()
         run: |
-          echo "---- First error in Internal lint log ----"
-          awk '/❌/{flag=1} flag{print; if (/^$/) exit}' lint_internal.log || true
-          echo "-----------------------------------------"
+          echo "---- First error in ${{ matrix.name }} lint log ----"
+          awk '/❌/{flag=1} flag{print; if (/^$/) exit}' "lint_${{ matrix.name }}.log" || true
+          echo "----------------------------------------------------"
 
-      # Lint SessionReplay (depends on Internal)
-      - name: Lint SessionReplay.podspec
-        run: |
-          set -euo pipefail
-          echo "🔍 Linting SessionReplay.podspec (iOS, static frameworks, includes Internal)…"
-          pod lib lint SessionReplay.podspec \
-            --include-podspecs=CoralogixInternal.podspec \
-            --platforms=iOS \
-            --use-static-frameworks \
-            --allow-warnings \
-            --fail-fast \
-            --no-clean \
-            --verbose 2>&1 | tee lint_session_replay.log
-          echo "✅ SessionReplay.podspec passed lint."
-
-      - name: Show SessionReplay lint error summary (if any)
-        if: failure()
-        run: |
-          echo "---- First error in SessionReplay lint log ----"
-          awk '/❌/{flag=1} flag{print; if (/^$/) exit}' lint_session_replay.log || true
-          echo "-----------------------------------------------"
-
-      # Lint Coralogix (depends on Internal)
-      - name: Lint Coralogix.podspec
-        run: |
-          set -euo pipefail
-          echo "🔍 Linting Coralogix.podspec (iOS, static frameworks, includes Internal)…"
-          pod lib lint Coralogix.podspec \
-            --include-podspecs=CoralogixInternal.podspec \
-            --platforms=iOS \
-            --use-static-frameworks \
-            --allow-warnings \
-            --fail-fast \
-            --no-clean \
-            --verbose 2>&1 | tee lint_main.log
-          echo "✅ Coralogix.podspec passed lint."
-
-      - name: Show Coralogix lint error summary (if any)
-        if: failure()
-        run: |
-          echo "---- First error in Coralogix lint log ----"
-          awk '/❌/{flag=1} flag{print; if (/^$/) exit}' lint_main.log || true
-          echo "-------------------------------------------"
-
-      # Upload logs for debugging
-      - name: Upload lint logs
+      - name: Upload lint log
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: podspec-lint-logs
-          path: |
-            lint_internal.log
-            lint_session_replay.log
-            lint_main.log
+          name: podspec-lint-log-${{ matrix.name }}
+          path: lint_${{ matrix.name }}.log
           if-no-files-found: ignore
+
+  # Aggregator: re-emits the single "lint" status context so existing
+  # branch-protection rules stay satisfied without the old serial job. Passes
+  # only if every podspec in the matrix passed.
+  lint:
+    name: lint
+    needs: [lint-spec]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "lint-spec=${{ needs.lint-spec.result }}"
+          if [ "${{ needs.lint-spec.result }}" = "success" ]; then
+            echo "✅ all podspecs linted"
+          else
+            echo "❌ a podspec lint failed"
+            exit 1
+          fi
