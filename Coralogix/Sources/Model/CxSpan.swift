@@ -157,9 +157,10 @@ public class CxSpan {
                 }
                 // Same compensation for the setUserContext promotion: this span consumed
                 // the one-shot token, so hand it back and let the next accepted event
-                // carry the snapshot.
-                if self.cxRum.consumedSnapshotTrigger != nil {
-                    sessionManager?.triggerSnapshotOnNextEvent()
+                // carry the snapshot. The restore is session-checked — a token from a
+                // rotated-out session is discarded instead of re-armed.
+                if let consumedTrigger = self.cxRum.consumedSnapshotTrigger {
+                    sessionManager?.restorePendingSnapshotTrigger(consumedTrigger)
                 }
                 return nil
             }

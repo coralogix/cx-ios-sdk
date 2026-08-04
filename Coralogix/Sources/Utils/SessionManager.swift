@@ -16,7 +16,17 @@ import UIKit
 /// `setUserContext`. Its presence *is* the state: `SessionManager` holds at most one,
 /// consuming it yields it exactly once, and `CxRum` carries the consumed token so the
 /// `beforeSend` drop path can hand it back (re-arm) when the promoted span never ships.
-struct PendingSnapshotTrigger {}
+struct PendingSnapshotTrigger {
+    /// Session the promotion was requested in. A handed-back token re-arms only while
+    /// this still matches the active session — a rotation invalidates it, so a delayed
+    /// `beforeSend` drop can never promote an event in the fresh session for a prior
+    /// session's user-context change.
+    let sessionId: String?
+
+    init(sessionId: String? = nil) {
+        self.sessionId = sessionId
+    }
+}
 
 /**
  * When Is a New Session Created?
@@ -124,7 +134,7 @@ public class SessionManager {
     func triggerSnapshotOnNextEvent() {
         sessionLock.lock()
         defer { sessionLock.unlock() }
-        _pendingSnapshotTrigger = PendingSnapshotTrigger()
+        _pendingSnapshotTrigger = PendingSnapshotTrigger(sessionId: sessionMetadata?.sessionId)
     }
 
     /// One-shot: yields the token at most once per arm. Take-and-clear is atomic so
@@ -135,6 +145,17 @@ public class SessionManager {
         let pending = _pendingSnapshotTrigger
         _pendingSnapshotTrigger = nil
         return pending
+    }
+
+    /// Hands a consumed token back when the promoted span never shipped (`beforeSend`
+    /// dropped it). The session check runs under the same lock that rotation holds
+    /// while clearing the pending token, so a token from a rotated-out session can
+    /// never re-arm a promotion in the fresh session.
+    func restorePendingSnapshotTrigger(_ token: PendingSnapshotTrigger) {
+        sessionLock.lock()
+        defer { sessionLock.unlock() }
+        guard token.sessionId == sessionMetadata?.sessionId else { return }
+        _pendingSnapshotTrigger = token
     }
 
     public var isIdle: Bool {

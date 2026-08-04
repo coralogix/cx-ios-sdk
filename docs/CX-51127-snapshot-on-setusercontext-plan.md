@@ -61,7 +61,7 @@ Current triggers: error severity, navigation event, 1-minute throttle
    the established lock-guarded accessor pattern (a token rather than a Bool, per the
    AGENTS.md no-boolean-flags convention):
    ```swift
-   struct PendingSnapshotTrigger {}
+   struct PendingSnapshotTrigger { let sessionId: String? }  // session-scoped: never re-arms across a rotation
 
    private var _pendingSnapshotTrigger: PendingSnapshotTrigger?
 
@@ -180,7 +180,7 @@ through the native pipeline where the flag is consumed. Work is:
   event would have carried the user data either. Identical to browser behavior.
 - **`beforeSend` drops the carrier event** *(iOS: closed after PR review)*: on iOS the
   consume now happens only after the session-attributes drop guard, and a native
-  `beforeSend` drop re-arms the trigger (`CxRum.consumedSnapshotTrigger` →
+  `beforeSend` drop re-arms the trigger session-checked (`CxRum.consumedSnapshotTrigger` →
   `CxSpan.getDictionary()` drop branch), following the same compensation pattern as the
   error-counter undo. Hybrid JS `beforeSend` drops and upload failures remain
   browser-parity best-effort. Android keeps the browser-parity behavior.

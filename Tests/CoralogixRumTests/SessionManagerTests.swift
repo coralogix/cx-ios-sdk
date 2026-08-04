@@ -301,6 +301,31 @@ class SessionManagerTests: XCTestCase {
             "A stale trigger must not leak into a fresh session — the rotation's nil throttle already grants the first snapshot")
     }
 
+    func testRestorePendingSnapshotTrigger_reArmsWithinTheSameSession() {
+        sessionManager.triggerSnapshotOnNextEvent()
+        guard let token = sessionManager.consumePendingSnapshotTrigger() else {
+            return XCTFail("Arming must yield a token to consume")
+        }
+
+        sessionManager.restorePendingSnapshotTrigger(token)
+
+        XCTAssertNotNil(sessionManager.consumePendingSnapshotTrigger(),
+            "A token handed back in the session it was armed in must re-arm the promotion")
+    }
+
+    func testRestorePendingSnapshotTrigger_discardedAfterSessionRotation() {
+        sessionManager.triggerSnapshotOnNextEvent()
+        guard let token = sessionManager.consumePendingSnapshotTrigger() else {
+            return XCTFail("Arming must yield a token to consume")
+        }
+
+        sessionManager.setupSessionMetadata()
+        sessionManager.restorePendingSnapshotTrigger(token)
+
+        XCTAssertNil(sessionManager.consumePendingSnapshotTrigger(),
+            "A token from a rotated-out session must be discarded — a delayed beforeSend drop must not promote an event in the fresh session")
+    }
+
     // MARK: - Crash attribution to the previous-launch session
     //
     // A crash is captured on the *next* launch, after a fresh session has already
