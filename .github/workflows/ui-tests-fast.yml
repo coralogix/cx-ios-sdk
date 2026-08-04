@@ -318,3 +318,22 @@ jobs:
             exit 1
           fi
           echo "✅ All $EXPECTED UI tests ran."
+
+  # Emits the legacy required-check context "Run DemoApp UI Tests" so existing
+  # branch-protection rules stay satisfied without running the old workflow.
+  # Passes only if the sharded tests AND the coverage guard passed. Remove once
+  # branch protection is repointed to the shard jobs + "Verify no test was dropped".
+  legacy-check:
+    name: Run DemoApp UI Tests
+    needs: [ui-tests, verify]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "ui-tests=${{ needs.ui-tests.result }}  verify=${{ needs.verify.result }}"
+          if [ "${{ needs.ui-tests.result }}" = "success" ] && [ "${{ needs.verify.result }}" = "success" ]; then
+            echo "✅ sharded UI tests + coverage guard passed"
+          else
+            echo "❌ sharded UI tests or coverage guard failed"
+            exit 1
+          fi
