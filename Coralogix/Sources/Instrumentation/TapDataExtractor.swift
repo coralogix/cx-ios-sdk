@@ -264,6 +264,15 @@ enum TapDataExtractor {
         // flag it as sensitive (password field, sensitive textContentType), or when the caller's
         // shouldSendText delegate rejects it. The delegate is consulted last and only for text
         // that is not already redacted — a password must not reach the customer's closure.
+        //
+        // Covers UIKit `cxMask` only. SwiftUI's `.cxMask()` installs a non-hit-testing overlay
+        // *sibling*, so a masked composable's content is never below the overlay in the superview
+        // chain and `isInsideMaskedSubtree` is false for it — its pixels and tap marker are masked
+        // (the overlay contributes a real mask rect) but its text is not. `isSecureTextEntry` and
+        // a sensitive `textContentType` still redact, so SwiftUI `SecureField` is covered either
+        // way; a plainly-typed masked field is not. Closing this needs the tap tested against the
+        // frame's mask rects instead of the view tree, which would make every tap a hierarchy
+        // walk — deliberately deferred, and documented in the SessionReplay README.
         if !isContainerView(resolvedClassName),
            let innerText = rawInnerText(from: view),
            !innerText.isEmpty {
