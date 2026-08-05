@@ -231,7 +231,10 @@ final class ScrollTracker {
 enum TapDataExtractor {
     /// - Parameter shouldSendText: Optional delegate from `CoralogixExporterOptions`.
     ///   When provided, it is called with the view and candidate text before recording
-    ///   `target_element_inner_text`. Return `false` to suppress the text for that view.
+    ///   `target_element_inner_text`. Return `false` to redact the text to `***` — the key is
+    ///   still reported, so a redacted tap stays distinguishable from one on an element with no
+    ///   text. Views that are already masked never reach this delegate and their text is never
+    ///   passed to it; see the redaction rules at the call site below.
     /// - Parameter resolveTargetName: Optional delegate from `CoralogixExporterOptions`.
     ///   When provided, its return value replaces the UIKit class name in `target_element`.
     ///   Returning `nil` falls back to the resolved class name.
@@ -321,7 +324,7 @@ enum TapDataExtractor {
     /// holding sensitive PII — a password mask or a sensitive `textContentType`.
     /// This is intentionally checked via `UITextInputTraits` so it applies uniformly to
     /// `UITextField`, `UITextView`, and `UISearchBar` without repeating logic per class.
-    private static func hasSensitivePIIProperties(_ view: UIView) -> Bool {
+    static func hasSensitivePIIProperties(_ view: UIView) -> Bool {
         guard let traits = view as? UITextInputTraits else { return false }
         if traits.isSecureTextEntry == true { return true }
         if let contentType = traits.textContentType.flatMap({ $0 }),
@@ -329,16 +332,10 @@ enum TapDataExtractor {
         return false
     }
 
-    /// Returns developer-authored or user-typed (non-sensitive) text for a tapped view.
+    /// Returns the text a tapped view displays, whether or not it is sensitive.
     ///
-    /// **Property-based block (always nil — sensitive PII signals present):**
-    /// Text input views (`UITextField`, `UITextView`, `UISearchBar`) are blocked when iOS
-    /// system properties explicitly mark the field as sensitive:
-    /// - `isSecureTextEntry == true` (password / PIN masking)
-    /// - `textContentType` is `.password`, `.newPassword`, or `.creditCardNumber`
-    ///
-    /// **Text extraction (non-sensitive input and developer-authored text):**
-    /// - `UITextField` / `UITextView` / `UISearchBar` → current text (if non-sensitive)
+    /// **Text extraction:**
+    /// - `UITextField` / `UITextView` / `UISearchBar` → current text
     /// - `UIButton`           → button title
     /// - `UILabel`            → label text
     /// - `UITableViewCell`    → `UIListContentConfiguration.text` (iOS 14+), else `textLabel`
@@ -346,23 +343,14 @@ enum TapDataExtractor {
     /// - `UIDatePicker`, `UIStepper` → no text property; fall through to `accessibilityLabel`
     ///
     /// **Fallback:** `accessibilityLabel` — always developer-set, never user-typed.
-    static func safeInnerText(from view: UIView) -> String? {
-        // --- Property-based PII block ---
-        // Checked before any type-specific extraction so it applies to all input classes.
-        if hasSensitivePIIProperties(view) { return nil }
-
-        return rawInnerText(from: view)
-    }
-
-    /// The text `safeInnerText` would extract, without the sensitive-PII block.
     ///
-    /// Split out so a caller can tell "this view has sensitive text" apart from "this view has no
-    /// text" — `safeInnerText` answers nil to both, which is the right answer when the text is
-    /// about to be reported verbatim, but not when it is about to be redacted to `***`.
+    /// Deliberately does **not** apply the sensitive-PII block, so a caller can tell "this view
+    /// has sensitive text" apart from "this view has no text" — a distinction that matters once
+    /// the answer is redaction to `***` rather than omission. Pair it with
+    /// `hasSensitivePIIProperties` before reporting anything.
     ///
-    /// Callers that reach for this take on the obligation not to let the value escape: it may be
-    /// a password. Report `Keys.maskedInnerText` in its place, and never hand it to a customer
-    /// callback.
+    /// Callers take on the obligation not to let the value escape: it may be a password. Report
+    /// `Keys.maskedInnerText` in its place, and never hand it to a customer callback.
     static func rawInnerText(from view: UIView) -> String? {
         // --- Text input views (non-sensitive) ---
         if let textField = view as? UITextField {

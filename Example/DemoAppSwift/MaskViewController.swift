@@ -136,17 +136,23 @@ class MaskViewController: UIViewController {
     /// Masking is applied to the container only — the keys inside carry no `cxMask` of their own.
     /// They still inherit it: the replay draws no tap marker over them and their interaction
     /// events report `***` instead of the digit.
+    ///
+    /// The keys deliberately share one identifier. `element_id` comes from
+    /// `accessibilityIdentifier` and is **not** redacted inside a masked subtree — it is
+    /// developer-authored, so the SDK takes it at face value. A per-digit identifier here would
+    /// leak the sequence through `element_id` and defeat the masking this screen demonstrates.
     private lazy var maskedKeypad: UIView = {
-        let keypad = makeKeypad(tint: .systemRed)
+        let keypad = makeKeypad(tint: .systemRed) { _ in "masked_keypad_key" }
         keypad.cxMask = true // 👈 masks the whole subtree, keys included
         return keypad
     }()
 
     /// The same keypad without masking — its digits appear in the replay and in the interaction
     /// events, which is what makes the masked one's behaviour visible as a difference.
-    private lazy var unmaskedKeypad: UIView = makeKeypad(tint: .systemBlue)
+    private lazy var unmaskedKeypad: UIView = makeKeypad(tint: .systemBlue) { "keypad_key_\($0)" }
 
-    private func makeKeypad(tint: UIColor) -> UIView {
+    private func makeKeypad(tint: UIColor,
+                            identifierForDigit: (Int) -> String) -> UIView {
         let rows = (0..<2).map { row -> UIStackView in
             let buttons = (0..<3).map { column -> UIButton in
                 let digit = row * 3 + column + 1
@@ -157,7 +163,7 @@ class MaskViewController: UIViewController {
                 key.layer.borderWidth = 1
                 key.layer.borderColor = tint.withAlphaComponent(0.4).cgColor
                 key.layer.cornerRadius = 6
-                key.accessibilityIdentifier = "keypad_key_\(digit)"
+                key.accessibilityIdentifier = identifierForDigit(digit)
                 key.addTarget(self, action: #selector(keypadKeyTapped(_:)), for: .touchUpInside)
                 return key
             }

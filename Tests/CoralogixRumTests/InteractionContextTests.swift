@@ -23,6 +23,15 @@ final class InteractionContextTests: XCTestCase {
         return nil
     }
 
+    /// The composition `extract` performs: extract the text, then treat it as unavailable when the
+    /// view carries a sensitive-PII signal. Production redacts to `***` at that point rather than
+    /// dropping the value; these tests predate that and assert the extraction rules themselves, so
+    /// they keep asking the narrower question "would this text have been reportable verbatim?".
+    private func safeInnerText(from view: UIView) -> String? {
+        if TapDataExtractor.hasSensitivePIIProperties(view) { return nil }
+        return TapDataExtractor.rawInnerText(from: view)
+    }
+
     private func makeSpan(tapObject: [String: Any]) -> SpanDataProtocol {
         let now = Date()
         return MockSpanData(
@@ -151,7 +160,7 @@ final class InteractionContextTests: XCTestCase {
     func testSafeInnerText_textField_nonSensitive_returnsText() {
         let tf = UITextField()
         tf.text = "user@example.com"
-        XCTAssertEqual(TapDataExtractor.safeInnerText(from: tf), "user@example.com")
+        XCTAssertEqual(safeInnerText(from: tf), "user@example.com")
     }
 
     /// UITextField with isSecureTextEntry must return nil — password/PIN field.
@@ -159,7 +168,7 @@ final class InteractionContextTests: XCTestCase {
         let tf = UITextField()
         tf.isSecureTextEntry = true
         tf.text = "super-secret"
-        XCTAssertNil(TapDataExtractor.safeInnerText(from: tf))
+        XCTAssertNil(safeInnerText(from: tf))
     }
 
     /// UITextField whose textContentType is .password must return nil.
@@ -167,7 +176,7 @@ final class InteractionContextTests: XCTestCase {
         let tf = UITextField()
         tf.textContentType = .password
         tf.text = "hunter2"
-        XCTAssertNil(TapDataExtractor.safeInnerText(from: tf))
+        XCTAssertNil(safeInnerText(from: tf))
     }
 
     /// UITextField whose textContentType is .newPassword must return nil.
@@ -175,7 +184,7 @@ final class InteractionContextTests: XCTestCase {
         let tf = UITextField()
         tf.textContentType = .newPassword
         tf.text = "S3cur3P@ss!"
-        XCTAssertNil(TapDataExtractor.safeInnerText(from: tf))
+        XCTAssertNil(safeInnerText(from: tf))
     }
 
     /// UITextField whose textContentType is .creditCardNumber must return nil.
@@ -183,7 +192,7 @@ final class InteractionContextTests: XCTestCase {
         let tf = UITextField()
         tf.textContentType = .creditCardNumber
         tf.text = "4111111111111111"
-        XCTAssertNil(TapDataExtractor.safeInnerText(from: tf))
+        XCTAssertNil(safeInnerText(from: tf))
     }
 
     // MARK: UITextView
@@ -192,7 +201,7 @@ final class InteractionContextTests: XCTestCase {
     func testSafeInnerText_textView_nonSensitive_returnsText() {
         let tv = UITextView()
         tv.text = "some user note"
-        XCTAssertEqual(TapDataExtractor.safeInnerText(from: tv), "some user note")
+        XCTAssertEqual(safeInnerText(from: tv), "some user note")
     }
 
     /// UITextView with isSecureTextEntry must return nil.
@@ -200,14 +209,14 @@ final class InteractionContextTests: XCTestCase {
         let tv = UITextView()
         tv.isSecureTextEntry = true
         tv.text = "secret"
-        XCTAssertNil(TapDataExtractor.safeInnerText(from: tv))
+        XCTAssertNil(safeInnerText(from: tv))
     }
 
     /// Empty UITextView (no text) must return nil — nothing useful to capture.
     func testSafeInnerText_textView_empty_returnsNil() {
         let tv = UITextView()
         tv.text = ""
-        XCTAssertNil(TapDataExtractor.safeInnerText(from: tv))
+        XCTAssertNil(safeInnerText(from: tv))
     }
 
     // MARK: UISearchBar
@@ -216,7 +225,7 @@ final class InteractionContextTests: XCTestCase {
     func testSafeInnerText_searchBar_nonSensitive_returnsText() {
         let sb = UISearchBar()
         sb.text = "search term"
-        XCTAssertEqual(TapDataExtractor.safeInnerText(from: sb), "search term")
+        XCTAssertEqual(safeInnerText(from: sb), "search term")
     }
 
     /// UISearchBar with isSecureTextEntry must return nil.
@@ -224,28 +233,28 @@ final class InteractionContextTests: XCTestCase {
         let sb = UISearchBar()
         sb.isSecureTextEntry = true
         sb.text = "pin"
-        XCTAssertNil(TapDataExtractor.safeInnerText(from: sb))
+        XCTAssertNil(safeInnerText(from: sb))
     }
 
     /// UIButton title is developer-authored — must be captured.
     func testSafeInnerText_button_returnsTitle() {
         let btn = UIButton()
         btn.setTitle("Add to Cart", for: .normal)
-        XCTAssertEqual(TapDataExtractor.safeInnerText(from: btn), "Add to Cart")
+        XCTAssertEqual(safeInnerText(from: btn), "Add to Cart")
     }
 
     /// UILabel text is developer-authored — must be captured.
     func testSafeInnerText_label_returnsText() {
         let lbl = UILabel()
         lbl.text = "Section Header"
-        XCTAssertEqual(TapDataExtractor.safeInnerText(from: lbl), "Section Header")
+        XCTAssertEqual(safeInnerText(from: lbl), "Section Header")
     }
 
     /// UITableViewCell primary text is developer-authored — must be captured.
     func testSafeInnerText_tableViewCell_returnsTextLabel() {
         let cell = UITableViewCell()
         cell.textLabel?.text = "Settings"
-        XCTAssertEqual(TapDataExtractor.safeInnerText(from: cell), "Settings")
+        XCTAssertEqual(safeInnerText(from: cell), "Settings")
     }
 
     /// UITableViewCell with an empty textLabel must not return "" and must fall through to accessibilityLabel.
@@ -256,7 +265,7 @@ final class InteractionContextTests: XCTestCase {
         if #available(iOS 14.0, *) {
             cell.contentConfiguration = nil
         }
-        XCTAssertEqual(TapDataExtractor.safeInnerText(from: cell), "Item Row",
+        XCTAssertEqual(safeInnerText(from: cell), "Item Row",
                        "Whitespace-only textLabel must fall through to accessibilityLabel")
     }
 
@@ -270,7 +279,7 @@ final class InteractionContextTests: XCTestCase {
         config.secondaryText = "   "
         cell.contentConfiguration = config
         cell.accessibilityLabel = "Product Row"
-        XCTAssertEqual(TapDataExtractor.safeInnerText(from: cell), "Product Row",
+        XCTAssertEqual(safeInnerText(from: cell), "Product Row",
                        "UIListContentConfiguration with empty text and whitespace secondaryText must fall through to accessibilityLabel")
     }
 
@@ -284,7 +293,7 @@ final class InteractionContextTests: XCTestCase {
         config.secondaryText = "Subtitle"
         cell.contentConfiguration = config
         cell.accessibilityLabel = "Should Not Be Used"
-        XCTAssertEqual(TapDataExtractor.safeInnerText(from: cell), "Subtitle",
+        XCTAssertEqual(safeInnerText(from: cell), "Subtitle",
                        "Non-empty secondaryText must be returned when primary text is empty")
     }
 
@@ -292,26 +301,26 @@ final class InteractionContextTests: XCTestCase {
     func testSafeInnerText_segmentedControl_returnsSelectedTitle() {
         let seg = UISegmentedControl(items: ["Day", "Week", "Month"])
         seg.selectedSegmentIndex = 1
-        XCTAssertEqual(TapDataExtractor.safeInnerText(from: seg), "Week")
+        XCTAssertEqual(safeInnerText(from: seg), "Week")
     }
 
     /// UISegmentedControl with no selection must return nil.
     func testSafeInnerText_segmentedControl_noSelection_returnsNil() {
         let seg = UISegmentedControl(items: ["Day", "Week"])
         seg.selectedSegmentIndex = UISegmentedControl.noSegment
-        XCTAssertNil(TapDataExtractor.safeInnerText(from: seg))
+        XCTAssertNil(safeInnerText(from: seg))
     }
 
     /// accessibilityLabel is the safe fallback for any other view type.
     func testSafeInnerText_genericView_usesAccessibilityLabel() {
         let view = UIView()
         view.accessibilityLabel = "Profile Avatar"
-        XCTAssertEqual(TapDataExtractor.safeInnerText(from: view), "Profile Avatar")
+        XCTAssertEqual(safeInnerText(from: view), "Profile Avatar")
     }
 
     /// A generic UIView with no text and no accessibilityLabel must return nil.
     func testSafeInnerText_genericView_noText_returnsNil() {
-        XCTAssertNil(TapDataExtractor.safeInnerText(from: UIView()))
+        XCTAssertNil(safeInnerText(from: UIView()))
     }
 
     // MARK: - safeInnerText — UIDatePicker / UIStepper fall through to accessibilityLabel
@@ -320,14 +329,14 @@ final class InteractionContextTests: XCTestCase {
     func testSafeInnerText_datePicker_usesAccessibilityLabel() {
         let picker = UIDatePicker()
         picker.accessibilityLabel = "Birth Date"
-        XCTAssertEqual(TapDataExtractor.safeInnerText(from: picker), "Birth Date")
+        XCTAssertEqual(safeInnerText(from: picker), "Birth Date")
     }
 
     /// UIStepper has no text property — must fall through to accessibilityLabel.
     func testSafeInnerText_stepper_usesAccessibilityLabel() {
         let stepper = UIStepper()
         stepper.accessibilityLabel = "Quantity"
-        XCTAssertEqual(TapDataExtractor.safeInnerText(from: stepper), "Quantity")
+        XCTAssertEqual(safeInnerText(from: stepper), "Quantity")
     }
 
     // MARK: - TapDataExtractor.extract — swipe events

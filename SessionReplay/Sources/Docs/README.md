@@ -79,16 +79,20 @@ Masking does not suppress the interaction event itself, and the event still carr
 
 ### Which masking sources suppress a tap marker
 
-Only masking that reports geometry to the capture pass can suppress a marker, because the marker is tested against the exact rectangles the frame blacked out — the pixels and the marker can never disagree.
+Only masking that reports geometry to the capture pass can suppress a marker, because the marker is tested against the exact rectangles the frame blacked out — the pixels and the marker can never disagree. The synchronous `UIView` walk reports geometry; the Vision-based scanners and the Dart bitmap mask pixels in place and report none.
 
 | Masking source | Pixels masked | Tap marker suppressed | Interaction text `***` |
 |---|---|---|---|
 | `cxMask` on a `UIView` (and its subviews) | ✅ | ✅ | ✅ |
 | `.cxMask()` on a SwiftUI view | ✅ | ✅ | ❌ — see below |
-| `maskText`, `maskAllImages`, `maskFaces`, `creditCardPredicate` | ✅ | ❌ | ❌ |
+| `maskText` / `maskAllImages` on **UIKit** views (`UILabel`, `UITextField`, `UITextView`, `UINavigationBar` titles, `UIImageView`) | ✅ | ✅ | ❌ |
+| `maskText` / `maskAllImages` on **SwiftUI** content (OCR / rectangle detection) | ✅ | ❌ | ❌ |
+| `maskFaces`, `creditCardPredicate` (Vision) | ✅ | ❌ | ❌ |
 | Flutter (Dart-supplied pre-masked bitmap) | ✅ | ❌ | ❌ |
 
 The global policy options and the Flutter path deliberately do not affect interaction text: they answer "should these pixels be hidden in this frame", which is not the same question as "may this text leave the device". Password fields and fields with a sensitive `textContentType` are redacted to `***` independently of any of this.
+
+> **`element_id` is never redacted.** It carries the view's `accessibilityIdentifier`, which is developer-authored rather than user data, so the SDK reports it as-is even for a view inside a masked subtree. Avoid encoding sensitive values in identifiers: on a masked keypad, per-digit identifiers such as `keypad_key_7` would reconstruct the entered sequence from the tap spans even though the text is `***`. Both demo apps give the masked keypad's keys a single shared identifier for this reason. This matches the Android SDK, which does not redact `resourceId` either.
 
 > **Limitation — SwiftUI:** `.cxMask()` works by overlaying a masked `UIView` on top of the composable content. That overlay masks the pixels and suppresses tap markers over the area, but it is a sibling of the content rather than an ancestor of it, so the views underneath do not inherit masking and their interaction events still report their real text. If a SwiftUI control's text is sensitive, use the `shouldSendText` option to redact it.
 

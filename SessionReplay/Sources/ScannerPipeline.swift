@@ -19,6 +19,12 @@ extension Array where Element == CGRect {
     ///
     /// Internal, and deliberately not on the shared `CoralogixInternal` surface: the capture pass
     /// only collects the rects, and this question is asked in exactly one place — here.
+    ///
+    /// `CGRect.contains` excludes the `maxX`/`maxY` edges, so a tap exactly on a mask's bottom or
+    /// right boundary reads as outside and still draws a marker. Left as-is: the marker is centred
+    /// on the tap, and its radius already overlaps masked pixels for any tap within ~25pt of a
+    /// mask, so treating the boundary as inside would not stop that — only insetting every rect by
+    /// the marker radius would, which would suppress markers well outside the masked area.
     func containsTap(_ point: CGPoint) -> Bool {
         contains { $0.contains(point) }
     }

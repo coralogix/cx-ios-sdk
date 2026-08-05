@@ -70,9 +70,12 @@ struct MaskDemoView: View {
                     .foregroundColor(.secondary)
 
                 HStack(spacing: 16) {
-                    KeypadView(tint: .red)
+                    // One shared identifier on the masked pad: `element_id` comes from
+                    // accessibilityIdentifier and is not redacted, so per-digit identifiers would
+                    // leak the sequence the masking is meant to hide.
+                    KeypadView(tint: .red) { _ in "masked_keypad_key" }
                         .cxMask() // 👈 masks the whole container, keys included
-                    KeypadView(tint: .blue)
+                    KeypadView(tint: .blue) { "keypad_key_\($0)" }
                 }
 
                 // Button
@@ -137,6 +140,7 @@ struct MaskDemoView: View {
 /// hit-testing resolves a single key, not the container the mask was applied to.
 struct KeypadView: View {
     let tint: Color
+    let identifierForDigit: (Int) -> String
 
     var body: some View {
         VStack(spacing: 6) {
@@ -154,7 +158,7 @@ struct KeypadView: View {
                             RoundedRectangle(cornerRadius: 6)
                                 .stroke(tint.opacity(0.4), lineWidth: 1)
                         )
-                        .accessibilityIdentifier("keypad_key_\(digit)")
+                        .accessibilityIdentifier(identifierForDigit(digit))
                     }
                 }
             }
