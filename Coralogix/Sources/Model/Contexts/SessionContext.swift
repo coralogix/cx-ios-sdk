@@ -72,11 +72,14 @@ struct SessionContext {
     /// armed with. The usual sources (span attributes stamped at creation, exporter
     /// options copied per span at encode) can predate the `setUserContext` call, and
     /// the promoted snapshot must reflect exactly the context that requested it.
-    mutating func applyUserContextOverride(_ userContext: UserContext) {
-        self.userId = userContext.userId
-        self.userName = userContext.userName
-        self.userEmail = userContext.userEmail
-        self.userMetadata = userContext.userMetadata
+    /// nil records a clear: the identity empties and `userMetadata` becomes nil so
+    /// the wire omits `user_metadata`, matching every non-promoted event after the
+    /// clear (`getDictionary` only writes the key for a non-nil dictionary).
+    mutating func applyUserContextOverride(_ userContext: UserContext?) {
+        self.userId = userContext?.userId ?? ""
+        self.userName = userContext?.userName ?? ""
+        self.userEmail = userContext?.userEmail ?? ""
+        self.userMetadata = userContext?.userMetadata
     }
 
     static func shouldRestorePreviousSession(from otel: SpanDataProtocol) -> Bool {

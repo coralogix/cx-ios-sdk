@@ -157,8 +157,9 @@ public class CxSpan {
                 }
                 // Same compensation for the setUserContext promotion: this span consumed
                 // the one-shot token, so hand it back and let the next accepted event
-                // carry the snapshot. The restore is session-checked — a token from a
-                // rotated-out session is discarded instead of re-armed.
+                // carry the snapshot. The restore is guarded — a token from a rotated-out
+                // session is discarded, and one that raced a newer setUserContext never
+                // displaces the fresher arm.
                 if let consumedTrigger = self.cxRum.consumedSnapshotTrigger {
                     sessionManager?.restorePendingSnapshotTrigger(consumedTrigger)
                 }

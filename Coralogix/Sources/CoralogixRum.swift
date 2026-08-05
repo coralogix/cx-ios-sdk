@@ -278,11 +278,9 @@ public class CoralogixRum {
         // The token captures the context it was armed for: the promoted event's own
         // identity sources (span attributes stamped at creation, options copied per
         // span at encode) can predate this call, and the snapshot must reflect
-        // exactly the context that requested it. A clear (nil) maps to an empty
-        // context so the promoted event reports the cleared identity too.
-        let armedContext = userContext
-            ?? UserContext(userId: "", userName: "", userEmail: "", userMetadata: [:])
-        self.coralogixExporter?.getSessionManager().triggerSnapshotOnNextEvent(userContext: armedContext)
+        // exactly the context that requested it — including a clear, which the
+        // token records as nil.
+        self.coralogixExporter?.getSessionManager().triggerSnapshotOnNextEvent(userContext: userContext)
     }
     
     public func set(labels: [String: Any]) {

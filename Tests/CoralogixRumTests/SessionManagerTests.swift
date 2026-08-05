@@ -326,6 +326,54 @@ class SessionManagerTests: XCTestCase {
             "A token from a rotated-out session must be discarded — a delayed beforeSend drop must not promote an event in the fresh session")
     }
 
+    func testRestorePendingSnapshotTrigger_doesNotClobberNewerArm() {
+        // Interleaving: token A is consumed, setUserContext(B) arms a fresh token while
+        // A's span sits in the customer's beforeSend, then the drop hands A back.
+        sessionManager.triggerSnapshotOnNextEvent(
+            userContext: UserContext(userId: "user-A", userName: "A", userEmail: "a@example.com", userMetadata: [:]))
+        guard let staleToken = sessionManager.consumePendingSnapshotTrigger() else {
+            return XCTFail("Arming must yield a token to consume")
+        }
+
+        sessionManager.triggerSnapshotOnNextEvent(
+            userContext: UserContext(userId: "user-B", userName: "B", userEmail: "b@example.com", userMetadata: [:]))
+        sessionManager.restorePendingSnapshotTrigger(staleToken)
+
+        XCTAssertEqual(sessionManager.consumePendingSnapshotTrigger()?.userContext?.userId, "user-B",
+            "A handed-back token must not displace a fresher arm — the next promoted snapshot has to report the newest setUserContext identity")
+    }
+
+    func testTriggerSnapshotOnNextEvent_expiredSession_armsForTheRotatedSession() {
+        // Rotation is lazy — with no span emitted for over an hour, only the arm itself
+        // can fire it. A token stamped with the expired session's id could never match
+        // any future span, and the rotation would then delete it unconsumed.
+        guard var metadata = sessionManager.getSessionMetadata() else {
+            return XCTFail("Initial session metadata should not be nil")
+        }
+        let expiredSessionId = metadata.sessionId
+        metadata.sessionCreationDate = Date().addingTimeInterval(-3601).timeIntervalSince1970
+        sessionManager.sessionMetadata = metadata
+
+        sessionManager.triggerSnapshotOnNextEvent()
+
+        let token = sessionManager.consumePendingSnapshotTrigger()
+        XCTAssertNotNil(token, "Arming on an expired session must still yield a pending token")
+        XCTAssertNotEqual(token?.sessionId, expiredSessionId,
+            "The token must not be stamped with the expired session no span will ever carry again")
+        XCTAssertEqual(token?.sessionId, sessionManager.getSessionMetadata()?.sessionId,
+            "The arm must rotate first so the token belongs to the session the next span will actually carry")
+    }
+
+    func testShutdown_clearsPendingSnapshotTrigger() {
+        sessionManager.triggerSnapshotOnNextEvent(
+            userContext: UserContext(userId: "u1", userName: "n", userEmail: "a@b.com", userMetadata: [:]))
+
+        sessionManager.shutdown()
+
+        XCTAssertNil(sessionManager.consumePendingSnapshotTrigger(),
+            "shutdown() must release the armed token — with the session id blanked it could never be consumed, only retain the user's identity")
+    }
+
     // MARK: - Crash attribution to the previous-launch session
     //
     // A crash is captured on the *next* launch, after a fresh session has already

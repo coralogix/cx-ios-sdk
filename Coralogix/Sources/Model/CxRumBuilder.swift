@@ -55,17 +55,24 @@ class CxRumBuilder {
 
         // Consumed only after the drop-guard above: a span that never exports must not
         // swallow the one-shot promotion armed by setUserContext. Taken unconditionally
-        // (not short-circuited behind the other triggers) — the browser clears its flag
-        // whenever any snapshot is emitted, and when a token is present the snapshot
-        // always emits, so consume-on-take == consume-on-emit.
+        // (not short-circuited behind the other triggers) — browser parity: any emitted
+        // snapshot satisfies the pending request. What keeps the one-shot alive is the
+        // invariant that every path that does NOT emit the promoted snapshot hands the
+        // token back: the eligibility reject below and the beforeSend drop in
+        // CxSpan.getDictionary() are those paths today — any new early-out between the
+        // take and the snapshot decision must do the same.
         var pendingSnapshotTrigger = sessionManager.consumePendingSnapshotTrigger()
 
-        // The token only promotes spans of the session it was armed in. A buffered span
-        // from a rotated-out session exports after the arm; promoting it would stamp the
-        // new session's identity onto the old session's snapshot record — and burn the
-        // token meant for the new session's events. Hand it back (session-checked
-        // against the active session) and treat this span as unpromoted.
-        if let trigger = pendingSnapshotTrigger, trigger.sessionId != sessionContext.sessionId {
+        // Eligibility: the token only promotes a span of the session it was armed in
+        // that started at or after the arm. A buffered span from a rotated-out session
+        // would stamp the new session's identity onto the old session's snapshot
+        // record; a pre-arm span describes a moment before the user change and already
+        // went out through tracesExporter with the old identity. Either way, hand the
+        // token back (session-checked) and leave this span unpromoted — the armed
+        // session's next eligible event carries the promotion instead.
+        if let trigger = pendingSnapshotTrigger,
+           !trigger.canPromote(sessionId: sessionContext.sessionId,
+                               spanStartTime: otel.getStartTime()) {
             sessionManager.restorePendingSnapshotTrigger(trigger)
             pendingSnapshotTrigger = nil
         }
@@ -75,10 +82,11 @@ class CxRumBuilder {
 
         // The promoted event reports the identity the token was armed with — the
         // carrier span's own identity can predate the setUserContext call (attributes
-        // stamped at creation, options copied at encode). prevSessionContext is left
-        // untouched: it describes the prior session's historical identity.
-        if let armedContext = pendingSnapshotTrigger?.userContext {
-            sessionContext.applyUserContextOverride(armedContext)
+        // stamped at creation, options copied at encode). A nil token context records
+        // a clear. prevSessionContext is left untouched: it describes the prior
+        // session's historical identity.
+        if let trigger = pendingSnapshotTrigger {
+            sessionContext.applyUserContextOverride(trigger.userContext)
         }
 
         if SessionContext.shouldRestorePreviousSession(from: otel){
@@ -163,9 +171,12 @@ class CxRumBuilder {
         return InternalContext(eventName: Keys.initKey.rawValue, data: options.getInitData())
     }
     
-    /// Pure decision: the caller (`build()`) owns consuming the pending setUserContext
-    /// trigger and passes the token in, so a span dropped before this point can never
-    /// swallow the one-shot promotion.
+    /// Decides whether this event emits a snapshot — and when it does, mutates session
+    /// state (error counter, snapshot-throttle timestamp), so call it exactly once per
+    /// event, at emit time; a speculative call over-counts errors and steals the next
+    /// qualifying event's snapshot. The caller (`build()`) owns consuming the pending
+    /// setUserContext trigger and passes the token in, so a span dropped before this
+    /// point can never swallow the one-shot promotion.
     internal func buildSnapshotContextIfNeeded(for eventContext: EventContext,
                                                pendingTrigger: PendingSnapshotTrigger? = nil) -> SnapshotContext? {
         let currentTime = otel.getStartTime() ?? Date().timeIntervalSince1970

@@ -132,11 +132,16 @@ final class BeforeSendInstrumentationDataTests: XCTestCase {
     func test_beforeSendDrop_reArmsConsumedSnapshotTrigger() throws {
         let sessionManager = SessionManager()
         // Align the active session with the span's stamped session so the armed token
-        // is consumable by this span (build() rejects cross-session tokens).
+        // is consumable by this span (build() rejects cross-session tokens). Recent
+        // creation date: arming routes through getSessionMetadata(), which would
+        // rotate (and re-stamp) a session older than an hour.
         sessionManager.sessionMetadata = SessionMetadata(sessionId: "session_001",
-                                                         sessionCreationDate: 1609459200,
+                                                         sessionCreationDate: Date().timeIntervalSince1970,
                                                          using: MockKeyChain())
         sessionManager.triggerSnapshotOnNextEvent()
+        // The carrier span must start after the arm — build() hands the token back
+        // for spans that predate the setUserContext call.
+        mockSpanData = makeNetworkRequestMockSpan()
 
         let cxSpan = try XCTUnwrap(CxSpan(
             otel: mockSpanData,
