@@ -415,17 +415,18 @@ final class InteractionContextTests: XCTestCase {
                        "shouldSendText returning true must allow text capture")
     }
 
-    /// When shouldSendText returns false the inner text must be suppressed even though
-    /// the SDK would otherwise record it.
-    func testExtract_shouldSendText_returnsFalse_suppressesInnerText() {
+    /// When shouldSendText returns false the inner text must be redacted to `***` — reported,
+    /// but not readable. The key stays present so a rejected tap is distinguishable from a tap on
+    /// an element that had no text at all.
+    func testExtract_shouldSendText_returnsFalse_redactsInnerText() {
         let button = UIButton()
         button.setTitle("Submit", for: .normal) // safeInnerText reads currentTitle, not accessibilityLabel
         let event = TouchEvent(view: button, location: .zero, eventType: .click, scrollDirection: nil)
 
         let data = TapDataExtractor.extract(from: event, shouldSendText: { _, _ in false })
 
-        XCTAssertNil(data[Keys.targetElementInnerText.rawValue],
-                     "shouldSendText returning false must suppress target_element_inner_text")
+        XCTAssertEqual(data[Keys.targetElementInnerText.rawValue] as? String, "***",
+                       "shouldSendText returning false must redact target_element_inner_text to ***")
     }
 
     /// With no shouldSendText delegate the inner text must be captured as normal (defaults to true).

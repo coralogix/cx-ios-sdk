@@ -254,17 +254,23 @@ enum TapDataExtractor {
             tapData[Keys.elementId.rawValue] = accessibilityId
         }
 
-        // target_element_inner_text: PII-safe text only.
-        // Container views are skipped (they span many items; text would be ambiguous).
-        // Input views (UITextField, UITextView, UISearchBar) are always skipped —
-        // they hold user-typed content which may be passwords, emails, or other PII.
-        // If the caller supplied a shouldSendText delegate, it is the final gate:
-        // returning false suppresses the text even when all SDK-side checks pass.
+        // target_element_inner_text: redacted text, never omitted text.
+        // Container views are skipped (they span many items; text would be ambiguous), and a view
+        // with no text at all reports nothing. Everything else reports either its text or `***`,
+        // so a masked tap is visibly masked rather than indistinguishable from a tap on something
+        // that had nothing to say. Matches the Android SDK.
+        //
+        // Text is redacted when the view is inside a masked subtree, when iOS system properties
+        // flag it as sensitive (password field, sensitive textContentType), or when the caller's
+        // shouldSendText delegate rejects it. The delegate is consulted last and only for text
+        // that is not already redacted — a password must not reach the customer's closure.
         if !isContainerView(resolvedClassName),
-           let innerText = safeInnerText(from: view),
-           !innerText.isEmpty,
-           shouldSendText?(view, innerText) ?? true {
-            tapData[Keys.targetElementInnerText.rawValue] = innerText
+           let innerText = rawInnerText(from: view),
+           !innerText.isEmpty {
+            let isMasked = view.isInsideMaskedSubtree || hasSensitivePIIProperties(view)
+            let isAllowedByDelegate = !isMasked && (shouldSendText?(view, innerText) ?? true)
+            tapData[Keys.targetElementInnerText.rawValue] =
+                isAllowedByDelegate ? innerText : Keys.maskedInnerText.rawValue
         }
 
         // scroll_direction: only present for scroll/swipe events
@@ -336,6 +342,19 @@ enum TapDataExtractor {
         // Checked before any type-specific extraction so it applies to all input classes.
         if hasSensitivePIIProperties(view) { return nil }
 
+        return rawInnerText(from: view)
+    }
+
+    /// The text `safeInnerText` would extract, without the sensitive-PII block.
+    ///
+    /// Split out so a caller can tell "this view has sensitive text" apart from "this view has no
+    /// text" — `safeInnerText` answers nil to both, which is the right answer when the text is
+    /// about to be reported verbatim, but not when it is about to be redacted to `***`.
+    ///
+    /// Callers that reach for this take on the obligation not to let the value escape: it may be
+    /// a password. Report `Keys.maskedInnerText` in its place, and never hand it to a customer
+    /// callback.
+    static func rawInnerText(from view: UIView) -> String? {
         // --- Text input views (non-sensitive) ---
         if let textField = view as? UITextField {
             return textField.text

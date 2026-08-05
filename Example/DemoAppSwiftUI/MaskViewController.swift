@@ -56,7 +56,25 @@ struct MaskDemoView: View {
                 Text("Sensitive Info")
                     .foregroundColor(.red)
                     .cxMask() // masked example
-                
+
+                // Keypads — mirrors the UIKit demo's masked/unmasked pair.
+                //
+                // `.cxMask()` overlays a masked UIView on top of this container, so the replay
+                // blacks the keypad out and draws no tap marker over it. Unlike the UIKit
+                // `cxMask`, the overlay is not an ancestor of the keys, so their interaction
+                // events still report the digit. Masking a SwiftUI control's interaction text is
+                // not supported yet — see the SessionReplay README.
+                Text("Keypads: the left one is masked at the container. "
+                     + "Tap both and compare them in the replay.")
+                    .font(.system(size: 13))
+                    .foregroundColor(.secondary)
+
+                HStack(spacing: 16) {
+                    KeypadView(tint: .red)
+                        .cxMask() // 👈 masks the whole container, keys included
+                    KeypadView(tint: .blue)
+                }
+
                 // Button
                 Button(action: {}) {
                     Text("Submit")
@@ -112,5 +130,35 @@ struct MaskDemoView: View {
             .padding(20)
         }
         .background(Color(.systemBackground))
+    }
+}
+
+/// A 3×2 grid of individually tappable keys — the shape that made masking-by-container matter:
+/// hit-testing resolves a single key, not the container the mask was applied to.
+struct KeypadView: View {
+    let tint: Color
+
+    var body: some View {
+        VStack(spacing: 6) {
+            ForEach(0..<2, id: \.self) { row in
+                HStack(spacing: 6) {
+                    ForEach(0..<3, id: \.self) { column in
+                        let digit = row * 3 + column + 1
+                        Button(action: {}) {
+                            Text("\(digit)")
+                                .font(.system(size: 20, weight: .bold))
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        }
+                        .foregroundColor(tint)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6)
+                                .stroke(tint.opacity(0.4), lineWidth: 1)
+                        )
+                        .accessibilityIdentifier("keypad_key_\(digit)")
+                    }
+                }
+            }
+        }
+        .frame(height: 92)
     }
 }

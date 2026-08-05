@@ -9,6 +9,21 @@ import Foundation
 import CoreImage
 import CoralogixInternal
 
+extension Array where Element == CGRect {
+    /// Whether a tap at `point` (screen points) landed inside one of a frame's masked regions.
+    ///
+    /// Fails closed: any rect containing the point counts, including one belonging to a window a
+    /// higher z-order layer later painted over. Resolving stacking precisely would risk drawing a
+    /// marker over content the customer asked to be masked; the cost of the conservative answer is
+    /// only a missing marker in a rare layering case.
+    ///
+    /// Internal, and deliberately not on the shared `CoralogixInternal` surface: the capture pass
+    /// only collects the rects, and this question is asked in exactly one place — here.
+    func containsTap(_ point: CGPoint) -> Bool {
+        contains { $0.contains(point) }
+    }
+}
+
 class ScannerPipeline {
     func runPipeline(
         options: SessionReplayOptions,
@@ -36,6 +51,11 @@ class ScannerPipeline {
         //   detection) stages here. Probabilistic — accepted interim trade-off (BUGV2-6045).
         // - Credit-card image detection (ImageScanner, maskAll: false) runs for everyone
         //   when enabled.
+        //
+        // Only the UIKit walk reports geometry back (URLEntry.maskRects). The OCR/Vision and
+        // Dart-bitmap stages mask pixels in place and report none, so a tap over content masked
+        // only by those still draws its marker. Suppressing those needs the scanners to surface
+        // their observation rects in screen points, which is its own work.
         let needsSwiftUIMasking = urlEntry.containsSwiftUIContent
         let isTextScannerEnabled = needsSwiftUIMasking && !(options.maskText?.isEmpty ?? true)
         let isImageScannerEnabled = options.maskOnlyCreditCards || (needsSwiftUIMasking && options.maskAllImages)
@@ -91,6 +111,19 @@ class ScannerPipeline {
         func runClickScanner(input: CIImage, completion: @escaping (CIImage) -> Void) {
             guard let point = urlEntry.point else {
                 Log.e("Tap point not provided. Cannot run ClickScanner.")
+                completion(input)
+                return
+            }
+
+            // A tap inside a masked region is drawn nowhere: the marker would give away which
+            // element under the mask was hit, and a run of markers reconstructs what was entered
+            // on a masked keypad. The frame itself is kept — only the position is withheld.
+            //
+            // Tested against the rects the capture pass actually painted, so the marker cannot
+            // contradict the pixels. Regions masked by the OCR/Vision stages above report no
+            // geometry and so cannot suppress a marker — see the SwiftUI note in runPipeline.
+            guard !urlEntry.maskRects.containsTap(point) else {
+                Log.d("[SR] tap inside a masked region — marker suppressed")
                 completion(input)
                 return
             }

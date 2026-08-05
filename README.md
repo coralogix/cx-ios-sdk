@@ -322,7 +322,9 @@ let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
 > **Note:** Only allowlist URLs and header names you are comfortable logging. Avoid capturing `Authorization` or other sensitive headers unless intentional. Body and header capture should not be used for endpoints that return or send PII or secrets. Request and response bodies over 1024 characters are **dropped** (not truncated) and do not appear in RUM.
 
 ### User Action Text Redaction (`shouldSendText`)
-Called before `target_element_inner_text` is recorded for a tapped view. Return `false` to suppress text capture for sensitive views (e.g. fields showing account numbers or personal data) without disabling text capture globally.
+Called before `target_element_inner_text` is recorded for a tapped view. Return `false` to redact text for sensitive views (e.g. fields showing account numbers or personal data) without disabling text capture globally.
+
+Redacted text is reported as `***` rather than omitted, so a redacted tap stays distinguishable from a tap on an element that had no text at all. Views that are already masked — a view inside a [masked subtree](SessionReplay/Sources/Docs/README.md#masking-a-specific-view-cxmask), a password field, or a field with a sensitive `textContentType` — report `***` without consulting this closure, so their text is never passed to your code.
 
 This closure is called on the **main thread** only when the SDK would otherwise record text. Keep it fast and non-blocking.
 ```swift

@@ -24,6 +24,8 @@ Holds the configuration used to initialize SessionReplay. This includes capture 
 - `maskFaces`: Whether faces should be masked (default: `false`).
 - `creditCardPredicate`: Custom text patterns to identify images that may contain credit card content.
 
+See [Masking a specific view (`cxMask`)](#masking-a-specific-view-cxmask) for opting an individual view in, regardless of these global options.
+
 #### Initializer
 ```swift
 public init(
@@ -54,6 +56,41 @@ let options = SessionReplayOptions(
 
 SessionReplay.initializeWithOptions(sessionReplayOptions: options)
 ```
+
+---
+
+## Masking a specific view (`cxMask`)
+
+Opts a single view into Coralogix masking, regardless of the global masking policy.
+
+```swift
+accountNumberLabel.cxMask = true
+```
+
+Masking applies to the **whole subtree**: every subview is masked too, and a subview cannot be opted back out. Applying it to a container is therefore enough to cover its contents, which is the recommended way to protect a composite element such as a PIN keypad whose keys are individually tappable.
+
+A masked view, and anything inside it:
+
+- is covered by a black rectangle in session replays;
+- absorbs tap markers — a tap landing anywhere inside it draws no marker in the recording, so the replay does not reveal which part of the masked area was touched;
+- reports its text as `***` in user interaction events.
+
+Masking does not suppress the interaction event itself, and the event still carries the touch coordinates. Masking hides *what* an element is and *what it says*, not *that it was used*.
+
+### Which masking sources suppress a tap marker
+
+Only masking that reports geometry to the capture pass can suppress a marker, because the marker is tested against the exact rectangles the frame blacked out — the pixels and the marker can never disagree.
+
+| Masking source | Pixels masked | Tap marker suppressed | Interaction text `***` |
+|---|---|---|---|
+| `cxMask` on a `UIView` (and its subviews) | ✅ | ✅ | ✅ |
+| `.cxMask()` on a SwiftUI view | ✅ | ✅ | ❌ — see below |
+| `maskText`, `maskAllImages`, `maskFaces`, `creditCardPredicate` | ✅ | ❌ | ❌ |
+| Flutter (Dart-supplied pre-masked bitmap) | ✅ | ❌ | ❌ |
+
+The global policy options and the Flutter path deliberately do not affect interaction text: they answer "should these pixels be hidden in this frame", which is not the same question as "may this text leave the device". Password fields and fields with a sensitive `textContentType` are redacted to `***` independently of any of this.
+
+> **Limitation — SwiftUI:** `.cxMask()` works by overlaying a masked `UIView` on top of the composable content. That overlay masks the pixels and suppresses tap markers over the area, but it is a sibling of the content rather than an ancestor of it, so the views underneath do not inherit masking and their interaction events still report their real text. If a SwiftUI control's text is sensitive, use the `shouldSendText` option to redact it.
 
 ---
 

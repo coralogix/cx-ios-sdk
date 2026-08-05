@@ -79,14 +79,21 @@ public struct CoralogixExporterOptions {
 
     /// Called before `target_element_inner_text` is recorded for a tapped view.
     ///
-    /// Return `true` to allow the text to be captured, `false` to suppress it.
+    /// Return `true` to allow the text to be captured, `false` to redact it to `***`.
     /// Use this to redact sensitive labels (e.g. account numbers, personal data)
     /// on a per-view or per-text basis without disabling text capture globally.
+    ///
+    /// Redacted text is reported as `***` rather than omitted, so a redacted tap stays
+    /// distinguishable from a tap on an element that had no text to begin with.
     ///
     /// - Important: This closure is called on the **main thread** only when the SDK would
     ///   otherwise record text — views where text extraction returns nothing (e.g. a plain
     ///   `UIView` with no label) never trigger this callback.
     ///   Keep the implementation fast and non-blocking.
+    ///
+    /// - Note: Views that are already masked never reach this closure, and their text is never
+    ///   passed to it: a view inside a `cxMask` subtree, a `isSecureTextEntry` field, or a field
+    ///   with a sensitive `textContentType` reports `***` outright.
     ///
     /// - Parameters:
     ///   - view: The UIView that was tapped.
