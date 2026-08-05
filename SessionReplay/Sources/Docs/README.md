@@ -79,7 +79,7 @@ Masking does not suppress the interaction event itself, and the event still carr
 
 ### Which masking sources suppress a tap marker
 
-Only masking that reports geometry to the capture pass can suppress a marker, because the marker is tested against the exact rectangles the frame blacked out — the pixels and the marker can never disagree. The synchronous `UIView` walk reports geometry; the Vision-based scanners and the Dart bitmap mask pixels in place and report none.
+Only masking that reports geometry to the capture pass can suppress a marker, because the marker is tested against the exact rectangles the frame blacked out — the pixels and the marker can never disagree. The synchronous `UIView` walk reports geometry. The Vision-based scanners and the Dart-supplied bitmap both modify pixels in place and report none, so masking that relies on them cannot suppress a marker.
 
 | Masking source | Pixels masked | Tap marker suppressed | Interaction text `***` |
 |---|---|---|---|
