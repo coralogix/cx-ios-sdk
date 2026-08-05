@@ -9,6 +9,16 @@ Release-mechanics commits (version bumps, podspec/script tweaks, README edits) a
 omitted; the focus here is user-facing behavior changes. Tickets are referenced as
 `CX-XXXXX` (Jira) or `ALPH-XXXX` (legacy). Pull request numbers are in parentheses.
 
+## [2.13.3] - 2026-08-05
+
+### Fixed
+- Masking now applies to everything inside a masked view, not just the view it was set on. Masking a container is enough to cover its contents, including individually tappable subviews.
+- Tapping inside a masked area no longer draws a tap marker in session replays, so a recording of a masked keypad no longer reveals which keys were pressed. The frame is still recorded, and interaction events still carry their touch coordinates.
+- User interaction events now report `***` for the text of any view inside a masked area. Previously only the masked view itself was redacted, so a tap on a key inside a masked keypad sent the key's label in clear.
+
+### Changed
+- Redacted `target_element_inner_text` is now reported as `***` rather than omitted, matching the Android SDK. This affects views rejected by `shouldSendText`, password fields, and fields with a sensitive `textContentType`, which previously sent no `target_element_inner_text` at all.
+
 ## [2.13.2] - 2026-07-30
 
 ### Fixed

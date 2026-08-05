@@ -74,6 +74,9 @@ public enum Keys: String {
     case targetElement = "target_element"
     case targetElementType = "target_element_type"
     case targetElementInnerText = "target_element_inner_text"
+    // Wire value, not a key: what a redacted `target_element_inner_text` reads as. Matches the
+    // Android SDK so the same masked tap looks the same whichever platform sent it.
+    case maskedInnerText = "***"
     case scrollDirection = "scroll_direction"
     case fetch
     case networkRequestContext = "network_request_context"
@@ -227,6 +230,7 @@ public enum Keys: String {
     case page
     case screenshotData
     case containsSwiftUIContent
+    case maskRects
     case screenshotContext = "screenshot_context"
     case queueScreenshotManager = "com.coralogix.screenshotmanager.queue"
     case queueExporter = "com.coralogix.exporter.queue"
