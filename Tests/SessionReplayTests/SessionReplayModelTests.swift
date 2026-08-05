@@ -101,9 +101,25 @@ final class SessionReplayModelTests: XCTestCase {
         XCTAssertEqual(model.passedScreenshotData, "mock image".data(using: .utf8))
     }
 
+    /// The rects the capture pass painted must reach the properties that build the `URLEntry`.
+    /// If they are dropped here, every tap looks unmasked to ScannerPipeline and markers are drawn
+    /// over masked content — silently, since the frame itself still looks correct.
+    func testCaptureImage_carriesCaptureMaskRectsIntoProperties() {
+        let model = MockSessionReplayModel2()
+        model.sessionId = "abc123"
+        model.sessionReplayOptions = SessionReplayOptions(captureScale: 1.0, captureCompressionQuality: 0.8)
+        model.stubbedMaskRects = [CGRect(x: 20, y: 40, width: 200, height: 160)]
+
+        _ = model.captureImage(properties: nil)
+
+        let carried = model.passedProperties?[Keys.maskRects.rawValue] as? [CGRect]
+        XCTAssertEqual(carried, [CGRect(x: 20, y: 40, width: 200, height: 160)],
+                       "Capture-time mask rects must travel with the frame")
+    }
+
     func testCaptureImage_logsAndReturnsIfPrepareScreenshotFails() {
         class FailingScreenshotModel: MockSessionReplayModel2 {
-            override func prepareScreenshotImageOnMain(properties: [String : Any]?) -> UIImage? {
+            override func prepareCapturedFrameOnMain(properties: [String : Any]?) -> CapturedFrame? {
                 didCallPrepareScreenshot = true
                 return nil
             }
@@ -722,14 +738,18 @@ class MockSessionReplayModel2: SessionReplayModel {
     var passedScreenshotData: Data?
     var passedProperties: [String: Any]?
 
-    override func prepareScreenshotImageOnMain(properties: [String : Any]?) -> UIImage? {
+    /// Mask rects the stubbed capture reports, as a real capture pass would.
+    var stubbedMaskRects: [CGRect] = []
+
+    override func prepareCapturedFrameOnMain(properties: [String : Any]?) -> CapturedFrame? {
         didCallPrepareScreenshot = true
         // 1x1 white image — real UIImage so the encode pipeline can run, but cheap.
         let renderer = UIGraphicsImageRenderer(size: CGSize(width: 1, height: 1))
-        return renderer.image { ctx in
+        let image = renderer.image { ctx in
             UIColor.white.setFill()
             ctx.fill(CGRect(x: 0, y: 0, width: 1, height: 1))
         }
+        return CapturedFrame(image: image, maskRects: stubbedMaskRects)
     }
 
     /// Bypass the encodingQueue + JPEG path and inject a deterministic byte

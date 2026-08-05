@@ -24,6 +24,9 @@ struct URLEntry {
     /// time (detected on the main thread). Gates the SwiftUI-scoped OCR text /
     /// image maskAll stages in ScannerPipeline.
     var containsSwiftUIContent: Bool = false
+    /// The regions this frame blacked out, in screen points, as collected by the capture pass.
+    /// ScannerPipeline tests `point` against these to decide whether to draw a tap marker.
+    var maskRects: [CGRect] = []
     let completion: URLProcessingCompletion?
     var finalImage: CIImage? = nil
     var ciImage: CIImage? {

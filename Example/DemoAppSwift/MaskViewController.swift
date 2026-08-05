@@ -122,7 +122,71 @@ class MaskViewController: UIViewController {
         label.cxMask = true // 👈 masked example
         return label
     }()
-    
+
+    private let keypadCaption: UILabel = {
+        let label = UILabel()
+        label.text = "Keypads: the left one is masked at the container. "
+            + "Tap both and compare them in the replay."
+        label.font = .systemFont(ofSize: 13)
+        label.textColor = .secondaryLabel
+        label.numberOfLines = 0
+        return label
+    }()
+
+    /// Masking is applied to the container only — the keys inside carry no `cxMask` of their own.
+    /// They still inherit it: the replay draws no tap marker over them and their interaction
+    /// events report `***` instead of the digit.
+    ///
+    /// The keys deliberately share one identifier. `element_id` comes from
+    /// `accessibilityIdentifier` and is **not** redacted inside a masked subtree — it is
+    /// developer-authored, so the SDK takes it at face value. A per-digit identifier here would
+    /// leak the sequence through `element_id` and defeat the masking this screen demonstrates.
+    private lazy var maskedKeypad: UIView = {
+        let keypad = makeKeypad(tint: .systemRed) { _ in "masked_keypad_key" }
+        keypad.cxMask = true // 👈 masks the whole subtree, keys included
+        return keypad
+    }()
+
+    /// The same keypad without masking — its digits appear in the replay and in the interaction
+    /// events, which is what makes the masked one's behaviour visible as a difference.
+    private lazy var unmaskedKeypad: UIView = makeKeypad(tint: .systemBlue) { "keypad_key_\($0)" }
+
+    private func makeKeypad(tint: UIColor,
+                            identifierForDigit: (Int) -> String) -> UIView {
+        let rows = (0..<2).map { row -> UIStackView in
+            let buttons = (0..<3).map { column -> UIButton in
+                let digit = row * 3 + column + 1
+                let key = UIButton(type: .system)
+                key.setTitle("\(digit)", for: .normal)
+                key.titleLabel?.font = .boldSystemFont(ofSize: 20)
+                key.tintColor = tint
+                key.layer.borderWidth = 1
+                key.layer.borderColor = tint.withAlphaComponent(0.4).cgColor
+                key.layer.cornerRadius = 6
+                key.accessibilityIdentifier = identifierForDigit(digit)
+                key.addTarget(self, action: #selector(keypadKeyTapped(_:)), for: .touchUpInside)
+                return key
+            }
+            let rowStack = UIStackView(arrangedSubviews: buttons)
+            rowStack.axis = .horizontal
+            rowStack.spacing = 6
+            rowStack.distribution = .fillEqually
+            return rowStack
+        }
+
+        let keypad = UIStackView(arrangedSubviews: rows)
+        keypad.axis = .vertical
+        keypad.spacing = 6
+        keypad.distribution = .fillEqually
+        keypad.heightAnchor.constraint(equalToConstant: 92).isActive = true
+        return keypad
+    }
+
+    @objc private func keypadKeyTapped(_ sender: UIButton) {
+        sender.alpha = 0.4
+        UIView.animate(withDuration: 0.2) { sender.alpha = 1.0 }
+    }
+
     // MARK: - Lifecycle
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -132,6 +196,11 @@ class MaskViewController: UIViewController {
     
     // MARK: - Layout
     private func setupLayout() {
+        let keypadRow = UIStackView(arrangedSubviews: [maskedKeypad, unmaskedKeypad])
+        keypadRow.axis = .horizontal
+        keypadRow.spacing = 16
+        keypadRow.distribution = .fillEqually
+
         let stack = UIStackView(arrangedSubviews: [
             titleLabel,
             descriptionLabel,
@@ -139,6 +208,8 @@ class MaskViewController: UIViewController {
             passwordField,
             textView,
             maskedLabel,
+            keypadCaption,
+            keypadRow,
             button,
             toggleSwitch,
             slider,
@@ -147,21 +218,31 @@ class MaskViewController: UIViewController {
             progressView,
             imageView
         ])
-        
+
         stack.axis = .vertical
         stack.spacing = 16
         stack.alignment = .fill
         stack.distribution = .equalSpacing
         stack.translatesAutoresizingMaskIntoConstraints = false
-        
-        view.addSubview(stack)
-        
+
+        // Scrolls because the content no longer fits a single screen once the keypads are added.
+        let scrollView = UIScrollView()
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.addSubview(stack)
+        view.addSubview(scrollView)
+
         NSLayoutConstraint.activate([
-            stack.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
-            stack.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
-            stack.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 20),
-            stack.bottomAnchor.constraint(lessThanOrEqualTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -20),
-            
+            scrollView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            scrollView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            scrollView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor),
+
+            stack.leadingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.leadingAnchor, constant: 20),
+            stack.trailingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.trailingAnchor, constant: -20),
+            stack.topAnchor.constraint(equalTo: scrollView.contentLayoutGuide.topAnchor, constant: 20),
+            stack.bottomAnchor.constraint(equalTo: scrollView.contentLayoutGuide.bottomAnchor, constant: -20),
+            stack.widthAnchor.constraint(equalTo: scrollView.frameLayoutGuide.widthAnchor, constant: -40),
+
             textView.heightAnchor.constraint(equalToConstant: 100),
             imageView.heightAnchor.constraint(equalToConstant: 80)
         ])

@@ -80,18 +80,18 @@ public class SessionReplayModel {
     /// For the Flutter path, `flutterCGImage` and `flutterViewRect` carry the pre-masked
     /// Dart bitmap and its position in screen points.
     /// Must be called on the main thread.
-    private func prepareScreenshotImageOnMain(
+    private func prepareCapturedFrameOnMain(
         options: SessionReplayOptions,
         flutterCGImage: CGImage?,
         flutterViewRect: CGRect?,
         isClickFrame: Bool = false
-    ) -> UIImage? {
+    ) -> CapturedFrame? {
         guard Thread.isMainThread else { return nil }
         guard isValidSessionReplayOptions(options) else {
             Log.e("Invalid sessionReplayOptions")
             return nil
         }
-        return UIView().captureScreenshotImage(
+        return UIView().captureFrame(
             scale: options.captureScale,
             maskText: options.maskText,
             maskAllImages: options.maskAllImages,
@@ -102,10 +102,10 @@ public class SessionReplayModel {
     }
 
     /// Legacy signature kept for test compatibility and the synchronous captureAutomatic path.
-    internal func prepareScreenshotImageOnMain(properties: [String: Any]?) -> UIImage? {
+    internal func prepareCapturedFrameOnMain(properties: [String: Any]?) -> CapturedFrame? {
         guard let options = sessionReplayOptions else { return nil }
         let isClickFrame = getClickPoint(from: properties) != nil
-        return prepareScreenshotImageOnMain(options: options, flutterCGImage: nil, flutterViewRect: nil, isClickFrame: isClickFrame)
+        return prepareCapturedFrameOnMain(options: options, flutterCGImage: nil, flutterViewRect: nil, isClickFrame: isClickFrame)
     }
 
     /// Synchronous capture-and-encode, retained as a back-compat shim.
@@ -117,11 +117,11 @@ public class SessionReplayModel {
             return nil
         }
 
-        guard let image = prepareScreenshotImageOnMain(properties: properties),
+        guard let frame = prepareCapturedFrameOnMain(properties: properties),
               let quality = sessionReplayOptions?.captureCompressionQuality else {
             return nil
         }
-        return image.jpegData(compressionQuality: quality)
+        return frame.image.jpegData(compressionQuality: quality)
     }
 
     internal func saveScreenshotToFileSystem(
@@ -174,16 +174,16 @@ public class SessionReplayModel {
         }
 
         // Native path: synchronous UIView walk on main thread, encode off-main.
-        guard let image = prepareScreenshotImageOnMain(properties: properties),
+        guard let frame = prepareCapturedFrameOnMain(properties: properties),
               let options = sessionReplayOptions else {
             return .failure(.captureFailed)
         }
 
         let callerIncrementedCounter = properties?[Keys.segmentIndex.rawValue] as? Int != nil
         encodeAndProcess(
-            image: image,
+            image: frame.image,
             compressionQuality: options.captureCompressionQuality,
-            properties: propertiesWithSwiftUIFlag(properties),
+            properties: propertiesWithCaptureMetadata(properties, maskRects: frame.maskRects),
             callerIncrementedCounter: callerIncrementedCounter
         )
         return .success(())
@@ -209,7 +209,7 @@ public class SessionReplayModel {
 
         // No FlutterView visible — capture native windows only.
         guard let rect = flutterViewRect else {
-            guard let image = prepareScreenshotImageOnMain(
+            guard let frame = prepareCapturedFrameOnMain(
                 options: options, flutterCGImage: nil, flutterViewRect: nil, isClickFrame: isClickFrame
             ) else {
                 if callerIncrementedCounter {
@@ -217,8 +217,8 @@ public class SessionReplayModel {
                 }
                 return
             }
-            encodeAndProcess(image: image, compressionQuality: options.captureCompressionQuality,
-                             properties: propertiesWithSwiftUIFlag(properties),
+            encodeAndProcess(image: frame.image, compressionQuality: options.captureCompressionQuality,
+                             properties: propertiesWithCaptureMetadata(properties, maskRects: frame.maskRects),
                              callerIncrementedCounter: callerIncrementedCounter)
             return
         }
@@ -249,7 +249,7 @@ public class SessionReplayModel {
             // if the view is no longer visible (e.g., navigation transition).
             let compositeRect = self.findFlutterViewRect() ?? rect
 
-            guard let image = self.prepareScreenshotImageOnMain(
+            guard let frame = self.prepareCapturedFrameOnMain(
                 options: options, flutterCGImage: flutterCGImage, flutterViewRect: compositeRect, isClickFrame: isClickFrame
             ) else {
                 if callerIncrementedCounter {
@@ -258,8 +258,8 @@ public class SessionReplayModel {
                 return
             }
 
-            self.encodeAndProcess(image: image, compressionQuality: options.captureCompressionQuality,
-                                  properties: self.propertiesWithSwiftUIFlag(properties),
+            self.encodeAndProcess(image: frame.image, compressionQuality: options.captureCompressionQuality,
+                                  properties: self.propertiesWithCaptureMetadata(properties, maskRects: frame.maskRects),
                                   callerIncrementedCounter: callerIncrementedCounter)
         }
     }
@@ -336,11 +336,16 @@ public class SessionReplayModel {
             .contains { UIView.subtreeContainsSwiftUIHostingView($0) }
     }
 
-    /// Merges the SwiftUI-content flag (detected on the main thread) into the
-    /// capture properties so it reaches `handleCapturedData` → `URLEntry`.
-    private func propertiesWithSwiftUIFlag(_ properties: [String: Any]?) -> [String: Any] {
+    /// Merges the facts that are only knowable on the main thread at capture time — the
+    /// SwiftUI-content flag and the frame's mask rects — into the capture properties so they
+    /// reach `handleCapturedData` → `URLEntry`. Same channel the click point already travels on.
+    private func propertiesWithCaptureMetadata(
+        _ properties: [String: Any]?,
+        maskRects: [CGRect]
+    ) -> [String: Any] {
         var props = properties ?? [:]
         props[Keys.containsSwiftUIContent.rawValue] = detectSwiftUIContentOnMain()
+        props[Keys.maskRects.rawValue] = maskRects
         return props
     }
 
@@ -520,6 +525,7 @@ public class SessionReplayModel {
             let page = self.getPage(from: properties)
             let point = self.getClickPoint(from: properties)
             let containsSwiftUIContent = (properties?[Keys.containsSwiftUIContent.rawValue] as? Bool) ?? false
+            let maskRects = (properties?[Keys.maskRects.rawValue] as? [CGRect]) ?? []
 
             let completion: URLProcessingCompletion = { [weak self] ciImage, urlEntry in
                 if let ciImage = ciImage,
@@ -539,6 +545,7 @@ public class SessionReplayModel {
                                     screenshotData: data,
                                     point: point,
                                     containsSwiftUIContent: containsSwiftUIContent,
+                                    maskRects: maskRects,
                                     completion: completion)
 
             self.urlManager.addURL(urlEntry: urlEntry)

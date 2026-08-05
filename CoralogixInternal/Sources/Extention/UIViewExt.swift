@@ -10,6 +10,23 @@ import ObjectiveC
 
 private var kCxMaskKey: UInt8 = 0
 
+/// A rendered frame together with the mask rectangles that were painted onto it, in screen
+/// points.
+///
+/// The rects travel with the image so a later stage can test a tap against the regions this
+/// frame actually blacked out, rather than re-deriving what is masked from a second walk of a
+/// hierarchy that has since moved on. One capture, one answer — the pixels and the tap marker
+/// cannot disagree.
+public struct CapturedFrame {
+    public let image: UIImage
+    public let maskRects: [CGRect]
+
+    public init(image: UIImage, maskRects: [CGRect]) {
+        self.image = image
+        self.maskRects = maskRects
+    }
+}
+
 // Resolved once; safe when Flutter is not on the classpath.
 private let _flutterViewClass: AnyClass? =
     NSClassFromString("FlutterView")
@@ -21,6 +38,25 @@ public extension UIView {
     var cxMask: Bool {
         get { (objc_getAssociatedObject(self, &kCxMaskKey) as? Bool) ?? false }
         set { objc_setAssociatedObject(self, &kCxMaskKey, newValue, .OBJC_ASSOCIATION_RETAIN_NONATOMIC) }
+    }
+
+    /// True when this view is masked, either directly or because an ancestor is.
+    ///
+    /// Masking is inherited: everything inside a masked view is masked, with no way to opt a
+    /// descendant back out. This is what makes a tap on an unmasked key inside a masked keypad
+    /// count as a tap on masked content — hit-testing resolves the key, which carries no masking
+    /// signal of its own, so asking the key alone would report it unmasked.
+    ///
+    /// Resolved by walking up rather than by threading state down: the mask rects are collected
+    /// from a live view hierarchy per capture, and the interaction path starts from an already
+    /// hit-tested leaf, so there is no shared tree to seed.
+    var isInsideMaskedSubtree: Bool {
+        var view: UIView? = self
+        while let current = view {
+            if current.cxMask { return true }
+            view = current.superview
+        }
+        return false
     }
 
     func activeForegroundWindowScene() -> UIWindowScene? {
@@ -261,8 +297,35 @@ public extension UIView {
         flutterViewRect: CGRect? = nil,
         isClickFrame: Bool = false
     ) -> UIImage? {
+        return captureFrame(
+            scale: scale,
+            maskText: maskText,
+            maskAllImages: maskAllImages,
+            flutterCGImage: flutterCGImage,
+            flutterViewRect: flutterViewRect,
+            isClickFrame: isClickFrame
+        )?.image
+    }
+
+    /// As `captureScreenshotImage`, but also returns the mask rectangles painted onto the frame
+    /// so a later stage can decide whether a tap landed inside one. See `CapturedFrame`.
+    ///
+    /// The Flutter branch contributes no rects, and cannot: Dart masks the widget tree inside its
+    /// own bitmap and reports no geometry back, so the host cannot know where a masked Flutter
+    /// widget sits. Tap markers over masked Flutter content are therefore not suppressed — only
+    /// masked native views on the same screen are.
+    ///
+    /// Must be called on the main thread.
+    func captureFrame(
+        scale: CGFloat = UIScreen.main.scale,
+        maskText: [String]? = nil,
+        maskAllImages: Bool = false,
+        flutterCGImage: CGImage? = nil,
+        flutterViewRect: CGRect? = nil,
+        isClickFrame: Bool = false
+    ) -> CapturedFrame? {
         guard Thread.isMainThread else {
-            Log.e("captureScreenshotImage must be called on the main thread")
+            Log.e("captureFrame must be called on the main thread")
             return nil
         }
 
@@ -283,7 +346,7 @@ public extension UIView {
         format.scale = scale
         let renderer = UIGraphicsImageRenderer(bounds: bounds, format: format)
 
-        return renderer.image { rendererContext in
+        let image = renderer.image { rendererContext in
             for win in windows {
                 if UIView.subtreeContainsFlutterView(win) {
                     // Flutter window: paste Dart pre-masked bitmap; black-fill on nil/missing rect.
@@ -336,6 +399,10 @@ public extension UIView {
                 for rect in nativeMaskRects { UIRectFill(rect) }
             }
         }
+
+        // Read after the renderer block, which runs synchronously — every rect the frame masked
+        // has been appended by this point.
+        return CapturedFrame(image: image, maskRects: nativeMaskRects)
     }
 
     /// Convenience wrapper — captures and JPEG-encodes inline. Prefer calling
@@ -358,6 +425,12 @@ public extension UIView {
                 if !rect.isNull && !rect.isEmpty {
                     rects.append(rect)
                 }
+                // Deliberately keeps descending. Android's equivalent stops at a masked node
+                // because masking is inherited there, so every descendant reports itself masked
+                // and the walk would emit a rect per node. Here `cxMask` stays per-view, so a
+                // descendant only contributes a rect when it was masked explicitly — and it must,
+                // since subviews are not clipped to their parent and a masked child can extend
+                // past a masked parent's bounds.
             }
             for subview in view.subviews {
                 traverse(subview)

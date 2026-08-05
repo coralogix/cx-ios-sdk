@@ -231,7 +231,10 @@ final class ScrollTracker {
 enum TapDataExtractor {
     /// - Parameter shouldSendText: Optional delegate from `CoralogixExporterOptions`.
     ///   When provided, it is called with the view and candidate text before recording
-    ///   `target_element_inner_text`. Return `false` to suppress the text for that view.
+    ///   `target_element_inner_text`. Return `false` to redact the text to `***` — the key is
+    ///   still reported, so a redacted tap stays distinguishable from one on an element with no
+    ///   text. Views that are already masked never reach this delegate and their text is never
+    ///   passed to it; see the redaction rules at the call site below.
     /// - Parameter resolveTargetName: Optional delegate from `CoralogixExporterOptions`.
     ///   When provided, its return value replaces the UIKit class name in `target_element`.
     ///   Returning `nil` falls back to the resolved class name.
@@ -254,17 +257,32 @@ enum TapDataExtractor {
             tapData[Keys.elementId.rawValue] = accessibilityId
         }
 
-        // target_element_inner_text: PII-safe text only.
-        // Container views are skipped (they span many items; text would be ambiguous).
-        // Input views (UITextField, UITextView, UISearchBar) are always skipped —
-        // they hold user-typed content which may be passwords, emails, or other PII.
-        // If the caller supplied a shouldSendText delegate, it is the final gate:
-        // returning false suppresses the text even when all SDK-side checks pass.
+        // target_element_inner_text: redacted text, never omitted text.
+        // Container views are skipped (they span many items; text would be ambiguous), and a view
+        // with no text at all reports nothing. Everything else reports either its text or `***`,
+        // so a masked tap is visibly masked rather than indistinguishable from a tap on something
+        // that had nothing to say. Matches the Android SDK.
+        //
+        // Text is redacted when the view is inside a masked subtree, when iOS system properties
+        // flag it as sensitive (password field, sensitive textContentType), or when the caller's
+        // shouldSendText delegate rejects it. The delegate is consulted last and only for text
+        // that is not already redacted — a password must not reach the customer's closure.
+        //
+        // Covers UIKit `cxMask` only. SwiftUI's `.cxMask()` installs a non-hit-testing overlay
+        // *sibling*, so a masked composable's content is never below the overlay in the superview
+        // chain and `isInsideMaskedSubtree` is false for it — its pixels and tap marker are masked
+        // (the overlay contributes a real mask rect) but its text is not. `isSecureTextEntry` and
+        // a sensitive `textContentType` still redact, so SwiftUI `SecureField` is covered either
+        // way; a plainly-typed masked field is not. Closing this needs the tap tested against the
+        // frame's mask rects instead of the view tree, which would make every tap a hierarchy
+        // walk — deliberately deferred, and documented in the SessionReplay README.
         if !isContainerView(resolvedClassName),
-           let innerText = safeInnerText(from: view),
-           !innerText.isEmpty,
-           shouldSendText?(view, innerText) ?? true {
-            tapData[Keys.targetElementInnerText.rawValue] = innerText
+           let innerText = rawInnerText(from: view),
+           !innerText.isEmpty {
+            let isMasked = view.isInsideMaskedSubtree || hasSensitivePIIProperties(view)
+            let isAllowedByDelegate = !isMasked && (shouldSendText?(view, innerText) ?? true)
+            tapData[Keys.targetElementInnerText.rawValue] =
+                isAllowedByDelegate ? innerText : Keys.maskedInnerText.rawValue
         }
 
         // scroll_direction: only present for scroll/swipe events
@@ -306,7 +324,7 @@ enum TapDataExtractor {
     /// holding sensitive PII — a password mask or a sensitive `textContentType`.
     /// This is intentionally checked via `UITextInputTraits` so it applies uniformly to
     /// `UITextField`, `UITextView`, and `UISearchBar` without repeating logic per class.
-    private static func hasSensitivePIIProperties(_ view: UIView) -> Bool {
+    static func hasSensitivePIIProperties(_ view: UIView) -> Bool {
         guard let traits = view as? UITextInputTraits else { return false }
         if traits.isSecureTextEntry == true { return true }
         if let contentType = traits.textContentType.flatMap({ $0 }),
@@ -314,16 +332,10 @@ enum TapDataExtractor {
         return false
     }
 
-    /// Returns developer-authored or user-typed (non-sensitive) text for a tapped view.
+    /// Returns the text a tapped view displays, whether or not it is sensitive.
     ///
-    /// **Property-based block (always nil — sensitive PII signals present):**
-    /// Text input views (`UITextField`, `UITextView`, `UISearchBar`) are blocked when iOS
-    /// system properties explicitly mark the field as sensitive:
-    /// - `isSecureTextEntry == true` (password / PIN masking)
-    /// - `textContentType` is `.password`, `.newPassword`, or `.creditCardNumber`
-    ///
-    /// **Text extraction (non-sensitive input and developer-authored text):**
-    /// - `UITextField` / `UITextView` / `UISearchBar` → current text (if non-sensitive)
+    /// **Text extraction:**
+    /// - `UITextField` / `UITextView` / `UISearchBar` → current text
     /// - `UIButton`           → button title
     /// - `UILabel`            → label text
     /// - `UITableViewCell`    → `UIListContentConfiguration.text` (iOS 14+), else `textLabel`
@@ -331,11 +343,15 @@ enum TapDataExtractor {
     /// - `UIDatePicker`, `UIStepper` → no text property; fall through to `accessibilityLabel`
     ///
     /// **Fallback:** `accessibilityLabel` — always developer-set, never user-typed.
-    static func safeInnerText(from view: UIView) -> String? {
-        // --- Property-based PII block ---
-        // Checked before any type-specific extraction so it applies to all input classes.
-        if hasSensitivePIIProperties(view) { return nil }
-
+    ///
+    /// Deliberately does **not** apply the sensitive-PII block, so a caller can tell "this view
+    /// has sensitive text" apart from "this view has no text" — a distinction that matters once
+    /// the answer is redaction to `***` rather than omission. Pair it with
+    /// `hasSensitivePIIProperties` before reporting anything.
+    ///
+    /// Callers take on the obligation not to let the value escape: it may be a password. Report
+    /// `Keys.maskedInnerText` in its place, and never hand it to a customer callback.
+    static func rawInnerText(from view: UIView) -> String? {
         // --- Text input views (non-sensitive) ---
         if let textField = view as? UITextField {
             return textField.text
