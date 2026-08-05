@@ -36,8 +36,7 @@ class CxRumBuilder {
         let eventContext = EventContext(otel: otel)
         
         updateSessionCounters(for: eventContext)
-        
-        let snapshotContext = buildSnapshotContextIfNeeded(for: eventContext)
+
         let internalContext = buildInternalContext(for: eventContext)
         
         let traceContext = Helper.getTraceAndSpanId(otel: otel)
@@ -47,13 +46,49 @@ class CxRumBuilder {
         var prevSessionContext: SessionContext? = nil
         
         // CRITICAL: If SessionContext creation fails (missing session attributes), drop the span
-        guard let sessionContext = SessionContext(otel: otel,
+        guard var sessionContext = SessionContext(otel: otel,
                                                   userMetadata: userMetadata,
                                                   hasRecording: hasRecording) else {
             Log.w("[CxRumBuilder] Dropping span due to missing session attributes")
             return nil
         }
-        
+
+        // Consumed only after the drop-guard above: a span that never exports must not
+        // swallow the one-shot promotion armed by setUserContext. Taken unconditionally
+        // (not short-circuited behind the other triggers) — browser parity: any emitted
+        // snapshot satisfies the pending request. What keeps the one-shot alive is the
+        // invariant that every path that does NOT emit the promoted snapshot hands the
+        // token back: the eligibility reject below and the beforeSend drop in
+        // CxSpan.getDictionary() are those paths today — any new early-out between the
+        // take and the snapshot decision must do the same.
+        var pendingSnapshotTrigger = sessionManager.consumePendingSnapshotTrigger()
+
+        // Eligibility: the token only promotes a span of the session it was armed in
+        // that started at or after the arm. A buffered span from a rotated-out session
+        // would stamp the new session's identity onto the old session's snapshot
+        // record; a pre-arm span describes a moment before the user change and already
+        // went out through tracesExporter with the old identity. Either way, hand the
+        // token back (session-checked) and leave this span unpromoted — the armed
+        // session's next eligible event carries the promotion instead.
+        if let trigger = pendingSnapshotTrigger,
+           !trigger.canPromote(sessionId: sessionContext.sessionId,
+                               spanStartTime: otel.getStartTime()) {
+            sessionManager.restorePendingSnapshotTrigger(trigger)
+            pendingSnapshotTrigger = nil
+        }
+
+        let snapshotContext = buildSnapshotContextIfNeeded(for: eventContext,
+                                                           pendingTrigger: pendingSnapshotTrigger)
+
+        // The promoted event reports the identity the token was armed with — the
+        // carrier span's own identity can predate the setUserContext call (attributes
+        // stamped at creation, options copied at encode). A nil token context records
+        // a clear. prevSessionContext is left untouched: it describes the prior
+        // session's historical identity.
+        if let trigger = pendingSnapshotTrigger {
+            sessionContext.applyUserContextOverride(trigger.userContext)
+        }
+
         if SessionContext.shouldRestorePreviousSession(from: otel){
             // Note: prevSessionContext can be nil if session attributes are missing
             // This is acceptable - we'll use the current session instead
@@ -90,6 +125,7 @@ class CxRumBuilder {
                      deviceState: DeviceState(networkManager: networkManager),
                      labels: Helper.getLabels(otel: otel, labels: options.labels),
                      snapshotContext: snapshotContext,
+                     consumedSnapshotTrigger: pendingSnapshotTrigger,
                      interactionContext: InteractionContext(otel: otel),
                      mobileVitalsContext: MobileVitalsContext(otel: otel),
                      lifeCycleContext: LifeCycleContext(otel: otel),
@@ -135,7 +171,14 @@ class CxRumBuilder {
         return InternalContext(eventName: Keys.initKey.rawValue, data: options.getInitData())
     }
     
-    internal func buildSnapshotContextIfNeeded(for eventContext: EventContext) -> SnapshotContext? {
+    /// Decides whether this event emits a snapshot — and when it does, mutates session
+    /// state (error counter, snapshot-throttle timestamp), so call it exactly once per
+    /// event, at emit time; a speculative call over-counts errors and steals the next
+    /// qualifying event's snapshot. The caller (`build()`) owns consuming the pending
+    /// setUserContext trigger and passes the token in, so a span dropped before this
+    /// point can never swallow the one-shot promotion.
+    internal func buildSnapshotContextIfNeeded(for eventContext: EventContext,
+                                               pendingTrigger: PendingSnapshotTrigger? = nil) -> SnapshotContext? {
         let currentTime = otel.getStartTime() ?? Date().timeIntervalSince1970
         let isErrorSeverity = eventContext.severity == CoralogixLogSeverity.error.rawValue
         let isNavigationEvent = eventContext.type == .navigation
@@ -148,7 +191,7 @@ class CxRumBuilder {
         } ?? true
         
         // Check if any of the conditions for creating a snapshot are met
-        if isErrorSeverity || isNavigationEvent || oneMinuteHasPassed {
+        if isErrorSeverity || isNavigationEvent || oneMinuteHasPassed || pendingTrigger != nil {
             
             if isErrorSeverity {
                 sessionManager.incrementErrorCounter()

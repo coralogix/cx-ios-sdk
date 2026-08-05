@@ -11,6 +11,50 @@ import CoralogixInternal
 #if canImport(UIKit)
 import UIKit
 #endif
+
+/// One-shot token representing a pending snapshot promotion requested by
+/// `setUserContext`. Its presence *is* the state: `SessionManager` holds at most one,
+/// consuming it yields it exactly once, and `CxRum` carries the consumed token so the
+/// `beforeSend` drop path can hand it back (re-arm) when the promoted span never ships.
+struct PendingSnapshotTrigger {
+    /// Session the promotion was requested in. Only spans of this session may carry
+    /// the promotion, and a handed-back token re-arms only while this still matches
+    /// the active session — a rotation invalidates it, so a delayed `beforeSend` drop
+    /// can never promote an event in the fresh session for a prior session's
+    /// user-context change.
+    let sessionId: String?
+
+    /// The user context captured at arm time. The promoted event's session context is
+    /// overridden with this, because neither of its usual sources is guaranteed fresh:
+    /// the carrier span's identity attributes were stamped at span creation, and the
+    /// exporter options are a struct copied per span at encode — both can predate the
+    /// `setUserContext` call that armed this token. nil records a cleared context:
+    /// the promoted event reports the empty identity and omits `user_metadata`,
+    /// exactly like every non-promoted event after the clear.
+    let userContext: UserContext?
+
+    /// When the token was armed. A span that started earlier describes a moment
+    /// before the user change — promoting it would rewrite that moment's identity
+    /// and contradict what `tracesExporter` already emitted for the same span.
+    let armedAt: TimeInterval
+
+    init(sessionId: String? = nil, userContext: UserContext? = nil, armedAt: TimeInterval = 0) {
+        self.sessionId = sessionId
+        self.userContext = userContext
+        self.armedAt = armedAt
+    }
+
+    /// Whether a span may carry this promotion: it must belong to the session the
+    /// token was armed in and have started at or after the arm. A nil start time is
+    /// treated as eligible — losing the promotion over an unstampable span would
+    /// drop it for nothing.
+    func canPromote(sessionId: String, spanStartTime: TimeInterval?) -> Bool {
+        guard self.sessionId == sessionId else { return false }
+        guard let spanStartTime else { return true }
+        return spanStartTime >= armedAt
+    }
+}
+
 /**
  * When Is a New Session Created?
  *
@@ -104,8 +148,60 @@ public class SessionManager {
     }
 
     public var hasRecording: Bool = false
-    
+
     public var lastSnapshotEventTime: Date?
+
+    /// One-shot token armed by `setUserContext` so the next exported event is promoted
+    /// to a snapshot event. Mirrors the browser SDK's `shouldTriggerSnapshotContext`:
+    /// user data reaches the backend on events, and the backend refreshes session-level
+    /// user info from snapshot events — promoting the next event is exactly sufficient,
+    /// with no synthetic event type on the wire.
+    private var _pendingSnapshotTrigger: PendingSnapshotTrigger?
+
+    func triggerSnapshotOnNextEvent(userContext: UserContext? = nil) {
+        // Two-phase like sessionSpanAttributes(): getSessionMetadata() first so a due
+        // 1-hour rotation fires now and the token is stamped with the session the next
+        // span will actually carry. A direct read would stamp the stale id — no future
+        // span could ever match it, and the rotation would then discard the token
+        // unconsumed (the 24h-session bug family).
+        _ = getSessionMetadata()
+
+        sessionLock.lock()
+        defer { sessionLock.unlock() }
+        _pendingSnapshotTrigger = PendingSnapshotTrigger(sessionId: sessionMetadata?.sessionId,
+                                                         userContext: userContext,
+                                                         armedAt: Date().timeIntervalSince1970)
+    }
+
+    /// One-shot: yields the token at most once per arm. Take-and-clear is atomic so
+    /// concurrent span exports cannot both consume it.
+    func consumePendingSnapshotTrigger() -> PendingSnapshotTrigger? {
+        sessionLock.lock()
+        defer { sessionLock.unlock() }
+        let pending = _pendingSnapshotTrigger
+        _pendingSnapshotTrigger = nil
+        return pending
+    }
+
+    /// Hands a consumed token back when the promoted span never shipped (`beforeSend`
+    /// dropped it, or `build()` rejected an ineligible carrier). The session check runs
+    /// under the same lock that rotation holds while clearing the pending token, so a
+    /// token from a rotated-out session can never re-arm a promotion in the fresh
+    /// session; the rotation check fires first so that comparison is against a live
+    /// session, not a stale one. The empty-slot guard keeps a stale hand-back from
+    /// displacing a fresher arm: if `setUserContext` ran again while the dropped span
+    /// was in flight, the slot already holds the newer context — overwriting it would
+    /// promote the previous identity and lose the newer promotion entirely.
+    func restorePendingSnapshotTrigger(_ token: PendingSnapshotTrigger) {
+        _ = getSessionMetadata()
+
+        sessionLock.lock()
+        defer { sessionLock.unlock() }
+        guard token.sessionId == sessionMetadata?.sessionId,
+              _pendingSnapshotTrigger == nil else { return }
+        _pendingSnapshotTrigger = token
+    }
+
     public var isIdle: Bool {
         let timeSinceLastActivity = Date().timeIntervalSince(self.lastActivity)
         return timeSinceLastActivity > idleInterval
@@ -272,6 +368,10 @@ public class SessionManager {
         self.sessionMetadata = SessionMetadata(sessionId: "",
                                                sessionCreationDate: 0,
                                                using: KeychainManager())
+        // Symmetric with rotation: with the session id blanked the token could never
+        // be consumed again, so it would otherwise outlive the teardown still holding
+        // the user's identity.
+        self._pendingSnapshotTrigger = nil
         sessionLock.unlock()
         self.reset()
     }
@@ -356,6 +456,10 @@ public class SessionManager {
         // synchronisation would require routing CxRumBuilder's accesses through
         // sessionLock-aware accessors; tracked as a follow-up (CX-44589).
         self.lastSnapshotEventTime = nil
+        // A pending user-context snapshot must not leak into the fresh session — the
+        // nil throttle above already guarantees the new session's first qualifying
+        // event emits a snapshot carrying the current user context.
+        self._pendingSnapshotTrigger = nil
 
         return RotationPendingCallbacks(
             endedCallback: endedCb,

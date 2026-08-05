@@ -155,6 +155,14 @@ public class CxSpan {
                 if self.cxRum.eventContext.severity == CoralogixLogSeverity.error.rawValue {
                     sessionManager?.decrementErrorCounter()
                 }
+                // Same compensation for the setUserContext promotion: this span consumed
+                // the one-shot token, so hand it back and let the next accepted event
+                // carry the snapshot. The restore is guarded — a token from a rotated-out
+                // session is discarded, and one that raced a newer setUserContext never
+                // displaces the fresher arm.
+                if let consumedTrigger = self.cxRum.consumedSnapshotTrigger {
+                    sessionManager?.restorePendingSnapshotTrigger(consumedTrigger)
+                }
                 return nil
             }
         } else {

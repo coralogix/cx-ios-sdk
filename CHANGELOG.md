@@ -12,6 +12,7 @@ omitted; the focus here is user-facing behavior changes. Tickets are referenced 
 ## [2.13.3] - 2026-08-05
 
 ### Fixed
+- `setUserContext` now promotes the next exported event to a snapshot event, so the session's user information refreshes immediately instead of waiting for the next error, navigation, or one-minute interval — matching the browser SDK's behavior.
 - Masking now applies to everything inside a masked view, not just the view it was set on. Masking a container is enough to cover its contents, including individually tappable subviews.
 - Tapping inside a masked area no longer draws a tap marker in session replays, so a recording of a masked keypad no longer reveals which keys were pressed. The frame is still recorded, and interaction events still carry their touch coordinates.
 - User interaction events now report `***` for the text of any view inside a masked area. Previously only the masked view itself was redacted, so a tap on a key inside a masked keypad sent the key's label in clear.

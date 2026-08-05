@@ -123,6 +123,61 @@ final class BeforeSendInstrumentationDataTests: XCTestCase {
         return (textCxRum, attrs)
     }
 
+    // MARK: - setUserContext promotion survives a beforeSend drop
+    //
+    // When beforeSend drops the span that consumed the one-shot promotion, the
+    // trigger is re-armed (same compensation pattern as the error-counter undo)
+    // so the next accepted event still carries the snapshot.
+
+    func test_beforeSendDrop_reArmsConsumedSnapshotTrigger() throws {
+        let sessionManager = SessionManager()
+        // Align the active session with the span's stamped session so the armed token
+        // is consumable by this span (build() rejects cross-session tokens). Recent
+        // creation date: arming routes through getSessionMetadata(), which would
+        // rotate (and re-stamp) a session older than an hour.
+        sessionManager.sessionMetadata = SessionMetadata(sessionId: "session_001",
+                                                         sessionCreationDate: Date().timeIntervalSince1970,
+                                                         using: MockKeyChain())
+        sessionManager.triggerSnapshotOnNextEvent()
+        // The carrier span must start after the arm — build() hands the token back
+        // for spans that predate the setUserContext call.
+        mockSpanData = makeNetworkRequestMockSpan()
+
+        let cxSpan = try XCTUnwrap(CxSpan(
+            otel: mockSpanData,
+            versionMetadata: mockVersionMetadata,
+            sessionManager: sessionManager,
+            networkManager: mockNetworkManager,
+            viewManager: mockViewManager,
+            metricsManager: mockMetricsManager,
+            options: makeOptions(beforeSend: { _ in nil })
+        ))
+
+        XCTAssertNil(cxSpan.getDictionary(), "beforeSend returning nil must drop the span")
+        XCTAssertNotNil(sessionManager.consumePendingSnapshotTrigger(),
+                        "Dropping the promoted span must re-arm the trigger so the next accepted event carries the snapshot")
+    }
+
+    func test_beforeSendDrop_doesNotArmTriggerItNeverConsumed() throws {
+        // Fresh SessionManager: the span is a snapshot via the nil throttle,
+        // not via the setUserContext trigger — dropping it must not conjure one.
+        let sessionManager = SessionManager()
+
+        let cxSpan = try XCTUnwrap(CxSpan(
+            otel: mockSpanData,
+            versionMetadata: mockVersionMetadata,
+            sessionManager: sessionManager,
+            networkManager: mockNetworkManager,
+            viewManager: mockViewManager,
+            metricsManager: mockMetricsManager,
+            options: makeOptions(beforeSend: { _ in nil })
+        ))
+
+        XCTAssertNil(cxSpan.getDictionary(), "beforeSend returning nil must drop the span")
+        XCTAssertNil(sessionManager.consumePendingSnapshotTrigger(),
+                     "Dropping a span that never consumed the trigger must not arm a promotion")
+    }
+
     // MARK: - Editable field propagation (text.cx_rum ↔ instrumentation_data parity)
     //
     // For each editable field, change the value via `beforeSend` and assert the
