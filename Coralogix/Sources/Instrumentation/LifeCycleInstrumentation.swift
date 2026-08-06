@@ -44,7 +44,19 @@ extension CoralogixRum {
     
     @objc private func appDidEnterBackgroundNotification(notification: Notification) {
         self.makeSpan(type: .type, value: .appDidEnterBackgroundNotification)
-        self.flush()
+
+        // Request background time to ensure flush/export completes before app suspension.
+        // The expiration handler ensures we don't leak background task identifiers.
+        var backgroundTaskId: UIBackgroundTaskIdentifier = .invalid
+        backgroundTaskId = UIApplication.shared.beginBackgroundTask(expirationHandler: {
+            UIApplication.shared.endBackgroundTask(backgroundTaskId)
+            backgroundTaskId = .invalid
+        })
+
+        self.flush {
+            UIApplication.shared.endBackgroundTask(backgroundTaskId)
+            backgroundTaskId = .invalid
+        }
     }
     
     @objc private func appWillTerminateNotification(notification: Notification) {
