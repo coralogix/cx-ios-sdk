@@ -9,6 +9,11 @@ Release-mechanics commits (version bumps, podspec/script tweaks, README edits) a
 omitted; the focus here is user-facing behavior changes. Tickets are referenced as
 `CX-XXXXX` (Jira) or `ALPH-XXXX` (legacy). Pull request numbers are in parentheses.
 
+## [2.14.0] - 2026-08-06
+
+### Added
+- Buffered spans are now automatically flushed when the app enters the background, ensuring telemetry is uploaded before process suspension. Uses `UIApplication.beginBackgroundTask` to extend the background time window and guarantee completion before the app is terminated (#249).
+
 ## [2.13.3] - 2026-08-05
 
 ### Fixed
