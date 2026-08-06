@@ -44,6 +44,7 @@ extension CoralogixRum {
     
     @objc private func appDidEnterBackgroundNotification(notification: Notification) {
         self.makeSpan(type: .type, value: .appDidEnterBackgroundNotification)
+        self.flush()
     }
     
     @objc private func appWillTerminateNotification(notification: Notification) {
