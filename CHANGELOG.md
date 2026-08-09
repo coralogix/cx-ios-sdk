@@ -9,7 +9,7 @@ Release-mechanics commits (version bumps, podspec/script tweaks, README edits) a
 omitted; the focus here is user-facing behavior changes. Tickets are referenced as
 `CX-XXXXX` (Jira) or `ALPH-XXXX` (legacy). Pull request numbers are in parentheses.
 
-## [2.14.0] - 2026-08-09
+## [2.15.0] - 2026-08-09
 
 ### Added
 - Every user-interaction event now carries `interaction_context.is_masked_element` (always present, boolean): the SDK's own observation that the interaction targeted content session replay masked. `false` also covers "could not resolve" — a hybrid payload with no coordinates, or no frame geometry to test the point against — so the flag under-reports rather than over-reports. Read it in `beforeSend` to implement policies stricter than the default redaction: drop the event, blank the coordinates, or rewrite the target.
@@ -19,6 +19,11 @@ omitted; the focus here is user-facing behavior changes. Tickets are referenced 
 ### Fixed
 - Interactions reported through the hybrid bridge (`setUserInteraction` — React Native, Flutter) are now redacted on the same terms as native taps. Previously the bridge payload's `target_element_inner_text` was copied verbatim, so a masked element's real text shipped in the clear: the redaction only ran on the swizzled native-touch path, which emits no span in hybrid mode. Only the inner text is redacted — identity fields and coordinates are reported as-is (web-SDK parity) — and the masking is resolved from the payload's coordinates against the same frame geometry that suppresses the replay's tap marker, so the metadata cannot contradict the pixels.
 - Native tap redaction now also tests the tap point against the frame's mask geometry, closing two documented gaps: text of UIKit views masked by `maskText`/`maskAllImages`, and text under a SwiftUI `.cxMask()` overlay (a sibling, not an ancestor, so the view-tree walk could not see it). Both previously shipped their real text while their pixels and tap marker were masked.
+
+## [2.14.0] - 2026-08-06
+
+### Added
+- Buffered spans are now automatically flushed when the app enters the background, ensuring telemetry is uploaded before process suspension. Uses `UIApplication.beginBackgroundTask` to extend the background time window and guarantee completion before the app is terminated.
 
 ## [2.13.3] - 2026-08-05
 
