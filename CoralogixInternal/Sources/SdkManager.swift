@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import CoreGraphics
 
 public enum CaptureEventError: Error {
     case dummyInstance
@@ -51,6 +52,15 @@ public protocol SessionReplayInterface {
     func isRecording() -> Bool
     func isInitialized() -> Bool
     func getSessionReplayFolderPath() -> String?
+
+    /// The mask rectangles (screen coordinates, points) a frame captured at this moment would
+    /// paint for native content — the same families the capture pass collects (`cxMask`,
+    /// `maskText`, `maskAllImages`, navigation-bar titles). The interaction path tests a tap
+    /// against these so `is_masked_element` and inner-text redaction resolve from the same
+    /// geometry that suppresses the replay's tap marker, and the metadata cannot contradict
+    /// the pixels. Returns nil when unresolvable (off the main thread, or no options) — the
+    /// caller must treat nil as "unknown", never as "unmasked geometry exists".
+    func currentMaskRects() -> [CGRect]?
 }
 
 public class SdkManager {

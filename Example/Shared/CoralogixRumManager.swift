@@ -13,6 +13,46 @@ import UIKit
 final class CoralogixRumManager {
     static let shared = CoralogixRumManager()
 
+    /// Demo of the customer-side lever for masked interactions (`is_masked_element`):
+    /// the SDK default redacts only `target_element_inner_text`; this callback upgrades
+    /// every *other* masked interaction to full masking, so the platform shows the two
+    /// strategies side by side. Events it fully masks are marked inside the attributes
+    /// map (`demo_masking_strategy`, `demo_masked_fields`).
+    static let maskedInteractionBeforeSend: ([String: Any]) -> [String: Any]? = { cxRum in
+        guard var interaction = cxRum["interaction_context"] as? [String: Any],
+              interaction["is_masked_element"] as? Bool == true else {
+            return cxRum
+        }
+
+        // Alternate: odd masked events keep the SDK default, even ones get full masking.
+        // Demo-only counter — beforeSend runs on the exporter's serial encode path.
+        maskedInteractionCounter += 1
+        guard maskedInteractionCounter % 2 == 0 else { return cxRum }
+
+        let fieldsToMask = ["target_element", "element_classes", "element_id",
+                            "target_element_inner_text"]
+        for field in fieldsToMask where interaction[field] != nil {
+            interaction[field] = "***"
+        }
+
+        // Coordinates travel inside the attributes map; blank them there and record
+        // what this callback masked so the two strategies are tellable apart in RUM.
+        var attributes = interaction["attributes"] as? [String: Any] ?? [:]
+        let maskedCoordinates = ["x", "y"].filter { attributes[$0] != nil }
+        for coordinate in maskedCoordinates {
+            attributes[coordinate] = 0
+        }
+        attributes["demo_masking_strategy"] = "before_send_full"
+        attributes["demo_masked_fields"] = (fieldsToMask + maskedCoordinates)
+            .joined(separator: ",")
+        interaction["attributes"] = attributes
+
+        var editable = cxRum
+        editable["interaction_context"] = interaction
+        return editable
+    }
+    private static var maskedInteractionCounter = 0
+
     private var _sdk: CoralogixRum?
     var sdk: CoralogixRum {
         guard let _sdk = _sdk else {
@@ -52,14 +92,7 @@ final class CoralogixRumManager {
                                                                   .anr: true,
                                                                   .lifeCycle: true],
                                                collectIPData: true,
-//                                               beforeSend: { cxRum in
-//            var editableCxRum = cxRum
-//            if var sessionContext = editableCxRum["session_context"] as? [String: Any] {
-//                sessionContext["user_email"] = "jone.dow@coralogix.com"
-//                editableCxRum["session_context"] = sessionContext
-//            }
-//            return editableCxRum
-//        },
+                                               beforeSend: CoralogixRumManager.maskedInteractionBeforeSend,
                                                enableSwizzling: true,
                                                proxyUrl: proxyUrl, // BUGV2-6045: harness override (CX_MOCK_PORT env), else Envs.PROXY_URL
                                                traceParentInHeader: ["enable": true],

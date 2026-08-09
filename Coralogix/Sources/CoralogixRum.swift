@@ -491,8 +491,16 @@ public class CoralogixRum {
     /// - `element_id` (`String`, optional) — accessibility identifier
     /// - `target_element_inner_text` (`String`, optional) — visible label text
     /// - `scroll_direction` (`String`, optional) — `"up"` | `"down"` | `"left"` | `"right"`
-    /// - `x` / `y` (`Double`, optional) — screen coordinates
+    /// - `x` / `y` (`Double`, optional) — screen coordinates, in points (matching iOS mask
+    ///   geometry — no unit conversion, unlike Android where the payload is dp)
     /// - `attributes` (`[String: Any]`, optional) — custom attributes
+    /// - `is_masked` (`Bool`, optional) — authoritative masking verdict from a wrapper that
+    ///   owns its own masking (Flutter). When present it overrides the SDK's own resolution
+    ///   of the coordinates against the frame's mask geometry; the outcome is reported as
+    ///   `interaction_context.is_masked_element` and drives inner-text redaction.
+    ///
+    /// May be called from any thread; off-main calls are processed asynchronously on the
+    /// main thread, where masking is resolved.
     public func setUserInteraction(_ dictionary: [String: Any]) {
         guard CoralogixRum.isInitialized else { return }
         reportHybridUserInteraction(dictionary)

@@ -912,6 +912,12 @@ final class MockSessionReplay: SessionReplayInterface {
     func isInitialized() -> Bool {
         return true
     }
+
+    var maskRectsToReturn: [CGRect]?
+
+    func currentMaskRects() -> [CGRect]? {
+        return maskRectsToReturn
+    }
 }
 
 public final class MockSpan: Span {

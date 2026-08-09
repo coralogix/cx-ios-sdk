@@ -380,7 +380,9 @@ final class HybridAPITests: XCTestCase {
         let result = coralogixRum.validateHybridInteraction(dict)
 
         XCTAssertNotNil(result)
-        XCTAssertEqual(result?.count, dict.count)
+        // Every input key is forwarded, plus the SDK-added is_masked_element.
+        XCTAssertEqual(result?.count, dict.count + 1)
+        XCTAssertEqual(result?[Keys.isMaskedElement.rawValue] as? Bool, false)
     }
 
     func testValidateHybridInteraction_completeScrollEvent_passes() {

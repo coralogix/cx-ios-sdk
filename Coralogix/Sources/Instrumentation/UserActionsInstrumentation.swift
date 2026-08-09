@@ -116,6 +116,15 @@ extension CoralogixRum {
     /// span (user/environment context is added by makeSpan via addUserMetadata) and
     /// hands off to `handleUserInteractionEvent`, which serialises the payload and closes the span.
     internal func reportHybridUserInteraction(_ dictionary: [String: Any]) {
+        // Masking resolution walks UIKit windows, so it needs the main thread. Bridge calls
+        // (React Native modules, Flutter channels) often arrive off-main; hop asynchronously
+        // rather than sync-blocking the bridge thread. Main-thread callers stay synchronous.
+        guard Thread.isMainThread else {
+            DispatchQueue.main.async { [weak self] in
+                self?.reportHybridUserInteraction(dictionary)
+            }
+            return
+        }
         guard let validated = validateHybridInteraction(dictionary) else { return }
 
         var span = makeSpan(event: .userInteraction, source: .console, severity: .info)
@@ -129,7 +138,10 @@ extension CoralogixRum {
     /// and the caller must drop the event.
     ///
     /// - Note: `internal` visibility to allow unit testing.
-    internal func validateHybridInteraction(_ dictionary: [String: Any]) -> [String: Any]? {
+    /// - Parameter maskRects: Frame mask geometry for the masking resolution; nil (the
+    ///   production default) fetches it live from the registered session replay.
+    internal func validateHybridInteraction(_ dictionary: [String: Any],
+                                            maskRects: [CGRect]? = nil) -> [String: Any]? {
         // event_name is required and must be a known InteractionEventName value.
         guard let rawEventName = dictionary[Keys.eventName.rawValue] as? String else {
             Log.w("setUserInteraction: missing required key '\(Keys.eventName.rawValue)' — event dropped")
@@ -172,7 +184,48 @@ extension CoralogixRum {
             Log.w("setUserInteraction: unknown scroll_direction '\(rawDirection)' (expected: up | down | left | right) — field ignored")
         }
 
+        // A hybrid-reported interaction is redacted on the same terms as a native one: the
+        // bridge payload's text is copied verbatim above, so a masked element's real text
+        // would otherwise ship (the swizzles feed session replay in hybrid mode, but the span
+        // comes from here and never passes through TapDataExtractor). nil = unresolvable →
+        // the documented `false` default: the flag under-reports rather than over-reports.
+        let isMaskedElement = Self.resolveHybridMasking(
+            dictionary,
+            maskRects: maskRects ?? SdkManager.shared.getSessionReplay()?.currentMaskRects()
+        )
+        if let text = result[Keys.targetElementInnerText.rawValue] {
+            result[Keys.targetElementInnerText.rawValue] =
+                TapDataExtractor.redactIfMasked(text, isMasked: isMaskedElement == true)
+        }
+        result[Keys.isMaskedElement.rawValue] = isMaskedElement ?? false
+
         return result
+    }
+
+    /// Resolves whether a hybrid-reported interaction targeted masked content.
+    ///
+    /// Precedence: the wrapper's own verdict (`is_masked` in the bridge dictionary) —
+    /// authoritative for hybrids that own their masking (Flutter sets it; React Native does
+    /// not) — then the payload's coordinates tested against the same frame geometry that
+    /// suppresses the replay's tap marker, so the metadata cannot contradict the pixels.
+    /// Hybrid coordinates and iOS mask rects are both in points — no unit conversion, unlike
+    /// Android where the payload is dp and the rects are px.
+    ///
+    /// Returns nil when neither is resolvable — no coordinates (React Native scroll and swipe
+    /// carry none) or no frame geometry to test against.
+    internal static func resolveHybridMasking(_ dictionary: [String: Any],
+                                              maskRects: [CGRect]?) -> Bool? {
+        if let verdict = dictionary[Keys.isMasked.rawValue] as? Bool { return verdict }
+        guard let x = doubleValue(dictionary[Keys.positionX.rawValue]),
+              let y = doubleValue(dictionary[Keys.positionY.rawValue]),
+              let rects = maskRects else { return nil }
+        return TapDataExtractor.pointIsMasked(CGPoint(x: x, y: y), in: rects)
+    }
+
+    private static func doubleValue(_ value: Any?) -> Double? {
+        if let double = value as? Double { return double }
+        if let int = value as? Int { return Double(int) }
+        return (value as? NSNumber)?.doubleValue
     }
 
     /// Rounds a numeric coordinate to 2 decimal places for RUM (e.g. 62.04064556 → 62.04). Returns value unchanged if not numeric.

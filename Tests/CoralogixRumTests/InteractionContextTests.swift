@@ -632,6 +632,47 @@ final class InteractionContextTests: XCTestCase {
         XCTAssertEqual(context.attributes?[Keys.text.rawValue] as? String, "promo")
     }
 
+    /// `is_masked_element` must round-trip from the tapObject into the context.
+    func testInit_isMaskedElementTrue_isParsed() {
+        let tapObject: [String: Any] = [
+            Keys.eventName.rawValue:       "click",
+            Keys.targetElement.rawValue:   "UIButton",
+            Keys.isMaskedElement.rawValue: true
+        ]
+        let context = InteractionContext(otel: makeSpan(tapObject: tapObject))
+
+        XCTAssertTrue(context.isMaskedElement)
+    }
+
+    /// A tapObject without the flag (older wrapper, unresolvable masking) must read as the
+    /// documented default — false, the under-reporting answer.
+    func testInit_isMaskedElementAbsent_defaultsToFalse() {
+        let tapObject: [String: Any] = [
+            Keys.eventName.rawValue:     "click",
+            Keys.targetElement.rawValue: "UIButton"
+        ]
+        let context = InteractionContext(otel: makeSpan(tapObject: tapObject))
+
+        XCTAssertFalse(context.isMaskedElement)
+    }
+
+    /// The flag is always on the wire — false is a reported value, not an omitted key.
+    func testGetDictionary_alwaysEmitsIsMaskedElement() {
+        let unmasked = InteractionContext(otel: makeSpan(tapObject: [
+            Keys.eventName.rawValue:     "click",
+            Keys.targetElement.rawValue: "UIButton"
+        ]))
+        XCTAssertEqual(unmasked.getDictionary()[Keys.isMaskedElement.rawValue] as? Bool, false,
+                       "An unmasked interaction must still carry the key, reading false")
+
+        let masked = InteractionContext(otel: makeSpan(tapObject: [
+            Keys.eventName.rawValue:       "click",
+            Keys.targetElement.rawValue:   "UIButton",
+            Keys.isMaskedElement.rawValue: true
+        ]))
+        XCTAssertEqual(masked.getDictionary()[Keys.isMaskedElement.rawValue] as? Bool, true)
+    }
+
     /// event_name must default to "click" when the tapObject omits it.
     func testInit_missingEventName_defaultsToClick() {
         let tapObject: [String: Any] = [

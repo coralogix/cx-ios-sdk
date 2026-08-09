@@ -9,6 +9,17 @@ Release-mechanics commits (version bumps, podspec/script tweaks, README edits) a
 omitted; the focus here is user-facing behavior changes. Tickets are referenced as
 `CX-XXXXX` (Jira) or `ALPH-XXXX` (legacy). Pull request numbers are in parentheses.
 
+## [2.14.0] - 2026-08-09
+
+### Added
+- Every user-interaction event now carries `interaction_context.is_masked_element` (always present, boolean): the SDK's own observation that the interaction targeted content session replay masked. `false` also covers "could not resolve" — a hybrid payload with no coordinates, or no frame geometry to test the point against — so the flag under-reports rather than over-reports. Read it in `beforeSend` to implement policies stricter than the default redaction: drop the event, blank the coordinates, or rewrite the target.
+- `setUserInteraction` accepts an optional `is_masked` boolean — an authoritative masking verdict from a hybrid wrapper that owns its own masking (the Flutter plugin sets it). It overrides the SDK's geometry resolution and drives both the flag and inner-text redaction.
+- `FlutterViewBitmap` gained `maskRects` — the rectangles Dart masked in the delivered bitmap, in Flutter-view-local points. They merge into the captured frame's mask geometry, so tap markers over masked Flutter content are now suppressed on the same terms as native masks. A reused stale bitmap carries the rects of its own frame, never a newer frame's.
+
+### Fixed
+- Interactions reported through the hybrid bridge (`setUserInteraction` — React Native, Flutter) are now redacted on the same terms as native taps. Previously the bridge payload's `target_element_inner_text` was copied verbatim, so a masked element's real text shipped in the clear: the redaction only ran on the swizzled native-touch path, which emits no span in hybrid mode. Only the inner text is redacted — identity fields and coordinates are reported as-is (web-SDK parity) — and the masking is resolved from the payload's coordinates against the same frame geometry that suppresses the replay's tap marker, so the metadata cannot contradict the pixels.
+- Native tap redaction now also tests the tap point against the frame's mask geometry, closing two documented gaps: text of UIKit views masked by `maskText`/`maskAllImages`, and text under a SwiftUI `.cxMask()` overlay (a sibling, not an ancestor, so the view-tree walk could not see it). Both previously shipped their real text while their pixels and tap marker were masked.
+
 ## [2.13.3] - 2026-08-05
 
 ### Fixed

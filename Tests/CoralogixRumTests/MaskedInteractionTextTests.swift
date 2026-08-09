@@ -137,6 +137,105 @@ final class MaskedInteractionTextTests: XCTestCase {
                      "A password must never be passed to the customer's closure")
     }
 
+    // MARK: - is_masked_element
+
+    /// The masked boolean the redaction already computes is reported, not discarded — masked
+    /// and unmasked taps must be distinguishable without parsing `***`.
+    func testMaskedTap_reportsIsMaskedElementTrue() {
+        let keypad = UIView()
+        keypad.cxMask = true
+        let key = UIButton()
+        key.setTitle("7", for: .normal)
+        keypad.addSubview(key)
+
+        let data = TapDataExtractor.extract(from: clickEvent(on: key))
+
+        XCTAssertEqual(data[Keys.isMaskedElement.rawValue] as? Bool, true)
+    }
+
+    func testUnmaskedTap_reportsIsMaskedElementFalse() {
+        let key = UIButton()
+        key.setTitle("7", for: .normal)
+
+        let data = TapDataExtractor.extract(from: clickEvent(on: key))
+
+        XCTAssertEqual(data[Keys.isMaskedElement.rawValue] as? Bool, false,
+                       "The flag must be present and false, not absent")
+    }
+
+    /// The flag is not tied to text: a masked view with nothing to say still reports true.
+    func testMaskedViewWithNoText_stillReportsFlagTrue() {
+        let container = UIView()
+        container.cxMask = true
+        let stepper = UIStepper()
+        container.addSubview(stepper)
+
+        let data = TapDataExtractor.extract(from: clickEvent(on: stepper))
+
+        XCTAssertEqual(data[Keys.isMaskedElement.rawValue] as? Bool, true)
+    }
+
+    /// The customer's reporting gate is not session-replay masking: text redacted by
+    /// `shouldSendText` alone must not claim the element was masked.
+    func testShouldSendTextRejection_redactsText_butFlagStaysFalse() {
+        let button = UIButton()
+        button.setTitle("Buy Now", for: .normal)
+
+        let data = TapDataExtractor.extract(from: clickEvent(on: button),
+                                            shouldSendText: { _, _ in false })
+
+        XCTAssertEqual(innerText(data), "***")
+        XCTAssertEqual(data[Keys.isMaskedElement.rawValue] as? Bool, false)
+    }
+
+    // MARK: - Frame-geometry masking
+
+    /// The mask rects are the preferred oracle: they cover what the view tree cannot see —
+    /// SwiftUI `.cxMask()` overlays and `maskText`/`maskAllImages` matches — so the flag and
+    /// the replay's suppressed tap marker resolve from the same geometry and cannot disagree.
+    func testTapInsideMaskRect_redactsAndFlagsTrue_evenWhenViewTreeSaysUnmasked() {
+        let label = UILabel()
+        label.text = "Balance 4,200"
+        let event = TouchEvent(view: label, location: CGPoint(x: 50, y: 50),
+                               eventType: .click, scrollDirection: nil)
+
+        let data = TapDataExtractor.extract(from: event,
+                                            maskRects: [CGRect(x: 0, y: 0, width: 100, height: 100)])
+
+        XCTAssertEqual(innerText(data), "***",
+                       "Text the pixels masked must not ship in the clear")
+        XCTAssertEqual(data[Keys.isMaskedElement.rawValue] as? Bool, true)
+    }
+
+    func testTapOutsideMaskRects_notRedacted_flagFalse() {
+        let label = UILabel()
+        label.text = "Public caption"
+        let event = TouchEvent(view: label, location: CGPoint(x: 200, y: 200),
+                               eventType: .click, scrollDirection: nil)
+
+        let data = TapDataExtractor.extract(from: event,
+                                            maskRects: [CGRect(x: 0, y: 0, width: 100, height: 100)])
+
+        XCTAssertEqual(innerText(data), "Public caption")
+        XCTAssertEqual(data[Keys.isMaskedElement.rawValue] as? Bool, false)
+    }
+
+    /// No geometry (nil) must not erase the view-tree answer — a masked subtree still masks.
+    func testNilMaskRects_viewTreeOracleStillApplies() {
+        let container = UIView()
+        container.cxMask = true
+        let button = UIButton()
+        button.setTitle("7", for: .normal)
+        container.addSubview(button)
+        let event = TouchEvent(view: button, location: CGPoint(x: 5, y: 5),
+                               eventType: .click, scrollDirection: nil)
+
+        let data = TapDataExtractor.extract(from: event, maskRects: nil)
+
+        XCTAssertEqual(innerText(data), "***")
+        XCTAssertEqual(data[Keys.isMaskedElement.rawValue] as? Bool, true)
+    }
+
     // MARK: - Absent text stays absent
 
     /// Redaction applies to text that exists. A view with nothing to say still reports no key,

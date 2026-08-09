@@ -63,6 +63,52 @@ final class UIViewExtMaskInheritanceTests: XCTestCase {
                        "A sibling of a masked container must not be masked")
     }
 
+    // MARK: - collectNativeMaskRects
+
+    /// One collector feeds both the capture pass and the interaction-time masking resolution:
+    /// every mask family combines, offset to the window's screen position, so the tap test and
+    /// the painted pixels derive from the same geometry.
+    func testCollectNativeMaskRects_combinesFamiliesAndAppliesWindowOffset() {
+        let window = UIWindow(frame: CGRect(x: 10, y: 20, width: 300, height: 300))
+        window.isHidden = false  // windows are born hidden; the walk skips hidden views
+        let masked = UIView(frame: CGRect(x: 0, y: 0, width: 50, height: 50))
+        masked.cxMask = true
+        let label = UILabel(frame: CGRect(x: 100, y: 0, width: 50, height: 20))
+        label.text = "secret code"
+        let image = UIImageView(frame: CGRect(x: 0, y: 100, width: 40, height: 40))
+        window.addSubview(masked)
+        window.addSubview(label)
+        window.addSubview(image)
+
+        let rects = window.collectNativeMaskRects(in: window,
+                                                  maskText: ["secret"],
+                                                  maskAllImages: true)
+
+        XCTAssertEqual(rects.count, 3, "cxMask, maskText, and maskAllImages must all contribute")
+        XCTAssertTrue(rects.contains(CGRect(x: 10, y: 20, width: 50, height: 50)),
+                      "The cxMask rect must be offset by the window's screen origin")
+        XCTAssertTrue(rects.contains(CGRect(x: 110, y: 20, width: 50, height: 20)),
+                      "The maskText rect must be offset by the window's screen origin")
+        XCTAssertTrue(rects.contains(CGRect(x: 10, y: 120, width: 40, height: 40)),
+                      "The maskAllImages rect must be offset by the window's screen origin")
+    }
+
+    func testCollectNativeMaskRects_withoutTextOrImageOptions_stillCollectsCxMask() {
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 300, height: 300))
+        window.isHidden = false  // windows are born hidden; the walk skips hidden views
+        let masked = UIView(frame: CGRect(x: 5, y: 6, width: 50, height: 50))
+        masked.cxMask = true
+        let label = UILabel(frame: CGRect(x: 100, y: 0, width: 50, height: 20))
+        label.text = "secret code"
+        window.addSubview(masked)
+        window.addSubview(label)
+
+        let rects = window.collectNativeMaskRects(in: window, maskText: nil, maskAllImages: false)
+
+        XCTAssertEqual(rects, [CGRect(x: 5, y: 6, width: 50, height: 50)],
+                       "Only the cxMask rect is collected when no other masking is configured")
+    }
+
     // MARK: - collectCxMaskRects
 
     /// A masked container whose keys are *not* individually masked contributes exactly one rect.

@@ -77,24 +77,29 @@ A masked view, and anything inside it:
 
 Masking does not suppress the interaction event itself, and the event still carries the touch coordinates. Masking hides *what* an element is and *what it says*, not *that it was used*.
 
-### Which masking sources suppress a tap marker
+### Which masking sources suppress a tap marker and set `is_masked_element`
 
-Only masking that reports geometry to the capture pass can suppress a marker, because the marker is tested against the exact rectangles the frame blacked out — the pixels and the marker can never disagree. The synchronous `UIView` walk reports geometry. The Vision-based scanners and the Dart-supplied bitmap both modify pixels in place and report none, so masking that relies on them cannot suppress a marker.
+Only masking that reports geometry to the capture pass can suppress a marker, because the marker is tested against the exact rectangles the frame blacked out — the pixels and the marker can never disagree. The synchronous `UIView` walk reports geometry, and the Flutter plugin reports the rects it masked alongside each bitmap. The Vision-based scanners modify pixels in place and report none, so masking that relies on them cannot suppress a marker.
 
-| Masking source | Pixels masked | Tap marker suppressed | Interaction text `***` |
-|---|---|---|---|
-| `cxMask` on a `UIView` (and its subviews) | ✅ | ✅ | ✅ |
-| `.cxMask()` on a SwiftUI view | ✅ | ✅ | ❌ — see below |
-| `maskText` / `maskAllImages` on **UIKit** views (`UILabel`, `UITextField`, `UITextView`, `UINavigationBar` titles, `UIImageView`) | ✅ | ✅ | ❌ |
-| `maskText` / `maskAllImages` on **SwiftUI** content (OCR / rectangle detection) | ✅ | ❌ | ❌ |
-| `maskFaces`, `creditCardPredicate` (Vision) | ✅ | ❌ | ❌ |
-| Flutter (Dart-supplied pre-masked bitmap) | ✅ | ❌ | ❌ |
+Interaction events resolve masking from the **same geometry**: the tap point is tested against the rects a frame captured at that moment would paint. A tap inside one redacts `target_element_inner_text` to `***` and reports `interaction_context.is_masked_element: true`, so the flag and the replay cannot contradict each other. The view-tree walk (`cxMask` inheritance) and the sensitive-field traits still answer when no geometry is available.
 
-The global policy options and the Flutter path deliberately do not affect interaction text: they answer "should these pixels be hidden in this frame", which is not the same question as "may this text leave the device". Password fields and fields with a sensitive `textContentType` are redacted to `***` independently of any of this.
+| Masking source | Pixels masked | Tap marker suppressed | Interaction text `***` | `is_masked_element` |
+|---|---|---|---|---|
+| `cxMask` on a `UIView` (and its subviews) | ✅ | ✅ | ✅ | ✅ |
+| `.cxMask()` on a SwiftUI view | ✅ | ✅ | ✅ — via frame geometry | ✅ |
+| `maskText` / `maskAllImages` on **UIKit** views (`UILabel`, `UITextField`, `UITextView`, `UINavigationBar` titles, `UIImageView`) | ✅ | ✅ | ✅ — via frame geometry | ✅ |
+| `maskText` / `maskAllImages` on **SwiftUI** content (OCR / rectangle detection) | ✅ | ❌ | ❌ | ❌ |
+| `maskFaces`, `creditCardPredicate` (Vision) | ✅ | ❌ | ❌ | ❌ |
+| Flutter (Dart-supplied pre-masked bitmap) | ✅ | ✅ — with plugin-reported rects (`FlutterViewBitmap.maskRects`) | ✅ — via `is_masked` on `setUserInteraction` | ✅ — same |
+| Secure text entry / sensitive `textContentType` | n/a (system-drawn dots) | ❌ — paints no rect | ✅ | ✅ |
 
-> **`element_id` is never redacted.** It carries the view's `accessibilityIdentifier`, which is developer-authored rather than user data, so the SDK reports it as-is even for a view inside a masked subtree. Avoid encoding sensitive values in identifiers: on a masked keypad, per-digit identifiers such as `keypad_key_7` would reconstruct the entered sequence from the tap spans even though the text is `***`. Both demo apps give the masked keypad's keys a single shared identifier for this reason. This matches the Android SDK, which does not redact `resourceId` either.
+Rows marked "via frame geometry" require session replay to be initialized — the interaction path asks it for the rects, since only it knows the `maskText` / `maskAllImages` configuration. Password fields and fields with a sensitive `textContentType` are redacted to `***` independently of any of this. Any **new masking source must state which of the two it feeds**: geometry to the capture pass (suppresses markers, sets the flag) or pixels only (neither).
 
-> **Limitation — SwiftUI:** `.cxMask()` works by overlaying a masked `UIView` on top of the composable content. That overlay masks the pixels and suppresses tap markers over the area, but it is a sibling of the content rather than an ancestor of it, so the views underneath do not inherit masking and their interaction events still report their real text. If a SwiftUI control's text is sensitive, use the `shouldSendText` option to redact it.
+`is_masked_element` is always present and defaults to `false` whenever masking cannot be resolved — the flag under-reports rather than over-reports when the SDK has no answer. The known unresolvable cases on iOS: a hybrid `setUserInteraction` payload with no coordinates (React Native scroll and swipe carry none), and no frame geometry to test the point against (session replay not initialized).
+
+> **`element_id` is never redacted.** It carries the view's `accessibilityIdentifier`, which is developer-authored rather than user data, so the SDK reports it as-is even for a view inside a masked subtree. Avoid encoding sensitive values in identifiers: on a masked keypad, per-digit identifiers such as `keypad_key_7` would reconstruct the entered sequence from the tap spans even though the text is `***`. Both demo apps give the masked keypad's keys a single shared identifier for this reason. This matches the Android SDK, which does not redact `resourceId` either. Customers who need identity fields or coordinates withheld implement it in `beforeSend`, keyed on `is_masked_element` — see the root README.
+
+> **SwiftUI:** `.cxMask()` works by overlaying a masked `UIView` on top of the composable content — a sibling, not an ancestor — so the views underneath do not inherit masking through the view tree. Their interaction events are still redacted, because the tap point is tested against the overlay's mask rect. The residual gap is text masked only by the OCR/Vision stages (`maskText`/`maskAllImages` over SwiftUI content), which report no geometry; use `shouldSendText` for those.
 
 ---
 

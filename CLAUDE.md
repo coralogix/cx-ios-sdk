@@ -92,6 +92,10 @@ The review rules in `AGENTS.md` apply **while writing code**, not only at PR tim
 
 - **Protect all shared mutable state with `NSLock` or a serial `DispatchQueue`.** Follow the existing pattern — don't introduce unguarded shared state.
 
+- **Any change to user-interaction capture, reporting, or redaction must also verify the hybrid path** (`CoralogixRum.setUserInteraction` → `UserActionsInstrumentation.reportHybridUserInteraction` / `validateHybridInteraction`). In hybrid mode the native swizzles feed session replay but emit no span — the span comes from the bridge payload and does not pass through `TapDataExtractor`. A change touching redaction or attribute reporting is not complete until the hybrid path is checked and covered by a test.
+
+- **A new masking source must state which of the two channels it feeds:** geometry to the capture pass (the UIKit walk and Dart-reported rects do — these suppress tap markers and set `is_masked_element`), or pixels only (OCR/Vision do — these can never suppress a marker or set the flag). Record the answer in the masking table in `SessionReplay/Sources/Docs/README.md`.
+
 - **Demo-app changes must land in both `Example/DemoAppSwift` (UIKit) and `Example/DemoAppSwiftUI` (SwiftUI).** When adding a new screen, section, or interactive control to one demo app, mirror it in the other so feature parity holds across both targets and the UI tests (`DemoAppUITests`, `DemoAppSwiftUIUITests`) stay symmetrical.
 
 ## Skills available

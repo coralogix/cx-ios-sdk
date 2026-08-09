@@ -77,6 +77,13 @@ public enum Keys: String {
     // Wire value, not a key: what a redacted `target_element_inner_text` reads as. Matches the
     // Android SDK so the same masked tap looks the same whichever platform sent it.
     case maskedInnerText = "***"
+    // Always-present boolean in interaction_context: the SDK's own observation that the
+    // interaction targeted content session replay masked. `false` also covers "could not
+    // resolve" — the flag under-reports rather than over-reports when there is no answer.
+    case isMaskedElement = "is_masked_element"
+    // Optional input key on the hybrid setUserInteraction dictionary: an authoritative
+    // masking verdict from a wrapper that owns its own masking (Flutter). Never emitted.
+    case isMasked = "is_masked"
     case scrollDirection = "scroll_direction"
     case fetch
     case networkRequestContext = "network_request_context"

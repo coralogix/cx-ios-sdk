@@ -44,8 +44,18 @@ public class SessionReplayModel {
     // runs off-main, so these are genuinely cross-thread.
     private let flutterFrameQueue = DispatchQueue(label: "com.coralogix.sessionReplay.flutterFrameQueue")
 
+    /// A decoded Dart delivery: the bitmap together with the mask rects Dart reported for it
+    /// (screen offsets applied later, at composite time). One entry on purpose — when a stale
+    /// bitmap is reused, it must carry the rects of its own frame; caching the rects separately
+    /// could pair a reused bitmap with a newer frame's geometry, exactly the pixels/metadata
+    /// disagreement the rects exist to prevent.
+    internal struct FlutterFrame {
+        let image: CGImage
+        let maskRects: [CGRect]
+    }
+
     // Last frame the provider delivered; reused when a later frame is nil.
-    private var _lastFlutterCGImage: CGImage?
+    private var _lastFlutterFrame: FlutterFrame?
     // frameId of the delivery cached above. An out-of-order (older) callback must
     // not overwrite a newer frame.
     private var _latestAcceptedFlutterFrameId: Int64 = 0
@@ -84,6 +94,7 @@ public class SessionReplayModel {
         options: SessionReplayOptions,
         flutterCGImage: CGImage?,
         flutterViewRect: CGRect?,
+        flutterMaskRects: [CGRect] = [],
         isClickFrame: Bool = false
     ) -> CapturedFrame? {
         guard Thread.isMainThread else { return nil }
@@ -97,6 +108,7 @@ public class SessionReplayModel {
             maskAllImages: options.maskAllImages,
             flutterCGImage: flutterCGImage,
             flutterViewRect: flutterViewRect,
+            flutterMaskRects: flutterMaskRects,
             isClickFrame: isClickFrame
         )
     }
@@ -237,7 +249,7 @@ public class SessionReplayModel {
             guard self.flutterFrameGeneration == requestGeneration else { return }
 
             // nil = no fresh frame: reuse the last one, or skip if none yet. Never black.
-            guard let flutterCGImage = self.resolveFlutterCGImage(freshBitmap: bitmap, frameId: frameId) else {
+            guard let flutterFrame = self.resolveFlutterFrame(freshBitmap: bitmap, frameId: frameId) else {
                 if callerIncrementedCounter {
                     SdkManager.shared.getCoralogixSdk()?.revertScreenshotCounter()
                 }
@@ -250,7 +262,8 @@ public class SessionReplayModel {
             let compositeRect = self.findFlutterViewRect() ?? rect
 
             guard let frame = self.prepareCapturedFrameOnMain(
-                options: options, flutterCGImage: flutterCGImage, flutterViewRect: compositeRect, isClickFrame: isClickFrame
+                options: options, flutterCGImage: flutterFrame.image, flutterViewRect: compositeRect,
+                flutterMaskRects: flutterFrame.maskRects, isClickFrame: isClickFrame
             ) else {
                 if callerIncrementedCounter {
                     SdkManager.shared.getCoralogixSdk()?.revertScreenshotCounter()
@@ -266,17 +279,20 @@ public class SessionReplayModel {
 
     // Returns the frame to composite. A fresh bitmap is cached and returned only when
     // its frameId is newer than the last cached one; a nil — or an out-of-order older
-    // delivery — reuses the newest cached frame. nil only before any frame is cached.
-    internal func resolveFlutterCGImage(freshBitmap: FlutterViewBitmap?, frameId: Int64) -> CGImage? {
+    // delivery — reuses the newest cached frame, whose mask rects travel with it.
+    // nil only before any frame is cached.
+    internal func resolveFlutterFrame(freshBitmap: FlutterViewBitmap?, frameId: Int64) -> FlutterFrame? {
         // Wrap the bytes outside the lock (cheap — no decode).
-        let freshCGImage = freshBitmap.flatMap { Self.makeCGImage(from: $0) }
+        let freshFrame = freshBitmap.flatMap { bitmap in
+            Self.makeCGImage(from: bitmap).map { FlutterFrame(image: $0, maskRects: bitmap.maskRects) }
+        }
         return flutterFrameQueue.sync {
-            if let freshCGImage, frameId > _latestAcceptedFlutterFrameId {
+            if let freshFrame, frameId > _latestAcceptedFlutterFrameId {
                 _latestAcceptedFlutterFrameId = frameId
-                _lastFlutterCGImage = freshCGImage
-                return freshCGImage
+                _lastFlutterFrame = freshFrame
+                return freshFrame
             }
-            return _lastFlutterCGImage
+            return _lastFlutterFrame
         }
     }
 
@@ -397,7 +413,7 @@ public class SessionReplayModel {
             self.sessionId = sessionId
             screenshotDataQueue.sync { _prvScreenshotData = nil }
             flutterFrameQueue.sync {
-                _lastFlutterCGImage = nil
+                _lastFlutterFrame = nil
                 _latestAcceptedFlutterFrameId = 0
                 _flutterFrameGeneration &+= 1
             }

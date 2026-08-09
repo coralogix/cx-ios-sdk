@@ -234,6 +234,37 @@ let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
             }
         })
 ```
+
+#### Masked interactions in `beforeSend` (`is_masked_element`)
+Every user-interaction event carries `interaction_context.is_masked_element` — the SDK's own observation that the interaction targeted content session replay masked. By default (matching the Browser SDK) only `target_element_inner_text` is redacted to `***` on a masked interaction; identity fields and coordinates are reported as-is, and the replay's tap marker is suppressed. Anything stricter is yours to express here, where it stays auditable in your own code.
+
+The flag is always present. `false` also covers "could not resolve" — a hybrid payload with no coordinates (React Native scroll/swipe), or no frame geometry to test the point against (session replay not initialized) — so it under-reports rather than over-reports when the SDK has no answer.
+
+Drop masked interaction events entirely:
+```swift
+beforeSend: { cxRum in
+    let interaction = cxRum["interaction_context"] as? [String: Any]
+    if interaction?["is_masked_element"] as? Bool == true {
+        return nil
+    }
+    return cxRum
+}
+```
+
+Or keep the event but blank the coordinates:
+```swift
+beforeSend: { cxRum in
+    var editable = cxRum
+    if var interaction = editable["interaction_context"] as? [String: Any],
+       interaction["is_masked_element"] as? Bool == true {
+        interaction["x"] = 0
+        interaction["y"] = 0
+        editable["interaction_context"] = interaction
+    }
+    return editable
+}
+```
+
 ### Mobile Vitals
 Turn on/off specific Mobile Vitals, default to all trues. Each Mobile Vitals is responsible for which data the SDK will track and collect for you.
 Note: ANR is controlled separately via the `instrumentations` option, not as a mobile vital.
@@ -324,7 +355,9 @@ let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
 ### User Action Text Redaction (`shouldSendText`)
 Called before `target_element_inner_text` is recorded for a tapped view. Return `false` to redact text for sensitive views (e.g. fields showing account numbers or personal data) without disabling text capture globally.
 
-Redacted text is reported as `***` rather than omitted, so a redacted tap stays distinguishable from a tap on an element that had no text at all. Views that are already masked — a view inside a [masked subtree](SessionReplay/Sources/Docs/README.md#masking-a-specific-view-cxmask), a password field, or a field with a sensitive `textContentType` — report `***` without consulting this closure, so their text is never passed to your code.
+Redacted text is reported as `***` rather than omitted, so a redacted tap stays distinguishable from a tap on an element that had no text at all. Views that are already masked — a view inside a [masked subtree](SessionReplay/Sources/Docs/README.md#masking-a-specific-view-cxmask), a tap landing on session-replay-masked geometry (`maskText`, `maskAllImages`, SwiftUI `.cxMask()`), a password field, or a field with a sensitive `textContentType` — report `***` without consulting this closure, so their text is never passed to your code.
+
+Interactions reported through the hybrid bridge (`setUserInteraction` — React Native, Flutter) are redacted on the same terms as native ones: the payload's coordinates are tested against the same mask geometry, and a masked tap's inner text is replaced with `***`.
 
 This closure is called on the **main thread** only when the SDK would otherwise record text. Keep it fast and non-blocking.
 ```swift

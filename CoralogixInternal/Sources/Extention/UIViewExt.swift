@@ -310,10 +310,10 @@ public extension UIView {
     /// As `captureScreenshotImage`, but also returns the mask rectangles painted onto the frame
     /// so a later stage can decide whether a tap landed inside one. See `CapturedFrame`.
     ///
-    /// The Flutter branch contributes no rects, and cannot: Dart masks the widget tree inside its
-    /// own bitmap and reports no geometry back, so the host cannot know where a masked Flutter
-    /// widget sits. Tap markers over masked Flutter content are therefore not suppressed — only
-    /// masked native views on the same screen are.
+    /// The Flutter branch contributes only the rects Dart reported alongside the bitmap
+    /// (`flutterMaskRects`, Flutter-view-local points — offset here by `flutterViewRect.origin`).
+    /// The host cannot derive them itself: Dart masks the widget tree inside its own bitmap.
+    /// With no reported rects, tap markers over masked Flutter content are not suppressed.
     ///
     /// Must be called on the main thread.
     func captureFrame(
@@ -322,6 +322,7 @@ public extension UIView {
         maskAllImages: Bool = false,
         flutterCGImage: CGImage? = nil,
         flutterViewRect: CGRect? = nil,
+        flutterMaskRects: [CGRect] = [],
         isClickFrame: Bool = false
     ) -> CapturedFrame? {
         guard Thread.isMainThread else {
@@ -356,6 +357,10 @@ public extension UIView {
                                               scale: UIScreen.main.scale,
                                               orientation: .up)
                         uiImage.draw(in: rect)
+                        // Dart rects are Flutter-view-local; the view sits at rect.origin in
+                        // screen space, the renderer's coordinate space.
+                        nativeMaskRects += flutterMaskRects
+                            .map { $0.offsetBy(dx: rect.origin.x, dy: rect.origin.y) }
                     } else {
                         // Screen-space fallback: flutterViewRect is already in screen
                         // coordinates (flutterView.convert(_, to: nil)); win.frame matches
@@ -379,18 +384,9 @@ public extension UIView {
                     }
                     ctx.restoreGState()
 
-                    if let maskText = maskText, !maskText.isEmpty {
-                        nativeMaskRects += collectTextViewRects(in: win, maskText: maskText)
-                            .map { $0.offsetBy(dx: origin.x, dy: origin.y) }
-                        nativeMaskRects += collectMatchingNavigationBarRects(in: win, maskText: maskText)
-                            .map { $0.offsetBy(dx: origin.x, dy: origin.y) }
-                    }
-                    if maskAllImages {
-                        nativeMaskRects += collectImageViewRects(in: win)
-                            .map { $0.offsetBy(dx: origin.x, dy: origin.y) }
-                    }
-                    nativeMaskRects += collectCxMaskRects(in: win)
-                        .map { $0.offsetBy(dx: origin.x, dy: origin.y) }
+                    nativeMaskRects += collectNativeMaskRects(in: win,
+                                                              maskText: maskText,
+                                                              maskAllImages: maskAllImages)
                 }
             }
 
@@ -412,6 +408,39 @@ public extension UIView {
         compressionQuality: CGFloat = 0.8
     ) -> Data? {
         return captureScreenshotImage(scale: scale)?.jpegData(compressionQuality: compressionQuality)
+    }
+
+    /// Every mask rect the native walk paints for one window — maskText matches,
+    /// navigation-bar titles, maskAllImages, and `cxMask` views — offset to screen
+    /// coordinates. Single source for the capture pass and the interaction-time masking
+    /// resolution (`SessionReplayInterface.currentMaskRects`), so the two cannot drift.
+    func collectNativeMaskRects(in win: UIWindow,
+                                maskText: [String]?,
+                                maskAllImages: Bool) -> [CGRect] {
+        var rects: [CGRect] = []
+        if let maskText = maskText, !maskText.isEmpty {
+            rects += collectTextViewRects(in: win, maskText: maskText)
+            rects += collectMatchingNavigationBarRects(in: win, maskText: maskText)
+        }
+        if maskAllImages {
+            rects += collectImageViewRects(in: win)
+        }
+        rects += collectCxMaskRects(in: win)
+        let origin = win.frame.origin
+        return rects.map { $0.offsetBy(dx: origin.x, dy: origin.y) }
+    }
+
+    /// The mask rects a frame captured at this moment would paint for native content, across
+    /// all visible windows of the active scene, in screen points. Windows hosting a
+    /// FlutterView are skipped, matching `captureFrame`'s routing — their masking arrives
+    /// pre-painted in the Dart bitmap, with geometry reported per-frame in
+    /// `FlutterViewBitmap.maskRects` rather than derivable from the view tree.
+    /// Must be called on the main thread.
+    func collectScreenMaskRects(maskText: [String]?, maskAllImages: Bool) -> [CGRect] {
+        guard Thread.isMainThread, let scene = activeForegroundWindowScene() else { return [] }
+        return scene.windows
+            .filter { !$0.isHidden && $0.alpha > 0 && !UIView.subtreeContainsFlutterView($0) }
+            .flatMap { collectNativeMaskRects(in: $0, maskText: maskText, maskAllImages: maskAllImages) }
     }
 
     func collectCxMaskRects(in rootView: UIView) -> [CGRect] {

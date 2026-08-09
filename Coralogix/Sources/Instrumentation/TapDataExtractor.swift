@@ -238,13 +238,28 @@ enum TapDataExtractor {
     /// - Parameter resolveTargetName: Optional delegate from `CoralogixExporterOptions`.
     ///   When provided, its return value replaces the UIKit class name in `target_element`.
     ///   Returning `nil` falls back to the resolved class name.
+    /// - Parameter maskRects: The mask geometry (screen points) a frame captured now would
+    ///   paint, from `SessionReplayInterface.currentMaskRects`. nil when unresolvable —
+    ///   geometry then contributes nothing to the masking decision.
     static func extract(from event: TouchEvent,
                         shouldSendText: ((UIView, String) -> Bool)? = nil,
-                        resolveTargetName: ((UIView) -> String?)? = nil) -> [String: Any] {
+                        resolveTargetName: ((UIView) -> String?)? = nil,
+                        maskRects: [CGRect]? = SdkManager.shared.getSessionReplay()?.currentMaskRects()
+    ) -> [String: Any] {
         var tapData = [String: Any]()
         let view = event.view
 
         tapData[Keys.eventName.rawValue] = event.eventType.rawValue
+
+        // Masked = the frame geometry the replay paints (preferred oracle — it also covers
+        // maskText / maskAllImages and SwiftUI `.cxMask()`, which the view tree cannot see,
+        // so this flag and the replay's tap-marker suppression cannot contradict each other)
+        // unioned with the view-tree walk and the PII traits, which still answer when no
+        // geometry is available and for secure fields that paint no rect.
+        let isMaskedElement = (maskRects.map { pointIsMasked(event.location, in: $0) } ?? false)
+            || view.isInsideMaskedSubtree
+            || hasSensitivePIIProperties(view)
+        tapData[Keys.isMaskedElement.rawValue] = isMaskedElement
 
         // element_classes always reflects the true UIKit class name — never overridden.
         // target_element can be customised via resolveTargetName; falls back to class name.
@@ -263,26 +278,18 @@ enum TapDataExtractor {
         // so a masked tap is visibly masked rather than indistinguishable from a tap on something
         // that had nothing to say. Matches the Android SDK.
         //
-        // Text is redacted when the view is inside a masked subtree, when iOS system properties
-        // flag it as sensitive (password field, sensitive textContentType), or when the caller's
-        // shouldSendText delegate rejects it. The delegate is consulted last and only for text
-        // that is not already redacted — a password must not reach the customer's closure.
-        //
-        // Covers UIKit `cxMask` only. SwiftUI's `.cxMask()` installs a non-hit-testing overlay
-        // *sibling*, so a masked composable's content is never below the overlay in the superview
-        // chain and `isInsideMaskedSubtree` is false for it — its pixels and tap marker are masked
-        // (the overlay contributes a real mask rect) but its text is not. `isSecureTextEntry` and
-        // a sensitive `textContentType` still redact, so SwiftUI `SecureField` is covered either
-        // way; a plainly-typed masked field is not. Closing this needs the tap tested against the
-        // frame's mask rects instead of the view tree, which would make every tap a hierarchy
-        // walk — deliberately deferred, and documented in the SessionReplay README.
+        // Text is redacted when the masking decision above says the tap targeted masked
+        // content, or when the caller's shouldSendText delegate rejects it. The delegate is
+        // consulted last and only for text that is not already redacted — a password must not
+        // reach the customer's closure. The delegate's rejection redacts the text but does not
+        // set `is_masked_element`: the flag records what session replay masked, not what the
+        // customer's reporting gate withheld.
         if !isContainerView(resolvedClassName),
            let innerText = rawInnerText(from: view),
            !innerText.isEmpty {
-            let isMasked = view.isInsideMaskedSubtree || hasSensitivePIIProperties(view)
-            let isAllowedByDelegate = !isMasked && (shouldSendText?(view, innerText) ?? true)
+            let isAllowedByDelegate = !isMaskedElement && (shouldSendText?(view, innerText) ?? true)
             tapData[Keys.targetElementInnerText.rawValue] =
-                isAllowedByDelegate ? innerText : Keys.maskedInnerText.rawValue
+                redactIfMasked(innerText, isMasked: isMaskedElement || !isAllowedByDelegate)
         }
 
         // scroll_direction: only present for scroll/swipe events
@@ -299,6 +306,23 @@ enum TapDataExtractor {
         tapData[Keys.attributes.rawValue] = attributes
 
         return tapData
+    }
+
+    /// The one redaction rule, shared by the native path above and the hybrid path
+    /// (`validateHybridInteraction`) so the two cannot drift: masked text is replaced by
+    /// `***`, never omitted, keeping a masked tap distinguishable from a tap on an element
+    /// with no text. Only `target_element_inner_text` is redacted — identity fields and
+    /// coordinates ship as-is (web-SDK parity; stricter policies belong to the customer's
+    /// `beforeSend`, keyed on `is_masked_element`).
+    static func redactIfMasked(_ innerText: Any, isMasked: Bool) -> Any {
+        isMasked ? Keys.maskedInnerText.rawValue : innerText
+    }
+
+    /// Whether a tap at `point` (screen points) landed inside one of a frame's masked regions.
+    /// Mirrors the replay's tap-marker test (`ScannerPipeline.containsTap`), including failing
+    /// closed on overlapping windows.
+    static func pointIsMasked(_ point: CGPoint, in maskRects: [CGRect]) -> Bool {
+        maskRects.contains { $0.contains(point) }
     }
 
     /// Container views that span multiple content items — extracting inner text from them
