@@ -67,15 +67,19 @@ final class CoralogixRumManager {
                                       userName: "?",
                                       userEmail: "a@a.com",
                                       userMetadata: ["d":"d"])
-        // BUGV2-6045 leak-harness override: when the XCUITest harness
-        // launches the app it sets CX_MOCK_PORT in the env. Point the
-        // session-replay proxy at the host mock server on the simulator
-        // host loopback. No effect on normal demo launches.
+        // Proxy resolution, in priority order:
+        // 1. BUGV2-6045 leak-harness override — the XCUITest harness sets CX_MOCK_PORT in
+        //    the env; point the session-replay proxy at the host mock server.
+        // 2. Envs.PROXY_URL from the gitignored, per-environment `Example/envs.swift`.
+        //    CI generates its copy with the schema-validator URL (ui-tests.yml), so e2e
+        //    always goes through the proxy; leave it EMPTY ("") locally to send events
+        //    straight to the Coralogix ingress — no code changes needed per environment.
         let proxyUrl: String? = {
             if let port = ProcessInfo.processInfo.environment["CX_MOCK_PORT"], !port.isEmpty {
                 return "http://127.0.0.1:\(port)"
             }
-            return Envs.PROXY_URL.rawValue
+            let configured = Envs.PROXY_URL.rawValue
+            return configured.isEmpty ? nil : configured
         }()
         let options = CoralogixExporterOptions(coralogixDomain: CoralogixDomain.EU2,
                                                userContext: userContext,
