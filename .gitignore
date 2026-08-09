@@ -25,3 +25,7 @@ package/
 # CocoaPods (example app dependencies)
 Example/Pods/
 Example/Podfile.lock
+
+# Claude Code local development (skills, commands, etc.)
+.claude/commands/
+.claude/workflows/
