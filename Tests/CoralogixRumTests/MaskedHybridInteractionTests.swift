@@ -207,8 +207,9 @@ final class IsMaskedElementBeforeSendTests: XCTestCase {
             Keys.targetElement.rawValue: "Button",
             Keys.targetElementInnerText.rawValue: isMasked ? "***" : "7",
             Keys.isMaskedElement.rawValue: isMasked,
-            Keys.positionX.rawValue: 50.0,
-            Keys.positionY.rawValue: 50.0
+            // Coordinates travel to the wire inside interaction_context.attributes.
+            Keys.attributes.rawValue: [Keys.positionX.rawValue: 50.0,
+                                       Keys.positionY.rawValue: 50.0]
         ]
         return MockSpanData(
             attributes: [
@@ -269,14 +270,17 @@ final class IsMaskedElementBeforeSendTests: XCTestCase {
                        "beforeSend must see is_masked_element inside interaction_context")
     }
 
-    /// The "blank the coordinates" recipe from the README, end to end.
+    /// The "blank the coordinates" recipe from the README, end to end: coordinates are
+    /// serialised from the nested attributes map, so that is what the callback must edit.
     func testBeforeSend_canMutateInteractionContext() throws {
         let cxSpan = try XCTUnwrap(makeCxSpan(otel: makeInteractionSpan(isMasked: true)) { cxRum in
             var editable = cxRum
             if var interaction = editable[Keys.interactionContext.rawValue] as? [String: Any],
                interaction[Keys.isMaskedElement.rawValue] as? Bool == true {
-                interaction[Keys.positionX.rawValue] = 0
-                interaction[Keys.positionY.rawValue] = 0
+                var attributes = interaction[Keys.attributes.rawValue] as? [String: Any] ?? [:]
+                attributes[Keys.positionX.rawValue] = 0
+                attributes[Keys.positionY.rawValue] = 0
+                interaction[Keys.attributes.rawValue] = attributes
                 editable[Keys.interactionContext.rawValue] = interaction
             }
             return editable
@@ -284,10 +288,37 @@ final class IsMaskedElementBeforeSendTests: XCTestCase {
 
         let dict = try XCTUnwrap(cxSpan.getDictionary())
         let interaction = try XCTUnwrap(finalInteractionContext(of: dict))
+        let attributes = try XCTUnwrap(interaction[Keys.attributes.rawValue] as? [String: Any])
 
-        XCTAssertEqual(interaction[Keys.positionX.rawValue] as? Int, 0,
-                       "The customer's mutation must reach the final payload")
+        XCTAssertEqual(attributes[Keys.positionX.rawValue] as? Int, 0,
+                       "The customer's mutation must reach the transmitted attributes map")
+        XCTAssertEqual(attributes[Keys.positionY.rawValue] as? Int, 0)
         XCTAssertEqual(interaction[Keys.isMaskedElement.rawValue] as? Bool, true)
+    }
+
+    /// The flag is a visible read-only field: callbacks key their policy on it, but the SDK's
+    /// observation is restored after the merge so the record of what was masked cannot be
+    /// forged — same treatment as `session_context.isSessionSampledIn`.
+    func testBeforeSend_cannotForgeIsMaskedElement() throws {
+        let cxSpan = try XCTUnwrap(makeCxSpan(otel: makeInteractionSpan(isMasked: true)) { cxRum in
+            var editable = cxRum
+            var interaction = editable[Keys.interactionContext.rawValue] as? [String: Any] ?? [:]
+            interaction[Keys.isMaskedElement.rawValue] = false
+            var attributes = interaction[Keys.attributes.rawValue] as? [String: Any] ?? [:]
+            attributes[Keys.positionX.rawValue] = 0
+            interaction[Keys.attributes.rawValue] = attributes
+            editable[Keys.interactionContext.rawValue] = interaction
+            return editable
+        })
+
+        let dict = try XCTUnwrap(cxSpan.getDictionary())
+        let interaction = try XCTUnwrap(finalInteractionContext(of: dict))
+        let attributes = try XCTUnwrap(interaction[Keys.attributes.rawValue] as? [String: Any])
+
+        XCTAssertEqual(interaction[Keys.isMaskedElement.rawValue] as? Bool, true,
+                       "A callback that rewrites the flag must not survive the restore")
+        XCTAssertEqual(attributes[Keys.positionX.rawValue] as? Int, 0,
+                       "Permitted mutations alongside the forged flag must still apply")
     }
 
     /// The "drop the event" recipe: returning nil discards the span.

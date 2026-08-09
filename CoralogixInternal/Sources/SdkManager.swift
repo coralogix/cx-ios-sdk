@@ -63,6 +63,13 @@ public protocol SessionReplayInterface {
     func currentMaskRects() -> [CGRect]?
 }
 
+public extension SessionReplayInterface {
+    /// Default for conformers that predate mask-geometry reporting: nil = "unknown", so the
+    /// interaction path falls back to its other oracles rather than reading "nothing masked".
+    /// Keeps existing conformers source-compatible; SessionReplay overrides with real rects.
+    func currentMaskRects() -> [CGRect]? { nil }
+}
+
 public class SdkManager {
     public static let shared = SdkManager()
     

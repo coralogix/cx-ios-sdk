@@ -251,19 +251,23 @@ beforeSend: { cxRum in
 }
 ```
 
-Or keep the event but blank the coordinates:
+Or keep the event but blank the coordinates (they travel inside `interaction_context.attributes`):
 ```swift
 beforeSend: { cxRum in
     var editable = cxRum
     if var interaction = editable["interaction_context"] as? [String: Any],
        interaction["is_masked_element"] as? Bool == true {
-        interaction["x"] = 0
-        interaction["y"] = 0
+        var attributes = interaction["attributes"] as? [String: Any] ?? [:]
+        attributes["x"] = 0
+        attributes["y"] = 0
+        interaction["attributes"] = attributes
         editable["interaction_context"] = interaction
     }
     return editable
 }
 ```
+
+`is_masked_element` itself is read-only: it records the SDK's observation, so a value written to it in the returned dictionary is ignored and the SDK's value is restored.
 
 ### Mobile Vitals
 Turn on/off specific Mobile Vitals, default to all trues. Each Mobile Vitals is responsible for which data the SDK will track and collect for you.
