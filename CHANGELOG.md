@@ -12,7 +12,7 @@ omitted; the focus here is user-facing behavior changes. Tickets are referenced 
 ## [2.14.0] - 2026-08-06
 
 ### Added
-- Buffered spans are now automatically flushed when the app enters the background, ensuring telemetry is uploaded before process suspension. Uses `UIApplication.beginBackgroundTask` to extend the background time window and guarantee completion before the app is terminated (#249).
+- Buffered spans are now automatically flushed when the app enters the background, ensuring telemetry is uploaded before process suspension. Uses `UIApplication.beginBackgroundTask` to extend the background time window and guarantee completion before the app is terminated.
 
 ## [2.13.3] - 2026-08-05
 
