@@ -28,9 +28,25 @@ final class HybridNetworkDurationTests: XCTestCase {
         XCTAssertEqual(CoralogixRum.coerceToDurationMs("350.5"), 350.5, "Decimal string must coerce")
     }
 
-    /// A zero duration is a legitimate sub-millisecond measurement, not an absent value.
-    func testCoercionAcceptsZero() {
+    /// A zero or fractional duration is a legitimate sub-millisecond measurement, not an
+    /// absent value. (The export pipeline floors emitted durations at 1 ms for every event
+    /// type; the coercion itself must not reject the measurement.)
+    func testCoercionAcceptsZeroAndSubMillisecond() {
         XCTAssertEqual(CoralogixRum.coerceToDurationMs(0), 0.0)
+        XCTAssertEqual(CoralogixRum.coerceToDurationMs(0.4), 0.4)
+    }
+
+    /// Durations above 24h are bridge bugs; back-dating that far would overflow the UInt64
+    /// nanosecond conversions in the export pipeline, so they must be treated as absent.
+    /// The boundary itself is a valid (if absurd) measurement.
+    func testCoercionEnforcesUpperBound() {
+        XCTAssertEqual(CoralogixRum.coerceToDurationMs(CoralogixRum.maxHybridDurationMs),
+                       CoralogixRum.maxHybridDurationMs, "The 24h boundary itself is accepted")
+        XCTAssertNil(CoralogixRum.coerceToDurationMs(CoralogixRum.maxHybridDurationMs + 1),
+                     "Just above the bound must be absent")
+        XCTAssertNil(CoralogixRum.coerceToDurationMs(1e30), "Huge Double must be absent")
+        XCTAssertNil(CoralogixRum.coerceToDurationMs(Double.greatestFiniteMagnitude),
+                     "greatestFiniteMagnitude must be absent — it would trap UInt64 conversion at export")
     }
 
     /// Negative, non-numeric, non-finite, or missing values mean "no duration reported" —
@@ -201,5 +217,24 @@ final class HybridNetworkDurationTests: XCTestCase {
         let span = try XCTUnwrap(waitForNetworkSpan(urlContains: "/hybrid/garbage-duration"))
         let delta = span.endTime.timeIntervalSince(span.startTime)
         XCTAssertLessThan(delta, 0.2)
+    }
+
+    /// Regression: an extreme duration must not back-date the span into a range that overflows
+    /// the UInt64 nanosecond conversions during export (a host-app crash). It degrades to the
+    /// missing-key path — a zero-length span that exports cleanly end-to-end.
+    func testExtremeDurationDoesNotCrashExport() throws {
+        let url = "https://example.com/hybrid/extreme-duration"
+        rum?.setNetworkRequestContext(dictionary: hybridPayload(url: url, extra: [
+            Keys.duration.rawValue: Double.greatestFiniteMagnitude
+        ]))
+
+        let span = try XCTUnwrap(waitForNetworkSpan(urlContains: "/hybrid/extreme-duration"),
+                                 "Span must export (not crash) despite the absurd duration")
+        let delta = span.endTime.timeIntervalSince(span.startTime)
+        XCTAssertLessThan(delta, 0.2, "Extreme duration must be discarded, not back-dated")
+
+        // The full context computation must also survive and stay sane.
+        let context = NetworkRequestContext(otel: span)
+        XCTAssertLessThan(context.duration, 1000)
     }
 }

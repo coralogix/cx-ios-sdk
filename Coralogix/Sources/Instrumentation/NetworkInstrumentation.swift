@@ -287,12 +287,8 @@ extension CoralogixRum {
     internal func reportHybridNetworkRequest(_ dictionary: [String: Any]) {
         guard validateHybridNetworkRequest(dictionary) else { return }
 
-        // Hybrid layers (Flutter/React Native) measure the request themselves and report
-        // `duration` in milliseconds. Back-date the span start by that amount so the emitted
-        // network_request_context.duration (computed as span end − start) equals the measured
-        // duration, and the span's time range covers the actual request window. Absent or
-        // invalid duration falls back to a zero-length span, preserving the behavior older
-        // plugin versions rely on.
+        // Back-date the span start: the emitted duration is derived from span timing,
+        // so this is how the hybrid layer's own measurement becomes the reported duration.
         let durationMs = Self.coerceToDurationMs(dictionary[Keys.duration.rawValue])
         let span = getSpan(startTime: durationMs.map { Date(timeIntervalSinceNow: -$0 / 1000.0) })
 
@@ -386,46 +382,40 @@ extension CoralogixRum {
         return makeSpan(event: .networkRequest, source: .fetch, severity: .info, startTime: startTime)
     }
 
-    /// Coerces the hybrid payload `duration` value to milliseconds. Platform channels deliver
-    /// numbers as Int, Int64, Double, NSNumber, or numeric String depending on the bridge —
-    /// all are accepted. Returns nil for negative, non-finite, non-numeric, or missing values;
-    /// callers treat nil as "no duration reported".
-    internal static func coerceToDurationMs(_ value: Any?) -> Double? {
+    /// Longest hybrid-reported request duration accepted, in milliseconds (24 hours).
+    /// Larger values are bridge bugs, and back-dating a span start that far would overflow the
+    /// UInt64 nanosecond conversion in the export pipeline — so they are treated as absent.
+    internal static let maxHybridDurationMs: Double = 86_400_000
+
+    /// Normalizes a hybrid payload value to a raw Double. Platform channels deliver numbers as
+    /// Int, Int64, Double, or NSNumber depending on the bridge and value size; some bridges
+    /// stringify — all are accepted. Domain validation belongs to the caller.
+    private static func coerceToRawDouble(_ value: Any?) -> Double? {
         // Bool bridges to NSNumber on Darwin, so it must be rejected before the NSNumber cast.
         guard let value, !(value is Bool) else { return nil }
-        let raw: Double
         if let number = value as? NSNumber {
-            raw = number.doubleValue
-        } else if let string = value as? String, let parsed = Double(string) {
-            raw = parsed
-        } else {
-            return nil
+            return number.doubleValue
         }
-        return raw.isFinite && raw >= 0 ? raw : nil
+        if let string = value as? String {
+            return Double(string)
+        }
+        return nil
+    }
+
+    /// Coerces the hybrid payload `duration` value to milliseconds. Returns nil for negative,
+    /// non-finite, non-numeric, missing, or absurdly large (> `maxHybridDurationMs`) values;
+    /// callers treat nil as "no duration reported".
+    internal static func coerceToDurationMs(_ value: Any?) -> Double? {
+        guard let raw = coerceToRawDouble(value), raw.isFinite else { return nil }
+        return (0...maxHybridDurationMs).contains(raw) ? raw : nil
     }
 
     /// Coerces hybrid payload value (Int, Double, NSNumber, String) to Int for status_code.
     /// Returns nil for non-numeric or out-of-range (outside 100...599) values.
     internal func coerceToInt(_ value: Any?) -> Int? {
-        guard let value else { return nil }
-        let raw: Int
-        if let i = value as? Int {
-            raw = i
-        } else if let d = value as? Double, let i = Int(exactly: d) {
-            raw = i
-        } else if let n = value as? NSNumber, let i = Int(exactly: n.doubleValue) {
-            raw = i
-        } else if let s = value as? String {
-            if let i = Int(s) {
-                raw = i
-            } else if let d = Double(s), let i = Int(exactly: d) {
-                raw = i
-            } else {
-                return nil
-            }
-        } else {
+        guard let raw = Self.coerceToRawDouble(value), let intValue = Int(exactly: raw) else {
             return nil
         }
-        return (100...599).contains(raw) ? raw : nil
+        return (100...599).contains(intValue) ? intValue : nil
     }
 }
