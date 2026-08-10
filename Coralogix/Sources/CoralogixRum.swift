@@ -470,7 +470,16 @@ public class CoralogixRum {
     ///
     /// Call this from the hybrid bridge when the hybrid side completes an HTTP request.
     /// The dictionary should contain: `url`, `host`, `method`, `status_code`, `fragments`,
-    /// `schema`, `http_response_body_size`; optional `custom_span_id`, `custom_trace_id`.
+    /// `schema`, `http_response_body_size`; optional `custom_span_id`, `custom_trace_id`,
+    /// `duration`.
+    ///
+    /// `duration` is the measured request duration in **milliseconds** (numeric value or
+    /// numeric string, 0 up to 24 hours). When present, the exported event's
+    /// `network_request_context.duration` reports this value and the underlying span is
+    /// back-dated so its time range covers the actual request window. When absent, invalid,
+    /// or out of range, the event is reported as a point in time at the moment of this call.
+    /// Sub-millisecond durations are floored to 1 ms by the export pipeline, as for every
+    /// other event type.
     public func setNetworkRequestContext(dictionary: [String: Any]) {
         guard CoralogixRum.isInitialized else { return }
         reportHybridNetworkRequest(dictionary)
