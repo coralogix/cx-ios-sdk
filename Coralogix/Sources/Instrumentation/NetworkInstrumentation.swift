@@ -287,7 +287,14 @@ extension CoralogixRum {
     internal func reportHybridNetworkRequest(_ dictionary: [String: Any]) {
         guard validateHybridNetworkRequest(dictionary) else { return }
 
-        let span = getSpan()
+        // Hybrid layers (Flutter/React Native) measure the request themselves and report
+        // `duration` in milliseconds. Back-date the span start by that amount so the emitted
+        // network_request_context.duration (computed as span end − start) equals the measured
+        // duration, and the span's time range covers the actual request window. Absent or
+        // invalid duration falls back to a zero-length span, preserving the behavior older
+        // plugin versions rely on.
+        let durationMs = Self.coerceToDurationMs(dictionary[Keys.duration.rawValue])
+        let span = getSpan(startTime: durationMs.map { Date(timeIntervalSinceNow: -$0 / 1000.0) })
 
         let statusCodeInt = coerceToInt(dictionary[Keys.statusCode.rawValue])
         if let status = statusCodeInt {
@@ -375,8 +382,26 @@ extension CoralogixRum {
         return true
     }
 
-    private func getSpan() -> any Span {
-        return makeSpan(event: .networkRequest, source: .fetch, severity: .info)
+    private func getSpan(startTime: Date? = nil) -> any Span {
+        return makeSpan(event: .networkRequest, source: .fetch, severity: .info, startTime: startTime)
+    }
+
+    /// Coerces the hybrid payload `duration` value to milliseconds. Platform channels deliver
+    /// numbers as Int, Int64, Double, NSNumber, or numeric String depending on the bridge —
+    /// all are accepted. Returns nil for negative, non-finite, non-numeric, or missing values;
+    /// callers treat nil as "no duration reported".
+    internal static func coerceToDurationMs(_ value: Any?) -> Double? {
+        // Bool bridges to NSNumber on Darwin, so it must be rejected before the NSNumber cast.
+        guard let value, !(value is Bool) else { return nil }
+        let raw: Double
+        if let number = value as? NSNumber {
+            raw = number.doubleValue
+        } else if let string = value as? String, let parsed = Double(string) {
+            raw = parsed
+        } else {
+            return nil
+        }
+        return raw.isFinite && raw >= 0 ? raw : nil
     }
 
     /// Coerces hybrid payload value (Int, Double, NSNumber, String) to Int for status_code.
