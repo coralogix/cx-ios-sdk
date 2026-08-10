@@ -9,6 +9,12 @@ Release-mechanics commits (version bumps, podspec/script tweaks, README edits) a
 omitted; the focus here is user-facing behavior changes. Tickets are referenced as
 `CX-XXXXX` (Jira) or `ALPH-XXXX` (legacy). Pull request numbers are in parentheses.
 
+## [2.15.1] - 2026-08-10
+
+### Fixed
+- Network requests reported from Flutter and React Native now carry the HTTP reason phrase in `network_request_context.status_text` (e.g. `"OK"`, `"Not Found"`); previously it was always empty on iOS while Android populated it.
+- Network requests reported from Flutter and React Native that fail to complete now carry the failure description in `network_request_context.error_message`, matching Android. It does not interact with the `ignoreErrors` option, which keeps filtering error events only.
+
 ## [2.15.0] - 2026-08-09
 
 ### Added

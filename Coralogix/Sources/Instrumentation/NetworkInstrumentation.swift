@@ -304,6 +304,17 @@ extension CoralogixRum {
         if let status = statusCodeInt {
             span.setAttribute(key: SemanticAttributes.httpStatusCode.rawValue, value: status)
         }
+        // The OTel span status text is unavailable on iOS export (getStatusText is stubbed),
+        // so the bridge-reported reason phrase travels as a span attribute instead.
+        if let statusText = dictionary[Keys.statusText.rawValue] as? String, !statusText.isEmpty {
+            span.setAttribute(key: Keys.statusText.rawValue, value: AttributeValue.string(statusText))
+        }
+        // Under a network-specific key so the exporter's ignoreErrors filter (which reads the
+        // generic error_message attribute) keeps filtering only error events — a failed
+        // network request must remain a network event.
+        if let errorMessage = dictionary[Keys.errorMessage.rawValue] as? String, !errorMessage.isEmpty {
+            span.setAttribute(key: Keys.networkRequestErrorMessage.rawValue, value: AttributeValue.string(errorMessage))
+        }
         span.setAttribute(key: SemanticAttributes.httpResponseBodySize.rawValue, value: dictionary[Keys.httpResponseBodySize.rawValue] as? Int ?? 0)
         span.setAttribute(key: SemanticAttributes.httpTarget.rawValue, value: dictionary[Keys.fragments.rawValue] as? String ?? "")
         span.setAttribute(key: SemanticAttributes.httpScheme.rawValue, value: dictionary[Keys.schema.rawValue] as? String ?? "")

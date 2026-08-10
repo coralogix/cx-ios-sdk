@@ -112,6 +112,7 @@ struct OtelSpan {
         static let networkMethod             = "cx_rum.network_request_context.method"
         static let networkStatusCode         = "cx_rum.network_request_context.status_code"
         static let networkStatusText         = "cx_rum.network_request_context.status_text"
+        static let networkErrorMessage       = "cx_rum.network_request_context.error_message"
         static let networkFragments          = "cx_rum.network_request_context.fragments"
         static let networkRequestHeaders     = "cx_rum.network_request_context.request_headers"
         static let networkResponseHeaders    = "cx_rum.network_request_context.response_headers"
@@ -194,6 +195,7 @@ struct OtelSpan {
             attrs[AttrKey.networkStatusCode] = net[Keys.statusCode.rawValue]
             attrs[AttrKey.networkStatusText] = net[Keys.statusText.rawValue]
             attrs[AttrKey.networkFragments]  = net[Keys.fragments.rawValue]
+            if let v = net[Keys.errorMessage.rawValue] as? String, !v.isEmpty { attrs[AttrKey.networkErrorMessage] = v }
             if let h = net[Keys.requestHeaders.rawValue]  { attrs[AttrKey.networkRequestHeaders]  = h }
             if let h = net[Keys.responseHeaders.rawValue] { attrs[AttrKey.networkResponseHeaders] = h }
             if let p = net[Keys.requestPayload.rawValue]  { attrs[AttrKey.networkRequestPayload]  = p }
@@ -304,6 +306,7 @@ struct OtelSpan {
                 attrs[AttrKey.networkStatusCode] = nrc.statusCode
                 attrs[AttrKey.networkStatusText] = nrc.statusText
                 attrs[AttrKey.networkFragments]  = nrc.fragments
+                if let v = nrc.errorMessage, !v.isEmpty { attrs[AttrKey.networkErrorMessage] = v }
                 if let v = nrc.requestHeaders  { attrs[AttrKey.networkRequestHeaders]  = v }
                 if let v = nrc.responseHeaders { attrs[AttrKey.networkResponseHeaders] = v }
                 if let v = nrc.requestPayload  { attrs[AttrKey.networkRequestPayload]  = v }

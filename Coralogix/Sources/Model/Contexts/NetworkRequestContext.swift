@@ -18,6 +18,9 @@ struct NetworkRequestContext {
     let duration: UInt64
     var responseContentLength: Int = 0
     let statusText: String
+    /// Failure description reported by a hybrid platform (Flutter / React Native) when the
+    /// request did not complete. Emitted as `error_message`; omitted from the payload when nil.
+    var errorMessage: String?
 
     // MARK: - Network capture rule fields (omitted from payload when nil)
 
@@ -82,7 +85,21 @@ struct NetworkRequestContext {
             self.responseContentLength = Int(httpResponseBodySize) ?? 0
         }
         
-        self.statusText = otel.getStatusText()
+        // Hybrid platforms report the response's reason phrase through the bridge as a span
+        // attribute; the OTel span status text is not usable on iOS (getStatusText is stubbed
+        // around an upstream bug), so the attribute wins. Native spans never set the attribute
+        // and keep their existing value.
+        if let hybridStatusText = otel.getAttribute(forKey: Keys.statusText.rawValue) as? String,
+           !hybridStatusText.isEmpty {
+            self.statusText = hybridStatusText
+        } else {
+            self.statusText = otel.getStatusText()
+        }
+
+        if let bridgedErrorMessage = otel.getAttribute(forKey: Keys.networkRequestErrorMessage.rawValue) as? String,
+           !bridgedErrorMessage.isEmpty {
+            self.errorMessage = bridgedErrorMessage
+        }
 
         // Network capture: allowlisted headers (CX-33233) stored as JSON on the span
         if let raw = otel.getAttribute(forKey: Keys.requestHeaders.rawValue) as? String,
@@ -110,7 +127,8 @@ struct NetworkRequestContext {
         dict[Keys.schema.rawValue]                = schema
         dict[Keys.duration.rawValue]              = duration
         dict[Keys.responseContentLength.rawValue] = responseContentLength
-        // Capture-rule fields: included only when set, never serialised as null.
+        // Optional fields: included only when set, never serialised as null.
+        if let v = errorMessage    { dict[Keys.errorMessage.rawValue]    = v }
         if let v = requestHeaders  { dict[Keys.requestHeaders.rawValue]  = v }
         if let v = responseHeaders { dict[Keys.responseHeaders.rawValue] = v }
         if let v = requestPayload  { dict[Keys.requestPayload.rawValue]  = v }

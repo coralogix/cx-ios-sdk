@@ -98,6 +98,11 @@ public enum Keys: String {
     case requestHeaders = "request_headers"
     case responseHeaders = "response_headers"
     case requestPayload = "request_payload"
+    // Span-attribute transport for a hybrid-reported network failure description.
+    // Deliberately distinct from `errorMessage`: that attribute feeds the exporter's
+    // ignoreErrors span filter, which must keep filtering only error events. Mapped
+    // to the `error_message` wire key inside network_request_context at build time.
+    case networkRequestErrorMessage = "network_request_error_message"
     case responsePayload = "response_payload"
     case fragments
     case traceId
