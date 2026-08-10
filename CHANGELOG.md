@@ -13,7 +13,6 @@ omitted; the focus here is user-facing behavior changes. Tickets are referenced 
 
 ### Fixed
 - Network requests reported from Flutter and React Native now carry the HTTP reason phrase in `network_request_context.status_text` (e.g. `"OK"`, `"Not Found"`); previously it was always empty on iOS while Android populated it.
-- Network requests reported from Flutter and React Native that fail to complete now carry the failure description in `network_request_context.error_message`, matching Android. It does not interact with the `ignoreErrors` option, which keeps filtering error events only.
 
 ## [2.15.0] - 2026-08-09
 

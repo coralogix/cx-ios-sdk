@@ -18,9 +18,6 @@ struct NetworkRequestContext {
     let duration: UInt64
     var responseContentLength: Int = 0
     let statusText: String
-    /// Failure description reported by a hybrid platform (Flutter / React Native) when the
-    /// request did not complete. Emitted as `error_message`; omitted from the payload when nil.
-    var errorMessage: String?
 
     // MARK: - Network capture rule fields (omitted from payload when nil)
 
@@ -96,11 +93,6 @@ struct NetworkRequestContext {
             self.statusText = otel.getStatusText()
         }
 
-        if let bridgedErrorMessage = otel.getAttribute(forKey: Keys.networkRequestErrorMessage.rawValue) as? String,
-           !bridgedErrorMessage.isEmpty {
-            self.errorMessage = bridgedErrorMessage
-        }
-
         // Network capture: allowlisted headers (CX-33233) stored as JSON on the span
         if let raw = otel.getAttribute(forKey: Keys.requestHeaders.rawValue) as? String,
            let dict = Helper.convertJsonStringToDict(jsonString: raw) {
@@ -127,8 +119,7 @@ struct NetworkRequestContext {
         dict[Keys.schema.rawValue]                = schema
         dict[Keys.duration.rawValue]              = duration
         dict[Keys.responseContentLength.rawValue] = responseContentLength
-        // Optional fields: included only when set, never serialised as null.
-        if let v = errorMessage    { dict[Keys.errorMessage.rawValue]    = v }
+        // Capture-rule fields: included only when set, never serialised as null.
         if let v = requestHeaders  { dict[Keys.requestHeaders.rawValue]  = v }
         if let v = responseHeaders { dict[Keys.responseHeaders.rawValue] = v }
         if let v = requestPayload  { dict[Keys.requestPayload.rawValue]  = v }

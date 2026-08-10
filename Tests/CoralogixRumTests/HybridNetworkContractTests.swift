@@ -10,9 +10,10 @@ import CoralogixInternal
 @testable import Coralogix
 
 /// Pins the full hybrid network bridge contract: every key the Flutter/React Native plugins send
-/// in `setNetworkRequestContext` must surface on the exported event. The complete-dictionary test
-/// exists so that a key that is sent but silently dropped fails a test instead of shipping —
-/// `status_text` and `error_message` were dropped for years before this suite existed.
+/// in `setNetworkRequestContext` must surface on the exported event — except `error_message`,
+/// whose absence is itself part of the contract (see the complete-dictionary test). The
+/// complete-dictionary test exists so that a key whose handling silently changes fails a test
+/// instead of shipping — `status_text` was dropped for years before this suite existed.
 final class HybridNetworkContractTests: XCTestCase {
 
     private var rum: CoralogixRum?
@@ -121,8 +122,6 @@ final class HybridNetworkContractTests: XCTestCase {
         XCTAssertEqual(context.responseContentLength, 2387)
         XCTAssertGreaterThanOrEqual(context.duration, 350)
         XCTAssertLessThan(context.duration, 850)
-        XCTAssertEqual(context.errorMessage, "HTTP 404 returned for /contract/full",
-                       "error_message must survive the bridge (Android parity)")
         XCTAssertEqual(context.requestHeaders?["X-Req"], "req-value")
         XCTAssertEqual(context.responseHeaders?["X-Res"], "res-value")
         XCTAssertEqual(context.requestPayload, "{\"q\":1}")
@@ -137,10 +136,18 @@ final class HybridNetworkContractTests: XCTestCase {
         XCTAssertEqual(span.attributes[Keys.severity.rawValue]?.description,
                        String(CoralogixLogSeverity.error.rawValue))
 
-        // The wire dictionary must carry the two previously-dropped fields.
         let wire = context.getDictionary()
-        XCTAssertEqual(wire[Keys.statusText.rawValue] as? String, "Not Found")
-        XCTAssertEqual(wire[Keys.errorMessage.rawValue] as? String, "HTTP 404 returned for /contract/full")
+        XCTAssertEqual(wire[Keys.statusText.rawValue] as? String, "Not Found",
+                       "status_text must survive to the wire dictionary")
+
+        // `error_message` is deliberately NOT exported, although the bridge sends it (Flutter
+        // always has; RN since its status-text fix): the browser SDK's wire schema owns the
+        // contract, failure descriptions belong to error_context only, and neither Android nor
+        // browser emit one in network_request_context. iOS must not become the only platform
+        // that does. Emitting it in the future must be a deliberate cross-platform schema
+        // decision — this assertion is the tripwire.
+        XCTAssertNil(wire[Keys.errorMessage.rawValue],
+                     "error_message must not appear in network_request_context (cross-platform schema)")
     }
 
     // MARK: - status_text
@@ -184,12 +191,14 @@ final class HybridNetworkContractTests: XCTestCase {
         XCTAssertEqual(NetworkRequestContext(otel: span).statusText, "fallback")
     }
 
-    // MARK: - error_message
+    // MARK: - error_message (deliberately not exported)
 
-    /// A failed request (Flutter catch path: status_code 0, error_message set) must carry the
-    /// failure description on the exported context.
-    func testErrorMessageSurfacesForFailedRequest() throws {
-        startSDK()
+    /// A failed request (Flutter catch path: status_code 0, error_message set) is exported as a
+    /// network event WITHOUT the failure description — and, because the bridge value never
+    /// reaches any span attribute, it cannot engage the exporter's ignoreErrors filter either:
+    /// the event survives even when the message matches an ignoreErrors pattern.
+    func testBridgeErrorMessageIsAcceptedButNeverExported() throws {
+        startSDK(ignoreErrors: ["SocketException.*"])
         rum?.setNetworkRequestContext(dictionary: [
             Keys.url.rawValue: "https://example.com/contract/failure",
             Keys.method.rawValue: "GET",
@@ -198,67 +207,15 @@ final class HybridNetworkContractTests: XCTestCase {
             Keys.errorMessage.rawValue: "SocketException: Connection refused"
         ])
 
-        let span = try XCTUnwrap(waitForNetworkSpan(urlContains: "/contract/failure"))
-        let context = NetworkRequestContext(otel: span)
-        XCTAssertEqual(context.errorMessage, "SocketException: Connection refused")
-        XCTAssertEqual(context.getDictionary()[Keys.errorMessage.rawValue] as? String,
-                       "SocketException: Connection refused")
-    }
-
-    /// A successful request without error_message must not emit the key at all (never null).
-    func testAbsentErrorMessageIsOmittedFromWireDictionary() throws {
-        startSDK()
-        rum?.setNetworkRequestContext(dictionary: [
-            Keys.url.rawValue: "https://example.com/contract/success",
-            Keys.method.rawValue: "GET",
-            Keys.statusCode.rawValue: 200,
-            Keys.statusText.rawValue: "OK"
-        ])
-
-        let span = try XCTUnwrap(waitForNetworkSpan(urlContains: "/contract/success"))
-        let context = NetworkRequestContext(otel: span)
-        XCTAssertNil(context.errorMessage)
-        XCTAssertNil(context.getDictionary()[Keys.errorMessage.rawValue],
-                     "error_message must be omitted when the bridge did not report one")
-    }
-
-    // MARK: - ignoreErrors isolation (pinned design decision)
-
-    /// The hybrid failure description travels under a network-specific attribute key, NOT the
-    /// generic `error_message` attribute, because the exporter's ignoreErrors filter reads the
-    /// generic key on EVERY span. A failed network request whose message matches ignoreErrors
-    /// must remain exported — ignoreErrors filters error events only.
-    func testNetworkErrorMessageDoesNotTriggerIgnoreErrorsFilter() throws {
-        startSDK(ignoreErrors: ["SocketException.*"])
-        rum?.setNetworkRequestContext(dictionary: [
-            Keys.url.rawValue: "https://example.com/contract/ignored-pattern",
-            Keys.method.rawValue: "GET",
-            Keys.statusCode.rawValue: 0,
-            Keys.errorMessage.rawValue: "SocketException: Connection refused"
-        ])
-
-        let span = try XCTUnwrap(waitForNetworkSpan(urlContains: "/contract/ignored-pattern"))
-
-        // The exporter's own filter must keep this span (the direct, falsifiable claim —
-        // testExportCallback fires before filtering, so assert on the filter itself).
-        let exporter = try XCTUnwrap(rum?.coralogixExporter)
-        XCTAssertTrue(exporter.shouldFilterIgnoreError(span: span),
-                      "A network event must survive ignoreErrors even when its error_message matches")
-
-        // The transport key must be the network-specific one; the generic attribute (which
-        // would engage the filter) must be absent.
+        let span = try XCTUnwrap(waitForNetworkSpan(urlContains: "/contract/failure"),
+                                 "The failed request must still export as a network event")
         XCTAssertNil(span.attributes[Keys.errorMessage.rawValue],
-                     "Hybrid network failures must not set the generic error_message attribute")
-        XCTAssertNotNil(span.attributes[Keys.networkRequestErrorMessage.rawValue])
+                     "The bridge error_message must not be copied onto any span attribute")
+        XCTAssertNil(NetworkRequestContext(otel: span).getDictionary()[Keys.errorMessage.rawValue],
+                     "error_message must not appear in network_request_context (cross-platform schema)")
 
-        // Control: the same message under the generic key on an error span IS filtered —
-        // proving the assertion above is not vacuous.
-        let errorSpan = MockSpanData(
-            attributes: [Keys.errorMessage.rawValue: AttributeValue("SocketException: Connection refused")],
-            startTime: Date(), endTime: Date(),
-            spanId: "s", traceId: "t", name: "n", kind: 2
-        )
-        XCTAssertFalse(exporter.shouldFilterIgnoreError(span: errorSpan),
-                       "Sanity: the ignoreErrors pattern does engage for the generic attribute")
+        // And the exporter's ignoreErrors filter keeps the span (nothing to match against).
+        let exporter = try XCTUnwrap(rum?.coralogixExporter)
+        XCTAssertTrue(exporter.shouldFilterIgnoreError(span: span))
     }
 }
