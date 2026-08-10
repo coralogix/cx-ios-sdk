@@ -16,6 +16,9 @@ struct InteractionContext {
     var scrollDirection: ScrollDirection? // .up / .down / .left / .right — nil for tap
     var targetElement: String          // resolveTargetName result, or class name fallback
     var attributes: [String: Any]?
+    // Always present on the wire. false doubles as "could not resolve" — the documented
+    // default, under-reporting rather than over-reporting when the SDK has no answer.
+    var isMaskedElement: Bool = false
 
     init(otel: SpanDataProtocol) {
         guard let jsonString = otel.getAttribute(forKey: Keys.tapObject.rawValue) as? String,
@@ -52,12 +55,14 @@ struct InteractionContext {
 
         targetElement = tapObject[Keys.targetElement.rawValue] as? String ?? ""
         attributes    = tapObject[Keys.attributes.rawValue] as? [String: Any]
+        isMaskedElement = tapObject[Keys.isMaskedElement.rawValue] as? Bool ?? false
     }
 
     func getDictionary() -> [String: Any] {
         var result = [String: Any]()
         result[Keys.eventName.rawValue]    = eventName.rawValue
         result[Keys.targetElement.rawValue] = targetElement
+        result[Keys.isMaskedElement.rawValue] = isMaskedElement
 
         if let v = elementClasses         { result[Keys.elementClasses.rawValue] = v }
         if let v = elementId              { result[Keys.elementId.rawValue] = v }

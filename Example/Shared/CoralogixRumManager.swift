@@ -6,12 +6,70 @@
 //
 
 import Coralogix
+import CoralogixInternal
 import Foundation
 import UIKit
 //import os
 
+// The demo target has its own `Keys` enum (UI labels), which shadows the SDK's wire-key
+// registry — alias the registry so payload keys stay typo-proof against the SDK schema.
+private typealias WireKeys = CoralogixInternal.Keys
+
 final class CoralogixRumManager {
     static let shared = CoralogixRumManager()
+
+    /// Demo of the customer-side lever for masked interactions (`is_masked_element`):
+    /// the SDK default redacts only `target_element_inner_text`; this callback upgrades
+    /// every *other* masked interaction to full masking, so the platform shows the two
+    /// strategies side by side. Events it fully masks are marked inside the attributes
+    /// map (`demo_masking_strategy`, `demo_masked_fields` — demo-authored custom keys,
+    /// not SDK wire keys, hence not in the `Keys` registry).
+    static let maskedInteractionBeforeSend: ([String: Any]) -> [String: Any]? = { cxRum in
+        guard var interaction = cxRum[WireKeys.interactionContext.rawValue] as? [String: Any],
+              interaction[WireKeys.isMaskedElement.rawValue] as? Bool == true else {
+            return cxRum
+        }
+
+        // Alternate: odd masked events keep the SDK default, even ones get full masking.
+        guard nextMaskedEventGetsFullMasking() else { return cxRum }
+
+        let fieldsToMask = [WireKeys.targetElement.rawValue,
+                            WireKeys.elementClasses.rawValue,
+                            WireKeys.elementId.rawValue,
+                            WireKeys.targetElementInnerText.rawValue]
+        for field in fieldsToMask where interaction[field] != nil {
+            interaction[field] = WireKeys.maskedInnerText.rawValue
+        }
+
+        // Coordinates travel inside the attributes map; blank them there and record
+        // what this callback masked so the two strategies are tellable apart in RUM.
+        var attributes = interaction[WireKeys.attributes.rawValue] as? [String: Any] ?? [:]
+        let maskedCoordinates = [WireKeys.positionX.rawValue, WireKeys.positionY.rawValue]
+            .filter { attributes[$0] != nil }
+        for coordinate in maskedCoordinates {
+            attributes[coordinate] = 0
+        }
+        attributes["demo_masking_strategy"] = "before_send_full"
+        attributes["demo_masked_fields"] = (fieldsToMask + maskedCoordinates)
+            .joined(separator: ",")
+        interaction[WireKeys.attributes.rawValue] = attributes
+
+        var editable = cxRum
+        editable[WireKeys.interactionContext.rawValue] = interaction
+        return editable
+    }
+
+    // beforeSend may run concurrently across exporter instances; the increment and the
+    // parity read form one critical section so the odd/even alternation stays exact.
+    private static var maskedInteractionCounter = 0
+    private static let maskedInteractionCounterLock = NSLock()
+
+    private static func nextMaskedEventGetsFullMasking() -> Bool {
+        maskedInteractionCounterLock.lock()
+        defer { maskedInteractionCounterLock.unlock() }
+        maskedInteractionCounter += 1
+        return maskedInteractionCounter % 2 == 0
+    }
 
     private var _sdk: CoralogixRum?
     var sdk: CoralogixRum {
@@ -27,15 +85,15 @@ final class CoralogixRumManager {
                                       userName: "?",
                                       userEmail: "a@a.com",
                                       userMetadata: ["d":"d"])
-        // BUGV2-6045 leak-harness override: when the XCUITest harness
-        // launches the app it sets CX_MOCK_PORT in the env. Point the
-        // session-replay proxy at the host mock server on the simulator
-        // host loopback. No effect on normal demo launches.
+        // Proxy resolution, in priority order: a nonempty CX_MOCK_PORT env override wins,
+        // then Envs.PROXY_URL from the gitignored per-environment `Example/envs.swift`.
+        // An empty configured URL means no proxy — events go straight to the ingress.
         let proxyUrl: String? = {
             if let port = ProcessInfo.processInfo.environment["CX_MOCK_PORT"], !port.isEmpty {
                 return "http://127.0.0.1:\(port)"
             }
-            return Envs.PROXY_URL.rawValue
+            let configured = Envs.PROXY_URL.rawValue
+            return configured.isEmpty ? nil : configured
         }()
         let options = CoralogixExporterOptions(coralogixDomain: CoralogixDomain.EU2,
                                                userContext: userContext,
@@ -52,16 +110,9 @@ final class CoralogixRumManager {
                                                                   .anr: true,
                                                                   .lifeCycle: true],
                                                collectIPData: true,
-//                                               beforeSend: { cxRum in
-//            var editableCxRum = cxRum
-//            if var sessionContext = editableCxRum["session_context"] as? [String: Any] {
-//                sessionContext["user_email"] = "jone.dow@coralogix.com"
-//                editableCxRum["session_context"] = sessionContext
-//            }
-//            return editableCxRum
-//        },
+                                               beforeSend: CoralogixRumManager.maskedInteractionBeforeSend,
                                                enableSwizzling: true,
-                                               proxyUrl: proxyUrl, // BUGV2-6045: harness override (CX_MOCK_PORT env), else Envs.PROXY_URL
+                                               proxyUrl: proxyUrl,
                                                traceParentInHeader: ["enable": true],
                                                mobileVitals:[.cpuDetector: false,
                                                              .warmDetector: false,

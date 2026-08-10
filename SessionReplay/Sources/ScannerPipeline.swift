@@ -58,10 +58,12 @@ class ScannerPipeline {
         // - Credit-card image detection (ImageScanner, maskAll: false) runs for everyone
         //   when enabled.
         //
-        // Only the UIKit walk reports geometry back (URLEntry.maskRects). The OCR/Vision and
-        // Dart-bitmap stages mask pixels in place and report none, so a tap over content masked
-        // only by those still draws its marker. Suppressing those needs the scanners to surface
-        // their observation rects in screen points, which is its own work.
+        // The UIKit walk reports geometry back (URLEntry.maskRects), and the Dart bitmap
+        // provider reports the rects it masked alongside each frame (FlutterViewBitmap.maskRects,
+        // merged in captureFrame). The OCR/Vision stages mask pixels in place and report none,
+        // so a tap over content masked only by those still draws its marker. Suppressing those
+        // needs the scanners to surface their observation rects in screen points, which is its
+        // own work.
         let needsSwiftUIMasking = urlEntry.containsSwiftUIContent
         let isTextScannerEnabled = needsSwiftUIMasking && !(options.maskText?.isEmpty ?? true)
         let isImageScannerEnabled = options.maskOnlyCreditCards || (needsSwiftUIMasking && options.maskAllImages)

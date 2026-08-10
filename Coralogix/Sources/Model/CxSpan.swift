@@ -101,6 +101,20 @@ public class CxSpan {
                     }
                 }
 
+                // interaction_context.is_masked_element is an SDK observation and stays
+                // VISIBLE in the subset (callbacks key their masking policy on it — that's
+                // its purpose) but is restored here so it's read-only: it records what the
+                // SDK saw, and a forged value would corrupt the audit trail the flag exists
+                // to provide. Same visible-read-only treatment as isSessionSampledIn.
+                if let originalInteraction = originalCxRum[Keys.interactionContext.rawValue] as? [String: Any] {
+                    if var mergedInteraction = mergedDict[Keys.interactionContext.rawValue] as? [String: Any] {
+                        mergedInteraction[Keys.isMaskedElement.rawValue] = originalInteraction[Keys.isMaskedElement.rawValue]
+                        mergedDict[Keys.interactionContext.rawValue] = mergedInteraction
+                    } else {
+                        mergedDict[Keys.interactionContext.rawValue] = originalInteraction
+                    }
+                }
+
                 // Sync severity from editableCxRum to both the top-level field and
                 // mergedDict[eventContext][severity] so they remain consistent.
                 // parseSeverity accepts Int or numeric String (matching the OTEL init path)

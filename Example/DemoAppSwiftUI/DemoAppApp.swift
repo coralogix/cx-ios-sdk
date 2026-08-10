@@ -26,6 +26,7 @@ struct DemoAppApp: App {
                                                ignoreErrors: [], //[".*errorcode=.*", "Im cusom Error"],
                                                customDomainUrl: "https://ingress.staging.rum-ingress-coralogix.com",
                                                labels: ["item" : "playstation 5", "itemPrice" : 1000],
+                                               beforeSend: CoralogixRumManager.maskedInteractionBeforeSend,
                                                debug: true)
         self.coralogixRum = CoralogixRum(options: options)
     }

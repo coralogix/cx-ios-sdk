@@ -39,8 +39,16 @@ public struct FlutterViewBitmap {
     public let width: Int
     /// Pixel height.
     public let height: Int
+    /// The rectangles Dart masked in `bytes`, in Flutter-view-local logical points (Dart's
+    /// logical pixels are UIKit points — no unit conversion on iOS, unlike Android where the
+    /// payload is dp and the host rects are px). The host offsets them by the FlutterView's
+    /// screen origin and merges them into `CapturedFrame.maskRects`, so tap markers over
+    /// masked Flutter content are suppressed on the same terms as native masks. They travel
+    /// with the bytes — a reused stale bitmap must carry the rects of *its* frame, never a
+    /// newer frame's (see `SessionReplayModel.resolveFlutterFrame`).
+    public let maskRects: [CGRect]
 
-    public init?(bytes: Data, width: Int, height: Int) {
+    public init?(bytes: Data, width: Int, height: Int, maskRects: [CGRect] = []) {
         guard width > 0 && height > 0 else {
             Log.w("FlutterViewBitmap: invalid dimensions \(width)x\(height) — treating as missing bitmap")
             return nil
@@ -62,6 +70,7 @@ public struct FlutterViewBitmap {
         self.bytes = bytes
         self.width = width
         self.height = height
+        self.maskRects = maskRects
     }
 }
 

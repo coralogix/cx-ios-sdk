@@ -222,6 +222,16 @@ public class SessionReplay: SessionReplayInterface {
         }
     }
 
+    public func currentMaskRects() -> [CGRect]? {
+        // Runs for the sampled-out dummy instance too: masking intent (cxMask, maskText,
+        // maskAllImages) is configuration, not recording state, and the interaction span that
+        // consumes this resolution is emitted whether or not a replay is being recorded.
+        guard Thread.isMainThread else { return nil }
+        guard let options = sessionReplayOptions else { return nil }
+        return UIView().collectScreenMaskRects(maskText: options.maskText,
+                                               maskAllImages: options.maskAllImages)
+    }
+
     public func stopRecording() {
         if isDummyInstance {
             Log.d("SessionReplay.stopRecording() called on inactive instance (skipped by sampling)")
