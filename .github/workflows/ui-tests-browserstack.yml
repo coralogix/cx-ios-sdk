@@ -1,24 +1,21 @@
 name: UI Tests (BrowserStack real devices)
 
 # A/B experiment against "UI Tests (fast — cache + shard)", which runs the same
-# XCUITest suites on GitHub-hosted simulators. Deliberately workflow_dispatch
-# only: this gates nothing, it exists to produce comparable wall-clock numbers.
+# XCUITest suites on GitHub-hosted simulators. workflow_dispatch + a branch
+# scoped push trigger: this gates nothing.
 #
-# Baseline to beat (last green simulator run on this branch):
-#   Plan shards 5s | Build once 3m | shards 5m / 5m / 7m / 8m in parallel
-#   wall clock ~11-12 min
+# Baseline to beat (simulator, last green): build 3m, shards 4/8/8/9m in
+# parallel, wall clock ~12m.
 #
-# Structural differences from the simulator workflow, for anyone reading the
-# numbers:
-#   - artifacts must be built for a REAL device (-sdk iphoneos), not a simulator
-#   - a BrowserStack build carries exactly ONE app + ONE test suite, and this
-#     scheme has two host apps (DemoAppSwift, DemoAppSwiftUI) with a UI-test
-#     target each -> two builds, not one
-#   - the account's parallel-session cap bounds real concurrency regardless of
-#     how many shards we declare: 2 sessions vs 4 simulator shards today, so the
-#     4 declared shards execute in 2 waves. Two devices are listed by default
-#     with deviceSelection "any" so both sessions can run at once on distinct
-#     hardware; "all" would re-run every shard on every device instead.
+# Measured cost model from the first real-device run (run 31377282463):
+#   832s of actual test execution, 1394s of session wall -> 40% overhead.
+#   ~45s to allocate a device + install the .ipa per session, and ~70s of
+#   tearDown+setUp between two tests inside the same session.
+# So a shard holding m tests costs sum(tests) + 45 + 70*(m-1), and
+#   total_work(k shards) = 832 + 45k + 70*(11-k) = 1602 - 25k
+# i.e. splitting is strictly a win because a gap (70s) costs more than a fresh
+# session's install (45s). Shard count is capped by the plan's queue limit
+# (queued_sessions_max_allowed = 5) rather than by anything about the tests.
 
 permissions:
   contents: read
@@ -43,8 +40,8 @@ on:
         default: 'iPhone 16-18,iPhone 14-18'
         required: false
       shards:
-        description: 'Number of shards to declare per build'
-        default: '4'
+        description: 'Shards for the UIKit target (2 run at once; 5 may queue)'
+        default: '6'
         required: false
 
 jobs:
@@ -58,7 +55,7 @@ jobs:
       # `inputs.*` are only populated for workflow_dispatch, so a push-triggered
       # run must fall back to the same defaults or it posts an empty device list.
       DEVICES: ${{ inputs.devices || 'iPhone 16-18,iPhone 14-18' }}
-      NUM_SHARDS: ${{ inputs.shards || '4' }}
+      NUM_SHARDS: ${{ inputs.shards || '6' }}
 
     steps:
       - name: Checkout code
@@ -70,6 +67,7 @@ jobs:
             | tee plan.json | jq '.'
           jq -e '.parallel_sessions_max_allowed > 0' plan.json > /dev/null \
             || { echo "::error::BrowserStack credentials rejected or no parallel capacity"; exit 1; }
+          echo "PARALLEL=$(jq -r '.parallel_sessions_max_allowed' plan.json)" >> $GITHUB_ENV
 
       - name: Select Xcode
         run: |
@@ -110,17 +108,45 @@ jobs:
               end' "$CONST" || true
           done
 
+      # Caching: the first device build cost 217s with none of this in place.
+      # Keys are deliberately distinct from the simulator workflow's — these are
+      # iphoneos products and must never be restored into a simulator run.
+      - name: Cache SPM checkouts (Firebase etc.)
+        uses: actions/cache@v4
+        with:
+          path: DerivedData/SourcePackages
+          key: bs-spm-${{ runner.os }}-${{ hashFiles('Example/DemoApp.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+          restore-keys: bs-spm-${{ runner.os }}-
+
+      - name: Cache CocoaPods
+        uses: actions/cache@v4
+        with:
+          path: Example/Pods
+          key: bs-pods-${{ runner.os }}-${{ hashFiles('Example/Podfile') }}
+          restore-keys: bs-pods-${{ runner.os }}-
+
+      # Device build products. Keyed on every input that can change the binary,
+      # so a source change still rebuilds while a workflow-only edit does not.
+      - name: Cache device build products
+        uses: actions/cache@v4
+        with:
+          path: DerivedData/Build
+          key: bs-dd-${{ runner.os }}-${{ hashFiles('Example/**/*.swift', 'Example/Podfile', 'Coralogix/Sources/**/*.swift', 'CoralogixInternal/Sources/**/*.swift', 'SessionReplay/Sources/**/*.swift') }}
+          restore-keys: bs-dd-${{ runner.os }}-
+
       - name: Install CocoaPods dependencies
         run: cd Example && pod install --no-repo-update
 
-      # NOTE: -sdk iphoneos, not iphonesimulator. Unsigned — BrowserStack resigns
-      # uploads. If it rejects these artifacts, this is the step that needs a real
-      # signing identity + provisioning profile.
+      # -sdk iphoneos, not iphonesimulator. Unsigned: BrowserStack resigns
+      # uploads, confirmed working — both artifacts uploaded fine on the first run.
       - name: Build for testing (real device)
         run: |
           set -o pipefail
           cd Example
           START=$(date +%s)
+          if ls ../DerivedData/Build/Products/*.xctestrun >/dev/null 2>&1; then
+            echo "cache hit — verifying products are complete"
+          fi
           xcodebuild build-for-testing \
             -workspace DemoApp.xcworkspace \
             -scheme DemoAppSwift \
@@ -134,22 +160,40 @@ jobs:
           echo "BUILD_SECONDS=$(( $(date +%s) - START ))" >> $GITHUB_ENV
 
       # Shards are derived from source (same rule as ui-tests-fast.yml) so there
-      # is no hand-maintained list to drift. App<->runner pairing comes from the
-      # xctestrun rather than bundle-name guessing.
-      - name: Plan shards and resolve build products
+      # is no hand-maintained list to drift, then packed by MEASURED duration —
+      # equal test counts produced a 790s shard next to a 137s one last time.
+      - name: Plan duration-balanced shards
         run: |
           python3 - <<'PY'
           import json, os, plistlib, re
           from pathlib import Path
 
-          repo = Path(".")
+          # Measured on run 31377282463 (seconds of pure execution, real device).
+          # Unknown/new tests fall back to the mean so a new test never silently
+          # lands in an under-weighted shard.
+          MEASURED = {
+              "SessionReplayLeakUITests/test_navigationTransition": 125.2,
+              "NetworkInstrumentationUITests/testAllNetworkInstrumentationWithSchemaValidation": 114.2,
+              "DemoAppUITests/testSchemaValidationFlow": 93.6,
+              "SessionReplayLeakUITests/test_listSlowScroll_1fps": 80.5,
+              "UserInteractionUITests/testResolveTargetName_tapLoginButton_customNameInBackend": 70.4,
+              "UserInteractionUITests/testAllInteractionEvents_areAttributedToActiveSession": 64.1,
+              "UserInteractionUITests/testAllUserInteractionEvents_combinedSchemaValidation": 63.4,
+              "UserInteractionUITests/testSwipeEvents_leftAndRight_areCorrectlyCaptured": 56.2,
+              "UserInteractionUITests/testShouldSendText_sensitiveLabel_noInnerTextInBackend": 53.4,
+              "UserInteractionUITests/testScrollEvents_downAndUp_areCorrectlyCaptured": 49.6,
+          }
+          DEFAULT = round(sum(MEASURED.values()) / len(MEASURED), 1)
+          GAP = 70.0      # tearDown+setUp between two tests in one session
+          INSTALL = 45.0  # device allocation + .ipa install per session
+
           roots = {
               "DemoAppUITests": "Example/DemoAppUITests",
               "DemoAppSwiftUIUITests": "Example/DemoAppSwiftUIUITests",
           }
-          suites = {}
+          tests = {}   # target -> [(Class/method, seconds)]
           for target, root in roots.items():
-              for dp, _, files in os.walk(repo / root):
+              for dp, _, files in os.walk(Path(root)):
                   for fn in sorted(files):
                       if not fn.endswith(".swift"):
                           continue
@@ -160,58 +204,51 @@ jobs:
                               cls = m.group(1)
                           fm = re.search(r"func\s+(test[A-Za-z0-9_]*)\s*\(", line)
                           if fm and cls:
-                              suites.setdefault((target, cls), []).append(fm.group(1))
+                              tid = f"{cls}/{fm.group(1)}"
+                              tests.setdefault(target, []).append((tid, MEASURED.get(tid, DEFAULT)))
 
-          total = sum(len(v) for v in suites.values())
-          n = min(int(os.environ.get("NUM_SHARDS") or 4), len(suites)) or 1
-          shards = [{"labels": [], "items": [], "n": 0} for _ in range(n)]
-          for (target, cls), methods in sorted(suites.items(), key=lambda kv: -len(kv[1])):
-              s = min(shards, key=lambda s: s["n"])
-              s["labels"].append(cls if target == "DemoAppUITests" else f"{cls}-SwiftUI")
-              # BrowserStack only-testing wants Class/method, no target prefix.
-              s["items"] += [(target, f"{cls}/{m}") for m in methods]
-              s["n"] += len(methods)
-
-          # Group each shard's tests by test target: one BrowserStack build per
-          # target, carrying that target's slice of every shard.
-          per_target = {}
-          for s in shards:
-              if not s["items"]:
-                  continue
-              label = "+".join(s["labels"])
-              for target, tid in s["items"]:
-                  per_target.setdefault(target, {}).setdefault(label, []).append(tid)
-
+          want = int(os.environ.get("NUM_SHARDS") or 6)
           products = Path("DerivedData/Build/Products")
-          xctestrun = sorted(products.glob("*.xctestrun"))
-          if not xctestrun:
+          runs = sorted(products.glob("*.xctestrun"))
+          if not runs:
               raise SystemExit(f"no .xctestrun in {products}")
-          data = plistlib.loads(xctestrun[0].read_bytes())
+          data = plistlib.loads(runs[0].read_bytes())
           targets = [t for c in data.get("TestConfigurations", []) for t in c.get("TestTargets", [])]
-
           pairs = {}
           for t in targets:
-              name = t.get("BlueprintName")
-              app = t.get("UITargetAppPath")
-              runner = t.get("TestHostPath")
-              if not (name and app and runner):
-                  continue
-              fix = lambda p: p.replace("__TESTROOT__", str(products))
-              pairs[name] = {"app": fix(app), "runner": fix(runner)}
+              name, app, runner = t.get("BlueprintName"), t.get("UITargetAppPath"), t.get("TestHostPath")
+              if name and app and runner:
+                  fix = lambda p: p.replace("__TESTROOT__", str(products))
+                  pairs[name] = {"app": fix(app), "runner": fix(runner)}
 
-          plan = {t: {"mapping": [{"name": k, "values": v} for k, v in m.items()],
-                      **pairs.get(t, {})}
-                  for t, m in per_target.items()}
+          plan = {}
+          for target, items in tests.items():
+              # Longest-processing-time-first into k bins: the standard greedy
+              # that bounds the makespan, and it beats count-based splitting
+              # whenever durations differ by more than ~2x (they differ by 2.5x).
+              k = max(1, min(want, len(items)))
+              bins = [{"ids": [], "cost": 0.0} for _ in range(k)]
+              for tid, secs in sorted(items, key=lambda x: -x[1]):
+                  b = min(bins, key=lambda b: b["cost"])
+                  # Adding to a non-empty bin also buys a GAP; a new session buys
+                  # INSTALL instead. The packer must price both to be honest.
+                  b["cost"] += secs + (GAP if b["ids"] else INSTALL)
+                  b["ids"].append(tid)
+              mapping = [{"name": f"{target}-s{i+1}", "values": b["ids"], "cost": round(b["cost"])}
+                         for i, b in enumerate(bins) if b["ids"]]
+              plan[target] = {"mapping": mapping, **pairs.get(target, {})}
+
           Path("bs-plan.json").write_text(json.dumps(plan, indent=1))
 
-          print(f"{total} tests across {len(shards)} shards")
+          par = int(os.environ.get("PARALLEL") or 2)
+          total = sum(m["cost"] for p in plan.values() for m in p["mapping"])
+          sessions = sum(len(p["mapping"]) for p in plan.values())
+          print(f"{sum(len(v) for v in tests.values())} tests -> {sessions} sessions, "
+                f"{total}s of work, {par} in parallel -> ideal wall ~{total // par}s")
           for t, p in plan.items():
-              if "app" not in p:
-                  print(f"  !! {t}: no build products found, will be skipped")
-                  continue
-              print(f"  {t}: app={Path(p['app']).name} runner={Path(p['runner']).name}")
+              print(f"  {t}: {'OK' if 'app' in p else 'NO PRODUCTS'}")
               for m in p["mapping"]:
-                  print(f"      [{m['name']}] {len(m['values'])} tests")
+                  print(f"      [{m['name']}] {m['cost']:>4}s  {len(m['values'])} tests")
           PY
 
       - name: Package, upload, and run on BrowserStack
@@ -220,7 +257,10 @@ jobs:
           RUN_START=$(date +%s)
           : > build_ids.txt
 
-          for TARGET in $(jq -r 'keys[]' bs-plan.json); do
+          # Smallest target first: submitting the 1-test SwiftUI build after the
+          # 10-test one left it queued behind every UIKit session last run, so a
+          # 76s job reported 974s of wall clock.
+          for TARGET in $(jq -r 'to_entries | sort_by(.value.mapping | length) | .[].key' bs-plan.json); do
             APP=$(jq -r --arg t "$TARGET" '.[$t].app // empty' bs-plan.json)
             RUNNER=$(jq -r --arg t "$TARGET" '.[$t].runner // empty' bs-plan.json)
             if [ -z "$APP" ] || [ -z "$RUNNER" ]; then
@@ -234,16 +274,14 @@ jobs:
             cp -R "$APP" "$WORK/Payload/"
             ( cd "$WORK" && zip -qry app.ipa Payload )
             ( cd "$(dirname "$RUNNER")" && zip --symlinks -qr "$WORK/tests.zip" "$(basename "$RUNNER")" )
-            ls -lh "$WORK/app.ipa" "$WORK/tests.zip"
 
             APP_URL=$(curl -s -u "$BS_AUTH" -X POST "$API/app" \
               -F "file=@$WORK/app.ipa" | jq -r '.app_url // empty')
             TEST_URL=$(curl -s -u "$BS_AUTH" -X POST "$API/test-suite" \
               -F "file=@$WORK/tests.zip" | jq -r '.test_suite_url // empty')
             if [ -z "$APP_URL" ] || [ -z "$TEST_URL" ]; then
-              echo "::error::upload failed for $TARGET (unsigned artifacts may be rejected)"; exit 1
+              echo "::error::upload failed for $TARGET"; exit 1
             fi
-            echo "  app=$APP_URL test-suite=$TEST_URL"
 
             DEVICES_JSON=$(python3 -c "import json,os;print(json.dumps([d.strip() for d in os.environ['DEVICES'].split(',') if d.strip()]))")
             PAYLOAD=$(jq -n \
@@ -254,7 +292,6 @@ jobs:
                 deviceLogs:false, networkLogs:false,
                 shards:{numberOfShards:($mapping|length), deviceSelection:"any", mapping:$mapping}}')
 
-            echo "  payload: $PAYLOAD"
             RESP=$(curl -s -u "$BS_AUTH" -X POST "$API/build" \
               -H 'Content-Type: application/json' -d "$PAYLOAD")
             BUILD_ID=$(echo "$RESP" | jq -r '.build_id // empty')
@@ -265,7 +302,7 @@ jobs:
               exit 1
             fi
             echo "$TARGET $BUILD_ID" >> build_ids.txt
-            echo "  build_id=$BUILD_ID"
+            echo "  $(jq -r --arg t "$TARGET" '.[$t].mapping | length' bs-plan.json) shards -> $BUILD_ID"
           done
 
           echo "SUBMIT_SECONDS=$(( $(date +%s) - RUN_START ))" >> $GITHUB_ENV
@@ -279,32 +316,34 @@ jobs:
               curl -s -u "$BS_AUTH" "$API/builds/$BUILD_ID" > "res-$TARGET.json"
               STATUS=$(jq -r '.status // "unknown"' "res-$TARGET.json")
               case "$STATUS" in
-                running|queued) sleep 20 ;;
+                running|queued) sleep 10 ;;
                 *) echo "$TARGET: $STATUS"; break ;;
               esac
             done
           done < build_ids.txt
           POLL_SECONDS=$(( $(date +%s) - POLL_START ))
+          TOTAL=$(( BUILD_SECONDS + SUBMIT_SECONDS + POLL_SECONDS ))
 
           {
             echo "### BrowserStack real devices vs GitHub simulators"
             echo
             echo "| phase | BrowserStack | simulators (last green) |"
             echo "|---|---|---|"
-            echo "| build | ${BUILD_SECONDS}s (device) | ~180s (simulator) |"
+            echo "| build | ${BUILD_SECONDS}s (device, cached) | ~180s (simulator, cached) |"
             echo "| upload + submit | ${SUBMIT_SECONDS}s | n/a |"
-            echo "| test execution | ${POLL_SECONDS}s | ~480s (slowest of 4 parallel shards) |"
-            echo "| **total** | **$(( BUILD_SECONDS + SUBMIT_SECONDS + POLL_SECONDS ))s** | **~715s** |"
+            echo "| test execution | ${POLL_SECONDS}s | ~540s (slowest of 4 shards) |"
+            echo "| **total** | **${TOTAL}s** | **~720s** |"
             echo
-            echo "Devices: \`$DEVICES\` · declared shards: \`$NUM_SHARDS\`"
+            echo "Devices: \`$DEVICES\` · parallel sessions: \`${PARALLEL}\` · shards: \`$NUM_SHARDS\`"
             echo
-            echo "| target | shard | device | status | duration |"
-            echo "|---|---|---|---|---|"
+            echo "#### Per-device load (imbalance is the thing to watch)"
+            echo
+            echo "| target | device | sessions | session seconds |"
+            echo "|---|---|---|---|"
             while read -r TARGET BUILD_ID; do
               jq -r --arg t "$TARGET" '
-                (.devices // [])[] as $d
-                | ($d.sessions // [])[]
-                | "| \($t) | \(.shard_id // .name // "-") | \($d.device // "-") | \(.status // "-") | \(.duration // "-")s |"
+                (.devices // [])[]
+                | "| \($t) | \(.device // "-") | \((.sessions // []) | length) | \([(.sessions // [])[].duration] | add // 0)s |"
               ' "res-$TARGET.json"
             done < build_ids.txt
           } >> "$GITHUB_STEP_SUMMARY"
