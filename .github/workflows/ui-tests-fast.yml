@@ -133,20 +133,20 @@ jobs:
       # NOTE: keep SPM at its default DerivedData/SourcePackages location.
       # Firebase's Crashlytics run-script phase hardcodes that path, so
       # relocating checkouts (-clonedSourcePackagesDirPath) breaks the build.
+      # Shared with the BrowserStack workflow on purpose: these are package
+      # SOURCE checkouts (~535MB), identical for simulator and device builds, so
+      # a per-workflow prefix just stored the same bytes twice against the repo's
+      # 10GB cache allowance. Compiled products must NOT be shared this way.
       - name: Cache SPM checkouts (Firebase etc.)
         uses: actions/cache@v4
         with:
           path: DerivedData/SourcePackages
-          key: ui-spm-${{ runner.os }}-${{ hashFiles('Example/DemoApp.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
-          restore-keys: ui-spm-${{ runner.os }}-
+          key: spm-src-${{ runner.os }}-${{ hashFiles('Example/DemoApp.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+          restore-keys: spm-src-${{ runner.os }}-
 
-      - name: Cache CocoaPods
-        uses: actions/cache@v4
-        with:
-          path: Example/Pods
-          key: ui-pods-${{ runner.os }}-${{ hashFiles('Example/Podfile') }}
-          restore-keys: ui-pods-${{ runner.os }}-
-
+      # No CocoaPods cache: it measured 0MB (AFNetworking, Alamofire,
+      # SDWebImage), and `pod install` costs ~10s, so the cache round-trip was
+      # pure bookkeeping.
       - name: Install CocoaPods dependencies
         run: cd Example && pod install --no-repo-update
 
