@@ -35,9 +35,19 @@ extension CoralogixRum {
             return
         }
 
+        // The window walk is only worth paying for when this dictionary becomes a span.
+        // When no span is emitted (hybrid, or userActions off) it only feeds session
+        // replay, the masking flag goes unused, and the hybrid span resolves its own
+        // geometry in validateHybridInteraction — walking here too would cost React
+        // Native and Flutter apps two full view-tree walks per tap.
+        let maskRects: [CGRect]? = shouldEmitUserActionSpan
+            ? SdkManager.shared.getSessionReplay()?.currentMaskRects()
+            : nil
+
         processInteractionEvent(TapDataExtractor.extract(from: touchEvent,
                                                          shouldSendText: userActionsDelegates?.shouldSendText,
-                                                         resolveTargetName: userActionsDelegates?.resolveTargetName))
+                                                         resolveTargetName: userActionsDelegates?.resolveTargetName,
+                                                         maskRects: maskRects))
     }
 
     private func processInteractionEvent(_ properties: [String: Any]) {

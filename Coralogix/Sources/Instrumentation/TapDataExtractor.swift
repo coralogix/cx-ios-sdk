@@ -239,13 +239,14 @@ enum TapDataExtractor {
     ///   When provided, its return value replaces the UIKit class name in `target_element`.
     ///   Returning `nil` falls back to the resolved class name.
     /// - Parameter maskRects: The mask geometry (screen points) a frame captured now would
-    ///   paint, from `SessionReplayInterface.currentMaskRects`. nil when unresolvable —
-    ///   geometry then contributes nothing to the masking decision.
+    ///   paint, from `SessionReplayInterface.currentMaskRects`. The caller resolves it —
+    ///   and decides whether the walk is worth paying for at all (see
+    ///   `handleInteractionNotification`). nil when unresolvable or skipped — geometry
+    ///   then contributes nothing to the masking decision.
     static func extract(from event: TouchEvent,
                         shouldSendText: ((UIView, String) -> Bool)? = nil,
                         resolveTargetName: ((UIView) -> String?)? = nil,
-                        maskRects: [CGRect]? = SdkManager.shared.getSessionReplay()?.currentMaskRects()
-    ) -> [String: Any] {
+                        maskRects: [CGRect]? = nil) -> [String: Any] {
         var tapData = [String: Any]()
         let view = event.view
 

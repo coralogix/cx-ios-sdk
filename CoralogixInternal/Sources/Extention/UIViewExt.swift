@@ -435,9 +435,12 @@ public extension UIView {
     /// FlutterView are skipped, matching `captureFrame`'s routing — their masking arrives
     /// pre-painted in the Dart bitmap, with geometry reported per-frame in
     /// `FlutterViewBitmap.maskRects` rather than derivable from the view tree.
-    /// Must be called on the main thread.
-    func collectScreenMaskRects(maskText: [String]?, maskAllImages: Bool) -> [CGRect] {
-        guard Thread.isMainThread, let scene = activeForegroundWindowScene() else { return [] }
+    ///
+    /// Returns nil when there is nothing to walk (off the main thread, or no active
+    /// foreground scene) — "don't know", which callers must not read as "nothing masked".
+    /// An empty array means the walk ran and genuinely found no masked content.
+    func collectScreenMaskRects(maskText: [String]?, maskAllImages: Bool) -> [CGRect]? {
+        guard Thread.isMainThread, let scene = activeForegroundWindowScene() else { return nil }
         return scene.windows
             .filter { !$0.isHidden && $0.alpha > 0 && !UIView.subtreeContainsFlutterView($0) }
             .flatMap { collectNativeMaskRects(in: $0, maskText: maskText, maskAllImages: maskAllImages) }
