@@ -218,4 +218,98 @@ final class HybridNetworkContractTests: XCTestCase {
         let exporter = try XCTUnwrap(rum?.coralogixExporter)
         XCTAssertTrue(exporter.shouldFilterIgnoreError(span: span))
     }
+
+    // MARK: - Full exported envelope: wire-shape parity through beforeSend
+
+    /// Test-only `SpanUploading` capturing the final payload handed to upload (no network I/O).
+    private final class CapturingUploader: SpanUploading {
+        private(set) var uploaded: [[String: Any]]?
+        func upload(_ spans: [[String: Any]], endPoint: String) -> SpanExporterResultCode {
+            uploaded = spans
+            return .success
+        }
+    }
+
+    private func textCxRum(of event: [String: Any]) throws -> [String: Any] {
+        let text = try XCTUnwrap(event[Keys.text.rawValue] as? [String: Any])
+        return try XCTUnwrap(text[Keys.cxRum.rawValue] as? [String: Any])
+    }
+
+    private func otelAttributes(of event: [String: Any]) throws -> [String: Any] {
+        let inst = try XCTUnwrap(event[Keys.instrumentationData.rawValue] as? [String: Any])
+        let otel = try XCTUnwrap(inst[Keys.otelSpan.rawValue] as? [String: Any])
+        return try XCTUnwrap(otel[Keys.attributes.rawValue] as? [String: Any])
+    }
+
+    /// The drop-pin above asserts on `NetworkRequestContext` built from the raw SpanData; this
+    /// test covers what it cannot: the final exported envelope. `status_text` must appear in
+    /// BOTH `text.cx_rum.network_request_context` and `instrumentation_data.otelSpan.attributes`
+    /// (AGENTS wire-shape parity), `error_message` in NEITHER — and both claims must hold again
+    /// after the `beforeSend` round-trip, whose rebuild path (`sendBeforeSendData` →
+    /// dict-variant `buildRumContextAttributes`) is a separate code path from the live encode.
+    func testExportedEnvelopeStatusTextParityAndErrorMessageAbsence() throws {
+        var batch: [[String: Any]] = []
+        let batchLock = NSLock()
+        var opts = makeSamplingOptions(sampleRate: 100, exclude: [])
+        opts.beforeSendCallBack = { events in
+            batchLock.lock(); batch.append(contentsOf: events); batchLock.unlock()
+        }
+        rum = CoralogixRum(options: opts, sdkFramework: .flutter(version: "1.0.0"))
+        XCTAssertTrue(CoralogixRum.isInitialized)
+        let exporter = try XCTUnwrap(rum?.coralogixExporter)
+        let uploader = CapturingUploader()
+        exporter.spanUploader = uploader
+
+        let url = "https://example.com/contract/envelope"
+        rum?.setNetworkRequestContext(dictionary: [
+            Keys.url.rawValue: url,
+            Keys.method.rawValue: "GET",
+            Keys.statusCode.rawValue: 404,
+            Keys.statusText.rawValue: "Not Found",
+            Keys.errorMessage.rawValue: "should never surface"
+        ])
+
+        // The hybrid batch path delivers the encoded event to beforeSendCallBack.
+        var event: [String: Any]?
+        let deadline = Date().addingTimeInterval(5)
+        while event == nil && Date() < deadline {
+            (OpenTelemetry.instance.tracerProvider as? TracerProviderSdk)?.forceFlush(timeout: 3)
+            batchLock.lock()
+            event = batch.first { candidate in
+                let net = ((candidate[Keys.text.rawValue] as? [String: Any])?[Keys.cxRum.rawValue]
+                    as? [String: Any])?[Keys.networkRequestContext.rawValue] as? [String: Any]
+                return (net?[Keys.url.rawValue] as? String)?.contains("/contract/envelope") == true
+            }
+            batchLock.unlock()
+            if event == nil { Thread.sleep(forTimeInterval: 0.1) }
+        }
+        let encoded = try XCTUnwrap(event, "Encoded network event must reach beforeSendCallBack")
+
+        func assertEnvelopeContract(_ event: [String: Any], stage: String) throws {
+            let net = try XCTUnwrap(textCxRum(of: event)[Keys.networkRequestContext.rawValue] as? [String: Any])
+            XCTAssertEqual(net[Keys.statusText.rawValue] as? String, "Not Found",
+                           "\(stage): text.cx_rum must carry status_text")
+            XCTAssertNil(net[Keys.errorMessage.rawValue],
+                         "\(stage): error_message must not appear in text.cx_rum network context")
+            let attrs = try otelAttributes(of: event)
+            XCTAssertEqual(attrs["cx_rum.network_request_context.status_text"] as? String, "Not Found",
+                           "\(stage): otelSpan.attributes must mirror status_text (wire-shape parity)")
+            XCTAssertNil(attrs["cx_rum.network_request_context.error_message"],
+                         "\(stage): otelSpan.attributes must not mirror error_message")
+        }
+        try assertEnvelopeContract(encoded, stage: "encode")
+
+        // beforeSend round-trip with a benign edit: the rebuild path must preserve both claims.
+        var edited = encoded
+        var text = try XCTUnwrap(encoded[Keys.text.rawValue] as? [String: Any])
+        var cxRum = try XCTUnwrap(text[Keys.cxRum.rawValue] as? [String: Any])
+        cxRum[Keys.labels.rawValue] = ["tier": "edited"]
+        text[Keys.cxRum.rawValue] = cxRum
+        edited[Keys.text.rawValue] = text
+        exporter.sendBeforeSendData(data: [edited])
+
+        let uploaded = try XCTUnwrap(uploader.uploaded?.first,
+                                     "sendBeforeSendData must hand the event to upload")
+        try assertEnvelopeContract(uploaded, stage: "post-beforeSend upload")
+    }
 }
