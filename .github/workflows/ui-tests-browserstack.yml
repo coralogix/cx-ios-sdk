@@ -23,6 +23,12 @@ name: UI Tests (BrowserStack real devices)
 permissions:
   contents: read
 
+# Two overlapping runs would compete for the same 2 paid parallel sessions and
+# corrupt each other's timings, so a newer run always supersedes an older one.
+concurrency:
+  group: browserstack-ui-tests-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   # workflow_dispatch alone is not enough: GitHub only offers a dispatch for
   # workflows present on the default branch, and this file lives on the
@@ -47,11 +53,7 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 60
     env:
-      # POC ONLY — credentials inlined deliberately for a throwaway experiment.
-      # This repo is public: treat this key as burned. Before this workflow
-      # outlives the experiment, move these to repository secrets
-      # (BROWSERSTACK_USERNAME / BROWSERSTACK_ACCESS_KEY) and rotate the key.
-      BS_AUTH: stasrudevitsky_BXES7N:QAyCrSytptzvVxMhoU5s
+      BS_AUTH: ${{ secrets.BROWSERSTACK_USERNAME }}:${{ secrets.BROWSERSTACK_ACCESS_KEY }}
       API: https://api-cloud.browserstack.com/app-automate/xcuitest/v2
       # `inputs.*` are only populated for workflow_dispatch, so a push-triggered
       # run must fall back to the same defaults or it posts an empty device list.
