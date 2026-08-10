@@ -1,0 +1,323 @@
+name: UI Tests (BrowserStack real devices)
+
+# A/B experiment against "UI Tests (fast — cache + shard)", which runs the same
+# XCUITest suites on GitHub-hosted simulators. Deliberately workflow_dispatch
+# only: this gates nothing, it exists to produce comparable wall-clock numbers.
+#
+# Baseline to beat (last green simulator run on this branch):
+#   Plan shards 5s | Build once 3m | shards 5m / 5m / 7m / 8m in parallel
+#   wall clock ~11-12 min
+#
+# Structural differences from the simulator workflow, for anyone reading the
+# numbers:
+#   - artifacts must be built for a REAL device (-sdk iphoneos), not a simulator
+#   - a BrowserStack build carries exactly ONE app + ONE test suite, and this
+#     scheme has two host apps (DemoAppSwift, DemoAppSwiftUI) with a UI-test
+#     target each -> two builds, not one
+#   - the account's parallel-session cap bounds real concurrency regardless of
+#     how many shards we declare: 2 sessions vs 4 simulator shards today, so the
+#     4 declared shards execute in 2 waves. Two devices are listed by default
+#     with deviceSelection "any" so both sessions can run at once on distinct
+#     hardware; "all" would re-run every shard on every device instead.
+
+permissions:
+  contents: read
+
+on:
+  # workflow_dispatch alone is not enough: GitHub only offers a dispatch for
+  # workflows present on the default branch, and this file lives on the
+  # experiment branch. The push trigger is scoped so it cannot fire elsewhere.
+  push:
+    branches:
+      - perf/unit-tests-ci-speedup
+  workflow_dispatch:
+    inputs:
+      devices:
+        description: 'BrowserStack devices (comma-separated, "Device-OSVersion")'
+        default: 'iPhone 16-18,iPhone 14-18'
+        required: false
+      shards:
+        description: 'Number of shards to declare per build'
+        default: '4'
+        required: false
+
+jobs:
+  browserstack:
+    name: BrowserStack XCUITest
+    runs-on: macos-15
+    timeout-minutes: 60
+    env:
+      # POC ONLY — credentials inlined deliberately for a throwaway experiment.
+      # This repo is public: treat this key as burned. Before this workflow
+      # outlives the experiment, move these to repository secrets
+      # (BROWSERSTACK_USERNAME / BROWSERSTACK_ACCESS_KEY) and rotate the key.
+      BS_AUTH: stasrudevitsky_BXES7N:QAyCrSytptzvVxMhoU5s
+      API: https://api-cloud.browserstack.com/app-automate/xcuitest/v2
+      DEVICES: ${{ inputs.devices }}
+      NUM_SHARDS: ${{ inputs.shards }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Verify BrowserStack credentials and parallel capacity
+        run: |
+          curl -s -u "$BS_AUTH" https://api-cloud.browserstack.com/app-automate/plan.json \
+            | tee plan.json | jq '.'
+          jq -e '.parallel_sessions_max_allowed > 0' plan.json > /dev/null \
+            || { echo "::error::BrowserStack credentials rejected or no parallel capacity"; exit 1; }
+
+      - name: Select Xcode
+        run: |
+          for v in 16.4 16.3 16.2 16.1 16.0; do
+            if [ -d "/Applications/Xcode_$v.app" ]; then
+              echo "DEVELOPER_DIR=/Applications/Xcode_$v.app/Contents/Developer" >> $GITHUB_ENV; break
+            fi
+          done
+
+      - name: Configure Xcode
+        run: |
+          if [ -n "${DEVELOPER_DIR:-}" ]; then sudo xcode-select -s "$DEVELOPER_DIR"; fi
+          sudo xcodebuild -license accept || true
+          xcodebuild -version
+
+      # Same generated inputs the simulator workflow creates.
+      - name: Generate envs.swift (CI)
+        run: |
+          cd Example
+          PUBLIC_KEY="${{ secrets.DEMOAPP_API_KEY || 'CI_DUMMY' }}"
+          printf 'import Foundation\n\npublic enum Envs: String {\n    case PUBLIC_KEY = "%s"\n    case PROXY_URL = "https://schema-validator-latest.onrender.com/logs"\n}\n' "$PUBLIC_KEY" > envs.swift
+
+      - name: Create placeholder GoogleService-Info.plist (CI)
+        run: |
+          cd Example
+          printf '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0">\n<dict>\n  <key>BUNDLE_ID</key>\n  <string>com.coralogix.DemoAppSwift</string>\n  <key>PROJECT_ID</key>\n  <string>placeholder-project</string>\n  <key>GOOGLE_APP_ID</key>\n  <string>1:000000000000:ios:0000000000000000000000</string>\n  <key>GCM_SENDER_ID</key>\n  <string>000000000000</string>\n  <key>API_KEY</key>\n  <string>AIzaSyAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA</string>\n  <key>IS_ANALYTICS_ENABLED</key>\n  <false/>\n</dict>\n</plist>\n' > GoogleService-Info.plist
+
+      - name: Patch Xcodeproj for objectVersion 70
+        run: |
+          for CONST in $(find /opt/homebrew /usr/local /Library/Ruby "$HOME/.gem" \
+              -path '*/gems/xcodeproj-*/lib/xcodeproj/constants.rb' 2>/dev/null); do
+            ruby -e '
+              f = ARGV[0]; s = File.read(f)
+              unless s =~ /^\s*70\s*=>/
+                s = s.sub("COMPATIBILITY_VERSION_BY_OBJECT_VERSION = {",
+                          "COMPATIBILITY_VERSION_BY_OBJECT_VERSION = {\n      70 => \x27Xcode 16.0\x27,")
+                File.write(f, s)
+              end' "$CONST" || true
+          done
+
+      - name: Install CocoaPods dependencies
+        run: cd Example && pod install --no-repo-update
+
+      # NOTE: -sdk iphoneos, not iphonesimulator. Unsigned — BrowserStack resigns
+      # uploads. If it rejects these artifacts, this is the step that needs a real
+      # signing identity + provisioning profile.
+      - name: Build for testing (real device)
+        run: |
+          set -o pipefail
+          cd Example
+          START=$(date +%s)
+          xcodebuild build-for-testing \
+            -workspace DemoApp.xcworkspace \
+            -scheme DemoAppSwift \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath ../DerivedData \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO DEVELOPMENT_TEAM="" \
+            IPHONEOS_DEPLOYMENT_TARGET="18.0" \
+            ARCHS=arm64 ONLY_ACTIVE_ARCH=NO \
+            -jobs $(sysctl -n hw.ncpu)
+          echo "BUILD_SECONDS=$(( $(date +%s) - START ))" >> $GITHUB_ENV
+
+      # Shards are derived from source (same rule as ui-tests-fast.yml) so there
+      # is no hand-maintained list to drift. App<->runner pairing comes from the
+      # xctestrun rather than bundle-name guessing.
+      - name: Plan shards and resolve build products
+        run: |
+          python3 - <<'PY'
+          import json, os, plistlib, re
+          from pathlib import Path
+
+          repo = Path(".")
+          roots = {
+              "DemoAppUITests": "Example/DemoAppUITests",
+              "DemoAppSwiftUIUITests": "Example/DemoAppSwiftUIUITests",
+          }
+          suites = {}
+          for target, root in roots.items():
+              for dp, _, files in os.walk(repo / root):
+                  for fn in sorted(files):
+                      if not fn.endswith(".swift"):
+                          continue
+                      cls = None
+                      for line in (Path(dp) / fn).read_text(encoding="utf-8").splitlines():
+                          m = re.search(r"class\s+([A-Za-z0-9_]+)\s*:\s*[^\{]*XCTestCase", line)
+                          if m:
+                              cls = m.group(1)
+                          fm = re.search(r"func\s+(test[A-Za-z0-9_]*)\s*\(", line)
+                          if fm and cls:
+                              suites.setdefault((target, cls), []).append(fm.group(1))
+
+          total = sum(len(v) for v in suites.values())
+          n = min(int(os.environ.get("NUM_SHARDS") or 4), len(suites)) or 1
+          shards = [{"labels": [], "items": [], "n": 0} for _ in range(n)]
+          for (target, cls), methods in sorted(suites.items(), key=lambda kv: -len(kv[1])):
+              s = min(shards, key=lambda s: s["n"])
+              s["labels"].append(cls if target == "DemoAppUITests" else f"{cls}-SwiftUI")
+              # BrowserStack only-testing wants Class/method, no target prefix.
+              s["items"] += [(target, f"{cls}/{m}") for m in methods]
+              s["n"] += len(methods)
+
+          # Group each shard's tests by test target: one BrowserStack build per
+          # target, carrying that target's slice of every shard.
+          per_target = {}
+          for s in shards:
+              if not s["items"]:
+                  continue
+              label = "+".join(s["labels"])
+              for target, tid in s["items"]:
+                  per_target.setdefault(target, {}).setdefault(label, []).append(tid)
+
+          products = Path("DerivedData/Build/Products")
+          xctestrun = sorted(products.glob("*.xctestrun"))
+          if not xctestrun:
+              raise SystemExit(f"no .xctestrun in {products}")
+          data = plistlib.loads(xctestrun[0].read_bytes())
+          targets = [t for c in data.get("TestConfigurations", []) for t in c.get("TestTargets", [])]
+
+          pairs = {}
+          for t in targets:
+              name = t.get("BlueprintName")
+              app = t.get("UITargetAppPath")
+              runner = t.get("TestHostPath")
+              if not (name and app and runner):
+                  continue
+              fix = lambda p: p.replace("__TESTROOT__", str(products))
+              pairs[name] = {"app": fix(app), "runner": fix(runner)}
+
+          plan = {t: {"mapping": [{"name": k, "values": v} for k, v in m.items()],
+                      **pairs.get(t, {})}
+                  for t, m in per_target.items()}
+          Path("bs-plan.json").write_text(json.dumps(plan, indent=1))
+
+          print(f"{total} tests across {len(shards)} shards")
+          for t, p in plan.items():
+              if "app" not in p:
+                  print(f"  !! {t}: no build products found, will be skipped")
+                  continue
+              print(f"  {t}: app={Path(p['app']).name} runner={Path(p['runner']).name}")
+              for m in p["mapping"]:
+                  print(f"      [{m['name']}] {len(m['values'])} tests")
+          PY
+
+      - name: Package, upload, and run on BrowserStack
+        run: |
+          set -euo pipefail
+          RUN_START=$(date +%s)
+          : > build_ids.txt
+
+          for TARGET in $(jq -r 'keys[]' bs-plan.json); do
+            APP=$(jq -r --arg t "$TARGET" '.[$t].app // empty' bs-plan.json)
+            RUNNER=$(jq -r --arg t "$TARGET" '.[$t].runner // empty' bs-plan.json)
+            if [ -z "$APP" ] || [ -z "$RUNNER" ]; then
+              echo "::warning::no build products for $TARGET — skipping"; continue
+            fi
+
+            echo "── $TARGET"
+            WORK=$(mktemp -d)
+            # App: .ipa (Payload/ layout). Test suite: plain zip of the -Runner.app.
+            mkdir -p "$WORK/Payload"
+            cp -R "$APP" "$WORK/Payload/"
+            ( cd "$WORK" && zip -qry app.ipa Payload )
+            ( cd "$(dirname "$RUNNER")" && zip --symlinks -qr "$WORK/tests.zip" "$(basename "$RUNNER")" )
+            ls -lh "$WORK/app.ipa" "$WORK/tests.zip"
+
+            APP_URL=$(curl -s -u "$BS_AUTH" -X POST "$API/app" \
+              -F "file=@$WORK/app.ipa" | jq -r '.app_url // empty')
+            TEST_URL=$(curl -s -u "$BS_AUTH" -X POST "$API/test-suite" \
+              -F "file=@$WORK/tests.zip" | jq -r '.test_suite_url // empty')
+            if [ -z "$APP_URL" ] || [ -z "$TEST_URL" ]; then
+              echo "::error::upload failed for $TARGET (unsigned artifacts may be rejected)"; exit 1
+            fi
+            echo "  app=$APP_URL test-suite=$TEST_URL"
+
+            DEVICES_JSON=$(python3 -c "import json,os;print(json.dumps([d.strip() for d in os.environ['DEVICES'].split(',') if d.strip()]))")
+            PAYLOAD=$(jq -n \
+              --arg app "$APP_URL" --arg test "$TEST_URL" --arg name "$TARGET" \
+              --argjson devices "$DEVICES_JSON" \
+              --argjson mapping "$(jq -c --arg t "$TARGET" '[.[$t].mapping[] | {name, strategy:"only-testing", values}]' bs-plan.json)" \
+              '{app:$app, testSuite:$test, devices:$devices, buildName:$name,
+                deviceLogs:false, networkLogs:false,
+                shards:{numberOfShards:($mapping|length), deviceSelection:"any", mapping:$mapping}}')
+
+            BUILD_ID=$(curl -s -u "$BS_AUTH" -X POST "$API/build" \
+              -H 'Content-Type: application/json' -d "$PAYLOAD" | jq -r '.build_id // empty')
+            if [ -z "$BUILD_ID" ]; then
+              echo "::error::could not start build for $TARGET"; exit 1
+            fi
+            echo "$TARGET $BUILD_ID" >> build_ids.txt
+            echo "  build_id=$BUILD_ID"
+          done
+
+          echo "SUBMIT_SECONDS=$(( $(date +%s) - RUN_START ))" >> $GITHUB_ENV
+
+      - name: Wait for results and summarise
+        run: |
+          set -uo pipefail
+          POLL_START=$(date +%s)
+          while read -r TARGET BUILD_ID; do
+            while :; do
+              curl -s -u "$BS_AUTH" "$API/builds/$BUILD_ID" > "res-$TARGET.json"
+              STATUS=$(jq -r '.status // "unknown"' "res-$TARGET.json")
+              case "$STATUS" in
+                running|queued) sleep 20 ;;
+                *) echo "$TARGET: $STATUS"; break ;;
+              esac
+            done
+          done < build_ids.txt
+          POLL_SECONDS=$(( $(date +%s) - POLL_START ))
+
+          {
+            echo "### BrowserStack real devices vs GitHub simulators"
+            echo
+            echo "| phase | BrowserStack | simulators (last green) |"
+            echo "|---|---|---|"
+            echo "| build | ${BUILD_SECONDS}s (device) | ~180s (simulator) |"
+            echo "| upload + submit | ${SUBMIT_SECONDS}s | n/a |"
+            echo "| test execution | ${POLL_SECONDS}s | ~480s (slowest of 4 parallel shards) |"
+            echo "| **total** | **$(( BUILD_SECONDS + SUBMIT_SECONDS + POLL_SECONDS ))s** | **~715s** |"
+            echo
+            echo "Devices: \`$DEVICES\` · declared shards: \`$NUM_SHARDS\`"
+            echo
+            echo "| target | shard | device | status | duration |"
+            echo "|---|---|---|---|---|"
+            while read -r TARGET BUILD_ID; do
+              jq -r --arg t "$TARGET" '
+                (.devices // [])[] as $d
+                | ($d.sessions // [])[]
+                | "| \($t) | \(.shard_id // .name // "-") | \($d.device // "-") | \(.status // "-") | \(.duration // "-")s |"
+              ' "res-$TARGET.json"
+            done < build_ids.txt
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # Raw payloads: the v2 schema drives the table above, so keep them for
+          # debugging when a field name shifts.
+          for f in res-*.json; do echo "── $f"; jq '.' "$f"; done
+
+          FAILED=0
+          while read -r TARGET BUILD_ID; do
+            S=$(jq -r '.status // "unknown"' "res-$TARGET.json")
+            [ "$S" = "passed" ] || { echo "::warning::$TARGET finished as $S"; FAILED=1; }
+          done < build_ids.txt
+          echo "experiment complete (non-gating); failures=$FAILED"
+
+      - name: Upload raw BrowserStack payloads
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browserstack-results
+          path: |
+            bs-plan.json
+            build_ids.txt
+            res-*.json
+          if-no-files-found: ignore
