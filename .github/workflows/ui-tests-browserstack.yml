@@ -40,8 +40,8 @@ on:
         default: 'iPhone 16-18,iPhone 14-18'
         required: false
       shards:
-        description: 'Shards for the UIKit target (2 run at once; 5 may queue)'
-        default: '6'
+        description: 'Shards for the largest target (blank = fill the paid capacity)'
+        default: ''
         required: false
 
 jobs:
@@ -55,7 +55,11 @@ jobs:
       # `inputs.*` are only populated for workflow_dispatch, so a push-triggered
       # run must fall back to the same defaults or it posts an empty device list.
       DEVICES: ${{ inputs.devices || 'iPhone 16-18,iPhone 14-18' }}
-      NUM_SHARDS: ${{ inputs.shards || '6' }}
+      # Blank on purpose so the plan step sizes shards to the paid capacity.
+      # BrowserStack discards sessions past running+queued rather than waiting,
+      # which would report unrun tests as a pass — so this must not be a
+      # hardcoded number that the suite can silently outgrow.
+      NUM_SHARDS: ${{ inputs.shards }}
 
     steps:
       - name: Checkout code
@@ -68,6 +72,7 @@ jobs:
           jq -e '.parallel_sessions_max_allowed > 0' plan.json > /dev/null \
             || { echo "::error::BrowserStack credentials rejected or no parallel capacity"; exit 1; }
           echo "PARALLEL=$(jq -r '.parallel_sessions_max_allowed' plan.json)" >> $GITHUB_ENV
+          echo "QUEUE_MAX=$(jq -r '.queued_sessions_max_allowed' plan.json)" >> $GITHUB_ENV
 
       - name: Select Xcode
         run: |
@@ -132,7 +137,10 @@ jobs:
         with:
           path: DerivedData/Build
           key: bs-dd-${{ runner.os }}-${{ hashFiles('Example/**/*.swift', 'Example/Podfile', 'Coralogix/Sources/**/*.swift', 'CoralogixInternal/Sources/**/*.swift', 'SessionReplay/Sources/**/*.swift') }}
-          restore-keys: bs-dd-${{ runner.os }}-
+          # Deliberately no restore-keys. A partial restore hands Xcode another
+          # runner's DerivedData and an incremental build over absolute paths and
+          # stale module caches — a hit that doesn't match the sources would test
+          # the wrong binary. Exact match or clean build, nothing in between.
 
       - name: Install CocoaPods dependencies
         run: cd Example && pod install --no-repo-update
@@ -207,7 +215,19 @@ jobs:
                               tid = f"{cls}/{fm.group(1)}"
                               tests.setdefault(target, []).append((tid, MEASURED.get(tid, DEFAULT)))
 
-          want = int(os.environ.get("NUM_SHARDS") or 6)
+          # Saturate the paid capacity instead of hardcoding a count: every slot
+          # BrowserStack will hold for us (running + queued) should carry a shard.
+          # One session is spent on the second test target's build, so the UIKit
+          # target gets the rest. A hardcoded number silently starts rejecting
+          # shards the moment the suite grows past the queue limit.
+          par = int(os.environ.get("PARALLEL") or 2)
+          qmax = int(os.environ.get("QUEUE_MAX") or 5)
+          n_targets = len([t for t in tests if t])
+          want = int(os.environ["NUM_SHARDS"]) if os.environ.get("NUM_SHARDS") \
+              else max(1, par + qmax - max(0, n_targets - 1))
+          print(f"capacity: {par} running + {qmax} queued = {par + qmax} slots; "
+                f"{n_targets} targets -> {want} shards for the largest target")
+
           products = Path("DerivedData/Build/Products")
           runs = sorted(products.glob("*.xctestrun"))
           if not runs:
@@ -240,7 +260,6 @@ jobs:
 
           Path("bs-plan.json").write_text(json.dumps(plan, indent=1))
 
-          par = int(os.environ.get("PARALLEL") or 2)
           total = sum(m["cost"] for p in plan.values() for m in p["mapping"])
           sessions = sum(len(p["mapping"]) for p in plan.values())
           print(f"{sum(len(v) for v in tests.values())} tests -> {sessions} sessions, "
