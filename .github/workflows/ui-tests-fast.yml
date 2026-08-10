@@ -14,7 +14,8 @@ on:
   pull_request:
     branches: [ main, master ]
   push:
-    branches: [ main, master ]
+    # test/prove-ui-tests-catch-breakage is the sabotage branch: THROWAWAY.
+    branches: [ main, master, test/prove-ui-tests-catch-breakage ]
 
 permissions:
   contents: read
@@ -106,11 +107,17 @@ jobs:
           sudo xcodebuild -runFirstLaunch || true
           xcodebuild -version
 
+      # ⚠️ SABOTAGE — THROWAWAY BRANCH ONLY, NEVER MERGE.
+      # PROXY_URL is pointed at a non-resolving host so the SDK cannot ship any
+      # span to the schema validator. If the UI tests genuinely assert on backend
+      # data, every test that checks events "in backend" must now FAIL. If the run
+      # goes green, those assertions were never executing and the suite is a false
+      # positive. .example is reserved by RFC 2606, so nothing real is contacted.
       - name: Generate envs.swift (CI)
         run: |
           cd Example
           PUBLIC_KEY="${{ secrets.DEMOAPP_API_KEY || 'CI_DUMMY' }}"
-          printf 'import Foundation\n\npublic enum Envs: String {\n    case PUBLIC_KEY = "%s"\n    case PROXY_URL = "https://schema-validator-latest.onrender.com/logs"\n}\n' "$PUBLIC_KEY" > envs.swift
+          printf 'import Foundation\n\npublic enum Envs: String {\n    case PUBLIC_KEY = "%s"\n    case PROXY_URL = "https://schema-validator-sabotage.invalid.example/logs"\n}\n' "$PUBLIC_KEY" > envs.swift
 
       - name: Create placeholder GoogleService-Info.plist (CI)
         run: |
@@ -289,6 +296,18 @@ jobs:
         with:
           name: count-${{ matrix.name }}
           path: count-${{ matrix.name }}.txt
+          retention-days: 1
+
+      # xcpretty swallows the tests' own print() output, which is where the
+      # backend-verification decisions are reported ("Read N log entries" vs
+      # "Local mode — skipping"). Without the raw log there is no way to tell a
+      # real pass from a vacuous one.
+      - name: Upload raw shard log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: shardlog-${{ matrix.name }}
+          path: shard.log
           retention-days: 1
 
   # ---- Coverage guard: executed across shards MUST equal tests that exist ----
