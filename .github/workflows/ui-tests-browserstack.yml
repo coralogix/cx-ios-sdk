@@ -53,8 +53,10 @@ jobs:
       # (BROWSERSTACK_USERNAME / BROWSERSTACK_ACCESS_KEY) and rotate the key.
       BS_AUTH: stasrudevitsky_BXES7N:QAyCrSytptzvVxMhoU5s
       API: https://api-cloud.browserstack.com/app-automate/xcuitest/v2
-      DEVICES: ${{ inputs.devices }}
-      NUM_SHARDS: ${{ inputs.shards }}
+      # `inputs.*` are only populated for workflow_dispatch, so a push-triggered
+      # run must fall back to the same defaults or it posts an empty device list.
+      DEVICES: ${{ inputs.devices || 'iPhone 16-18,iPhone 14-18' }}
+      NUM_SHARDS: ${{ inputs.shards || '4' }}
 
     steps:
       - name: Checkout code
@@ -250,10 +252,15 @@ jobs:
                 deviceLogs:false, networkLogs:false,
                 shards:{numberOfShards:($mapping|length), deviceSelection:"any", mapping:$mapping}}')
 
-            BUILD_ID=$(curl -s -u "$BS_AUTH" -X POST "$API/build" \
-              -H 'Content-Type: application/json' -d "$PAYLOAD" | jq -r '.build_id // empty')
+            echo "  payload: $PAYLOAD"
+            RESP=$(curl -s -u "$BS_AUTH" -X POST "$API/build" \
+              -H 'Content-Type: application/json' -d "$PAYLOAD")
+            BUILD_ID=$(echo "$RESP" | jq -r '.build_id // empty')
             if [ -z "$BUILD_ID" ]; then
-              echo "::error::could not start build for $TARGET"; exit 1
+              # Echo the body: the API reports the actual rejection reason here,
+              # and swallowing it turns every failure into a guessing game.
+              echo "::error::could not start build for $TARGET — response: $RESP"
+              exit 1
             fi
             echo "$TARGET $BUILD_ID" >> build_ids.txt
             echo "  build_id=$BUILD_ID"
