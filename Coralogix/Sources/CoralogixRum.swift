@@ -470,8 +470,13 @@ public class CoralogixRum {
     ///
     /// Call this from the hybrid bridge when the hybrid side completes an HTTP request.
     /// The dictionary should contain: `url`, `host`, `method`, `status_code`, `fragments`,
-    /// `schema`, `http_response_body_size`; optional `custom_span_id`, `custom_trace_id`,
-    /// `duration`.
+    /// `schema`, `http_response_body_size`; optional `status_text`, `custom_span_id`,
+    /// `custom_trace_id`, `duration`.
+    ///
+    /// `status_text` is the HTTP reason phrase (e.g. `"OK"`, `"Not Found"`) and is emitted as
+    /// `network_request_context.status_text`. An `error_message` entry, if present, is
+    /// accepted but not exported: the cross-platform wire schema keeps failure descriptions
+    /// in `error_context` only, and no platform emits one in `network_request_context`.
     ///
     /// `duration` is the measured request duration in **milliseconds** (numeric value or
     /// numeric string, 0 up to 24 hours). When present, the exported event's

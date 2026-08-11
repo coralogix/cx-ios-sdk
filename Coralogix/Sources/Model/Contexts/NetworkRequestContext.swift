@@ -82,7 +82,16 @@ struct NetworkRequestContext {
             self.responseContentLength = Int(httpResponseBodySize) ?? 0
         }
         
-        self.statusText = otel.getStatusText()
+        // Hybrid platforms report the response's reason phrase through the bridge as a span
+        // attribute; the OTel span status text is not usable on iOS (getStatusText is stubbed
+        // around an upstream bug), so the attribute wins. Native spans never set the attribute
+        // and keep their existing value.
+        if let hybridStatusText = otel.getAttribute(forKey: Keys.statusText.rawValue) as? String,
+           !hybridStatusText.isEmpty {
+            self.statusText = hybridStatusText
+        } else {
+            self.statusText = otel.getStatusText()
+        }
 
         // Network capture: allowlisted headers (CX-33233) stored as JSON on the span
         if let raw = otel.getAttribute(forKey: Keys.requestHeaders.rawValue) as? String,
