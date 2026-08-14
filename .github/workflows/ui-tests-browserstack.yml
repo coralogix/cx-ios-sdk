@@ -195,6 +195,14 @@ jobs:
           # Measured on run 31377282463 (seconds of pure execution, real device).
           # Unknown/new tests fall back to the mean so a new test never silently
           # lands in an under-weighted shard.
+          #
+          # STALE, and knowingly so: these were recorded while the suite still
+          # sniffed CI env vars, which never reach the XCUITest process on a real
+          # device, so every test ran with the SHORT local delays. Now that the
+          # conservative delays apply everywhere, each test costs roughly 10-20s
+          # more than the figure below. The shift is close to uniform, so the
+          # relative weights the packer needs still hold — but re-measure from a
+          # green run before trusting the absolute ideal-wall estimate.
           MEASURED = {
               "SessionReplayLeakUITests/test_navigationTransition": 125.2,
               "NetworkInstrumentationUITests/testAllNetworkInstrumentationWithSchemaValidation": 114.2,

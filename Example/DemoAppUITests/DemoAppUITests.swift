@@ -12,22 +12,23 @@ final class DemoAppUITests: XCTestCase {
     
     var app: XCUIApplication!
     
-    // Detect CI environment (GitHub Actions, Jenkins, etc.)
-    private var isCI: Bool {
-        ProcessInfo.processInfo.environment["CI"] == "true" ||
-        ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] == "true" ||
-        ProcessInfo.processInfo.environment["CONTINUOUS_INTEGRATION"] == "true"
+    // Any run is automated unless a developer explicitly opts out. Sniffing CI
+    // env vars cannot work here: the XCUITest process runs ON the device, so a
+    // real-device farm (BrowserStack) never sets CI/GITHUB_ACTIONS, and the old
+    // sniff picked the SHORT timeouts exactly where the network is slowest.
+    // Set LOCAL_DEV=true in the test scheme for faster local feedback.
+    private var isAutomatedRun: Bool {
+        ProcessInfo.processInfo.environment["LOCAL_DEV"] != "true"
     }
-    
-    // Use longer timeouts in CI due to slower network/API calls
+
     private var elementTimeout: TimeInterval {
-        isCI ? 15.0 : 10.0  // 15s in CI (reduced from 30s), 10s locally
+        isAutomatedRun ? 15.0 : 10.0
     }
     private var shortDelay: TimeInterval {
-        isCI ? 1.5 : 1.0  // 1.5s in CI, 1s locally
+        isAutomatedRun ? 1.5 : 1.0
     }
     private var networkDelay: TimeInterval {
-        isCI ? 8.0 : 3.0  // 8s in CI for network operations, 3s locally
+        isAutomatedRun ? 8.0 : 3.0
     }
     
     // Helper to log with timestamp
@@ -67,7 +68,7 @@ final class DemoAppUITests: XCTestCase {
     override func setUpWithError() throws {
         continueAfterFailure = false
         log("🚀 Starting test setup")
-        log("   CI Environment: \(isCI)")
+        log("   Automated run: \(isAutomatedRun)")
         log("   Element timeout: \(elementTimeout)s")
         log("   Network delay: \(networkDelay)s")
         
@@ -194,7 +195,7 @@ final class DemoAppUITests: XCTestCase {
         Thread.sleep(forTimeInterval: networkDelay)
         validateSchemaButton.tap()
         
-        let validationTimeout: TimeInterval = isCI ? 60.0 : 30.0  // Allow up to 60 seconds in CI, 30 locally
+        let validationTimeout: TimeInterval = isAutomatedRun ? 60.0 : 30.0
         let startTime = Date()
         var validationComplete = false
         

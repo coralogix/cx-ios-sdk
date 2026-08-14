@@ -44,28 +44,37 @@ final class UserInteractionUITests: XCTestCase {
 
     private var app: XCUIApplication!
 
-    // MARK: - CI detection
+    // MARK: - Run mode
 
-    /// Captured once per test in `setUpWithError` to avoid repeated environment dictionary lookups.
-    private var isCI = false
+    /// Any run is treated as automated unless a developer explicitly opts out,
+    /// because sniffing CI env vars cannot work here: the XCUITest process runs
+    /// ON the device, so on a real-device farm (BrowserStack) `CI` and
+    /// `GITHUB_ACTIONS` are never set. The old sniff therefore selected the
+    /// SHORT timeouts and the lenient missing-file path exactly where the
+    /// network is slowest — flaky runs on device, and a silent pass whenever the
+    /// validation file was absent.
+    ///
+    /// Set `LOCAL_DEV=true` in the test scheme for faster feedback while
+    /// developing; every other environment gets the conservative values.
+    private var isAutomatedRun = true
 
-    private var elementTimeout: TimeInterval  { isCI ? 15.0 : 10.0 }
-    private var shortDelay: TimeInterval      { isCI ?  2.0 :  1.0 }
-    private var sdkFlushDelay: TimeInterval   { isCI ? 10.0 :  5.0 }
+    private var elementTimeout: TimeInterval  { isAutomatedRun ? 15.0 : 10.0 }
+    private var shortDelay: TimeInterval      { isAutomatedRun ?  2.0 :  1.0 }
+    private var sdkFlushDelay: TimeInterval   { isAutomatedRun ? 10.0 :  5.0 }
     /// Wait after tapping "Validate Schema" for the backend to fetch and return logs.
-    private var networkDelay: TimeInterval    { isCI ?  8.0 :  3.0 }
+    private var networkDelay: TimeInterval    { isAutomatedRun ?  8.0 :  3.0 }
 
     // MARK: - Setup / Teardown
 
     override func setUpWithError() throws {
         try super.setUpWithError()
         let env = ProcessInfo.processInfo.environment
-        isCI = env["CI"] == "true" || env["GITHUB_ACTIONS"] == "true" || env["CONTINUOUS_INTEGRATION"] == "true"
+        isAutomatedRun = env["LOCAL_DEV"] != "true"
         continueAfterFailure = false
         app = XCUIApplication()
         app.launchArguments = ["--uitesting"]
         clearValidationData()
-        print("🟪 🚀 Launching app (CI=\(isCI))")
+        print("🟪 🚀 Launching app (automated=\(isAutomatedRun))")
         app.launch()
     }
 
@@ -75,7 +84,7 @@ final class UserInteractionUITests: XCTestCase {
         // test's setUp calls app.launch(), which internally terminates any
         // running instance — without this gap, launch() can fail with
         // "Failed to terminate <bundle-id>" on slow CI machines.
-        Thread.sleep(forTimeInterval: isCI ? 3.0 : 1.0)
+        Thread.sleep(forTimeInterval: isAutomatedRun ? 3.0 : 1.0)
         app = nil
         try super.tearDownWithError()
     }
@@ -588,7 +597,7 @@ final class UserInteractionUITests: XCTestCase {
     }
 
     private func validateSchemaWithRetry(file: StaticString = #file, line: UInt = #line) {
-        let maxAttempts = isCI ? 3 : 2
+        let maxAttempts = isAutomatedRun ? 3 : 2
         for attempt in 1...maxAttempts {
             print("🟪 🔁 Schema validation attempt \(attempt)/\(maxAttempts)")
             triggerValidation()
@@ -667,10 +676,10 @@ final class UserInteractionUITests: XCTestCase {
     }
 
     private func handleMissingValidationData(file: StaticString = #file, line: UInt = #line) {
-        if isCI {
-            XCTFail("Validation data file required in CI mode", file: file, line: line)
+        if isAutomatedRun {
+            XCTFail("Validation data file required for an automated run", file: file, line: line)
         } else {
-            print("🟪 ℹ️  Local mode — skipping temp-file verification (UI-only pass)")
+            print("🟪 ℹ️  LOCAL_DEV — skipping temp-file verification (UI-only pass)")
         }
     }
 
