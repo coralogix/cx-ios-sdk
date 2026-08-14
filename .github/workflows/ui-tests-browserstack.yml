@@ -138,6 +138,18 @@ jobs:
           # stale module caches — a hit that doesn't match the sources would test
           # the wrong binary. Exact match or clean build, nothing in between.
 
+      # The bs:// URLs of the artifacts we uploaded from exactly these sources.
+      # Same key as the build products above on purpose: if that cache is still
+      # valid for this tree, the binaries we built from it are byte-identical to
+      # the ones already sitting on BrowserStack, so re-uploading them is pure
+      # wall clock. Reuse is still gated on the API confirming each URL is live
+      # (see the upload step) — a hit here is a hint, not a promise.
+      - name: Cache BrowserStack upload URLs
+        uses: actions/cache@v4
+        with:
+          path: bs-url-cache
+          key: bs-url-${{ runner.os }}-${{ hashFiles('Example/**/*.swift', 'Example/Podfile', 'Coralogix/Sources/**/*.swift', 'CoralogixInternal/Sources/**/*.swift', 'SessionReplay/Sources/**/*.swift') }}
+
       - name: Install CocoaPods dependencies
         run: cd Example && pod install --no-repo-update
 
@@ -273,6 +285,101 @@ jobs:
           set -euo pipefail
           RUN_START=$(date +%s)
           : > build_ids.txt
+          WORK=$(mktemp -d)
+          URLDIR=bs-url-cache
+          mkdir -p "$URLDIR"
+
+          # One row per DISTINCT artifact path rather than per target. The two
+          # UI-test targets drive different host apps (DemoAppSwift.app vs
+          # DemoAppSwiftUI.app) and each ships its own -Runner.app, so all four
+          # artifacts really are distinct here — but keying the work by path
+          # means a target pair that ever does share a bundle pays once, and it
+          # is what lets packaging and uploading fan out below.
+          python3 - <<'PY' > artifacts.txt
+          import json, os
+          plan = json.load(open("bs-plan.json"))
+          seen = set()
+          for target, p in plan.items():
+              for kind in ("app", "runner"):
+                  path = p.get(kind)
+                  if not path or path in seen:
+                      continue
+                  seen.add(path)
+                  # Slot name is derived from the basename so it stays stable
+                  # across runs — it is also the cache filename.
+                  print(f"{kind}-{os.path.basename(path)} {kind} "
+                        f"{'ipa' if kind == 'app' else 'zip'} {path}")
+          PY
+          echo "── artifacts"; cat artifacts.txt
+
+          # BrowserStack drops uploads after 30 days, and an Actions cache entry
+          # can outlive that, so a cached bs:// URL is only reused if the API
+          # still lists it. Anything unexpected here (404, schema drift, network)
+          # leaves LIVE empty and every artifact simply uploads as before.
+          curl -s -u "$BS_AUTH" "$API/apps" > known-apps.json &
+          curl -s -u "$BS_AUTH" "$API/test-suites" > known-suites.json &
+          wait
+          LIVE=$( { jq -r '.. | .app_url? // empty' known-apps.json
+                    jq -r '.. | .test_suite_url? // empty' known-suites.json
+                  } 2>/dev/null | sort -u || true )
+
+          : > todo.txt
+          REUSED=0
+          while read -r SLOT KIND EXT SRC; do
+            CACHED=$(cat "$URLDIR/$SLOT.url" 2>/dev/null || true)
+            if [ -n "$CACHED" ] && printf '%s\n' "$LIVE" | grep -qxF "$CACHED"; then
+              echo "  reuse    $SLOT -> $CACHED"
+              REUSED=$(( REUSED + 1 ))
+            else
+              # Stale or absent: drop it so a failed upload can never leave a
+              # previous run's URL behind for the submit loop to pick up.
+              rm -f "$URLDIR/$SLOT.url"
+              echo "$SLOT $KIND $EXT $SRC" >> todo.txt
+              echo "  upload   $SLOT"
+            fi
+          done < artifacts.txt
+          FRESH=$(wc -l < todo.txt | tr -d ' ')
+
+          # Package everything still outstanding at once. These are independent
+          # zips of independent bundles, so the only reason they were serial was
+          # that the old loop was keyed by target.
+          PIDS=""
+          while read -r SLOT KIND EXT SRC; do
+            (
+              if [ "$KIND" = app ]; then
+                # App: .ipa (Payload/ layout). Test suite: plain zip of -Runner.app.
+                mkdir -p "$WORK/$SLOT/Payload"
+                cp -R "$SRC" "$WORK/$SLOT/Payload/"
+                ( cd "$WORK/$SLOT" && zip -qry "$WORK/$SLOT.$EXT" Payload )
+              else
+                ( cd "$(dirname "$SRC")" && zip --symlinks -qr "$WORK/$SLOT.$EXT" "$(basename "$SRC")" )
+              fi
+            ) &
+            PIDS="$PIDS $!"
+          done < todo.txt
+          # `wait` with no arguments always reports success, so each job is
+          # waited on by pid — otherwise a failed zip would upload nothing.
+          for p in $PIDS; do wait "$p" || { echo "::error::packaging failed"; exit 1; }; done
+
+          PIDS=""
+          while read -r SLOT KIND EXT SRC; do
+            (
+              if [ "$KIND" = app ]; then EP=app; FIELD=app_url; else EP=test-suite; FIELD=test_suite_url; fi
+              RESP=$(curl -s -u "$BS_AUTH" -X POST "$API/$EP" -F "file=@$WORK/$SLOT.$EXT")
+              URL=$(printf '%s' "$RESP" | jq -r --arg f "$FIELD" '.[$f] // empty')
+              if [ -z "$URL" ]; then
+                echo "::error::upload failed for $SLOT — response: $RESP"; exit 1
+              fi
+              printf '%s' "$URL" > "$URLDIR/$SLOT.url"
+            ) &
+            PIDS="$PIDS $!"
+          done < todo.txt
+          for p in $PIDS; do wait "$p" || exit 1; done
+
+          echo "UPLOADS_FRESH=$FRESH" >> $GITHUB_ENV
+          echo "UPLOADS_REUSED=$REUSED" >> $GITHUB_ENV
+
+          DEVICES_JSON=$(python3 -c "import json,os;print(json.dumps([d.strip() for d in os.environ['DEVICES'].split(',') if d.strip()]))")
 
           # Smallest target first: submitting the 1-test SwiftUI build after the
           # 10-test one left it queued behind every UIKit session last run, so a
@@ -285,22 +392,12 @@ jobs:
             fi
 
             echo "── $TARGET"
-            WORK=$(mktemp -d)
-            # App: .ipa (Payload/ layout). Test suite: plain zip of the -Runner.app.
-            mkdir -p "$WORK/Payload"
-            cp -R "$APP" "$WORK/Payload/"
-            ( cd "$WORK" && zip -qry app.ipa Payload )
-            ( cd "$(dirname "$RUNNER")" && zip --symlinks -qr "$WORK/tests.zip" "$(basename "$RUNNER")" )
-
-            APP_URL=$(curl -s -u "$BS_AUTH" -X POST "$API/app" \
-              -F "file=@$WORK/app.ipa" | jq -r '.app_url // empty')
-            TEST_URL=$(curl -s -u "$BS_AUTH" -X POST "$API/test-suite" \
-              -F "file=@$WORK/tests.zip" | jq -r '.test_suite_url // empty')
+            APP_URL=$(cat "$URLDIR/app-$(basename "$APP").url" 2>/dev/null || true)
+            TEST_URL=$(cat "$URLDIR/runner-$(basename "$RUNNER").url" 2>/dev/null || true)
             if [ -z "$APP_URL" ] || [ -z "$TEST_URL" ]; then
-              echo "::error::upload failed for $TARGET"; exit 1
+              echo "::error::no upload URL for $TARGET (app='$APP_URL' test='$TEST_URL')"; exit 1
             fi
 
-            DEVICES_JSON=$(python3 -c "import json,os;print(json.dumps([d.strip() for d in os.environ['DEVICES'].split(',') if d.strip()]))")
             PAYLOAD=$(jq -n \
               --arg app "$APP_URL" --arg test "$TEST_URL" --arg name "$TARGET" \
               --argjson devices "$DEVICES_JSON" \
@@ -328,6 +425,10 @@ jobs:
         run: |
           set -uo pipefail
           POLL_START=$(date +%s)
+          # A session cannot report a terminal status before BrowserStack has
+          # allocated a device and installed the .ipa (~45s measured), so every
+          # poll inside that window is a request that can only answer "running".
+          sleep 45
           while read -r TARGET BUILD_ID; do
             while :; do
               curl -s -u "$BS_AUTH" "$API/builds/$BUILD_ID" > "res-$TARGET.json"
@@ -352,6 +453,8 @@ jobs:
             echo "| **total** | **${TOTAL}s** | **~720s** |"
             echo
             echo "Devices: \`$DEVICES\` · parallel sessions: \`${PARALLEL}\` · shards: \`$NUM_SHARDS\`"
+            echo
+            echo "Uploads: ${UPLOADS_FRESH} fresh, ${UPLOADS_REUSED} reused from cache."
             echo
             echo "#### Per-device load (imbalance is the thing to watch)"
             echo
@@ -417,6 +520,7 @@ jobs:
           name: browserstack-results
           path: |
             bs-plan.json
+            artifacts.txt
             build_ids.txt
             res-*.json
           if-no-files-found: ignore
