@@ -144,8 +144,14 @@ jobs:
       # the ones already sitting on BrowserStack, so re-uploading them is pure
       # wall clock. Reuse is still gated on the API confirming each URL is live
       # (see the upload step) — a hit here is a hint, not a promise.
-      - name: Cache BrowserStack upload URLs
-        uses: actions/cache@v4
+      # Restore/save are split rather than using actions/cache, whose post step
+      # only saves when the JOB succeeds. Whether the tests went red says nothing
+      # about the validity of the binaries we uploaded, and a red branch is
+      # exactly when re-runs pile up — the built-in behaviour would re-upload on
+      # every run until the suite is green, which is when it is needed least.
+      - name: Restore BrowserStack upload URLs
+        id: bs-url-cache
+        uses: actions/cache/restore@v4
         with:
           path: bs-url-cache
           key: bs-url-${{ runner.os }}-${{ hashFiles('Example/**/*.swift', 'Example/Podfile', 'Coralogix/Sources/**/*.swift', 'CoralogixInternal/Sources/**/*.swift', 'SessionReplay/Sources/**/*.swift') }}
@@ -281,6 +287,7 @@ jobs:
           PY
 
       - name: Package, upload, and run on BrowserStack
+        id: package
         run: |
           set -euo pipefail
           RUN_START=$(date +%s)
@@ -376,6 +383,10 @@ jobs:
           done < todo.txt
           for p in $PIDS; do wait "$p" || exit 1; done
 
+          # Timed separately from the build submissions: this is the number the
+          # dedupe/parallel/cache work is meant to move, and folding it into
+          # SUBMIT_SECONDS would hide it behind BrowserStack's queueing.
+          echo "UPLOAD_SECONDS=$(( $(date +%s) - RUN_START ))" >> $GITHUB_ENV
           echo "UPLOADS_FRESH=$FRESH" >> $GITHUB_ENV
           echo "UPLOADS_REUSED=$REUSED" >> $GITHUB_ENV
 
@@ -421,6 +432,17 @@ jobs:
 
           echo "SUBMIT_SECONDS=$(( $(date +%s) - RUN_START ))" >> $GITHUB_ENV
 
+      # Runs before the results are known, so the URLs are kept regardless of how
+      # the suite finishes. A partial save is still correct: a .url file is only
+      # written after that artifact's upload succeeded, and a URL that fails the
+      # liveness check next run is re-uploaded rather than trusted.
+      - name: Save BrowserStack upload URLs
+        if: ${{ !cancelled() && steps.package.outcome != 'skipped' && steps.bs-url-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v4
+        with:
+          path: bs-url-cache
+          key: bs-url-${{ runner.os }}-${{ hashFiles('Example/**/*.swift', 'Example/Podfile', 'Coralogix/Sources/**/*.swift', 'CoralogixInternal/Sources/**/*.swift', 'SessionReplay/Sources/**/*.swift') }}
+
       - name: Wait for results and summarise
         run: |
           set -uo pipefail
@@ -448,13 +470,12 @@ jobs:
             echo "| phase | BrowserStack | simulators (last green) |"
             echo "|---|---|---|"
             echo "| build | ${BUILD_SECONDS}s (device, cached) | ~180s (simulator, cached) |"
-            echo "| upload + submit | ${SUBMIT_SECONDS}s | n/a |"
+            echo "| package + upload | ${UPLOAD_SECONDS}s (${UPLOADS_FRESH} fresh, ${UPLOADS_REUSED} reused) | n/a |"
+            echo "| submit | $(( SUBMIT_SECONDS - UPLOAD_SECONDS ))s | n/a |"
             echo "| test execution | ${POLL_SECONDS}s | ~540s (slowest of 4 shards) |"
             echo "| **total** | **${TOTAL}s** | **~720s** |"
             echo
             echo "Devices: \`$DEVICES\` · parallel sessions: \`${PARALLEL}\` · shards: \`$NUM_SHARDS\`"
-            echo
-            echo "Uploads: ${UPLOADS_FRESH} fresh, ${UPLOADS_REUSED} reused from cache."
             echo
             echo "#### Per-device load (imbalance is the thing to watch)"
             echo
