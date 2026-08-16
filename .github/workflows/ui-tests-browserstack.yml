@@ -375,13 +375,42 @@ jobs:
               RESP=$(curl -s -u "$BS_AUTH" -X POST "$API/$EP" -F "file=@$WORK/$SLOT.$EXT")
               URL=$(printf '%s' "$RESP" | jq -r --arg f "$FIELD" '.[$f] // empty')
               if [ -z "$URL" ]; then
-                echo "::error::upload failed for $SLOT — response: $RESP"; exit 1
+                # Severity is decided after the wait below, once we know whether
+                # this is an exhausted plan (skip) or a real fault (fail) — an
+                # ::error:: here would paint a green skip red.
+                printf '%s' "$RESP" > "$WORK/$SLOT.err"
+                echo "  upload rejected: $SLOT — $RESP"; exit 1
               fi
               printf '%s' "$URL" > "$URLDIR/$SLOT.url"
             ) &
             PIDS="$PIDS $!"
           done < todo.txt
-          for p in $PIDS; do wait "$p" || exit 1; done
+
+          UPLOAD_FAILED=0
+          for p in $PIDS; do wait "$p" || UPLOAD_FAILED=1; done
+          if [ "$UPLOAD_FAILED" = 1 ]; then
+            # An exhausted plan rejects every upload with this marker, and no
+            # amount of retrying or rebuilding changes it. This workflow gates
+            # nothing, so an account-level outage must not read as a code
+            # failure — skip loudly and stay green. Any OTHER upload failure
+            # still fails the job.
+            if grep -qls 'BROWSERSTACK_TESTING_TIME_LIMIT_EXHAUSTED' "$WORK"/*.err 2>/dev/null; then
+              echo "::warning::BrowserStack App Automate time exhausted — skipping this run"
+              {
+                echo "### ⏭️ Skipped — BrowserStack App Automate time exhausted"
+                echo
+                echo "Every upload was rejected with \`BROWSERSTACK_TESTING_TIME_LIMIT_EXHAUSTED\`,"
+                echo "so no build was submitted. **This is an account/plan limit, not a code failure** —"
+                echo "renew App Automate time to re-enable this workflow."
+              } >> "$GITHUB_STEP_SUMMARY"
+              echo "BS_QUOTA_EXHAUSTED=1" >> $GITHUB_ENV
+              exit 0
+            fi
+            for e in "$WORK"/*.err; do
+              [ -f "$e" ] && echo "::error::upload failed for $(basename "$e" .err) — response: $(cat "$e")"
+            done
+            exit 1
+          fi
 
           # Timed separately from the build submissions: this is the number the
           # dedupe/parallel/cache work is meant to move, and folding it into
@@ -443,13 +472,14 @@ jobs:
       # could never be found again. Single-step actions/cache avoids this by
       # resolving its key once; splitting restore/save is what exposed it.
       - name: Save BrowserStack upload URLs
-        if: ${{ !cancelled() && steps.package.outcome != 'skipped' && steps.bs-url-cache.outputs.cache-hit != 'true' }}
+        if: ${{ !cancelled() && steps.package.outcome != 'skipped' && steps.bs-url-cache.outputs.cache-hit != 'true' && env.BS_QUOTA_EXHAUSTED != '1' }}
         uses: actions/cache/save@v4
         with:
           path: bs-url-cache
           key: ${{ steps.bs-url-cache.outputs.cache-primary-key }}
 
       - name: Wait for results and summarise
+        if: ${{ env.BS_QUOTA_EXHAUSTED != '1' }}
         run: |
           set -uo pipefail
           POLL_START=$(date +%s)
