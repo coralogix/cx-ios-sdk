@@ -436,12 +436,18 @@ jobs:
       # the suite finishes. A partial save is still correct: a .url file is only
       # written after that artifact's upload succeeded, and a URL that fails the
       # liveness check next run is re-uploaded rather than trusted.
+      # Reuses the key the restore step actually resolved instead of evaluating
+      # hashFiles again. `pod install` writes ~43 Swift files into Example/Pods
+      # (untracked) between the two steps, and Example/**/*.swift matches them —
+      # so re-evaluating here produced a different hash every time and the entry
+      # could never be found again. Single-step actions/cache avoids this by
+      # resolving its key once; splitting restore/save is what exposed it.
       - name: Save BrowserStack upload URLs
         if: ${{ !cancelled() && steps.package.outcome != 'skipped' && steps.bs-url-cache.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@v4
         with:
           path: bs-url-cache
-          key: bs-url-${{ runner.os }}-${{ hashFiles('Example/**/*.swift', 'Example/Podfile', 'Coralogix/Sources/**/*.swift', 'CoralogixInternal/Sources/**/*.swift', 'SessionReplay/Sources/**/*.swift') }}
+          key: ${{ steps.bs-url-cache.outputs.cache-primary-key }}
 
       - name: Wait for results and summarise
         run: |
