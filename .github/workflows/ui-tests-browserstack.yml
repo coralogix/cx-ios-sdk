@@ -43,6 +43,10 @@ on:
         description: 'Shards for the largest target (blank = fill the paid capacity)'
         default: ''
         required: false
+      parallel:
+        description: 'Cap on concurrent sessions (plan.json over-reports; raise when the plan really grows)'
+        default: '2'
+        required: false
 
 jobs:
   browserstack:
@@ -60,6 +64,11 @@ jobs:
       # which would report unrun tests as a pass — so this must not be a
       # hardcoded number that the suite can silently outgrow.
       NUM_SHARDS: ${{ inputs.shards }}
+      # plan.json reported parallel_sessions_max_allowed=5 on 2026-08-16 while the
+      # account actually grants 2. Trusting it sized 9 shards for 7 real slots, and
+      # BrowserStack DISCARDS sessions past running+queued instead of waiting — so
+      # the surplus never runs and reports as passed. Cap to what we truly have.
+      MAX_PARALLEL: ${{ inputs.parallel || '2' }}
 
     steps:
       - name: Checkout code
@@ -71,7 +80,13 @@ jobs:
             | tee plan.json | jq '.'
           jq -e '.parallel_sessions_max_allowed > 0' plan.json > /dev/null \
             || { echo "::error::BrowserStack credentials rejected or no parallel capacity"; exit 1; }
-          echo "PARALLEL=$(jq -r '.parallel_sessions_max_allowed' plan.json)" >> $GITHUB_ENV
+          PLAN_PAR=$(jq -r '.parallel_sessions_max_allowed' plan.json)
+          PAR=$PLAN_PAR
+          if [ -n "${MAX_PARALLEL:-}" ] && [ "$PLAN_PAR" -gt "$MAX_PARALLEL" ]; then
+            echo "::notice::plan.json reports $PLAN_PAR parallel sessions; capping at $MAX_PARALLEL"
+            PAR=$MAX_PARALLEL
+          fi
+          echo "PARALLEL=$PAR" >> $GITHUB_ENV
           echo "QUEUE_MAX=$(jq -r '.queued_sessions_max_allowed' plan.json)" >> $GITHUB_ENV
 
       - name: Select Xcode
