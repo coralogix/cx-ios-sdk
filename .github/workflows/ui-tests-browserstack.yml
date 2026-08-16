@@ -404,23 +404,10 @@ jobs:
           UPLOAD_FAILED=0
           for p in $PIDS; do wait "$p" || UPLOAD_FAILED=1; done
           if [ "$UPLOAD_FAILED" = 1 ]; then
-            # An exhausted plan rejects every upload with this marker, and no
-            # amount of retrying or rebuilding changes it. This workflow gates
-            # nothing, so an account-level outage must not read as a code
-            # failure — skip loudly and stay green. Any OTHER upload failure
-            # still fails the job.
-            if grep -qls 'BROWSERSTACK_TESTING_TIME_LIMIT_EXHAUSTED' "$WORK"/*.err 2>/dev/null; then
-              echo "::warning::BrowserStack App Automate time exhausted — skipping this run"
-              {
-                echo "### ⏭️ Skipped — BrowserStack App Automate time exhausted"
-                echo
-                echo "Every upload was rejected with \`BROWSERSTACK_TESTING_TIME_LIMIT_EXHAUSTED\`,"
-                echo "so no build was submitted. **This is an account/plan limit, not a code failure** —"
-                echo "renew App Automate time to re-enable this workflow."
-              } >> "$GITHUB_STEP_SUMMARY"
-              echo "BS_QUOTA_EXHAUSTED=1" >> $GITHUB_ENV
-              exit 0
-            fi
+            # Every upload failure fails the job, including an exhausted plan.
+            # A green tick on a run that submitted nothing reads as "tests
+            # passed" — the run finishes in ~2 minutes with no device involved,
+            # and that is far more dangerous than a red X nobody can fix in code.
             for e in "$WORK"/*.err; do
               [ -f "$e" ] && echo "::error::upload failed for $(basename "$e" .err) — response: $(cat "$e")"
             done
@@ -487,14 +474,13 @@ jobs:
       # could never be found again. Single-step actions/cache avoids this by
       # resolving its key once; splitting restore/save is what exposed it.
       - name: Save BrowserStack upload URLs
-        if: ${{ !cancelled() && steps.package.outcome != 'skipped' && steps.bs-url-cache.outputs.cache-hit != 'true' && env.BS_QUOTA_EXHAUSTED != '1' }}
+        if: ${{ !cancelled() && steps.package.outcome != 'skipped' && steps.bs-url-cache.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@v4
         with:
           path: bs-url-cache
           key: ${{ steps.bs-url-cache.outputs.cache-primary-key }}
 
       - name: Wait for results and summarise
-        if: ${{ env.BS_QUOTA_EXHAUSTED != '1' }}
         run: |
           set -uo pipefail
           POLL_START=$(date +%s)
