@@ -1,0 +1,232 @@
+name: UI Tests (BrowserStack POC)
+
+# POC: run the existing DemoAppUITests on BrowserStack real devices and compare
+# CI wall-clock against the simulator job in ui-tests.yml. The macOS runner still
+# builds (BrowserStack does not compile) — it builds for DEVICE, packages, uploads,
+# then BrowserStack executes. First run is single-device serial to validate the
+# pipeline; flip BS_SHARDS via workflow_dispatch to measure sharded parallelism.
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+    inputs:
+      shards:
+        description: "Parallel shards (0 = single-device serial)"
+        default: "0"
+      devices:
+        description: 'Devices JSON, e.g. ["iPhone 15-17"]'
+        default: '["iPhone 15-17"]'
+      run_baseline:
+        description: "Also run the simulator baseline job for comparison"
+        type: boolean
+        default: false
+
+jobs:
+  simulator-baseline:
+    name: Simulator baseline (serial)
+    if: ${{ github.event.inputs.run_baseline == 'true' }}
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: |
+          if [ -d "/Applications/Xcode_16.4.app" ]; then
+            echo "DEVELOPER_DIR=/Applications/Xcode_16.4.app/Contents/Developer" >> $GITHUB_ENV
+          fi
+
+      - name: Configure Xcode
+        run: |
+          if [ -n "${DEVELOPER_DIR:-}" ]; then sudo xcode-select -s "$DEVELOPER_DIR"; fi
+          sudo xcodebuild -license accept || true
+          sudo xcodebuild -runFirstLaunch || true
+
+      - name: Generate envs.swift (CI)
+        run: |
+          cd Example
+          PUBLIC_KEY="${{ secrets.DEMOAPP_API_KEY || 'CI_DUMMY' }}"
+          printf 'import Foundation\n\npublic enum Envs: String {\n    case PUBLIC_KEY = "%s"\n    case PROXY_URL = "https://schema-validator-latest.onrender.com/logs"\n}\n' "$PUBLIC_KEY" > envs.swift
+
+      - name: Create placeholder GoogleService-Info.plist (CI)
+        run: |
+          cd Example
+          printf '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0">\n<dict>\n  <key>BUNDLE_ID</key>\n  <string>com.coralogix.DemoAppSwift</string>\n  <key>PROJECT_ID</key>\n  <string>placeholder-project</string>\n  <key>GOOGLE_APP_ID</key>\n  <string>1:000000000000:ios:0000000000000000000000</string>\n  <key>GCM_SENDER_ID</key>\n  <string>000000000000</string>\n  <key>API_KEY</key>\n  <string>AIzaSyAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA</string>\n  <key>IS_ANALYTICS_ENABLED</key>\n  <false/>\n</dict>\n</plist>\n' > GoogleService-Info.plist
+
+      - name: Patch Xcodeproj for objectVersion 70
+        run: |
+          for CONST in $(find /opt/homebrew /usr/local /Library/Ruby "$HOME/.gem" \
+              -path '*/gems/xcodeproj-*/lib/xcodeproj/constants.rb' 2>/dev/null); do
+            ruby -e '
+              f = ARGV[0]; s = File.read(f)
+              unless s =~ /^\s*70\s*=>/
+                s = s.sub("COMPATIBILITY_VERSION_BY_OBJECT_VERSION = {",
+                          "COMPATIBILITY_VERSION_BY_OBJECT_VERSION = {\n      70 => \x27Xcode 16.0\x27,")
+                File.write(f, s)
+              end' "$CONST" || true
+          done
+
+      - name: Install CocoaPods dependencies
+        run: cd Example && pod install --no-repo-update
+
+      - name: Find simulator destination
+        run: |
+          cd Example
+          OUT=$(xcodebuild -showdestinations -workspace DemoApp.xcworkspace -scheme DemoAppSwift 2>/dev/null || true)
+          LINE=$(echo "$OUT" | grep -E "platform:iOS Simulator,.*name:iPhone" | grep -E "OS:1[89]\." | head -1 || true)
+          [ -z "$LINE" ] && LINE=$(echo "$OUT" | grep -E "platform:iOS Simulator,.*name:iPhone" | head -1)
+          NAME=$(echo "$LINE" | sed -n 's/.*name:\([^,}]*\).*/\1/p' | xargs)
+          OS=$(echo "$LINE" | sed -n 's/.*OS:\([^,}]*\).*/\1/p' | xargs)
+          echo "SIM_DEST=platform=iOS Simulator,name=$NAME,OS=$OS" >> $GITHUB_ENV
+          echo "Selected: $NAME ($OS)"
+
+      - name: Build & run UI tests on simulator (serial, timed)
+        run: |
+          cd Example
+          START=$(date +%s)
+          set +e
+          xcodebuild clean build test \
+            -workspace DemoApp.xcworkspace -scheme DemoAppSwift \
+            -destination "$SIM_DEST" \
+            -parallel-testing-enabled NO \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY="" DEVELOPMENT_TEAM="" \
+            IPHONEOS_DEPLOYMENT_TARGET="18.0" \
+            2>&1 | tee ../sim-test.log | xcpretty || true
+          END=$(date +%s)
+          TOTAL=$((END - START))
+          {
+            echo "### Simulator baseline (serial)"
+            echo ""
+            echo "| build + test wall-clock | status |"
+            echo "|---|---|"
+            if grep -Eq "Executed [1-9][0-9]* tests, with 0 failures" ../sim-test.log; then ST=passed; else ST=failed; fi
+            echo "| ${TOTAL}s | ${ST} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  browserstack-ui-tests:
+  browserstack-ui-tests:
+    name: Build for device → BrowserStack
+    runs-on: macos-15
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Select Xcode (via DEVELOPER_DIR)
+        run: |
+          if [ -d "/Applications/Xcode_16.4.app" ]; then
+            echo "DEVELOPER_DIR=/Applications/Xcode_16.4.app/Contents/Developer" >> $GITHUB_ENV
+          elif [ -d "/Applications/Xcode_16.3.app" ]; then
+            echo "DEVELOPER_DIR=/Applications/Xcode_16.3.app/Contents/Developer" >> $GITHUB_ENV
+          elif [ -d "/Applications/Xcode_16.2.app" ]; then
+            echo "DEVELOPER_DIR=/Applications/Xcode_16.2.app/Contents/Developer" >> $GITHUB_ENV
+          else
+            echo "No pinned Xcode found; using default Xcode"
+          fi
+
+      - name: Make root use the same Xcode
+        run: |
+          set -euo pipefail
+          if [ -n "${DEVELOPER_DIR:-}" ]; then sudo xcode-select -s "$DEVELOPER_DIR"; fi
+          xcodebuild -version
+          sudo xcodebuild -license accept || true
+
+      - name: Xcode first launch setup
+        run: sudo env DEVELOPER_DIR="${DEVELOPER_DIR:-}" xcodebuild -runFirstLaunch || sudo xcodebuild -runFirstLaunch
+
+      - name: Generate envs.swift (CI)
+        run: |
+          set -euo pipefail
+          cd Example
+          PUBLIC_KEY="${{ secrets.DEMOAPP_API_KEY || 'CI_DUMMY' }}"
+          printf 'import Foundation\n\npublic enum Envs: String {\n    case PUBLIC_KEY = "%s"\n    case PROXY_URL = "https://schema-validator-latest.onrender.com/logs"\n}\n' "$PUBLIC_KEY" > envs.swift
+          cat envs.swift
+
+      - name: Create placeholder GoogleService-Info.plist (CI)
+        run: |
+          set -euo pipefail
+          cd Example
+          printf '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0">\n<dict>\n  <key>API_KEY</key>\n  <string>AIzaSyAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA</string>\n  <key>GCM_SENDER_ID</key>\n  <string>000000000000</string>\n  <key>PLIST_VERSION</key>\n  <string>1</string>\n  <key>BUNDLE_ID</key>\n  <string>com.coralogix.DemoAppSwift</string>\n  <key>PROJECT_ID</key>\n  <string>placeholder-project</string>\n  <key>STORAGE_BUCKET</key>\n  <string>placeholder-project.appspot.com</string>\n  <key>IS_ADS_ENABLED</key>\n  <false/>\n  <key>IS_ANALYTICS_ENABLED</key>\n  <false/>\n  <key>IS_APPINVITE_ENABLED</key>\n  <false/>\n  <key>IS_GCM_ENABLED</key>\n  <false/>\n  <key>IS_SIGNIN_ENABLED</key>\n  <false/>\n  <key>GOOGLE_APP_ID</key>\n  <string>1:000000000000:ios:0000000000000000000000</string>\n</dict>\n</plist>\n' > GoogleService-Info.plist
+
+      - name: Patch Xcodeproj for objectVersion 70 (Xcode 16 project format)
+        run: |
+          set -euo pipefail
+          patched=0
+          for CONST in $(find /opt/homebrew /usr/local /Library/Ruby "$HOME/.gem" \
+              -path '*/gems/xcodeproj-*/lib/xcodeproj/constants.rb' 2>/dev/null); do
+            ruby -e '
+              f = ARGV[0]; s = File.read(f)
+              unless s =~ /^\s*70\s*=>/
+                s = s.sub("COMPATIBILITY_VERSION_BY_OBJECT_VERSION = {",
+                          "COMPATIBILITY_VERSION_BY_OBJECT_VERSION = {\n      70 => \x27Xcode 16.0\x27,")
+                File.write(f, s)
+              end' "$CONST"
+            grep -nE "^\s*70 =>" "$CONST" && patched=1 || true
+          done
+          [ "$patched" = 1 ] || echo "WARNING: no Xcodeproj constants.rb patched — pod install may fail on objectVersion 70"
+
+      - name: Install CocoaPods dependencies
+        run: |
+          set -euo pipefail
+          cd Example
+          pod install --no-repo-update
+
+      - name: Build for testing (DEVICE / iphoneos, unsigned)
+        run: |
+          set -uo pipefail
+          cd Example
+          echo "🔨 Building DemoAppSwift for generic iOS device (unsigned; BrowserStack re-signs)..."
+          BUILD_START=$(date +%s)
+          set +e
+          xcodebuild build-for-testing \
+            -workspace DemoApp.xcworkspace \
+            -scheme DemoAppSwift \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath ../DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGN_ENTITLEMENTS="" \
+            DEVELOPMENT_TEAM="" \
+            IPHONEOS_DEPLOYMENT_TARGET="15.0" \
+            -jobs $(sysctl -n hw.ncpu) \
+            2>&1 | tee ../build-output.log
+          BUILD_EXIT=${PIPESTATUS[0]}
+          set -e
+          if [ "$BUILD_EXIT" -ne 0 ]; then
+            echo "❌ Device build failed (exit $BUILD_EXIT)"
+            grep -iE "error:|failed:" ../build-output.log | tail -30 || true
+            exit "$BUILD_EXIT"
+          fi
+          BUILD_END=$(date +%s)
+          echo "T_BUILD_SECONDS=$((BUILD_END - BUILD_START))" >> $GITHUB_ENV
+          echo "✅ Device build done in $((BUILD_END - BUILD_START))s"
+
+      - name: Package .ipa artifacts (app + test suite)
+        run: |
+          set -euo pipefail
+          PROD="DerivedData/Build/Products/Debug-iphoneos"
+          echo "Products:"; ls -la "$PROD"
+          APP=$(ls -d "$PROD"/*.app | grep -v "Runner.app" | head -1)
+          RUNNER=$(ls -d "$PROD"/*-Runner.app | head -1)
+          echo "app    = $APP"
+          echo "runner = $RUNNER"
+          rm -rf Payload && mkdir Payload && cp -r "$APP" Payload/    && zip -qry app.ipa   Payload && rm -rf Payload
+          rm -rf Payload && mkdir Payload && cp -r "$RUNNER" Payload/ && zip -qry tests.ipa Payload && rm -rf Payload
+          ls -la app.ipa tests.ipa
+
+      - name: Run on BrowserStack (timed)
+        env:
+          BROWSERSTACK_USERNAME: ${{ secrets.BROWSERSTACK_USERNAME }}
+          BROWSERSTACK_ACCESS_KEY: ${{ secrets.BROWSERSTACK_ACCESS_KEY }}
+          BS_SHARDS: ${{ github.event.inputs.shards || '0' }}
+          BS_DEVICES: ${{ github.event.inputs.devices || '["iPhone 15-17"]' }}
+        run: |
+          chmod +x tool/browserstack-poc/run_browserstack.sh
+          echo "── macOS build phase: ${T_BUILD_SECONDS:-?}s (stays on the runner regardless) ──"
+          tool/browserstack-poc/run_browserstack.sh app.ipa tests.ipa
