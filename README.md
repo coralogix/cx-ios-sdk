@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Coralogix RUM Mobile SDK is a library (Swift package) for iOS. The SDK provides mobile Telemetry instrumentation that captures:
+The Coralogix RUM Mobile SDK is a library for iOS, distributed through Swift Package Manager and CocoaPods. The SDK provides mobile Telemetry instrumentation that captures:
 
 1. HTTP requests, using URLSession instrumentation
 2. Unhandled exceptions (NSException, NSError, Error)
@@ -19,10 +19,27 @@ Coralogix RUM agent for iOS supports iOS 13 and higher.
 
 ## Installation
 
-The integration requires minimal effort with a few lines of code.
-To install this package,
+The integration requires minimal effort with a few lines of code. The SDK can
+be installed with Swift Package Manager or CocoaPods.
 
-import `git@github.com:coralogix/cx-ios-sdk` in SPM.
+### Swift Package Manager
+
+1. Open **File > Add Package Dependencies**.
+2. Search for `git@github.com:coralogix/cx-ios-sdk`.
+3. Select the **Up to Next Major Version** option.
+
+### CocoaPods
+
+Add the Coralogix pod to your `Podfile`:
+
+```ruby
+pod 'Coralogix'
+pod 'SessionReplay'  # Only if you use Session Replay
+```
+
+Then run `pod install` from your project root.
+
+### Initialization
 
 Remember to call this as early in your application life cycle as possible.
 Ideally in ```applicationDidFinishLaunching in your AppDelegate```
@@ -83,6 +100,33 @@ struct DemoAppApp: App {
     }
 }
 ```
+<!-- split title="Configuration options" path="configuration/options.md" -->
+### CoralogixExporterOptions Reference
+
+The fields accepted by `CoralogixExporterOptions`. Each one is described in detail in the sections below.
+
+| Property | Type | Description | Required |
+| --- | --- | --- | --- |
+| coralogixDomain | CoralogixDomain | The [Coralogix domain](https://coralogix.com/docs/user-guides/account-management/account-settings/coralogix-domain/) for your account's region. | Yes |
+| publicKey | String | Coralogix token, the publicly-visible `public_key` value. | Yes |
+| environment | String | Specifies the environment, such as development, staging, or production. | Yes |
+| application | String | Name of the application. | Yes |
+| version | String | Version of the application. | Yes |
+| userContext | UserContext? | Configuration for user context. | No |
+| debug | Bool | Turns internal debug logging on or off. | No |
+| ignoreUrls | \[String\]? | URLs that partially match any regex in `ignoreUrls` are not traced. | No |
+| ignoreErrors | \[String\]? | Patterns for error messages that should not be sent to Coralogix. | No |
+| customDomainUrl | String? | Ignores the `CoralogixDomain` URL and routes all data calls to a specific URL. | No |
+| labels | \[String: Any\]? | Labels added to every span. | No |
+| beforeSend | `((Event) -> Event?)?` | Callback to inspect, modify, or discard each event before it reaches Coralogix. Return `nil` to drop the event. | No |
+| tracesExporter | `((CoralogixTraceExporterData) -> Void)?` | Callback invoked for every span batch, for forwarding spans to your own collector. | No |
+| networkExtraConfig | `[NetworkCaptureRule]?` | Per-URL rules for capturing request and response headers and payloads. | No |
+| proxyUrl | String? | Routes all RUM data through a proxy URL. | No |
+| traceParentInHeader | \[String: Any\]? | Configures W3C `traceparent` header propagation for distributed tracing. | No |
+| collectIPData | Bool | Sends the client IP for region detection. Defaults to `true`. | No |
+| sessionSampleRate | Int | Percentage of overall sessions tracked, 0–100. Defaults to `100`. | No |
+| enableSwizzling | Bool | Method swizzling for `URLSession` instrumentation. Defaults to `true`. | No |
+
 ### Instrumentations
 Turn on/off specific instrumentation, default to true. Each instrumentation is responsible for which data the SDK will track and collect for you.
 ```swift
@@ -200,6 +244,23 @@ beforeSend: { cxRum in
 }
 ```
 
+### Trace Exporter
+Forward span data to your own collector or backend by configuring a trace exporter callback. The callback receives every span batch the SDK produces, in OTLP-compatible shape. Spans continue to flow to Coralogix when this callback is set.
+```swift
+let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
+                                        environment: "ENVIRONMENT",
+                                        application: "APP-NAME",
+                                        version: "APP-VERSION",
+                                        publicKey: "API-KEY",
+                                        tracesExporter: { data in
+                                            // data.tracesData.resourceSpans[].scopeSpans[].spans[]
+                                            // data.jsonString — JSON-encoded OTLP payload
+                                            forwardToCustomCollector(data.jsonString)
+                                        })
+```
+
+<!-- /split -->
+<!-- split title="Before send" path="configuration/before-send.md" -->
 ### Before Send
 Enable event access and modification before sending to Coralogix, supporting content modification.
 ```swift
@@ -269,6 +330,8 @@ beforeSend: { cxRum in
 
 `is_masked_element` itself is read-only: it records the SDK's observation, so a value written to it in the returned dictionary is ignored and the SDK's value is restored.
 
+<!-- /split -->
+<!-- split title="Mobile vitals" path="features/mobile-vitals.md" -->
 ### Mobile Vitals
 Turn on/off specific Mobile Vitals, default to all trues. Each Mobile Vitals is responsible for which data the SDK will track and collect for you.
 Note: ANR is controlled separately via the `instrumentations` option, not as a mobile vital.
@@ -316,6 +379,8 @@ These intervals are optimized for battery efficiency while capturing all importa
 - Thresholds automatically adapt to display refresh rate (60Hz standard, 120Hz ProMotion)
 - Industry thresholds range from 250ms (very sensitive) to 700ms (severe freezes only); 700ms aligns with ANR
 
+<!-- /split -->
+<!-- split title="Swizzling and network capture" path="configuration/swizzling-and-network-capture.md" -->
 ### Enable Swizzling
 Controls whether the SDK automatically swizzles system methods for instrumentation (e.g. `NSURLSession`, view-controller lifecycle). Enabled by default. Set to `false` only if another library conflicts with Coralogix's swizzling.
 ```swift
@@ -401,6 +466,8 @@ let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
                                         })
 ```
 
+<!-- /split -->
+<!-- split title="Sessions and user context" path="features/sessions-and-user-context.md" -->
 ### Session Recording
 See the [Session Recording Guide](SessionReplay/Sources/Docs/README.md) for installation steps and examples.
 
@@ -449,6 +516,8 @@ coralogixRum.createNewSession()
 ```
 On a logout → login flow, pair it with `setUserContext` for the new user. The current view carries into the new session automatically (as view #0), so events keep their view context without any extra call.
 
+<!-- /split -->
+<!-- split title="Custom instrumentation" path="features/custom-instrumentation.md" -->
 ### Custom Logs
 Send a structured log at a chosen severity, with optional structured `data` and `labels`.
 ```swift
@@ -505,6 +574,19 @@ coralogixRum.setView(name: "CheckoutScreen")
 coralogixRum.setApplicationContext(application: "MyApp", version: "2.5.0")
 ```
 
+In SwiftUI, the `trackCXView` view modifier is the declarative equivalent of `setView`: attach it to a view and the SDK reports that view name for you, without a manual call in the navigation code.
+
+```swift
+import SwiftUI
+
+struct ContentView: View {
+    var body: some View {
+        Text("Hello, World!")
+            .trackCXView(name: "ContentView")
+    }
+}
+```
+
 ### Custom Time Measurement
 Time arbitrary spans of work in your app code with `startTimeMeasure(name:labels:)` and `endTimeMeasure(name:)`. Use this when you need to measure something the SDK can't auto-instrument — checkout flows, custom render passes, asset loading, etc. The duration is reported as a `custom-measurement` span (milliseconds).
 
@@ -536,6 +618,17 @@ try performCheckout()
 
 Parity note: the Coralogix Browser SDK exposes the same `startTimeMeasure` / `endTimeMeasure` surface with matching semantics.
 
+### Utility Methods
+Inspect SDK state or read the current session at runtime.
+```swift
+// Confirm the SDK is initialized.
+let initialized = CoralogixRum.isInitialized
+
+// Read the current session ID, for example to attach it to a support ticket.
+let sessionId = coralogixRum.getSessionId()
+```
+
+<!-- /split -->
 ## Example Apps
 
 The repository includes two fully-featured demo apps under `Example/`:
