@@ -144,6 +144,7 @@ jobs:
       # Device build products. Keyed on every input that can change the binary,
       # so a source change still rebuilds while a workflow-only edit does not.
       - name: Cache device build products
+        id: dd-cache
         uses: actions/cache@v4
         with:
           path: DerivedData/Build
@@ -152,24 +153,6 @@ jobs:
           # runner's DerivedData and an incremental build over absolute paths and
           # stale module caches — a hit that doesn't match the sources would test
           # the wrong binary. Exact match or clean build, nothing in between.
-
-      # The bs:// URLs of the artifacts we uploaded from exactly these sources.
-      # Same key as the build products above on purpose: if that cache is still
-      # valid for this tree, the binaries we built from it are byte-identical to
-      # the ones already sitting on BrowserStack, so re-uploading them is pure
-      # wall clock. Reuse is still gated on the API confirming each URL is live
-      # (see the upload step) — a hit here is a hint, not a promise.
-      # Restore/save are split rather than using actions/cache, whose post step
-      # only saves when the JOB succeeds. Whether the tests went red says nothing
-      # about the validity of the binaries we uploaded, and a red branch is
-      # exactly when re-runs pile up — the built-in behaviour would re-upload on
-      # every run until the suite is green, which is when it is needed least.
-      - name: Restore BrowserStack upload URLs
-        id: bs-url-cache
-        uses: actions/cache/restore@v4
-        with:
-          path: bs-url-cache
-          key: bs-url-${{ runner.os }}-${{ hashFiles('Example/**/*.swift', 'Example/Podfile', 'Coralogix/Sources/**/*.swift', 'CoralogixInternal/Sources/**/*.swift', 'SessionReplay/Sources/**/*.swift') }}
 
       - name: Install CocoaPods dependencies
         run: cd Example && pod install --no-repo-update
@@ -303,12 +286,18 @@ jobs:
 
       - name: Package, upload, and run on BrowserStack
         id: package
+        env:
+          # Resolved by the cache step BEFORE `pod install` runs. Re-deriving the
+          # hash here would not work: `pod install` writes ~43 Swift files into
+          # Example/Pods (untracked) and the Example/**/*.swift pattern matches
+          # them, so a hash taken after that step changes on every run.
+          BIN_KEY: ${{ steps.dd-cache.outputs.cache-primary-key }}
         run: |
           set -euo pipefail
           RUN_START=$(date +%s)
           : > build_ids.txt
           WORK=$(mktemp -d)
-          URLDIR=bs-url-cache
+          URLDIR="$WORK/urls"
           mkdir -p "$URLDIR"
 
           # One row per DISTINCT artifact path rather than per target. The two
@@ -334,27 +323,65 @@ jobs:
           PY
           echo "── artifacts"; cat artifacts.txt
 
-          # BrowserStack drops uploads after 30 days, and an Actions cache entry
-          # can outlive that, so a cached bs:// URL is only reused if the API
-          # still lists it. Anything unexpected here (404, schema drift, network)
-          # leaves LIVE empty and every artifact simply uploads as before.
-          curl -s -u "$BS_AUTH" "$API/apps" > known-apps.json &
-          curl -s -u "$BS_AUTH" "$API/test-suites" > known-suites.json &
-          wait
-          LIVE=$( { jq -r '.. | .app_url? // empty' known-apps.json
-                    jq -r '.. | .test_suite_url? // empty' known-suites.json
-                  } 2>/dev/null | sort -u || true )
+          # Dedupe server-side on BrowserStack rather than through an Actions
+          # cache. Each artifact is uploaded under a custom_id derived from the
+          # same source hash that keys the build-products cache, so asking
+          # "?custom_id=<hash>-<slot>" answers "is the binary built from exactly
+          # this tree already on BrowserStack, unexpired?" — the API is the one
+          # source of truth and there is nothing local to go stale.
+          #
+          # The previous Actions-cache approach could not work, two ways:
+          #   * the liveness check read $API/apps and $API/test-suites, which
+          #     return only the last 10 uploads with no pagination. Each run adds
+          #     4, so a still-valid URL (30-day expiry) dropped out of the window
+          #     after ~5 runs and was re-uploaded regardless.
+          #   * the save step was gated on `cache-hit != 'true'`, so an entry
+          #     that hit but yielded no usable URL could never repair itself: it
+          #     hit forever, reused nothing, and discarded each run's fresh URLs.
+          # Run 31937728903 shows the signature — cache hit, yet 4 fresh, 0
+          # reused. custom_id removes both failure modes and two workflow steps.
+          H=${BIN_KEY##*-}          # strip the bs-dd-<os>- prefix, keep the hash
+          H=${H:0:32}
+          PIDS=""
+          while read -r SLOT KIND EXT SRC; do
+            (
+              CID=$(printf 'bs-%s-%s' "$H" "$SLOT" | tr -c 'A-Za-z0-9_-' '-')
+              printf '%s' "$CID" > "$URLDIR/$SLOT.cid"
+              if [ "$KIND" = app ]; then EP=apps; else EP=test-suites; fi
+              # The custom_id in the query string is NOT trusted to have been
+              # applied. Verified against the live API on 2026-08-17:
+              # /apps?custom_id=bogus correctly returns [], but
+              # /test-suites?custom_id=bogus IGNORES the filter and returns the
+              # last 10 suites — so taking [0] would hand this slot some other
+              # target's runner. Re-check custom_id on the returned rows and let
+              # the server-side filter be a bandwidth optimisation only.
+              #
+              # An empty result means "never uploaded"; any other outcome (404,
+              # schema drift, network) also yields empty, which just falls
+              # through to uploading as before.
+              curl -s -u "$BS_AUTH" --get "$API/$EP" --data-urlencode "custom_id=$CID" \
+                | jq -r --arg cid "$CID" '(.apps // .test_suites // [])
+                         | map(select(.custom_id == $cid)) | .[0] // {}
+                         | (.app_url // .test_suite_url) // empty' \
+                > "$URLDIR/$SLOT.url" 2>/dev/null || : > "$URLDIR/$SLOT.url"
+            ) &
+            PIDS="$PIDS $!"
+          done < artifacts.txt
+          # Lookups are advisory: a failed probe must not fail the job, it must
+          # only mean "upload this one".
+          for p in $PIDS; do wait "$p" || true; done
 
           : > todo.txt
           REUSED=0
           while read -r SLOT KIND EXT SRC; do
-            CACHED=$(cat "$URLDIR/$SLOT.url" 2>/dev/null || true)
-            if [ -n "$CACHED" ] && printf '%s\n' "$LIVE" | grep -qxF "$CACHED"; then
-              echo "  reuse    $SLOT -> $CACHED"
+            KNOWN=$(tr -d '[:space:]' < "$URLDIR/$SLOT.url" 2>/dev/null || true)
+            if [ -n "$KNOWN" ]; then
+              printf '%s' "$KNOWN" > "$URLDIR/$SLOT.url"
+              echo "  reuse    $SLOT -> $KNOWN"
               REUSED=$(( REUSED + 1 ))
             else
-              # Stale or absent: drop it so a failed upload can never leave a
-              # previous run's URL behind for the submit loop to pick up.
+              # Drop it so a failed upload can never leave an empty file behind
+              # for the submit loop to pick up as if it were a URL.
               rm -f "$URLDIR/$SLOT.url"
               echo "$SLOT $KIND $EXT $SRC" >> todo.txt
               echo "  upload   $SLOT"
@@ -387,7 +414,12 @@ jobs:
           while read -r SLOT KIND EXT SRC; do
             (
               if [ "$KIND" = app ]; then EP=app; FIELD=app_url; else EP=test-suite; FIELD=test_suite_url; fi
-              RESP=$(curl -s -u "$BS_AUTH" -X POST "$API/$EP" -F "file=@$WORK/$SLOT.$EXT")
+              # custom_id is what makes the next run's lookup hit. Upload
+              # endpoints are singular (app/test-suite); the query endpoints
+              # above are plural (apps/test-suites).
+              RESP=$(curl -s -u "$BS_AUTH" -X POST "$API/$EP" \
+                -F "file=@$WORK/$SLOT.$EXT" \
+                -F "custom_id=$(cat "$URLDIR/$SLOT.cid")")
               URL=$(printf '%s' "$RESP" | jq -r --arg f "$FIELD" '.[$f] // empty')
               if [ -z "$URL" ]; then
                 # Severity is decided after the wait below, once we know whether
@@ -463,22 +495,8 @@ jobs:
 
           echo "SUBMIT_SECONDS=$(( $(date +%s) - RUN_START ))" >> $GITHUB_ENV
 
-      # Runs before the results are known, so the URLs are kept regardless of how
-      # the suite finishes. A partial save is still correct: a .url file is only
-      # written after that artifact's upload succeeded, and a URL that fails the
-      # liveness check next run is re-uploaded rather than trusted.
-      # Reuses the key the restore step actually resolved instead of evaluating
-      # hashFiles again. `pod install` writes ~43 Swift files into Example/Pods
-      # (untracked) between the two steps, and Example/**/*.swift matches them —
-      # so re-evaluating here produced a different hash every time and the entry
-      # could never be found again. Single-step actions/cache avoids this by
-      # resolving its key once; splitting restore/save is what exposed it.
-      - name: Save BrowserStack upload URLs
-        if: ${{ !cancelled() && steps.package.outcome != 'skipped' && steps.bs-url-cache.outputs.cache-hit != 'true' }}
-        uses: actions/cache/save@v4
-        with:
-          path: bs-url-cache
-          key: ${{ steps.bs-url-cache.outputs.cache-primary-key }}
+      # No save step: BrowserStack itself now remembers each binary by custom_id,
+      # so there is nothing to persist between runs.
 
       - name: Wait for results and summarise
         run: |
