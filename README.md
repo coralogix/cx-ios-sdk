@@ -1,8 +1,8 @@
-# Official Coralogix SDK for iOS.
+# Official Coralogix SDK for iOS
 
-## The Coralogix RUM Mobile SDK is a library (Swift package) for iOS
+## Overview
 
-The SDK provides mobile Telemetry instrumentation that captures:
+The Coralogix RUM Mobile SDK is a library (Swift package) for iOS. The SDK provides mobile Telemetry instrumentation that captures:
 
 1. HTTP requests, using URLSession instrumentation
 2. Unhandled exceptions (NSException, NSError, Error)
@@ -296,7 +296,8 @@ Mobile vitals are sampled at fixed, battery-optimized intervals:
 
 These intervals are optimized for battery efficiency while capturing all important performance trends. The 1-second sampling provides accurate statistics (min/max/avg/p95) for monitoring without excessive battery drain.
 
-> **Note:** Prior to v2.2.0, the SDK exposed (non-functional) configuration parameters for these intervals. These have been removed as they were never actually used.
+> [!NOTE]
+> Prior to v2.2.0, the SDK exposed (non-functional) configuration parameters for these intervals. These have been removed as they were never actually used.
 
 #### Understanding Mobile Vitals Metrics
 
@@ -354,7 +355,8 @@ let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
                                         ])
 ```
 
-> **Note:** Only allowlist URLs and header names you are comfortable logging. Avoid capturing `Authorization` or other sensitive headers unless intentional. Body and header capture should not be used for endpoints that return or send PII or secrets. Request and response bodies over 1024 characters are **dropped** (not truncated) and do not appear in RUM.
+> [!NOTE]
+> Only allowlist URLs and header names you are comfortable logging. Avoid capturing `Authorization` or other sensitive headers unless intentional. Body and header capture should not be used for endpoints that return or send PII or secrets. Request and response bodies over 1024 characters are **dropped** (not truncated) and do not appear in RUM.
 
 ### User Action Text Redaction (`shouldSendText`)
 Called before `target_element_inner_text` is recorded for a tapped view. Return `false` to redact text for sensitive views (e.g. fields showing account numbers or personal data) without disabling text capture globally.
@@ -379,7 +381,8 @@ let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
 ### Custom Target Element Name (`resolveTargetName`)
 Override the `target_element` field in user action events with a business-friendly name instead of the raw UIKit class name. Return `nil` to fall back to the default class name (e.g. `"UIButton"`).
 
-> **Note:** `resolveTargetName` only affects `target_element`. The `element_classes` field always contains the real UIKit class name (e.g. `"UIButton"`) regardless of what the closure returns, so existing analytics queries and backwards-compatible dashboards that filter on `element_classes` continue to work unchanged.
+> [!NOTE]
+> `resolveTargetName` only affects `target_element`. The `element_classes` field always contains the real UIKit class name (e.g. `"UIButton"`) regardless of what the closure returns, so existing analytics queries and backwards-compatible dashboards that filter on `element_classes` continue to work unchanged.
 
 This closure is called on the **main thread** on every tap event. Keep it fast and non-blocking.
 ```swift

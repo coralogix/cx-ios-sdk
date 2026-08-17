@@ -4,8 +4,6 @@
 
 The `SessionReplay` module provides functionality for recording user sessions, including capturing images or videos at specified intervals. It also supports masking sensitive data like text, images, and faces during the recording process.
 
----
-
 ## Classes
 
 ### 1. `SessionReplayOptions`
@@ -57,8 +55,6 @@ let options = SessionReplayOptions(
 SessionReplay.initializeWithOptions(sessionReplayOptions: options)
 ```
 
----
-
 ## Masking a specific view (`cxMask`)
 
 Opts a single view into Coralogix masking, regardless of the global masking policy.
@@ -100,8 +96,6 @@ Rows marked "via frame geometry" require session replay to be initialized — th
 > **`element_id` is never redacted.** It carries the view's `accessibilityIdentifier`, which is developer-authored rather than user data, so the SDK reports it as-is even for a view inside a masked subtree. Avoid encoding sensitive values in identifiers: on a masked keypad, per-digit identifiers such as `keypad_key_7` would reconstruct the entered sequence from the tap spans even though the text is `***`. Both demo apps give the masked keypad's keys a single shared identifier for this reason. This matches the Android SDK, which does not redact `resourceId` either. Customers who need identity fields or coordinates withheld implement it in `beforeSend`, keyed on `is_masked_element` — see the root README.
 
 > **SwiftUI:** `.cxMask()` works by overlaying a masked `UIView` on top of the composable content — a sibling, not an ancestor — so the views underneath do not inherit masking through the view tree. Their interaction events are still redacted, because the tap point is tested against the overlay's mask rect. The residual gap is text masked only by the OCR/Vision stages (`maskText`/`maskAllImages` over SwiftUI content), which report no geometry; use `shouldSendText` for those.
-
----
 
 ### 2. `SessionReplay`
 
@@ -155,8 +149,6 @@ SessionReplay.shared.startRecording()
 _ = SessionReplay.shared.captureEvent(properties: nil)
 ```
 
----
-
 ## Additional Notes
 
 ### Credit Card Detection
@@ -168,14 +160,10 @@ The `creditCardPredicate` property contains text patterns used to identify credi
 
 By default, this property is optional, and custom patterns can be supplied during initialization.
 
----
-
 ## Enums
 
 ### `RecordingType`
 Defines the type of recording:
 - `.image`
 - `.video`
-
----
 
