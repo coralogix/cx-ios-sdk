@@ -20,8 +20,24 @@ import CoralogixInternal
 @testable import Coralogix
 
 private final class PropagationTestURLProtocol: URLProtocol {
-    static var lastTraceparent: String?
     static let scheme = "cx52134propagation"
+
+    /// `startLoading()` runs on the URL loading system's thread while the assertions read from the
+    /// test thread, so the storage is lock-guarded and only reachable through these accessors.
+    private static let lock = NSLock()
+    private static var _lastTraceparent: String?
+
+    static var lastTraceparent: String? {
+        lock.lock()
+        defer { lock.unlock() }
+        return _lastTraceparent
+    }
+
+    private static func record(traceparent: String?) {
+        lock.lock()
+        defer { lock.unlock() }
+        _lastTraceparent = traceparent
+    }
 
     override class func canInit(with request: URLRequest) -> Bool {
         request.url?.scheme == scheme
@@ -30,11 +46,15 @@ private final class PropagationTestURLProtocol: URLProtocol {
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
     override func startLoading() {
+        // Records what this request actually carried, nil included, so a header from an earlier
+        // request in the same test can never be mistaken for this one's.
+        var captured: String?
         if let fields = request.allHTTPHeaderFields {
             for (key, value) in fields where key.lowercased() == "traceparent" {
-                Self.lastTraceparent = value
+                captured = value
             }
         }
+        Self.record(traceparent: captured)
         let url = request.url ?? URL(string: "\(Self.scheme)://localhost/")!
         let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: [:])!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
@@ -44,7 +64,7 @@ private final class PropagationTestURLProtocol: URLProtocol {
 
     override func stopLoading() {}
 
-    static func reset() { lastTraceparent = nil }
+    static func reset() { record(traceparent: nil) }
 }
 
 final class NetworkPropagationSamplingTests: XCTestCase {
