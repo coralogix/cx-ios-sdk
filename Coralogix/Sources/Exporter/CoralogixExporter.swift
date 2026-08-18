@@ -382,6 +382,13 @@ public class CoralogixExporter: SpanExporter {
         // The SDK's own lifecycle events always survive, matching Android. Without this a
         // sampled-out session is indistinguishable from an SDK that never started, which makes
         // sampling impossible to verify from the backend side.
+        //
+        // This keys on the event type alone and is deliberately not defended against forgery:
+        // `CoralogixCustomSpan.setAttribute` accepts any key, so a caller can stamp `internal` on
+        // their own span and have it bypass their own sample rate. That follows the SDK's standing
+        // position that semantic fields are the caller's responsibility while identity and counters
+        // are defended — the only cost here is the caller's own sampling savings, on their own data.
+        // Requiring an SDK-private marker alongside the type would close it if that ever changes.
         if eventType == CoralogixEventType.internalKey.rawValue { return true }
 
         return options.excludeFromSampling.contains { $0.eventType.rawValue == eventType }
