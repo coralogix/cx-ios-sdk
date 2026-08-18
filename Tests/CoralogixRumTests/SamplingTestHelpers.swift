@@ -85,6 +85,7 @@ func makeSamplingOptions(sampleRate: Int,
                          exclude: Set<ExcludableInstrumentation>,
                          instrumentations: [CoralogixExporterOptions.InstrumentationType: Bool]? = nil,
                          traceParentInHeader: [String: Any]? = nil,
+                         enableSwizzling: Bool = true,
                          tracesExporter: TracesExporterCallback? = nil) -> CoralogixExporterOptions {
     return CoralogixExporterOptions(
         coralogixDomain: .US2,
@@ -99,6 +100,7 @@ func makeSamplingOptions(sampleRate: Int,
         sessionSampleRate: sampleRate,
         excludeFromSampling: exclude,
         instrumentations: instrumentations,
+        enableSwizzling: enableSwizzling,
         traceParentInHeader: traceParentInHeader,
         tracesExporter: tracesExporter,
         debug: false

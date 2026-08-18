@@ -203,7 +203,7 @@ public class CoralogixExporter: SpanExporter {
         // inherit the same behavior.
         var filterSpans = spans.filter { self.passesSessionSampling($0) && self.reportsNetworkEvents($0) }
         if filterSpans.count != spans.count {
-            Log.d("[CoralogixExporter] export: \(spans.count) in, \(filterSpans.count) after sampling filter")
+            Log.d("[CoralogixExporter] export: \(spans.count) in, \(filterSpans.count) after sampling and network-reporting filters")
         }
         if filterSpans.isEmpty { return .success }
 

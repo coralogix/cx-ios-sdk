@@ -183,6 +183,33 @@ final class InstrumentationGatingTests: XCTestCase {
                        "On a native app the option still governs the swizzles.")
     }
 
+    // MARK: - enableSwizzling remains a hard kill switch
+
+    func testEnableSwizzlingFalse_installsNoURLSessionInstrumentationEvenWithPropagationOn() {
+        // `shouldInstall` deliberately does not consult `enableSwizzling` — the flag is enforced
+        // inside `initializeNetworkInstrumentation`, so it cannot be bypassed by the install rule.
+        // Asserted through the instrumentation object, which is only created once the flag passes.
+        let killed = CoralogixRum(options: makeSamplingOptions(sampleRate: 100,
+                                                               exclude: [.network],
+                                                               traceParentInHeader: traceParentEnabled,
+                                                               enableSwizzling: false))
+        defer { killed.shutdown() }
+
+        XCTAssertNil(killed.sessionInstrumentation,
+                     "enableSwizzling: false must leave NSURLSession untouched, whatever sampling and propagation ask for.")
+    }
+
+    func testEnableSwizzlingTrue_installsURLSessionInstrumentation() {
+        // Positive control, so the assertion above cannot pass because the object is never built.
+        let live = CoralogixRum(options: makeSamplingOptions(sampleRate: 100,
+                                                            exclude: [],
+                                                            traceParentInHeader: traceParentEnabled))
+        defer { live.shutdown() }
+
+        XCTAssertNotNil(live.sessionInstrumentation,
+                        "With swizzling allowed the URLSession instrumentation must exist.")
+    }
+
     // MARK: - Propagation predicate
 
     func testIsTraceParentInHeaderEnabled_readsTheEnableFlag() {
