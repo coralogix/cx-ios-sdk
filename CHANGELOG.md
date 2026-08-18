@@ -9,6 +9,16 @@ Release-mechanics commits (version bumps, podspec/script tweaks, README edits) a
 omitted; the focus here is user-facing behavior changes. Tickets are referenced as
 `CX-XXXXX` (Jira) or `ALPH-XXXX` (legacy). Pull request numbers are in parentheses.
 
+## [2.16.0] - 2026-08-18
+
+### Changed
+- The session sample rate no longer decides whether the SDK starts. A sampled-out session now initializes, keeps network instrumentation installed, and continues to attach `traceparent` to outgoing requests, so backend traces stay correlated for the whole population; everything that must not be reported is dropped per span at export instead. Previously a sampled-out session skipped initialization entirely unless `excludeFromSampling` was non-empty, and sent no trace context at all.
+- `excludeFromSampling` no longer overrides the `instrumentations` map. The map is the source of truth: an instrumentation switched off stays off, and the exclude list only relaxes the *sampling* decision. Listing a category in both places now leaves it off rather than turning it back on, and the exclude list has no effect at all on a session that is already sampled in.
+- `instrumentations: [.network: false]` now suppresses only the `network-request` event. The swizzles stay installed while `traceParentInHeader` is enabled so requests keep carrying trace context; with `traceParentInHeader` disabled, network instrumentation is not installed at all. `enableSwizzling: false` remains a complete kill switch for `NSURLSession` instrumentation.
+
+### Fixed
+- A sampled-out session now reports the SDK's own initialization event, matching Android. Previously it emitted nothing at all, which made a sampled-out session indistinguishable from an SDK that never started.
+
 ## [2.15.1] - 2026-08-10
 
 ### Fixed

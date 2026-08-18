@@ -2,8 +2,8 @@
 //  SessionSamplingRerollTests.swift
 //
 //  Verifies that:
-//   1. The init guard short-circuits ONLY when the session is sampled out AND no
-//      instrumentation is opted into `excludeFromSampling` (back-compat).
+//   1. Init is unconditional — a sampled-out session still initializes, whatever the exclude list
+//      holds, so network instrumentation stays alive to propagate trace context.
 //   2. The exporter's per-session sampling decision is seeded at init.
 //   3. Session rotation invokes the reroll callback through `samplingReevaluationCallback`,
 //      keeping the exporter's flag in sync — without clobbering `sessionChangedCallback`,
@@ -22,16 +22,20 @@ final class SessionSamplingRerollTests: XCTestCase {
         CoralogixRum.isInitialized = false
     }
 
-    // MARK: - Back-compat: sampleRate=0 + empty exclude ⇒ no init
+    // MARK: - sampleRate=0 + empty exclude ⇒ still initializes, stamped sampled-out
 
-    func testInit_sampleRateZero_excludeEmpty_doesNotInitialize() {
+    func testInit_sampleRateZero_excludeEmpty_stillInitializesStampedSampledOut() {
+        // The SDK used to skip init entirely here. It no longer can: network instrumentation has to
+        // stay installed so outgoing requests still carry `traceparent`, and a session that never
+        // initialized emits none. Nothing reportable survives the export filter, so the observable
+        // telemetry is unchanged — what changes is that trace context keeps flowing.
         let rum = CoralogixRum(options: makeOptions(sampleRate: 0, exclude: []))
         defer { rum.shutdown() }
 
-        XCTAssertFalse(rum.isInitialized,
-                       "Back-compat: sampleRate=0 + excludeFromSampling=[] must NOT initialize.")
-        XCTAssertNil(rum.coralogixExporter,
-                     "Skipped init must not create an exporter.")
+        XCTAssertTrue(rum.isInitialized,
+                      "Init must proceed even sampled out with an empty exclude list.")
+        XCTAssertEqual(rum.coralogixExporter?.isCurrentSessionSampledIn(), false,
+                       "The exporter must record the session as sampled-out so the filter drops reportable spans.")
     }
 
     // MARK: - New: sampleRate=0 + non-empty exclude ⇒ init succeeds, sampledIn=false

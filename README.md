@@ -146,7 +146,11 @@ let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
 ```
 
 ### Sample Rate
-Number between 0-100 as a percentage of SDK sessions should be initialized.
+Number between 0-100 as a percentage of sessions that report the full event stream.
+
+A sampled-out session still starts. Network instrumentation stays installed so outgoing requests keep
+carrying `traceparent` and your backend traces stay correlated across the whole population; the events
+that would otherwise be reported are dropped before they leave the device.
 ```swift
 let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
                                         environment: "ENVIRONMENT",
@@ -157,7 +161,11 @@ let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
 ```
 
 ### Excluding Instrumentations from Session Sampling
-Opt specific event categories out of the `sessionSampleRate` gate so they always export, even from sessions that are otherwise sampled out. Useful when you want a low session sample rate for general telemetry but still need every log and error captured.
+Opt specific event categories out of the `sessionSampleRate` gate so they keep exporting from sessions that are otherwise sampled out. Useful when you want a low session sample rate for general telemetry but still need every log and error captured.
+
+This option only ever *relaxes* the sampling decision, so it does nothing on a session that is already
+sampled in — and it never overrides `instrumentations`. If you switch an instrumentation off there and
+also list it here, it stays off.
 
 In the example below, only 10% of sessions are sampled in for the full event stream; the remaining 90% of sessions still export `.logs` and `.errors`, but every other category is dropped.
 ```swift
@@ -179,9 +187,25 @@ Accepted `ExcludableInstrumentation` cases:
 - `.customSpan`
 - `.customMeasurement`
 
-**Back-compat:** The default is an empty set — `sessionSampleRate` gates the entire SDK exactly as before. Add categories to `excludeFromSampling` to let them bypass the gate.
+The default is an empty set: a sampled-out session then reports nothing except the SDK's own
+initialization event, while still propagating trace context.
 
 Parity note: the Coralogix Browser SDK exposes the same option with matching semantics.
+
+#### Network instrumentation and trace propagation
+Network is the one instrumentation with three states rather than two, because the `traceparent` header
+and the `network-request` event are independent:
+
+| Configuration | Header | `network-request` event |
+| --- | --- | --- |
+| Session sampled in, network enabled | injected | reported |
+| Session sampled in, `instrumentations: [.network: false]`, `traceParentInHeader` enabled | injected | not reported |
+| Session sampled in, `instrumentations: [.network: false]`, `traceParentInHeader` disabled | not injected | not reported |
+| Session sampled out, `.network` not excluded | injected | not reported |
+| Session sampled out, `excludeFromSampling: [.network]` | injected | reported |
+
+`enableSwizzling: false` overrides all of the above — with swizzling off the SDK never touches
+`NSURLSession`, so there is no header and no native network event.
 
 #### Telling excluded events apart in `beforeSend`
 Every event carries `session_context.isSessionSampledIn` (read-only). `false` means the event reached export only because its category is listed in `excludeFromSampling` — the session itself was sampled out. Use it in `beforeSend` to apply your own filtering on top of the exclude list, e.g. keep only crashes and ANRs from sampled-out sessions:

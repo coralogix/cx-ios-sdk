@@ -472,4 +472,84 @@ final class HybridAPITests: XCTestCase {
         XCTAssertEqual(Set(capture.eventTypes), Set(["log", "network-request"]),
                        "Sampled-in: every span should reach the hybrid callback regardless of excludeFromSampling.")
     }
+
+    // MARK: - Gating on a sampled-out hybrid session
+    //
+    // The SDK now initializes for a sampled-out session instead of bailing out, so the bridge entry
+    // points stop no-oping and start producing spans that the export filter then drops. These pin
+    // that the hybrid outcome is unchanged while the reachability underneath it changed — the
+    // bridge payload never passes through the native extraction path, so it needs its own coverage.
+
+    func testFlutterPath_sampledOutEmptyExclude_initializesButReportsNothing() throws {
+        coralogixRum?.shutdown()
+        coralogixRum = nil
+
+        let capture = EventTypeCapture()
+        var opts = makeSamplingOptions(sampleRate: 0, exclude: [])
+        opts.beforeSendCallBack = capture.beforeSendCallback()
+
+        coralogixRum = CoralogixRum(options: opts, sdkFramework: .flutter(version: "1.0.0"))
+
+        XCTAssertTrue(CoralogixRum.isInitialized,
+                      "Init must proceed so the bridge stays usable and trace context keeps flowing.")
+
+        let exporter = try XCTUnwrap(coralogixRum.coralogixExporter, "Exporter must exist after init.")
+        exporter.spanUploader = SamplingMockSpanUploader()
+
+        _ = exporter.export(spans: [
+            makeSamplingSpan(eventType: .networkRequest, sampledIn: false),
+            makeSamplingSpan(eventType: .userInteraction, sampledIn: false),
+            makeSamplingSpan(eventType: .log, sampledIn: false)
+        ], explicitTimeout: nil)
+
+        XCTAssertEqual(capture.eventTypes, [],
+                       "Nothing reportable may reach the hybrid callback with an empty exclude list.")
+    }
+
+    func testFlutterPath_sampledOutExcludeNetwork_reportsHybridNetworkEvents() throws {
+        coralogixRum?.shutdown()
+        coralogixRum = nil
+
+        let capture = EventTypeCapture()
+        var opts = makeSamplingOptions(sampleRate: 0, exclude: [.network])
+        opts.beforeSendCallBack = capture.beforeSendCallback()
+
+        coralogixRum = CoralogixRum(options: opts, sdkFramework: .flutter(version: "1.0.0"))
+
+        let exporter = try XCTUnwrap(coralogixRum.coralogixExporter, "Exporter must exist after init.")
+        exporter.spanUploader = SamplingMockSpanUploader()
+
+        _ = exporter.export(spans: [
+            makeSamplingSpan(eventType: .networkRequest, sampledIn: false),
+            makeSamplingSpan(eventType: .userInteraction, sampledIn: false)
+        ], explicitTimeout: nil)
+
+        XCTAssertEqual(capture.eventTypes, ["network-request"],
+                       "Excluding network must let bridge-reported network events through on a sampled-out session.")
+    }
+
+    func testFlutterPath_networkReportingOff_dropsHybridNetworkEventsWhileSampledIn() throws {
+        coralogixRum?.shutdown()
+        coralogixRum = nil
+
+        let capture = EventTypeCapture()
+        var opts = makeSamplingOptions(sampleRate: 100,
+                                       exclude: [],
+                                       instrumentations: [.network: false],
+                                       traceParentInHeader: traceParentEnabled)
+        opts.beforeSendCallBack = capture.beforeSendCallback()
+
+        coralogixRum = CoralogixRum(options: opts, sdkFramework: .flutter(version: "1.0.0"))
+
+        let exporter = try XCTUnwrap(coralogixRum.coralogixExporter, "Exporter must exist after init.")
+        exporter.spanUploader = SamplingMockSpanUploader()
+
+        _ = exporter.export(spans: [
+            makeSamplingSpan(eventType: .networkRequest),
+            makeSamplingSpan(eventType: .log)
+        ], explicitTimeout: nil)
+
+        XCTAssertEqual(capture.eventTypes, ["log"],
+                       "Case 4a on the hybrid path: propagate-only network must not reach the callback even sampled in.")
+    }
 }
