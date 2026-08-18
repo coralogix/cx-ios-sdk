@@ -146,7 +146,7 @@ let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
 ```
 
 ### Sample Rate
-Number between 0-100 as a percentage of sessions that report the full event stream.
+Number between 0 and 100 as a percentage of sessions that report the full event stream.
 
 A sampled-out session still starts. Network instrumentation stays installed so outgoing requests keep
 carrying `traceparent` and your backend traces stay correlated across the whole population; the events
