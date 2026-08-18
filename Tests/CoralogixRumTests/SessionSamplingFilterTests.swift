@@ -125,6 +125,23 @@ final class SessionSamplingFilterTests: XCTestCase {
         XCTAssertTrue(exporter.reportsNetworkEvents(span(eventType: nil, sampledIn: true)))
     }
 
+    func testNetworkOff_excludeFromSamplingCannotRestoreReporting() {
+        // Guards a plausible-but-wrong migration story: "disabled network reporting? list .network in
+        // excludeFromSampling to get the events back." It does not work, by design — the exclude list
+        // only relaxes the *sampling* condition, and the instrumentations map is the source of truth.
+        // Asserted as export() composes it, since reportsNetworkEvents alone is sampling-blind.
+        let sampledIn = makeExporter(sampleRate: 100, exclude: [.network], instrumentations: [.network: false])
+        let sampledOut = makeExporter(sampleRate: 0, exclude: [.network], instrumentations: [.network: false])
+
+        let inSpan = span(eventType: "network-request", sampledIn: true)
+        let outSpan = span(eventType: "network-request", sampledIn: false)
+
+        XCTAssertFalse(sampledIn.passesSessionSampling(inSpan) && sampledIn.reportsNetworkEvents(inSpan),
+                       "Sampled in: reporting stays off because the caller switched network off.")
+        XCTAssertFalse(sampledOut.passesSessionSampling(outSpan) && sampledOut.reportsNetworkEvents(outSpan),
+                       "Sampled out: the exclude entry gets the span past the sampling filter, but reporting is still off.")
+    }
+
     func testReportsNetworkEvents_networkOn_passesNetworkSpans() {
         let exporter = makeExporter(sampleRate: 100, exclude: [])
 

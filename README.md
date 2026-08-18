@@ -204,6 +204,10 @@ and the `network-request` event are independent:
 | Session sampled out, `.network` not excluded | injected | not reported |
 | Session sampled out, `excludeFromSampling: [.network]` | injected | reported |
 
+Every row assumes network instrumentation is enabled unless it says otherwise. `excludeFromSampling`
+never overrides `instrumentations`: with `[.network: false]` the event stays unreported whether or not
+`.network` is also excluded from sampling.
+
 `enableSwizzling: false` overrides all of the above — with swizzling off the SDK never touches
 `NSURLSession`, so there is no header and no native network event.
 
