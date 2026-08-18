@@ -69,6 +69,13 @@ public class CoralogixRum {
     /// Serializes check-and-set for `customTracerIssued` so concurrent `getCustomTracer()` calls cannot both succeed.
     private static let customTracerIssuanceLock = NSLock()
 
+    /// Instrumentations already installed for this SDK lifecycle. Guards the top-up that runs when a
+    /// session rotates into being sampled in: none of the `initialize*Instrumentation()` functions are
+    /// idempotent — they register observers, start monitors and install swizzles — so each type must be
+    /// installed at most once however many rotations occur.
+    private let installedInstrumentationsLock = NSLock()
+    private var installedInstrumentations: Set<CoralogixExporterOptions.InstrumentationType> = []
+
     /// Resets CX-35956 singleton state when tests reinitialize the SDK in-process without calling `shutdown()`.
     internal static func resetCustomTracerIssuanceForTesting() {
         customTracerIssuanceLock.lock()
@@ -136,14 +143,24 @@ public class CoralogixRum {
         self.coralogixExporter?.updateSessionSampling(sampledIn: initialSampledIn)
         sessionManager.samplingReevaluationCallback = { [weak self, weak sessionManager] _ in
             guard let self, let sessionManager else { return }
-            self.coralogixExporter?.updateSessionSampling(
-                sampledIn: sessionManager.isSessionSampledIn
-            )
+            let sampledIn = sessionManager.isSessionSampledIn
+            self.coralogixExporter?.updateSessionSampling(sampledIn: sampledIn)
+
+            // Eligibility is re-resolved, not just reported. A session that rolled sampled-out
+            // installed almost nothing; when a rotation rolls it sampled-in those instrumentations
+            // become eligible and have to be installed now, or the session would report only what
+            // survives without them for the rest of the process. Eligibility only ever widens —
+            // a rotation to sampled-out cannot uninstall swizzles — so this only ever adds.
+            //
+            // Fires outside `sessionLock` (see `SessionManager.fireRotationCallbacks`) and on
+            // whichever thread rotated, which is the same contract the initializers already meet
+            // at startup.
+            self.installEligibleInstrumentations(using: options, sampledIn: sampledIn)
         }
 
         self.setupTracer(applicationName: options.application)
         self.swizzle()
-        self.initializeEnabledInstrumentations(using: options, sampledIn: initialSampledIn)
+        self.installEligibleInstrumentations(using: options, sampledIn: initialSampledIn)
         self.createInitSpan()
 
         CoralogixRum.isInitialized = true
@@ -153,7 +170,12 @@ public class CoralogixRum {
         self.completeCrashRecovery()
     }
     
-    private func initializeEnabledInstrumentations(using options: CoralogixExporterOptions, sampledIn: Bool) {
+    /// Installs every instrumentation that is eligible now and not already installed.
+    ///
+    /// Safe to call repeatedly: `claimInstallation(of:)` hands out each type exactly once, which is
+    /// what makes the rotation top-up possible at all — the initializers register observers and
+    /// install swizzles, so calling one twice would double every event it produces.
+    private func installEligibleInstrumentations(using options: CoralogixExporterOptions, sampledIn: Bool) {
         let instrumentationMap: [(CoralogixExporterOptions.InstrumentationType, () -> Void)] = [
             (.lifeCycle, self.initializeLifeCycleInstrumentation),
             (.userActions, self.initializeUserActionsInstrumentation),
@@ -165,8 +187,16 @@ public class CoralogixRum {
         
         for (type, initializer) in instrumentationMap
         where Self.shouldInstall(type, options: options, sampledIn: sampledIn) {
+            guard self.claimInstallation(of: type) else { continue }
             initializer()
         }
+    }
+
+    /// Returns `true` to exactly one caller per instrumentation type, for the SDK's lifecycle.
+    private func claimInstallation(of type: CoralogixExporterOptions.InstrumentationType) -> Bool {
+        self.installedInstrumentationsLock.lock()
+        defer { self.installedInstrumentationsLock.unlock() }
+        return self.installedInstrumentations.insert(type).inserted
     }
 
     /// Resolves whether `type` is installed for this session.
