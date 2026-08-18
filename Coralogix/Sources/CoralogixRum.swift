@@ -136,14 +136,15 @@ public class CoralogixRum {
         //
         // SessionManager owns the roll: it happens inside the rotation lock so the decision
         // is atomic with the session identity and gets stamped on every span
-        // (is_session_sampled_in). The callback only propagates the stored decision to the
-        // exporter's filter — rolling again here would let the filter and the stamp disagree.
+        // (is_session_sampled_in). The callback receives that rotation's own decision as an
+        // argument — rolling again here would let the filter and the stamp disagree, and
+        // re-reading the live flag would let a concurrent rotation hide a sampled-in transition
+        // from the callback meant to act on it.
         sessionManager.setSessionSampledIn(initialSampledIn)
         sessionManager.samplingRoller = { options.sdkSampler.shouldInitialized() }
         self.coralogixExporter?.updateSessionSampling(sampledIn: initialSampledIn)
-        sessionManager.samplingReevaluationCallback = { [weak self, weak sessionManager] _ in
-            guard let self, let sessionManager else { return }
-            let sampledIn = sessionManager.isSessionSampledIn
+        sessionManager.samplingReevaluationCallback = { [weak self] _, sampledIn in
+            guard let self else { return }
             self.coralogixExporter?.updateSessionSampling(sampledIn: sampledIn)
 
             // Eligibility is re-resolved, not just reported. A session that rolled sampled-out

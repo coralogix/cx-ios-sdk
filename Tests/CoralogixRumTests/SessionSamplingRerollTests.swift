@@ -112,6 +112,81 @@ final class SessionSamplingRerollTests: XCTestCase {
                       "sessionChangedCallback must fire on rotation; if samplingReevaluationCallback had clobbered it, this would be false.")
     }
 
+    // MARK: - The callback carries its own rotation's decision
+
+    func testSamplingCallback_receivesTheDecisionRolledForThatRotation() throws {
+        // Guards against resolving the decision by re-reading `isSessionSampledIn` when the callback
+        // runs: that reads whatever the newest rotation left, so a concurrent rotation could hide a
+        // sampled-in transition from the callback meant to act on it. Passing it as an argument keeps
+        // the decision paired with the rotation that produced it.
+        let rum = CoralogixRum(options: makeOptions(sampleRate: 100, exclude: []))
+        defer { rum.shutdown() }
+        let sessionManager = try XCTUnwrap(rum.sessionManager)
+
+        var rolled: [Bool] = []
+        var observed: [Bool] = []
+        let plan = [true, false, true, true, false]
+        var next = 0
+
+        sessionManager.samplingRoller = {
+            let decision = plan[min(next, plan.count - 1)]
+            next += 1
+            rolled.append(decision)
+            return decision
+        }
+        sessionManager.samplingReevaluationCallback = { _, sampledIn in observed.append(sampledIn) }
+
+        for _ in plan { sessionManager.setupSessionMetadata() }
+
+        XCTAssertEqual(observed, rolled,
+                       "Each callback must report the decision rolled for its own rotation, in order.")
+    }
+
+    func testSamplingCallback_underConcurrentRotations_reportsEveryDecisionExactlyOnce() throws {
+        // The invariant that a re-read cannot hold: however the rotations interleave, the decisions
+        // the callbacks report must be exactly the decisions that were rolled — same count of each.
+        let rum = CoralogixRum(options: makeOptions(sampleRate: 100, exclude: []))
+        defer { rum.shutdown() }
+        let sessionManager = try XCTUnwrap(rum.sessionManager)
+
+        let stateLock = NSLock()
+        var rolledTrue = 0
+        var observedTrue = 0
+        var observedTotal = 0
+        var counter = 0
+
+        sessionManager.samplingRoller = {
+            stateLock.lock()
+            defer { stateLock.unlock() }
+            counter += 1
+            let decision = counter % 2 == 0
+            if decision { rolledTrue += 1 }
+            return decision
+        }
+        sessionManager.samplingReevaluationCallback = { _, sampledIn in
+            stateLock.lock()
+            defer { stateLock.unlock() }
+            observedTotal += 1
+            if sampledIn { observedTrue += 1 }
+        }
+
+        let rotations = 40
+        let queue = DispatchQueue(label: "rotations", attributes: .concurrent)
+        let group = DispatchGroup()
+        for _ in 0..<rotations {
+            queue.async(group: group) { sessionManager.setupSessionMetadata() }
+        }
+        XCTAssertEqual(group.wait(timeout: .now() + 10), .success, "Rotations must finish.")
+
+        stateLock.lock()
+        let (total, seenTrue, expectedTrue) = (observedTotal, observedTrue, rolledTrue)
+        stateLock.unlock()
+
+        XCTAssertEqual(total, rotations, "Every rotation must fire the callback exactly once.")
+        XCTAssertEqual(seenTrue, expectedTrue,
+                       "The sampled-in decisions reported must match the sampled-in decisions rolled.")
+    }
+
     // MARK: - Helpers
 
     private func makeOptions(sampleRate: Int,
