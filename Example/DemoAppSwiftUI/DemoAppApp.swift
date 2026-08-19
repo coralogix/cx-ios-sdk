@@ -24,7 +24,6 @@ struct DemoAppApp: App {
                                                publicKey: "cxtp_3EBvvOiDcFwgutlSBX507UsXvrSQts",
                                                ignoreUrls: [], //[".*\\.il$", "https://www.coralogix.com/academy"],
                                                ignoreErrors: [], //[".*errorcode=.*", "Im cusom Error"],
-                                               customDomainUrl: "https://ingress.staging.rum-ingress-coralogix.com",
                                                labels: ["item" : "playstation 5", "itemPrice" : 1000],
                                                beforeSend: CoralogixRumManager.maskedInteractionBeforeSend,
                                                debug: true)
