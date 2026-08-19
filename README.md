@@ -128,7 +128,7 @@ The fields accepted by `CoralogixExporterOptions`. Each one is described in deta
 | enableSwizzling | Bool | Method swizzling for `URLSession` instrumentation. Defaults to `true`. | No |
 | instrumentations | `[InstrumentationType: Bool]?` | Switches individual instrumentations off. All are active by default. Read once while the SDK initializes, so a later change takes effect only after `shutdown()` and a fresh `CoralogixRum(options:)`. | No |
 | mobileVitals | `[MobileVitalsType: Bool]?` | Switches individual mobile vitals detectors off. All are active by default. Read at initialization only, the same as `instrumentations`. | No |
-| shouldSendText | `((UIView, String) -> Bool)?` | Called before recording tapped text. Return `false` to redact it: the field is still sent, carrying `***` instead of the text. Masked, secure and sensitive fields are redacted before this runs, so they never reach your closure. | No |
+| shouldSendText | `((UIView, String) -> Bool)?` | Called before recording tapped text. Return `false` to redact it: the field is still sent, carrying `***` instead of the text. Taps that land on masked geometry, inside a masked subtree, or on a field carrying sensitive traits are redacted without consulting this closure. Text masked only in the replay's pixels still reaches it, so use this closure for anything you need kept out of events. | No |
 | resolveTargetName | `((UIView) -> String?)?` | Returns a human-readable name for a tapped view, used as `target_element`. Return `nil` to fall back to the class name. Runs on the main thread on every tap, so keep it fast. | No |
 
 ### Instrumentations
@@ -262,7 +262,11 @@ let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
                                             // data.tracesData.resourceSpans[].scopeSpans[].spans[]
                                             // data.jsonString — JSON-encoded OTLP payload, nil if encoding fails
                                             if let json = data.jsonString {
-                                                forwardToCustomCollector(json)
+                                                // Hand the work to your own queue: this callback runs on the
+                                                // export path, so blocking here delays the batches behind it.
+                                                DispatchQueue.global(qos: .utility).async {
+                                                    forwardToCustomCollector(json)
+                                                }
                                             }
                                         })
 ```
