@@ -116,15 +116,15 @@ The fields accepted by `CoralogixExporterOptions`. Each one is described in deta
 | debug | Bool | Turns internal debug logging on or off. | No |
 | ignoreUrls | \[String\]? | URLs that partially match any regex in `ignoreUrls` are not traced. | No |
 | ignoreErrors | \[String\]? | Patterns for error messages that should not be sent to Coralogix. | No |
-| customDomainUrl | String? | Ignores the `CoralogixDomain` URL and routes all data calls to a specific URL. | No |
 | labels | \[String: Any\]? | Labels added to every span. | No |
-| beforeSend | `((Event) -> Event?)?` | Callback to inspect, modify, or discard each event before it reaches Coralogix. Return `nil` to drop the event. | No |
-| tracesExporter | `((CoralogixTraceExporterData) -> Void)?` | Callback invoked for every span batch, for forwarding spans to your own collector. | No |
+| beforeSend | `(([String: Any]) -> [String: Any]?)?` | Callback to inspect, modify, or discard each event before it reaches Coralogix. Receives the event as a dictionary; return `nil` to drop it. | No |
+| tracesExporter | `TracesExporterCallback?`, i.e. `((CoralogixTraceExporterData) throws -> Void)?` | Callback invoked for each exported span batch, for forwarding spans to your own collector. | No |
 | networkExtraConfig | `[NetworkCaptureRule]?` | Per-URL rules for capturing request and response headers and payloads. | No |
 | proxyUrl | String? | Routes all RUM data through a proxy URL. | No |
 | traceParentInHeader | \[String: Any\]? | Configures W3C `traceparent` header propagation for distributed tracing. | No |
 | collectIPData | Bool | Sends the client IP for region detection. Defaults to `true`. | No |
 | sessionSampleRate | Int | Percentage of overall sessions tracked, 0–100. Defaults to `100`. | No |
+| excludeFromSampling | `Set<CoralogixEventCategory>` | Event categories that bypass the `sessionSampleRate` gate. Defaults to empty. | No |
 | enableSwizzling | Bool | Method swizzling for `URLSession` instrumentation. Defaults to `true`. | No |
 
 ### Instrumentations
@@ -245,7 +245,9 @@ beforeSend: { cxRum in
 ```
 
 ### Trace Exporter
-Forward span data to your own collector or backend by configuring a trace exporter callback. The callback receives every span batch the SDK produces, in OTLP-compatible shape. Spans continue to flow to Coralogix when this callback is set.
+Forward span data to your own collector or backend by configuring a trace exporter callback. The callback receives each batch on its way out, in OTLP-compatible shape, and spans continue to flow to Coralogix when it is set.
+
+Two things to know about where it sits in the pipeline: the batch has already been filtered, sampled and de-duplicated, so this is not a stream of every span produced; and it runs before `beforeSend`, so anything `beforeSend` would redact or drop is still present here. Sanitize attributes yourself before forwarding.
 ```swift
 let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
                                         environment: "ENVIRONMENT",
@@ -578,6 +580,7 @@ In SwiftUI, the `trackCXView` view modifier is the declarative equivalent of `se
 
 ```swift
 import SwiftUI
+import Coralogix
 
 struct ContentView: View {
     var body: some View {
@@ -619,13 +622,12 @@ try performCheckout()
 Parity note: the Coralogix Browser SDK exposes the same `startTimeMeasure` / `endTimeMeasure` surface with matching semantics.
 
 ### Utility Methods
-Inspect SDK state or read the current session at runtime.
+Read the current session at runtime, for example to attach it to a support ticket.
+`getSessionId` is a property, and it is `nil` until the SDK has started a session.
 ```swift
-// Confirm the SDK is initialized.
-let initialized = CoralogixRum.isInitialized
-
-// Read the current session ID, for example to attach it to a support ticket.
-let sessionId = coralogixRum.getSessionId()
+if let sessionId = coralogixRum.getSessionId {
+    attachToSupportTicket(sessionId)
+}
 ```
 
 <!-- /split -->
