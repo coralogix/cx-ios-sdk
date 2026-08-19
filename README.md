@@ -528,7 +528,17 @@ coralogixRum.log(severity: .info,
                  data: ["step_count": 4],
                  labels: ["flow": "onboarding"])
 ```
-Severity levels: `.debug`, `.verbose`, `.info`, `.warn`, `.error`, `.critical`.
+
+`CoralogixLogSeverity` is an `Int`-backed enum with six cases:
+
+| Case | Level |
+| --- | --- |
+| `.debug` | 1 |
+| `.verbose` | 2 |
+| `.info` | 3 |
+| `.warn` | 4 |
+| `.error` | 5 |
+| `.critical` | 6 |
 
 ### Custom Spans
 Create your own OpenTelemetry spans to trace app-specific work (e.g. a checkout flow) with full control over attributes, events, and status. The custom tracer requires `traceParentInHeader` to be enabled in the options.
