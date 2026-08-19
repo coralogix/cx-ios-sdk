@@ -119,7 +119,7 @@ The fields accepted by `CoralogixExporterOptions`. Each one is described in deta
 | labels | \[String: Any\]? | Labels added to every span. | No |
 | beforeSend | `(([String: Any]) -> [String: Any]?)?` | Callback to inspect, modify, or discard each event before it reaches Coralogix. Receives the event as a dictionary; return `nil` to drop it. | No |
 | tracesExporter | `TracesExporterCallback?`, i.e. `((CoralogixTraceExporterData) throws -> Void)?` | Callback invoked for each exported span batch, for forwarding spans to your own collector. | No |
-| networkExtraConfig | `[NetworkCaptureRule]?` | Per-URL rules for capturing request and response headers and payloads. | No |
+| networkExtraConfig | `[NetworkCaptureRule]?` | Per-URL rules for capturing request and response headers and payloads. Nothing is captured by default. Only allowlist URLs and header names you are comfortable logging, and note that bodies over 1024 characters are dropped rather than truncated. See "Swizzling and network capture" for the full rules. | No |
 | proxyUrl | String? | Routes all RUM data through a proxy URL. | No |
 | traceParentInHeader | \[String: Any\]? | Configures W3C `traceparent` header propagation for distributed tracing. | No |
 | collectIPData | Bool | Sends the client IP for region detection. Defaults to `true`. | No |
