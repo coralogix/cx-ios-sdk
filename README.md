@@ -124,8 +124,12 @@ The fields accepted by `CoralogixExporterOptions`. Each one is described in deta
 | traceParentInHeader | \[String: Any\]? | Configures W3C `traceparent` header propagation for distributed tracing. | No |
 | collectIPData | Bool | Sends the client IP for region detection. Defaults to `true`. | No |
 | sessionSampleRate | Int | Percentage of overall sessions tracked, 0–100. Defaults to `100`. | No |
-| excludeFromSampling | `Set<CoralogixEventCategory>` | Event categories that bypass the `sessionSampleRate` gate. Defaults to empty. | No |
+| excludeFromSampling | `Set<ExcludableInstrumentation>` | Instrumentations that bypass the `sessionSampleRate` gate, so their events are sent even from sessions that are not sampled in. Accepts `errors`, `logs`, `network`, `userInteractions`, `mobileVitals`, `customSpan` and `customMeasurement`. Defaults to empty. | No |
 | enableSwizzling | Bool | Method swizzling for `URLSession` instrumentation. Defaults to `true`. | No |
+| instrumentations | `[InstrumentationType: Bool]?` | Switches individual instrumentations off at runtime. All are active by default. | No |
+| mobileVitals | `[MobileVitalsType: Bool]?` | Switches individual mobile vitals detectors off at runtime. All are active by default. | No |
+| shouldSendText | `((UIView, String) -> Bool)?` | Called before recording tapped text. Return `false` to omit it. Masked, secure and sensitive fields are already redacted before this runs. | No |
+| resolveTargetName | `((UIView) -> String?)?` | Returns a human-readable name for a tapped view, used as `target_element`. Return `nil` to fall back to the class name. Runs on the main thread on every tap, so keep it fast. | No |
 
 ### Instrumentations
 Turn on/off specific instrumentation, default to true. Each instrumentation is responsible for which data the SDK will track and collect for you.
