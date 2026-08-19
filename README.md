@@ -260,8 +260,10 @@ let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
                                         publicKey: "API-KEY",
                                         tracesExporter: { data in
                                             // data.tracesData.resourceSpans[].scopeSpans[].spans[]
-                                            // data.jsonString — JSON-encoded OTLP payload
-                                            forwardToCustomCollector(data.jsonString)
+                                            // data.jsonString — JSON-encoded OTLP payload, nil if encoding fails
+                                            if let json = data.jsonString {
+                                                forwardToCustomCollector(json)
+                                            }
                                         })
 ```
 
