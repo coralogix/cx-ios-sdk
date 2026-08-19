@@ -92,11 +92,12 @@ final class NetworkPropagationSamplingTests: XCTestCase {
 
     private func startRUM(sampleRate: Int = 0,
                           exclude: Set<ExcludableInstrumentation>,
-                          instrumentations: [CoralogixExporterOptions.InstrumentationType: Bool]? = nil) throws {
+                          instrumentations: [CoralogixExporterOptions.InstrumentationType: Bool]? = nil,
+                          propagation: Bool = true) throws {
         let options = makeSamplingOptions(sampleRate: sampleRate,
                                          exclude: exclude,
                                          instrumentations: instrumentations,
-                                         traceParentInHeader: traceParentEnabled,
+                                         traceParentInHeader: propagation ? traceParentEnabled : nil,
                                          tracesExporter: capture.tracesExporterCallback())
         let rum = CoralogixRum(options: options)
         self.rum = rum
@@ -136,6 +137,49 @@ final class NetworkPropagationSamplingTests: XCTestCase {
 
         XCTAssertFalse(capture.eventTypes.contains(CoralogixEventType.networkRequest.rawValue),
                        "Propagate-only: the request must not surface as a network-request event. Saw \(capture.eventTypes).")
+    }
+
+    // MARK: - Sampled out, propagation OFF: nothing to inject, so nothing installs
+
+    func testSampledOut_noExcludeNoPropagation_installsNothingAndReportsNothing() throws {
+        let options = makeSamplingOptions(sampleRate: 0,
+                                         exclude: [],
+                                         tracesExporter: capture.tracesExporterCallback())
+        try startRUM(exclude: [], propagation: false)
+
+        performRequest(path: "no-propagation")
+        forceFlush()
+
+        XCTAssertFalse(CoralogixRum.shouldInstall(.network, options: options, sampledIn: false),
+                       "Nothing to propagate and nothing to report, so network must not be installed.")
+        XCTAssertFalse(capture.eventTypes.contains(CoralogixEventType.networkRequest.rawValue),
+                       "No event may be reported. Saw \(capture.eventTypes).")
+
+        // Deliberately no assertion on the wire here. Swizzles are process-global and never
+        // uninstalled, and `shutdown()` does not clear `NetworkInstrumentation.currentNetworkOptions`
+        // — the statics are intentional, so that closures surviving a reinitialization can read the
+        // latest config. A prior test in this process installed them with propagation on, and those
+        // leftovers keep injecting from the stale options. The same is true of a host app that
+        // reinitializes the SDK: "network is off" means the SDK stops installing and updating the
+        // instrumentation, not that previously-installed swizzles disappear. In a fresh process
+        // nothing is installed and nothing is injected, which is what the decision above asserts.
+    }
+
+    // MARK: - Sampled out, network excluded, propagation OFF: reports without a header
+    //
+    // The row that shows the two concerns really are independent: excluding network from sampling
+    // restores the event, while the header still obeys traceParentInHeader alone.
+
+    func testSampledOut_excludeNetworkNoPropagation_reportsEventWithoutInjecting() throws {
+        try startRUM(exclude: [.network], propagation: false)
+
+        performRequest(path: "excluded-no-propagation")
+        forceFlush()
+
+        XCTAssertNil(PropagationTestURLProtocol.lastTraceparent,
+                     "traceParentInHeader is off, so no header goes out even though the event is reported.")
+        XCTAssertTrue(capture.eventTypes.contains(CoralogixEventType.networkRequest.rawValue),
+                      "Excluding network from sampling reports the event regardless of propagation. Saw \(capture.eventTypes).")
     }
 
     // MARK: - Case 4a: sampled IN, reporting off, propagation on
