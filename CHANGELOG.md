@@ -12,13 +12,13 @@ omitted; the focus here is user-facing behavior changes. Tickets are referenced 
 ## [2.16.0] - 2026-08-18
 
 ### Changed
-- The session sample rate no longer decides whether the SDK starts. A sampled-out session now initializes, keeps network instrumentation installed, and continues to attach `traceparent` to outgoing requests, so backend traces stay correlated for the whole population; everything that must not be reported is dropped per span at export instead. Previously a sampled-out session skipped initialization entirely unless `excludeFromSampling` was non-empty, and sent no trace context at all.
-- `excludeFromSampling` no longer overrides the `instrumentations` map. The map is the source of truth: an instrumentation switched off stays off, and the exclude list only relaxes the *sampling* decision. Listing a category in both places now leaves it off rather than turning it back on, and the exclude list has no effect at all on a session that is already sampled in.
-- `instrumentations: [.network: false]` switches network instrumentation off completely — no `network-request` events and no `traceparent` header, whatever `traceParentInHeader` says. This matches the Coralogix Browser SDK, where a disabled instrumentation is never registered with the OpenTelemetry provider and so has nothing left to inject. Sampling behaves differently on purpose: a session that is merely sampled out keeps injecting the header while reporting nothing, so backend traces stay correlated. `enableSwizzling: false` remains a complete kill switch for `NSURLSession` instrumentation.
-- `instrumentations: [.network: false]` now also suppresses network events reported by a hybrid wrapper through `setNetworkRequestContext`. Previously that bridge ignored the option and exported regardless, so Flutter and React Native apps that disable network instrumentation while reporting their own requests will stop seeing those events. To keep reporting them, leave network instrumentation enabled — the `instrumentations` setting takes precedence, so listing `.network` in `excludeFromSampling` will not bring them back.
+- Sessions not selected by `sessionSampleRate` now keep sending the `traceparent` header on outgoing requests, so distributed traces still correlate with your backend, while none of their events are reported.
+- `excludeFromSampling` no longer re-enables an instrumentation you switched off in `instrumentations`, and has no effect on sessions that are sampled in.
+- `instrumentations: [.network: false]` now suppresses the `traceparent` header as well as `network-request` events, whatever `traceParentInHeader` is set to.
+- `instrumentations: [.network: false]` now also suppresses network events reported from Flutter and React Native through `setNetworkRequestContext`, which previously ignored the setting; leave network instrumentation enabled to keep receiving them.
 
 ### Fixed
-- A sampled-out session now reports the SDK's own initialization event, matching Android. Previously it emitted nothing at all, which made a sampled-out session indistinguishable from an SDK that never started.
+- Sessions not selected by `sessionSampleRate` now report the SDK initialization event, which was previously missing.
 
 ## [2.15.1] - 2026-08-10
 
