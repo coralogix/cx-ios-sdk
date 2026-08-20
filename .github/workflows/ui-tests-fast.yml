@@ -1,0 +1,342 @@
+name: UI Tests (fast — cache + shard)
+
+# Replaces ui-tests.yml (legacy is workflow_dispatch-only now). Same coverage,
+# faster wall-clock:
+#   - shards are GENERATED from source at runtime (no hand-maintained list to
+#     drift), so every test method is assigned to exactly one shard
+#   - a final `verify` job fails CI if tests-executed != tests-that-exist,
+#     so a dropped/renamed test can never silently reduce coverage
+#   - build once (cached SPM + Pods, arm64) → fan out to parallel shards
+#     running test-without-building
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [ main, master ]
+  push:
+    branches: [ main, master ]
+
+permissions:
+  contents: read
+
+# A new push supersedes older in-flight runs (no duplicate shard checks).
+concurrency:
+  group: ui-tests-fast-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---- Enumerate every test from source and partition into named shards ----
+  plan:
+    name: Plan shards
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.gen.outputs.matrix }}
+      total: ${{ steps.gen.outputs.total }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: gen
+        run: |
+          python3 - <<'PY'
+          import os, re, json
+          # Test targets the DemoAppSwift scheme runs -> {(target, class): [methods]}.
+          roots = {
+              "DemoAppUITests": "Example/DemoAppUITests",
+              "DemoAppSwiftUIUITests": "Example/DemoAppSwiftUIUITests",
+          }
+          suites = {}
+          for target, root in roots.items():
+              for dp, _, files in os.walk(root):
+                  for fn in files:
+                      if not fn.endswith(".swift"):
+                          continue
+                      cls = None
+                      with open(os.path.join(dp, fn), encoding="utf-8") as fh:
+                          for line in fh:
+                              m = re.search(r'class\s+([A-Za-z0-9_]+)\s*:\s*[^\{]*XCTestCase', line)
+                              if m:
+                                  cls = m.group(1)
+                              fm = re.search(r'func\s+(test[A-Za-z0-9_]*)\s*\(', line)
+                              if fm and cls:
+                                  suites.setdefault((target, cls), []).append(fm.group(1))
+          total = sum(len(v) for v in suites.values())
+          # Keep each test class (suite) whole so every shard has a clear,
+          # self-describing name. Balance whole suites across shards by test
+          # count (largest-first).
+          N = min(4, len(suites)) or 1
+          shards = [{"labels": [], "ids": [], "n": 0} for _ in range(N)]
+          for (target, cls), methods in sorted(suites.items(), key=lambda kv: -len(kv[1])):
+              s = min(shards, key=lambda s: s["n"])
+              s["labels"].append(cls if target == "DemoAppUITests" else f"{cls}-SwiftUI")
+              s["ids"] += [f"{target}/{cls}/{m}" for m in methods]
+              s["n"] += len(methods)
+          include = [
+              {"name": "+".join(s["labels"]), "only": " ".join("-only-testing:" + t for t in s["ids"])}
+              for s in shards if s["ids"]
+          ]
+          out = os.environ["GITHUB_OUTPUT"]
+          with open(out, "a") as f:
+              f.write(f"matrix={json.dumps({'include': include})}\n")
+              f.write(f"total={total}\n")
+          print(f"{total} tests across {len(include)} shards:")
+          for it in include:
+              print(f"  [{it['name']}] {it['only'].count('-only-testing:')} tests")
+          PY
+
+  # ---- Build the app + tests once; share slim products as an artifact ----
+  build:
+    name: Build once (cached)
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: |
+          for v in 16.4 16.3 16.2 16.1 16.0; do
+            if [ -d "/Applications/Xcode_$v.app" ]; then
+              echo "DEVELOPER_DIR=/Applications/Xcode_$v.app/Contents/Developer" >> $GITHUB_ENV; break
+            fi
+          done
+
+      - name: Configure Xcode
+        run: |
+          if [ -n "${DEVELOPER_DIR:-}" ]; then sudo xcode-select -s "$DEVELOPER_DIR"; fi
+          sudo xcodebuild -license accept || true
+          sudo xcodebuild -runFirstLaunch || true
+          xcodebuild -version
+
+      - name: Generate envs.swift (CI)
+        run: |
+          cd Example
+          PUBLIC_KEY="${{ secrets.DEMOAPP_API_KEY || 'CI_DUMMY' }}"
+          printf 'import Foundation\n\npublic enum Envs: String {\n    case PUBLIC_KEY = "%s"\n    case PROXY_URL = "https://schema-validator-latest.onrender.com/logs"\n}\n' "$PUBLIC_KEY" > envs.swift
+
+      - name: Create placeholder GoogleService-Info.plist (CI)
+        run: |
+          cd Example
+          printf '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0">\n<dict>\n  <key>BUNDLE_ID</key>\n  <string>com.coralogix.DemoAppSwift</string>\n  <key>PROJECT_ID</key>\n  <string>placeholder-project</string>\n  <key>GOOGLE_APP_ID</key>\n  <string>1:000000000000:ios:0000000000000000000000</string>\n  <key>GCM_SENDER_ID</key>\n  <string>000000000000</string>\n  <key>API_KEY</key>\n  <string>AIzaSyAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA</string>\n  <key>IS_ANALYTICS_ENABLED</key>\n  <false/>\n</dict>\n</plist>\n' > GoogleService-Info.plist
+
+      - name: Patch Xcodeproj for objectVersion 70
+        run: |
+          for CONST in $(find /opt/homebrew /usr/local /Library/Ruby "$HOME/.gem" \
+              -path '*/gems/xcodeproj-*/lib/xcodeproj/constants.rb' 2>/dev/null); do
+            ruby -e '
+              f = ARGV[0]; s = File.read(f)
+              unless s =~ /^\s*70\s*=>/
+                s = s.sub("COMPATIBILITY_VERSION_BY_OBJECT_VERSION = {",
+                          "COMPATIBILITY_VERSION_BY_OBJECT_VERSION = {\n      70 => \x27Xcode 16.0\x27,")
+                File.write(f, s)
+              end' "$CONST" || true
+          done
+
+      # NOTE: keep SPM at its default DerivedData/SourcePackages location.
+      # Firebase's Crashlytics run-script phase hardcodes that path, so
+      # relocating checkouts (-clonedSourcePackagesDirPath) breaks the build.
+      # Shared with the BrowserStack workflow on purpose: these are package
+      # SOURCE checkouts (~535MB), identical for simulator and device builds, so
+      # a per-workflow prefix just stored the same bytes twice against the repo's
+      # 10GB cache allowance. Compiled products must NOT be shared this way.
+      - name: Cache SPM checkouts (Firebase etc.)
+        uses: actions/cache@v4
+        with:
+          path: DerivedData/SourcePackages
+          key: spm-src-${{ runner.os }}-${{ hashFiles('Example/DemoApp.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+          restore-keys: spm-src-${{ runner.os }}-
+
+      # No CocoaPods cache: it measured 0MB (AFNetworking, Alamofire,
+      # SDWebImage), and `pod install` costs ~10s, so the cache round-trip was
+      # pure bookkeeping.
+      - name: Install CocoaPods dependencies
+        run: cd Example && pod install --no-repo-update
+
+      - name: Build for testing (simulator, once)
+        run: |
+          set -o pipefail
+          cd Example
+          START=$(date +%s)
+          xcodebuild build-for-testing \
+            -workspace DemoApp.xcworkspace \
+            -scheme DemoAppSwift \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath ../DerivedData \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY="" DEVELOPMENT_TEAM="" \
+            IPHONEOS_DEPLOYMENT_TARGET="18.0" \
+            ARCHS=arm64 ONLY_ACTIVE_ARCH=YES \
+            -jobs $(sysctl -n hw.ncpu)
+          END=$(date +%s)
+          {
+            echo "### Build once"
+            echo "| build wall-clock |"
+            echo "|---|"
+            echo "| $((END - START))s (~$(((END-START)/60))m) |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Slim: ship only the app bundles + xctestrun (each .app already embeds its
+      # frameworks). Drops the duplicated standalone *.framework/*.bundle so the
+      # per-shard download is much smaller.
+      - name: Package test products (apps + xctestrun only)
+        run: |
+          cd DerivedData/Build
+          tar -czf ../../products.tar.gz \
+            Products/*.xctestrun \
+            Products/Debug-iphonesimulator/DemoAppSwift.app \
+            Products/Debug-iphonesimulator/DemoAppSwiftUI.app \
+            Products/Debug-iphonesimulator/*-Runner.app
+          cd ../.. && ls -lh products.tar.gz
+
+      - name: Upload test products
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-products
+          path: products.tar.gz
+          retention-days: 1
+
+  # ---- Run each shard in parallel ----
+  ui-tests:
+    name: ${{ matrix.name }}
+    needs: [plan, build]
+    runs-on: macos-15
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    steps:
+      - name: Select Xcode
+        run: |
+          for v in 16.4 16.3 16.2 16.1 16.0; do
+            if [ -d "/Applications/Xcode_$v.app" ]; then
+              echo "DEVELOPER_DIR=/Applications/Xcode_$v.app/Contents/Developer" >> $GITHUB_ENV; break
+            fi
+          done
+      - name: Configure Xcode
+        run: |
+          if [ -n "${DEVELOPER_DIR:-}" ]; then sudo xcode-select -s "$DEVELOPER_DIR"; fi
+          gem install xcpretty || true
+
+      - name: Download test products
+        uses: actions/download-artifact@v4
+        with:
+          name: test-products
+
+      - name: Unpack products
+        run: tar -xzf products.tar.gz && ls Products/*.xctestrun
+
+      - name: Pick & boot iOS simulator (18+)
+        run: |
+          set -euo pipefail
+          # Build is pinned to IPHONEOS_DEPLOYMENT_TARGET=18.0, so the app can
+          # only launch on iOS 18+. Never fall back to iOS 17.
+          UDID=$(xcrun simctl list devices available -j | jq -r '
+            .devices | to_entries[]
+            | select(.key | test("SimRuntime.iOS-18"))
+            | .value[] | select(.name | test("iPhone")) | .udid' | head -1)
+          if [ -z "$UDID" ]; then
+            UDID=$(xcrun simctl list devices available -j | jq -r '
+              .devices | to_entries[]
+              | select(.key | test("SimRuntime.iOS-(19|2[0-9])"))
+              | .value[] | select(.name | test("iPhone")) | .udid' | head -1)
+          fi
+          [ -n "$UDID" ] || { echo "❌ no simulator"; exit 1; }
+          xcrun simctl boot "$UDID" 2>/dev/null || true
+          # Wait for full boot — `boot` returns early; racing xcodebuild against
+          # a half-booted sim is a common source of intermittent failures.
+          xcrun simctl bootstatus "$UDID" -b || true
+          echo "SIM_ID=$UDID" >> $GITHUB_ENV
+
+      - name: Run shard (test-without-building, timed)
+        env:
+          ONLY: ${{ matrix.only }}
+        run: |
+          set -o pipefail
+          XCTESTRUN=$(ls Products/*.xctestrun | head -1)
+          START=$(date +%s)
+          set +e
+          xcodebuild test-without-building \
+            -xctestrun "$XCTESTRUN" \
+            -destination "platform=iOS Simulator,id=${SIM_ID}" \
+            $ONLY \
+            -parallel-testing-enabled NO \
+            2>&1 | tee shard.log | xcpretty
+          EXIT=${PIPESTATUS[0]}
+          set -e
+          END=$(date +%s)
+          # Count finished test cases directly. A shard can span two test
+          # TARGETS (a UIKit class + a SwiftUI class), and xcodebuild then emits
+          # one "Executed N tests" summary PER bundle — so the last summary line
+          # under-counts by dropping the earlier bundle(s). One "Test Case '…'
+          # passed/failed/skipped" line per test is bundle-agnostic and exact
+          # (skipped is included so this matches the source-scanned plan total).
+          COUNT=$(grep -cE "Test Case '.*' (passed|failed|skipped)" shard.log || true)
+          COUNT=${COUNT:-0}
+          # Passed requires: clean exit, a POSITIVE executed count (reject
+          # "Executed 0 tests" from an empty filter), and zero failures.
+          if [ "${EXIT:-1}" -eq 0 ] && [ "${COUNT:-0}" -gt 0 ] && grep -qE "with 0 failures" shard.log && ! grep -qE "with [1-9][0-9]* failures" shard.log; then ST=passed; else ST=failed; fi
+          echo "$COUNT" > "count-${{ matrix.name }}.txt"
+          {
+            echo "### ${{ matrix.name }}"
+            echo "| tests | wall-clock | status |"
+            echo "|---|---|---|"
+            echo "| ${COUNT} | $((END - START))s | ${ST} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          [ "$ST" = passed ] || { echo "❌ shard failed (exit=${EXIT:-?})"; grep -iE "error:|failed|failure" shard.log | tail -20; exit 1; }
+          echo "✅ ${{ matrix.name }}: ${COUNT} tests in $((END - START))s"
+
+      - name: Upload shard count
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: count-${{ matrix.name }}
+          path: count-${{ matrix.name }}.txt
+          retention-days: 1
+
+  # ---- Coverage guard: executed across shards MUST equal tests that exist ----
+  verify:
+    name: Verify no test was dropped
+    needs: [plan, ui-tests]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download shard counts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: count-*
+          merge-multiple: true
+          path: counts
+      - name: Compare executed vs expected
+        run: |
+          set -euo pipefail
+          EXPECTED="${{ needs.plan.outputs.total }}"
+          EXECUTED=$(cat counts/count-*.txt | awk '{s+=$1} END{print s+0}')
+          echo "expected (tests in source): $EXPECTED"
+          echo "executed (summed shards):   $EXECUTED"
+          {
+            echo "### Coverage guard"
+            echo "| expected | executed | verdict |"
+            echo "|---|---|---|"
+            echo "| $EXPECTED | $EXECUTED | $([ "$EXECUTED" -eq "$EXPECTED" ] && echo '✅ full coverage' || echo '❌ MISMATCH') |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$EXECUTED" -ne "$EXPECTED" ]; then
+            echo "❌ Coverage regression: $EXECUTED executed but $EXPECTED exist. A test was dropped or double-counted."
+            exit 1
+          fi
+          echo "✅ All $EXPECTED UI tests ran."
+
+  # Emits the legacy required-check context "Run DemoApp UI Tests" so existing
+  # branch-protection rules stay satisfied without running the old workflow.
+  # Passes only if the sharded tests AND the coverage guard passed. Remove once
+  # branch protection is repointed to the shard jobs + "Verify no test was dropped".
+  legacy-check:
+    name: Run DemoApp UI Tests
+    needs: [ui-tests, verify]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "ui-tests=${{ needs.ui-tests.result }}  verify=${{ needs.verify.result }}"
+          if [ "${{ needs.ui-tests.result }}" = "success" ] && [ "${{ needs.verify.result }}" = "success" ]; then
+            echo "✅ sharded UI tests + coverage guard passed"
+          else
+            echo "❌ sharded UI tests or coverage guard failed"
+            exit 1
+          fi
