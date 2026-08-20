@@ -9,7 +9,12 @@ These READMEs are not just repo files any more. A nightly job in `coralogix/docu
 
 Two consequences drive everything below:
 
-**The README is the single source.** Editing the published page is pointless — the next sync overwrites it. Content fixes only stick here.
+**Only some READMEs are synced.** The docs repo names the exact files it mirrors in
+`external_repos.json`; most repos publish their root `README.md`, some publish a file under
+`libs/`, and one publishes three. An `example/` README is not published, so none of this
+applies to it. Check before assuming a README you are editing is one of them.
+
+**The synced README is the single source.** Editing the published page is pointless — the next sync overwrites it. Content fixes only stick here.
 
 **Nothing downstream checks your prose.** The docs repo runs Vale over its own pages but explicitly disables every style rule for synced content (`.vale.ini`, `[docs/external/**]`), because a flag can't be fixed there without diverging from this repo. This file is the only style gate there is.
 
@@ -18,9 +23,10 @@ Two consequences drive everything below:
 The single most common defect in these pages has been confident documentation of things that do not exist. Real examples, all shipped and all caught late:
 
 - a configuration option documented for years that **is not a parameter of the options object at all**
-- a type given as `Set<CoralogixEventCategory>` where **no such type exists**. The real one, in that
-  SDK, was `Set<ExcludableInstrumentation>` — and note that the same option is a `List<…>` on
-  Android, which is the point: a type is only true for the SDK you read it from
+- a collection type documented for an option where **that type did not exist in the SDK at all**.
+  The same option is spelled differently in each SDK — a set in one, a list in another, with a
+  differently-prefixed element type — so a type copied from a sibling repo, or from this file, is
+  a guess. Read it from the declaration in *this* repo
 - a callback documented as taking an object when the implementation takes a dictionary, so anyone copying the signature could not compile
 - a severity enum documented with a case the sealed class does not define
 - two documented behaviours taken from the SDK's **own doc comments**, which contradicted the implementation: a comment said a callback returning `false` "omits" a field, but the code still sends it, redacted
@@ -50,7 +56,8 @@ Rules that matter:
 
 - **`title` must come before `path`.** The parser reads attributes in any order, but the code that strips the marked block out of the parent page matches `title="…" path="…"` literally. Reverse them and the section is published as its own page *and* left duplicated on the README page.
 - **`path` is relative to the README**, and its directories become the page's URL. `configuration/options.md` and `features/session-replay.md` are the established shape: setup material stays in the README, everything else goes under `configuration/` or `features/`.
-- **One section per split.** Start the block at an `##` heading and end it before the next one. Do not nest splits.
+- **One section per split.** Open the block at the section's own heading — whatever level this
+  README already uses for its sections — and close it before the next one. Do not nest splits.
 - **Do not split tiny sections.** A page of four lines is worse than a section on a longer page. Two of the Android READMEs are deliberately left whole for this reason.
 - Relative links inside a split are rewritten by the sync so they still resolve from the subdirectory. You write them relative to the README, as normal.
 
@@ -75,9 +82,11 @@ Mechanical rules, in rough order of how often they are missed:
 - Callouts use `> [!NOTE]` style; no `---` dividers; headings sentence case with no trailing period
 - Split markers: `title` before `path`, one section each, sensible `configuration/` or `features/` paths
 - No `&amp;` or other entities anywhere, including inside code fences
-- Install snippets name the version that is actually published, and each README in the repo is
-  checked (this repo may hold more than one)
-- A public API you added, renamed or removed is reflected in the README, not just in the code
+- Install snippets name a version that is actually published — check the package registry, not the
+  manifest in this repo, which may name an unreleased candidate
+- A public API you added, renamed or removed is reflected in the README, not just in the code —
+  and a rename or removal says what to use instead, since the published page is what a reader
+  on the old version will find
 
 ## What happens after you merge
 
