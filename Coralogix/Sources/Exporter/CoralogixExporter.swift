@@ -394,12 +394,12 @@ public class CoralogixExporter: SpanExporter {
         return options.excludeFromSampling.contains { $0.eventType.rawValue == eventType }
     }
 
-    /// Returns `false` for a `network-request` span produced while network instrumentation is
-    /// installed purely to inject the `traceparent` header.
+    /// Returns `false` for a `network-request` span reported while network instrumentation is off.
     ///
-    /// The sampling filter cannot catch this: the session may be sampled in, so the span is stamped
-    /// sampled-in and passes. The caller switched network reporting off, and only the header keeps
-    /// the swizzles alive, so the request must propagate trace context without surfacing as an event.
+    /// With the option off the native swizzles are never installed, so this only fires for spans a
+    /// hybrid wrapper reports through `setNetworkRequestContext` — that bridge is gated on
+    /// `isInitialized` alone and never consults the instrumentations map. The sampling filter cannot
+    /// catch them either: the session may be sampled in, so they are stamped sampled-in and pass.
     internal func reportsNetworkEvents(_ span: SpanDataProtocol) -> Bool {
         let eventType = attributeStringValue(forKey: Keys.eventType.rawValue, span: span)
         guard eventType == CoralogixEventType.networkRequest.rawValue else { return true }

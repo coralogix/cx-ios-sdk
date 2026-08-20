@@ -193,20 +193,22 @@ initialization event, while still propagating trace context.
 Parity note: the Coralogix Browser SDK exposes the same option with matching semantics.
 
 #### Network instrumentation and trace propagation
-Network is the one instrumentation with three states rather than two, because the `traceparent` header
-and the `network-request` event are independent:
+Network is the one instrumentation with three states rather than two: off, propagate-only, and fully
+reported. The header and the event are independent *while the instrumentation is enabled* — sampling
+can silence the event without silencing the header:
 
 | Configuration | Header | `network-request` event |
 | --- | --- | --- |
 | Session sampled in, network enabled | injected | reported |
-| Session sampled in, `instrumentations: [.network: false]`, `traceParentInHeader` enabled | injected | not reported |
-| Session sampled in, `instrumentations: [.network: false]`, `traceParentInHeader` disabled | not injected | not reported |
+| `instrumentations: [.network: false]` — any session | **not injected** | not reported |
 | Session sampled out, `.network` not excluded | injected | not reported |
-| Session sampled out, `excludeFromSampling: [.network]` | injected | reported |
+| Session sampled out, `excludeFromSampling: [.network]`, `traceParentInHeader` enabled | injected | reported |
+| Session sampled out, `excludeFromSampling: [.network]`, `traceParentInHeader` disabled | not injected | reported |
 
-Every row assumes network instrumentation is enabled unless it says otherwise. `excludeFromSampling`
-never overrides `instrumentations`: with `[.network: false]` the event stays unreported whether or not
-`.network` is also excluded from sampling.
+`instrumentations[.network]` is the outer gate: switching it off removes network instrumentation
+entirely, header included, and neither `traceParentInHeader` nor `excludeFromSampling` brings any of
+it back. Sampling is deliberately weaker than that — a session that is merely sampled out keeps
+injecting the header so your backend traces stay correlated, while reporting no events.
 
 `enableSwizzling: false` overrides all of the above — with swizzling off the SDK never touches
 `NSURLSession`, so there is no header and no native network event.

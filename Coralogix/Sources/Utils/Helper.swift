@@ -396,15 +396,24 @@ class Helper {
         return TraceParentInHeader(params: params).enable
     }
 
-    /// Network instrumentation exists for two independent reasons: reporting `network-request`
-    /// events, and injecting the `traceparent` header. A session that will not report still needs
-    /// the swizzles while propagation is on — otherwise a sampled-out session emits no trace context
-    /// at all and the backend cannot correlate the request to anything.
+    /// Network instrumentation exists for two reasons — reporting `network-request` events and
+    /// injecting the `traceparent` header — but they are not peers.
+    ///
+    /// `instrumentations[.network]` is the outer gate. Switching it off removes the machinery
+    /// entirely, header included, matching the browser SDK: there a disabled instrumentation is
+    /// never registered with the OTel provider, so there is nothing left to inject whatever
+    /// `traceParentInHeader` says.
+    ///
+    /// Inside that gate, propagation keeps the swizzles alive for a session that will not report.
+    /// This is the case the parent ticket exists for: a sampled-out session must still emit trace
+    /// context, or the backend cannot correlate the request to anything. Sampling therefore silences
+    /// reporting without silencing propagation, while the caller's own switch silences both.
     ///
     /// `enableSwizzling` is deliberately not consulted here; it stays a hard kill switch checked
     /// inside `initializeNetworkInstrumentation` so it can never be bypassed by this decision.
     internal static func shouldInstallNetworkInstrumentation(options: CoralogixExporterOptions, sampledIn: Bool) -> Bool {
-        willReportNetworkEvents(options: options, sampledIn: sampledIn)
+        guard options.shouldInitInstrumentation(instrumentation: .network) else { return false }
+        return willReportNetworkEvents(options: options, sampledIn: sampledIn)
             || isTraceParentInHeaderEnabled(options: options)
     }
 }

@@ -78,7 +78,10 @@ final class InstrumentationGatingTests: XCTestCase {
         XCTAssertEqual(installed(options, sampledIn: true), [])
     }
 
-    func testCase4a_sampledIn_networkOffButPropagationOn_installsNetworkForHeaderOnly() {
+    func testCase4a_sampledIn_networkOff_installsNothingEvenWithPropagationOn() {
+        // instrumentations[.network] is the outer gate, matching the browser SDK: a disabled
+        // instrumentation is never registered with the OTel provider, so nothing is left to inject
+        // whatever traceParentInHeader says.
         var instrumentations = allInstrumentationsOff
         instrumentations[.lifeCycle] = true
         let options = makeSamplingOptions(sampleRate: 100,
@@ -86,13 +89,26 @@ final class InstrumentationGatingTests: XCTestCase {
                                           instrumentations: instrumentations,
                                           traceParentInHeader: traceParentEnabled)
 
-        XCTAssertEqual(installed(options, sampledIn: true), [.lifeCycle, .network],
-                       "Network stays installed to inject traceparent even though reporting is off.")
-        XCTAssertFalse(Helper.willReportNetworkEvents(options: options, sampledIn: true),
-                       "…but it must not report network events.")
+        XCTAssertEqual(installed(options, sampledIn: true), [.lifeCycle],
+                       "Switching network off removes the machinery entirely, header included.")
+    }
+
+    func testSampledOut_networkOn_propagationStillKeepsItInstalled() {
+        // The distinction the outer gate must preserve: sampling silences reporting without
+        // silencing propagation, while the caller's own switch silences both.
+        let options = makeSamplingOptions(sampleRate: 0,
+                                          exclude: [],
+                                          traceParentInHeader: traceParentEnabled)
+
+        XCTAssertTrue(CoralogixRum.shouldInstall(.network, options: options, sampledIn: false),
+                      "A sampled-out session must keep network installed so trace context still flows.")
+        XCTAssertFalse(Helper.willReportNetworkEvents(options: options, sampledIn: false),
+                       "…while reporting nothing.")
     }
 
     func testCase4b_sampledIn_networkOffAndPropagationOff_installsNothingForNetwork() {
+        // Same outcome as 4a now — kept as a distinct row because it was reached by a different
+        // route before instrumentations[.network] became the outer gate.
         var instrumentations = allInstrumentationsOff
         instrumentations[.lifeCycle] = true
         let options = makeSamplingOptions(sampleRate: 100,

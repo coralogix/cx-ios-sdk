@@ -182,24 +182,27 @@ final class NetworkPropagationSamplingTests: XCTestCase {
                       "Excluding network from sampling reports the event regardless of propagation. Saw \(capture.eventTypes).")
     }
 
-    // MARK: - Case 4a: sampled IN, reporting off, propagation on
+    // MARK: - Sampled IN, network switched off: the outer gate silences both
     //
-    // The only row where `reportsNetworkEvents` is load-bearing. The session is sampled in, so the
-    // span is stamped sampled-in and sails through `passesSessionSampling`; only the propagate-only
-    // gate can stop it. Confirmed falsifiable: forcing that gate to return true turns this red.
+    // Browser parity: a disabled instrumentation is never registered with the OTel provider, so
+    // there is nothing left to inject regardless of traceParentInHeader. Contrast with the
+    // sampled-out rows above, where propagation survives — sampling silences reporting without
+    // silencing propagation, the caller's own switch silences both.
 
-    func testSampledIn_networkReportingOff_injectsTraceparentButReportsNoNetworkEvent() throws {
+    func testSampledIn_networkOff_injectsNothingAndReportsNothing() throws {
         try startRUM(sampleRate: 100, exclude: [], instrumentations: [.network: false])
 
-        performRequest(path: "reporting-off")
+        performRequest(path: "network-off")
         forceFlush()
 
-        XCTAssertNotNil(PropagationTestURLProtocol.lastTraceparent,
-                        "Disabling network reporting must not stop header injection while traceParentInHeader is on.")
         XCTAssertFalse(capture.eventTypes.contains(CoralogixEventType.networkRequest.rawValue),
-                       "instrumentations[.network] = false must suppress the event even on a sampled-in session. Saw \(capture.eventTypes).")
+                       "No network event may be reported. Saw \(capture.eventTypes).")
         XCTAssertFalse(capture.eventTypes.isEmpty,
                        "Sanity: the capture must be receiving something, otherwise the assertion above is vacuous.")
+
+        // No wire assertion, for the reason given on the no-propagation row above: swizzles from an
+        // earlier test in this process are still installed and still injecting from stale statics.
+        // The install decision is asserted directly in InstrumentationGatingTests instead.
     }
 
     // MARK: - Case 7: excluded from sampling, so it reports
