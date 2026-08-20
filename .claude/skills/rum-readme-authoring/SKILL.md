@@ -82,12 +82,21 @@ Mechanical rules, in rough order of how often they are missed:
 - Callouts use `> [!NOTE]` style; no `---` dividers; headings sentence case with no trailing period
 - Split markers: `title` before `path`, one section each, sensible `configuration/` or `features/` paths
 - No `&amp;` or other entities anywhere, including inside code fences
-- Install snippets name a version that is actually published — check the package registry, not the
-  manifest in this repo, which may name an unreleased candidate
+- Install snippets *you added or changed* name a version that is actually published — check the
+  package registry, not the manifest in this repo, which may name an unreleased candidate. Leave
+  older snippets alone unless you are deliberately refreshing them; a version sweep is its own
+  change, not a rider on yours
 - A public API you added, renamed or removed is reflected in the README, not just in the code —
   and a rename or removal says what to use instead, since the published page is what a reader
   on the old version will find
 
 ## What happens after you merge
 
-The sync runs nightly at 04:00 UTC and opens a PR in `coralogix/documentation` with whatever changed. A technical writer reviews that PR before it publishes, so a mistake is catchable — but it is caught a day later by someone without the SDK in front of them, which is exactly the position that produced the errors listed above. The cheap place to be right is here.
+The sync runs nightly at 04:00 UTC and opens a PR in `coralogix/documentation` with whatever changed.
+
+**Docs can run ahead of the release.** The sync follows `master`; the package publishes on a
+version tag. So a README documenting a new API goes live on the docs site as soon as it is
+merged, while the version that has that API may not be on the registry yet — and a reader on
+the current release gets instructions that cannot work for them. If you are documenting
+something unreleased, say which version introduces it, or hold the README change until the
+release goes out. A technical writer reviews that PR before it publishes, so a mistake is catchable — but it is caught a day later by someone without the SDK in front of them, which is exactly the position that produced the errors listed above. The cheap place to be right is here.
