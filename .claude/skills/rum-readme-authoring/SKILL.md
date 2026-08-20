@@ -88,7 +88,9 @@ Mechanical rules, in rough order of how often they are missed:
   change, not a rider on yours
 - A public API you added, renamed or removed is reflected in the README, not just in the code —
   and a rename or removal says what to use instead, since the published page is what a reader
-  on the old version will find
+  on the old version will find. "Public" means what the package actually hands to consumers —
+  what the entrypoint re-exports, or what the module declares public — not every symbol marked
+  `export` or `public` somewhere in the tree
 
 ## What happens after you merge
 
