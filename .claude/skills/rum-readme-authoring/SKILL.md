@@ -18,7 +18,9 @@ Two consequences drive everything below:
 The single most common defect in these pages has been confident documentation of things that do not exist. Real examples, all shipped and all caught late:
 
 - a configuration option documented for years that **is not a parameter of the options object at all**
-- a type given as `Set<CoralogixEventCategory>` where **no such type exists** — it is `Set<ExcludableInstrumentation>`
+- a type given as `Set<CoralogixEventCategory>` where **no such type exists**. The real one, in that
+  SDK, was `Set<ExcludableInstrumentation>` — and note that the same option is a `List<…>` on
+  Android, which is the point: a type is only true for the SDK you read it from
 - a callback documented as taking an object when the implementation takes a dictionary, so anyone copying the signature could not compile
 - a severity enum documented with a case the sealed class does not define
 - two documented behaviours taken from the SDK's **own doc comments**, which contradicted the implementation: a comment said a callback returning `false` "omits" a field, but the code still sends it, redacted
@@ -61,7 +63,8 @@ Mechanical rules, in rough order of how often they are missed:
 - **Headings: sentence case, no trailing period, not a sentence.** `## Overview`, not `## The Coralogix RUM Mobile SDK is a library for iOS.` If a heading is carrying explanation, move the explanation into the paragraph below it.
 - **No HTML entities.** `&amp;` in prose or a code sample reaches the page verbatim: a setup command reading `cd /etc/rsyslog.d &amp;&amp; wget` does not run. Write `&`.
 - **Second person, active voice, present tense.** "Set `sessionSampleRate` to 10" rather than "the rate should be set" or "the SDK will send".
-- **No "please", no exclamation marks, no Latin abbreviations.** "for example", not "e.g.".
+- **No "please", no Latin abbreviations, no exclamation marks in prose.** "for example", not "e.g.".
+  The `!` in `> [!NOTE]` is syntax, not punctuation, and is required.
 - **Spell out an ampersand in prose** — "logs and traces", not "logs & traces".
 - Keep images in the repo and reference them relatively; the sync rewrites them to absolute raw URLs.
 
@@ -72,6 +75,9 @@ Mechanical rules, in rough order of how often they are missed:
 - Callouts use `> [!NOTE]` style; no `---` dividers; headings sentence case with no trailing period
 - Split markers: `title` before `path`, one section each, sensible `configuration/` or `features/` paths
 - No `&amp;` or other entities anywhere, including inside code fences
+- Install snippets name the version that is actually published, and each README in the repo is
+  checked (this repo may hold more than one)
+- A public API you added, renamed or removed is reflected in the README, not just in the code
 
 ## What happens after you merge
 
