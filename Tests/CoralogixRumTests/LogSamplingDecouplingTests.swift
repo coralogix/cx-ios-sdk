@@ -30,14 +30,17 @@ final class LogSamplingDecouplingTests: XCTestCase {
 
     // MARK: - Case 1: sampleRate=0, exclude=[] ⇒ SDK does not initialize
 
-    func testCase1_sampleRateZero_excludeEmpty_doesNotInitialize() {
+    func testCase1_sampleRateZero_excludeEmpty_stillInitializes() {
+        // Init is unconditional now: network instrumentation has to stay installed so requests keep
+        // carrying trace context. Nothing reportable survives the export filter, so the telemetry a
+        // customer sees is unchanged — see testCase1_sampleRateZero_excludeEmpty_reportsNothing.
         let rum = CoralogixRum(options: makeSamplingOptions(sampleRate: 0, exclude: []))
         defer { rum.shutdown() }
 
-        XCTAssertFalse(rum.isInitialized,
-                       "Legacy contract: sampleRate=0 + excludeFromSampling=[] must NOT initialize.")
-        XCTAssertNil(rum.coralogixExporter,
-                     "Skipped init must not create an exporter.")
+        XCTAssertTrue(rum.isInitialized,
+                      "sampleRate=0 + excludeFromSampling=[] must still initialize.")
+        XCTAssertNotNil(rum.coralogixExporter,
+                        "An exporter is required so the per-span filter can drop what must not be reported.")
     }
 
     // MARK: - Case 2: sampleRate=0, exclude=[.logs] ⇒ logs export, others drop
@@ -146,7 +149,11 @@ final class LogSamplingDecouplingTests: XCTestCase {
             makeSamplingSpan(eventType: .mobileVitals, sampledIn: false)
         ], explicitTimeout: nil)
 
-        XCTAssertEqual(Set(capture.eventTypes), Set(["log", "error"]),
+        // `internal` is filtered out of the comparison: the SDK's own init event is unconditional and
+        // arrives asynchronously via the batch processor, so asserting on it would make this test a
+        // race. What matters here is which *reportable* categories survived.
+        XCTAssertEqual(Set(capture.eventTypes).subtracting([CoralogixEventType.internalKey.rawValue]),
+                       Set(["log", "error"]),
                        "Sampled-out + exclude=[.logs, .errors] must let exactly those two categories through.")
     }
 

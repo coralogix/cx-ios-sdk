@@ -109,7 +109,11 @@ public class SessionManager {
     /// property so the sampling-reroll path cannot accidentally clobber the existing
     /// SessionReplay listener that owns `sessionChangedCallback`. Internal-only — host apps
     /// have no use for setting this, and a public slot would invite accidental clobber.
-    internal var samplingReevaluationCallback: ((String) -> Void)?
+    /// Receives the new session id and **that rotation's own** sampling decision. The decision is
+    /// passed rather than re-read: reading `isSessionSampledIn` when the callback runs would pick up
+    /// whatever the latest rotation left behind, so a concurrent rotation could make a sampled-in
+    /// transition invisible to the callback that was supposed to act on it.
+    internal var samplingReevaluationCallback: ((String, Bool) -> Void)?
 
     /// Rolls the sampling decision for a newly rotated session. Installed once at startup;
     /// invoked inside `performRotationLocked` so the decision is replaced atomically with
@@ -417,7 +421,10 @@ public class SessionManager {
         let priorExisted: Bool
         let newSessionId: String?
         let changedCallback: ((String) -> Void)?
-        let samplingCallback: ((String) -> Void)?
+        let samplingCallback: ((String, Bool) -> Void)?
+        /// Captured under the same lock acquisition as the roll, so it is the decision belonging to
+        /// this rotation and not whatever a later one may already have replaced it with.
+        let sampledIn: Bool
     }
 
     /// Performs the session rotation. PRECONDITION: caller must already hold
@@ -466,7 +473,8 @@ public class SessionManager {
             priorExisted: priorExisted,
             newSessionId: self.sessionMetadata?.sessionId,
             changedCallback: self.sessionChangedCallback,
-            samplingCallback: self.samplingReevaluationCallback
+            samplingCallback: self.samplingReevaluationCallback,
+            sampledIn: self._isSessionSampledIn
         )
     }
 
@@ -485,7 +493,7 @@ public class SessionManager {
         }
         if let newId = pending.newSessionId {
             pending.changedCallback?(newId)
-            pending.samplingCallback?(newId)
+            pending.samplingCallback?(newId, pending.sampledIn)
         }
     }
 

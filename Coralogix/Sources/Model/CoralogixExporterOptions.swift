@@ -214,6 +214,24 @@ public struct CoralogixExporterOptions {
     internal func shouldInitInstrumentation(instrumentation: InstrumentationType) -> Bool {
         return self.instrumentations?[instrumentation] ?? true
     }
+
+    /// Whether `instrumentation` should be installed at init, given the session's sampling roll.
+    ///
+    /// `enabled(i) = optOn(i) AND (sampledIn OR excludes(i))`. `instrumentations` is the source of
+    /// truth: an instrumentation the caller switched off stays off in both branches, so
+    /// `excludeFromSampling` can only ever relax the *sampling* condition — never re-enable
+    /// something that was turned off. The exclude term is consequently unreachable while the
+    /// session is sampled in.
+    internal func shouldInstallInstrumentation(_ instrumentation: InstrumentationType,
+                                              sampledIn: Bool) -> Bool {
+        guard self.shouldInitInstrumentation(instrumentation: instrumentation) else { return false }
+        return sampledIn || self.isExcludedFromSampling(instrumentation)
+    }
+
+    /// Whether `excludeFromSampling` requires `instrumentation` to keep running on a sampled-out session.
+    internal func isExcludedFromSampling(_ instrumentation: InstrumentationType) -> Bool {
+        self.excludeFromSampling.contains { $0.instrumentationTypes.contains(instrumentation) }
+    }
     
     internal func shouldInitMobileVitals(mobileVital: MobileVitalsType) -> Bool {
         return self.mobileVitals?[mobileVital] ?? true
@@ -251,6 +269,29 @@ public struct CoralogixExporterOptions {
 
         return items.reduce(into: [String: Bool]()) { acc, pair in
             acc[pair.key.rawValue] = pair.value
+        }
+    }
+}
+
+extension ExcludableInstrumentation {
+    /// Install-time instrumentations that must run when this category is listed in
+    /// `excludeFromSampling`, so a sampled-out session can still produce the excluded events.
+    ///
+    /// A set rather than a single value because `.errors` covers two installers: the crash
+    /// instrumentation and ANR monitoring. ANR reports are emitted as `.error` events, so excluding
+    /// errors while leaving ANR uninstalled would let the export filter admit an event type nothing
+    /// is left to produce.
+    ///
+    /// Empty for the three categories with no installer of their own — logs, custom spans and custom
+    /// measurements all reach the tracer through public API calls gated on `isInitialized`, so there
+    /// is nothing to install on their behalf.
+    internal var instrumentationTypes: Set<CoralogixExporterOptions.InstrumentationType> {
+        switch self {
+        case .errors: return [.errors, .anr]
+        case .network: return [.network]
+        case .userInteractions: return [.userActions]
+        case .mobileVitals: return [.mobileVitals]
+        case .logs, .customSpan, .customMeasurement: return []
         }
     }
 }

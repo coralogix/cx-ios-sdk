@@ -472,4 +472,124 @@ final class HybridAPITests: XCTestCase {
         XCTAssertEqual(Set(capture.eventTypes), Set(["log", "network-request"]),
                        "Sampled-in: every span should reach the hybrid callback regardless of excludeFromSampling.")
     }
+
+    // MARK: - Gating on a sampled-out hybrid session
+    //
+    // The SDK now initializes for a sampled-out session instead of bailing out, so the bridge entry
+    // points stop no-oping and start producing spans that the export filter then drops. These pin
+    // that the hybrid outcome is unchanged while the reachability underneath it changed — the
+    // bridge payload never passes through the native extraction path, so it needs its own coverage.
+
+    func testFlutterPath_sampledOutEmptyExclude_initializesButReportsNothing() throws {
+        coralogixRum?.shutdown()
+        coralogixRum = nil
+
+        let capture = EventTypeCapture()
+        var opts = makeSamplingOptions(sampleRate: 0, exclude: [])
+        opts.beforeSendCallBack = capture.beforeSendCallback()
+
+        coralogixRum = CoralogixRum(options: opts, sdkFramework: .flutter(version: "1.0.0"))
+
+        XCTAssertTrue(CoralogixRum.isInitialized,
+                      "Init must proceed so the bridge stays usable and trace context keeps flowing.")
+
+        let exporter = try XCTUnwrap(coralogixRum.coralogixExporter, "Exporter must exist after init.")
+        exporter.spanUploader = SamplingMockSpanUploader()
+
+        _ = exporter.export(spans: [
+            makeSamplingSpan(eventType: .networkRequest, sampledIn: false),
+            makeSamplingSpan(eventType: .userInteraction, sampledIn: false),
+            makeSamplingSpan(eventType: .log, sampledIn: false)
+        ], explicitTimeout: nil)
+
+        XCTAssertEqual(capture.eventTypes, [],
+                       "Nothing reportable may reach the hybrid callback with an empty exclude list.")
+    }
+
+    func testFlutterPath_sampledOutExcludeNetwork_reportsHybridNetworkEvents() throws {
+        coralogixRum?.shutdown()
+        coralogixRum = nil
+
+        let capture = EventTypeCapture()
+        var opts = makeSamplingOptions(sampleRate: 0, exclude: [.network])
+        opts.beforeSendCallBack = capture.beforeSendCallback()
+
+        coralogixRum = CoralogixRum(options: opts, sdkFramework: .flutter(version: "1.0.0"))
+
+        let exporter = try XCTUnwrap(coralogixRum.coralogixExporter, "Exporter must exist after init.")
+        exporter.spanUploader = SamplingMockSpanUploader()
+
+        _ = exporter.export(spans: [
+            makeSamplingSpan(eventType: .networkRequest, sampledIn: false),
+            makeSamplingSpan(eventType: .userInteraction, sampledIn: false)
+        ], explicitTimeout: nil)
+
+        XCTAssertEqual(capture.eventTypes, ["network-request"],
+                       "Excluding network must let bridge-reported network events through on a sampled-out session.")
+    }
+
+    /// Regression guard, driven through the real bridge entry point rather than a synthetic span.
+    ///
+    /// Flutter's iOS bridge force-sets `instrumentations[.userActions] = false` unconditionally —
+    /// Dart owns interaction detection, so the native touch path must stay silent. Dart-reported
+    /// interactions arrive through `setUserInteraction` and deliberately do NOT consult that option;
+    /// if they did, every Flutter app would lose every interaction event, and
+    /// `excludeFromSampling: [.userInteractions]` would be impossible to use on Flutter at all.
+    ///
+    /// So the asymmetry with `.network` is deliberate: nothing force-sets `instrumentations[.network]`,
+    /// which is why suppressing network events when it is off honours the caller's intent, while doing
+    /// the same for `.userActions` would contradict it. Do not "fix" this into symmetry.
+    func testFlutterPath_userActionsOffAsTheBridgeSetsIt_stillReportsDartInteractions() throws {
+        coralogixRum?.shutdown()
+        coralogixRum = nil
+
+        let capture = EventTypeCapture()
+        var opts = makeSamplingOptions(sampleRate: 0,
+                                       exclude: [.userInteractions],
+                                       instrumentations: [.userActions: false])
+        opts.beforeSendCallBack = capture.beforeSendCallback()
+
+        coralogixRum = CoralogixRum(options: opts, sdkFramework: .flutter(version: "1.0.0"))
+        let exporter = try XCTUnwrap(coralogixRum.coralogixExporter)
+        exporter.spanUploader = SamplingMockSpanUploader()
+
+        // A real bridge payload, not a hand-built SpanData: this goes through
+        // validateHybridInteraction and the normal span construction.
+        coralogixRum.setUserInteraction([
+            Keys.eventName.rawValue: "click",
+            Keys.targetElement.rawValue: "FlutterButton"
+        ])
+
+        Thread.sleep(forTimeInterval: 0.3)
+        (OpenTelemetry.instance.tracerProvider as? TracerProviderSdk)?.forceFlush(timeout: 3)
+        Thread.sleep(forTimeInterval: 0.5)
+
+        XCTAssertTrue(capture.eventTypes.contains(CoralogixEventType.userInteraction.rawValue),
+                      "A Dart-reported interaction must survive on a sampled-out session excluding userInteractions, even though the bridge set userActions off. Saw \(capture.eventTypes).")
+    }
+
+    func testFlutterPath_networkReportingOff_dropsHybridNetworkEventsWhileSampledIn() throws {
+        coralogixRum?.shutdown()
+        coralogixRum = nil
+
+        let capture = EventTypeCapture()
+        var opts = makeSamplingOptions(sampleRate: 100,
+                                       exclude: [],
+                                       instrumentations: [.network: false],
+                                       traceParentInHeader: traceParentEnabled)
+        opts.beforeSendCallBack = capture.beforeSendCallback()
+
+        coralogixRum = CoralogixRum(options: opts, sdkFramework: .flutter(version: "1.0.0"))
+
+        let exporter = try XCTUnwrap(coralogixRum.coralogixExporter, "Exporter must exist after init.")
+        exporter.spanUploader = SamplingMockSpanUploader()
+
+        _ = exporter.export(spans: [
+            makeSamplingSpan(eventType: .networkRequest),
+            makeSamplingSpan(eventType: .log)
+        ], explicitTimeout: nil)
+
+        XCTAssertEqual(capture.eventTypes, ["log"],
+                       "Case 4a on the hybrid path: propagate-only network must not reach the callback even sampled in.")
+    }
 }

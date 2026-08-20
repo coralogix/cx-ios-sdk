@@ -69,6 +69,13 @@ public class CoralogixRum {
     /// Serializes check-and-set for `customTracerIssued` so concurrent `getCustomTracer()` calls cannot both succeed.
     private static let customTracerIssuanceLock = NSLock()
 
+    /// Instrumentations already installed for this SDK lifecycle. Guards the top-up that runs when a
+    /// session rotates into being sampled in: none of the `initialize*Instrumentation()` functions are
+    /// idempotent — they register observers, start monitors and install swizzles — so each type must be
+    /// installed at most once however many rotations occur.
+    private let installedInstrumentationsLock = NSLock()
+    private var installedInstrumentations: Set<CoralogixExporterOptions.InstrumentationType> = []
+
     /// Resets CX-35956 singleton state when tests reinitialize the SDK in-process without calling `shutdown()`.
     internal static func resetCustomTracerIssuanceForTesting() {
         customTracerIssuanceLock.lock()
@@ -86,18 +93,13 @@ public class CoralogixRum {
         self.sessionManager = sessionManager
         self.displayCoralogixWord()
         
-        // Only short-circuit when the session is sampled out AND the user did not opt any
-        // instrumentation out of sampling. With excludeFromSampling non-empty, the SDK still
-        // initializes so the listed event types can be emitted regardless of the sampling roll.
+        // Startup is unconditional, including for a sampled-out session. Network instrumentation
+        // has to stay installed so outgoing requests still carry trace context — a session that
+        // never initialized emits no `traceparent` at all, which breaks backend correlation for
+        // the whole sampled-out population. What must not be reported is dropped per span at
+        // export instead; which instrumentations are installed at all is resolved by
+        // `initializeEnabledInstrumentations`.
         let initialSampledIn = options.sdkSampler.shouldInitialized()
-        guard initialSampledIn || !options.excludeFromSampling.isEmpty else {
-            Log.e("Initialization skipped: session sampled out and no instrumentation opted into excludeFromSampling.")
-            // Drop the default-constructed SessionManager so its NotificationCenter observers
-            // unregister via deinit instead of staying live for the lifetime of the skipped RUM.
-            self.sessionManager = nil
-            return
-        }
-
         self.startup(options: options, initialSampledIn: initialSampledIn)
     }
     
@@ -134,21 +136,32 @@ public class CoralogixRum {
         //
         // SessionManager owns the roll: it happens inside the rotation lock so the decision
         // is atomic with the session identity and gets stamped on every span
-        // (is_session_sampled_in). The callback only propagates the stored decision to the
-        // exporter's filter — rolling again here would let the filter and the stamp disagree.
+        // (is_session_sampled_in). The callback receives that rotation's own decision as an
+        // argument — rolling again here would let the filter and the stamp disagree, and
+        // re-reading the live flag would let a concurrent rotation hide a sampled-in transition
+        // from the callback meant to act on it.
         sessionManager.setSessionSampledIn(initialSampledIn)
         sessionManager.samplingRoller = { options.sdkSampler.shouldInitialized() }
         self.coralogixExporter?.updateSessionSampling(sampledIn: initialSampledIn)
-        sessionManager.samplingReevaluationCallback = { [weak self, weak sessionManager] _ in
-            guard let self, let sessionManager else { return }
-            self.coralogixExporter?.updateSessionSampling(
-                sampledIn: sessionManager.isSessionSampledIn
-            )
+        sessionManager.samplingReevaluationCallback = { [weak self] _, sampledIn in
+            guard let self else { return }
+            self.coralogixExporter?.updateSessionSampling(sampledIn: sampledIn)
+
+            // Eligibility is re-resolved, not just reported. A session that rolled sampled-out
+            // installed almost nothing; when a rotation rolls it sampled-in those instrumentations
+            // become eligible and have to be installed now, or the session would report only what
+            // survives without them for the rest of the process. Eligibility only ever widens —
+            // a rotation to sampled-out cannot uninstall swizzles — so this only ever adds.
+            //
+            // Fires outside `sessionLock` (see `SessionManager.fireRotationCallbacks`) and on
+            // whichever thread rotated, which is the same contract the initializers already meet
+            // at startup.
+            self.installEligibleInstrumentations(using: options, sampledIn: sampledIn)
         }
 
         self.setupTracer(applicationName: options.application)
         self.swizzle()
-        self.initializeEnabledInstrumentations(using: options)
+        self.installEligibleInstrumentations(using: options, sampledIn: initialSampledIn)
         self.createInitSpan()
 
         CoralogixRum.isInitialized = true
@@ -158,7 +171,12 @@ public class CoralogixRum {
         self.completeCrashRecovery()
     }
     
-    private func initializeEnabledInstrumentations(using options: CoralogixExporterOptions) {
+    /// Installs every instrumentation that is eligible now and not already installed.
+    ///
+    /// Safe to call repeatedly: `claimInstallation(of:)` hands out each type exactly once, which is
+    /// what makes the rotation top-up possible at all — the initializers register observers and
+    /// install swizzles, so calling one twice would double every event it produces.
+    private func installEligibleInstrumentations(using options: CoralogixExporterOptions, sampledIn: Bool) {
         let instrumentationMap: [(CoralogixExporterOptions.InstrumentationType, () -> Void)] = [
             (.lifeCycle, self.initializeLifeCycleInstrumentation),
             (.userActions, self.initializeUserActionsInstrumentation),
@@ -168,16 +186,44 @@ public class CoralogixRum {
             (.anr, self.initializeANRInstrumentation)
         ]
         
-        for (type, initializer) in instrumentationMap {
-            // userActions is special: we install touch swizzles for native spans OR for session replay in hybrid
-            // (not just when options.shouldInitInstrumentation(.userActions)), so use Helper instead of the shared path.
-            if type == .userActions {
-                if Helper.shouldInstallTouchSwizzles(options: options, sdkFramework: CoralogixRum.mobileSDK.sdkFramework) {
-                    initializer()
-                }
-            } else if options.shouldInitInstrumentation(instrumentation: type) {
-                initializer()
-            }
+        for (type, initializer) in instrumentationMap
+        where Self.shouldInstall(type, options: options, sampledIn: sampledIn) {
+            guard self.claimInstallation(of: type) else { continue }
+            initializer()
+        }
+    }
+
+    /// Returns `true` to exactly one caller per instrumentation type, for the SDK's lifecycle.
+    private func claimInstallation(of type: CoralogixExporterOptions.InstrumentationType) -> Bool {
+        self.installedInstrumentationsLock.lock()
+        defer { self.installedInstrumentationsLock.unlock() }
+        return self.installedInstrumentations.insert(type).inserted
+    }
+
+    /// Resolves whether `type` is installed for this session.
+    ///
+    /// Most instrumentations follow the plain rule on `CoralogixExporterOptions`. Two cannot, because
+    /// they are installed for reasons the caller's on/off switch does not describe:
+    ///
+    /// - `.userActions` also drives session replay in hybrid, so the touch swizzles go in regardless
+    ///   of the option and of sampling. Whether a tap becomes a span is decided separately by
+    ///   `Helper.shouldEmitUserActionSpan` and the exporter's sampling filter.
+    /// - `.network` also injects the `traceparent` header, so it goes in when either the events will
+    ///   be reported or propagation is on.
+    ///
+    /// Internal so the decision can be asserted directly in tests — observing installed swizzles is
+    /// global process state and makes for far weaker assertions.
+    internal static func shouldInstall(_ type: CoralogixExporterOptions.InstrumentationType,
+                                       options: CoralogixExporterOptions,
+                                       sampledIn: Bool) -> Bool {
+        switch type {
+        case .userActions:
+            return Helper.shouldInstallTouchSwizzles(options: options,
+                                                     sdkFramework: CoralogixRum.mobileSDK.sdkFramework)
+        case .network:
+            return Helper.shouldInstallNetworkInstrumentation(options: options, sampledIn: sampledIn)
+        default:
+            return options.shouldInstallInstrumentation(type, sampledIn: sampledIn)
         }
     }
     

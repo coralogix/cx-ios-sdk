@@ -48,7 +48,7 @@ final class CoralogixRumTests: XCTestCase {
         }
     }
     
-    func testInitSamplerOff() {
+    func testInitSamplerOff_stillInitializesSoTraceContextKeepsFlowing() {
         CoralogixRum.isInitialized = false
         options = CoralogixExporterOptions(coralogixDomain: CoralogixDomain.US2,
                                            userContext: nil,
@@ -62,7 +62,8 @@ final class CoralogixRumTests: XCTestCase {
                                            sessionSampleRate: 0,
                                            debug: true)
         _ = CoralogixRum(options: options!)
-        XCTAssertFalse(CoralogixRum.isInitialized)
+        XCTAssertTrue(CoralogixRum.isInitialized,
+                      "sessionSampleRate no longer gates initialization: a sampled-out session still starts so network instrumentation can propagate traceparent. Reportable spans are dropped per span at export instead.")
     }
     
     // Test setUserContext method

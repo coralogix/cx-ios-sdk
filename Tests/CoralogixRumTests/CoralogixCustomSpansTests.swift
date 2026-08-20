@@ -40,21 +40,12 @@ final class CoralogixCustomSpansTests: XCTestCase {
     }
 
     func testStartGlobalSpanReturnsNilWhenSdkNotInitialized() {
+        // `sessionSampleRate: 0` used to leave the SDK uninitialized and was the convenient way to
+        // reach this state. Sampling no longer gates initialization, so drive the flag directly —
+        // the guard under test is `guard CoralogixRum.isInitialized` inside `getCustomTracer()`.
+        let rum = CoralogixRum(options: options!)
         CoralogixRum.isInitialized = false
-        let offOptions = CoralogixExporterOptions(
-            coralogixDomain: CoralogixDomain.US2,
-            userContext: nil,
-            environment: "PROD",
-            application: "Off",
-            version: "1.0",
-            publicKey: "token",
-            ignoreUrls: [],
-            ignoreErrors: [],
-            labels: [:],
-            sessionSampleRate: 0,
-            debug: true
-        )
-        let rum = CoralogixRum(options: offOptions)
+
         XCTAssertFalse(rum.isInitialized)
         XCTAssertNil(rum.getCustomTracer())
     }
