@@ -83,6 +83,9 @@ final class EventTypeCapture {
 /// on the options (not an init parameter), so hybrid tests assign it post-init at the call site.
 func makeSamplingOptions(sampleRate: Int,
                          exclude: Set<ExcludableInstrumentation>,
+                         instrumentations: [CoralogixExporterOptions.InstrumentationType: Bool]? = nil,
+                         traceParentInHeader: [String: Any]? = nil,
+                         enableSwizzling: Bool = true,
                          tracesExporter: TracesExporterCallback? = nil) -> CoralogixExporterOptions {
     return CoralogixExporterOptions(
         coralogixDomain: .US2,
@@ -96,11 +99,29 @@ func makeSamplingOptions(sampleRate: Int,
         labels: nil,
         sessionSampleRate: sampleRate,
         excludeFromSampling: exclude,
-        instrumentations: nil,
+        instrumentations: instrumentations,
+        enableSwizzling: enableSwizzling,
+        traceParentInHeader: traceParentInHeader,
         tracesExporter: tracesExporter,
         debug: false
     )
 }
+
+/// Every public instrumentation switch turned off. The truth-table rows that describe
+/// "options set all to false" start from this and flip individual keys back on.
+let allInstrumentationsOff: [CoralogixExporterOptions.InstrumentationType: Bool] = [
+    .mobileVitals: false,
+    .custom: false,
+    .errors: false,
+    .network: false,
+    .userActions: false,
+    .anr: false,
+    .lifeCycle: false
+]
+
+/// `traceParentInHeader` with propagation switched on and no URL allowlist, i.e. inject on every
+/// request. Mirrors the shape `TraceParentInHeader(params:)` parses.
+let traceParentEnabled: [String: Any] = [Keys.enable.rawValue: true]
 
 /// Builds a `SpanData` that survives the encoding pipeline (`CxRumBuilder.build()` requires
 /// session attributes) and carries the `event_type` under test. No `httpUrl`, no

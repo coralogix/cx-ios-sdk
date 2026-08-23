@@ -9,6 +9,17 @@ Release-mechanics commits (version bumps, podspec/script tweaks, README edits) a
 omitted; the focus here is user-facing behavior changes. Tickets are referenced as
 `CX-XXXXX` (Jira) or `ALPH-XXXX` (legacy). Pull request numbers are in parentheses.
 
+## [2.16.0] - 2026-08-18
+
+### Changed
+- Sessions not selected by `sessionSampleRate` now keep sending the `traceparent` header on outgoing requests, so distributed traces still correlate with your backend, while none of their events are reported.
+- `excludeFromSampling` no longer re-enables an instrumentation you switched off in `instrumentations`, and has no effect on sessions that are sampled in.
+- `instrumentations: [.network: false]` now suppresses the `traceparent` header as well as `network-request` events, whatever `traceParentInHeader` is set to.
+- `instrumentations: [.network: false]` now also suppresses network events reported from Flutter and React Native through `setNetworkRequestContext`, which previously ignored the setting; leave network instrumentation enabled to keep receiving them.
+
+### Fixed
+- Sessions not selected by `sessionSampleRate` now report the SDK initialization event, which was previously missing.
+
 ## [2.15.1] - 2026-08-10
 
 ### Fixed
