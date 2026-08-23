@@ -286,9 +286,21 @@ final class CrashDeliveryTests: XCTestCase {
     /// `initializeCrashInstrumentation` defers the purge and the store cleanup to
     /// `completeCrashRecovery`, which only `startup` used to call. Without that call the backlog is
     /// re-emitted on every later launch and never removed.
-    func test_rotationIntoSampledIn_completesCrashRecovery_andClearsConfirmedBacklog() throws {
+    func test_rotationIntoSampledIn_completesCrashRecovery_andClearsBacklogAfterConfirmation() throws {
         CoralogixRum.isInitialized = false
-        coralogixRum = CoralogixRum(options: makeSamplingOptions(sampleRate: 0, exclude: []))
+        // Everything except crash instrumentation is switched off, so the top-up installs only what
+        // this test is about. With the full set the main thread first installs URLSession swizzling,
+        // MetricKit and the mobile-vitals detectors, and the confirmation waited on below lands
+        // behind all of it — fast on an idle machine, intermittently past the budget on a busy one.
+        coralogixRum = CoralogixRum(options: makeSamplingOptions(
+            sampleRate: 0,
+            exclude: [],
+            instrumentations: [.lifeCycle: false,
+                               .userActions: false,
+                               .network: false,
+                               .mobileVitals: false,
+                               .anr: false,
+                               .custom: false]))
 
         let uploader = StubUploader()
         coralogixRum.coralogixExporter?.spanUploader = uploader
@@ -303,8 +315,10 @@ final class CrashDeliveryTests: XCTestCase {
         sessionManager.samplingRoller = { true }
         coralogixRum.createNewSession()
 
+        XCTAssertTrue(coralogixRum.isInstrumentationInstalled(.errors),
+                      "The rotation must have installed crash instrumentation — otherwise the assertion below is vacuous.")
         XCTAssertTrue(waitUntil { store.loadAll().isEmpty },
-                      "The top-up installed crash instrumentation, so it must also confirm the upload and clear the backlog. Still holding \(store.loadAll().count).")
+                      "Having installed crash instrumentation, the top-up must also confirm the upload and clear the backlog. Still holding \(store.loadAll().count).")
     }
 
     func test_crashEventStore_discardsCorruptFile() throws {
