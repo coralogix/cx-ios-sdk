@@ -232,6 +232,13 @@ public class CoralogixRum {
         return installed
     }
 
+    /// Whether `type` has been installed for this SDK lifecycle.
+    internal func isInstrumentationInstalled(_ type: CoralogixExporterOptions.InstrumentationType) -> Bool {
+        self.installedInstrumentationsLock.lock()
+        defer { self.installedInstrumentationsLock.unlock() }
+        return self.installedInstrumentations.contains(type)
+    }
+
     /// Returns `true` to exactly one caller per instrumentation type, for the SDK's lifecycle.
     private func claimInstallation(of type: CoralogixExporterOptions.InstrumentationType) -> Bool {
         self.installedInstrumentationsLock.lock()
@@ -309,6 +316,9 @@ public class CoralogixRum {
     private func setupCoreModules() {
         self.initializeSessionReplay()
         self.initializeNavigationInstrumentation()
+        // Getting the batch out before suspension is delivery, not telemetry, so it does not follow
+        // the sampling roll — see initializeBackgroundFlush.
+        self.initializeBackgroundFlush()
         // CX-40573: Mobile-vitals payloads now flow through the typed
         // MetricsCollector protocol instead of the previous closure on
         // MetricsManager. Wire format is unchanged — pinned by

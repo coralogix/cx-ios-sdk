@@ -147,6 +147,33 @@ final class SamplingRotationInstallTests: XCTestCase {
                         "…but the work must still happen once main drains, not be dropped.")
     }
 
+    /// The pre-suspension flush is registered unconditionally, so a sampled-out session still gets
+    /// `beginBackgroundTask` and a forced export before it suspends. Life-cycle *events* stay gated.
+    ///
+    /// Only the sampled-in direction is asserted, deliberately. The sampled-out direction has no
+    /// observable consequence to test: `passesSessionSampling` already drops `.lifeCycle` spans on
+    /// such a session, so suppressing the span at the source changes nothing a test can see. And the
+    /// flush itself cannot be isolated either — `BatchSpanProcessor` waits on a condition variable
+    /// that is signalled on enqueue, so it exports within milliseconds either way; what the
+    /// background task buys is surviving suspension mid-upload, which a unit test cannot observe.
+    /// Verifying that end of it belongs in the demo app.
+    func testSampledInSession_backgroundingStillEmitsLifeCycleEvent() throws {
+        let capture = EventTypeCapture()
+        let rum = CoralogixRum(options: makeSamplingOptions(sampleRate: 100,
+                                                           exclude: [],
+                                                           tracesExporter: capture.tracesExporterCallback()))
+        self.rum = rum
+        try XCTUnwrap(rum.coralogixExporter).spanUploader = SamplingMockSpanUploader()
+
+        XCTAssertTrue(rum.isInstrumentationInstalled(.lifeCycle), "Precondition: sampled in installs life-cycle events.")
+
+        NotificationCenter.default.post(name: UIApplication.didEnterBackgroundNotification, object: nil)
+        flush()
+
+        XCTAssertTrue(capture.eventTypes.contains(CoralogixEventType.lifeCycle.rawValue),
+                      "Moving the observer to the always-on path must not stop a sampled-in session reporting backgrounding. Saw \(capture.eventTypes).")
+    }
+
     func testRotationStayingSampledOut_installsNothingExtra() throws {
         let options = makeSamplingOptions(sampleRate: 0,
                                          exclude: [],
