@@ -153,9 +153,9 @@ public class CoralogixRum {
             // survives without them for the rest of the process. Eligibility only ever widens —
             // a rotation to sampled-out cannot uninstall swizzles — so this only ever adds.
             //
-            // Fires outside `sessionLock` (see `SessionManager.fireRotationCallbacks`) and on
-            // whichever thread rotated, which is the same contract the initializers already meet
-            // at startup.
+            // Fires outside `sessionLock` (see `SessionManager.fireRotationCallbacks`), on whichever
+            // thread rotated — so the install itself is hopped to main rather than run there. See
+            // `topUpInstrumentations`.
             self.topUpInstrumentations(using: options, sampledIn: sampledIn)
         }
 
@@ -171,11 +171,6 @@ public class CoralogixRum {
         self.completeCrashRecovery()
     }
     
-    /// Installs every instrumentation that is eligible now and not already installed.
-    ///
-    /// Safe to call repeatedly: `claimInstallation(of:)` hands out each type exactly once, which is
-    /// what makes the rotation top-up possible at all — the initializers register observers and
-    /// install swizzles, so calling one twice would double every event it produces.
     /// Installs whatever a rotation has made newly eligible, on the main thread.
     ///
     /// The reevaluation callback fires on whichever thread rotated the session — often a touch
@@ -210,6 +205,12 @@ public class CoralogixRum {
         }
     }
 
+    /// Installs every instrumentation that is eligible now and not already installed, returning the
+    /// ones it installed.
+    ///
+    /// Safe to call repeatedly: `claimInstallation(of:)` hands out each type exactly once, which is
+    /// what makes the rotation top-up possible at all — the initializers register observers and
+    /// install swizzles, so calling one twice would double every event it produces.
     @discardableResult
     private func installEligibleInstrumentations(using options: CoralogixExporterOptions,
                                                  sampledIn: Bool) -> Set<CoralogixExporterOptions.InstrumentationType> {
