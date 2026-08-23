@@ -61,7 +61,10 @@ final class LogSamplingDecouplingTests: XCTestCase {
             makeSamplingSpan(eventType: .networkRequest, sampledIn: false)
         ], explicitTimeout: nil)
 
-        XCTAssertEqual(capture.eventTypes, ["log"],
+        // `internal` is filtered out: the SDK's own init event bypasses the sampling filter and arrives
+        // asynchronously through the batch processor, so including it would make this a race.
+        XCTAssertEqual(Set(capture.eventTypes).subtracting([CoralogixEventType.internalKey.rawValue]),
+                       Set(["log"]),
                        "Sampled-out + exclude=[.logs] must let only log spans through; errors and network spans drop.")
     }
 
@@ -83,7 +86,9 @@ final class LogSamplingDecouplingTests: XCTestCase {
             makeSamplingSpan(eventType: .networkRequest)
         ], explicitTimeout: nil)
 
-        XCTAssertEqual(Set(capture.eventTypes),
+        // `internal` is filtered out: the SDK's own init event bypasses the sampling filter and arrives
+        // asynchronously through the batch processor, so including it would make this a race.
+        XCTAssertEqual(Set(capture.eventTypes).subtracting([CoralogixEventType.internalKey.rawValue]),
                        Set(["log", "error", "network-request"]),
                        "Sampled-in: every span passes regardless of excludeFromSampling.")
     }
@@ -177,7 +182,10 @@ final class LogSamplingDecouplingTests: XCTestCase {
             makeSamplingSpan(eventType: .error, sampledIn: true)            // current, sampled-in
         ], explicitTimeout: nil)
 
-        XCTAssertEqual(capture.eventTypes, ["error"],
+        // `internal` is filtered out: the SDK's own init event bypasses the sampling filter and arrives
+        // asynchronously through the batch processor, so including it would make this a race.
+        XCTAssertEqual(Set(capture.eventTypes).subtracting([CoralogixEventType.internalKey.rawValue]),
+                       Set(["error"]),
                        "Live session sampled-in must not over-include a stale sampled-out span; only the sampled-in span survives.")
     }
 
