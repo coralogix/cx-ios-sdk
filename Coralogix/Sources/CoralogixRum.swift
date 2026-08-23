@@ -504,6 +504,15 @@ public class CoralogixRum {
         self.metricsManager.removeObservers()
         self.timeMeasurementTracker?.teardown()
         self.timeMeasurementTracker = nil
+
+        // SessionManager keeps its own foreground and interaction observers, and shutdown does not
+        // tear it down, so sessions keep rotating after the host has stopped the SDK. Leaving the
+        // reevaluation callback installed would let one of those rotations reinstall everything this
+        // method just removed — MetricKit, the detector timers, the lifecycle observers, the ANR
+        // watchdog and the crash handler — with nothing to stop them again and nothing exported to
+        // make it visible. Re-arming a crash handler after an explicit shutdown is the case that
+        // matters: shutdown is what a host calls when consent is withdrawn.
+        self.sessionManager?.samplingReevaluationCallback = nil
     }
     
     public var isInitialized: Bool { return CoralogixRum.isInitialized }

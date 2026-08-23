@@ -94,6 +94,28 @@ final class SamplingRotationInstallTests: XCTestCase {
                        "One notification must yield one event however many rotations occurred — duplicated observers would multiply it. Saw \(capture.eventTypes).")
     }
 
+    /// A rotation after `shutdown()` must not reinstall what shutdown removed.
+    ///
+    /// Asserted through `metricsManager.eventReporter`, which only the ANR installer sets, because
+    /// nothing exports after shutdown — `SpanUploader` checks `isInitialized`, so the reinstall would
+    /// otherwise be invisible: battery cost and a re-armed crash handler with no telemetry to show it.
+    func testRotationAfterShutdown_doesNotReinstallInstrumentation() throws {
+        let sessionManager = try startSampledOutSession()
+
+        XCTAssertNil(rum?.metricsManager.eventReporter,
+                     "Precondition: a sampled-out session with an empty exclude list installs no ANR monitoring.")
+
+        rum?.shutdown()
+
+        // SessionManager is untouched by shutdown, so this is the rotation a backgrounded app
+        // performs on its own when it returns past the idle interval.
+        sessionManager.setupSessionMetadata()
+        XCTAssertTrue(sessionManager.isSessionSampledIn, "Precondition: the rotation rolled sampled in.")
+
+        XCTAssertNil(rum?.metricsManager.eventReporter,
+                     "Shutdown must stop the reevaluation callback, so a later rotation cannot re-arm the ANR watchdog, MetricKit or the crash handler.")
+    }
+
     func testRotationStayingSampledOut_installsNothingExtra() throws {
         let options = makeSamplingOptions(sampleRate: 0,
                                          exclude: [],
