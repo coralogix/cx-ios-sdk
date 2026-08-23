@@ -156,17 +156,7 @@ public class CoralogixRum {
             // Fires outside `sessionLock` (see `SessionManager.fireRotationCallbacks`) and on
             // whichever thread rotated, which is the same contract the initializers already meet
             // at startup.
-            let installed = self.installEligibleInstrumentations(using: options, sampledIn: sampledIn)
-
-            // `startup` finishes crash recovery for the init path, deliberately after
-            // `isInitialized` flips so the uploader will accept the confirmation. When a rotation is
-            // what installs crash instrumentation for the first time, it has to finish it too:
-            // `initializeCrashInstrumentation` defers both the report purge and the store cleanup to
-            // `completeCrashRecovery`, so skipping it leaves the crash on disk to be re-emitted, and
-            // never removed, on every later launch.
-            if installed.contains(.errors) {
-                self.completeCrashRecovery()
-            }
+            self.topUpInstrumentations(using: options, sampledIn: sampledIn)
         }
 
         self.setupTracer(applicationName: options.application)
@@ -186,6 +176,40 @@ public class CoralogixRum {
     /// Safe to call repeatedly: `claimInstallation(of:)` hands out each type exactly once, which is
     /// what makes the rotation top-up possible at all — the initializers register observers and
     /// install swizzles, so calling one twice would double every event it produces.
+    /// Installs whatever a rotation has made newly eligible, on the main thread.
+    ///
+    /// The reevaluation callback fires on whichever thread rotated the session — often a touch
+    /// handler or a span-emission path — but the initializers are written for the main thread:
+    /// `MetricsManager.eventReporter` is documented as set-once-on-main with unsynchronized reads
+    /// from the MetricKit and ANR callbacks, the frame detector drives the main run loop, and the
+    /// network initializer blocks for up to half a second waiting on swizzling readiness when it is
+    /// called off-main. Hopping mirrors `reportHybridUserInteraction`: main-thread callers stay
+    /// synchronous, everyone else is deferred rather than blocking the rotating thread.
+    private func topUpInstrumentations(using options: CoralogixExporterOptions, sampledIn: Bool) {
+        guard Thread.isMainThread else {
+            DispatchQueue.main.async { [weak self] in
+                // The rotation that queued this can be followed by `shutdown()` before it runs, and
+                // reinstalling then would undo the teardown. A rotation that happens *after* shutdown
+                // never reaches here at all, because shutdown clears the callback.
+                guard CoralogixRum.isInitialized else { return }
+                self?.topUpInstrumentations(using: options, sampledIn: sampledIn)
+            }
+            return
+        }
+
+        let installed = self.installEligibleInstrumentations(using: options, sampledIn: sampledIn)
+
+        // `startup` finishes crash recovery for the init path, deliberately after `isInitialized`
+        // flips so the uploader will accept the confirmation. When a rotation is what installs crash
+        // instrumentation for the first time, it has to finish it too:
+        // `initializeCrashInstrumentation` defers both the report purge and the store cleanup to
+        // `completeCrashRecovery`, so skipping it leaves the crash on disk to be re-emitted, and
+        // never removed, on every later launch.
+        if installed.contains(.errors) {
+            self.completeCrashRecovery()
+        }
+    }
+
     @discardableResult
     private func installEligibleInstrumentations(using options: CoralogixExporterOptions,
                                                  sampledIn: Bool) -> Set<CoralogixExporterOptions.InstrumentationType> {

@@ -116,6 +116,37 @@ final class SamplingRotationInstallTests: XCTestCase {
                      "Shutdown must stop the reevaluation callback, so a later rotation cannot re-arm the ANR watchdog, MetricKit or the crash handler.")
     }
 
+    /// The top-up must not run the initializers on whichever thread rotated the session.
+    ///
+    /// `MetricsManager` documents `eventReporter` as set-once-on-main with unsynchronized reads from
+    /// the MetricKit and ANR callbacks, and the network initializer blocks for up to half a second
+    /// off-main. Rotations arrive from touch handlers and span-emission paths, so the work is hopped.
+    func testRotationOffMainThread_defersInstallToTheMainThread() throws {
+        let sessionManager = try startSampledOutSession()
+        XCTAssertNil(rum?.metricsManager.eventReporter,
+                     "Precondition: a sampled-out session installs no ANR monitoring.")
+
+        // `group.wait()` blocks this thread without spinning the run loop, so anything dispatched to
+        // main provably cannot have run by the time the next assertion executes.
+        let group = DispatchGroup()
+        DispatchQueue.global().async(group: group) {
+            XCTAssertFalse(Thread.isMainThread, "the rotation must happen off-main for this test to mean anything")
+            sessionManager.setupSessionMetadata()
+        }
+        XCTAssertEqual(group.wait(timeout: .now() + 5), .success, "the rotation must complete")
+        XCTAssertTrue(sessionManager.isSessionSampledIn, "Precondition: the rotation rolled sampled in.")
+
+        XCTAssertNil(rum?.metricsManager.eventReporter,
+                     "Nothing may be installed on the rotating thread — that write is documented as main-thread-only.")
+
+        let deadline = Date().addingTimeInterval(5)
+        while rum?.metricsManager.eventReporter == nil && Date() < deadline {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        }
+        XCTAssertNotNil(rum?.metricsManager.eventReporter,
+                        "…but the work must still happen once main drains, not be dropped.")
+    }
+
     func testRotationStayingSampledOut_installsNothingExtra() throws {
         let options = makeSamplingOptions(sampleRate: 0,
                                          exclude: [],
