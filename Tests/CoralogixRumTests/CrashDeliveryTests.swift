@@ -279,6 +279,34 @@ final class CrashDeliveryTests: XCTestCase {
                        "an unconfirmed backlog entry must survive another event's confirmation")
     }
 
+    /// Crash recovery has to complete on the rotation top-up path too.
+    ///
+    /// A sampled-out session never installs crash instrumentation, so nothing scans the store. When a
+    /// rotation rolls the session sampled in, the top-up installs it and re-emits the backlog — but
+    /// `initializeCrashInstrumentation` defers the purge and the store cleanup to
+    /// `completeCrashRecovery`, which only `startup` used to call. Without that call the backlog is
+    /// re-emitted on every later launch and never removed.
+    func test_rotationIntoSampledIn_completesCrashRecovery_andClearsConfirmedBacklog() throws {
+        CoralogixRum.isInitialized = false
+        coralogixRum = CoralogixRum(options: makeSamplingOptions(sampleRate: 0, exclude: []))
+
+        let uploader = StubUploader()
+        coralogixRum.coralogixExporter?.spanUploader = uploader
+        let store = makeTempStore()
+        coralogixRum.crashEventStore = store
+        store.append([Keys.errorMessage.rawValue: "crash-from-a-previous-launch"])
+
+        XCTAssertEqual(store.loadAll().count, 1,
+                       "Precondition: a sampled-out session installs no crash instrumentation, so the backlog is untouched.")
+
+        let sessionManager = try XCTUnwrap(coralogixRum.sessionManager)
+        sessionManager.samplingRoller = { true }
+        coralogixRum.createNewSession()
+
+        XCTAssertTrue(waitUntil { store.loadAll().isEmpty },
+                      "The top-up installed crash instrumentation, so it must also confirm the upload and clear the backlog. Still holding \(store.loadAll().count).")
+    }
+
     func test_crashEventStore_discardsCorruptFile() throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         let store = CrashEventStore(directory: dir)

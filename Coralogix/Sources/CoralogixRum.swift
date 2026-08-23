@@ -156,7 +156,17 @@ public class CoralogixRum {
             // Fires outside `sessionLock` (see `SessionManager.fireRotationCallbacks`) and on
             // whichever thread rotated, which is the same contract the initializers already meet
             // at startup.
-            self.installEligibleInstrumentations(using: options, sampledIn: sampledIn)
+            let installed = self.installEligibleInstrumentations(using: options, sampledIn: sampledIn)
+
+            // `startup` finishes crash recovery for the init path, deliberately after
+            // `isInitialized` flips so the uploader will accept the confirmation. When a rotation is
+            // what installs crash instrumentation for the first time, it has to finish it too:
+            // `initializeCrashInstrumentation` defers both the report purge and the store cleanup to
+            // `completeCrashRecovery`, so skipping it leaves the crash on disk to be re-emitted, and
+            // never removed, on every later launch.
+            if installed.contains(.errors) {
+                self.completeCrashRecovery()
+            }
         }
 
         self.setupTracer(applicationName: options.application)
@@ -176,7 +186,9 @@ public class CoralogixRum {
     /// Safe to call repeatedly: `claimInstallation(of:)` hands out each type exactly once, which is
     /// what makes the rotation top-up possible at all — the initializers register observers and
     /// install swizzles, so calling one twice would double every event it produces.
-    private func installEligibleInstrumentations(using options: CoralogixExporterOptions, sampledIn: Bool) {
+    @discardableResult
+    private func installEligibleInstrumentations(using options: CoralogixExporterOptions,
+                                                 sampledIn: Bool) -> Set<CoralogixExporterOptions.InstrumentationType> {
         let instrumentationMap: [(CoralogixExporterOptions.InstrumentationType, () -> Void)] = [
             (.lifeCycle, self.initializeLifeCycleInstrumentation),
             (.userActions, self.initializeUserActionsInstrumentation),
@@ -186,11 +198,14 @@ public class CoralogixRum {
             (.anr, self.initializeANRInstrumentation)
         ]
         
+        var installed: Set<CoralogixExporterOptions.InstrumentationType> = []
         for (type, initializer) in instrumentationMap
         where Self.shouldInstall(type, options: options, sampledIn: sampledIn) {
             guard self.claimInstallation(of: type) else { continue }
             initializer()
+            installed.insert(type)
         }
+        return installed
     }
 
     /// Returns `true` to exactly one caller per instrumentation type, for the SDK's lifecycle.
