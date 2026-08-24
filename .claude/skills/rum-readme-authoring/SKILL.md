@@ -9,10 +9,22 @@ These READMEs are not just repo files any more. A nightly job in `coralogix/docu
 
 Two consequences drive everything below:
 
-**Only some READMEs are synced.** The docs repo names the exact files it mirrors in
-`external_repos.json`; most repos publish their root `README.md`, some publish a file under
-`libs/`, and one publishes three. An `example/` README is not published, so none of this
-applies to it. Check before assuming a README you are editing is one of them.
+**Only some READMEs are synced, and these rules apply only to those.** The docs repo names
+the exact files it mirrors in `external_repos.json`:
+
+| Repo | Synced file(s) |
+|---|---|
+| `coralogix-browser-sdk` | `libs/browser/README.md` |
+| `cx-react-native-plugin` | `libs/cx-plugin/README.md` |
+| `android-sdk` | `Coralogix-Development/`, `Coralogix-Compose/`, `Coralogix-Gradle-Plugin/` |
+| `cx-ios-sdk` | root, plus `SessionReplay/Sources/Docs/README.md` |
+| `cx-flutter-plugin` | root `README.md` |
+| `rum-cli` | root `README.md` |
+| `coralogix-javascript-bundler-plugins` | `packages/*/README.md` |
+
+A root `README.md` in a repo whose synced file is under `libs/`, and anything under
+`apps/example/`, is not published - none of this applies there. Check the table before
+assuming the README you are editing is one of them.
 
 **The synced README is the single source.** Editing the published page is pointless — the next sync overwrites it. Content fixes only stick here.
 
@@ -23,8 +35,10 @@ applies to it. Check before assuming a README you are editing is one of them.
 The single most common defect in these pages has been confident documentation of things that do not exist. Real examples, all shipped and all caught late:
 
 - a configuration option documented for years that **is not a parameter of the options object at all**
-- a collection type documented for an option where **that type did not exist in the SDK at all**.
-  The same option is spelled differently in each SDK — a set in one, a list in another, with a
+- a collection type documented for an option where **that type did not exist in that SDK**.
+  `Set<ExcludableInstrumentation>` is a Swift shape; the browser and React Native SDKs type
+  the same option as an array, so copying the Swift spelling into a TypeScript example
+  produces something that will not compile. The same option is spelled differently in each SDK — a set in one, a list in another, with a
   differently-prefixed element type — so a type copied from a sibling repo, or from this file, is
   a guess. Read it from the declaration in *this* repo
 - a callback documented as taking an object when the implementation takes a dictionary, so anyone copying the signature could not compile
@@ -83,13 +97,16 @@ Mechanical rules, in rough order of how often they are missed:
 - Split markers: `title` before `path`, one section each, sensible `configuration/` or `features/` paths
 - No `&amp;` or other entities anywhere, including inside code fences
 - Install snippets *you added or changed* name a version that is actually published — check the
-  package registry, not the manifest in this repo, which may name an unreleased candidate. Leave
+  package registry, not a manifest or lockfile in this repo - those can name an unreleased
+  candidate, and a lockfile can name a `pr.<run>` build that no consumer can install. Leave
   older snippets alone unless you are deliberately refreshing them; a version sweep is its own
   change, not a rider on yours
 - A public API you added, renamed or removed is reflected in the README, not just in the code —
   and a rename or removal says what to use instead, since the published page is what a reader
   on the old version will find. "Public" means what the package actually hands to consumers —
-  what the entrypoint re-exports, or what the module declares public — not every symbol marked
+  what the entrypoint re-exports **and** does not mark `@internal` - a re-exported symbol
+  whose declaration says it is not part of the public API is not yours to document - or what
+  the module declares public. Not every symbol marked
   `export` or `public` somewhere in the tree
 
 ## What happens after you merge
@@ -97,8 +114,10 @@ Mechanical rules, in rough order of how often they are missed:
 The sync runs nightly at 04:00 UTC and opens a PR in `coralogix/documentation` with whatever changed.
 
 **Docs can run ahead of the release.** The sync follows `master`; the package publishes on a
-version tag. So a README documenting a new API goes live on the docs site as soon as it is
-merged, while the version that has that API may not be on the registry yet — and a reader on
+version tag. A merged README does not publish immediately: the nightly sync opens a PR in
+`coralogix/documentation`, a technical writer reviews it, and it publishes when that merges.
+But it is queued from the moment you merge, so a README documenting a new API can reach the
+site while the version that has that API is not on the registry yet — and a reader on
 the current release gets instructions that cannot work for them. If you are documenting
 something unreleased, say which version introduces it, or hold the README change until the
 release goes out. A technical writer reviews that PR before it publishes, so a mistake is catchable — but it is caught a day later by someone without the SDK in front of them, which is exactly the position that produced the errors listed above. The cheap place to be right is here.
