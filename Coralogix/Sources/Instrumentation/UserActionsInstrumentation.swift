@@ -40,9 +40,13 @@ extension CoralogixRum {
         // replay, the masking flag goes unused, and the hybrid span resolves its own
         // geometry in validateHybridInteraction — walking here too would cost React
         // Native and Flutter apps two full view-tree walks per tap.
-        let maskRects: [CGRect]? = shouldEmitUserActionSpan
-            ? SdkManager.shared.getSessionReplay()?.currentMaskRects()
-            : nil
+        //
+        // This now walks whether or not session replay is in use — the geometry is `cxMask`,
+        // which is ours, not the replay's. Apps without session replay previously paid nothing
+        // here; they now pay one cxMask walk per tap, which is the price of the verdict no
+        // longer depending on session replay being initialized. Taps are human-paced, so the
+        // walk is not on a hot enough path to warrant caching or a global "any mask set" flag.
+        let maskRects: [CGRect]? = shouldEmitUserActionSpan ? UIView.deliberateMaskRects() : nil
 
         processInteractionEvent(TapDataExtractor.extract(from: touchEvent,
                                                          shouldSendText: userActionsDelegates?.shouldSendText,
@@ -201,7 +205,7 @@ extension CoralogixRum {
         // the documented `false` default: the flag under-reports rather than over-reports.
         let isMaskedElement = Self.resolveHybridMasking(
             dictionary,
-            maskRects: maskRects ?? SdkManager.shared.getSessionReplay()?.currentMaskRects()
+            maskRects: maskRects ?? UIView.deliberateMaskRects()
         )
         if let text = result[Keys.targetElementInnerText.rawValue] {
             result[Keys.targetElementInnerText.rawValue] =
@@ -216,13 +220,13 @@ extension CoralogixRum {
     ///
     /// Precedence: the wrapper's own verdict (`is_masked` in the bridge dictionary) —
     /// authoritative for hybrids that own their masking (Flutter sets it; React Native does
-    /// not) — then the payload's coordinates tested against the same frame geometry that
-    /// suppresses the replay's tap marker, so the metadata cannot contradict the pixels.
-    /// Hybrid coordinates and iOS mask rects are both in points — no unit conversion, unlike
-    /// Android where the payload is dp and the rects are px.
+    /// not) — then the payload's coordinates tested against the deliberate-masking geometry
+    /// (`UIView.deliberateMaskRects`), which excludes the replay's pixel policy. Hybrid
+    /// coordinates and iOS mask rects are both in points — no unit conversion, unlike Android
+    /// where the payload is dp and the rects are px.
     ///
     /// Returns nil when neither is resolvable — no coordinates (React Native scroll and swipe
-    /// carry none) or no frame geometry to test against.
+    /// carry none) or no mask geometry to test against.
     internal static func resolveHybridMasking(_ dictionary: [String: Any],
                                               maskRects: [CGRect]?) -> Bool? {
         if let verdict = dictionary[Keys.isMasked.rawValue] as? Bool { return verdict }

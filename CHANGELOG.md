@@ -9,6 +9,13 @@ Release-mechanics commits (version bumps, podspec/script tweaks, README edits) a
 omitted; the focus here is user-facing behavior changes. Tickets are referenced as
 `CX-XXXXX` (Jira) or `ALPH-XXXX` (legacy). Pull request numbers are in parentheses.
 
+## [2.16.1] - 2026-08-24
+
+### Changed
+- `interaction_context.is_masked_element` no longer reports `true` for content masked only by session replay's pixel policy (`maskText`, `maskAllImages`). The flag and the inner-text redaction now reflect deliberate masking alone — `cxMask`, anything inside it, SwiftUI `.cxMask()`, and sensitive fields — matching the Android and Flutter SDKs. Previously, with a wrapper's default `maskAllTexts`, a tap on almost any text reported as masked and shipped `***`; such taps now report `false` with their real text. Use `shouldSendText` to withhold that text.
+- The replay's tap marker is unchanged: it is still suppressed over pixels the frame hid, including policy-masked ones. Flag and marker can now legitimately disagree for policy-masked content, as they already do on Android and Flutter.
+- Interaction masking no longer depends on session replay being initialized; the verdict resolves from the view hierarchy alone.
+
 ## [2.16.0] - 2026-08-18
 
 ### Changed

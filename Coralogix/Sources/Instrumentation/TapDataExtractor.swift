@@ -238,11 +238,11 @@ enum TapDataExtractor {
     /// - Parameter resolveTargetName: Optional delegate from `CoralogixExporterOptions`.
     ///   When provided, its return value replaces the UIKit class name in `target_element`.
     ///   Returning `nil` falls back to the resolved class name.
-    /// - Parameter maskRects: The mask geometry (screen points) a frame captured now would
-    ///   paint, from `SessionReplayInterface.currentMaskRects`. The caller resolves it —
-    ///   and decides whether the walk is worth paying for at all (see
-    ///   `handleInteractionNotification`). nil when unresolvable or skipped — geometry
-    ///   then contributes nothing to the masking decision.
+    /// - Parameter maskRects: The deliberate-masking geometry (screen points) from
+    ///   `UIView.deliberateMaskRects` — `cxMask` only, with the replay's pixel policy
+    ///   excluded. The caller resolves it, and decides whether the walk is worth paying for
+    ///   at all (see `handleInteractionNotification`). nil when unresolvable or skipped —
+    ///   geometry then contributes nothing to the masking decision.
     static func extract(from event: TouchEvent,
                         shouldSendText: ((UIView, String) -> Bool)? = nil,
                         resolveTargetName: ((UIView) -> String?)? = nil,
@@ -252,11 +252,15 @@ enum TapDataExtractor {
 
         tapData[Keys.eventName.rawValue] = event.eventType.rawValue
 
-        // Masked = the frame geometry the replay paints (preferred oracle — it also covers
-        // maskText / maskAllImages and SwiftUI `.cxMask()`, which the view tree cannot see,
-        // so this flag and the replay's tap-marker suppression cannot contradict each other)
-        // unioned with the view-tree walk and the PII traits, which still answer when no
-        // geometry is available and for secure fields that paint no rect.
+        // Masked = deliberate-masking geometry (needed for SwiftUI `.cxMask()`, which overlays
+        // a masked sibling the view tree cannot see) unioned with the view-tree walk, which
+        // still answers when no geometry is available, and the PII traits, which cover secure
+        // fields that paint no rect.
+        //
+        // The replay's pixel policy (maskText / maskAllImages) is deliberately not an input:
+        // it answers whether pixels should be hidden in a frame, not whether text may leave
+        // the device. So this flag and the replay's tap-marker suppression can legitimately
+        // disagree for policy-masked content — matching Android and Flutter.
         let isMaskedElement = (maskRects.map { pointIsMasked(event.location, in: $0) } ?? false)
             || view.isInsideMaskedSubtree
             || hasSensitivePIIProperties(view)
@@ -319,9 +323,10 @@ enum TapDataExtractor {
         isMasked ? Keys.maskedInnerText.rawValue : innerText
     }
 
-    /// Whether a tap at `point` (screen points) landed inside one of a frame's masked regions.
-    /// Mirrors the replay's tap-marker test (`ScannerPipeline.containsTap`), including failing
-    /// closed on overlapping windows.
+    /// Whether a tap at `point` (screen points) landed inside one of the given masked regions.
+    /// Same test mechanics as the replay's tap-marker suppression (`ScannerPipeline.containsTap`),
+    /// including failing closed on overlapping windows — but applied to different geometry: the
+    /// marker tests the rects the frame actually painted, this tests deliberate masking only.
     static func pointIsMasked(_ point: CGPoint, in maskRects: [CGRect]) -> Bool {
         maskRects.contains { $0.contains(point) }
     }
