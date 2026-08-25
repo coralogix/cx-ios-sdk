@@ -29,6 +29,7 @@ import json
 import html.entities
 import os
 import re
+import string
 import sys
 
 # The files `coralogix/documentation` mirrors from this repo, per its
@@ -49,7 +50,7 @@ EDIT_TOOLS = ("Edit", "Write", "MultiEdit", "NotebookEdit")
 # The semicolon is optional because HTML still decodes the legacy names without
 # it - `&copy` renders as a symbol - but only when what follows is not `=` or
 # another alphanumeric, which is what keeps `?a=1&copy=2` a query string.
-ENTITY = re.compile(r"&(?:([A-Za-z][A-Za-z0-9]*)(;?)|(#\d+|#[xX][0-9A-Fa-f]+);)")
+ENTITY = re.compile(r"&(?:([A-Za-z][A-Za-z0-9]*)|#\d+|#[xX][0-9A-Fa-f]+)(;?)")
 FENCE = re.compile(r"^\s{0,3}(`{3,}|~{3,})")
 THEMATIC = re.compile(r"^\s{0,3}(?:(?:-\s*){3,}|(?:\*\s*){3,}|(?:_\s*){3,})$")
 SETEXT = re.compile(r"^\s{0,3}(=+|-+)\s*$")
@@ -130,6 +131,10 @@ def _split_problems(n, attrs, opened):
 NOT_PARAGRAPH = re.compile(r"^\s{0,3}(?:#{1,6}\s|[-*+]\s|\d+[.)]\s|>|\||<!--|\[[^\]]*\]:)")
 
 
+# What HTML5 refuses to decode a semicolonless name in front of. Ascii only:
+# `&copyé` does decode, so `str.isalnum()` would have let it through.
+ASCII_AFTER = frozenset("=" + string.ascii_letters + string.digits)
+
 INDENTED_CODE = re.compile(r"^(?: {4,}|\t)")
 
 
@@ -159,7 +164,7 @@ def lint_text(text):
                         continue
                 else:
                     following = line[m.end():m.end() + 1]
-                    if name not in html.entities.html5 or following == "=" or following.isalnum():
+                    if name not in html.entities.html5 or following in ASCII_AFTER:
                         continue
             out.append((n, f"HTML entity `{m.group(0)}` - write the character itself"))
 
@@ -389,7 +394,7 @@ Run `cd /etc &amp;&amp; wget` and mind the &mdash; and &#0000065; too.
 
 ---
 
-A semicolonless &copy still renders as a symbol.
+A semicolonless &copy still renders as a symbol, as do &#65 and &copyé.
 
     indented code, not a paragraph
 ---
@@ -433,11 +438,141 @@ An example of the syntax, which is not a real marker:
 ```
 """
 
+def _payload(transcript, **kw):
+    payload = {"cwd": "/repo", "transcript_path": transcript}
+    payload.update(kw)
+    return payload
 
-def _payload(tmp, **kw):
-    base = {"cwd": "/repo", "transcript_path": tmp}
-    base.update(kw)
-    return base
+
+def _transcripts(directory):
+    """The transcript shapes the gate has to tell apart."""
+    call = {"type": "tool_use", "id": "toolu_1", "name": "Skill", "input": {"skill": SKILL}}
+
+    def write(name, *records):
+        path = os.path.join(directory, name)
+        with open(path, "w") as fh:
+            for record in records:
+                fh.write(json.dumps(record) + "\n")
+        return path
+
+    def said(text):
+        return {"type": "user", "message": {"content": [{"type": "text", "text": text}]}}
+
+    shapes = {
+        # The skill listing and the skill's own file path, but no invocation.
+        "bare": write("bare.jsonl", said(f"see .claude/skills/{SKILL}/SKILL.md")),
+        "loaded": write("loaded.jsonl", {"type": "assistant", "message": {"content": [call]}}),
+        # Someone quoting the matcher itself - a review comment, or this script.
+        "quoted": write("quoted.jsonl", said('the gate looks for "skill": "%s"' % SKILL)),
+        "asked": write("asked.jsonl", said(f"please run /{SKILL} for me")),
+        # A Skill call that came back an error loaded nothing.
+        "errored": write(
+            "errored.jsonl",
+            {"type": "assistant", "message": {"content": [call]}},
+            {"type": "user", "message": {"content": [
+                {"type": "tool_result", "tool_use_id": "toolu_1", "is_error": True}]}},
+        ),
+        "truncated": write("truncated.jsonl", {"type": "assistant", "message": {"content": [call]}}),
+        "gone": os.path.join(directory, "does-not-exist.jsonl"),
+    }
+    with open(shapes["truncated"], "a") as fh:
+        fh.write('{"type":"assistant","message":{"conte\n')
+    return shapes
+
+
+def _check_rules():
+    """Every rule still fires, and none of them fires on clean content."""
+    problems = [m for _, m in lint_text(BAD)]
+    found = " | ".join(problems)
+    for expected in (
+        "path` before `title", "period", "&amp;", "&mdash;", "&#0000065;", "&#65", "`&copy`",
+        "horizontal rule", "[!NOTE]", "never closed", "no quoted value",
+    ):
+        assert expected in found, f"rule missed {expected!r}: {found}"
+    # Three: the standalone rule, the one after a heading, and the one after an
+    # indented code line. Not the `---` in the yaml fence, and not the setext
+    # underlines in GOOD.
+    hrs = [m for m in problems if "horizontal rule" in m]
+    assert len(hrs) == 3, f"expected 3 horizontal rules, got {len(hrs)}: {found}"
+    # Both the plain and the closed-ATX heading, not just the plain one.
+    assert len([m for m in problems if "period" in m]) == 2, f"closing-hash heading missed: {found}"
+    assert not lint_text(GOOD), lint_text(GOOD)
+
+
+def _check_gate(shapes):
+    """Every registered tool, every synced path, and payloads that are not payloads."""
+    cases = [
+        (0, None, "a payload that is not an object"),
+        (0, {}, "an empty payload"),
+        (0, {"tool_name": "Edit", "tool_input": None}, "tool_input of the wrong type"),
+    ]
+
+    for synced in SYNCED:
+        absolute = {"file_path": "/repo/" + synced}
+        cases += [
+            (2, _payload(shapes["bare"], tool_name="Edit", tool_input=absolute), f"{synced}: edit without the skill"),
+            (0, _payload(shapes["loaded"], tool_name="Edit", tool_input=absolute), f"{synced}: edit with the skill loaded"),
+            (2, _payload(shapes["quoted"], tool_name="Edit", tool_input=absolute), f"{synced}: the matcher quoted in ordinary text"),
+            (2, _payload(shapes["asked"], tool_name="Edit", tool_input=absolute), f"{synced}: asking for the skill, no call"),
+            (2, _payload(shapes["errored"], tool_name="Edit", tool_input=absolute), f"{synced}: a Skill call that errored"),
+            (0, _payload(shapes["truncated"], tool_name="Edit", tool_input=absolute), f"{synced}: a half-written trailing line"),
+            (2, _payload(shapes["gone"], tool_name="Edit", tool_input=absolute), f"{synced}: unreadable transcript fails closed"),
+            (2, _payload(None, tool_name="Edit", tool_input=absolute), f"{synced}: missing transcript fails closed"),
+            (2, _payload(shapes["bare"], tool_name="Edit", tool_input={"file_path": synced}), f"{synced}: relative to the session cwd"),
+            (2, _payload(shapes["bare"], tool_name="Write", tool_input=absolute), f"{synced}: Write"),
+            (2, _payload(shapes["bare"], tool_name="MultiEdit", tool_input=absolute), f"{synced}: MultiEdit"),
+            (2, _payload(shapes["bare"], tool_name="NotebookEdit", tool_input={"notebook_path": "/repo/" + synced}), f"{synced}: NotebookEdit"),
+            (0, _payload(shapes["bare"], tool_name="Read", tool_input=absolute), f"{synced}: a tool that only reads"),
+            (0, _payload(shapes["bare"], tool_name="Edit", tool_input={"file_path": ["/repo/" + synced]}), f"{synced}: file_path of the wrong type"),
+            (2, _payload(shapes["bare"], tool_name="Bash", tool_input={"command": "printf x >%s" % synced}), f"{synced}: shell write"),
+            (0, _payload(shapes["bare"], tool_name="Bash", tool_input={"command": "cat %s" % synced}), f"{synced}: shell read"),
+            (2, _payload(shapes["bare"], tool_name="Bash", tool_input={"command": "git restore " + synced}), f"{synced}: git restore"),
+            (2, _payload(shapes["bare"], tool_name="Bash", tool_input={"command": "python3 -c \"open('%s','w')\"" % synced}), f"{synced}: interpreter write"),
+            (0, _payload(shapes["bare"], tool_name="Bash", tool_input={"command": "rm docs/" + os.path.basename(synced)}), f"{synced}: a different README of the same name"),
+        ]
+        if "/" in synced:
+            # A nested path can carry a directory prefix; a bare README.md cannot.
+            cases.append((2, _payload(shapes["bare"], tool_name="Bash",
+                                      tool_input={"command": "sed -i '' s/a/b/ /repo/" + synced}),
+                          f"{synced}: an absolute path to a nested synced file"))
+
+    for expected, payload, why in cases:
+        captured, sys.stderr = sys.stderr, io.StringIO()
+        try:
+            got = gate(payload)
+        finally:
+            sys.stderr = captured
+        assert got == expected, f"gate returned {got}, expected {expected}: {why}"
+
+
+def _check_entry_points(directory, transcript):
+    """`lint` and `hook` themselves, not only the functions underneath them."""
+    root = os.path.join(directory, "repo")
+    pages = [os.path.join(root, rel) for rel in SYNCED]   # every one: lint checks them all
+    for page in pages:
+        os.makedirs(os.path.dirname(page), exist_ok=True)
+        with open(page, "w") as fh:
+            fh.write(GOOD)
+
+    captured, sys.stdout = sys.stdout, io.StringIO()
+    try:
+        clean = lint(root)
+        with open(pages[0], "w") as fh:
+            fh.write(BAD)
+        dirty = lint(root)
+    finally:
+        sys.stdout = captured
+    assert clean == 0, "lint() failed a clean README"
+    assert dirty == 1, "lint() passed a README full of violations"
+
+    payload = _payload(transcript, tool_name="Edit", tool_input={"file_path": "/repo/" + SYNCED[0]})
+    stdin, sys.stdin = sys.stdin, io.StringIO(json.dumps(payload))
+    captured, sys.stderr = sys.stderr, io.StringIO()
+    try:
+        blocked = hook()
+    finally:
+        sys.stdin, sys.stderr = stdin, captured
+    assert blocked == 2, "hook() did not block a synced edit"
 
 
 def selftest():
@@ -445,138 +580,13 @@ def selftest():
     if not __debug__:
         raise SystemExit("selftest asserts; do not run it under python -O")
 
-    problems = [m for _, m in lint_text(BAD)]
-    found = " | ".join(problems)
-    for expected in (
-        "path` before `title", "period", "&amp;", "&mdash;", "&#0000065;", "`&copy`",
-        "horizontal rule", "[!NOTE]", "never closed", "no quoted value",
-    ):
-        assert expected in found, f"rule missed {expected!r}: {found}"
-    # Both the plain and the closed-ATX heading, not just the plain one.
-    assert len([m for m in problems if "period" in m]) == 2, f"closing-hash heading missed: {found}"
-    # Exactly one: the `---` inside the yaml fence is not a rule.
-    hrs = [m for m in problems if "horizontal rule" in m]
-    # Two: the standalone rule and the one after a heading. Not the `---` in the
-    # yaml fence, and not the setext underline in GOOD.
-    # Three: the standalone rule, the one after a heading, and the one after an
-    # indented code line. Not the `---` in the yaml fence, and not the setext
-    # underlines in GOOD.
-    assert len(hrs) == 3, f"expected 3 horizontal rules, got {len(hrs)}: {found}"
-    assert not lint_text(GOOD), lint_text(GOOD)
-
     import tempfile
 
-    synced = SYNCED[0]
-    with tempfile.TemporaryDirectory() as d:
-        def transcript(name, *records):
-            path = os.path.join(d, name)
-            with open(path, "w") as fh:
-                for record in records:
-                    fh.write(json.dumps(record) + "\n")
-            return path
-
-        call = {"type": "tool_use", "id": "toolu_1", "name": "Skill", "input": {"skill": SKILL}}
-
-        # The skill listing and the skill's own file path, but no invocation.
-        bare = transcript(
-            "bare.jsonl",
-            {"type": "user", "message": {"content": [
-                {"type": "text", "text": f"see .claude/skills/{SKILL}/SKILL.md"}]}},
-        )
-        loaded = transcript("loaded.jsonl", {"type": "assistant", "message": {"content": [call]}})
-        # Someone quoting the matcher itself - a review comment, or this script.
-        quoted = transcript(
-            "quoted.jsonl",
-            {"type": "user", "message": {"content": [
-                {"type": "text", "text": 'the gate looks for "skill": "%s" in the transcript' % SKILL}]}},
-        )
-        # A Skill call that came back an error loaded nothing.
-        errored = transcript(
-            "errored.jsonl",
-            {"type": "assistant", "message": {"content": [call]}},
-            {"type": "user", "message": {"content": [
-                {"type": "tool_result", "tool_use_id": "toolu_1", "is_error": True}]}},
-        )
-        slash = transcript(
-            "slash.jsonl",
-            {"type": "user", "message": {"content": [
-                {"type": "text", "text": f"please run /{SKILL} for me"}]}},
-        )
-        truncated = transcript("truncated.jsonl", {"type": "assistant", "message": {"content": [call]}})
-        with open(truncated, "a") as fh:
-            fh.write('{"type":"assistant","message":{"conte\n')
-        gone = os.path.join(d, "does-not-exist.jsonl")
-
-        edit = {"tool_name": "Edit", "tool_input": {"file_path": "/repo/" + synced}}
-        relative = {"tool_name": "Edit", "tool_input": {"file_path": synced}}
-        other = {"tool_name": "Edit", "tool_input": {"file_path": "/repo/docs/README.md"}}
-        write = {"tool_name": "Bash", "tool_input": {"command": "printf x >%s" % synced}}
-        read = {"tool_name": "Bash", "tool_input": {"command": "cat %s" % synced}}
-
-        cases = [
-            (2, _payload(bare, **edit), "synced edit without the skill"),
-            (2, _payload(bare, **relative), "a file_path relative to the session cwd"),
-            (2, _payload(bare, tool_name="Write", tool_input={"file_path": "/repo/" + synced}), "Write"),
-            (2, _payload(bare, tool_name="MultiEdit", tool_input={"file_path": "/repo/" + synced}), "MultiEdit"),
-            (2, _payload(bare, tool_name="NotebookEdit", tool_input={"notebook_path": "/repo/" + synced}), "NotebookEdit"),
-            (0, _payload(bare, tool_name="Read", tool_input={"file_path": "/repo/" + synced}), "a tool that only reads"),
-            (2, _payload(bare, tool_name="Bash", tool_input={"command": "git restore " + synced}), "git restore"),
-            (0, _payload(bare, tool_name="Bash", tool_input={"command": "rm docs/" + os.path.basename(synced)}), "a different README of the same name"),
-            (2, _payload(bare, tool_name="Bash", tool_input={"command": "python3 -c \"open('%s','w')\"" % synced}), "a write from inside an interpreter"),
-            (0, _payload(loaded, **edit), "synced edit with the skill loaded"),
-            (0, _payload(bare, **other), "a README the sync does not mirror"),
-            (2, _payload(bare, **write), "shell write without the skill"),
-            (0, _payload(bare, **read), "shell read"),
-            (2, _payload(slash, **edit), "asking for the skill without the call landing"),
-            (2, _payload(quoted, **edit), "the matcher quoted in ordinary text"),
-            (2, _payload(errored, **edit), "a Skill call that came back an error"),
-            (0, _payload(truncated, **edit), "a half-written trailing line"),
-            (2, _payload(gone, **edit), "unreadable transcript fails closed"),
-            (2, _payload(None, **edit), "missing transcript fails closed"),
-            (0, None, "a payload that is not an object"),
-            (0, {"tool_name": "Edit", "tool_input": None}, "tool_input of the wrong type"),
-            (0, {"tool_name": "Edit", "tool_input": {"file_path": ["/repo/" + synced]}}, "file_path of the wrong type"),
-            (0, {}, "an empty payload"),
-        ]
-        if "/" in synced:
-            # A nested path can carry a directory prefix; a bare README.md cannot.
-            cases.append((2, _payload(bare, tool_name="Bash",
-                                      tool_input={"command": "sed -i '' s/a/b/ /repo/" + synced}),
-                          "an absolute path to a nested synced file"))
-
-        for expected, payload, why in cases:
-            captured, sys.stderr = sys.stderr, io.StringIO()
-            try:
-                got = gate(payload)
-            finally:
-                sys.stderr = captured
-            assert got == expected, f"gate returned {got}, expected {expected}: {why}"
-
-        # The two entry points CI and the hook actually call, not just their internals.
-        root = os.path.join(d, "repo")
-        pages = [os.path.join(root, rel) for rel in SYNCED]   # every one: lint checks them all
-        for page in pages:
-            os.makedirs(os.path.dirname(page), exist_ok=True)
-            with open(page, "w") as fh:
-                fh.write(GOOD)
-        captured, sys.stdout = sys.stdout, io.StringIO()
-        try:
-            clean = lint(root)
-            with open(pages[0], "w") as fh:
-                fh.write(BAD)
-            dirty = lint(root)
-        finally:
-            sys.stdout = captured
-        assert clean == 0, "lint() failed a clean README"
-        assert dirty == 1, "lint() passed a README full of violations"
-
-        stdin, sys.stdin = sys.stdin, io.StringIO(json.dumps(_payload(bare, **edit)))
-        captured, sys.stderr = sys.stderr, io.StringIO()
-        try:
-            blocked = hook()
-        finally:
-            sys.stdin, sys.stderr = stdin, captured
-        assert blocked == 2, "hook() did not block a synced edit"
+    _check_rules()
+    with tempfile.TemporaryDirectory() as directory:
+        shapes = _transcripts(directory)
+        _check_gate(shapes)
+        _check_entry_points(directory, shapes["bare"])
 
     print("selftest ok")
     return 0
