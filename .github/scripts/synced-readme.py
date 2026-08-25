@@ -67,11 +67,12 @@ SETEXT = re.compile(r"^\s{0,3}(=+|-+)\s*$")
 # `## Heading. ##` renders as "Heading." - the closing run is syntax, so it has
 # to come off before the trailing-period check.
 ATX = re.compile(r"^\s{0,3}#{1,6}\s+(.*?)(?:\s+#+)?\s*$")
-# The plain bolded form only. An emphasis-wrapped variant (`> _**Note:**_`) is
-# deliberately not matched yet: the one instance in these repos sits in
-# coralogix-browser-sdk, and rewording it is a documentation change rather than
-# a tooling one. Add `[_*]{0,2}` before `\*\*` once that line is fixed.
-CALLOUT = re.compile(r"^\s{0,3}>\s*\*\*(note|tip|important|warning|caution)\b", re.I)
+# Any bolded label, however it is emphasised: `> **Note:**`, `> _**Note:**_`,
+# `> __Note:__`. All of them render as a plain blockquote rather than as the
+# alert the docs site styles, and the italic form is the one people reach for.
+CALLOUT = re.compile(
+    r"^\s{0,3}>\s*[_*]{0,2}(?:\*\*|__)(note|tip|important|warning|caution)\b", re.I
+)
 # A fence can sit inside a blockquote. The prefix comes off for fence tracking
 # only - the callout rule is *about* blockquotes, so it keeps the original line.
 QUOTE_PREFIX = re.compile(r"^(?:\s{0,3}>\s?)+")
@@ -495,6 +496,8 @@ A semicolonless &copy still renders as a symbol, as do &#65 and &copyé.
 
 > **Note:** bolded callouts render as plain blockquotes.
 
+> _**Warning:**_ so do the emphasis-wrapped ones.
+
 ```yaml
 ---
 this: is a code fence, not a rule
@@ -592,7 +595,7 @@ def _check_rules():
     found = " | ".join(problems)
     for expected in (
         "path` before `title", "period", "&amp;", "&mdash;", "&#0000065;", "&#65", "`&copy`",
-        "horizontal rule", "[!NOTE]", "never closed", "no quoted value",
+        "horizontal rule", "[!NOTE]", "[!WARNING]", "never closed", "no quoted value",
     ):
         assert expected in found, f"rule missed {expected!r}: {found}"
     # Three: the standalone rule, the one after a heading, and the one after an
@@ -622,6 +625,12 @@ def _check_rules():
     assert not quoted, f"blockquoted fence linted as prose: {quoted}"
     unquoted = lint_text('> **Note:** a real callout\n')
     assert unquoted, "the callout rule stopped firing outside a fence"
+    for spelling in ("> _**Tip:**_ x", "> __Important:__ x", "> *__Caution:__* x"):
+        assert lint_text(spelling + "\n"), f"callout spelling missed: {spelling}"
+    # A real alert, and a blockquote with a label that has no alert equivalent,
+    # both have to stay clean.
+    assert not lint_text("> [!NOTE]\n> body\n"), "a real alert was reported"
+    assert not lint_text("> **Limitation:** this one has no alert form\n"), "a custom label was reported"
     for prefix, delimiter in (("> ", "~~~"), ("> > ", "```")):
         block = f"{prefix}{delimiter}markdown\n{prefix}**Note:** an example\n{prefix}{delimiter}\n"
         quoted = lint_text(block)
