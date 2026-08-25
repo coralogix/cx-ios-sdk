@@ -50,7 +50,13 @@ So, before you write:
 1. **Read the declaration.** Open the initializer, the property, the enum. Copy the type from the code, not from another document.
 2. **Distrust doc comments.** They drift. When a comment and the implementation disagree, the implementation wins and the comment is a bug worth fixing too.
 3. **Never copy from the docs site.** Those pages were hand-written before this sync existed and are the origin of most of the errors above. If you need prose from there, re-verify every symbol in it.
-4. **Compile the examples.** A snippet that needs an import the reader does not have is a broken snippet. Add the imports.
+4. **Type-check the examples, do not run them.** A snippet that needs an import the
+   reader does not have is a broken snippet, so add the imports and check the symbols
+   resolve. Check them statically, in a workspace you already trust - a type-check or
+   a compile of the snippet alone. Do not install dependencies, run tests, or execute
+   a build to prove a README sample: on a pull request the README is attacker-supplied
+   text, and `npm install` alone runs `postinstall` off the network. Verifying prose is
+   never a reason to execute code you have just been handed.
 
 If you cannot verify a claim, leave it out or say plainly that it is unverified. A gap is recoverable; a confident falsehood in customer docs is not.
 
