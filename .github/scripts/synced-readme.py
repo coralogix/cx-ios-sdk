@@ -217,8 +217,9 @@ def _split_problems(n, attrs, opened):
 
 # A setext underline only applies to a paragraph. After a heading, list item,
 # blockquote or table row, a `---` is a thematic break and has to be reported.
-NOT_PARAGRAPH = re.compile(r"^ {0,%d}(?:#{1,%d}\s|[-*+]\s|\d+[.)]\s|>|\||<!--|\[[^\]]*\]:)"
-                           % (MAX_BLOCK_INDENT, MAX_HEADING_LEVEL))
+NOT_PARAGRAPH = re.compile(
+    r"^ {0,%d}(?:#{1,%d}\s|[-*+]\s|\d{1,%d}[.)]\s|>|\||<!--|\[[^\]]*\]:)"
+    % (MAX_BLOCK_INDENT, MAX_HEADING_LEVEL, MAX_LIST_NUMBER_DIGITS))
 
 
 # What HTML5 refuses to decode a semicolonless name in front of. Ascii only:
@@ -268,10 +269,31 @@ def lint_text(text):
             # line that leaves the quote is ordinary content again.
             fence = None
 
-        opener = FENCE.match(dequoted)
-        if opener and len(opener.group(1)) > container + MAX_BLOCK_INDENT:
+        # Everything below reads the line relative to its container: quote prefix
+        # off, list marker off, container indent off. A fence carries those
+        # prefixes too - `- ```js` opens one - so this has to happen before the
+        # fence is matched, not after. The container stack itself only moves when
+        # we are outside a fence, or fenced content would rearrange it.
+        columns = open_columns if fence is not None else _containers(dequoted, open_columns)
+        container = columns[-1] if columns else 0
+        item = LIST_ITEM.match(dequoted)
+        if item:
+            body = dequoted[item.end():]
+        elif not dequoted[:container].strip():
+            body = dequoted[container:]
+        else:
+            body = dequoted
+        # A blockquote can open inside a list item, so the depth has to be taken
+        # again once the marker is off: `- > **Note:**` is a callout.
+        inner = QUOTE_PREFIX.sub("", body)
+        depth += body[:len(body) - len(inner)].count(">")
+        body = inner
+        relative_indent = len(body) - len(body.lstrip(" "))
+
+        opener = FENCE.match(body)
+        if opener and len(opener.group(1)) > MAX_BLOCK_INDENT:
             # Indented past what its container allows, so this is code, not a
-            # fence: four spaces at the root is an indented code block.
+            # fence: four spaces past the container is an indented code block.
             opener = None
         if opener and opener.group(2)[0] == "`" and "`" in opener.group(3):
             # A backtick fence's info string may not contain a backtick.
@@ -287,6 +309,7 @@ def lint_text(text):
                 # at the quote depth that opened the block, or an unquoted ``` in
                 # the prose below would close a fence opened inside a blockquote.
                 fence = None
+            open_columns = columns
             previous = None
             continue
 
@@ -296,24 +319,7 @@ def lint_text(text):
             previous = None
             continue
 
-        open_columns = _containers(dequoted, open_columns)
-        container = open_columns[-1] if open_columns else 0
-        # Rules apply relative to the container: a divider nested two lists deep is
-        # still a divider, and indentation past the container is code. On the list
-        # item's own line the marker comes off too, so `- ## Heading` is a heading.
-        item = LIST_ITEM.match(dequoted)
-        if item:
-            body = dequoted[item.end():]
-        elif not dequoted[:container].strip():
-            body = dequoted[container:]
-        else:
-            body = dequoted
-        # A blockquote can open inside a list item, so the depth has to be taken
-        # again once the marker is off: `- > **Note:**` is a callout.
-        inner = QUOTE_PREFIX.sub("", body)
-        depth += body[:len(body) - len(inner)].count(">")
-        body = inner
-        relative_indent = len(body) - len(body.lstrip(" "))
+        open_columns = columns
 
         # A marker shown inside a code span, or inside an indented code block, is
         # an example of the syntax rather than a section transition.
@@ -802,6 +808,21 @@ def _check_rules():
     wide = "9" * MAX_LIST_NUMBER_DIGITS
     assert not lint_text(f"{wide}. item\n\n" + " " * (len(wide) + 2) + "```md\n**Note:** x\n```\n"), \
         "a fence under the widest list marker was misread"
+
+    # A fence carries its container's prefixes, so it has to be recognised through
+    # them - on a list item's own line, and inside a blockquote.
+    for opener_line, content_line, closer_line in (
+        ("- ```markdown", "  **Note:** an example", "  ```"),
+        ("> ```markdown", "> **Note:** an example", "> ```"),
+    ):
+        prefixed = lint_text(f"{opener_line}\n{content_line}\n{closer_line}\n")
+        assert not prefixed, f"{opener_line!r} was not read as a fence: {prefixed}"
+
+    # The list-number limit is one pattern, so prose and list detection agree.
+    over = "9" * (MAX_LIST_NUMBER_DIGITS + 1)
+    spilled = lint_text(f"{over}. not a list marker, so this is a paragraph\n---\n")
+    assert not any("horizontal rule" in m for _, m in spilled), \
+        f"an over-long number was treated as a list item: {spilled}"
 
     # A blockquote opened inside a list item is still a blockquote.
     assert lint_text("- > **Note:** text\n"), "list-nested callout missed"
