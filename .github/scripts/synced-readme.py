@@ -44,6 +44,14 @@ SKILL = "rum-readme-authoring"
 
 EDIT_TOOLS = ("Edit", "Write", "MultiEdit", "NotebookEdit")
 
+# Exit statuses. These are two external contracts, not ours to choose: 0 and
+# non-zero decide whether the CI job passes, and 2 is the one PreToolUse status
+# that refuses a tool call - Claude Code treats every other non-zero value as a
+# non-blocking error and lets the edit through.
+EXIT_OK = 0
+EXIT_VIOLATIONS = 1
+EXIT_REFUSE = 2
+
 # Candidates; a named one counts only if `html.entities` knows it. Matching every
 # `&word;` would flag ordinary prose like `R&D; and other teams`, and a shortlist
 # would miss `&mdash;` and `&copy;`, which reach the page as literally as `&amp;`.
@@ -51,7 +59,7 @@ EDIT_TOOLS = ("Edit", "Write", "MultiEdit", "NotebookEdit")
 # it - `&copy` renders as a symbol - but only when what follows is not `=` or
 # another alphanumeric, which is what keeps `?a=1&copy=2` a query string.
 ENTITY = re.compile(r"&(?:([A-Za-z][A-Za-z0-9]*)|#\d+|#[xX][0-9A-Fa-f]+)(;?)")
-FENCE = re.compile(r"^\s{0,3}(`{3,}|~{3,})")
+FENCE = re.compile(r"^\s{0,3}(`{3,}|~{3,})(.*)$")
 THEMATIC = re.compile(r"^\s{0,3}(?:(?:-\s*){3,}|(?:\*\s*){3,}|(?:_\s*){3,})$")
 SETEXT = re.compile(r"^\s{0,3}(=+|-+)\s*$")
 # `## Heading. ##` renders as "Heading." - the closing run is syntax, so it has
@@ -72,22 +80,25 @@ ATTR = re.compile(r'\b([A-Za-z_][\w-]*)\s*=\s*"([^"]*)"')
 # this; the lint job checks the result either way.
 WRITEISH = re.compile(
     r">>?|\btee\b|\bmv\b|\bcp\b|\brm\b|\btouch\b|\bpatch\b|\btruncate\b|\binstall\b"
-    r"|\bsed\b[^|]*\s-i|\bperl\b[^|]*\s-i|\bgit\s+(?:restore|checkout|apply)\b"
+    r"|\bsed\b[^|]*\s(?:-i|--in-place)|\bperl\b[^|]*\s(?:-i|--in-place)"
+    r"|\bgit\s+(?:restore|checkout|apply)\b"
     r"|\bdd\b|\bpython[0-9.]*\b[^|]*\s-c|\bnode\b[^|]*\s-e"
 )
 
 # The path as a whole argument. A bare `p in command` would match `docs/README.md`
 # in a repo whose synced file is the root `README.md`.
-# A nested path may legitimately be preceded by a directory prefix, as in an
-# absolute path. A bare `README.md` may not, or every other README in the tree
-# would be gated with it.
-IN_COMMAND = {
-    p: re.compile(
-        r"(?<![\w.-])(?:\./)?%s(?![\w.\-/])" % re.escape(p) if "/" in p
-        else r"(?<![\w.\-/])(?:\./)?%s(?![\w.\-/])" % re.escape(p)
-    )
-    for p in SYNCED
-}
+def _whole_argument(path, prefixed):
+    """The path as a complete command argument rather than as a substring.
+
+    `prefixed` allows a directory in front of it. A nested synced path may carry
+    one, as an absolute path does; a bare `README.md` may not, or every other
+    README in the tree would be gated with it.
+    """
+    before = r"(?<![\w.-])" if prefixed else r"(?<![\w.\-/])"
+    return re.compile(before + r"(?:\./)?" + re.escape(path) + r"(?![\w.\-/])")
+
+
+IN_COMMAND = {p: _whole_argument(p, "/" in p) for p in SYNCED}
 
 def _split_problems(n, attrs, opened):
     """Check one `<!-- split ... -->` marker. Returns (problems, path or None)."""
@@ -170,10 +181,12 @@ def lint_text(text):
 
         opener = FENCE.match(line)
         if opener:
-            marker = opener.group(1)
+            marker, trailing = opener.group(1), opener.group(2)
             if fence is None:
                 fence = (n, marker)
-            elif marker[0] == fence[1][0] and len(marker) >= len(fence[1]):
+            elif marker[0] == fence[1][0] and len(marker) >= len(fence[1]) and not trailing.strip():
+                # A closing fence takes no info string, so ```not-a-closer inside
+                # a block is content rather than the end of it.
                 fence = None
             previous = None
             continue
@@ -248,8 +261,8 @@ def lint(root):
             f"\n{failures} problem(s). These READMEs publish to coralogix.com/docs - see "
             f".claude/skills/{SKILL}/SKILL.md for the rules and the checks a linter cannot make."
         )
-        return 1
-    return 0
+        return EXIT_VIOLATIONS
+    return EXIT_OK
 
 
 def _blocks(record):
@@ -275,7 +288,7 @@ def skill_loaded(transcript):
         return False
 
     called = set()
-    errored = set()
+    results = {}
 
     with open(transcript, encoding="utf-8", errors="ignore") as fh:
         for line in fh:
@@ -293,13 +306,13 @@ def skill_loaded(transcript):
                     args = block.get("input")
                     if isinstance(args, dict) and args.get("skill") == SKILL:
                         called.add(block.get("id"))
-                elif kind == "tool_result" and block.get("is_error") is True:
-                    errored.add(block.get("tool_use_id"))
+                elif kind == "tool_result":
+                    results[block.get("tool_use_id")] = block.get("is_error")
 
-    # A Skill call whose result came back an error loaded nothing. An absent
-    # result is not held against it - the call may simply have no recorded result
-    # in this transcript shape.
-    return bool(called - errored)
+    # The call has to have come back, and not as an error. A later tool call can
+    # only happen after the Skill result reached the model, so by the time this
+    # hook runs a genuine invocation always has its result recorded.
+    return any(cid in results and results[cid] is not True for cid in called)
 
 
 def targets(payload):
@@ -330,7 +343,18 @@ def targets(payload):
         command = args.get("command")
         if not isinstance(command, str) or not WRITEISH.search(command):
             return []
-        return [p for p in SYNCED if IN_COMMAND[p].search(command)]
+        root = payload.get("cwd")
+        hits = []
+        for p in SYNCED:
+            if IN_COMMAND[p].search(command):
+                hits.append(p)
+            elif isinstance(root, str) and root:
+                # An absolute path is unambiguous once the session cwd is known,
+                # so `/repo/README.md` matches where a bare prefix could not.
+                absolute = os.path.join(root, p)
+                if _whole_argument(absolute, False).search(command):
+                    hits.append(p)
+        return hits
 
     return []
 
@@ -338,24 +362,24 @@ def targets(payload):
 def gate(payload):
     """Exit code for one PreToolUse payload: 0 allows the tool call, 2 blocks it."""
     if not isinstance(payload, dict):
-        return 0
+        return EXIT_OK
 
     try:
         hits = targets(payload)
     except Exception:
         # Nothing identified this as a synced README, so there is nothing to
         # protect, and blocking every edit in the repo would be worse.
-        return 0
+        return EXIT_OK
 
     if not hits:
-        return 0
+        return EXIT_OK
 
     # Past this point the target *is* a synced README, so anything unexpected
     # blocks rather than allows: an unreadable transcript is not proof that the
     # skill was loaded.
     try:
         if skill_loaded(payload.get("transcript_path")):
-            return 0
+            return EXIT_OK
     except Exception:
         pass
 
@@ -368,7 +392,7 @@ def gate(payload):
         f"`python3 .github/scripts/synced-readme.py lint` checks the mechanical rules; CI runs "
         f"the same check on the pull request.\n"
     )
-    return 2
+    return EXIT_REFUSE
 
 
 def hook():
@@ -377,7 +401,7 @@ def hook():
     except Exception:
         # A payload this malformed names no tool and no path, so there is no edit
         # to block. Claude Code writes it, not the agent being gated.
-        return 0
+        return EXIT_OK
     return gate(payload)
 
 
@@ -461,7 +485,14 @@ def _transcripts(directory):
     shapes = {
         # The skill listing and the skill's own file path, but no invocation.
         "bare": write("bare.jsonl", said(f"see .claude/skills/{SKILL}/SKILL.md")),
-        "loaded": write("loaded.jsonl", {"type": "assistant", "message": {"content": [call]}}),
+        "loaded": write(
+            "loaded.jsonl",
+            {"type": "assistant", "message": {"content": [call]}},
+            {"type": "user", "message": {"content": [
+                {"type": "tool_result", "tool_use_id": "toolu_1"}]}},
+        ),
+        # Recorded but never came back, so nothing was loaded from it.
+        "pending": write("pending.jsonl", {"type": "assistant", "message": {"content": [call]}}),
         # Someone quoting the matcher itself - a review comment, or this script.
         "quoted": write("quoted.jsonl", said('the gate looks for "skill": "%s"' % SKILL)),
         "asked": write("asked.jsonl", said(f"please run /{SKILL} for me")),
@@ -472,7 +503,12 @@ def _transcripts(directory):
             {"type": "user", "message": {"content": [
                 {"type": "tool_result", "tool_use_id": "toolu_1", "is_error": True}]}},
         ),
-        "truncated": write("truncated.jsonl", {"type": "assistant", "message": {"content": [call]}}),
+        "truncated": write(
+            "truncated.jsonl",
+            {"type": "assistant", "message": {"content": [call]}},
+            {"type": "user", "message": {"content": [
+                {"type": "tool_result", "tool_use_id": "toolu_1"}]}},
+        ),
         "gone": os.path.join(directory, "does-not-exist.jsonl"),
     }
     with open(shapes["truncated"], "a") as fh:
@@ -502,40 +538,38 @@ def _check_rules():
 def _check_gate(shapes):
     """Every registered tool, every synced path, and payloads that are not payloads."""
     cases = [
-        (0, None, "a payload that is not an object"),
-        (0, {}, "an empty payload"),
-        (0, {"tool_name": "Edit", "tool_input": None}, "tool_input of the wrong type"),
+        (EXIT_OK, None, "a payload that is not an object"),
+        (EXIT_OK, {}, "an empty payload"),
+        (EXIT_OK, {"tool_name": "Edit", "tool_input": None}, "tool_input of the wrong type"),
     ]
 
     for synced in SYNCED:
         absolute = {"file_path": "/repo/" + synced}
         cases += [
-            (2, _payload(shapes["bare"], tool_name="Edit", tool_input=absolute), f"{synced}: edit without the skill"),
-            (0, _payload(shapes["loaded"], tool_name="Edit", tool_input=absolute), f"{synced}: edit with the skill loaded"),
-            (2, _payload(shapes["quoted"], tool_name="Edit", tool_input=absolute), f"{synced}: the matcher quoted in ordinary text"),
-            (2, _payload(shapes["asked"], tool_name="Edit", tool_input=absolute), f"{synced}: asking for the skill, no call"),
-            (2, _payload(shapes["errored"], tool_name="Edit", tool_input=absolute), f"{synced}: a Skill call that errored"),
-            (0, _payload(shapes["truncated"], tool_name="Edit", tool_input=absolute), f"{synced}: a half-written trailing line"),
-            (2, _payload(shapes["gone"], tool_name="Edit", tool_input=absolute), f"{synced}: unreadable transcript fails closed"),
-            (2, _payload(None, tool_name="Edit", tool_input=absolute), f"{synced}: missing transcript fails closed"),
-            (2, _payload(shapes["bare"], tool_name="Edit", tool_input={"file_path": synced}), f"{synced}: relative to the session cwd"),
-            (2, _payload(shapes["bare"], tool_name="Write", tool_input=absolute), f"{synced}: Write"),
-            (2, _payload(shapes["bare"], tool_name="MultiEdit", tool_input=absolute), f"{synced}: MultiEdit"),
-            (2, _payload(shapes["bare"], tool_name="NotebookEdit", tool_input={"notebook_path": "/repo/" + synced}), f"{synced}: NotebookEdit"),
-            (0, _payload(shapes["bare"], tool_name="Read", tool_input=absolute), f"{synced}: a tool that only reads"),
-            (0, _payload(shapes["bare"], tool_name="Edit", tool_input={"file_path": ["/repo/" + synced]}), f"{synced}: file_path of the wrong type"),
-            (2, _payload(shapes["bare"], tool_name="Bash", tool_input={"command": "printf x >%s" % synced}), f"{synced}: shell write"),
-            (0, _payload(shapes["bare"], tool_name="Bash", tool_input={"command": "cat %s" % synced}), f"{synced}: shell read"),
-            (2, _payload(shapes["bare"], tool_name="Bash", tool_input={"command": "git restore " + synced}), f"{synced}: git restore"),
-            (2, _payload(shapes["bare"], tool_name="Bash", tool_input={"command": "python3 -c \"open('%s','w')\"" % synced}), f"{synced}: interpreter write"),
-            (0, _payload(shapes["bare"], tool_name="Bash", tool_input={"command": "rm docs/" + os.path.basename(synced)}), f"{synced}: a different README of the same name"),
+            (EXIT_REFUSE, _payload(shapes["bare"], tool_name="Edit", tool_input=absolute), f"{synced}: edit without the skill"),
+            (EXIT_OK, _payload(shapes["loaded"], tool_name="Edit", tool_input=absolute), f"{synced}: edit with the skill loaded"),
+            (EXIT_REFUSE, _payload(shapes["quoted"], tool_name="Edit", tool_input=absolute), f"{synced}: the matcher quoted in ordinary text"),
+            (EXIT_REFUSE, _payload(shapes["asked"], tool_name="Edit", tool_input=absolute), f"{synced}: asking for the skill, no call"),
+            (EXIT_REFUSE, _payload(shapes["errored"], tool_name="Edit", tool_input=absolute), f"{synced}: a Skill call that errored"),
+            (EXIT_REFUSE, _payload(shapes["pending"], tool_name="Edit", tool_input=absolute), f"{synced}: a Skill call with no result"),
+            (EXIT_OK, _payload(shapes["truncated"], tool_name="Edit", tool_input=absolute), f"{synced}: a half-written trailing line"),
+            (EXIT_REFUSE, _payload(shapes["bare"], tool_name="Bash", tool_input={"command": "sed --in-place s/a/b/ " + synced}), f"{synced}: sed --in-place"),
+            (EXIT_REFUSE, _payload(shapes["bare"], tool_name="Bash", tool_input={"command": "sed -i '' s/a/b/ /repo/" + synced}), f"{synced}: an absolute path"),
+            (EXIT_OK, _payload(shapes["bare"], tool_name="Bash", tool_input={"command": "sed -i '' s/a/b/ /repo/docs/" + os.path.basename(synced)}), f"{synced}: an absolute path to a different README"),
+            (EXIT_REFUSE, _payload(shapes["gone"], tool_name="Edit", tool_input=absolute), f"{synced}: unreadable transcript fails closed"),
+            (EXIT_REFUSE, _payload(None, tool_name="Edit", tool_input=absolute), f"{synced}: missing transcript fails closed"),
+            (EXIT_REFUSE, _payload(shapes["bare"], tool_name="Edit", tool_input={"file_path": synced}), f"{synced}: relative to the session cwd"),
+            (EXIT_REFUSE, _payload(shapes["bare"], tool_name="Write", tool_input=absolute), f"{synced}: Write"),
+            (EXIT_REFUSE, _payload(shapes["bare"], tool_name="MultiEdit", tool_input=absolute), f"{synced}: MultiEdit"),
+            (EXIT_REFUSE, _payload(shapes["bare"], tool_name="NotebookEdit", tool_input={"notebook_path": "/repo/" + synced}), f"{synced}: NotebookEdit"),
+            (EXIT_OK, _payload(shapes["bare"], tool_name="Read", tool_input=absolute), f"{synced}: a tool that only reads"),
+            (EXIT_OK, _payload(shapes["bare"], tool_name="Edit", tool_input={"file_path": ["/repo/" + synced]}), f"{synced}: file_path of the wrong type"),
+            (EXIT_REFUSE, _payload(shapes["bare"], tool_name="Bash", tool_input={"command": "printf x >%s" % synced}), f"{synced}: shell write"),
+            (EXIT_OK, _payload(shapes["bare"], tool_name="Bash", tool_input={"command": "cat %s" % synced}), f"{synced}: shell read"),
+            (EXIT_REFUSE, _payload(shapes["bare"], tool_name="Bash", tool_input={"command": "git restore " + synced}), f"{synced}: git restore"),
+            (EXIT_REFUSE, _payload(shapes["bare"], tool_name="Bash", tool_input={"command": "python3 -c \"open('%s','w')\"" % synced}), f"{synced}: interpreter write"),
+            (EXIT_OK, _payload(shapes["bare"], tool_name="Bash", tool_input={"command": "rm docs/" + os.path.basename(synced)}), f"{synced}: a different README of the same name"),
         ]
-        if "/" in synced:
-            # A nested path can carry a directory prefix; a bare README.md cannot.
-            cases.append((2, _payload(shapes["bare"], tool_name="Bash",
-                                      tool_input={"command": "sed -i '' s/a/b/ /repo/" + synced}),
-                          f"{synced}: an absolute path to a nested synced file"))
-
     for expected, payload, why in cases:
         captured, sys.stderr = sys.stderr, io.StringIO()
         try:
@@ -562,8 +596,8 @@ def _check_entry_points(directory, transcript):
         dirty = lint(root)
     finally:
         sys.stdout = captured
-    assert clean == 0, "lint() failed a clean README"
-    assert dirty == 1, "lint() passed a README full of violations"
+    assert clean == EXIT_OK, "lint() failed a clean README"
+    assert dirty == EXIT_VIOLATIONS, "lint() passed a README full of violations"
 
     payload = _payload(transcript, tool_name="Edit", tool_input={"file_path": "/repo/" + SYNCED[0]})
     stdin, sys.stdin = sys.stdin, io.StringIO(json.dumps(payload))
@@ -572,13 +606,17 @@ def _check_entry_points(directory, transcript):
         blocked = hook()
     finally:
         sys.stdin, sys.stderr = stdin, captured
-    assert blocked == 2, "hook() did not block a synced edit"
+    assert blocked == EXIT_REFUSE, "hook() did not block a synced edit"
 
 
 def selftest():
     """Prove both gates still fire - a rule that stopped matching looks like a clean file."""
     if not __debug__:
         raise SystemExit("selftest asserts; do not run it under python -O")
+
+    # Pin the two external contracts in one place, so the cases below can use
+    # the names without the names being able to drift away from the numbers.
+    assert (EXIT_OK, EXIT_VIOLATIONS, EXIT_REFUSE) == (0, 1, 2), "exit statuses moved"
 
     import tempfile
 
@@ -589,7 +627,7 @@ def selftest():
         _check_entry_points(directory, shapes["bare"])
 
     print("selftest ok")
-    return 0
+    return EXIT_OK
 
 
 if __name__ == "__main__":
