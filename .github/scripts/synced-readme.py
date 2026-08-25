@@ -26,6 +26,7 @@ the skill's own checklist cover those.
 
 import io
 import json
+import html.entities
 import os
 import re
 import sys
@@ -42,9 +43,10 @@ SKILL = "rum-readme-authoring"
 
 EDIT_TOOLS = ("Edit", "Write", "MultiEdit", "NotebookEdit")
 
-# Any character reference, not a shortlist: `&mdash;` and `&copy;` reach the page
-# just as literally as `&amp;` does.
-ENTITY = re.compile(r"&(?:[A-Za-z][A-Za-z0-9]*|#\d+|#[xX][0-9A-Fa-f]+);")
+# Candidates; a named one counts only if `html.entities` knows it. Matching every
+# `&word;` would flag ordinary prose like `R&D; and other teams`, and a shortlist
+# would miss `&mdash;` and `&copy;`, which reach the page as literally as `&amp;`.
+ENTITY = re.compile(r"&(?:([A-Za-z][A-Za-z0-9]*)|#\d+|#[xX][0-9A-Fa-f]+);")
 FENCE = re.compile(r"^\s{0,3}(`{3,}|~{3,})")
 THEMATIC = re.compile(r"^\s{0,3}(?:(?:-\s*){3,}|(?:\*\s*){3,}|(?:_\s*){3,})$")
 SETEXT = re.compile(r"^\s{0,3}(=+|-+)\s*$")
@@ -66,8 +68,12 @@ ATTR = re.compile(r'\b([A-Za-z_][\w-]*)\s*=\s*"([^"]*)"')
 # this; the lint job checks the result either way.
 WRITEISH = re.compile(
     r">>?|\btee\b|\bmv\b|\bcp\b|\brm\b|\btouch\b|\bpatch\b|\btruncate\b|\binstall\b"
-    r"|\bsed\b[^|]*\s-i|\bperl\b[^|]*\s-i"
+    r"|\bsed\b[^|]*\s-i|\bperl\b[^|]*\s-i|\bgit\s+(?:restore|checkout)\b"
 )
+
+# The path as a whole argument. A bare `p in command` would match `docs/README.md`
+# in a repo whose synced file is the root `README.md`.
+IN_COMMAND = {p: re.compile(r"(?<![\w.\-/])(?:\./)?%s(?![\w.\-/])" % re.escape(p)) for p in SYNCED}
 
 def _split_problems(n, attrs, opened):
     """Check one `<!-- split ... -->` marker. Returns (problems, path or None)."""
@@ -106,6 +112,15 @@ def _split_problems(n, attrs, opened):
     return out, path
 
 
+# A setext underline only applies to a paragraph. After a heading, list item,
+# blockquote or table row, a `---` is a thematic break and has to be reported.
+NOT_PARAGRAPH = re.compile(r"^\s{0,3}(?:#{1,6}\s|[-*+]\s|\d+[.)]\s|>|\||<!--|\[)")
+
+
+def _is_paragraph(line):
+    return bool(line and line.strip() and not NOT_PARAGRAPH.match(line) and not THEMATIC.match(line))
+
+
 def lint_text(text):
     """Return a list of (line_number, message)."""
     out = []
@@ -117,6 +132,9 @@ def lint_text(text):
         # Entities are wrong everywhere, code fences included: `&amp;&amp;` reaches
         # the published page verbatim and the command it is part of does not run.
         for m in ENTITY.finditer(line):
+            name = m.group(1)
+            if name and (name + ";") not in html.entities.html5:
+                continue
             out.append((n, f"HTML entity `{m.group(0)}` - write the character itself"))
 
         opener = FENCE.match(line)
@@ -147,7 +165,7 @@ def lint_text(text):
             opened = (n, path or "?")
 
         heading = None
-        if SETEXT.match(line) and previous and previous.strip():
+        if SETEXT.match(line) and _is_paragraph(previous):
             heading = previous.strip()          # `---` under text is an H2, not a rule
         elif THEMATIC.match(line):
             out.append((n, "decorative horizontal rule - it publishes as a stray divider; headings already separate sections"))
@@ -268,6 +286,8 @@ def targets(payload):
         if not isinstance(root, str) or not root:
             root = os.getcwd()
         try:
+            if not os.path.isabs(target):
+                target = os.path.join(root, target)
             rel = os.path.relpath(os.path.realpath(target), os.path.realpath(root))
         except (OSError, ValueError):
             rel = target
@@ -279,7 +299,7 @@ def targets(payload):
         command = args.get("command")
         if not isinstance(command, str) or not WRITEISH.search(command):
             return []
-        return [p for p in SYNCED if p in command]
+        return [p for p in SYNCED if IN_COMMAND[p].search(command)]
 
     return []
 
@@ -339,6 +359,10 @@ Run `cd /etc &amp;&amp; wget` and mind the &mdash; and &#0000065; too.
 
 ## Closing hashes still render a period. ##
 
+## A rule after a heading is still a rule
+
+---
+
 ---
 
 > **Note:** bolded callouts render as plain blockquotes.
@@ -359,7 +383,7 @@ Setext heading
 <!-- split title="Fine" path="a/b.md" -->
 ## Section one
 
-Run `cd /etc && wget`.
+Run `cd /etc && wget`. R&D; and AT&T; are prose, not entities.
 
 > [!NOTE]
 > A real callout.
@@ -383,6 +407,9 @@ def _payload(tmp, **kw):
 
 def selftest():
     """Prove both gates still fire - a rule that stopped matching looks like a clean file."""
+    if not __debug__:
+        raise SystemExit("selftest asserts; do not run it under python -O")
+
     problems = [m for _, m in lint_text(BAD)]
     found = " | ".join(problems)
     for expected in (
@@ -393,7 +420,10 @@ def selftest():
     # Both the plain and the closed-ATX heading, not just the plain one.
     assert len([m for m in problems if "period" in m]) == 2, f"closing-hash heading missed: {found}"
     # Exactly one: the `---` inside the yaml fence is not a rule.
-    assert len([m for m in problems if "horizontal rule" in m]) == 1, f"fenced `---` flagged: {found}"
+    hrs = [m for m in problems if "horizontal rule" in m]
+    # Two: the standalone rule and the one after a heading. Not the `---` in the
+    # yaml fence, and not the setext underline in GOOD.
+    assert len(hrs) == 2, f"expected 2 horizontal rules, got {len(hrs)}: {found}"
     assert not lint_text(GOOD), lint_text(GOOD)
 
     import tempfile
@@ -440,12 +470,20 @@ def selftest():
         gone = os.path.join(d, "does-not-exist.jsonl")
 
         edit = {"tool_name": "Edit", "tool_input": {"file_path": "/repo/" + synced}}
+        relative = {"tool_name": "Edit", "tool_input": {"file_path": synced}}
         other = {"tool_name": "Edit", "tool_input": {"file_path": "/repo/docs/README.md"}}
         write = {"tool_name": "Bash", "tool_input": {"command": "printf x >%s" % synced}}
         read = {"tool_name": "Bash", "tool_input": {"command": "cat %s" % synced}}
 
         cases = [
             (2, _payload(bare, **edit), "synced edit without the skill"),
+            (2, _payload(bare, **relative), "a file_path relative to the session cwd"),
+            (2, _payload(bare, tool_name="Write", tool_input={"file_path": "/repo/" + synced}), "Write"),
+            (2, _payload(bare, tool_name="MultiEdit", tool_input={"file_path": "/repo/" + synced}), "MultiEdit"),
+            (2, _payload(bare, tool_name="NotebookEdit", tool_input={"notebook_path": "/repo/" + synced}), "NotebookEdit"),
+            (0, _payload(bare, tool_name="Read", tool_input={"file_path": "/repo/" + synced}), "a tool that only reads"),
+            (2, _payload(bare, tool_name="Bash", tool_input={"command": "git restore " + synced}), "git restore"),
+            (0, _payload(bare, tool_name="Bash", tool_input={"command": "rm docs/" + os.path.basename(synced)}), "a different README of the same name"),
             (0, _payload(loaded, **edit), "synced edit with the skill loaded"),
             (0, _payload(bare, **other), "a README the sync does not mirror"),
             (2, _payload(bare, **write), "shell write without the skill"),
@@ -468,6 +506,32 @@ def selftest():
             finally:
                 sys.stderr = captured
             assert got == expected, f"gate returned {got}, expected {expected}: {why}"
+
+        # The two entry points CI and the hook actually call, not just their internals.
+        root = os.path.join(d, "repo")
+        pages = [os.path.join(root, rel) for rel in SYNCED]   # every one: lint checks them all
+        for page in pages:
+            os.makedirs(os.path.dirname(page), exist_ok=True)
+            with open(page, "w") as fh:
+                fh.write(GOOD)
+        captured, sys.stdout = sys.stdout, io.StringIO()
+        try:
+            clean = lint(root)
+            with open(pages[0], "w") as fh:
+                fh.write(BAD)
+            dirty = lint(root)
+        finally:
+            sys.stdout = captured
+        assert clean == 0, "lint() failed a clean README"
+        assert dirty == 1, "lint() passed a README full of violations"
+
+        stdin, sys.stdin = sys.stdin, io.StringIO(json.dumps(_payload(bare, **edit)))
+        captured, sys.stderr = sys.stderr, io.StringIO()
+        try:
+            blocked = hook()
+        finally:
+            sys.stdin, sys.stderr = stdin, captured
+        assert blocked == 2, "hook() did not block a synced edit"
 
     print("selftest ok")
     return 0
