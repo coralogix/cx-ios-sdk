@@ -6,9 +6,10 @@
 //  NOT the exporter's live flag — so a span keeps the decision of the session it was born in
 //  even after a rotation flips the live flag:
 //    - Stamped sampled-in: every span passes regardless of event_type.
-//    - Stamped sampled-out: only spans whose event_type is in options.excludeFromSampling pass.
+//    - Stamped sampled-out: only `internal` events and spans whose event_type is in
+//      options.excludeFromSampling pass.
 //    - Stamped sampled-out + missing event_type: dropped (failsafe).
-//    - Stamped sampled-out + empty excludes: nothing passes.
+//    - Stamped sampled-out + empty excludes: only `internal` passes.
 //
 
 import XCTest
@@ -78,22 +79,73 @@ final class SessionSamplingFilterTests: XCTestCase {
     func testPassesSessionSampling_sampledOut_unknownEventType_drops() {
         let exporter = makeExporter(sampleRate: 0, exclude: [.errors])
 
-        XCTAssertFalse(exporter.passesSessionSampling(span(eventType: "internal")),
-                       "Internal/unknown event_types are not in ExcludableInstrumentation and must be dropped.")
-        XCTAssertFalse(exporter.passesSessionSampling(span(eventType: "totally-bogus")))
+        XCTAssertFalse(exporter.passesSessionSampling(span(eventType: "totally-bogus")),
+                       "An event_type outside ExcludableInstrumentation must be dropped when sampled out.")
+    }
+
+    func testPassesSessionSampling_sampledOut_internalEventType_alwaysPasses() {
+        // The SDK's own lifecycle events are not opt-in-able and must survive regardless, matching
+        // Android. Otherwise a sampled-out session looks identical to an SDK that never started and
+        // there is no way to confirm from the backend that sampling is behaving.
+        let excluded = makeExporter(sampleRate: 0, exclude: [.errors])
+        let noExcludes = makeExporter(sampleRate: 0, exclude: [])
+
+        XCTAssertTrue(excluded.passesSessionSampling(span(eventType: "internal")))
+        XCTAssertTrue(noExcludes.passesSessionSampling(span(eventType: "internal")),
+                      "`internal` survives even with an empty exclude list.")
     }
 
     // MARK: - Sampled out + empty excludes (manually flipped)
 
-    func testPassesSessionSampling_sampledOutEmptyExcludes_dropsEverything() {
-        // Sampled-out stamp with no opt-ins: every span drops, whatever its event_type.
-        // (Production cannot reach a sampled-out session with empty excludes because init
-        // short-circuits, but the filter must still hold.)
+    func testPassesSessionSampling_sampledOutEmptyExcludes_dropsEverythingButInternal() {
+        // Sampled-out stamp with no opt-ins: every reportable span drops. This is now a routine
+        // production state, not a synthetic one — init no longer short-circuits for a sampled-out
+        // session with an empty exclude list, because network instrumentation has to stay alive to
+        // propagate trace context.
         let exporter = makeExporter(sampleRate: 100, exclude: [])
 
         XCTAssertFalse(exporter.passesSessionSampling(span(eventType: "error")))
         XCTAssertFalse(exporter.passesSessionSampling(span(eventType: "log")))
+        XCTAssertFalse(exporter.passesSessionSampling(span(eventType: "network-request")))
         XCTAssertFalse(exporter.passesSessionSampling(span(eventType: nil)))
+        XCTAssertTrue(exporter.passesSessionSampling(span(eventType: "internal")))
+    }
+
+    // MARK: - Propagate-only network: installed for the header, must not report
+
+    func testReportsNetworkEvents_networkOff_dropsNetworkSpansOnly() {
+        // Case 4a: network instrumentation is installed purely to inject traceparent, so its spans
+        // exist and are stamped sampled-in — the sampling filter passes them and cannot help here.
+        let exporter = makeExporter(sampleRate: 100, exclude: [], instrumentations: [.network: false])
+
+        XCTAssertFalse(exporter.reportsNetworkEvents(span(eventType: "network-request", sampledIn: true)),
+                       "Reporting is switched off, so a propagate-only request must not surface as an event.")
+        XCTAssertTrue(exporter.reportsNetworkEvents(span(eventType: "error", sampledIn: true)),
+                      "Only network-request spans are affected.")
+        XCTAssertTrue(exporter.reportsNetworkEvents(span(eventType: nil, sampledIn: true)))
+    }
+
+    func testNetworkOff_excludeFromSamplingCannotRestoreReporting() {
+        // Guards a plausible-but-wrong migration story: "disabled network reporting? list .network in
+        // excludeFromSampling to get the events back." It does not work, by design — the exclude list
+        // only relaxes the *sampling* condition, and the instrumentations map is the source of truth.
+        // Asserted as export() composes it, since reportsNetworkEvents alone is sampling-blind.
+        let sampledIn = makeExporter(sampleRate: 100, exclude: [.network], instrumentations: [.network: false])
+        let sampledOut = makeExporter(sampleRate: 0, exclude: [.network], instrumentations: [.network: false])
+
+        let inSpan = span(eventType: "network-request", sampledIn: true)
+        let outSpan = span(eventType: "network-request", sampledIn: false)
+
+        XCTAssertFalse(sampledIn.passesSessionSampling(inSpan) && sampledIn.reportsNetworkEvents(inSpan),
+                       "Sampled in: reporting stays off because the caller switched network off.")
+        XCTAssertFalse(sampledOut.passesSessionSampling(outSpan) && sampledOut.reportsNetworkEvents(outSpan),
+                       "Sampled out: the exclude entry gets the span past the sampling filter, but reporting is still off.")
+    }
+
+    func testReportsNetworkEvents_networkOn_passesNetworkSpans() {
+        let exporter = makeExporter(sampleRate: 100, exclude: [])
+
+        XCTAssertTrue(exporter.reportsNetworkEvents(span(eventType: "network-request", sampledIn: true)))
     }
 
     // MARK: - Attribute extraction handles both AttributeValue and raw String
@@ -137,7 +189,8 @@ final class SessionSamplingFilterTests: XCTestCase {
     // MARK: - Helpers
 
     private func makeExporter(sampleRate: Int,
-                              exclude: Set<ExcludableInstrumentation>) -> CoralogixExporter {
+                              exclude: Set<ExcludableInstrumentation>,
+                              instrumentations: [CoralogixExporterOptions.InstrumentationType: Bool]? = nil) -> CoralogixExporter {
         let options = CoralogixExporterOptions(
             coralogixDomain: .US2,
             userContext: nil,
@@ -150,7 +203,7 @@ final class SessionSamplingFilterTests: XCTestCase {
             labels: nil,
             sessionSampleRate: sampleRate,
             excludeFromSampling: exclude,
-            instrumentations: nil,
+            instrumentations: instrumentations,
             debug: false
         )
         let rum = CoralogixRum(options: options)

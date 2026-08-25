@@ -379,4 +379,41 @@ class Helper {
     internal static func shouldInstallTouchSwizzles(options: CoralogixExporterOptions?, sdkFramework: SdkFramework) -> Bool {
         isUserActionsEnabled(options: options) || !sdkFramework.isNative
     }
+
+    // MARK: - Network install / report decoupling
+
+    /// Whether this session will report `network-request` events at all, following the same
+    /// option-plus-sampling rule as every other instrumentation.
+    internal static func willReportNetworkEvents(options: CoralogixExporterOptions, sampledIn: Bool) -> Bool {
+        options.shouldInstallInstrumentation(.network, sampledIn: sampledIn)
+    }
+
+    /// Whether trace propagation is switched on at all, independent of any particular request.
+    /// The per-request URL allowlist is applied later, per request, by `shouldInjectTracingHeaders`;
+    /// the install decision only needs to know whether a `traceparent` could ever be emitted.
+    internal static func isTraceParentInHeaderEnabled(options: CoralogixExporterOptions) -> Bool {
+        guard let params = options.traceParentInHeader else { return false }
+        return TraceParentInHeader(params: params).enable
+    }
+
+    /// Network instrumentation exists for two reasons — reporting `network-request` events and
+    /// injecting the `traceparent` header — but they are not peers.
+    ///
+    /// `instrumentations[.network]` is the outer gate. Switching it off removes the machinery
+    /// entirely, header included, matching the browser SDK: there a disabled instrumentation is
+    /// never registered with the OTel provider, so there is nothing left to inject whatever
+    /// `traceParentInHeader` says.
+    ///
+    /// Inside that gate, propagation keeps the swizzles alive for a session that will not report.
+    /// This is the case the parent ticket exists for: a sampled-out session must still emit trace
+    /// context, or the backend cannot correlate the request to anything. Sampling therefore silences
+    /// reporting without silencing propagation, while the caller's own switch silences both.
+    ///
+    /// `enableSwizzling` is deliberately not consulted here; it stays a hard kill switch checked
+    /// inside `initializeNetworkInstrumentation` so it can never be bypassed by this decision.
+    internal static func shouldInstallNetworkInstrumentation(options: CoralogixExporterOptions, sampledIn: Bool) -> Bool {
+        guard options.shouldInitInstrumentation(instrumentation: .network) else { return false }
+        return willReportNetworkEvents(options: options, sampledIn: sampledIn)
+            || isTraceParentInHeaderEnabled(options: options)
+    }
 }

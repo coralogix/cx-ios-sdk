@@ -21,10 +21,6 @@ extension CoralogixRum {
                                                name: UIApplication.didBecomeActiveNotification,
                                                object: nil)
         NotificationCenter.default.addObserver(self,
-                                               selector: #selector(appDidEnterBackgroundNotification),
-                                               name: UIApplication.didEnterBackgroundNotification,
-                                               object: nil)
-        NotificationCenter.default.addObserver(self,
                                                selector: #selector(appWillTerminateNotification),
                                                name: UIApplication.willTerminateNotification,
                                                object: nil)
@@ -42,8 +38,27 @@ extension CoralogixRum {
         self.makeSpan(type: .type, value: .appDidBecomeActiveNotification)
     }
     
+    /// Registers the pre-suspension flush. Always active, unlike the life-cycle events above.
+    ///
+    /// Delivery is not telemetry. Buffered spans have to reach the exporter before the app suspends
+    /// whatever the sampling roll decided — otherwise a sampled-out session drops exactly the events
+    /// `excludeFromSampling` exists to guarantee, and iOS offers no `lifecycle` category to opt back
+    /// into. Emitting the life-cycle *event* stays gated; getting the batch out does not.
+    ///
+    /// One observer does both, in that order, so the background event is itself included in the
+    /// flush it triggers. Two observers on the same notification would fire in an unspecified order
+    /// and could leave that span behind.
+    internal func initializeBackgroundFlush() {
+        NotificationCenter.default.addObserver(self,
+                                               selector: #selector(appDidEnterBackgroundNotification),
+                                               name: UIApplication.didEnterBackgroundNotification,
+                                               object: nil)
+    }
+
     @objc private func appDidEnterBackgroundNotification(notification: Notification) {
-        self.makeSpan(type: .type, value: .appDidEnterBackgroundNotification)
+        if self.isInstrumentationInstalled(.lifeCycle) {
+            self.makeSpan(type: .type, value: .appDidEnterBackgroundNotification)
+        }
 
         // Request background time to ensure flush/export completes before app suspension.
         // The expiration handler ensures we don't leak background task identifiers.
