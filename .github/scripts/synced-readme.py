@@ -28,6 +28,7 @@ import io
 import json
 import html.entities
 import os
+import posixpath
 import re
 import string
 import sys
@@ -59,19 +60,25 @@ EXIT_REFUSE = 2
 # it - `&copy` renders as a symbol - but only when what follows is not `=` or
 # another alphanumeric, which is what keeps `?a=1&copy=2` a query string.
 ENTITY = re.compile(r"&(?:([A-Za-z][A-Za-z0-9]*)|#\d+|#[xX][0-9A-Fa-f]+)(;?)")
-# Indentation is not restricted to three spaces: a fence nested in a list item
-# carries the list's continuation indent, and its closer may carry more still.
-FENCE = re.compile(r"^\s*(`{3,}|~{3,})(.*)$")
+# A fence may be indented up to three spaces past the column its container
+# starts at - so a fence inside a list item carries the list's continuation
+# indent, while a four-space run at the root is an indented code block and not a
+# fence at all. `_container_indent()` tracks that column.
+FENCE = re.compile(r"^( *)(`{3,}|~{3,})(.*)$")
+LIST_ITEM = re.compile(r"^( *)(?:[-*+]|\d{1,9}[.)])( +)")
 THEMATIC = re.compile(r"^\s{0,3}(?:(?:-\s*){3,}|(?:\*\s*){3,}|(?:_\s*){3,})$")
 SETEXT = re.compile(r"^\s{0,3}(=+|-+)\s*$")
 # `## Heading. ##` renders as "Heading." - the closing run is syntax, so it has
 # to come off before the trailing-period check.
 ATX = re.compile(r"^\s{0,3}#{1,6}\s+(.*?)(?:\s+#+)?\s*$")
-# Any bolded label, however it is emphasised: `> **Note:**`, `> _**Note:**_`,
-# `> __Note:__`. All of them render as a plain blockquote rather than as the
-# alert the docs site styles, and the italic form is the one people reach for.
+# Any bolded label, however it is emphasised and at whatever quote depth:
+# `> **Note:**`, `> _**Note:**_`, `> **_Note:_**`, `> > __Warning:__`. All of
+# them render as a plain blockquote rather than as the alert the docs site
+# styles. Applied to the line with its quote prefix removed, so the depth does
+# not matter, but only when there was a prefix - a bolded label in ordinary
+# prose is not a callout.
 CALLOUT = re.compile(
-    r"^\s{0,3}>\s*[_*]{0,2}(?:\*\*|__)(note|tip|important|warning|caution)\b", re.I
+    r"^[_*]{0,2}(?:\*\*|__)[_*]{0,2}(note|tip|important|warning|caution)\b", re.I
 )
 # A fence can sit inside a blockquote. The prefix comes off for fence tracking
 # only - the callout rule is *about* blockquotes, so it keeps the original line.
@@ -91,13 +98,13 @@ WRITEISH = re.compile(
     r">>?|\btee\b|\bmv\b|\bcp\b|\brm\b|\btouch\b|\bpatch\b|\btruncate\b|\binstall\b"
     r"|\bsed\b[^|]*\s(?:-i|--in-place)|\bperl\b[^|]*\s(?:-i|--in-place)"
     r"|\bgit\s+(?:restore|checkout|apply)\b"
-    r"|\bdd\b|\bpython[0-9.]*\b[^|]*\s-c|\bnode\b[^|]*\s-e"
+    r"|\bdd\b|\bln\b|\bpython[0-9.]*\b[^|]*\s-c|\bnode\b[^|]*\s-e"
 )
 
 # The path as a whole argument. A bare `p in command` would match `docs/README.md`
 # in a repo whose synced file is the root `README.md`.
 def _argument(path, before):
-    return re.compile(before + r"(?:\./)?" + re.escape(path) + r"(?![\w.\-/])", re.I)
+    return re.compile(before + r"(?:\./)?" + re.escape(path) + r"(?![\w.\-/])")
 
 
 def _argument_anywhere(path):
@@ -118,14 +125,13 @@ def _argument_at_root(path):
 
 
 IN_COMMAND = {p: (_argument_anywhere(p) if "/" in p else _argument_at_root(p)) for p in SYNCED}
+IN_COMMAND_ANY_CASE = {
+    p: re.compile(IN_COMMAND[p].pattern, re.I) for p in SYNCED
+}
 
-# macOS and Windows checkouts are case-insensitive, so `readme.md` opens the same
-# file as `README.md` while comparing unequal. Folding alone would be wrong on a
-# case-sensitive filesystem, where those really are two files, so a folded match
-# only counts when the filesystem confirms they are one.
-SYNCED_FOLDED = {p.casefold(): p for p in SYNCED}
-
-
+# Asking the filesystem whether two paths are one file settles case-insensitive
+# checkouts, symlinks and hardlinks in a single check, without a table of
+# spellings to keep in step.
 def _same_file(a, b):
     try:
         return os.path.samefile(a, b)
@@ -196,6 +202,7 @@ def lint_text(text):
     opened = None      # (line number, path) of the split marker still open
     published = set()  # paths already claimed, so a duplicate is caught
     previous = None    # preceding paragraph line, for setext headings
+    container = 0      # column the current list item's content starts at
 
     for n, line in enumerate(text.splitlines(), 1):
         # Entities are wrong everywhere, code fences included: `&amp;&amp;` reaches
@@ -218,9 +225,17 @@ def lint_text(text):
             # A fence inside a blockquote ends when the blockquote does, so the
             # line that leaves the quote is ordinary content again.
             fence = None
+
         opener = FENCE.match(dequoted)
+        if opener and len(opener.group(1)) > container + 3:
+            # Indented past what its container allows, so this is code, not a
+            # fence: four spaces at the root is an indented code block.
+            opener = None
+        if opener and opener.group(2)[0] == "`" and "`" in opener.group(3):
+            # A backtick fence's info string may not contain a backtick.
+            opener = None
         if opener:
-            marker, trailing = opener.group(1), opener.group(2)
+            marker, trailing = opener.group(2), opener.group(3)
             if fence is None:
                 fence = (n, marker, depth)
             elif (marker[0] == fence[1][0] and len(marker) >= len(fence[1])
@@ -239,6 +254,14 @@ def lint_text(text):
             previous = None
             continue
 
+        # Track the column the current container starts at, so a fence indented
+        # under a list item is still a fence and one indented at the root is not.
+        item = LIST_ITEM.match(dequoted)
+        if item:
+            container = len(item.group(1)) + item.end() - item.start(2)
+        elif dequoted.strip() and len(dequoted) - len(dequoted.lstrip(" ")) <= 3:
+            container = 0
+
         for m in SPLIT_MARKER.finditer(line):
             if m.group(1):
                 if opened is None:
@@ -249,6 +272,7 @@ def lint_text(text):
             problems, path = _split_problems(n, m.group(2), opened)
             out.extend(problems)
             if path:
+                path = posixpath.normpath(path)
                 if path in published:
                     out.append((n, f"split `path=\"{path}\"` is already used - two sections cannot publish to one page"))
                 published.add(path)
@@ -267,7 +291,7 @@ def lint_text(text):
         if heading and heading.endswith("."):
             out.append((n, "heading ends in a period - headings are sentence case, no trailing period, not a sentence"))
 
-        callout = CALLOUT.match(line)
+        callout = CALLOUT.match(dequoted) if depth else None
         if callout:
             out.append((n, f"bolded callout renders as a plain blockquote - use `> [!{callout.group(1).upper()}]`"))
 
@@ -401,11 +425,9 @@ def targets(payload):
         hits = [p for p in SYNCED if p in candidates]
         if hits:
             return hits
-        for candidate in candidates:
-            synced = SYNCED_FOLDED.get(candidate.casefold())
-            if synced and _same_file(target, os.path.join(root, synced)):
-                return [synced]
-        return []
+        # Nothing matched by name. It may still *be* one of them under another
+        # spelling, another case, or a link, which only the filesystem knows.
+        return [p for p in SYNCED if _same_file(target, os.path.join(root, p))]
 
     if tool == "Bash":
         command = args.get("command")
@@ -413,15 +435,28 @@ def targets(payload):
             return []
         command = command.replace("\\", "/")   # a Windows-style path names the same file
         root = payload.get("cwd")
+        if not isinstance(root, str):
+            root = ""
         hits = []
         for p in SYNCED:
             if IN_COMMAND[p].search(command):
                 hits.append(p)
-            elif isinstance(root, str) and root:
-                # An absolute path is unambiguous once the session cwd is known,
-                # so `/repo/README.md` matches where a bare prefix could not.
-                absolute = os.path.join(root, p)
-                if _argument_at_root(absolute).search(command):
+                continue
+            if not root:
+                continue
+            # An absolute path is unambiguous once the session cwd is known, so
+            # `/repo/README.md` matches where a bare prefix could not.
+            if _argument_at_root(os.path.join(root, p)).search(command):
+                hits.append(p)
+                continue
+            # A different spelling of the same file - `readme.md` on a folding
+            # checkout - counts only if the filesystem says it is that file. On a
+            # case-sensitive one it is a different file and is left alone.
+            spelled = IN_COMMAND_ANY_CASE[p].search(command)
+            if spelled:
+                named = spelled.group(0)
+                named = named if os.path.isabs(named) else os.path.join(root, named)
+                if _same_file(named, os.path.join(root, p)):
                     hits.append(p)
         return hits
 
@@ -649,6 +684,27 @@ def _check_rules():
     listed = lint_text('- item\n\n  ```markdown\n  **Note:** an example\n  ```\n')
     assert not listed, f"list-nested fence linted as prose: {listed}"
 
+    # Four spaces at the root is an indented code block, not a fence, so it must
+    # not swallow the rest of the file.
+    indented = lint_text('    ```\n\n> **Note:** still reported\n')
+    assert len(indented) == 1 and "[!NOTE]" in indented[0][1], f"indented run opened a fence: {indented}"
+
+    # A backtick fence's info string may not contain a backtick.
+    infostring = lint_text('```js `x`\n> **Note:** still reported\n```\n')
+    assert any("[!NOTE]" in m for _, m in infostring), f"backtick info string opened a fence: {infostring}"
+
+    # Every emphasis arrangement, at any quote depth.
+    for spelling in ("> **_Note:_** x", "> __*Warning:*__ x", "> > **Warning:** x", "> > _**Tip:**_ x"):
+        assert lint_text(spelling + "\n"), f"callout spelling missed: {spelling}"
+    assert not lint_text("**Note:** not a blockquote, so not a callout\n"), "flagged a bolded label in prose"
+
+    # Two spellings of one destination are still one destination.
+    dotted = lint_text(
+        '<!-- split title="a" path="features/x.md" -->\n## A\n<!-- /split -->\n'
+        '<!-- split title="b" path="features/./x.md" -->\n## B\n<!-- /split -->\n'
+    )
+    assert any("already used" in m for _, m in dotted), f"dot-segment duplicate missed: {dotted}"
+
     # A quoted fence suppresses the example inside it, ends with the blockquote,
     # and leaves the callout after it reportable.
     boundary = lint_text('> ```markdown\n> **Note:** an example\n\n> **Note:** a real one\n')
@@ -688,6 +744,7 @@ def _check_gate(shapes):
             (EXIT_REFUSE, _payload(shapes["bare"], tool_name="Bash", tool_input={"command": "printf x >%s" % synced}), f"{synced}: shell write"),
             (EXIT_OK, _payload(shapes["bare"], tool_name="Bash", tool_input={"command": "cat %s" % synced}), f"{synced}: shell read"),
             (EXIT_REFUSE, _payload(shapes["bare"], tool_name="Bash", tool_input={"command": "git restore " + synced}), f"{synced}: git restore"),
+            (EXIT_REFUSE, _payload(shapes["bare"], tool_name="Bash", tool_input={"command": "ln -sf replacement " + synced}), f"{synced}: ln over the synced file"),
             (EXIT_REFUSE, _payload(shapes["bare"], tool_name="Bash", tool_input={"command": "python3 -c \"open('%s','w')\"" % synced}), f"{synced}: interpreter write"),
             (EXIT_OK, _payload(shapes["bare"], tool_name="Bash", tool_input={"command": "rm docs/" + os.path.basename(synced)}), f"{synced}: a different README of the same name"),
         ]
@@ -741,6 +798,32 @@ def _check_entry_points(directory, transcript):
     expected = EXIT_REFUSE if folds else EXIT_OK
     assert got == expected, f"case-variant path returned {got}, expected {expected} (filesystem folds: {folds})"
 
+    # A hardlink is the synced file under another name, and only the filesystem
+    # knows it. A shell command naming a case variant needs the same proof.
+    alias = os.path.join(root, "README-alias.md")
+    try:
+        os.link(pages[0], alias)
+    except OSError:
+        alias = None
+    if alias:
+        err, sys.stderr = sys.stderr, io.StringIO()
+        try:
+            linked = gate(_payload(transcript, cwd=root, tool_name="Edit", tool_input={"file_path": alias}))
+        finally:
+            sys.stderr = err
+        assert linked == EXIT_REFUSE, "a hardlink to the synced README was not gated"
+
+    err, sys.stderr = sys.stderr, io.StringIO()
+    try:
+        shell_variant = gate(_payload(transcript, cwd=root, tool_name="Bash",
+                                      tool_input={"command": "rm " + os.path.relpath(variant, root)}))
+    finally:
+        sys.stderr = err
+    assert shell_variant == (EXIT_REFUSE if folds else EXIT_OK), (
+        f"case-variant shell write returned {shell_variant} (filesystem folds: {folds})")
+
+    _check_registration()
+
     payload = _payload(transcript, tool_name="Edit", tool_input={"file_path": "/repo/" + SYNCED[0]})
     stdin, sys.stdin = sys.stdin, io.StringIO(json.dumps(payload))
     captured, sys.stderr = sys.stderr, io.StringIO()
@@ -751,6 +834,26 @@ def _check_entry_points(directory, transcript):
     assert blocked == EXIT_REFUSE, "hook() did not block a synced edit"
 
     _check_cli(root, payload)
+
+
+def _check_registration():
+    """The hook is only enforced if `.claude/settings.json` still calls it."""
+    here = os.path.abspath(__file__)
+    settings_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(here))),
+                                 ".claude", "settings.json")
+    with open(settings_path, encoding="utf-8") as fh:
+        settings = json.load(fh)
+
+    entries = settings.get("hooks", {}).get("PreToolUse", [])
+    ours = [
+        entry for entry in entries
+        if any(os.path.basename(here) in h.get("command", "") and h.get("command", "").endswith("hook")
+               for h in entry.get("hooks", []))
+    ]
+    assert ours, f"{settings_path} no longer runs this script as a PreToolUse hook"
+    matcher = ours[0].get("matcher", "")
+    for tool in EDIT_TOOLS + ("Bash",):
+        assert tool in matcher, f"{tool} is not in the PreToolUse matcher: {matcher!r}"
 
 
 def _check_cli(root, blocking_payload):
