@@ -1,0 +1,21 @@
+# The READMEs listed in .github/scripts/synced-readme.py are mirrored to
+# coralogix.com/docs by a nightly job in coralogix/documentation, so a change to one
+# is a documentation change. Nothing downstream checks them - the docs repo disables
+# every Vale style rule for synced content - so this is the only automated gate.
+# Runs on every pull request rather than on a paths filter, so it can be marked a
+# required check without pull requests that miss the filter sitting pending forever.
+name: Synced README lint
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 .github/scripts/synced-readme.py selftest
+      - run: python3 .github/scripts/synced-readme.py lint
