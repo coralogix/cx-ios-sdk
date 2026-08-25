@@ -70,6 +70,10 @@ ATX = re.compile(r"^\s{0,3}#{1,6}\s+(.*?)(?:\s+#+)?\s*$")
 # coralogix-browser-sdk, and rewording it is a documentation change rather than
 # a tooling one. Add `[_*]{0,2}` before `\*\*` once that line is fixed.
 CALLOUT = re.compile(r"^\s{0,3}>\s*\*\*(note|tip|important|warning|caution)\b", re.I)
+# A fence can sit inside a blockquote. The prefix comes off for fence tracking
+# only - the callout rule is *about* blockquotes, so it keeps the original line.
+QUOTE_PREFIX = re.compile(r"^(?:\s{0,3}>\s?)+")
+
 SPLIT_OPEN = re.compile(r"<!--\s*split\b(.*?)-->")
 SPLIT_CLOSE = re.compile(r"<!--\s*/\s*split\s*-->")
 ATTR = re.compile(r'\b([A-Za-z_][\w-]*)\s*=\s*"([^"]*)"')
@@ -185,7 +189,7 @@ def lint_text(text):
                         continue
             out.append((n, f"HTML entity `{m.group(0)}` - write the character itself"))
 
-        opener = FENCE.match(line)
+        opener = FENCE.match(QUOTE_PREFIX.sub("", line))
         if opener:
             marker, trailing = opener.group(1), opener.group(2)
             if fence is None:
@@ -301,7 +305,7 @@ def skill_loaded(transcript):
         return False
 
     called = set()
-    results = {}
+    error_by_tool_use_id = {}
 
     with open(transcript, encoding="utf-8", errors="ignore") as fh:
         for line in fh:
@@ -320,12 +324,15 @@ def skill_loaded(transcript):
                     if isinstance(args, dict) and args.get("skill") == SKILL:
                         called.add(block.get("id"))
                 elif kind == "tool_result":
-                    results[block.get("tool_use_id")] = block.get("is_error")
+                    error_by_tool_use_id[block.get("tool_use_id")] = block.get("is_error")
 
     # The call has to have come back, and not as an error. A later tool call can
     # only happen after the Skill result reached the model, so by the time this
     # hook runs a genuine invocation always has its result recorded.
-    return any(cid in results and results[cid] is not True for cid in called)
+    return any(
+        call_id in error_by_tool_use_id and error_by_tool_use_id[call_id] is not True
+        for call_id in called
+    )
 
 
 def targets(payload):
@@ -554,6 +561,24 @@ def _check_rules():
     # Both the plain and the closed-ATX heading, not just the plain one.
     assert len([m for m in problems if "period" in m]) == 2, f"closing-hash heading missed: {found}"
     assert not lint_text(GOOD), lint_text(GOOD)
+
+    # The containment rules, each on its own line, so removing either branch
+    # fails here rather than hiding behind the other diagnostics in BAD.
+    for marker, expected in (
+        ('<!-- split title="a" path="/absolute.md" -->', "must be relative"),
+        ('<!-- split title="a" path="../escape.md" -->', "must not escape"),
+        ('<!-- split title="a" path="fine.txt" -->', "should end in `.md`"),
+    ):
+        reported = " | ".join(m for _, m in lint_text(marker))
+        assert expected in reported, f"{marker} -> {reported}"
+
+    # A fenced block inside a blockquote is quoted code, not prose to grade. An
+    # entity is still reported in there - the skill bans those inside fences too -
+    # so the case to check is a rule that only applies to prose.
+    quoted = lint_text('> ```markdown\n> **Note:** an example callout\n> ```\n')
+    assert not quoted, f"blockquoted fence linted as prose: {quoted}"
+    unquoted = lint_text('> **Note:** a real callout\n')
+    assert unquoted, "the callout rule stopped firing outside a fence"
 
 
 def _check_gate(shapes):
