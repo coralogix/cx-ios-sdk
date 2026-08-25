@@ -63,9 +63,23 @@ ENTITY = re.compile(r"&(?:([A-Za-z][A-Za-z0-9]*)|#\d+|#[xX][0-9A-Fa-f]+)(;?)")
 # A fence may be indented up to three spaces past the column its container
 # starts at - so a fence inside a list item carries the list's continuation
 # indent, while a four-space run at the root is an indented code block and not a
-# fence at all. `_container_indent()` tracks that column.
+# fence at all. `_container_indent()` computes that column.
 FENCE = re.compile(r"^( *)(`{3,}|~{3,})(.*)$")
-LIST_ITEM = re.compile(r"^( *)(?:[-*+]|\d{1,9}[.)])( +)")
+LIST_ITEM = re.compile(r"^ *(?:[-*+]|\d{1,9}[.)]) +")
+
+
+def _container_indent(line, current):
+    """The column the current container's content starts at.
+
+    A list item opens one at the end of its marker and padding - `10. ` starts at
+    four, not at one. Anything else back at the left margin closes it.
+    """
+    item = LIST_ITEM.match(line)
+    if item:
+        return item.end()
+    if line.strip() and len(line) - len(line.lstrip(" ")) <= 3:
+        return 0
+    return current
 THEMATIC = re.compile(r"^\s{0,3}(?:(?:-\s*){3,}|(?:\*\s*){3,}|(?:_\s*){3,})$")
 SETEXT = re.compile(r"^\s{0,3}(=+|-+)\s*$")
 # `## Heading. ##` renders as "Heading." - the closing run is syntax, so it has
@@ -89,6 +103,7 @@ QUOTE_PREFIX = re.compile(r"^(?:\s{0,3}>\s?)+")
 # valid and was being reported as a close without an open.
 SPLIT_MARKER = re.compile(r"<!--\s*(/)?\s*split\b(.*?)-->")
 ATTR = re.compile(r'\b([A-Za-z_][\w-]*)\s*=\s*"([^"]*)"')
+CODE_SPAN = re.compile(r"`+[^`]*`+")
 
 # Commands that could write to a path, as opposed to read one. Blocking `cat
 # README.md` is how a hook ends up deleted, so reads are left alone. A write from
@@ -100,6 +115,12 @@ WRITEISH = re.compile(
     r"|\bgit\s+(?:restore|checkout|apply)\b"
     r"|\bdd\b|\bln\b|\bpython[0-9.]*\b[^|]*\s-c|\bnode\b[^|]*\s-e"
 )
+
+# Path-shaped operands of a shell command, so one naming the synced file under
+# another name - a hardlink, a copy of the path - can be checked against the
+# filesystem the way the edit branch does.
+OPERAND = re.compile(r"[A-Za-z0-9_.~/-]{2,}")
+MAX_OPERANDS = 40
 
 # The path as a whole argument. A bare `p in command` would match `docs/README.md`
 # in a repo whose synced file is the root `README.md`.
@@ -141,7 +162,12 @@ def _same_file(a, b):
 def _split_problems(n, attrs, opened):
     """Check one `<!-- split ... -->` marker. Returns (problems, path or None)."""
     out = []
-    found = {name: (i, value) for i, (name, value) in enumerate(ATTR.findall(attrs))}
+    pairs = ATTR.findall(attrs)
+    found = {name: (i, value) for i, (name, value) in enumerate(pairs)}
+    names = [name for name, _ in pairs]
+    for name in sorted(set(names)):
+        if names.count(name) > 1:
+            out.append((n, f"split marker repeats `{name}` - the sync reads only one of them"))
 
     if opened is not None:
         out.append((n, f"nested split marker - the one opened on line {opened[0]} is still open"))
@@ -254,15 +280,16 @@ def lint_text(text):
             previous = None
             continue
 
-        # Track the column the current container starts at, so a fence indented
-        # under a list item is still a fence and one indented at the root is not.
-        item = LIST_ITEM.match(dequoted)
-        if item:
-            container = len(item.group(1)) + item.end() - item.start(2)
-        elif dequoted.strip() and len(dequoted) - len(dequoted.lstrip(" ")) <= 3:
-            container = 0
+        container = _container_indent(dequoted, container)
+        # Rules apply relative to the container: a divider nested two lists deep is
+        # still a divider, and indentation past the container is code.
+        body = dequoted[container:] if not dequoted[:container].strip() else dequoted
+        relative_indent = len(body) - len(body.lstrip(" "))
 
-        for m in SPLIT_MARKER.finditer(line):
+        # A marker shown inside a code span, or inside an indented code block, is
+        # an example of the syntax rather than a section transition.
+        scannable = "" if relative_indent > 3 else CODE_SPAN.sub(" ", body)
+        for m in SPLIT_MARKER.finditer(scannable):
             if m.group(1):
                 if opened is None:
                     out.append((n, "`<!-- /split -->` with no open `<!-- split ... -->`"))
@@ -279,23 +306,23 @@ def lint_text(text):
             opened = (n, path or "?")
 
         heading = None
-        if SETEXT.match(line) and _is_paragraph(previous):
+        if SETEXT.match(body) and _is_paragraph(previous):
             heading = previous.strip()          # `---` under text is an H2, not a rule
-        elif THEMATIC.match(line):
+        elif THEMATIC.match(body):
             out.append((n, "decorative horizontal rule - it publishes as a stray divider; headings already separate sections"))
         else:
-            atx = ATX.match(line)
+            atx = ATX.match(body)
             if atx:
                 heading = atx.group(1)
 
         if heading and heading.endswith("."):
             out.append((n, "heading ends in a period - headings are sentence case, no trailing period, not a sentence"))
 
-        callout = CALLOUT.match(dequoted) if depth else None
+        callout = CALLOUT.match(body.lstrip()) if depth else None
         if callout:
             out.append((n, f"bolded callout renders as a plain blockquote - use `> [!{callout.group(1).upper()}]`"))
 
-        previous = line
+        previous = body
 
     if fence is not None:
         out.append((fence[0], "code fence is never closed - everything after it is skipped by this linter"))
@@ -390,9 +417,14 @@ def skill_loaded(transcript):
     # The call has to have come back, and not as an error. A later tool call can
     # only happen after the Skill result reached the model, so by the time this
     # hook runs a genuine invocation always has its result recorded.
-    # Only a result that says it did not fail counts. Anything else - an error, a
-    # missing result, or a status this does not recognise - fails closed.
-    return any(error_by_tool_use_id.get(call_id, True) in (False, None) for call_id in called)
+    # A call counts only if its result came back and does not report failure:
+    # `is_error` false, or absent from a result that is present. No result at all,
+    # `is_error` true, or any value this does not recognise, all fail closed.
+    return any(
+        call_id in error_by_tool_use_id and error_by_tool_use_id[call_id] in (None, False)
+        and isinstance(error_by_tool_use_id[call_id], (bool, type(None)))
+        for call_id in called
+    )
 
 
 def targets(payload):
@@ -458,6 +490,15 @@ def targets(payload):
                 named = named if os.path.isabs(named) else os.path.join(root, named)
                 if _same_file(named, os.path.join(root, p)):
                     hits.append(p)
+
+        if root and len(hits) < len(SYNCED):
+            # Nothing matched by name. An operand may still *be* one of the synced
+            # files under another name, which only the filesystem can say.
+            for token in OPERAND.findall(command)[:MAX_OPERANDS]:
+                candidate = token if os.path.isabs(token) else os.path.join(root, token)
+                for p in SYNCED:
+                    if p not in hits and _same_file(candidate, os.path.join(root, p)):
+                        hits.append(p)
         return hits
 
     return []
@@ -470,9 +511,14 @@ def gate(payload):
 
     try:
         hits = targets(payload)
-    except Exception:
-        # Nothing identified this as a synced README, so there is nothing to
-        # protect, and blocking every edit in the repo would be worse.
+    except Exception as err:
+        # The analysis fell over, which is not the same as "this is not a synced
+        # README" - but it names no path either, so blocking would take every edit
+        # in the repository with it. Allow, and say so rather than failing silently.
+        sys.stderr.write(
+            f"synced-readme hook could not identify this tool call's target ({err!r}); "
+            f"allowing it. If it touches a synced README, load the {SKILL} skill first.\n"
+        )
         return EXIT_OK
 
     if not hits:
@@ -698,6 +744,17 @@ def _check_rules():
         assert lint_text(spelling + "\n"), f"callout spelling missed: {spelling}"
     assert not lint_text("**Note:** not a blockquote, so not a callout\n"), "flagged a bolded label in prose"
 
+    # Rules have to see through the quote and the list prefix.
+    quoted_rule = lint_text("> text\n>\n> ---\n")
+    assert any("horizontal rule" in m for _, m in quoted_rule), f"quoted rule missed: {quoted_rule}"
+    quoted_heading = lint_text("> A quoted heading.\n> ---\n")
+    assert any("period" in m for _, m in quoted_heading), f"quoted setext heading missed: {quoted_heading}"
+    assert lint_text(">    **Note:** spaced away from the marker\n"), "spacing after `>` hid a callout"
+
+    # A marker's own width counts toward the container column.
+    assert not lint_text("10. item\n\n    ```markdown\n    **Note:** x\n    ```\n"), \
+        "an ordered-list fence was read as indented code"
+
     # Two spellings of one destination are still one destination.
     dotted = lint_text(
         '<!-- split title="a" path="features/x.md" -->\n## A\n<!-- /split -->\n'
@@ -806,12 +863,16 @@ def _check_entry_points(directory, transcript):
     except OSError:
         alias = None
     if alias:
-        err, sys.stderr = sys.stderr, io.StringIO()
-        try:
-            linked = gate(_payload(transcript, cwd=root, tool_name="Edit", tool_input={"file_path": alias}))
-        finally:
-            sys.stderr = err
-        assert linked == EXIT_REFUSE, "a hardlink to the synced README was not gated"
+        for tool, args in (
+            ("Edit", {"file_path": alias}),
+            ("Bash", {"command": "printf x >" + alias}),
+        ):
+            err, sys.stderr = sys.stderr, io.StringIO()
+            try:
+                linked = gate(_payload(transcript, cwd=root, tool_name=tool, tool_input=args))
+            finally:
+                sys.stderr = err
+            assert linked == EXIT_REFUSE, f"a hardlink to the synced README was not gated via {tool}"
 
     err, sys.stderr = sys.stderr, io.StringIO()
     try:
@@ -833,6 +894,7 @@ def _check_entry_points(directory, transcript):
         sys.stdin, sys.stderr = stdin, captured
     assert blocked == EXIT_REFUSE, "hook() did not block a synced edit"
 
+    _check_stdin(os.path.dirname(root), payload)
     _check_cli(root, payload)
 
 
@@ -851,9 +913,45 @@ def _check_registration():
                for h in entry.get("hooks", []))
     ]
     assert ours, f"{settings_path} no longer runs this script as a PreToolUse hook"
-    matcher = ours[0].get("matcher", "")
+    # The matcher is a regex Claude Code matches against the tool name, so a
+    # substring test would accept `NotEdit|NotWrite` and reject nothing.
+    matcher = re.compile(ours[0].get("matcher", ""))
     for tool in EDIT_TOOLS + ("Bash",):
-        assert tool in matcher, f"{tool} is not in the PreToolUse matcher: {matcher!r}"
+        assert matcher.fullmatch(tool), f"the PreToolUse matcher does not match {tool}: {matcher.pattern!r}"
+    for unrelated in ("Read", "Grep", "WebFetch"):
+        assert not matcher.fullmatch(unrelated), (
+            f"the PreToolUse matcher also matches {unrelated}: {matcher.pattern!r}")
+
+
+def _check_stdin(directory, blocking_payload):
+    """`hook()`'s own boundary: what it does with what arrives on stdin."""
+    for text, expected, why in (
+        ("", EXIT_OK, "empty stdin"),
+        ("not json at all", EXIT_OK, "stdin that is not JSON"),
+        ("[]", EXIT_OK, "a payload that is not an object"),
+        (json.dumps(blocking_payload), EXIT_REFUSE, "a synced edit without the skill"),
+    ):
+        stdin, sys.stdin = sys.stdin, io.StringIO(text)
+        captured, sys.stderr = sys.stderr, io.StringIO()
+        try:
+            got, noise = hook(), sys.stderr.getvalue()
+        finally:
+            sys.stdin, sys.stderr = stdin, captured
+        assert got == expected, f"hook() returned {got}, expected {expected}: {why}"
+        if expected == EXIT_OK:
+            assert not noise, f"hook() complained about {why}: {noise!r}"
+
+    # A transcript that cannot be read once the target is known to be synced has
+    # to block, not fall through. A directory raises on open.
+    unreadable = os.path.join(directory, "unreadable-transcript")
+    os.makedirs(unreadable, exist_ok=True)
+    payload = dict(blocking_payload, transcript_path=unreadable)
+    captured, sys.stderr = sys.stderr, io.StringIO()
+    try:
+        blocked = gate(payload)
+    finally:
+        sys.stderr = captured
+    assert blocked == EXIT_REFUSE, "an unreadable transcript did not fail closed"
 
 
 def _check_cli(root, blocking_payload):
