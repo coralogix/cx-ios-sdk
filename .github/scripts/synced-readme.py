@@ -68,18 +68,21 @@ FENCE = re.compile(r"^( *)(`{3,}|~{3,})(.*)$")
 LIST_ITEM = re.compile(r"^ *(?:[-*+]|\d{1,9}[.)]) +")
 
 
-def _container_indent(line, current):
-    """The column the current container's content starts at.
+def _containers(line, open_columns):
+    """The stack of content columns for the list items this line sits inside.
 
     A list item opens one at the end of its marker and padding - `10. ` starts at
-    four, not at one. Anything else back at the left margin closes it.
+    four, not at one. Leaving a nested item returns to the outer one rather than
+    to the margin, which is why this is a stack and not a single column.
     """
+    if not line.strip():
+        return open_columns
+    indent = len(line) - len(line.lstrip(" "))
+    columns = [c for c in open_columns if c <= indent]
     item = LIST_ITEM.match(line)
     if item:
-        return item.end()
-    if line.strip() and len(line) - len(line.lstrip(" ")) <= 3:
-        return 0
-    return current
+        columns.append(item.end())
+    return columns
 THEMATIC = re.compile(r"^\s{0,3}(?:(?:-\s*){3,}|(?:\*\s*){3,}|(?:_\s*){3,})$")
 SETEXT = re.compile(r"^\s{0,3}(=+|-+)\s*$")
 # `## Heading. ##` renders as "Heading." - the closing run is syntax, so it has
@@ -103,7 +106,9 @@ QUOTE_PREFIX = re.compile(r"^(?:\s{0,3}>\s?)+")
 # valid and was being reported as a close without an open.
 SPLIT_MARKER = re.compile(r"<!--\s*(/)?\s*split\b(.*?)-->")
 ATTR = re.compile(r'\b([A-Za-z_][\w-]*)\s*=\s*"([^"]*)"')
-CODE_SPAN = re.compile(r"`+[^`]*`+")
+# A code span closes on a backtick run of the same length as the one that opened
+# it, so `` `a` `` keeps its inner backticks rather than ending early.
+CODE_SPAN = re.compile(r"(`+)(?:(?!\1)[\s\S])*?\1")
 
 # Commands that could write to a path, as opposed to read one. Blocking `cat
 # README.md` is how a hook ends up deleted, so reads are left alone. A write from
@@ -228,7 +233,8 @@ def lint_text(text):
     opened = None      # (line number, path) of the split marker still open
     published = set()  # paths already claimed, so a duplicate is caught
     previous = None    # preceding paragraph line, for setext headings
-    container = 0      # column the current list item's content starts at
+    open_columns = []  # content columns of the list items currently open
+    container = 0      # the innermost of them
 
     for n, line in enumerate(text.splitlines(), 1):
         # Entities are wrong everywhere, code fences included: `&amp;&amp;` reaches
@@ -280,10 +286,18 @@ def lint_text(text):
             previous = None
             continue
 
-        container = _container_indent(dequoted, container)
+        open_columns = _containers(dequoted, open_columns)
+        container = open_columns[-1] if open_columns else 0
         # Rules apply relative to the container: a divider nested two lists deep is
-        # still a divider, and indentation past the container is code.
-        body = dequoted[container:] if not dequoted[:container].strip() else dequoted
+        # still a divider, and indentation past the container is code. On the list
+        # item's own line the marker comes off too, so `- ## Heading` is a heading.
+        item = LIST_ITEM.match(dequoted)
+        if item:
+            body = dequoted[item.end():]
+        elif not dequoted[:container].strip():
+            body = dequoted[container:]
+        else:
+            body = dequoted
         relative_indent = len(body) - len(body.lstrip(" "))
 
         # A marker shown inside a code span, or inside an indented code block, is
@@ -412,7 +426,9 @@ def skill_loaded(transcript):
                     if isinstance(args, dict) and args.get("skill") == SKILL and isinstance(call_id, str) and call_id:
                         called.add(call_id)
                 elif kind == "tool_result":
-                    error_by_tool_use_id[block.get("tool_use_id")] = block.get("is_error")
+                    result_id = block.get("tool_use_id")
+                    if isinstance(result_id, str) and result_id:
+                        error_by_tool_use_id[result_id] = block.get("is_error")
 
     # The call has to have come back, and not as an error. A later tool call can
     # only happen after the Skill result reached the model, so by the time this
@@ -527,11 +543,18 @@ def gate(payload):
     # Past this point the target *is* a synced README, so anything unexpected
     # blocks rather than allows: an unreadable transcript is not proof that the
     # skill was loaded.
+    unreadable = ""
     try:
         if skill_loaded(payload.get("transcript_path")):
             return EXIT_OK
-    except Exception:
-        pass
+    except Exception as err:
+        # Blocking either way, but an analysis that fell over is a different
+        # situation from a session that simply never loaded the skill, and the
+        # agent cannot act on the second message if it is really the first.
+        unreadable = (
+            f"\nThe session transcript could not be read ({type(err).__name__}), so whether "
+            f"the skill was loaded could not be determined. This edit is refused either way.\n"
+        )
 
     sys.stderr.write(
         f"Blocked: {hits[0]} is mirrored to coralogix.com/docs by the nightly docs sync, "
@@ -541,6 +564,7 @@ def gate(payload):
         f"docs site expects - none of which is checked downstream.\n\n"
         f"`python3 .github/scripts/synced-readme.py lint` checks the mechanical rules; CI runs "
         f"the same check on the pull request.\n"
+        + unreadable
     )
     return EXIT_REFUSE
 
@@ -750,6 +774,17 @@ def _check_rules():
     quoted_heading = lint_text("> A quoted heading.\n> ---\n")
     assert any("period" in m for _, m in quoted_heading), f"quoted setext heading missed: {quoted_heading}"
     assert lint_text(">    **Note:** spaced away from the marker\n"), "spacing after `>` hid a callout"
+
+    # Leaving a nested list returns to the outer item, not to the margin.
+    nested = lint_text("- a\n\n  - b\n\n  ---\n")
+    assert any("horizontal rule" in m for _, m in nested), f"outer container lost: {nested}"
+
+    # A heading or a rule on the list item's own line is still one.
+    assert any("period" in m for _, m in lint_text("- ## Inline heading.\n")), "list-marker heading missed"
+
+    # A code span keeps inner backticks, so the marker inside it stays an example.
+    spanned = lint_text('Use `` `<!-- split title="x" path="y.md" -->` `` inline.\n')
+    assert not spanned, f"code span closed early: {spanned}"
 
     # A marker's own width counts toward the container column.
     assert not lint_text("10. item\n\n    ```markdown\n    **Note:** x\n    ```\n"), \
