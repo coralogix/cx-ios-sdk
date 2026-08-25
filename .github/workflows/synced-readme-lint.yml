@@ -17,5 +17,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # This job runs a script the pull request itself can change, so it must
+          # not leave a usable GITHUB_TOKEN in .git/config for that script to read.
+          persist-credentials: false
       - run: python3 .github/scripts/synced-readme.py selftest
       - run: python3 .github/scripts/synced-readme.py lint

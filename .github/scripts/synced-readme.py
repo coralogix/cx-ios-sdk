@@ -5,15 +5,18 @@ A nightly job in `coralogix/documentation` mirrors the files listed in SYNCED an
 publishes them as customer-facing pages, so editing one is a documentation change.
 `.claude/skills/rum-readme-authoring/SKILL.md` is the authoring guide.
 
-Two modes, one path list:
+Three modes, one path list:
 
-  lint   Check the synced READMEs against the mechanical rules in that skill.
-         Run by CI on every pull request. Also runnable by hand.
+  lint      Check the synced READMEs against the mechanical rules in that skill.
+            Run by CI on every pull request. Also runnable by hand.
 
-  hook   Claude Code PreToolUse gate: refuse an edit to a synced README until the
-         rum-readme-authoring skill has been loaded in this session. Reads the hook
-         payload on stdin; exit 2 blocks the tool call and hands stderr back to the
-         agent as an instruction.
+  hook      Claude Code PreToolUse gate: refuse an edit to a synced README until the
+            rum-readme-authoring skill has been loaded in this session. Reads the hook
+            payload on stdin; exit 2 blocks the tool call and hands stderr back to the
+            agent as an instruction.
+
+  selftest  Assert both of the above still behave. Run by CI before `lint`, so a
+            rule that has stopped firing fails the build instead of reporting clean.
 
 The prose rules in the skill (second person, no "please", no Latin abbreviations,
 sentence-case headings) are not checked here - they need judgement, and a regex
@@ -21,6 +24,7 @@ that approximates them costs more in false positives than it catches. Review and
 the skill's own checklist cover those.
 """
 
+import io
 import json
 import os
 import re
@@ -36,76 +40,144 @@ SYNCED = [
 
 SKILL = "rum-readme-authoring"
 
-ENTITY = re.compile(r"&(?:amp|lt|gt|quot|apos|nbsp|#\d+|#x[0-9a-fA-F]+);")
-FENCE = re.compile(r"^\s{0,3}(```|~~~)")
-RULE = re.compile(r"^\s{0,3}(?:-\s*-\s*-[-\s]*|\*\s*\*\s*\*[*\s]*|_\s*_\s*_[_\s]*)$")
-HEADING = re.compile(r"^(#{1,6})\s+(.*?)\s*$")
-# ponytail: matches the plain `> **Note:**` form only. An emphasised variant
-# (`> _**Note:**_`) slips through; widen if one ever ships.
-CALLOUT = re.compile(r"^>\s*\*\*(note|tip|important|warning|caution)\b", re.I)
+EDIT_TOOLS = ("Edit", "Write", "MultiEdit", "NotebookEdit")
+
+# Any character reference, not a shortlist: `&mdash;` and `&copy;` reach the page
+# just as literally as `&amp;` does.
+ENTITY = re.compile(r"&(?:[A-Za-z][A-Za-z0-9]{1,31}|#\d{1,7}|#[xX][0-9A-Fa-f]{1,6});")
+FENCE = re.compile(r"^\s{0,3}(`{3,}|~{3,})")
+THEMATIC = re.compile(r"^\s{0,3}(?:(?:-\s*){3,}|(?:\*\s*){3,}|(?:_\s*){3,})$")
+SETEXT = re.compile(r"^\s{0,3}(=+|-+)\s*$")
+ATX = re.compile(r"^\s{0,3}#{1,6}\s+(.*?)\s*$")
+# The plain bolded form only. An emphasis-wrapped variant (`> _**Note:**_`) is
+# deliberately not matched yet: the one instance in these repos sits in
+# coralogix-browser-sdk, and rewording it is a documentation change rather than
+# a tooling one. Add `[_*]{0,2}` before `\*\*` once that line is fixed.
+CALLOUT = re.compile(r"^\s{0,3}>\s*\*\*(note|tip|important|warning|caution)\b", re.I)
 SPLIT_OPEN = re.compile(r"<!--\s*split\b(.*?)-->")
 SPLIT_CLOSE = re.compile(r"<!--\s*/\s*split\s*-->")
-WRITEISH = re.compile(r">>?\s|\bsed\b[^|]*\s-i|\bperl\b[^|]*\s-i|\btee\b|\bmv\b|\bcp\b|\bpatch\b|\btruncate\b")
+ATTR = re.compile(r'\b([A-Za-z_][\w-]*)\s*=\s*"([^"]*)"')
+
+# Commands that could write to a path, as opposed to read one. Blocking `cat
+# README.md` is how a hook ends up deleted, so reads are left alone. A write from
+# inside a language runtime, or one that reaches the file after a `cd`, gets past
+# this; the lint job checks the result either way.
+WRITEISH = re.compile(
+    r">>?|\btee\b|\bmv\b|\bcp\b|\brm\b|\btouch\b|\bpatch\b|\btruncate\b|\binstall\b"
+    r"|\bsed\b[^|]*\s-i|\bperl\b[^|]*\s-i"
+)
+
+# Proof that the skill was actually loaded: the Skill tool call, or the user typing
+# the slash command. Matching the bare name would pass on the session's skill
+# listing alone, and matching `/rum-readme-authoring` anywhere would pass on the
+# skill's own file path.
+SKILL_LOADED = re.compile(
+    r'"skill"\s*:\s*"%s"|<command-name>\s*/%s\s*</command-name>' % (re.escape(SKILL), re.escape(SKILL))
+)
+
+
+def _split_problems(n, attrs, opened):
+    """Check one `<!-- split ... -->` marker. Returns (problems, path or None)."""
+    out = []
+    found = {name: (i, value) for i, (name, value) in enumerate(ATTR.findall(attrs))}
+
+    if opened is not None:
+        out.append((n, f"nested split marker - the one opened on line {opened[0]} is still open"))
+
+    for name in ("title", "path"):
+        if name in found:
+            continue
+        # `path=configuration/options.md` looks present to a substring check but
+        # carries no value the sync can read.
+        if re.search(r"\b%s\s*=" % name, attrs):
+            out.append((n, f"split marker `{name}` has no quoted value - write `{name}=\"...\"`"))
+        else:
+            out.append((n, f"split marker needs `{name}=\"...\"`"))
+
+    if "title" in found and "path" in found and found["path"][0] < found["title"][0]:
+        # The sync's parser reads attributes in any order, but the code that strips
+        # the block out of the parent page matches `title="..." path="..."` literally.
+        # Reversed, the section publishes as its own page *and* stays duplicated on
+        # the README page.
+        out.append((n, "split marker has `path` before `title` - reverse them, or the section is published twice"))
+
+    path = found["path"][1] if "path" in found else None
+    if path is not None:
+        if not path.endswith(".md"):
+            out.append((n, f"split `path=\"{path}\"` should end in `.md`"))
+        if path.startswith("/") or os.path.isabs(path):
+            out.append((n, f"split `path=\"{path}\"` must be relative to the README"))
+        elif ".." in path.split("/"):
+            out.append((n, f"split `path=\"{path}\"` must not escape the README's directory"))
+
+    return out, path
 
 
 def lint_text(text):
     """Return a list of (line_number, message)."""
     out = []
-    fenced = False
-    open_split = None  # (line number, path attribute)
+    fence = None       # the delimiter run that opened the current code block
+    opened = None      # (line number, path) of the split marker still open
+    previous = None    # preceding paragraph line, for setext headings
 
     for n, line in enumerate(text.splitlines(), 1):
-        if FENCE.match(line):
-            fenced = not fenced
-
         # Entities are wrong everywhere, code fences included: `&amp;&amp;` reaches
         # the published page verbatim and the command it is part of does not run.
         for m in ENTITY.finditer(line):
             out.append((n, f"HTML entity `{m.group(0)}` - write the character itself"))
 
-        for m in SPLIT_CLOSE.finditer(line):
-            if open_split is None:
-                out.append((n, "`<!-- /split -->` with no open `<!-- split ... -->`"))
-            else:
-                open_split = None
-
-        for m in SPLIT_OPEN.finditer(line):
-            attrs = m.group(1)
-            if open_split is not None:
-                out.append((n, f"nested split marker - the one opened on line {open_split[0]} is still open"))
-            title = attrs.find("title=")
-            p = attrs.find("path=")
-            if title < 0 or p < 0:
-                out.append((n, "split marker needs both `title=\"...\"` and `path=\"...\"`"))
-            elif p < title:
-                # The sync's parser reads attributes in any order, but the code that
-                # strips the block out of the parent page matches `title="..." path="..."`
-                # literally. Reversed, the section publishes as its own page *and* stays
-                # duplicated on the README page.
-                out.append((n, "split marker has `path` before `title` - reverse them, or the section is published twice"))
-            pm = re.search(r'path="([^"]*)"', attrs)
-            if pm and not pm.group(1).endswith(".md"):
-                out.append((n, f"split `path=\"{pm.group(1)}\"` should end in `.md`"))
-            open_split = (n, pm.group(1) if pm else "?")
-
-        if fenced:
+        opener = FENCE.match(line)
+        if opener:
+            marker = opener.group(1)
+            if fence is None:
+                fence = (n, marker)
+            elif marker[0] == fence[1][0] and len(marker) >= len(fence[1]):
+                fence = None
+            previous = None
             continue
 
-        if RULE.match(line):
+        if fence is not None:
+            # Inside a code block. A README that documents how to write a split
+            # marker shows one in a fence; it is an example, not a marker.
+            previous = None
+            continue
+
+        for _ in SPLIT_CLOSE.finditer(line):
+            if opened is None:
+                out.append((n, "`<!-- /split -->` with no open `<!-- split ... -->`"))
+            else:
+                opened = None
+
+        for m in SPLIT_OPEN.finditer(line):
+            problems, path = _split_problems(n, m.group(1), opened)
+            out.extend(problems)
+            opened = (n, path or "?")
+
+        heading = None
+        if SETEXT.match(line) and previous and previous.strip():
+            heading = previous.strip()          # `---` under text is an H2, not a rule
+        elif THEMATIC.match(line):
             out.append((n, "decorative horizontal rule - it publishes as a stray divider; headings already separate sections"))
+        else:
+            atx = ATX.match(line)
+            if atx:
+                heading = atx.group(1)
 
-        if CALLOUT.match(line):
-            word = CALLOUT.match(line).group(1).upper()
-            out.append((n, f"bolded callout renders as a plain blockquote - use `> [!{word}]`"))
-
-        h = HEADING.match(line)
-        if h and h.group(2).endswith("."):
+        if heading and heading.endswith("."):
             out.append((n, "heading ends in a period - headings are sentence case, no trailing period, not a sentence"))
 
-    if open_split is not None:
-        out.append((open_split[0], f"split marker for `{open_split[1]}` is never closed with `<!-- /split -->`"))
+        callout = CALLOUT.match(line)
+        if callout:
+            out.append((n, f"bolded callout renders as a plain blockquote - use `> [!{callout.group(1).upper()}]`"))
 
-    return out
+        previous = line
+
+    if fence is not None:
+        out.append((fence[0], "code fence is never closed - everything after it is skipped by this linter"))
+    if opened is not None:
+        out.append((opened[0], f"split marker for `{opened[1]}` is never closed with `<!-- /split -->`"))
+
+    return sorted(out)
 
 
 def lint(root):
@@ -116,8 +188,13 @@ def lint(root):
             print(f"{rel}: missing - the docs sync expects this path; update SYNCED here and `external_repos.json` in coralogix/documentation together")
             failures += 1
             continue
-        with open(full, encoding="utf-8") as fh:
-            problems = lint_text(fh.read())
+        try:
+            with open(full, encoding="utf-8") as fh:
+                problems = lint_text(fh.read())
+        except (OSError, UnicodeDecodeError) as err:
+            print(f"{rel}: unreadable - {err}")
+            failures += 1
+            continue
         for n, msg in problems:
             print(f"{rel}:{n}: {msg}")
         failures += len(problems)
@@ -133,42 +210,67 @@ def lint(root):
     return 0
 
 
-def hook():
-    payload = json.load(sys.stdin)
-    tool = payload.get("tool_name", "")
-    args = payload.get("tool_input") or {}
+def skill_loaded(transcript):
+    if not isinstance(transcript, str) or not transcript or not os.path.isfile(transcript):
+        return False
+    with open(transcript, encoding="utf-8", errors="ignore") as fh:
+        return bool(SKILL_LOADED.search(fh.read()))
 
-    if tool in ("Edit", "Write", "MultiEdit", "NotebookEdit"):
-        target = str(args.get("file_path", "") or args.get("notebook_path", ""))
-        root = payload.get("cwd") or os.getcwd()
+
+def targets(payload):
+    """Which synced READMEs this tool call would write to."""
+    tool = payload.get("tool_name")
+    args = payload.get("tool_input")
+    if not isinstance(args, dict):
+        return []
+
+    if tool in EDIT_TOOLS:
+        target = args.get("file_path") or args.get("notebook_path")
+        if not isinstance(target, str) or not target:
+            return []
+        root = payload.get("cwd")
+        if not isinstance(root, str) or not root:
+            root = os.getcwd()
         try:
             rel = os.path.relpath(os.path.realpath(target), os.path.realpath(root))
-        except ValueError:  # different drive on Windows
+        except (OSError, ValueError):
             rel = target
         # Exact, not endswith: in a repo whose synced file is the root README, an
         # endswith match would gate every other README in the tree too.
-        hits = [p for p in SYNCED if rel.replace(os.sep, "/") == p]
-    elif tool == "Bash":
-        # ponytail: substring match, and only for commands that look like writes -
-        # blocking `cat README.md` is how a hook gets deleted. `cd libs && sed -i
-        # README.md`, or a write from inside a language runtime, gets past it. The
-        # lint job checks the result either way.
-        command = str(args.get("command", ""))
-        hits = [p for p in SYNCED if p in command] if WRITEISH.search(command) else []
-    else:
+        return [p for p in SYNCED if rel.replace(os.sep, "/") == p]
+
+    if tool == "Bash":
+        command = args.get("command")
+        if not isinstance(command, str) or not WRITEISH.search(command):
+            return []
+        return [p for p in SYNCED if p in command]
+
+    return []
+
+
+def gate(payload):
+    """Exit code for one PreToolUse payload: 0 allows the tool call, 2 blocks it."""
+    if not isinstance(payload, dict):
+        return 0
+
+    try:
+        hits = targets(payload)
+    except Exception:
+        # Nothing identified this as a synced README, so there is nothing to
+        # protect, and blocking every edit in the repo would be worse.
         return 0
 
     if not hits:
         return 0
 
-    transcript = payload.get("transcript_path", "")
-    if transcript and os.path.isfile(transcript):
-        with open(transcript, encoding="utf-8", errors="ignore") as fh:
-            body = fh.read()
-        # The Skill tool call, or the user typing the slash command. Matching the
-        # bare name would pass on the session's skill listing alone.
-        if re.search(r'"skill"\s*:\s*"%s"' % re.escape(SKILL), body) or f"/{SKILL}" in body:
+    # Past this point the target *is* a synced README, so anything unexpected
+    # blocks rather than allows: an unreadable transcript is not proof that the
+    # skill was loaded.
+    try:
+        if skill_loaded(payload.get("transcript_path")):
             return 0
+    except Exception:
+        pass
 
     sys.stderr.write(
         f"Blocked: {hits[0]} is mirrored to coralogix.com/docs by the nightly docs sync, "
@@ -182,12 +284,22 @@ def hook():
     return 2
 
 
+def hook():
+    try:
+        payload = json.load(sys.stdin)
+    except Exception:
+        # A payload this malformed names no tool and no path, so there is no edit
+        # to block. Claude Code writes it, not the agent being gated.
+        return 0
+    return gate(payload)
+
+
 BAD = """# Title
 
 <!-- split path="a/b.md" title="Reversed" -->
 ## Section one.
 
-Run `cd /etc &amp;&amp; wget`.
+Run `cd /etc &amp;&amp; wget` and mind the &mdash; too.
 
 ---
 
@@ -197,9 +309,14 @@ Run `cd /etc &amp;&amp; wget`.
 ---
 this: is a code fence, not a rule
 ```
+
+<!-- split path=unquoted.md -->
 """
 
 GOOD = """# Title
+
+Setext heading
+--------------
 
 <!-- split title="Fine" path="a/b.md" -->
 ## Section one
@@ -209,19 +326,74 @@ Run `cd /etc && wget`.
 > [!NOTE]
 > A real callout.
 <!-- /split -->
+
+An example of the syntax, which is not a real marker:
+
+```markdown
+<!-- split title="Example" path="features/x.md" -->
+## Example
+<!-- /split -->
+```
 """
 
 
+def _payload(tmp, **kw):
+    base = {"cwd": "/repo", "transcript_path": tmp}
+    base.update(kw)
+    return base
+
+
 def selftest():
-    """Prove the rules actually fire - a broken regex otherwise looks like a clean file."""
+    """Prove both gates still fire - a rule that stopped matching looks like a clean file."""
     problems = [m for _, m in lint_text(BAD)]
     found = " | ".join(problems)
-    for expected in ("path` before `title", "period", "entity", "horizontal rule", "[!NOTE]", "never closed"):
+    for expected in (
+        "path` before `title", "period", "&amp;", "&mdash;", "horizontal rule",
+        "[!NOTE]", "never closed", "no quoted value",
+    ):
         assert expected in found, f"rule missed {expected!r}: {found}"
-    # exactly one - the `---` inside the yaml fence is not a rule
-    hrs = [m for m in problems if "horizontal rule" in m]
-    assert len(hrs) == 1, f"fenced `---` flagged: {found}"
+    # Exactly one: the `---` inside the yaml fence is not a rule.
+    assert len([m for m in problems if "horizontal rule" in m]) == 1, f"fenced `---` flagged: {found}"
     assert not lint_text(GOOD), lint_text(GOOD)
+
+    import tempfile
+
+    synced = SYNCED[0]
+    with tempfile.TemporaryDirectory() as d:
+        bare = os.path.join(d, "bare.jsonl")
+        with open(bare, "w") as fh:
+            fh.write('{"note":"the skill listing, and the path .claude/skills/%s/SKILL.md"}\n' % SKILL)
+        loaded = os.path.join(d, "loaded.jsonl")
+        with open(loaded, "w") as fh:
+            fh.write('{"name":"Skill","input":{"skill":"%s"}}\n' % SKILL)
+        gone = os.path.join(d, "does-not-exist.jsonl")
+
+        edit = {"tool_name": "Edit", "tool_input": {"file_path": "/repo/" + synced}}
+        other = {"tool_name": "Edit", "tool_input": {"file_path": "/repo/docs/README.md"}}
+        write = {"tool_name": "Bash", "tool_input": {"command": "printf x >%s" % synced}}
+        read = {"tool_name": "Bash", "tool_input": {"command": "cat %s" % synced}}
+
+        cases = [
+            (2, _payload(bare, **edit), "synced edit without the skill"),
+            (0, _payload(loaded, **edit), "synced edit with the skill loaded"),
+            (0, _payload(bare, **other), "a README the sync does not mirror"),
+            (2, _payload(bare, **write), "shell write without the skill"),
+            (0, _payload(bare, **read), "shell read"),
+            (2, _payload(gone, **edit), "unreadable transcript fails closed"),
+            (2, _payload(None, **edit), "missing transcript fails closed"),
+            (0, None, "a payload that is not an object"),
+            (0, {"tool_name": "Edit", "tool_input": None}, "tool_input of the wrong type"),
+            (0, {"tool_name": "Edit", "tool_input": {"file_path": ["/repo/" + synced]}}, "file_path of the wrong type"),
+            (0, {}, "an empty payload"),
+        ]
+        for expected, payload, why in cases:
+            captured, sys.stderr = sys.stderr, io.StringIO()
+            try:
+                got = gate(payload)
+            finally:
+                sys.stderr = captured
+            assert got == expected, f"gate returned {got}, expected {expected}: {why}"
+
     print("selftest ok")
     return 0
 
