@@ -59,7 +59,9 @@ EXIT_REFUSE = 2
 # it - `&copy` renders as a symbol - but only when what follows is not `=` or
 # another alphanumeric, which is what keeps `?a=1&copy=2` a query string.
 ENTITY = re.compile(r"&(?:([A-Za-z][A-Za-z0-9]*)|#\d+|#[xX][0-9A-Fa-f]+)(;?)")
-FENCE = re.compile(r"^\s{0,3}(`{3,}|~{3,})(.*)$")
+# Indentation is not restricted to three spaces: a fence nested in a list item
+# carries the list's continuation indent, and its closer may carry more still.
+FENCE = re.compile(r"^\s*(`{3,}|~{3,})(.*)$")
 THEMATIC = re.compile(r"^\s{0,3}(?:(?:-\s*){3,}|(?:\*\s*){3,}|(?:_\s*){3,})$")
 SETEXT = re.compile(r"^\s{0,3}(=+|-+)\s*$")
 # `## Heading. ##` renders as "Heading." - the closing run is syntax, so it has
@@ -74,8 +76,10 @@ CALLOUT = re.compile(r"^\s{0,3}>\s*\*\*(note|tip|important|warning|caution)\b", 
 # only - the callout rule is *about* blockquotes, so it keeps the original line.
 QUOTE_PREFIX = re.compile(r"^(?:\s{0,3}>\s?)+")
 
-SPLIT_OPEN = re.compile(r"<!--\s*split\b(.*?)-->")
-SPLIT_CLOSE = re.compile(r"<!--\s*/\s*split\s*-->")
+# One pattern for both, so markers are handled in the order they appear rather
+# than every close before every open - a section opened and closed on one line is
+# valid and was being reported as a close without an open.
+SPLIT_MARKER = re.compile(r"<!--\s*(/)?\s*split\b(.*?)-->")
 ATTR = re.compile(r'\b([A-Za-z_][\w-]*)\s*=\s*"([^"]*)"')
 
 # Commands that could write to a path, as opposed to read one. Blocking `cat
@@ -91,18 +95,28 @@ WRITEISH = re.compile(
 
 # The path as a whole argument. A bare `p in command` would match `docs/README.md`
 # in a repo whose synced file is the root `README.md`.
-def _whole_argument(path, prefixed):
-    """The path as a complete command argument rather than as a substring.
-
-    `prefixed` allows a directory in front of it. A nested synced path may carry
-    one, as an absolute path does; a bare `README.md` may not, or every other
-    README in the tree would be gated with it.
-    """
-    before = r"(?<![\w.-])" if prefixed else r"(?<![\w.\-/])"
+def _argument(path, before):
     return re.compile(before + r"(?:\./)?" + re.escape(path) + r"(?![\w.\-/])", re.I)
 
 
-IN_COMMAND = {p: _whole_argument(p, "/" in p) for p in SYNCED}
+def _argument_anywhere(path):
+    """Matches the path even with a directory in front of it.
+
+    A nested synced path may legitimately carry one, as an absolute path does.
+    """
+    return _argument(path, r"(?<![\w.-])")
+
+
+def _argument_at_root(path):
+    """Matches the path only as written, with nothing in front of it.
+
+    A bare `README.md` may not carry a prefix, or every other README in the tree
+    would be gated along with it.
+    """
+    return _argument(path, r"(?<![\w.\-/])")
+
+
+IN_COMMAND = {p: (_argument_anywhere(p) if "/" in p else _argument_at_root(p)) for p in SYNCED}
 
 # macOS and Windows checkouts are case-insensitive, so `readme.md` opens the same
 # file as `README.md` while comparing unequal. Folding alone would be wrong on a
@@ -179,6 +193,7 @@ def lint_text(text):
     out = []
     fence = None       # the delimiter run that opened the current code block
     opened = None      # (line number, path) of the split marker still open
+    published = set()  # paths already claimed, so a duplicate is caught
     previous = None    # preceding paragraph line, for setext headings
 
     for n, line in enumerate(text.splitlines(), 1):
@@ -223,15 +238,19 @@ def lint_text(text):
             previous = None
             continue
 
-        for _ in SPLIT_CLOSE.finditer(line):
-            if opened is None:
-                out.append((n, "`<!-- /split -->` with no open `<!-- split ... -->`"))
-            else:
-                opened = None
-
-        for m in SPLIT_OPEN.finditer(line):
-            problems, path = _split_problems(n, m.group(1), opened)
+        for m in SPLIT_MARKER.finditer(line):
+            if m.group(1):
+                if opened is None:
+                    out.append((n, "`<!-- /split -->` with no open `<!-- split ... -->`"))
+                else:
+                    opened = None
+                continue
+            problems, path = _split_problems(n, m.group(2), opened)
             out.extend(problems)
+            if path:
+                if path in published:
+                    out.append((n, f"split `path=\"{path}\"` is already used - two sections cannot publish to one page"))
+                published.add(path)
             opened = (n, path or "?")
 
         heading = None
@@ -401,7 +420,7 @@ def targets(payload):
                 # An absolute path is unambiguous once the session cwd is known,
                 # so `/repo/README.md` matches where a bare prefix could not.
                 absolute = os.path.join(root, p)
-                if _whole_argument(absolute, False).search(command):
+                if _argument_at_root(absolute).search(command):
                     hits.append(p)
         return hits
 
@@ -607,6 +626,20 @@ def _check_rules():
         block = f"{prefix}{delimiter}markdown\n{prefix}**Note:** an example\n{prefix}{delimiter}\n"
         quoted = lint_text(block)
         assert not quoted, f"{prefix}{delimiter} linted as prose: {quoted}"
+    # Two sections cannot publish to one page, and an open and its close may share
+    # a line.
+    duplicate = lint_text(
+        '<!-- split title="a" path="features/x.md" -->\n## A\n<!-- /split -->\n'
+        '<!-- split title="b" path="features/x.md" -->\n## B\n<!-- /split -->\n'
+    )
+    assert any("already used" in m for _, m in duplicate), f"duplicate path not reported: {duplicate}"
+    inline = lint_text('<!-- split title="a" path="features/x.md" --> body <!-- /split -->\n')
+    assert not inline, f"an open and close on one line reported: {inline}"
+
+    # A fence indented under a list item is still a fence.
+    listed = lint_text('- item\n\n  ```markdown\n  **Note:** an example\n  ```\n')
+    assert not listed, f"list-nested fence linted as prose: {listed}"
+
     # A quoted fence suppresses the example inside it, ends with the blockquote,
     # and leaves the callout after it reportable.
     boundary = lint_text('> ```markdown\n> **Note:** an example\n\n> **Note:** a real one\n')
@@ -649,6 +682,14 @@ def _check_gate(shapes):
             (EXIT_REFUSE, _payload(shapes["bare"], tool_name="Bash", tool_input={"command": "python3 -c \"open('%s','w')\"" % synced}), f"{synced}: interpreter write"),
             (EXIT_OK, _payload(shapes["bare"], tool_name="Bash", tool_input={"command": "rm docs/" + os.path.basename(synced)}), f"{synced}: a different README of the same name"),
         ]
+    # The documented limit, asserted so a regex change cannot alter it unnoticed:
+    # a write that reaches the file after a `cd` is not seen. CI lints the result.
+    directory = os.path.dirname(SYNCED[0])
+    if directory:
+        cases.append((EXIT_OK, _payload(shapes["bare"], tool_name="Bash", tool_input={
+            "command": f"cd {directory} && sed -i '' s/a/b/ {os.path.basename(SYNCED[0])}"}),
+            "a write reached through cd - a known limit, not an intended allow"))
+
     for expected, payload, why in cases:
         captured, sys.stderr = sys.stderr, io.StringIO()
         try:
@@ -699,6 +740,26 @@ def _check_entry_points(directory, transcript):
     finally:
         sys.stdin, sys.stderr = stdin, captured
     assert blocked == EXIT_REFUSE, "hook() did not block a synced edit"
+
+    _check_cli(root, payload)
+
+
+def _check_cli(root, blocking_payload):
+    """The command line itself: mode dispatch, GITHUB_WORKSPACE, exit statuses."""
+    import subprocess
+
+    script = os.path.abspath(__file__)
+    environment = dict(os.environ, GITHUB_WORKSPACE=root)
+    lint_run = subprocess.run([sys.executable, script, "lint"], env=environment,
+                              capture_output=True, text=True)
+    assert lint_run.returncode == EXIT_VIOLATIONS, f"`lint` exited {lint_run.returncode}: {lint_run.stdout}"
+
+    hook_run = subprocess.run([sys.executable, script, "hook"], input=json.dumps(blocking_payload),
+                              capture_output=True, text=True)
+    assert hook_run.returncode == EXIT_REFUSE, f"`hook` exited {hook_run.returncode}: {hook_run.stderr}"
+
+    usage = subprocess.run([sys.executable, script, "nonsense"], capture_output=True, text=True)
+    assert usage.returncode != EXIT_OK, "an unknown mode exited 0"
 
 
 def selftest():
