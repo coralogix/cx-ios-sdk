@@ -44,11 +44,13 @@ EDIT_TOOLS = ("Edit", "Write", "MultiEdit", "NotebookEdit")
 
 # Any character reference, not a shortlist: `&mdash;` and `&copy;` reach the page
 # just as literally as `&amp;` does.
-ENTITY = re.compile(r"&(?:[A-Za-z][A-Za-z0-9]{1,31}|#\d{1,7}|#[xX][0-9A-Fa-f]{1,6});")
+ENTITY = re.compile(r"&(?:[A-Za-z][A-Za-z0-9]*|#\d+|#[xX][0-9A-Fa-f]+);")
 FENCE = re.compile(r"^\s{0,3}(`{3,}|~{3,})")
 THEMATIC = re.compile(r"^\s{0,3}(?:(?:-\s*){3,}|(?:\*\s*){3,}|(?:_\s*){3,})$")
 SETEXT = re.compile(r"^\s{0,3}(=+|-+)\s*$")
-ATX = re.compile(r"^\s{0,3}#{1,6}\s+(.*?)\s*$")
+# `## Heading. ##` renders as "Heading." - the closing run is syntax, so it has
+# to come off before the trailing-period check.
+ATX = re.compile(r"^\s{0,3}#{1,6}\s+(.*?)(?:\s+#+)?\s*$")
 # The plain bolded form only. An emphasis-wrapped variant (`> _**Note:**_`) is
 # deliberately not matched yet: the one instance in these repos sits in
 # coralogix-browser-sdk, and rewording it is a documentation change rather than
@@ -66,15 +68,6 @@ WRITEISH = re.compile(
     r">>?|\btee\b|\bmv\b|\bcp\b|\brm\b|\btouch\b|\bpatch\b|\btruncate\b|\binstall\b"
     r"|\bsed\b[^|]*\s-i|\bperl\b[^|]*\s-i"
 )
-
-# Proof that the skill was actually loaded: the Skill tool call, or the user typing
-# the slash command. Matching the bare name would pass on the session's skill
-# listing alone, and matching `/rum-readme-authoring` anywhere would pass on the
-# skill's own file path.
-SKILL_LOADED = re.compile(
-    r'"skill"\s*:\s*"%s"|<command-name>\s*/%s\s*</command-name>' % (re.escape(SKILL), re.escape(SKILL))
-)
-
 
 def _split_problems(n, attrs, opened):
     """Check one `<!-- split ... -->` marker. Returns (problems, path or None)."""
@@ -210,11 +203,54 @@ def lint(root):
     return 0
 
 
+def _blocks(record):
+    """The content blocks of one transcript record, whatever nesting it uses."""
+    if not isinstance(record, dict):
+        return []
+    content = record.get("message", record).get("content") if isinstance(record.get("message", record), dict) else None
+    return [b for b in content if isinstance(b, dict)] if isinstance(content, list) else []
+
+
 def skill_loaded(transcript):
+    """Did this session actually load the skill?
+
+    Read structurally, not as a substring sweep: the literal `"skill":
+    "rum-readme-authoring"` appears in this repo's own review comments and in the
+    script you are reading, so any transcript that quoted one of them would
+    otherwise authorize an edit.
+
+    The Skill tool call is the only signal accepted. Typing `/rum-readme-authoring`
+    converges on the same call, so there is no second, looser path to maintain.
+    """
     if not isinstance(transcript, str) or not transcript or not os.path.isfile(transcript):
         return False
+
+    called = set()
+    errored = set()
+
     with open(transcript, encoding="utf-8", errors="ignore") as fh:
-        return bool(SKILL_LOADED.search(fh.read()))
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                record = json.loads(line)
+            except ValueError:
+                continue  # a partial write, not proof of anything
+
+            for block in _blocks(record):
+                kind = block.get("type")
+                if kind == "tool_use" and block.get("name") == "Skill":
+                    args = block.get("input")
+                    if isinstance(args, dict) and args.get("skill") == SKILL:
+                        called.add(block.get("id"))
+                elif kind == "tool_result" and block.get("is_error") is True:
+                    errored.add(block.get("tool_use_id"))
+
+    # A Skill call whose result came back an error loaded nothing. An absent
+    # result is not held against it - the call may simply have no recorded result
+    # in this transcript shape.
+    return bool(called - errored)
 
 
 def targets(payload):
@@ -299,7 +335,9 @@ BAD = """# Title
 <!-- split path="a/b.md" title="Reversed" -->
 ## Section one.
 
-Run `cd /etc &amp;&amp; wget` and mind the &mdash; too.
+Run `cd /etc &amp;&amp; wget` and mind the &mdash; and &#0000065; too.
+
+## Closing hashes still render a period. ##
 
 ---
 
@@ -348,10 +386,12 @@ def selftest():
     problems = [m for _, m in lint_text(BAD)]
     found = " | ".join(problems)
     for expected in (
-        "path` before `title", "period", "&amp;", "&mdash;", "horizontal rule",
-        "[!NOTE]", "never closed", "no quoted value",
+        "path` before `title", "period", "&amp;", "&mdash;", "&#0000065;",
+        "horizontal rule", "[!NOTE]", "never closed", "no quoted value",
     ):
         assert expected in found, f"rule missed {expected!r}: {found}"
+    # Both the plain and the closed-ATX heading, not just the plain one.
+    assert len([m for m in problems if "period" in m]) == 2, f"closing-hash heading missed: {found}"
     # Exactly one: the `---` inside the yaml fence is not a rule.
     assert len([m for m in problems if "horizontal rule" in m]) == 1, f"fenced `---` flagged: {found}"
     assert not lint_text(GOOD), lint_text(GOOD)
@@ -360,12 +400,43 @@ def selftest():
 
     synced = SYNCED[0]
     with tempfile.TemporaryDirectory() as d:
-        bare = os.path.join(d, "bare.jsonl")
-        with open(bare, "w") as fh:
-            fh.write('{"note":"the skill listing, and the path .claude/skills/%s/SKILL.md"}\n' % SKILL)
-        loaded = os.path.join(d, "loaded.jsonl")
-        with open(loaded, "w") as fh:
-            fh.write('{"name":"Skill","input":{"skill":"%s"}}\n' % SKILL)
+        def transcript(name, *records):
+            path = os.path.join(d, name)
+            with open(path, "w") as fh:
+                for record in records:
+                    fh.write(json.dumps(record) + "\n")
+            return path
+
+        call = {"type": "tool_use", "id": "toolu_1", "name": "Skill", "input": {"skill": SKILL}}
+
+        # The skill listing and the skill's own file path, but no invocation.
+        bare = transcript(
+            "bare.jsonl",
+            {"type": "user", "message": {"content": [
+                {"type": "text", "text": f"see .claude/skills/{SKILL}/SKILL.md"}]}},
+        )
+        loaded = transcript("loaded.jsonl", {"type": "assistant", "message": {"content": [call]}})
+        # Someone quoting the matcher itself - a review comment, or this script.
+        quoted = transcript(
+            "quoted.jsonl",
+            {"type": "user", "message": {"content": [
+                {"type": "text", "text": 'the gate looks for "skill": "%s" in the transcript' % SKILL}]}},
+        )
+        # A Skill call that came back an error loaded nothing.
+        errored = transcript(
+            "errored.jsonl",
+            {"type": "assistant", "message": {"content": [call]}},
+            {"type": "user", "message": {"content": [
+                {"type": "tool_result", "tool_use_id": "toolu_1", "is_error": True}]}},
+        )
+        slash = transcript(
+            "slash.jsonl",
+            {"type": "user", "message": {"content": [
+                {"type": "text", "text": f"please run /{SKILL} for me"}]}},
+        )
+        truncated = transcript("truncated.jsonl", {"type": "assistant", "message": {"content": [call]}})
+        with open(truncated, "a") as fh:
+            fh.write('{"type":"assistant","message":{"conte\n')
         gone = os.path.join(d, "does-not-exist.jsonl")
 
         edit = {"tool_name": "Edit", "tool_input": {"file_path": "/repo/" + synced}}
@@ -379,6 +450,10 @@ def selftest():
             (0, _payload(bare, **other), "a README the sync does not mirror"),
             (2, _payload(bare, **write), "shell write without the skill"),
             (0, _payload(bare, **read), "shell read"),
+            (2, _payload(slash, **edit), "asking for the skill without the call landing"),
+            (2, _payload(quoted, **edit), "the matcher quoted in ordinary text"),
+            (2, _payload(errored, **edit), "a Skill call that came back an error"),
+            (0, _payload(truncated, **edit), "a half-written trailing line"),
             (2, _payload(gone, **edit), "unreadable transcript fails closed"),
             (2, _payload(None, **edit), "missing transcript fails closed"),
             (0, None, "a payload that is not an object"),
