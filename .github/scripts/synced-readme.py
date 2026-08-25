@@ -105,10 +105,17 @@ def _whole_argument(path, prefixed):
 IN_COMMAND = {p: _whole_argument(p, "/" in p) for p in SYNCED}
 
 # macOS and Windows checkouts are case-insensitive, so `readme.md` opens the same
-# file as `README.md` while comparing unequal. Matching case-insensitively can
-# only over-match, and a repo holding two READMEs differing by case alone is not
-# a thing that happens.
+# file as `README.md` while comparing unequal. Folding alone would be wrong on a
+# case-sensitive filesystem, where those really are two files, so a folded match
+# only counts when the filesystem confirms they are one.
 SYNCED_FOLDED = {p.casefold(): p for p in SYNCED}
+
+
+def _same_file(a, b):
+    try:
+        return os.path.samefile(a, b)
+    except OSError:
+        return False
 
 def _split_problems(n, attrs, opened):
     """Check one `<!-- split ... -->` marker. Returns (problems, path or None)."""
@@ -189,14 +196,23 @@ def lint_text(text):
                         continue
             out.append((n, f"HTML entity `{m.group(0)}` - write the character itself"))
 
-        opener = FENCE.match(QUOTE_PREFIX.sub("", line))
+        dequoted = QUOTE_PREFIX.sub("", line)
+        depth = line[:len(line) - len(dequoted)].count(">")
+        if fence is not None and fence[2] > 0 and depth < fence[2]:
+            # A fence inside a blockquote ends when the blockquote does, so the
+            # line that leaves the quote is ordinary content again.
+            fence = None
+        opener = FENCE.match(dequoted)
         if opener:
             marker, trailing = opener.group(1), opener.group(2)
             if fence is None:
-                fence = (n, marker)
-            elif marker[0] == fence[1][0] and len(marker) >= len(fence[1]) and not trailing.strip():
+                fence = (n, marker, depth)
+            elif (marker[0] == fence[1][0] and len(marker) >= len(fence[1])
+                  and not trailing.strip() and depth == fence[2]):
                 # A closing fence takes no info string, so ```not-a-closer inside
-                # a block is content rather than the end of it.
+                # a block is content rather than the end of it. It also has to be
+                # at the quote depth that opened the block, or an unquoted ``` in
+                # the prose below would close a fence opened inside a blockquote.
                 fence = None
             previous = None
             continue
@@ -321,18 +337,18 @@ def skill_loaded(transcript):
                 kind = block.get("type")
                 if kind == "tool_use" and block.get("name") == "Skill":
                     args = block.get("input")
-                    if isinstance(args, dict) and args.get("skill") == SKILL:
-                        called.add(block.get("id"))
+                    call_id = block.get("id")
+                    if isinstance(args, dict) and args.get("skill") == SKILL and isinstance(call_id, str) and call_id:
+                        called.add(call_id)
                 elif kind == "tool_result":
                     error_by_tool_use_id[block.get("tool_use_id")] = block.get("is_error")
 
     # The call has to have come back, and not as an error. A later tool call can
     # only happen after the Skill result reached the model, so by the time this
     # hook runs a genuine invocation always has its result recorded.
-    return any(
-        call_id in error_by_tool_use_id and error_by_tool_use_id[call_id] is not True
-        for call_id in called
-    )
+    # Only a result that says it did not fail counts. Anything else - an error, a
+    # missing result, or a status this does not recognise - fails closed.
+    return any(error_by_tool_use_id.get(call_id, True) in (False, None) for call_id in called)
 
 
 def targets(payload):
@@ -359,15 +375,23 @@ def targets(payload):
             candidates.add(os.path.relpath(os.path.normpath(target), os.path.normpath(root)))
         except (OSError, ValueError):
             candidates.add(target)
-        candidates = {c.replace(os.sep, "/").casefold() for c in candidates}
+        candidates = {c.replace(os.sep, "/") for c in candidates}
         # Exact, not endswith: in a repo whose synced file is the root README, an
         # endswith match would gate every other README in the tree too.
-        return [SYNCED_FOLDED[c] for c in candidates if c in SYNCED_FOLDED]
+        hits = [p for p in SYNCED if p in candidates]
+        if hits:
+            return hits
+        for candidate in candidates:
+            synced = SYNCED_FOLDED.get(candidate.casefold())
+            if synced and _same_file(target, os.path.join(root, synced)):
+                return [synced]
+        return []
 
     if tool == "Bash":
         command = args.get("command")
         if not isinstance(command, str) or not WRITEISH.search(command):
             return []
+        command = command.replace("\\", "/")   # a Windows-style path names the same file
         root = payload.get("cwd")
         hits = []
         for p in SYNCED:
@@ -579,6 +603,15 @@ def _check_rules():
     assert not quoted, f"blockquoted fence linted as prose: {quoted}"
     unquoted = lint_text('> **Note:** a real callout\n')
     assert unquoted, "the callout rule stopped firing outside a fence"
+    for prefix, delimiter in (("> ", "~~~"), ("> > ", "```")):
+        block = f"{prefix}{delimiter}markdown\n{prefix}**Note:** an example\n{prefix}{delimiter}\n"
+        quoted = lint_text(block)
+        assert not quoted, f"{prefix}{delimiter} linted as prose: {quoted}"
+    # A quoted fence suppresses the example inside it, ends with the blockquote,
+    # and leaves the callout after it reportable.
+    boundary = lint_text('> ```markdown\n> **Note:** an example\n\n> **Note:** a real one\n')
+    assert len(boundary) == 1 and "[!NOTE]" in boundary[0][1], f"quote/fence boundary: {boundary}"
+    assert boundary[0][0] == 4, f"reported the wrong line: {boundary}"
 
 
 def _check_gate(shapes):
@@ -615,7 +648,6 @@ def _check_gate(shapes):
             (EXIT_REFUSE, _payload(shapes["bare"], tool_name="Bash", tool_input={"command": "git restore " + synced}), f"{synced}: git restore"),
             (EXIT_REFUSE, _payload(shapes["bare"], tool_name="Bash", tool_input={"command": "python3 -c \"open('%s','w')\"" % synced}), f"{synced}: interpreter write"),
             (EXIT_OK, _payload(shapes["bare"], tool_name="Bash", tool_input={"command": "rm docs/" + os.path.basename(synced)}), f"{synced}: a different README of the same name"),
-            (EXIT_REFUSE, _payload(shapes["bare"], tool_name="Edit", tool_input={"file_path": "/repo/" + synced.lower()}), f"{synced}: a case-variant path on a case-insensitive checkout"),
         ]
     for expected, payload, why in cases:
         captured, sys.stderr = sys.stderr, io.StringIO()
@@ -645,6 +677,19 @@ def _check_entry_points(directory, transcript):
         sys.stdout = captured
     assert clean == EXIT_OK, "lint() failed a clean README"
     assert dirty == EXIT_VIOLATIONS, "lint() passed a README full of violations"
+
+    # Case folding is only correct where the filesystem folds too. On macOS the
+    # lowercase spelling opens the synced file and has to be gated; on a
+    # case-sensitive filesystem it is a different file and must not be.
+    variant = os.path.join(root, os.path.dirname(SYNCED[0]), os.path.basename(SYNCED[0]).lower())
+    folds = os.path.exists(variant) and _same_file(variant, pages[0])
+    err, sys.stderr = sys.stderr, io.StringIO()
+    try:
+        got = gate(_payload(transcript, cwd=root, tool_name="Edit", tool_input={"file_path": variant}))
+    finally:
+        sys.stderr = err
+    expected = EXIT_REFUSE if folds else EXIT_OK
+    assert got == expected, f"case-variant path returned {got}, expected {expected} (filesystem folds: {folds})"
 
     payload = _payload(transcript, tool_name="Edit", tool_input={"file_path": "/repo/" + SYNCED[0]})
     stdin, sys.stdin = sys.stdin, io.StringIO(json.dumps(payload))
