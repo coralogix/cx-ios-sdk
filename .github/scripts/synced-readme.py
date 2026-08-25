@@ -46,7 +46,10 @@ EDIT_TOOLS = ("Edit", "Write", "MultiEdit", "NotebookEdit")
 # Candidates; a named one counts only if `html.entities` knows it. Matching every
 # `&word;` would flag ordinary prose like `R&D; and other teams`, and a shortlist
 # would miss `&mdash;` and `&copy;`, which reach the page as literally as `&amp;`.
-ENTITY = re.compile(r"&(?:([A-Za-z][A-Za-z0-9]*)|#\d+|#[xX][0-9A-Fa-f]+);")
+# The semicolon is optional because HTML still decodes the legacy names without
+# it - `&copy` renders as a symbol - but only when what follows is not `=` or
+# another alphanumeric, which is what keeps `?a=1&copy=2` a query string.
+ENTITY = re.compile(r"&(?:([A-Za-z][A-Za-z0-9]*)(;?)|(#\d+|#[xX][0-9A-Fa-f]+);)")
 FENCE = re.compile(r"^\s{0,3}(`{3,}|~{3,})")
 THEMATIC = re.compile(r"^\s{0,3}(?:(?:-\s*){3,}|(?:\*\s*){3,}|(?:_\s*){3,})$")
 SETEXT = re.compile(r"^\s{0,3}(=+|-+)\s*$")
@@ -68,12 +71,22 @@ ATTR = re.compile(r'\b([A-Za-z_][\w-]*)\s*=\s*"([^"]*)"')
 # this; the lint job checks the result either way.
 WRITEISH = re.compile(
     r">>?|\btee\b|\bmv\b|\bcp\b|\brm\b|\btouch\b|\bpatch\b|\btruncate\b|\binstall\b"
-    r"|\bsed\b[^|]*\s-i|\bperl\b[^|]*\s-i|\bgit\s+(?:restore|checkout)\b"
+    r"|\bsed\b[^|]*\s-i|\bperl\b[^|]*\s-i|\bgit\s+(?:restore|checkout|apply)\b"
+    r"|\bdd\b|\bpython[0-9.]*\b[^|]*\s-c|\bnode\b[^|]*\s-e"
 )
 
 # The path as a whole argument. A bare `p in command` would match `docs/README.md`
 # in a repo whose synced file is the root `README.md`.
-IN_COMMAND = {p: re.compile(r"(?<![\w.\-/])(?:\./)?%s(?![\w.\-/])" % re.escape(p)) for p in SYNCED}
+# A nested path may legitimately be preceded by a directory prefix, as in an
+# absolute path. A bare `README.md` may not, or every other README in the tree
+# would be gated with it.
+IN_COMMAND = {
+    p: re.compile(
+        r"(?<![\w.-])(?:\./)?%s(?![\w.\-/])" % re.escape(p) if "/" in p
+        else r"(?<![\w.\-/])(?:\./)?%s(?![\w.\-/])" % re.escape(p)
+    )
+    for p in SYNCED
+}
 
 def _split_problems(n, attrs, opened):
     """Check one `<!-- split ... -->` marker. Returns (problems, path or None)."""
@@ -117,8 +130,15 @@ def _split_problems(n, attrs, opened):
 NOT_PARAGRAPH = re.compile(r"^\s{0,3}(?:#{1,6}\s|[-*+]\s|\d+[.)]\s|>|\||<!--|\[[^\]]*\]:)")
 
 
+INDENTED_CODE = re.compile(r"^(?: {4,}|\t)")
+
+
 def _is_paragraph(line):
-    return bool(line and line.strip() and not NOT_PARAGRAPH.match(line) and not THEMATIC.match(line))
+    if not line or not line.strip():
+        return False
+    if INDENTED_CODE.match(line):
+        return False   # an indented code block, so a following `---` is a rule
+    return not NOT_PARAGRAPH.match(line) and not THEMATIC.match(line)
 
 
 def lint_text(text):
@@ -132,9 +152,15 @@ def lint_text(text):
         # Entities are wrong everywhere, code fences included: `&amp;&amp;` reaches
         # the published page verbatim and the command it is part of does not run.
         for m in ENTITY.finditer(line):
-            name = m.group(1)
-            if name and (name + ";") not in html.entities.html5:
-                continue
+            name, semicolon = m.group(1), m.group(2)
+            if name:
+                if semicolon:
+                    if (name + ";") not in html.entities.html5:
+                        continue
+                else:
+                    following = line[m.end():m.end() + 1]
+                    if name not in html.entities.html5 or following == "=" or following.isalnum():
+                        continue
             out.append((n, f"HTML entity `{m.group(0)}` - write the character itself"))
 
         opener = FENCE.match(line)
@@ -363,6 +389,11 @@ Run `cd /etc &amp;&amp; wget` and mind the &mdash; and &#0000065; too.
 
 ---
 
+A semicolonless &copy still renders as a symbol.
+
+    indented code, not a paragraph
+---
+
 ---
 
 > **Note:** bolded callouts render as plain blockquotes.
@@ -386,7 +417,8 @@ Setext heading
 <!-- split title="Fine" path="a/b.md" -->
 ## Section one
 
-Run `cd /etc && wget`. R&D; and AT&T; are prose, not entities.
+Run `cd /etc && wget`. R&D; and AT&T; are prose, not entities, and
+<https://example.com/x?a=1&copy=2&reg=3> is a query string.
 
 > [!NOTE]
 > A real callout.
@@ -416,7 +448,7 @@ def selftest():
     problems = [m for _, m in lint_text(BAD)]
     found = " | ".join(problems)
     for expected in (
-        "path` before `title", "period", "&amp;", "&mdash;", "&#0000065;",
+        "path` before `title", "period", "&amp;", "&mdash;", "&#0000065;", "`&copy`",
         "horizontal rule", "[!NOTE]", "never closed", "no quoted value",
     ):
         assert expected in found, f"rule missed {expected!r}: {found}"
@@ -426,7 +458,10 @@ def selftest():
     hrs = [m for m in problems if "horizontal rule" in m]
     # Two: the standalone rule and the one after a heading. Not the `---` in the
     # yaml fence, and not the setext underline in GOOD.
-    assert len(hrs) == 2, f"expected 2 horizontal rules, got {len(hrs)}: {found}"
+    # Three: the standalone rule, the one after a heading, and the one after an
+    # indented code line. Not the `---` in the yaml fence, and not the setext
+    # underlines in GOOD.
+    assert len(hrs) == 3, f"expected 3 horizontal rules, got {len(hrs)}: {found}"
     assert not lint_text(GOOD), lint_text(GOOD)
 
     import tempfile
@@ -487,6 +522,7 @@ def selftest():
             (0, _payload(bare, tool_name="Read", tool_input={"file_path": "/repo/" + synced}), "a tool that only reads"),
             (2, _payload(bare, tool_name="Bash", tool_input={"command": "git restore " + synced}), "git restore"),
             (0, _payload(bare, tool_name="Bash", tool_input={"command": "rm docs/" + os.path.basename(synced)}), "a different README of the same name"),
+            (2, _payload(bare, tool_name="Bash", tool_input={"command": "python3 -c \"open('%s','w')\"" % synced}), "a write from inside an interpreter"),
             (0, _payload(loaded, **edit), "synced edit with the skill loaded"),
             (0, _payload(bare, **other), "a README the sync does not mirror"),
             (2, _payload(bare, **write), "shell write without the skill"),
@@ -502,6 +538,12 @@ def selftest():
             (0, {"tool_name": "Edit", "tool_input": {"file_path": ["/repo/" + synced]}}, "file_path of the wrong type"),
             (0, {}, "an empty payload"),
         ]
+        if "/" in synced:
+            # A nested path can carry a directory prefix; a bare README.md cannot.
+            cases.append((2, _payload(bare, tool_name="Bash",
+                                      tool_input={"command": "sed -i '' s/a/b/ /repo/" + synced}),
+                          "an absolute path to a nested synced file"))
+
         for expected, payload, why in cases:
             captured, sys.stderr = sys.stderr, io.StringIO()
             try:
