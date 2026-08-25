@@ -237,8 +237,15 @@ def lint_text(text):
 
 def lint(root):
     failures = 0
+    inside = os.path.realpath(root) + os.sep
     for rel in SYNCED:
         full = os.path.join(root, rel)
+        if not os.path.realpath(full).startswith(inside):
+            # A symlink pointing out of the checkout would have this job reading
+            # and reporting on a file that is not part of the repository.
+            print(f"{rel}: resolves outside the repository - refusing to read it")
+            failures += 1
+            continue
         if not os.path.isfile(full):
             print(f"{rel}: missing - the docs sync expects this path; update SYNCED here and `external_repos.json` in coralogix/documentation together")
             failures += 1
@@ -329,15 +336,20 @@ def targets(payload):
         root = payload.get("cwd")
         if not isinstance(root, str) or not root:
             root = os.getcwd()
+        if not os.path.isabs(target):
+            target = os.path.join(root, target)
+        candidates = set()
         try:
-            if not os.path.isabs(target):
-                target = os.path.join(root, target)
-            rel = os.path.relpath(os.path.realpath(target), os.path.realpath(root))
+            # Where it resolves to, so a symlink *at* the synced path is caught,
+            # and the path as written, so a symlink *of* it still is.
+            candidates.add(os.path.relpath(os.path.realpath(target), os.path.realpath(root)))
+            candidates.add(os.path.relpath(os.path.normpath(target), os.path.normpath(root)))
         except (OSError, ValueError):
-            rel = target
+            candidates.add(target)
+        candidates = {c.replace(os.sep, "/") for c in candidates}
         # Exact, not endswith: in a repo whose synced file is the root README, an
         # endswith match would gate every other README in the tree too.
-        return [p for p in SYNCED if rel.replace(os.sep, "/") == p]
+        return [p for p in SYNCED if p in candidates]
 
     if tool == "Bash":
         command = args.get("command")
@@ -430,6 +442,8 @@ A semicolonless &copy still renders as a symbol, as do &#65 and &copyé.
 ```yaml
 ---
 this: is a code fence, not a rule
+```not-a-closing-fence
+---
 ```
 
 <!-- split path=unquoted.md -->
@@ -526,8 +540,9 @@ def _check_rules():
     ):
         assert expected in found, f"rule missed {expected!r}: {found}"
     # Three: the standalone rule, the one after a heading, and the one after an
-    # indented code line. Not the `---` in the yaml fence, and not the setext
-    # underlines in GOOD.
+    # indented code line. Neither `---` inside the yaml fence counts - the second
+    # one sits after a ```-with-a-suffix, which does not close the block - and
+    # the setext underlines in GOOD do not either.
     hrs = [m for m in problems if "horizontal rule" in m]
     assert len(hrs) == 3, f"expected 3 horizontal rules, got {len(hrs)}: {found}"
     # Both the plain and the closed-ATX heading, not just the plain one.
