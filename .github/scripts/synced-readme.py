@@ -114,7 +114,7 @@ def _split_problems(n, attrs, opened):
 
 # A setext underline only applies to a paragraph. After a heading, list item,
 # blockquote or table row, a `---` is a thematic break and has to be reported.
-NOT_PARAGRAPH = re.compile(r"^\s{0,3}(?:#{1,6}\s|[-*+]\s|\d+[.)]\s|>|\||<!--|\[)")
+NOT_PARAGRAPH = re.compile(r"^\s{0,3}(?:#{1,6}\s|[-*+]\s|\d+[.)]\s|>|\||<!--|\[[^\]]*\]:)")
 
 
 def _is_paragraph(line):
@@ -379,6 +379,9 @@ GOOD = """# Title
 
 Setext heading
 --------------
+
+[A linked heading](https://coralogix.com/docs) still underlines
+----------------------------------------------------------------
 
 <!-- split title="Fine" path="a/b.md" -->
 ## Section one
