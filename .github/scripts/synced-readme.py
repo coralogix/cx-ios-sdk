@@ -45,6 +45,14 @@ SKILL = "rum-readme-authoring"
 
 EDIT_TOOLS = ("Edit", "Write", "MultiEdit", "NotebookEdit")
 
+# CommonMark's limits, named so the regexes below and the checks that compare
+# against them cannot drift apart: up to three spaces of indentation still
+# belongs to the current block, a fourth starts an indented code block; headings
+# go to six levels; an ordered list marker takes up to nine digits.
+MAX_BLOCK_INDENT = 3
+MAX_HEADING_LEVEL = 6
+MAX_LIST_NUMBER_DIGITS = 9
+
 # Exit statuses. These are two external contracts, not ours to choose: 0 and
 # non-zero decide whether the CI job passes, and 2 is the one PreToolUse status
 # that refuses a tool call - Claude Code treats every other non-zero value as a
@@ -65,7 +73,7 @@ ENTITY = re.compile(r"&(?:([A-Za-z][A-Za-z0-9]*)|#\d+|#[xX][0-9A-Fa-f]+)(;?)")
 # indent, while a four-space run at the root is an indented code block and not a
 # fence at all. `_container_indent()` computes that column.
 FENCE = re.compile(r"^( *)(`{3,}|~{3,})(.*)$")
-LIST_ITEM = re.compile(r"^ *(?:[-*+]|\d{1,9}[.)]) +")
+LIST_ITEM = re.compile(r"^ *(?:[-*+]|\d{1,%d}[.)]) +" % MAX_LIST_NUMBER_DIGITS)
 
 
 def _containers(line, open_columns):
@@ -78,28 +86,28 @@ def _containers(line, open_columns):
     if not line.strip():
         return open_columns
     indent = len(line) - len(line.lstrip(" "))
+    if indent > MAX_BLOCK_INDENT and not open_columns:
+        return open_columns   # indented code at the root opens no container
     columns = [c for c in open_columns if c <= indent]
     item = LIST_ITEM.match(line)
     if item:
         columns.append(item.end())
     return columns
-THEMATIC = re.compile(r"^\s{0,3}(?:(?:-\s*){3,}|(?:\*\s*){3,}|(?:_\s*){3,})$")
-SETEXT = re.compile(r"^\s{0,3}(=+|-+)\s*$")
+THEMATIC = re.compile(r"^ {0,%d}(?:(?:-\s*){3,}|(?:\*\s*){3,}|(?:_\s*){3,})$" % MAX_BLOCK_INDENT)
+SETEXT = re.compile(r"^ {0,%d}(=+|-+)\s*$" % MAX_BLOCK_INDENT)
 # `## Heading. ##` renders as "Heading." - the closing run is syntax, so it has
 # to come off before the trailing-period check.
-ATX = re.compile(r"^\s{0,3}#{1,6}\s+(.*?)(?:\s+#+)?\s*$")
+ATX = re.compile(r"^ {0,%d}#{1,%d}\s+(.*?)(?:\s+#+)?\s*$" % (MAX_BLOCK_INDENT, MAX_HEADING_LEVEL))
 # Any bolded label, however it is emphasised and at whatever quote depth:
 # `> **Note:**`, `> _**Note:**_`, `> **_Note:_**`, `> > __Warning:__`. All of
 # them render as a plain blockquote rather than as the alert the docs site
 # styles. Applied to the line with its quote prefix removed, so the depth does
 # not matter, but only when there was a prefix - a bolded label in ordinary
 # prose is not a callout.
-CALLOUT = re.compile(
-    r"^[_*]{0,2}(?:\*\*|__)[_*]{0,2}(note|tip|important|warning|caution)\b", re.I
-)
+CALLOUT = re.compile(r"^[_*]{0,2}(?:\*\*|__)[_*]{0,2}(note|tip|important|warning|caution)\b", re.I)
 # A fence can sit inside a blockquote. The prefix comes off for fence tracking
 # only - the callout rule is *about* blockquotes, so it keeps the original line.
-QUOTE_PREFIX = re.compile(r"^(?:\s{0,3}>\s?)+")
+QUOTE_PREFIX = re.compile(r"^(?: {0,%d}>\s?)+" % MAX_BLOCK_INDENT)
 
 # One pattern for both, so markers are handled in the order they appear rather
 # than every close before every open - a section opened and closed on one line is
@@ -116,8 +124,9 @@ CODE_SPAN = re.compile(r"(`+)(?:(?!\1)[\s\S])*?\1")
 # this; the lint job checks the result either way.
 WRITEISH = re.compile(
     r">>?|\btee\b|\bmv\b|\bcp\b|\brm\b|\btouch\b|\bpatch\b|\btruncate\b|\binstall\b"
-    r"|\bsed\b[^|]*\s(?:-i|--in-place)|\bperl\b[^|]*\s(?:-i|--in-place)"
-    r"|\bgit\s+(?:restore|checkout|apply)\b"
+    r"|\bsed\b[^|]*\s-\w*i\b|\bperl\b[^|]*\s-\w*i\b"
+    r"|\bsed\b[^|]*\s--in-place|\bperl\b[^|]*\s--in-place"
+    r"|\bgit\s+(?:restore|checkout|apply)\b|\bapply_patch\b"
     r"|\bdd\b|\bln\b|\bpython[0-9.]*\b[^|]*\s-c|\bnode\b[^|]*\s-e"
 )
 
@@ -208,7 +217,8 @@ def _split_problems(n, attrs, opened):
 
 # A setext underline only applies to a paragraph. After a heading, list item,
 # blockquote or table row, a `---` is a thematic break and has to be reported.
-NOT_PARAGRAPH = re.compile(r"^\s{0,3}(?:#{1,6}\s|[-*+]\s|\d+[.)]\s|>|\||<!--|\[[^\]]*\]:)")
+NOT_PARAGRAPH = re.compile(r"^ {0,%d}(?:#{1,%d}\s|[-*+]\s|\d+[.)]\s|>|\||<!--|\[[^\]]*\]:)"
+                           % (MAX_BLOCK_INDENT, MAX_HEADING_LEVEL))
 
 
 # What HTML5 refuses to decode a semicolonless name in front of. Ascii only:
@@ -232,7 +242,7 @@ def lint_text(text):
     fence = None       # the delimiter run that opened the current code block
     opened = None      # (line number, path) of the split marker still open
     published = set()  # paths already claimed, so a duplicate is caught
-    previous = None    # preceding paragraph line, for setext headings
+    previous = None    # (line, depth, container) of the preceding line
     open_columns = []  # content columns of the list items currently open
     container = 0      # the innermost of them
 
@@ -259,7 +269,7 @@ def lint_text(text):
             fence = None
 
         opener = FENCE.match(dequoted)
-        if opener and len(opener.group(1)) > container + 3:
+        if opener and len(opener.group(1)) > container + MAX_BLOCK_INDENT:
             # Indented past what its container allows, so this is code, not a
             # fence: four spaces at the root is an indented code block.
             opener = None
@@ -298,11 +308,16 @@ def lint_text(text):
             body = dequoted[container:]
         else:
             body = dequoted
+        # A blockquote can open inside a list item, so the depth has to be taken
+        # again once the marker is off: `- > **Note:**` is a callout.
+        inner = QUOTE_PREFIX.sub("", body)
+        depth += body[:len(body) - len(inner)].count(">")
+        body = inner
         relative_indent = len(body) - len(body.lstrip(" "))
 
         # A marker shown inside a code span, or inside an indented code block, is
         # an example of the syntax rather than a section transition.
-        scannable = "" if relative_indent > 3 else CODE_SPAN.sub(" ", body)
+        scannable = "" if relative_indent > MAX_BLOCK_INDENT else CODE_SPAN.sub(" ", body)
         for m in SPLIT_MARKER.finditer(scannable):
             if m.group(1):
                 if opened is None:
@@ -320,8 +335,9 @@ def lint_text(text):
             opened = (n, path or "?")
 
         heading = None
-        if SETEXT.match(body) and _is_paragraph(previous):
-            heading = previous.strip()          # `---` under text is an H2, not a rule
+        if SETEXT.match(body) and previous and previous[1:] == (depth, container) \
+                and _is_paragraph(previous[0]):
+            heading = previous[0].strip()       # `---` under text is an H2, not a rule
         elif THEMATIC.match(body):
             out.append((n, "decorative horizontal rule - it publishes as a stray divider; headings already separate sections"))
         else:
@@ -336,7 +352,7 @@ def lint_text(text):
         if callout:
             out.append((n, f"bolded callout renders as a plain blockquote - use `> [!{callout.group(1).upper()}]`"))
 
-        previous = body
+        previous = (body, depth, container)
 
     if fence is not None:
         out.append((fence[0], "code fence is never closed - everything after it is skipped by this linter"))
@@ -531,9 +547,12 @@ def gate(payload):
         # The analysis fell over, which is not the same as "this is not a synced
         # README" - but it names no path either, so blocking would take every edit
         # in the repository with it. Allow, and say so rather than failing silently.
+        # The type only: an exception's repr can carry local paths and payload
+        # fragments, and this text goes straight into the agent's context.
         sys.stderr.write(
-            f"synced-readme hook could not identify this tool call's target ({err!r}); "
-            f"allowing it. If it touches a synced README, load the {SKILL} skill first.\n"
+            f"synced-readme hook could not identify this tool call's target "
+            f"({type(err).__name__}); allowing it. If it touches a synced README, "
+            f"load the {SKILL} skill first.\n"
         )
         return EXIT_OK
 
@@ -774,6 +793,23 @@ def _check_rules():
     quoted_heading = lint_text("> A quoted heading.\n> ---\n")
     assert any("period" in m for _, m in quoted_heading), f"quoted setext heading missed: {quoted_heading}"
     assert lint_text(">    **Note:** spaced away from the marker\n"), "spacing after `>` hid a callout"
+
+    # The limits the regexes are built from, at their boundaries.
+    assert lint_text("#" * MAX_HEADING_LEVEL + " Heading.\n"), "deepest heading level missed"
+    assert not lint_text("#" * (MAX_HEADING_LEVEL + 1) + " Not a heading.\n"), "over-deep heading treated as one"
+    assert not lint_text(" " * (MAX_BLOCK_INDENT + 1) + "---\n"), "indented code reported as a rule"
+    assert lint_text(" " * MAX_BLOCK_INDENT + "---\n"), "an indented-but-valid rule was missed"
+    wide = "9" * MAX_LIST_NUMBER_DIGITS
+    assert not lint_text(f"{wide}. item\n\n" + " " * (len(wide) + 2) + "```md\n**Note:** x\n```\n"), \
+        "a fence under the widest list marker was misread"
+
+    # A blockquote opened inside a list item is still a blockquote.
+    assert lint_text("- > **Note:** text\n"), "list-nested callout missed"
+
+    # A `---` that has left its container is a rule, not a setext underline.
+    for text in ("> quoted paragraph\n---\n", "- item\n---\n"):
+        left = lint_text(text)
+        assert any("horizontal rule" in m for _, m in left), f"container exit misread as setext: {text!r} -> {left}"
 
     # Leaving a nested list returns to the outer item, not to the margin.
     nested = lint_text("- a\n\n  - b\n\n  ---\n")
