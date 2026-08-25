@@ -71,7 +71,7 @@ ENTITY = re.compile(r"&(?:([A-Za-z][A-Za-z0-9]*)|#\d+|#[xX][0-9A-Fa-f]+)(;?)")
 # A fence may be indented up to three spaces past the column its container
 # starts at - so a fence inside a list item carries the list's continuation
 # indent, while a four-space run at the root is an indented code block and not a
-# fence at all. `_container_indent()` computes that column.
+# fence at all. `_containers()` keeps the stack of those columns.
 FENCE = re.compile(r"^( *)(`{3,}|~{3,})(.*)$")
 LIST_ITEM = re.compile(r"^ *(?:[-*+]|\d{1,%d}[.)]) +" % MAX_LIST_NUMBER_DIGITS)
 
@@ -104,7 +104,12 @@ ATX = re.compile(r"^ {0,%d}#{1,%d}\s+(.*?)(?:\s+#+)?\s*$" % (MAX_BLOCK_INDENT, M
 # styles. Applied to the line with its quote prefix removed, so the depth does
 # not matter, but only when there was a prefix - a bolded label in ordinary
 # prose is not a callout.
-CALLOUT = re.compile(r"^[_*]{0,2}(?:\*\*|__)[_*]{0,2}(note|tip|important|warning|caution)\b", re.I)
+# The label has to *be* the alert word, so `> **Warning signs:**` stays a custom
+# blockquote label - the skill says to leave those alone - while every emphasis
+# arrangement of a real one is caught.
+CALLOUT = re.compile(
+    r"^[_*]{0,2}(?:\*\*|__)[_*]{0,2}(note|tip|important|warning|caution)[_*]{0,2}\s*:", re.I
+)
 # A fence can sit inside a blockquote. The prefix comes off for fence tracking
 # only - the callout rule is *about* blockquotes, so it keeps the original line.
 QUOTE_PREFIX = re.compile(r"^(?: {0,%d}>\s?)+" % MAX_BLOCK_INDENT)
@@ -247,7 +252,10 @@ def lint_text(text):
     open_columns = []  # content columns of the list items currently open
     container = 0      # the innermost of them
 
-    for n, line in enumerate(text.splitlines(), 1):
+    for n, raw in enumerate(text.splitlines(), 1):
+        # Indentation is measured in columns, and a tab is one. Expanding first
+        # means a tab-indented code block is recognised as indented.
+        line = raw.expandtabs(4)
         # Entities are wrong everywhere, code fences included: `&amp;&amp;` reaches
         # the published page verbatim and the command it is part of does not run.
         for m in ENTITY.finditer(line):
@@ -551,8 +559,22 @@ def gate(payload):
         hits = targets(payload)
     except Exception as err:
         # The analysis fell over, which is not the same as "this is not a synced
-        # README" - but it names no path either, so blocking would take every edit
-        # in the repository with it. Allow, and say so rather than failing silently.
+        # README". If the payload mentions a synced path anywhere, treat it as one
+        # and refuse; otherwise allow, because blocking on an internal error that
+        # names no path at all would take every edit in the repository with it.
+        try:
+            blob = json.dumps(payload, default=str).casefold()
+        except Exception:
+            blob = ""
+        named = [p for p in SYNCED if p.casefold() in blob]
+        if named:
+            sys.stderr.write(
+                f"Blocked: this tool call mentions {named[0]}, which is mirrored to "
+                f"coralogix.com/docs, and the hook could not analyse the payload "
+                f"({type(err).__name__}) to be sure what it touches.\n\n"
+                f"Load the {SKILL} skill and try again.\n"
+            )
+            return EXIT_REFUSE
         # The type only: an exception's repr can carry local paths and payload
         # fragments, and this text goes straight into the agent's context.
         sys.stderr.write(
@@ -664,6 +686,14 @@ An example of the syntax, which is not a real marker:
 <!-- /split -->
 ```
 """
+
+class Unserialisable(str):
+    """A `cwd` that passes the string check and then explodes, to force the
+    analysis failure path in `gate()` without reaching for mocks."""
+
+    def __len__(self):
+        raise RuntimeError("forced analysis failure")
+
 
 def _payload(transcript, **kw):
     payload = {"cwd": "/repo", "transcript_path": transcript}
@@ -809,6 +839,13 @@ def _check_rules():
     assert not lint_text(f"{wide}. item\n\n" + " " * (len(wide) + 2) + "```md\n**Note:** x\n```\n"), \
         "a fence under the widest list marker was misread"
 
+    # A custom label that happens to start with an alert word is not an alert.
+    assert not lint_text("> **Warning signs:** a custom label\n"), "a custom label was called an alert"
+    assert lint_text("> **Warning:** a real one\n"), "the alert label stopped matching"
+
+    # A tab indents as much as four spaces do.
+    assert not lint_text('\t<!-- split title="x" path="y.md" -->\n'), "a tab-indented marker was read as real"
+
     # A fence carries its container's prefixes, so it has to be recognised through
     # them - on a list item's own line, and inside a blockquote.
     for opener_line, content_line, closer_line in (
@@ -867,6 +904,18 @@ def _check_gate(shapes):
         (EXIT_OK, None, "a payload that is not an object"),
         (EXIT_OK, {}, "an empty payload"),
         (EXIT_OK, {"tool_name": "Edit", "tool_input": None}, "tool_input of the wrong type"),
+    ]
+
+    # An analysis that raises fails closed when the payload names a synced path,
+    # and allows when it names none - blocking on an internal error that points at
+    # nothing would take every edit in the repository with it.
+    broken = {"tool_name": "Edit", "tool_input": {"file_path": "/repo/" + SYNCED[0]},
+              "cwd": Unserialisable()}
+    innocuous = {"tool_name": "Edit", "tool_input": {"file_path": "/repo/src/main.ts"},
+                 "cwd": Unserialisable()}
+    cases += [
+        (EXIT_REFUSE, broken, "an analysis failure on a payload naming a synced path"),
+        (EXIT_OK, innocuous, "an analysis failure on a payload naming none"),
     ]
 
     for synced in SYNCED:
