@@ -95,10 +95,16 @@ def _whole_argument(path, prefixed):
     README in the tree would be gated with it.
     """
     before = r"(?<![\w.-])" if prefixed else r"(?<![\w.\-/])"
-    return re.compile(before + r"(?:\./)?" + re.escape(path) + r"(?![\w.\-/])")
+    return re.compile(before + r"(?:\./)?" + re.escape(path) + r"(?![\w.\-/])", re.I)
 
 
 IN_COMMAND = {p: _whole_argument(p, "/" in p) for p in SYNCED}
+
+# macOS and Windows checkouts are case-insensitive, so `readme.md` opens the same
+# file as `README.md` while comparing unequal. Matching case-insensitively can
+# only over-match, and a repo holding two READMEs differing by case alone is not
+# a thing that happens.
+SYNCED_FOLDED = {p.casefold(): p for p in SYNCED}
 
 def _split_problems(n, attrs, opened):
     """Check one `<!-- split ... -->` marker. Returns (problems, path or None)."""
@@ -346,10 +352,10 @@ def targets(payload):
             candidates.add(os.path.relpath(os.path.normpath(target), os.path.normpath(root)))
         except (OSError, ValueError):
             candidates.add(target)
-        candidates = {c.replace(os.sep, "/") for c in candidates}
+        candidates = {c.replace(os.sep, "/").casefold() for c in candidates}
         # Exact, not endswith: in a repo whose synced file is the root README, an
         # endswith match would gate every other README in the tree too.
-        return [p for p in SYNCED if p in candidates]
+        return [SYNCED_FOLDED[c] for c in candidates if c in SYNCED_FOLDED]
 
     if tool == "Bash":
         command = args.get("command")
@@ -584,6 +590,7 @@ def _check_gate(shapes):
             (EXIT_REFUSE, _payload(shapes["bare"], tool_name="Bash", tool_input={"command": "git restore " + synced}), f"{synced}: git restore"),
             (EXIT_REFUSE, _payload(shapes["bare"], tool_name="Bash", tool_input={"command": "python3 -c \"open('%s','w')\"" % synced}), f"{synced}: interpreter write"),
             (EXIT_OK, _payload(shapes["bare"], tool_name="Bash", tool_input={"command": "rm docs/" + os.path.basename(synced)}), f"{synced}: a different README of the same name"),
+            (EXIT_REFUSE, _payload(shapes["bare"], tool_name="Edit", tool_input={"file_path": "/repo/" + synced.lower()}), f"{synced}: a case-variant path on a case-insensitive checkout"),
         ]
     for expected, payload, why in cases:
         captured, sys.stderr = sys.stderr, io.StringIO()
