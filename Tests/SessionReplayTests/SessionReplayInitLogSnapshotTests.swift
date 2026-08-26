@@ -40,7 +40,7 @@ final class SessionReplayInitLogSnapshotTests: XCTestCase {
             maskFaces: true,
             creditCardPredicate: ["card"],
             autoStartSessionRecording: true,
-            flutterViewBitmapProvider: { _, _, completion in completion(nil) }
+            flutterViewBitmapProvider: { _, _, _, _, completion in completion(.unavailable) }
         )
 
         let snapshot = options.toSessionReplayInitLogSnapshot()
@@ -58,7 +58,7 @@ final class SessionReplayInitLogSnapshotTests: XCTestCase {
     }
 
     func testSnapshot_flutterProviderReducedToPresenceFlag() {
-        let withProvider = SessionReplayOptions(flutterViewBitmapProvider: { _, _, completion in completion(nil) })
+        let withProvider = SessionReplayOptions(flutterViewBitmapProvider: { _, _, _, _, completion in completion(.unavailable) })
             .toSessionReplayInitLogSnapshot()
         XCTAssertEqual(withProvider[Keys.srHasFlutterViewBitmapProvider.rawValue] as? Bool, true)
 

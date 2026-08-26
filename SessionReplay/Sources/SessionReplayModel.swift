@@ -237,9 +237,13 @@ public class SessionReplayModel {
 
         let requestGeneration = flutterFrameGeneration
 
+        // Tap context for the One-Frame Rule: the plugin rasterises a click frame at
+        // the next committed frame after the tap or answers .skip — never stale.
+        let tapTimestampMs: Int64? = isClickFrame ? Int64(getTimestamp(from: properties)) : nil
+
         // viewId is intentionally "implicit_view" — the cx-flutter-plugin ignores it (uses `_`)
         // and routes all captures to Flutter's single implicit view. Only frameId matters.
-        provider("implicit_view", frameId) { [weak self] bitmap in
+        provider("implicit_view", frameId, isClickFrame, tapTimestampMs) { [weak self] response in
             guard let self = self, let options = self.sessionReplayOptions else { return }
 
             // Drop a callback that outlived its session: its frame belongs to a
@@ -248,8 +252,9 @@ public class SessionReplayModel {
             // would corrupt it; a one-index gap in the old session is the lesser evil.
             guard self.flutterFrameGeneration == requestGeneration else { return }
 
-            // nil = no fresh frame: reuse the last one, or skip if none yet. Never black.
-            guard let flutterFrame = self.resolveFlutterFrame(freshBitmap: bitmap, frameId: frameId) else {
+            // .skip / click-without-fresh-frame drop the frame; .unavailable may fall
+            // back to the cached frame for periodic captures only. Never black.
+            guard let flutterFrame = self.resolveFlutterFrame(response: response, frameId: frameId, isClick: isClickFrame) else {
                 if callerIncrementedCounter {
                     SdkManager.shared.getCoralogixSdk()?.revertScreenshotCounter()
                 }
@@ -277,22 +282,34 @@ public class SessionReplayModel {
         }
     }
 
-    // Returns the frame to composite. A fresh bitmap is cached and returned only when
-    // its frameId is newer than the last cached one; a nil — or an out-of-order older
-    // delivery — reuses the newest cached frame, whose mask rects travel with it.
-    // nil only before any frame is cached.
-    internal func resolveFlutterFrame(freshBitmap: FlutterViewBitmap?, frameId: Int64) -> FlutterFrame? {
-        // Wrap the bytes outside the lock (cheap — no decode).
-        let freshFrame = freshBitmap.flatMap { bitmap in
-            Self.makeCGImage(from: bitmap).map { FlutterFrame(image: $0, maskRects: bitmap.maskRects) }
-        }
-        return flutterFrameQueue.sync {
-            if let freshFrame, frameId > _latestAcceptedFlutterFrameId {
-                _latestAcceptedFlutterFrameId = frameId
-                _lastFlutterFrame = freshFrame
-                return freshFrame
+    // Returns the frame to composite, or nil to drop the whole capture.
+    //
+    // .frame: cached and returned when its frameId is newer than the last accepted one;
+    //   a decode failure or out-of-order older delivery falls back like .unavailable.
+    // .skip: always nil — the plugin answered deliberately (gated / coalesced / One-Frame
+    //   Rule staleness). Substituting the cache here is exactly the stale-frame bug.
+    // .unavailable: periodic captures reuse the newest cached frame (whose mask rects
+    //   travel with it); click frames return nil — a fresh tap marker must never be
+    //   baked into old pixels, and marker suppression must never run against an old
+    //   frame's mask rects (the masked-keypad reconstruction leak).
+    internal func resolveFlutterFrame(response: FlutterViewBitmapResponse, frameId: Int64, isClick: Bool = false) -> FlutterFrame? {
+        switch response {
+        case .skip:
+            return nil
+        case .unavailable:
+            if isClick { return nil }
+            return flutterFrameQueue.sync { _lastFlutterFrame }
+        case .frame(let bitmap):
+            // Wrap the bytes outside the lock (cheap — no decode).
+            let freshFrame = Self.makeCGImage(from: bitmap).map { FlutterFrame(image: $0, maskRects: bitmap.maskRects) }
+            return flutterFrameQueue.sync {
+                if let freshFrame, frameId > _latestAcceptedFlutterFrameId {
+                    _latestAcceptedFlutterFrameId = frameId
+                    _lastFlutterFrame = freshFrame
+                    return freshFrame
+                }
+                return isClick ? nil : _lastFlutterFrame
             }
-            return _lastFlutterFrame
         }
     }
 
@@ -383,6 +400,13 @@ public class SessionReplayModel {
                 return
             }
 
+            // Click frames bypass skip-identical on purpose: the tap marker is drawn
+            // DOWNSTREAM of this check (URL-processing pipeline), so the data compared
+            // here has no marker — a tap on an unchanged screen would dedup away and
+            // lose its marker frame. The bypass is safe under the One-Frame Rule:
+            // resolveFlutterFrame never substitutes a cached frame for a click, so a
+            // click frame reaching this point is freshly rasterised by construction —
+            // the stale-click-frame leak the bypass used to enable cannot recur.
             let isClickFrame = self.getClickPoint(from: properties) != nil
             let shouldSkip = !isClickFrame && self.screenshotDataQueue.sync { () -> Bool in
                 if let prvData = self._prvScreenshotData,

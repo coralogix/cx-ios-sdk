@@ -59,13 +59,13 @@ final class FlutterViewHoldLastFrameTests: XCTestCase {
     func testProviderReturnsNilAfterValidFrame_reusesLastDeliveredFrame() throws {
         let red = try solidBitmap(width: 2, height: 2, r: 255, g: 0, b: 0)
 
-        let delivered = try XCTUnwrap(model.resolveFlutterFrame(freshBitmap: red, frameId: 1),
+        let delivered = try XCTUnwrap(model.resolveFlutterFrame(response: .frame(red), frameId: 1),
                                       "A valid bitmap must render to a CGImage")
         XCTAssertEqual(delivered.image.width, 2)
         XCTAssertEqual(delivered.image.height, 2)
 
         // Provider returns no frame.
-        let held = try XCTUnwrap(model.resolveFlutterFrame(freshBitmap: nil, frameId: 2),
+        let held = try XCTUnwrap(model.resolveFlutterFrame(response: .unavailable, frameId: 2),
                                  "A nil bitmap must reuse the last delivered frame, not skip")
         XCTAssertTrue(held.image === delivered.image,
                       "The held frame must be the exact last delivered CGImage")
@@ -81,13 +81,13 @@ final class FlutterViewHoldLastFrameTests: XCTestCase {
 
     func testNoPriorFrame_skips_thenHoldsOnceDelivered() throws {
         // No frame yet: nil must skip, not black-fill.
-        XCTAssertNil(model.resolveFlutterFrame(freshBitmap: nil, frameId: 1),
+        XCTAssertNil(model.resolveFlutterFrame(response: .unavailable, frameId: 1),
                      "With no delivered frame the capture must be skipped, never black-filled")
 
         // After a delivery, a later nil holds it.
         let red = try solidBitmap(width: 2, height: 2, r: 255, g: 0, b: 0)
-        _ = try XCTUnwrap(model.resolveFlutterFrame(freshBitmap: red, frameId: 2))
-        XCTAssertNotNil(model.resolveFlutterFrame(freshBitmap: nil, frameId: 3),
+        _ = try XCTUnwrap(model.resolveFlutterFrame(response: .frame(red), frameId: 2))
+        XCTAssertNotNil(model.resolveFlutterFrame(response: .unavailable, frameId: 3),
                         "After a frame is delivered, a nil result must hold it (non-nil)")
     }
 
@@ -95,11 +95,11 @@ final class FlutterViewHoldLastFrameTests: XCTestCase {
         let red = try solidBitmap(width: 2, height: 2, r: 255, g: 0, b: 0)
         let green = try solidBitmap(width: 2, height: 2, r: 0, g: 255, b: 0)
 
-        _ = try XCTUnwrap(model.resolveFlutterFrame(freshBitmap: red, frameId: 1))
-        let latest = try XCTUnwrap(model.resolveFlutterFrame(freshBitmap: green, frameId: 2))
+        _ = try XCTUnwrap(model.resolveFlutterFrame(response: .frame(red), frameId: 1))
+        let latest = try XCTUnwrap(model.resolveFlutterFrame(response: .frame(green), frameId: 2))
 
         // nil reuses the latest (green), not the old red.
-        let held = try XCTUnwrap(model.resolveFlutterFrame(freshBitmap: nil, frameId: 3))
+        let held = try XCTUnwrap(model.resolveFlutterFrame(response: .unavailable, frameId: 3))
         XCTAssertTrue(held.image === latest.image, "Held frame must be the most recent delivery")
 
         let color = try XCTUnwrap(sampledColor(of: held.image))
@@ -115,10 +115,10 @@ final class FlutterViewHoldLastFrameTests: XCTestCase {
         let red = try solidBitmap(width: 2, height: 2, r: 255, g: 0, b: 0)
 
         // Newer frame (id 5) is cached.
-        let newer = try XCTUnwrap(model.resolveFlutterFrame(freshBitmap: green, frameId: 5))
+        let newer = try XCTUnwrap(model.resolveFlutterFrame(response: .frame(green), frameId: 5))
 
         // Out-of-order older delivery (id 3) must be ignored — return the newer cached frame.
-        let outOfOrder = try XCTUnwrap(model.resolveFlutterFrame(freshBitmap: red, frameId: 3))
+        let outOfOrder = try XCTUnwrap(model.resolveFlutterFrame(response: .frame(red), frameId: 3))
         XCTAssertTrue(outOfOrder.image === newer.image, "An older frameId must not overwrite the newer cached frame")
 
         let color = try XCTUnwrap(sampledColor(of: outOfOrder.image))
@@ -126,7 +126,7 @@ final class FlutterViewHoldLastFrameTests: XCTestCase {
         XCTAssertEqual(color.r, 0)
 
         // A later nil also reuses green, confirming red was never cached.
-        let held = try XCTUnwrap(model.resolveFlutterFrame(freshBitmap: nil, frameId: 6))
+        let held = try XCTUnwrap(model.resolveFlutterFrame(response: .unavailable, frameId: 6))
         XCTAssertTrue(held.image === newer.image, "The stale red frame must never surface")
     }
 
@@ -139,11 +139,11 @@ final class FlutterViewHoldLastFrameTests: XCTestCase {
         let redRects = [CGRect(x: 1, y: 2, width: 3, height: 4)]
         let red = try solidBitmap(width: 2, height: 2, r: 255, g: 0, b: 0, maskRects: redRects)
 
-        _ = try XCTUnwrap(model.resolveFlutterFrame(freshBitmap: red, frameId: 1))
+        _ = try XCTUnwrap(model.resolveFlutterFrame(response: .frame(red), frameId: 1))
 
         // Provider returns no frame — the held bitmap must come back with the rects it
         // was delivered with.
-        let held = try XCTUnwrap(model.resolveFlutterFrame(freshBitmap: nil, frameId: 2))
+        let held = try XCTUnwrap(model.resolveFlutterFrame(response: .unavailable, frameId: 2))
         XCTAssertEqual(held.maskRects, redRects,
                        "A held frame must carry the mask rects of its own delivery")
     }
@@ -154,11 +154,11 @@ final class FlutterViewHoldLastFrameTests: XCTestCase {
         let green = try solidBitmap(width: 2, height: 2, r: 0, g: 255, b: 0, maskRects: greenRects)
         let red = try solidBitmap(width: 2, height: 2, r: 255, g: 0, b: 0, maskRects: redRects)
 
-        let newer = try XCTUnwrap(model.resolveFlutterFrame(freshBitmap: green, frameId: 5))
+        let newer = try XCTUnwrap(model.resolveFlutterFrame(response: .frame(green), frameId: 5))
 
         // The stale delivery is rejected whole: the cached green image keeps green's rects,
         // and red's rects never attach to it.
-        let outOfOrder = try XCTUnwrap(model.resolveFlutterFrame(freshBitmap: red, frameId: 3))
+        let outOfOrder = try XCTUnwrap(model.resolveFlutterFrame(response: .frame(red), frameId: 3))
         XCTAssertTrue(outOfOrder.image === newer.image)
         XCTAssertEqual(outOfOrder.maskRects, greenRects,
                        "The cached frame's rects must be its own, never a rejected delivery's")
@@ -166,12 +166,12 @@ final class FlutterViewHoldLastFrameTests: XCTestCase {
 
     func testSessionChange_clearsHeldFrame() throws {
         let red = try solidBitmap(width: 2, height: 2, r: 255, g: 0, b: 0)
-        _ = try XCTUnwrap(model.resolveFlutterFrame(freshBitmap: red, frameId: 1))
+        _ = try XCTUnwrap(model.resolveFlutterFrame(response: .frame(red), frameId: 1))
 
         // Session change must drop the held frame.
         model.updateSessionId(with: "new-session-\(UUID().uuidString)")
 
-        XCTAssertNil(model.resolveFlutterFrame(freshBitmap: nil, frameId: 2),
+        XCTAssertNil(model.resolveFlutterFrame(response: .unavailable, frameId: 2),
                      "A new session must not reuse the previous session's held frame")
     }
 
@@ -191,5 +191,43 @@ final class FlutterViewHoldLastFrameTests: XCTestCase {
 
         model.updateSessionId(with: "session-B")
         XCTAssertNotEqual(model.flutterFrameGeneration, genA, "A second rotation must bump again")
+    }
+
+    // MARK: - One-Frame Rule (skip-not-stale)
+
+    func testSkipResponse_dropsEvenWithCachedFrame() throws {
+        // .skip is the plugin's deliberate "no frame this tick" — substituting the
+        // cache here is exactly the stale-frame bug the response enum exists to kill.
+        let red = try solidBitmap(width: 2, height: 2, r: 255, g: 0, b: 0)
+        _ = try XCTUnwrap(model.resolveFlutterFrame(response: .frame(red), frameId: 1))
+
+        XCTAssertNil(model.resolveFlutterFrame(response: .skip, frameId: 2),
+                     ".skip must drop the frame even when a cached frame exists")
+        XCTAssertNil(model.resolveFlutterFrame(response: .skip, frameId: 3, isClick: true),
+                     ".skip must drop click frames too")
+    }
+
+    func testUnavailableClickFrame_dropsInsteadOfReusingCache() throws {
+        // A fresh tap marker must never be baked into old pixels: marker suppression
+        // would run against the old frame's mask rects (masked-keypad reconstruction).
+        let red = try solidBitmap(width: 2, height: 2, r: 255, g: 0, b: 0)
+        _ = try XCTUnwrap(model.resolveFlutterFrame(response: .frame(red), frameId: 1))
+
+        XCTAssertNil(model.resolveFlutterFrame(response: .unavailable, frameId: 2, isClick: true),
+                     "A click frame with no fresh bitmap must drop, never reuse the cache")
+        XCTAssertNotNil(model.resolveFlutterFrame(response: .unavailable, frameId: 3),
+                        "Periodic captures keep the legacy cache-reuse fallback")
+    }
+
+    func testOutOfOrderClickDelivery_dropsInsteadOfReusingCache() throws {
+        // An older-frameId delivery for a click is stale by definition under the
+        // One-Frame Rule — reusing the newest cached frame would pair the marker
+        // with pixels from a different instant.
+        let red = try solidBitmap(width: 2, height: 2, r: 255, g: 0, b: 0)
+        let green = try solidBitmap(width: 2, height: 2, r: 0, g: 255, b: 0)
+        _ = try XCTUnwrap(model.resolveFlutterFrame(response: .frame(green), frameId: 5))
+
+        XCTAssertNil(model.resolveFlutterFrame(response: .frame(red), frameId: 3, isClick: true),
+                     "An out-of-order click delivery must drop, not fall back to the cache")
     }
 }

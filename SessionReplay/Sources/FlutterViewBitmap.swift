@@ -74,21 +74,43 @@ public struct FlutterViewBitmap {
     }
 }
 
+/// The provider's answer for one capture cycle. Three states on purpose — the
+/// SDK reacts differently to "the plugin chose not to produce a frame" and
+/// "the plugin gave no answer", and collapsing them into `nil` is what used to
+/// let a stale cached frame ship with a fresh tap marker baked into it.
+public enum FlutterViewBitmapResponse {
+    /// A freshly rasterised, pre-masked frame for this `frameId`.
+    case frame(FlutterViewBitmap)
+    /// Authoritative "no frame this tick": the plugin's capture gates rejected
+    /// the cycle (UI mid-motion, click coalesced, or the One-Frame Rule's
+    /// staleness budget exceeded). The SDK must not substitute a cached frame.
+    case skip
+    /// No answer — an error, a timeout, or a legacy plugin that returned plain
+    /// `nil`. Periodic captures may fall back to the last delivered frame;
+    /// click frames must drop (marker and pixels would describe different
+    /// instants, and marker suppression would run against the old frame's
+    /// mask rects).
+    case unavailable
+}
+
 /// Callback signature used by [SessionReplayOptions.flutterViewBitmapProvider].
 ///
 /// Invoked by the SDK per FlutterView per capture cycle. `viewId` is the
 /// Flutter-allocated stable identifier (format `cx_flutter_view_<counter>`,
 /// see `docs/session-replay-shared.md` §3). `frameId` is a monotonic
 /// SDK-generated counter (see §2 — opaque to the provider; do not
-/// interpret as a timestamp).
+/// interpret as a timestamp). `isClick` marks a capture triggered by a user
+/// tap — the plugin applies the One-Frame Rule to it (rasterise at the next
+/// committed frame or answer `.skip`, never stale). `tapTimestampMs` is the
+/// tap's epoch-ms timestamp (`nil` for periodic captures) so the plugin can
+/// drop a click capture that runs too long after the tap.
 ///
-/// The completion handler must be called with the bytes, or `nil` if the
-/// FlutterView isn't ready yet. On `nil` the SDK reuses the last delivered
-/// bitmap, or skips the frame if none has arrived — never black, and never
-/// the raw FlutterView pixels (the leak case).
+/// The completion handler must be called exactly once with one of the
+/// [FlutterViewBitmapResponse] cases — never with raw FlutterView pixels
+/// (the leak case), and never black.
 public typealias FlutterViewBitmapProvider =
-    (_ viewId: String, _ frameId: Int64,
-     _ completion: @escaping (FlutterViewBitmap?) -> Void) -> Void
+    (_ viewId: String, _ frameId: Int64, _ isClick: Bool, _ tapTimestampMs: Int64?,
+     _ completion: @escaping (FlutterViewBitmapResponse) -> Void) -> Void
 
 /// Callback signature used by [SessionReplayOptions.flutterPlatformViewsProvider].
 ///
