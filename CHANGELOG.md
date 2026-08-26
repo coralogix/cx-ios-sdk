@@ -9,6 +9,15 @@ Release-mechanics commits (version bumps, podspec/script tweaks, README edits) a
 omitted; the focus here is user-facing behavior changes. Tickets are referenced as
 `CX-XXXXX` (Jira) or `ALPH-XXXX` (legacy). Pull request numbers are in parentheses.
 
+## [2.17.0] - 2026-08-26
+
+### Changed
+- The Flutter session-replay bitmap provider now receives whether a capture was triggered by a tap, and can decline a capture cycle outright instead of returning no bitmap. Flutter apps need a plugin version that implements the updated contract; native iOS integrations are unaffected.
+
+### Fixed
+- Session replay no longer re-sends the previous frame when a Flutter capture is declined, so a recording no longer shows a frozen screen while the frame count looks healthy.
+- A replay tap marker is no longer drawn onto an older frame when a fresh one could not be captured for that tap. The marker was previously positioned using the older frame's masked regions, so it could appear over content that is masked on the current screen.
+
 ## [2.16.0] - 2026-08-18
 
 ### Changed
