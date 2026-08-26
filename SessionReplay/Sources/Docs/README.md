@@ -82,7 +82,7 @@ Interaction events ask a **different question** and so use different geometry. T
 **Flag and marker can therefore legitimately disagree for policy-masked content:** a tap on a `maskText`-matched label draws no marker (its pixels are hidden) but reports `is_masked_element: false` with its real text. This is deliberate, and matches Android and Flutter, which both resolve the verdict from deliberate masking alone. Letting the pixel policy decide the verdict over-masks severely on defaults — a wrapper shipping `maskAllTexts: true` would mark every text tap as masked and ship `***` for all of it. Customers who want the pixel policy to withhold interaction text too use `shouldSendText`, which covers native interactions — clicks, scrolls and swipes alike. Hybrid text arrives pre-resolved in the bridge payload and never reaches it, so redact those in `beforeSend` or have the wrapper send `is_masked`.
 
 > [!NOTE]
-> This applies from version 2.17.0. On earlier versions the pixel policy did set `is_masked_element` and redact the interaction text.
+> This applies from version 2.17.0, and to **UIKit** views — the ones the pixel policy reports geometry for. On earlier versions it did set `is_masked_element` and redact the interaction text for those. The SwiftUI row below never did, on any version.
 
 | Masking source | Pixels masked | Tap marker suppressed | Interaction text `***` | `is_masked_element` |
 |---|---|---|---|---|

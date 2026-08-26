@@ -92,12 +92,13 @@ final class MaskedHybridInteractionTests: XCTestCase {
         XCTAssertEqual(result[Keys.targetElementInnerText.rawValue] as? String, "7")
     }
 
-    /// No frame geometry to test against (no session replay registered) — same pinned false.
-    func testNoMaskGeometry_flagFalse() throws {
-        SdkManager.shared.register(sessionReplayInterface: nil)
-
+    /// Geometry resolved, nothing masked — same pinned false. Passing `[]` rather than omitting
+    /// the argument is deliberate: nil now means "resolve it from the hierarchy", which would
+    /// make this a live walk against whatever scene the test host happens to have, so `[]` is
+    /// the only way left to state a resolved-but-empty screen deterministically.
+    func testEmptyMaskGeometry_flagFalse() throws {
         let result = try XCTUnwrap(coralogixRum.validateHybridInteraction(
-            clickPayload(x: 50, y: 50)))
+            clickPayload(x: 50, y: 50), maskRects: []))
 
         XCTAssertEqual(result[Keys.isMaskedElement.rawValue] as? Bool, false)
         XCTAssertEqual(result[Keys.targetElementInnerText.rawValue] as? String, "7")

@@ -12,7 +12,7 @@ omitted; the focus here is user-facing behavior changes. Tickets are referenced 
 ## [2.17.0] - 2026-08-26
 
 ### Changed
-- **Action required if you use `maskText` or `maskAllImages` to keep sensitive text out of user-interaction events.** Session replay's pixel policy no longer redacts interaction text or sets `interaction_context.is_masked_element`. Text that these options previously withheld from `target_element_inner_text` will now be reported in full. To keep withholding it, move the rule to `shouldSendText`, which is evaluated per tap and returns `false` to redact:
+- **Action required if you use `maskText` or `maskAllImages` on UIKit views to keep sensitive text out of user-interaction events.** Session replay's pixel policy no longer redacts interaction text or sets `interaction_context.is_masked_element`. Text that these options previously withheld from `target_element_inner_text` will now be reported in full. To keep withholding it, move the rule to `shouldSendText`, which is evaluated per interaction and returns `false` to redact:
 
   ```swift
   shouldSendText: { view, text in
@@ -21,7 +21,9 @@ omitted; the focus here is user-facing behavior changes. Tickets are referenced 
   }
   ```
 
-  `shouldSendText` covers **native UIKit and SwiftUI interactions only** — clicks, scrolls and swipes alike, since it is consulted while the SDK reads the touched view. Interactions reported through `setUserInteraction` from React Native or Flutter never reach it, because their text arrives already resolved in the bridge payload. For those, either have the wrapper send `is_masked: true` for the interaction (Flutter's plugin already does this for taps, so Flutter apps masking in Dart are unaffected), or redact in `beforeSend`, which runs on every path:
+  This affects **UIKit views only** (`UILabel`, `UITextField`, `UITextView`, `UINavigationBar` titles, `UIImageView`), which are the ones the pixel policy reported geometry for. Text inside SwiftUI content is masked by the OCR and Vision stages, which report no geometry, so it never set the flag and was never redacted in interaction events — nothing changes there, and no action is needed. Note also that `shouldSendText` receives whatever the SDK can read from the touched view, which for SwiftUI content is its `accessibilityLabel` at best, so a rule moved there may not see SwiftUI text at all.
+
+  `shouldSendText` covers **native interactions only** — clicks, scrolls and swipes alike, since it is consulted while the SDK reads the touched view. Interactions reported through `setUserInteraction` from React Native or Flutter never reach it, because their text arrives already resolved in the bridge payload. For those, either have the wrapper send `is_masked: true` for the interaction (Flutter's plugin already does this for taps, so Flutter apps masking in Dart are unaffected), or redact in `beforeSend`, which runs on every path:
 
   ```swift
   beforeSend: { cxRum in

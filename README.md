@@ -344,7 +344,7 @@ Every user-interaction event carries `interaction_context.is_masked_element` —
 Session replay's pixel policy (`maskText`, `maskAllImages`) deliberately does **not** set this flag — it decides which pixels a frame hides, not whether text may leave the device, and treating it as the latter marks nearly every text tap as masked. So a tap on a `maskText`-matched label draws no replay marker yet reports `is_masked_element: false` with its real text. This matches the Android and Flutter SDKs. Use [`shouldSendText`](#user-action-text-redaction-shouldsendtext) if you want the pixel policy to withhold interaction text as well — note it applies to native interactions only, clicks, scrolls and swipes alike, since hybrid text arrives pre-resolved in the bridge payload; redact those in `beforeSend` or have the wrapper send `is_masked`.
 
 > [!NOTE]
-> This applies from version 2.17.0. On earlier versions the pixel policy did set `is_masked_element` and redact the text, so a tap on a `maskText`-matched label reported `true` with `***`.
+> This applies from version 2.17.0. On earlier versions the pixel policy did set `is_masked_element` and redact the text for **UIKit** views, so a tap on a `maskText`-matched label reported `true` with `***`. Text inside SwiftUI content is masked by the OCR and Vision stages, which report no geometry, so it never set the flag on any version.
 
 The flag is always present. `false` also covers "could not resolve" — a hybrid payload with no coordinates (React Native scroll/swipe), or no view hierarchy to walk (off the main thread, or no active foreground scene) — so it under-reports rather than over-reports when the SDK has no answer. Resolving it does **not** require session replay to be running.
 

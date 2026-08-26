@@ -473,16 +473,16 @@ public extension UIView {
     /// while the interaction reports `is_masked_element: false`. Flag and marker may disagree.
     ///
     /// Needs no session replay options, so unlike the capture pass this resolves whether or not
-    /// session replay is initialized. Returns nil on the same "don't know" terms as
-    /// `collectScreenMaskRects`.
-    /// - Parameter windows: Test seam. nil (production) resolves the active foreground
-    ///   scene's windows; passing a list walks those instead, so the policy-off inputs this
-    ///   function chooses can be pinned by a test with no scene available.
+    /// session replay is initialized. The production path delegates to `collectScreenMaskRects`
+    /// rather than restating its guards, so the conditions under which this returns nil are
+    /// defined in one place and cannot drift as they are added to.
+    /// - Parameter windows: Test seam. nil (production) resolves the active foreground scene;
+    ///   passing a list walks those windows instead, so the policy-off inputs this function
+    ///   chooses can be pinned by a test with no scene available.
     static func deliberateMaskRects(in windows: [UIWindow]? = nil) -> [CGRect]? {
-        guard Thread.isMainThread else { return nil }
         let view = UIView()
-        guard let windows = windows ?? view.activeForegroundWindowScene()?.windows else {
-            return nil
+        guard let windows else {
+            return view.collectScreenMaskRects(maskText: nil, maskAllImages: false)
         }
         return view.collectMaskRects(in: windows, maskText: nil, maskAllImages: false)
     }
