@@ -21,7 +21,7 @@ omitted; the focus here is user-facing behavior changes. Tickets are referenced 
   }
   ```
 
-  `shouldSendText` covers **native UIKit and SwiftUI taps only** — it is consulted while the SDK reads the tapped view. Interactions reported through `setUserInteraction` from React Native or Flutter never reach it, because their text arrives already resolved in the bridge payload. For those, either have the wrapper send `is_masked: true` for the interaction (Flutter's plugin already does this for taps, so Flutter apps masking in Dart are unaffected), or redact in `beforeSend`, which runs on every path:
+  `shouldSendText` covers **native UIKit and SwiftUI interactions only** — clicks, scrolls and swipes alike, since it is consulted while the SDK reads the touched view. Interactions reported through `setUserInteraction` from React Native or Flutter never reach it, because their text arrives already resolved in the bridge payload. For those, either have the wrapper send `is_masked: true` for the interaction (Flutter's plugin already does this for taps, so Flutter apps masking in Dart are unaffected), or redact in `beforeSend`, which runs on every path:
 
   ```swift
   beforeSend: { cxRum in
