@@ -444,7 +444,16 @@ public extension UIView {
     /// An empty array means the walk ran and genuinely found no masked content.
     func collectScreenMaskRects(maskText: [String]?, maskAllImages: Bool) -> [CGRect]? {
         guard Thread.isMainThread, let scene = activeForegroundWindowScene() else { return nil }
-        return scene.windows
+        return collectMaskRects(in: scene.windows, maskText: maskText, maskAllImages: maskAllImages)
+    }
+
+    /// The windows-taking half of `collectScreenMaskRects`, split out so a caller that already
+    /// holds a window list can reach the same walk — and so tests, which have no foreground
+    /// scene to resolve, can exercise the real collection rather than re-deriving its inputs.
+    func collectMaskRects(in windows: [UIWindow],
+                          maskText: [String]?,
+                          maskAllImages: Bool) -> [CGRect] {
+        windows
             .filter { !$0.isHidden && $0.alpha > 0 && !UIView.subtreeContainsFlutterView($0) }
             .flatMap { collectNativeMaskRects(in: $0, maskText: maskText, maskAllImages: maskAllImages) }
     }
@@ -466,8 +475,16 @@ public extension UIView {
     /// Needs no session replay options, so unlike the capture pass this resolves whether or not
     /// session replay is initialized. Returns nil on the same "don't know" terms as
     /// `collectScreenMaskRects`.
-    static func deliberateMaskRects() -> [CGRect]? {
-        UIView().collectScreenMaskRects(maskText: nil, maskAllImages: false)
+    /// - Parameter windows: Test seam. nil (production) resolves the active foreground
+    ///   scene's windows; passing a list walks those instead, so the policy-off inputs this
+    ///   function chooses can be pinned by a test with no scene available.
+    static func deliberateMaskRects(in windows: [UIWindow]? = nil) -> [CGRect]? {
+        guard Thread.isMainThread else { return nil }
+        let view = UIView()
+        guard let windows = windows ?? view.activeForegroundWindowScene()?.windows else {
+            return nil
+        }
+        return view.collectMaskRects(in: windows, maskText: nil, maskAllImages: false)
     }
 
     func collectCxMaskRects(in rootView: UIView) -> [CGRect] {

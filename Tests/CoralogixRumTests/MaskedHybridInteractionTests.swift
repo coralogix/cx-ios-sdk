@@ -112,7 +112,8 @@ final class MaskedHybridInteractionTests: XCTestCase {
                                               policyLabel: UILabel,
                                               deliberatePoint: CGPoint,
                                               interactionRects: [CGRect],
-                                              captureRects: [CGRect]) {
+                                              captureRects: [CGRect],
+                                              policyImagePoint: CGPoint) {
         let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 300, height: 300))
         window.isHidden = false  // windows are born hidden; the walk skips hidden views
 
@@ -120,8 +121,11 @@ final class MaskedHybridInteractionTests: XCTestCase {
         deliberate.cxMask = true
         let policyLabel = UILabel(frame: CGRect(x: 0, y: 200, width: 100, height: 40))
         policyLabel.text = "secret code"
+        // Present so that flipping `maskAllImages` on, not just `maskText`, is caught below.
+        let policyImage = UIImageView(frame: CGRect(x: 200, y: 0, width: 40, height: 40))
         window.addSubview(deliberate)
         window.addSubview(policyLabel)
+        window.addSubview(policyImage)
 
         return (window: window,   // retained: subviews are released when the window goes
                 policyLabel: policyLabel,
@@ -133,7 +137,40 @@ final class MaskedHybridInteractionTests: XCTestCase {
                 // The inputs the capture pass uses, and so the replay's tap-marker test.
                 captureRects: window.collectNativeMaskRects(in: window,
                                                             maskText: ["secret"],
-                                                            maskAllImages: true))
+                                                            maskAllImages: true),
+                policyImagePoint: CGPoint(x: 220, y: 20))
+    }
+
+    /// The production entry point itself, rather than a hand-rolled copy of the inputs it
+    /// chooses. `deliberateMaskRects` is what both interaction paths call, so its arguments are
+    /// the thing that has to stay pinned: flipping either `maskText` or `maskAllImages` on
+    /// inside it reintroduces exactly the over-masking this change removes, and every test that
+    /// passes `maskRects:` explicitly would stay green while it did.
+    func testDeliberateMaskRects_collectsCxMaskOnly_excludingPixelPolicy() throws {
+        let fixture = makeMixedMaskingWindow()
+
+        let rects = try XCTUnwrap(UIView.deliberateMaskRects(in: [fixture.window]))
+
+        XCTAssertEqual(rects, [CGRect(x: 0, y: 0, width: 100, height: 100)],
+                       "Only the cxMask rect: neither the maskText-matching label nor the "
+                       + "image view may contribute to the interaction path's geometry")
+        XCTAssertTrue(rects.contains { $0.contains(fixture.deliberatePoint) },
+                      "A tap on the cxMask view must still resolve as masked")
+        XCTAssertFalse(rects.contains { $0.contains(CGPoint(x: 50, y: 220)) },
+                       "maskText geometry must not reach the interaction verdict")
+        XCTAssertFalse(rects.contains { $0.contains(fixture.policyImagePoint) },
+                       "maskAllImages geometry must not reach the interaction verdict")
+    }
+
+    /// Counterpart: the capture pass, which feeds the replay's tap-marker test, still takes the
+    /// full policy. The divergence is the point — same walk, different inputs.
+    func testCapturePassGeometry_stillIncludesPixelPolicy() {
+        let fixture = makeMixedMaskingWindow()
+
+        XCTAssertEqual(fixture.captureRects.count, 3,
+                       "cxMask, maskText and maskAllImages all feed the capture pass")
+        XCTAssertTrue(fixture.captureRects.contains { $0.contains(CGPoint(x: 50, y: 220)) })
+        XCTAssertTrue(fixture.captureRects.contains { $0.contains(fixture.policyImagePoint) })
     }
 
     /// The acceptance pin. With `maskText` configured and no `cxMask` on the element, a tap on

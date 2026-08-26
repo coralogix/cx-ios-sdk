@@ -152,8 +152,11 @@ extension CoralogixRum {
     /// and the caller must drop the event.
     ///
     /// - Note: `internal` visibility to allow unit testing.
-    /// - Parameter maskRects: Frame mask geometry for the masking resolution; nil (the
-    ///   production default) fetches it live from the registered session replay.
+    /// - Parameter maskRects: Deliberate-masking geometry for the masking resolution; nil
+    ///   (the production default) resolves it from the view hierarchy via
+    ///   `UIView.deliberateMaskRects`, and only once the payload is known to need it.
+    ///   Session replay is not consulted — the geometry is `cxMask`, not the replay's
+    ///   pixel policy.
     internal func validateHybridInteraction(_ dictionary: [String: Any],
                                             maskRects: [CGRect]? = nil) -> [String: Any]? {
         // event_name is required and must be a known InteractionEventName value.
@@ -203,10 +206,7 @@ extension CoralogixRum {
         // would otherwise ship (the swizzles feed session replay in hybrid mode, but the span
         // comes from here and never passes through TapDataExtractor). nil = unresolvable →
         // the documented `false` default: the flag under-reports rather than over-reports.
-        let isMaskedElement = Self.resolveHybridMasking(
-            dictionary,
-            maskRects: maskRects ?? UIView.deliberateMaskRects()
-        )
+        let isMaskedElement = Self.resolveHybridMasking(dictionary, maskRects: maskRects)
         if let text = result[Keys.targetElementInnerText.rawValue] {
             result[Keys.targetElementInnerText.rawValue] =
                 TapDataExtractor.redactIfMasked(text, isMasked: isMaskedElement == true)
@@ -227,12 +227,17 @@ extension CoralogixRum {
     ///
     /// Returns nil when neither is resolvable — no coordinates (React Native scroll and swipe
     /// carry none) or no mask geometry to test against.
+    ///
+    /// `maskRects` nil means "resolve it here". The resolution deliberately sits below both
+    /// early exits: the two commonest hybrid events take them — Flutter always sends
+    /// `is_masked`, and React Native scroll and swipe carry no coordinates — so a walk paid
+    /// before them would be thrown away on the SDK's highest-frequency hybrid path.
     internal static func resolveHybridMasking(_ dictionary: [String: Any],
                                               maskRects: [CGRect]?) -> Bool? {
         if let verdict = dictionary[Keys.isMasked.rawValue] as? Bool { return verdict }
         guard let x = doubleValue(dictionary[Keys.positionX.rawValue]),
-              let y = doubleValue(dictionary[Keys.positionY.rawValue]),
-              let rects = maskRects else { return nil }
+              let y = doubleValue(dictionary[Keys.positionY.rawValue]) else { return nil }
+        guard let rects = maskRects ?? UIView.deliberateMaskRects() else { return nil }
         return TapDataExtractor.pointIsMasked(CGPoint(x: x, y: y), in: rects)
     }
 

@@ -9,10 +9,20 @@ Release-mechanics commits (version bumps, podspec/script tweaks, README edits) a
 omitted; the focus here is user-facing behavior changes. Tickets are referenced as
 `CX-XXXXX` (Jira) or `ALPH-XXXX` (legacy). Pull request numbers are in parentheses.
 
-## [2.16.1] - 2026-08-24
+## [2.17.0] - 2026-08-26
 
 ### Changed
-- `interaction_context.is_masked_element` no longer reports `true` for content masked only by session replay's pixel policy (`maskText`, `maskAllImages`). The flag and the inner-text redaction now reflect deliberate masking alone — `cxMask`, anything inside it, SwiftUI `.cxMask()`, and sensitive fields — matching the Android and Flutter SDKs. Previously, with a wrapper's default `maskAllTexts`, a tap on almost any text reported as masked and shipped `***`; such taps now report `false` with their real text. Use `shouldSendText` to withhold that text.
+- **Action required if you use `maskText` or `maskAllImages` to keep sensitive text out of user-interaction events.** Session replay's pixel policy no longer redacts interaction text or sets `interaction_context.is_masked_element`. Text that these options previously withheld from `target_element_inner_text` will now be reported in full. To keep withholding it, move the rule to `shouldSendText`, which is evaluated per tap and returns `false` to redact:
+
+  ```swift
+  shouldSendText: { view, text in
+      // Previously covered by maskText: ["\\d{3}-\\d{2}-\\d{4}"]
+      text.range(of: "\\d{3}-\\d{2}-\\d{4}", options: .regularExpression) == nil
+  }
+  ```
+
+  `cxMask`, SwiftUI `.cxMask()`, password fields and fields with a sensitive `textContentType` are unaffected — they still redact to `***` and still set the flag. Session replay itself is unaffected: these options mask pixels in the recording exactly as before.
+- `is_masked_element` and inner-text redaction now reflect deliberate masking alone, matching the Android and Flutter SDKs. The pixel policy decides which pixels a frame hides, which is a different question from whether text may leave the device. Previously, with a wrapper's default `maskAllTexts`, a tap on almost any text reported as masked and shipped `***`.
 - The replay's tap marker is unchanged: it is still suppressed over pixels the frame hid, including policy-masked ones. Flag and marker can now legitimately disagree for policy-masked content, as they already do on Android and Flutter.
 - Interaction masking no longer depends on session replay being initialized; the verdict resolves from the view hierarchy alone.
 
