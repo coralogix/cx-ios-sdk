@@ -239,7 +239,7 @@ public class SessionReplayModel {
 
         // Tap context for the One-Frame Rule: the plugin rasterises a click frame at
         // the next committed frame after the tap or answers .skip — never stale.
-        let tapTimestampMs: Int64? = isClickFrame ? Int64(getTimestamp(from: properties)) : nil
+        let tapTimestampMs = tapTimestampMilliseconds(from: properties, isClick: isClickFrame)
 
         // viewId is intentionally "implicit_view" — the cx-flutter-plugin ignores it (uses `_`)
         // and routes all captures to Flutter's single implicit view. Only frameId matters.
@@ -292,7 +292,27 @@ public class SessionReplayModel {
     //   travel with it); click frames return nil — a fresh tap marker must never be
     //   baked into old pixels, and marker suppression must never run against an old
     //   frame's mask rects (the masked-keypad reconstruction leak).
-    internal func resolveFlutterFrame(response: FlutterViewBitmapResponse, frameId: Int64, isClick: Bool = false) -> FlutterFrame? {
+    /// Epoch-milliseconds timestamp of the tap that triggered this capture, for the
+    /// plugin's One-Frame Rule staleness budget. `nil` for periodic captures.
+    ///
+    /// `getTimestamp` returns SECONDS on the capture path — `SessionReplay.captureEvent`
+    /// stores `Date().timeIntervalSince1970` — and callers convert, the same way
+    /// `handleCapturedData` hands its value to `SRNetworkManager` as
+    /// `timestamp.milliseconds`. Sending seconds here would make every tap read as hours
+    /// stale, so the plugin would drop every click frame.
+    ///
+    /// `Int64(exactly:)` rather than a trapping conversion: the value is read out of an
+    /// untyped properties dictionary that hybrid bridges also populate, and a NaN or
+    /// out-of-range Double must never crash the host app. `nil` omits the budget check,
+    /// which is already how a capture with no tap timestamp behaves.
+    internal func tapTimestampMilliseconds(from properties: [String: Any]?, isClick: Bool) -> Int64? {
+        guard isClick else { return nil }
+        return Int64(exactly: (getTimestamp(from: properties) * 1_000).rounded())
+    }
+
+    // No default for `isClick`: periodic is the cache-reusing branch, so a caller that
+    // silently defaulted would reintroduce stale click frames. Every call site states it.
+    internal func resolveFlutterFrame(response: FlutterViewBitmapResponse, frameId: Int64, isClick: Bool) -> FlutterFrame? {
         switch response {
         case .skip:
             return nil
