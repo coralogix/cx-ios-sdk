@@ -21,6 +21,21 @@ omitted; the focus here is user-facing behavior changes. Tickets are referenced 
   }
   ```
 
+  `shouldSendText` covers **native UIKit and SwiftUI taps only** — it is consulted while the SDK reads the tapped view. Interactions reported through `setUserInteraction` from React Native or Flutter never reach it, because their text arrives already resolved in the bridge payload. For those, either have the wrapper send `is_masked: true` for the interaction (Flutter's plugin already does this for taps, so Flutter apps masking in Dart are unaffected), or redact in `beforeSend`, which runs on every path:
+
+  ```swift
+  beforeSend: { cxRum in
+      var event = cxRum
+      if var interaction = event["interaction_context"] as? [String: Any],
+         let text = interaction["target_element_inner_text"] as? String,
+         text.range(of: "\\d{3}-\\d{2}-\\d{4}", options: .regularExpression) != nil {
+          interaction["target_element_inner_text"] = "***"
+          event["interaction_context"] = interaction
+      }
+      return event
+  }
+  ```
+
   `cxMask`, SwiftUI `.cxMask()`, password fields and fields with a sensitive `textContentType` are unaffected — they still redact to `***` and still set the flag. Session replay itself is unaffected: these options mask pixels in the recording exactly as before.
 - `is_masked_element` and inner-text redaction now reflect deliberate masking alone, matching the Android and Flutter SDKs. The pixel policy decides which pixels a frame hides, which is a different question from whether text may leave the device. Previously, with a wrapper's default `maskAllTexts`, a tap on almost any text reported as masked and shipped `***`.
 - The replay's tap marker is unchanged: it is still suppressed over pixels the frame hid, including policy-masked ones. Flag and marker can now legitimately disagree for policy-masked content, as they already do on Android and Flutter.
