@@ -65,9 +65,9 @@ final class UIViewExtMaskInheritanceTests: XCTestCase {
 
     // MARK: - collectNativeMaskRects
 
-    /// One collector feeds both the capture pass and the interaction-time masking resolution:
-    /// every mask family combines, offset to the window's screen position, so the tap test and
-    /// the painted pixels derive from the same geometry.
+    /// The capture pass takes every mask family, combined and offset to the window's screen
+    /// position. The interaction path shares this one walk but leaves the pixel policy off —
+    /// see the cxMask-only case below.
     func testCollectNativeMaskRects_combinesFamiliesAndAppliesWindowOffset() {
         let window = UIWindow(frame: CGRect(x: 10, y: 20, width: 300, height: 300))
         window.isHidden = false  // windows are born hidden; the walk skips hidden views
@@ -93,6 +93,9 @@ final class UIViewExtMaskInheritanceTests: XCTestCase {
                       "The maskAllImages rect must be offset by the window's screen origin")
     }
 
+    /// The interaction path's inputs: policy off, so only deliberate masking contributes. The
+    /// label the replay would black out under `maskText` yields no rect here, which is what
+    /// keeps `is_masked_element` from reporting every text tap as masked.
     func testCollectNativeMaskRects_withoutTextOrImageOptions_stillCollectsCxMask() {
         let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 300, height: 300))
         window.isHidden = false  // windows are born hidden; the walk skips hidden views

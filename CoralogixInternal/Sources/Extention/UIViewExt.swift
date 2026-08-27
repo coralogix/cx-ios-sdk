@@ -412,8 +412,11 @@ public extension UIView {
 
     /// Every mask rect the native walk paints for one window — maskText matches,
     /// navigation-bar titles, maskAllImages, and `cxMask` views — offset to screen
-    /// coordinates. Single source for the capture pass and the interaction-time masking
-    /// resolution (`SessionReplayInterface.currentMaskRects`), so the two cannot drift.
+    /// coordinates.
+    ///
+    /// The capture pass passes the replay's pixel policy through here; the interaction path
+    /// calls `deliberateMaskRects()` instead, which leaves the policy off. Both share this
+    /// one walk, so the geometry itself cannot drift between them — only the inputs differ.
     func collectNativeMaskRects(in win: UIWindow,
                                 maskText: [String]?,
                                 maskAllImages: Bool) -> [CGRect] {
@@ -441,9 +444,47 @@ public extension UIView {
     /// An empty array means the walk ran and genuinely found no masked content.
     func collectScreenMaskRects(maskText: [String]?, maskAllImages: Bool) -> [CGRect]? {
         guard Thread.isMainThread, let scene = activeForegroundWindowScene() else { return nil }
-        return scene.windows
+        return collectMaskRects(in: scene.windows, maskText: maskText, maskAllImages: maskAllImages)
+    }
+
+    /// The windows-taking half of `collectScreenMaskRects`, split out so a caller that already
+    /// holds a window list can reach the same walk — and so tests, which have no foreground
+    /// scene to resolve, can exercise the real collection rather than re-deriving its inputs.
+    func collectMaskRects(in windows: [UIWindow],
+                          maskText: [String]?,
+                          maskAllImages: Bool) -> [CGRect] {
+        windows
             .filter { !$0.isHidden && $0.alpha > 0 && !UIView.subtreeContainsFlutterView($0) }
             .flatMap { collectNativeMaskRects(in: $0, maskText: maskText, maskAllImages: maskAllImages) }
+    }
+
+    /// The mask geometry the interaction path tests a tap against: deliberate masking only —
+    /// `cxMask`, whether set directly, inherited from an ancestor, or applied to SwiftUI
+    /// content via the `.cxMask()` overlay.
+    ///
+    /// The replay's pixel policy (`maskText`, `maskAllImages`) is deliberately absent. That
+    /// policy answers "should these pixels be hidden in this frame", which is not the question
+    /// "may this text leave the device" — and answering the second with the first over-masks
+    /// severely on defaults, since a wrapper shipping `maskAllTexts` marks every text tap.
+    /// Android and Flutter resolve the verdict from deliberate masking alone; this matches them.
+    ///
+    /// Consequence, and intended: for content masked only by the pixel policy, the replay still
+    /// suppresses its tap marker (that test uses the rects the capture pass actually painted)
+    /// while the interaction reports `is_masked_element: false`. Flag and marker may disagree.
+    ///
+    /// Needs no session replay options, so unlike the capture pass this resolves whether or not
+    /// session replay is initialized. The production path delegates to `collectScreenMaskRects`
+    /// rather than restating its guards, so the conditions under which this returns nil are
+    /// defined in one place and cannot drift as they are added to.
+    /// - Parameter windows: Test seam. nil (production) resolves the active foreground scene;
+    ///   passing a list walks those windows instead, so the policy-off inputs this function
+    ///   chooses can be pinned by a test with no scene available.
+    static func deliberateMaskRects(in windows: [UIWindow]? = nil) -> [CGRect]? {
+        let view = UIView()
+        guard let windows else {
+            return view.collectScreenMaskRects(maskText: nil, maskAllImages: false)
+        }
+        return view.collectMaskRects(in: windows, maskText: nil, maskAllImages: false)
     }
 
     func collectCxMaskRects(in rootView: UIView) -> [CGRect] {

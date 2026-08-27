@@ -11,8 +11,9 @@ import CoralogixInternal
 /// A hybrid-reported interaction (`setUserInteraction`) is redacted and flagged on the same
 /// terms as a native one. In hybrid mode the swizzles feed session replay but emit no span —
 /// the span comes from the bridge payload, which never passes through `TapDataExtractor` —
-/// so masking here resolves from the payload's coordinates against the frame's mask geometry,
-/// or from the wrapper's own `is_masked` verdict.
+/// so masking here resolves from the payload's coordinates against the deliberate-masking
+/// geometry (`cxMask` only — not the replay's pixel policy), or from the wrapper's own
+/// `is_masked` verdict.
 final class MaskedHybridInteractionTests: XCTestCase {
 
     private var coralogixRum: CoralogixRum!
@@ -91,29 +92,155 @@ final class MaskedHybridInteractionTests: XCTestCase {
         XCTAssertEqual(result[Keys.targetElementInnerText.rawValue] as? String, "7")
     }
 
-    /// No frame geometry to test against (no session replay registered) — same pinned false.
-    func testNoMaskGeometry_flagFalse() throws {
-        SdkManager.shared.register(sessionReplayInterface: nil)
-
+    /// Geometry resolved, nothing masked — same pinned false. Passing `[]` rather than omitting
+    /// the argument is deliberate: nil now means "resolve it from the hierarchy", which would
+    /// make this a live walk against whatever scene the test host happens to have, so `[]` is
+    /// the only way left to state a resolved-but-empty screen deterministically.
+    func testEmptyMaskGeometry_flagFalse() throws {
         let result = try XCTUnwrap(coralogixRum.validateHybridInteraction(
-            clickPayload(x: 50, y: 50)))
+            clickPayload(x: 50, y: 50), maskRects: []))
 
         XCTAssertEqual(result[Keys.isMaskedElement.rawValue] as? Bool, false)
         XCTAssertEqual(result[Keys.targetElementInnerText.rawValue] as? String, "7")
     }
 
-    /// Production path: geometry fetched live from the registered session replay.
-    func testLiveMaskGeometry_isFetchedFromRegisteredSessionReplay() throws {
-        let mock = MockSessionReplay()
-        mock.maskRectsToReturn = maskRects
-        SdkManager.shared.register(sessionReplayInterface: mock)
-        defer { SdkManager.shared.register(sessionReplayInterface: nil) }
+    // MARK: - The replay's pixel policy is not an input to the verdict
 
-        let result = try XCTUnwrap(coralogixRum.validateHybridInteraction(
-            clickPayload(x: 50, y: 50)))
+    /// A window carrying both kinds of masked content: a `cxMask` view (deliberate masking) and
+    /// a label the replay's `maskText` policy would black out. Returns the geometry each of the
+    /// two consumers collects — the capture pass takes the policy, the interaction path does not.
+    private func makeMixedMaskingWindow() -> (window: UIWindow,
+                                              policyLabel: UILabel,
+                                              deliberatePoint: CGPoint,
+                                              interactionRects: [CGRect],
+                                              captureRects: [CGRect],
+                                              policyImagePoint: CGPoint) {
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 300, height: 300))
+        window.isHidden = false  // windows are born hidden; the walk skips hidden views
 
-        XCTAssertEqual(result[Keys.isMaskedElement.rawValue] as? Bool, true)
-        XCTAssertEqual(result[Keys.targetElementInnerText.rawValue] as? String, "***")
+        let deliberate = UIView(frame: CGRect(x: 0, y: 0, width: 100, height: 100))
+        deliberate.cxMask = true
+        let policyLabel = UILabel(frame: CGRect(x: 0, y: 200, width: 100, height: 40))
+        policyLabel.text = "secret code"
+        // Present so that flipping `maskAllImages` on, not just `maskText`, is caught below.
+        let policyImage = UIImageView(frame: CGRect(x: 200, y: 0, width: 40, height: 40))
+        window.addSubview(deliberate)
+        window.addSubview(policyLabel)
+        window.addSubview(policyImage)
+
+        return (window: window,   // retained: subviews are released when the window goes
+                policyLabel: policyLabel,
+                deliberatePoint: CGPoint(x: 50, y: 50),
+                // The inputs `UIView.deliberateMaskRects()` uses: policy off.
+                interactionRects: window.collectNativeMaskRects(in: window,
+                                                                maskText: nil,
+                                                                maskAllImages: false),
+                // The inputs the capture pass uses, and so the replay's tap-marker test.
+                captureRects: window.collectNativeMaskRects(in: window,
+                                                            maskText: ["secret"],
+                                                            maskAllImages: true),
+                policyImagePoint: CGPoint(x: 220, y: 20))
+    }
+
+    /// The production entry point itself, rather than a hand-rolled copy of the inputs it
+    /// chooses. `deliberateMaskRects` is what both interaction paths call, so its arguments are
+    /// the thing that has to stay pinned: flipping either `maskText` or `maskAllImages` on
+    /// inside it reintroduces exactly the over-masking this change removes, and every test that
+    /// passes `maskRects:` explicitly would stay green while it did.
+    func testDeliberateMaskRects_collectsCxMaskOnly_excludingPixelPolicy() throws {
+        let fixture = makeMixedMaskingWindow()
+
+        let rects = try XCTUnwrap(UIView.deliberateMaskRects(in: [fixture.window]))
+
+        XCTAssertEqual(rects, [CGRect(x: 0, y: 0, width: 100, height: 100)],
+                       "Only the cxMask rect: neither the maskText-matching label nor the "
+                       + "image view may contribute to the interaction path's geometry")
+        XCTAssertTrue(rects.contains { $0.contains(fixture.deliberatePoint) },
+                      "A tap on the cxMask view must still resolve as masked")
+        XCTAssertFalse(rects.contains { $0.contains(CGPoint(x: 50, y: 220)) },
+                       "maskText geometry must not reach the interaction verdict")
+        XCTAssertFalse(rects.contains { $0.contains(fixture.policyImagePoint) },
+                       "maskAllImages geometry must not reach the interaction verdict")
+    }
+
+    /// Counterpart: the capture pass, which feeds the replay's tap-marker test, still takes the
+    /// full policy. The divergence is the point — same walk, different inputs.
+    func testCapturePassGeometry_stillIncludesPixelPolicy() {
+        let fixture = makeMixedMaskingWindow()
+
+        XCTAssertEqual(fixture.captureRects.count, 3,
+                       "cxMask, maskText and maskAllImages all feed the capture pass")
+        XCTAssertTrue(fixture.captureRects.contains { $0.contains(CGPoint(x: 50, y: 220)) })
+        XCTAssertTrue(fixture.captureRects.contains { $0.contains(fixture.policyImagePoint) })
+    }
+
+    /// The acceptance pin. With `maskText` configured and no `cxMask` on the element, a tap on
+    /// text reports unmasked and ships its real text — on both paths. The pixel policy answers
+    /// whether pixels are hidden in a frame, not whether text may leave the device, and letting
+    /// it decide the verdict over-masks every text tap on a wrapper's defaults. Android and
+    /// Flutter resolve from deliberate masking alone; this is iOS matching them.
+    func testPolicyMaskedText_reportsUnmasked_withRealText_bothPaths() throws {
+        let fixture = makeMixedMaskingWindow()
+        let point = CGPoint(x: 50, y: 220)
+
+        XCTAssertTrue(fixture.captureRects.contains { $0.contains(point) },
+                      "Fixture check: the capture pass must mask these pixels, so this test is "
+                      + "about the two consumers diverging — not about nothing being masked")
+        XCTAssertFalse(fixture.interactionRects.contains { $0.contains(point) },
+                       "The interaction path's geometry must not contain the policy-masked label")
+
+        let native = TapDataExtractor.extract(
+            from: TouchEvent(view: fixture.policyLabel, location: point,
+                             eventType: .click, scrollDirection: nil),
+            maskRects: fixture.interactionRects)
+
+        let hybrid = try XCTUnwrap(coralogixRum.validateHybridInteraction(
+            clickPayload(x: point.x, y: point.y,
+                         extra: [Keys.targetElementInnerText.rawValue: "secret code"]),
+            maskRects: fixture.interactionRects))
+
+        XCTAssertEqual(native[Keys.isMaskedElement.rawValue] as? Bool, false)
+        XCTAssertEqual(native[Keys.targetElementInnerText.rawValue] as? String, "secret code")
+        XCTAssertEqual(hybrid[Keys.isMaskedElement.rawValue] as? Bool, false)
+        XCTAssertEqual(hybrid[Keys.targetElementInnerText.rawValue] as? String, "secret code")
+    }
+
+    /// Deliberate masking is untouched: a tap on a `cxMask` view still reports masked with `***`.
+    func testDeliberatelyMaskedView_stillReportsMasked_bothPaths() throws {
+        let fixture = makeMixedMaskingWindow()
+        let point = fixture.deliberatePoint
+
+        let button = UIButton()
+        button.setTitle("7", for: .normal)
+        let native = TapDataExtractor.extract(
+            from: TouchEvent(view: button, location: point, eventType: .click, scrollDirection: nil),
+            maskRects: fixture.interactionRects)
+
+        let hybrid = try XCTUnwrap(coralogixRum.validateHybridInteraction(
+            clickPayload(x: point.x, y: point.y), maskRects: fixture.interactionRects))
+
+        XCTAssertEqual(native[Keys.isMaskedElement.rawValue] as? Bool, true)
+        XCTAssertEqual(native[Keys.targetElementInnerText.rawValue] as? String, "***")
+        XCTAssertEqual(hybrid[Keys.isMaskedElement.rawValue] as? Bool, true)
+        XCTAssertEqual(hybrid[Keys.targetElementInnerText.rawValue] as? String, "***")
+    }
+
+    /// Masking is inherited, so an unmasked key inside a `cxMask` container is still masked —
+    /// on the native path via the view-tree walk, which needs no geometry at all.
+    func testUnmaskedKeyInsideMaskedContainer_stillReportsMasked() {
+        let keypad = UIView(frame: CGRect(x: 0, y: 0, width: 200, height: 160))
+        keypad.cxMask = true
+        let key = UIButton(frame: CGRect(x: 10, y: 10, width: 50, height: 40))
+        key.setTitle("7", for: .normal)
+        keypad.addSubview(key)
+
+        let native = TapDataExtractor.extract(
+            from: TouchEvent(view: key, location: CGPoint(x: 35, y: 30),
+                             eventType: .click, scrollDirection: nil),
+            maskRects: nil)
+
+        XCTAssertEqual(native[Keys.isMaskedElement.rawValue] as? Bool, true)
+        XCTAssertEqual(native[Keys.targetElementInnerText.rawValue] as? String, "***")
     }
 
     // MARK: - The wrapper's own verdict
