@@ -50,12 +50,15 @@ public struct SessionReplayOptions {
     /// Automatically starts session recording if enabled in the options.
     public var autoStartSessionRecording: Bool
 
-    /// When set, the SDK requests a pre-masked bitmap from this provider
-    /// for each FlutterView found in the captured view hierarchy.
+    /// When set, the SDK requests a pre-masked bitmap from this provider once per capture,
+    /// for the first FlutterView it finds in the captured view hierarchy.
     ///
     /// The Flutter plugin registers this callback to return finished RGBA pixel data;
     /// the SDK substitutes it into the FlutterView region of the captured host bitmap.
     /// This path replaces the frame-skew-prone pull-based maskRegionsProvider.
+    ///
+    /// See [FlutterViewBitmapProvider] for the full contract, including the single-implicit-view
+    /// assumption this path shares with the Android SDK.
     public var flutterViewBitmapProvider: FlutterViewBitmapProvider?
 
     public init(recordingType: RecordingType = .image,

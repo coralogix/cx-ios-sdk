@@ -75,6 +75,60 @@ final class CaptureCompletionOutcomeTests: XCTestCase {
         return (outcome, savedAtCompletion)
     }
 
+    // MARK: - A capture requested off the main thread
+
+    /// Records which thread the UIKit walk ran on, and stands in a real frame so the capture
+    /// can complete without a foreground scene.
+    private final class ThreadRecordingModel: SessionReplayModel {
+        private let lock = NSLock()
+        private var _preparedOnMain: Bool?
+
+        var preparedOnMain: Bool? {
+            lock.lock(); defer { lock.unlock() }; return _preparedOnMain
+        }
+
+        override func prepareCapturedFrameOnMain(properties: [String: Any]?) -> CapturedFrame? {
+            lock.lock()
+            _preparedOnMain = Thread.isMainThread
+            lock.unlock()
+            let renderer = UIGraphicsImageRenderer(size: CGSize(width: 4, height: 4))
+            let image = renderer.image { ctx in
+                UIColor.green.setFill()
+                ctx.fill(CGRect(x: 0, y: 0, width: 4, height: 4))
+            }
+            return CapturedFrame(image: image, maskRects: [])
+        }
+
+        override func saveScreenshotToFileSystem(screenshotData: Data, properties: [String: Any]?) {}
+    }
+
+    /// An ANR span is built on the watchdog thread and `reportError` can be called from anywhere.
+    /// The UIKit walk bails off-main, so a capture requested from a background queue used to drop
+    /// without ever rendering — the frame was lost and the span carried no screenshot.
+    func testCaptureRequestedOffMain_runsTheUIKitWalkOnMainAndStillShips() {
+        // Needs options: the native path reads captureCompressionQuality off them to encode.
+        let model = ThreadRecordingModel(sessionReplayOptions: SessionReplayOptions(recordingType: .image))
+        let answered = expectation(description: "completion called")
+        answered.assertForOverFulfill = true
+        var outcome: Result<Void, CaptureEventError>?
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            XCTAssertFalse(Thread.isMainThread, "The request must start off the main thread")
+            _ = model.captureAutomatic(properties: nil) { result in
+                outcome = result
+                answered.fulfill()
+            }
+        }
+
+        wait(for: [answered], timeout: 5)
+        XCTAssertEqual(model.preparedOnMain, true,
+                       "The capture must be moved to the main thread, not dropped")
+        guard case .success = outcome else {
+            XCTFail("An off-main request must still ship a frame, got \(String(describing: outcome))")
+            return
+        }
+    }
+
     // MARK: - A frame that ships
 
     func testCompletion_reportsSuccessAndSavesTheFrame() {

@@ -214,6 +214,23 @@ public class SessionReplayModel {
 
     internal func captureAutomatic(properties: [String: Any]?,
                                    completion: CaptureEventCompletion? = nil) -> Result<Void, CaptureEventError> {
+        // Both paths walk UIKit before they do anything else: the native one renders the window
+        // hierarchy, and the Flutter one locates the FlutterView before it asks Dart for pixels.
+        // A capture requested off-main therefore used to fail those main-thread guards and drop
+        // without ever requesting a frame — and captures do arrive off-main, an ANR span comes
+        // from the watchdog thread and `reportError` can be called from anywhere. Hop instead,
+        // the same way `prepareScreenshotIfNeeded` already does.
+        guard Thread.isMainThread else {
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else {
+                    completion?(.failure(.captureFailed))
+                    return
+                }
+                _ = self.captureAutomatic(properties: properties, completion: completion)
+            }
+            return .success(())
+        }
+
         // Flutter path: Dart rasterises + masks in one synchronous slice and pushes
         // the pre-masked bitmap to native. Async — returns immediately.
         if sessionReplayOptions?.flutterViewBitmapProvider != nil {
