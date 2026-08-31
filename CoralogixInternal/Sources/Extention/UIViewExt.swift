@@ -342,6 +342,9 @@ public extension UIView {
             .sorted(by: { $0.windowLevel < $1.windowLevel })
 
         var nativeMaskRects: [CGRect] = []
+        // Set when a window holds a FlutterView the caller supplied no bitmap for; the frame
+        // rendered in that state is not publishable, so the whole capture is dropped.
+        var flutterRegionUnavailable = false
         let bounds = scene.screen.bounds
         let format = UIGraphicsImageRendererFormat()
         format.scale = scale
@@ -362,12 +365,13 @@ public extension UIView {
                         nativeMaskRects += flutterMaskRects
                             .map { $0.offsetBy(dx: rect.origin.x, dy: rect.origin.y) }
                     } else {
-                        // Screen-space fallback: flutterViewRect is already in screen
-                        // coordinates (flutterView.convert(_, to: nil)); win.frame matches
-                        // the renderer's screen-coordinate space, win.bounds (origin 0,0)
-                        // would black-fill the wrong spot for an offset window (BUGV2-6045).
-                        UIColor.black.setFill()
-                        UIRectFill(flutterViewRect ?? win.frame)
+                        // A FlutterView with no bitmap to paste. Black-filling it here produced a
+                        // frame that was solid black over the whole app window and shipped as if
+                        // it were a real capture — the caller decided there was no FlutterView to
+                        // ask Dart about, and this loop disagreed. Drop the capture instead: no
+                        // black fill, no raw GPU surface, which is the rule the Flutter provider
+                        // path already follows when Dart answers with no frame.
+                        flutterRegionUnavailable = true
                     }
                 } else {
                     // Native window: drawHierarchy goes through the screen compositor
@@ -394,6 +398,11 @@ public extension UIView {
                 UIColor.black.setFill()
                 for rect in nativeMaskRects { UIRectFill(rect) }
             }
+        }
+
+        if flutterRegionUnavailable {
+            Log.d("[SR] FlutterView present with no Dart bitmap — dropping the capture")
+            return nil
         }
 
         // Read after the renderer block, which runs synchronously — every rect the frame masked

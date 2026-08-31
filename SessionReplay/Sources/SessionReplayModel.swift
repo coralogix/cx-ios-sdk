@@ -560,22 +560,24 @@ public class SessionReplayModel {
                 self.dropCapture(properties: properties, completion: completion)
             }
 
-            // Both exemptions survive the move to fingerprint matching.
-            //
-            // A click frame is exempt because the tap marker is drawn by the scanner pipeline,
-            // downstream of here — the image being compared does not carry it yet, so a tap on
-            // an unchanged screen would dedup away and lose its marker frame. Android draws its
-            // marker before its own check and so needs no exemption; this one is an ordering
-            // difference, not a policy difference.
-            //
-            // A manual capture is exempt because the host asked for this frame, and the
-            // void-returning public overload has no way to answer "identical to the last one".
+            // A manual capture is exempt from deduplication: the host asked for this frame, and
+            // the void-returning public overload has no way to answer "identical to the last one".
             let isManual = (properties?[Keys.isManual.rawValue] as? Bool) == true
-            let isClickFrame = self.getClickPoint(from: properties) != nil
+
+            // A click frame is exempt only when its marker will actually be drawn. The marker is
+            // painted by the scanner pipeline downstream of here, so the image being compared
+            // does not carry it yet and an unchanged screen would otherwise dedup the marker
+            // frame away. But a tap inside a masked region is never drawn — the pipeline
+            // suppresses it so a run of markers cannot reconstruct what was typed on a masked
+            // keypad — and that frame is a true duplicate. Tested against the same rects the
+            // pipeline will test, so the two cannot disagree.
+            let clickPoint = self.getClickPoint(from: properties)
+            let maskRects = (properties?[Keys.maskRects.rawValue] as? [CGRect]) ?? []
+            let willDrawMarker = clickPoint.map { !maskRects.containsTap($0) } ?? false
 
             // Compared before encoding, so a dropped frame costs no JPEG. A frame whose
             // fingerprint cannot be built is kept: shipping it twice beats losing it.
-            let shouldSkip = !isClickFrame && !isManual && self.screenshotDataQueue.sync { () -> Bool in
+            let shouldSkip = !willDrawMarker && !isManual && self.screenshotDataQueue.sync { () -> Bool in
                 guard let cgImage = image.cgImage,
                       let fingerprint = FrameFingerprint.make(from: cgImage,
                                                               options: self.frameDiffOptions)

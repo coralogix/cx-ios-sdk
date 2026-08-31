@@ -227,4 +227,26 @@ final class CaptureCompletionOutcomeTests: XCTestCase {
         }
         XCTAssertEqual(saved, 2, "The click frame must reach the save path despite identical pixels")
     }
+
+    /// The exemption above is for the marker the pipeline is about to draw. A tap inside a
+    /// masked region is never drawn — the pipeline suppresses it so a run of markers cannot
+    /// reconstruct what was typed on a masked keypad — so that frame carries nothing new and
+    /// is a genuine duplicate.
+    func testCompletion_deduplicatesAnIdenticalClickFrameWhoseMarkerIsSuppressed() {
+        _ = encode(solidImage(red: 1.0))
+
+        let tapUnderAMask: [String: Any] = [
+            Keys.positionX.rawValue: 10.0,
+            Keys.positionY.rawValue: 20.0,
+            Keys.maskRects.rawValue: [CGRect(x: 0, y: 0, width: 100, height: 100)]
+        ]
+        let (outcome, saved) = encode(solidImage(red: 1.0), properties: tapUnderAMask)
+
+        guard case .failure(let error) = outcome else {
+            XCTFail("A click frame with no marker to draw must deduplicate, got \(outcome)")
+            return
+        }
+        XCTAssertEqual(error, .skippingEvent)
+        XCTAssertEqual(saved, 1, "no second frame should reach the save path")
+    }
 }
