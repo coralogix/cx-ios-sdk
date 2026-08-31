@@ -281,7 +281,8 @@ public extension UIView {
     ///
     /// Per-window routing:
     /// - Windows whose subtree contains a FlutterView → composite `flutterCGImage` at
-    ///   `flutterViewRect`; if either is nil → black fill.
+    ///   `flutterViewRect`; if either is nil → the capture is dropped. The Dart bytes are
+    ///   already masked, so `flutterMaskRects` are reported but never repainted.
     /// - All other windows → `drawHierarchy(afterScreenUpdates:false)` + synchronous UIView
     ///   walks for text, image, and `cxMask` views.
     ///
@@ -341,7 +342,14 @@ public extension UIView {
             .filter { !$0.isHidden && $0.alpha > 0 }
             .sorted(by: { $0.windowLevel < $1.windowLevel })
 
+        // Rects this pass paints black. Dart's are deliberately not in here.
         var nativeMaskRects: [CGRect] = []
+        // Rects Dart already painted into its own bitmap. Reported so a tap over masked Flutter
+        // content is suppressed on the same terms as a native mask, but never repainted: the
+        // bytes arrive pre-masked, so filling them again can only cover pixels Dart chose to
+        // keep. With a dialog open Dart reports every masked row behind the barrier, which
+        // unions to the whole screen — repainting that turned the frame solid black.
+        var flutterReportedMaskRects: [CGRect] = []
         // Set when a window holds a FlutterView the caller supplied no bitmap for; the frame
         // rendered in that state is not publishable, so the whole capture is dropped.
         var flutterRegionUnavailable = false
@@ -362,7 +370,7 @@ public extension UIView {
                         uiImage.draw(in: rect)
                         // Dart rects are Flutter-view-local; the view sits at rect.origin in
                         // screen space, the renderer's coordinate space.
-                        nativeMaskRects += flutterMaskRects
+                        flutterReportedMaskRects += flutterMaskRects
                             .map { $0.offsetBy(dx: rect.origin.x, dy: rect.origin.y) }
                     } else {
                         // A FlutterView with no bitmap to paste. Black-filling it here produced a
@@ -407,7 +415,9 @@ public extension UIView {
 
         // Read after the renderer block, which runs synchronously — every rect the frame masked
         // has been appended by this point.
-        return CapturedFrame(image: image, maskRects: nativeMaskRects)
+        // Both sets travel on the frame — tap suppression asks "is this point masked", and a
+        // Dart-masked region hides an element just as a native one does.
+        return CapturedFrame(image: image, maskRects: nativeMaskRects + flutterReportedMaskRects)
     }
 
     /// Convenience wrapper — captures and JPEG-encodes inline. Prefer calling
