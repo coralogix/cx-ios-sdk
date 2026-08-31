@@ -56,8 +56,8 @@ extension CoralogixRum {
 
     private func processInteractionEvent(_ properties: [String: Any]) {
         if shouldEmitUserActionSpan {
-            var span = makeSpan(event: .userInteraction, source: .console, severity: .info)
-            handleUserInteractionEvent(properties, span: &span)
+            let span = makeSpan(event: .userInteraction, source: .console, severity: .info)
+            handleUserInteractionEvent(properties, span: span)
         } else {
             // Hybrid or userActions disabled: still feed session replay from native touches.
             captureSessionReplayEventIfNeeded(properties)
@@ -74,42 +74,27 @@ extension CoralogixRum {
 
     /// Feeds session replay with interaction metadata (screenshot + properties). No RUM span.
     /// Used when native touch is detected but we are not emitting a user action span (hybrid or userActions off).
+    /// With no span to stamp there is nothing to wait for — the model hands the screenshot index
+    /// back on its own if the frame is dropped.
     private func captureSessionReplayEventIfNeeded(_ properties: [String: Any]) {
         guard let sessionReplay = SdkManager.shared.getSessionReplay(),
               let screenshotManager = coralogixExporter?.getScreenshotManager() else { return }
-        _ = captureSessionReplay(properties: properties, screenshotManager: screenshotManager, sessionReplay: sessionReplay)
+        let metadata = buildMetadata(properties: properties,
+                                     screenshotLocation: screenshotManager.nextScreenshotLocation)
+        _ = sessionReplay.captureEvent(properties: metadata)
     }
 
-    /// Shared path: get next screenshot location, build metadata, capture event; reverts counter on .skippingEvent. Returns (result, location) for callers that need to apply attributes.
-    private func captureSessionReplay(properties: [String: Any], screenshotManager: ScreenshotManager, sessionReplay: SessionReplayInterface) -> (Result<Void, CaptureEventError>, ScreenshotLocation) {
-        let screenshotLocation = screenshotManager.nextScreenshotLocation
-        let metadata = buildMetadata(properties: properties, screenshotLocation: screenshotLocation)
-        let result = sessionReplay.captureEvent(properties: metadata)
-        if case .failure(let error) = result, error == .skippingEvent {
-            screenshotManager.revertScreenshotCounter()
-        }
-        return (result, screenshotLocation)
-    }
-
+    /// The interaction is reported whether or not a frame shipped — only the screenshot attributes
+    /// are conditional, and the span closes once the capture resolves. Matches Android, where a
+    /// dropped frame yields a null screenshot context and the span is emitted without one.
     internal func handleUserInteractionEvent(_ properties: [String: Any],
-                                             span: inout any Span,
+                                             span: any Span,
                                              window: UIWindow? = Global.getKeyWindow()) {
-        if let sessionReplay = SdkManager.shared.getSessionReplay(),
-           let screenshotManager = coralogixExporter?.getScreenshotManager() {
-            let (result, screenshotLocation) = captureSessionReplay(properties: properties, screenshotManager: screenshotManager, sessionReplay: sessionReplay)
-            switch result {
-            case .success:
-                applyScreenshotAttributes(screenshotLocation, to: &span)
-            case .failure:
-                break
-            }
-        }
-
         span.setAttribute(
             key: Keys.tapObject.rawValue,
             value: Helper.convertDictionaryToJsonString(dict: properties)
         )
-        span.end()
+        recordScreenshotForSpan(on: span, extraProperties: properties) { _ in span.end() }
     }
     
     internal func buildMetadata(properties: [String: Any],
@@ -141,8 +126,8 @@ extension CoralogixRum {
         }
         guard let validated = validateHybridInteraction(dictionary) else { return }
 
-        var span = makeSpan(event: .userInteraction, source: .console, severity: .info)
-        handleUserInteractionEvent(validated, span: &span)
+        let span = makeSpan(event: .userInteraction, source: .console, severity: .info)
+        handleUserInteractionEvent(validated, span: span)
     }
 
     /// Validates a dictionary received from a hybrid bridge before it is written into a span.

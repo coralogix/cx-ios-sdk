@@ -192,14 +192,14 @@ final class CoralogixRumTests: XCTestCase {
     
     func testHandleAppearStateIfNeededWhenStateIsNotifyOnAppearShouldCaptureEventAndSetSpanAttribute() {
         let coralogixRum = makeMockCoralogixRum()
-        var mockSpan: any Span = MockSpan()
+        let mockSpan: any Span = MockSpan()
         
         // Arrange
         let view = CXView(state: .notifyOnAppear, name: "home")
         let mockSessionReplay =  MockSessionReplay()
         SdkManager.shared.register(sessionReplayInterface: mockSessionReplay)
         // Act
-        coralogixRum.handleAppearStateIfNeeded(cxView: view, span: &mockSpan)
+        coralogixRum.handleAppearStateIfNeeded(cxView: view, span: mockSpan) { }
         
         // Assert
         XCTAssertNotNil(mockSessionReplay.captureEventCalledWith, "Expected SessionReplay.captureEvent to be invoked")
@@ -214,7 +214,7 @@ final class CoralogixRumTests: XCTestCase {
     
     func testHandleAppearStateIfNeededWhenStateIsNotNotifyOnAppearShouldNotCaptureEvent() {
         let coralogixRum = makeMockCoralogixRum()
-        var mockSpan: any Span = MockSpan()
+        let mockSpan: any Span = MockSpan()
         let mockSessionReplay =  MockSessionReplay()
         
         // Arrange
@@ -222,7 +222,7 @@ final class CoralogixRumTests: XCTestCase {
         
         // Act
         SdkManager.shared.register(sessionReplayInterface: mockSessionReplay)
-        coralogixRum.handleAppearStateIfNeeded(cxView: view, span: &mockSpan)
+        coralogixRum.handleAppearStateIfNeeded(cxView: view, span: mockSpan) { }
         
         // Assert
         XCTAssertNil(mockSessionReplay.captureEventCalledWith)
@@ -235,11 +235,11 @@ final class CoralogixRumTests: XCTestCase {
         
         SdkManager.shared.register(sessionReplayInterface: nil)
         let coralogixRum = makeMockCoralogixRum()
-        var mockSpan: any Span = MockSpan()
+        let mockSpan: any Span = MockSpan()
         let view = CXView(state: .notifyOnAppear, name: "home")
         
         // Act
-        coralogixRum.handleAppearStateIfNeeded(cxView: view, span: &mockSpan)
+        coralogixRum.handleAppearStateIfNeeded(cxView: view, span: mockSpan) { }
         
         // Assert
         if let m = mockSpan as? MockSpan {
@@ -443,7 +443,7 @@ final class CoralogixRumTests: XCTestCase {
         
     func testAddScreenshotIdAddsAttributeAndCapturesEvent() {
         // Arrange
-        var span: any Span = MockSpan()
+        let span: any Span = MockSpan()
         let mockSessionReplay = MockSessionReplay()
         
         SdkManager.shared.register(sessionReplayInterface: mockSessionReplay)
@@ -451,7 +451,7 @@ final class CoralogixRumTests: XCTestCase {
         let coralogixRum = makeMockCoralogixRum()
         
         // Act
-        coralogixRum.recordScreenshotForSpan(to: &span)
+        coralogixRum.recordScreenshotForSpan(on: span) { _ in }
         
         guard let mockSpan = span as? MockSpan else {
             XCTFail("Span is not MockSpan")
@@ -467,6 +467,56 @@ final class CoralogixRumTests: XCTestCase {
         }
     }
     
+    func testRecordScreenshotForSpan_whenTheFrameIsDropped_leavesTheSpanUnstamped() {
+        let span: any Span = MockSpan()
+        let mockSessionReplay = MockSessionReplay()
+        // Dart answered with no bitmap (or the frame deduped) — the model handed the
+        // screenshot index back, so no frame will ever carry it.
+        mockSessionReplay.captureEventResult = .failure(.skippingEvent)
+        SdkManager.shared.register(sessionReplayInterface: mockSessionReplay)
+        let coralogixRum = makeMockCoralogixRum()
+
+        var reportedCapture: Bool?
+        coralogixRum.recordScreenshotForSpan(on: span) { reportedCapture = $0 }
+
+        XCTAssertEqual(reportedCapture, false, "A dropped frame must be reported to the caller")
+        guard let mockSpan = span as? MockSpan else {
+            XCTFail("Span is not MockSpan")
+            return
+        }
+        // Stamping here is the bug: the index was returned, so a later frame would take it
+        // and the span would point at a different screen entirely.
+        XCTAssertNil(mockSpan.recordedAttributes[Keys.screenshotId.rawValue],
+                     "A dropped frame must leave screenshotId off the span")
+        XCTAssertNil(mockSpan.recordedAttributes[Keys.page.rawValue],
+                     "A dropped frame must leave page off the span")
+        SdkManager.shared.register(sessionReplayInterface: nil)
+    }
+
+    func testScreenshotSpan_isEmittedOnlyWhenAFrameShipped() throws {
+        let mockSessionReplay = MockSessionReplay()
+        SdkManager.shared.register(sessionReplayInterface: mockSessionReplay)
+        let coralogixRum = makeMockCoralogixRum()
+        let tracer = MockTracer()
+        coralogixRum.tracerProvider = { tracer }
+
+        // A frame shipped: the span closes and is exported.
+        coralogixRum.makeSpan()
+        let captured = try XCTUnwrap(tracer.mockSpanBuilder.startedSpan)
+        XCTAssertTrue(captured.didEnd, "A captured frame must produce a closed screenshot span")
+        XCTAssertNotNil(captured.recordedAttributes[Keys.screenshotId.rawValue],
+                        "A captured frame must stamp the span with the screenshot it points at")
+
+        // The frame was dropped: a screenshot span with nothing to point at is not emitted.
+        mockSessionReplay.captureEventResult = .failure(.skippingEvent)
+        coralogixRum.makeSpan()
+        let dropped = try XCTUnwrap(tracer.mockSpanBuilder.startedSpan)
+        XCTAssertFalse(dropped === captured, "Each makeSpan call must build its own span")
+        XCTAssertFalse(dropped.didEnd,
+                       "A dropped frame must leave the screenshot span unemitted")
+        SdkManager.shared.register(sessionReplayInterface: nil)
+    }
+
     func testGetErrorSpanSetsAttributesAndCallsHelpers() {
         let mockSessionReplay = MockSessionReplay()
         SdkManager.shared.register(sessionReplayInterface: mockSessionReplay)
@@ -891,8 +941,17 @@ final class MockSessionReplay: SessionReplayInterface {
         captureEventCalledWith = properties
         return .success(())
     }
-    
+
+    /// Answers synchronously so span assertions can run right after the call.
+    /// Set `captureEventResult` to exercise the dropped-frame path.
+    func captureEvent(properties: [String : Any]?,
+                      completion: @escaping CaptureEventCompletion) {
+        captureEventCalledWith = properties
+        completion(captureEventResult)
+    }
+
     var captureEventCalledWith: [String: Any]?
+    var captureEventResult: Result<Void, CoralogixInternal.CaptureEventError> = .success(())
     
     func startRecording() {
         

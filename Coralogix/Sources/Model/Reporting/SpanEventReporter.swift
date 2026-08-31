@@ -22,10 +22,10 @@ import CoralogixInternal
 /// using its internal `makeSpan` / `recordScreenshotForSpan` methods.
 final class SpanEventReporter: EventReporter {
     private let createErrorSpan: () -> (any Span)?
-    private let recordScreenshot: (inout any Span) -> Void
+    private let recordScreenshot: (any Span, @escaping () -> Void) -> Void
 
     init(createErrorSpan: @escaping () -> (any Span)?,
-         recordScreenshot: @escaping (inout any Span) -> Void) {
+         recordScreenshot: @escaping (any Span, @escaping () -> Void) -> Void) {
         self.createErrorSpan = createErrorSpan
         self.recordScreenshot = recordScreenshot
     }
@@ -37,11 +37,11 @@ final class SpanEventReporter: EventReporter {
                 Log.d("[SpanEventReporter] event.type=.error but concrete type is not ANRErrorEvent; dropping")
                 return
             }
-            guard var span = createErrorSpan() else { return }
+            guard let span = createErrorSpan() else { return }
             span.setAttribute(key: Keys.errorMessage.rawValue, value: anr.errorMessage)
             span.setAttribute(key: Keys.errorType.rawValue,    value: anr.errorType)
-            recordScreenshot(&span)
-            span.end()
+            // The span closes when the capture resolves — see recordScreenshotForSpan.
+            recordScreenshot(span) { span.end() }
 
         // These event types do not flow through the EventReporter
         // protocol path today — they emit spans via other code paths.

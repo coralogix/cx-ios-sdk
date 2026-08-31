@@ -39,25 +39,21 @@ public class SessionReplayModel {
     /// Monotonic counter passed to flutterViewBitmapProvider as frameId.
     private var captureFrameCounter: Int64 = 0
 
-    // Guards the three fields below (same serial-queue-as-mutex pattern as
+    // Guards the two fields below (same serial-queue-as-mutex pattern as
     // `screenshotDataQueue`). The provider callback runs on main; `updateSessionId`
     // runs off-main, so these are genuinely cross-thread.
     private let flutterFrameQueue = DispatchQueue(label: "com.coralogix.sessionReplay.flutterFrameQueue")
 
     /// A decoded Dart delivery: the bitmap together with the mask rects Dart reported for it
-    /// (screen offsets applied later, at composite time). One entry on purpose — when a stale
-    /// bitmap is reused, it must carry the rects of its own frame; caching the rects separately
-    /// could pair a reused bitmap with a newer frame's geometry, exactly the pixels/metadata
-    /// disagreement the rects exist to prevent.
+    /// (screen offsets applied later, at composite time). Pixels and geometry travel on one
+    /// object so they can never be paired across frames.
     internal struct FlutterFrame {
         let image: CGImage
         let maskRects: [CGRect]
     }
 
-    // Last frame the provider delivered; reused when a later frame is nil.
-    private var _lastFlutterFrame: FlutterFrame?
-    // frameId of the delivery cached above. An out-of-order (older) callback must
-    // not overwrite a newer frame.
+    // frameId of the newest delivery already composited. A late, out-of-order callback
+    // carrying an older frameId is dropped, not shipped behind the newer frame.
     private var _latestAcceptedFlutterFrameId: Int64 = 0
     // Bumped on every session rotation. A callback whose captured generation no
     // longer matches was requested in a previous session — its frame must not leak
@@ -163,31 +159,41 @@ public class SessionReplayModel {
         }
     }
 
-    internal func captureImage(properties: [String: Any]? = nil) -> Result<Void, CaptureEventError> {
+    /// `completion` — when supplied — fires exactly once with the outcome the return value
+    /// cannot carry: whether a frame was actually encoded and queued for upload. Both capture
+    /// paths finish after this call returns (the native one encodes off-main, the Flutter one
+    /// waits on Dart), so a caller that stamps a span with screenshot attributes must wait for
+    /// it rather than trust `.success` here.
+    internal func captureImage(properties: [String: Any]? = nil,
+                               completion: CaptureEventCompletion? = nil) -> Result<Void, CaptureEventError> {
         guard !sessionId.isEmpty else {
             Log.e("[SessionReplayModel] Invalid sessionId")
+            completion?(.failure(.invalidSessionId))
             return .failure(.invalidSessionId)
         }
 
         guard let screenshotData = properties?[Keys.screenshotData.rawValue] as? Data else {
-            return self.captureAutomatic(properties: properties)
+            return self.captureAutomatic(properties: properties, completion: completion)
         }
 
         self.captureManual(properties: properties, screenshotData: screenshotData)
+        completion?(.success(()))
         return .success(())
     }
 
-    internal func captureAutomatic(properties: [String: Any]?) -> Result<Void, CaptureEventError> {
+    internal func captureAutomatic(properties: [String: Any]?,
+                                   completion: CaptureEventCompletion? = nil) -> Result<Void, CaptureEventError> {
         // Flutter path: Dart rasterises + masks in one synchronous slice and pushes
         // the pre-masked bitmap to native. Async — returns immediately.
         if sessionReplayOptions?.flutterViewBitmapProvider != nil {
-            captureAutomaticFlutter(properties: properties)
+            captureAutomaticFlutter(properties: properties, completion: completion)
             return .success(())
         }
 
         // Native path: synchronous UIView walk on main thread, encode off-main.
         guard let frame = prepareCapturedFrameOnMain(properties: properties),
               let options = sessionReplayOptions else {
+            completion?(.failure(.captureFailed))
             return .failure(.captureFailed)
         }
 
@@ -196,7 +202,8 @@ public class SessionReplayModel {
             image: frame.image,
             compressionQuality: options.captureCompressionQuality,
             properties: propertiesWithCaptureMetadata(properties, maskRects: frame.maskRects),
-            callerIncrementedCounter: callerIncrementedCounter
+            callerIncrementedCounter: callerIncrementedCounter,
+            completion: completion
         )
         return .success(())
     }
@@ -206,15 +213,30 @@ public class SessionReplayModel {
     /// Calls `flutterViewBitmapProvider` on the main thread; the provider invokes
     /// `captureMaskedFlutterView` on the Flutter MethodChannel and delivers the
     /// pre-masked RGBA bitmap via a callback that also fires on the main thread.
-    /// No blocking wait — the run loop handles the round-trip.
-    private func captureAutomaticFlutter(properties: [String: Any]?) {
+    /// No blocking wait — the run loop handles the round-trip. A `nil` delivery drops
+    /// the capture; nothing is carried over from an earlier cycle.
+    private func captureAutomaticFlutter(properties: [String: Any]?,
+                                         completion: CaptureEventCompletion? = nil) {
         guard let options = sessionReplayOptions,
-              let provider = options.flutterViewBitmapProvider else { return }
+              let provider = options.flutterViewBitmapProvider else {
+            completion?(.failure(.missingSessionReplayOptions))
+            return
+        }
 
         captureFrameCounter &+= 1
         let frameId = captureFrameCounter
         let callerIncrementedCounter = properties?[Keys.segmentIndex.rawValue] as? Int != nil
         let isClickFrame = getClickPoint(from: properties) != nil
+
+        // Nothing shipped for this cycle: give the caller's screenshot index back (it was
+        // minted for a frame that will never exist) and report the drop so no span advertises
+        // a screenshot the backend never receives.
+        let drop: () -> Void = {
+            if callerIncrementedCounter {
+                SdkManager.shared.getCoralogixSdk()?.revertScreenshotCounter()
+            }
+            completion?(.failure(.skippingEvent))
+        }
 
         // Locate the FlutterView on screen synchronously before yielding.
         let flutterViewRect = findFlutterViewRect()
@@ -224,35 +246,56 @@ public class SessionReplayModel {
             guard let frame = prepareCapturedFrameOnMain(
                 options: options, flutterCGImage: nil, flutterViewRect: nil, isClickFrame: isClickFrame
             ) else {
-                if callerIncrementedCounter {
-                    SdkManager.shared.getCoralogixSdk()?.revertScreenshotCounter()
-                }
+                drop()
                 return
             }
             encodeAndProcess(image: frame.image, compressionQuality: options.captureCompressionQuality,
                              properties: propertiesWithCaptureMetadata(properties, maskRects: frame.maskRects),
-                             callerIncrementedCounter: callerIncrementedCounter)
+                             callerIncrementedCounter: callerIncrementedCounter,
+                             completion: completion)
             return
         }
 
         let requestGeneration = flutterFrameGeneration
 
+        // The provider is host-app code (the Flutter plugin), so a second delivery for the
+        // same cycle is possible; it must not composite twice or report the capture twice.
+        // Plain captured state, not a lock: the contract puts the callback on main, and an
+        // off-main delivery is already dropped by `prepareCapturedFrameOnMain`.
+        var didAnswer = false
+
         // viewId is intentionally "implicit_view" — the cx-flutter-plugin ignores it (uses `_`)
         // and routes all captures to Flutter's single implicit view. Only frameId matters.
-        provider("implicit_view", frameId) { [weak self] bitmap in
-            guard let self = self, let options = self.sessionReplayOptions else { return }
+        //
+        // isClick/tapTimestampMs let Dart hold a tap capture for the next committed frame
+        // (or answer nil when the tap is already too stale to draw honestly) — the same
+        // inputs the Android provider receives.
+        provider("implicit_view", frameId, isClickFrame,
+                 tapTimestampMilliseconds(from: properties, isClick: isClickFrame)) { [weak self] bitmap in
+            guard !didAnswer else {
+                Log.w("[SessionReplayModel] flutterViewBitmapProvider answered twice for frameId \(frameId) — ignoring")
+                return
+            }
+            didAnswer = true
+
+            guard let self = self, let options = self.sessionReplayOptions else {
+                drop()
+                return
+            }
 
             // Drop a callback that outlived its session: its frame belongs to a
-            // previous session and must not poison the new one. No counter revert —
-            // after a rotation the counter belongs to the new session, so reverting
-            // would corrupt it; a one-index gap in the old session is the lesser evil.
-            guard self.flutterFrameGeneration == requestGeneration else { return }
+            // previous session and must not poison the new one. Reported to the caller like
+            // any other drop, but without the counter revert — after a rotation the counter
+            // belongs to the new session, so reverting would corrupt it; a one-index gap in
+            // the old session is the lesser evil.
+            guard self.flutterFrameGeneration == requestGeneration else {
+                completion?(.failure(.skippingEvent))
+                return
+            }
 
-            // nil = no fresh frame: reuse the last one, or skip if none yet. Never black.
+            // nil = no frame for this cycle. Drop it — never black, never an earlier frame.
             guard let flutterFrame = self.resolveFlutterFrame(freshBitmap: bitmap, frameId: frameId) else {
-                if callerIncrementedCounter {
-                    SdkManager.shared.getCoralogixSdk()?.revertScreenshotCounter()
-                }
+                drop()
                 return
             }
 
@@ -265,34 +308,50 @@ public class SessionReplayModel {
                 options: options, flutterCGImage: flutterFrame.image, flutterViewRect: compositeRect,
                 flutterMaskRects: flutterFrame.maskRects, isClickFrame: isClickFrame
             ) else {
-                if callerIncrementedCounter {
-                    SdkManager.shared.getCoralogixSdk()?.revertScreenshotCounter()
-                }
+                drop()
                 return
             }
 
             self.encodeAndProcess(image: frame.image, compressionQuality: options.captureCompressionQuality,
                                   properties: self.propertiesWithCaptureMetadata(properties, maskRects: frame.maskRects),
-                                  callerIncrementedCounter: callerIncrementedCounter)
+                                  callerIncrementedCounter: callerIncrementedCounter,
+                                  completion: completion)
         }
     }
 
-    // Returns the frame to composite. A fresh bitmap is cached and returned only when
-    // its frameId is newer than the last cached one; a nil — or an out-of-order older
-    // delivery — reuses the newest cached frame, whose mask rects travel with it.
-    // nil only before any frame is cached.
+    /// Epoch-milliseconds timestamp of the tap that triggered this capture, so Dart can drop a
+    /// click frame that would land too long after the tap. `nil` for periodic captures.
+    ///
+    /// `getTimestamp` returns SECONDS on the capture path — `SessionReplay.captureEvent` stores
+    /// `Date().timeIntervalSince1970` — and callers convert, the same way `handleCapturedData`
+    /// hands its value to `SRNetworkManager` as `timestamp.milliseconds`. Sending seconds would
+    /// make every tap read as hours stale, so Dart would drop every click frame.
+    ///
+    /// `Int64(exactly:)` rather than a trapping conversion: the value is read out of an untyped
+    /// properties dictionary that hybrid bridges also populate, and a NaN or out-of-range Double
+    /// must never crash the host app. `nil` omits the staleness check, which is already how a
+    /// capture with no tap timestamp behaves.
+    internal func tapTimestampMilliseconds(from properties: [String: Any]?, isClick: Bool) -> Int64? {
+        guard isClick else { return nil }
+        return Int64(exactly: (getTimestamp(from: properties) * 1_000).rounded())
+    }
+
+    // Returns the frame to composite, or nil to drop the whole capture.
+    //
+    // Nothing is ever carried across capture cycles: a nil delivery, a bitmap that fails to
+    // decode, and a late out-of-order delivery all return nil. Substituting an earlier frame
+    // would ship stale pixels under a fresh timestamp, and for a tap it would test marker
+    // suppression against the wrong frame's mask rects — a marker over a field that is masked
+    // now but was not masked then. Android drops on the same terms; see
+    // `composeFlutterRegionOrDrop` in its FrameCapturer.
     internal func resolveFlutterFrame(freshBitmap: FlutterViewBitmap?, frameId: Int64) -> FlutterFrame? {
-        // Wrap the bytes outside the lock (cheap — no decode).
-        let freshFrame = freshBitmap.flatMap { bitmap in
-            Self.makeCGImage(from: bitmap).map { FlutterFrame(image: $0, maskRects: bitmap.maskRects) }
-        }
+        // Decode outside the lock (cheap — no pixel copy).
+        guard let bitmap = freshBitmap, let image = Self.makeCGImage(from: bitmap) else { return nil }
+        let frame = FlutterFrame(image: image, maskRects: bitmap.maskRects)
         return flutterFrameQueue.sync {
-            if let freshFrame, frameId > _latestAcceptedFlutterFrameId {
-                _latestAcceptedFlutterFrameId = frameId
-                _lastFlutterFrame = freshFrame
-                return freshFrame
-            }
-            return _lastFlutterFrame
+            guard frameId > _latestAcceptedFlutterFrameId else { return nil }
+            _latestAcceptedFlutterFrameId = frameId
+            return frame
         }
     }
 
@@ -371,15 +430,26 @@ public class SessionReplayModel {
         image: UIImage,
         compressionQuality: CGFloat,
         properties: [String: Any]?,
-        callerIncrementedCounter: Bool
+        callerIncrementedCounter: Bool,
+        completion: CaptureEventCompletion? = nil
     ) {
         encodingQueue.async { [weak self] in
-            guard let self = self else { return }
+            guard let self = self else {
+                completion?(.failure(.captureFailed))
+                return
+            }
 
-            guard let screenshotData = image.jpegData(compressionQuality: compressionQuality) else {
+            // Nothing shipped: hand the caller's screenshot index back and say so, so no span
+            // advertises a screenshot the backend never receives.
+            let drop: () -> Void = {
                 if callerIncrementedCounter {
                     SdkManager.shared.getCoralogixSdk()?.revertScreenshotCounter()
                 }
+                completion?(.failure(.skippingEvent))
+            }
+
+            guard let screenshotData = image.jpegData(compressionQuality: compressionQuality) else {
+                drop()
                 return
             }
 
@@ -394,13 +464,12 @@ public class SessionReplayModel {
             }
 
             if shouldSkip {
-                if callerIncrementedCounter {
-                    SdkManager.shared.getCoralogixSdk()?.revertScreenshotCounter()
-                }
+                drop()
                 return
             }
 
             self.saveScreenshotToFileSystem(screenshotData: screenshotData, properties: properties)
+            completion?(.success(()))
         }
     }
 
@@ -413,7 +482,6 @@ public class SessionReplayModel {
             self.sessionId = sessionId
             screenshotDataQueue.sync { _prvScreenshotData = nil }
             flutterFrameQueue.sync {
-                _lastFlutterFrame = nil
                 _latestAcceptedFlutterFrameId = 0
                 _flutterFrameGeneration &+= 1
             }

@@ -242,21 +242,39 @@ public class SessionReplay: SessionReplayInterface {
     }
 
     public func captureEvent(properties: [String : Any]?) -> Result<Void, CaptureEventError> {
+        startCapture(properties: properties, completion: nil)
+    }
+
+    public func captureEvent(properties: [String : Any]?,
+                             completion: @escaping CaptureEventCompletion) {
+        _ = startCapture(properties: properties, completion: completion)
+    }
+
+    /// Single implementation behind both `captureEvent` overloads. Returns the immediately-known
+    /// outcome for the synchronous caller; `completion`, when supplied, is called exactly once —
+    /// here for every rejection, or by the model once the frame is encoded or dropped.
+    private func startCapture(properties: [String: Any]?,
+                              completion: CaptureEventCompletion?) -> Result<Void, CaptureEventError> {
+        func reject(_ error: CaptureEventError) -> Result<Void, CaptureEventError> {
+            completion?(.failure(error))
+            return .failure(error)
+        }
+
         if isDummyInstance {
             Log.d("[SessionReplay] captureEvent() called on inactive instance (skipped by sampling)")
-            return .failure(.dummyInstance)
+            return reject(.dummyInstance)
         }
 
         guard let coralogixSdk = SdkManager.shared.getCoralogixSdk(),
               !coralogixSdk.isIdle() else {
             Log.d("[SessionReplay] CoralogixSdk is idle and skiped capture event")
-            return .failure(.sdkIdle)
+            return reject(.sdkIdle)
         }
 
         guard let sessionReplayModel = self.sessionReplayModel,
               let sessionReplayOptions = sessionReplayModel.sessionReplayOptions else {
             Log.e("[SessionReplay] missing sessionReplayOptions")
-            return .failure(.missingSessionReplayOptions)
+            return reject(.missingSessionReplayOptions)
         }
 
         var updatedProperties = properties ?? [:]
@@ -265,10 +283,11 @@ public class SessionReplay: SessionReplayInterface {
         if sessionReplayOptions.recordingType == .image {
             guard sessionReplayModel.isRecording else {
                 Log.e("[SessionReplay] Session Replay not recording ...")
-                return .failure(.notRecording)
+                return reject(.notRecording)
             }
-            return sessionReplayModel.captureImage(properties: updatedProperties)
+            return sessionReplayModel.captureImage(properties: updatedProperties, completion: completion)
         }
+        completion?(.success(()))
         return .success(())
     }
 

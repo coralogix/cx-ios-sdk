@@ -104,10 +104,15 @@ extension CoralogixRum: CoralogixInterface {
     }
     
     internal func makeSpan(isManual: Bool = false) {
-        var span = makeSpan(event: .screenshot, source: .console, severity: .info)
-        self.recordScreenshotForSpan(to: &span)
+        let span = makeSpan(event: .screenshot, source: .console, severity: .info)
         if isManual { span.setAttribute(key: Keys.isManual.rawValue, value: AttributeValue(true)) }
-        span.end()
+        // A screenshot span exists only to point at a frame, so a dropped capture emits no span
+        // at all — the same rule Android applies, where the screenshot log is reported only for a
+        // frame that shipped.
+        self.recordScreenshotForSpan(on: span) { didCapture in
+            guard didCapture else { return }
+            span.end()
+        }
     }
     
     public func isIdle() -> Bool {

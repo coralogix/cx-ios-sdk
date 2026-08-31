@@ -44,10 +44,20 @@ public protocol CoralogixInterface {
     func reportSessionReplayInit(snapshot: [String: Any])
 }
 
+/// Outcome of a capture, delivered once the frame is either encoded or dropped.
+public typealias CaptureEventCompletion = (Result<Void, CaptureEventError>) -> Void
+
 public protocol SessionReplayInterface {
     func startRecording()
     func stopRecording()
+    /// Immediate outcome only. Both capture paths finish after this returns — the native one
+    /// encodes off-main, the Flutter one waits on Dart — so `.success` here means "the capture
+    /// started", not "a frame shipped". Kept for hybrid bridges that have no span to stamp.
     func captureEvent(properties: [String: Any]?) -> Result<Void, CaptureEventError>
+    /// Reports whether a frame actually shipped. `completion` fires exactly once. Callers that
+    /// attach `screenshotId`/`page` to a span must use this one: on `.failure(.skippingEvent)`
+    /// the screenshot index has been handed back and no frame will ever carry it.
+    func captureEvent(properties: [String: Any]?, completion: @escaping CaptureEventCompletion)
     func update(sessionId: String)
     func isRecording() -> Bool
     func isInitialized() -> Bool

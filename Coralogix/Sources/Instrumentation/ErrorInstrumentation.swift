@@ -235,7 +235,7 @@ extension CoralogixRum {
                  data: [String: Any]?,
                  labels: [String: Any]?) {
         guard isCustomOrLifecycleEnabled else { return }
-        var span = self.makeSpan(event: .log, source: .code, severity: severity)
+        let span = self.makeSpan(event: .log, source: .code, severity: severity)
         span.setAttribute(key: Keys.message.rawValue, value: message)
         
         if let labels = labels {
@@ -246,34 +246,59 @@ extension CoralogixRum {
             span.setAttribute(key: Keys.data.rawValue, value: Helper.convertDictionaryToJsonString(dict: data))
         }
                 
-        if severity == .error { self.recordScreenshotForSpan(to: &span) }
-        span.end()
+        guard severity == .error else {
+            span.end()
+            return
+        }
+        self.recordScreenshotForSpan(on: span) { _ in span.end() }
     }
     
     // MARK: - Helpers
-    internal func recordScreenshotForSpan(to span: inout any Span) {
-        if let sessionReplay = SdkManager.shared.getSessionReplay(),
-           let coralogixExporter = self.coralogixExporter {
-            let screenshotLocation = coralogixExporter.getScreenshotManager().nextScreenshotLocation
-            let result = recordSessionReplayEvent(for: screenshotLocation, via: sessionReplay)
-            switch result {
-            case .failure(let error):
-                if error == .skippingEvent {
-                    coralogixExporter.getScreenshotManager().revertScreenshotCounter()
-                }
-            case .success():
-                applyScreenshotAttributes(screenshotLocation, to: &span)
+
+    /// Captures a session-replay frame for `span`, stamps `screenshotId`/`page` onto it only if a
+    /// frame actually shipped, and then calls `finish` — with `true` when the span now points at a
+    /// real frame. `finish` runs exactly once, including when session replay is not initialised, so
+    /// it is where the caller ends the span.
+    ///
+    /// Asynchronous because that is when the outcome is known: the native path encodes off the main
+    /// thread, and the Flutter path waits for Dart to answer. Stamping before the answer arrives is
+    /// what let a span advertise a screenshot for a frame that was dropped — and whose index was
+    /// handed back to the next capture, so the attributes pointed at a different frame entirely.
+    ///
+    /// `extraProperties` carries per-event capture metadata (a tap's coordinates, for instance);
+    /// the minted screenshot location wins on any key collision.
+    internal func recordScreenshotForSpan(on span: any Span,
+                                          extraProperties: [String: Any] = [:],
+                                          then finish: @escaping (Bool) -> Void) {
+        guard let sessionReplay = SdkManager.shared.getSessionReplay(),
+              let coralogixExporter = self.coralogixExporter else {
+            Log.d("[SessionReplay] not initialized — span carries no screenshot attributes")
+            finish(false)
+            return
+        }
+        let screenshotLocation = coralogixExporter.getScreenshotManager().nextScreenshotLocation
+        let properties = buildMetadata(properties: extraProperties, screenshotLocation: screenshotLocation)
+        sessionReplay.captureEvent(properties: properties) { [weak self] result in
+            guard case .success = result else {
+                // The model already handed the screenshot index back; there is no frame to
+                // point at, so the span stays unstamped.
+                finish(false)
+                return
             }
+            self?.applyScreenshotAttributes(screenshotLocation, to: span)
+            finish(true)
         }
     }
-    
+
+    /// Kept for API compatibility; `Span` is a reference type, so the `inout` buys nothing.
     public func applyScreenshotAttributes(_ location: ScreenshotLocation, to span: inout any Span) {
+        let target: any Span = span
+        applyScreenshotAttributes(location, to: target)
+    }
+
+    internal func applyScreenshotAttributes(_ location: ScreenshotLocation, to span: any Span) {
         span.setAttribute(key: Keys.screenshotId.rawValue, value: location.screenshotId)
         span.setAttribute(key: Keys.page.rawValue,         value: location.page)
-    }
-    
-    internal func recordSessionReplayEvent(for location: ScreenshotLocation, via sessionReplay: SessionReplayInterface) -> Result<Void, CaptureEventError> {
-        return sessionReplay.captureEvent(properties: location.toProperties())
     }
     
     private func writeError(domain: String, code: Int? = nil, message: String,
@@ -296,7 +321,7 @@ extension CoralogixRum {
         let recoveredCrashDate = crashTimestamp
             .flatMap { Double($0) }
             .map { Date(timeIntervalSince1970: $0 / 1000.0) }
-        var span = makeSpan(event: .error, source: .console, severity: .error, startTime: recoveredCrashDate)
+        let span = makeSpan(event: .error, source: .console, severity: .error, startTime: recoveredCrashDate)
         if recoveredCrashDate != nil {
             self.overrideSessionForCrashedSession(on: span)
         }
@@ -328,11 +353,12 @@ extension CoralogixRum {
         }
         // Note: hybrid error paths (Flutter/RN) intentionally omit the code attribute — there is
         // no meaningful error code in these contexts. Native paths pass an explicit code when relevant.
-        recordScreenshotForSpan(to: &span)
-        if let recoveredCrashDate {
-            span.end(time: recoveredCrashDate)
-        } else {
-            span.end()
+        recordScreenshotForSpan(on: span) { _ in
+            if let recoveredCrashDate {
+                span.end(time: recoveredCrashDate)
+            } else {
+                span.end()
+            }
         }
     }
 }

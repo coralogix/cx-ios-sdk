@@ -16,7 +16,7 @@ public enum ImageFormat {
 }
 
 public enum Global: String {
-    case sdk = "2.17.0"
+    case sdk = "2.18.0"
     case swiftVersion = "5.9"
     case coralogixPath = "/browser/v1beta/logs"
     case sessionReplayPath = "/browser/alpha/sessionrecording"
