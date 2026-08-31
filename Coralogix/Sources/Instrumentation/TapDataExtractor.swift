@@ -38,18 +38,23 @@ struct TouchEvent {
         self.timestamp = Self.epochSeconds(ofTouchAt: touch.timestamp)
     }
 
-    /// Gesture-recogniser init — no live UITouch available (swipe path), so the recogniser's
-    /// firing time is the closest thing to the touch's own.
+    /// Position-only init — the location comes from state recorded at `.began` rather than from
+    /// `touch.view`, which UIKit may clear before the `.ended` event is delivered.
+    ///
+    /// `touchUptime` is the originating `UITouch.timestamp` when the caller still has the touch,
+    /// which the tap and swipe paths do. Without one — a recogniser firing with no touch behind
+    /// it — the recogniser's own firing time is the closest thing to the touch's.
     init(view: UIView,
          location: CGPoint,
          eventType: InteractionEventName,
-         scrollDirection: ScrollDirection? = nil) {
+         scrollDirection: ScrollDirection? = nil,
+         touchUptime: TimeInterval? = nil) {
         self.view = view
         self.touch = nil
         self.location = location
         self.eventType = eventType
         self.scrollDirection = scrollDirection
-        self.timestamp = Date().timeIntervalSince1970
+        self.timestamp = touchUptime.map(Self.epochSeconds(ofTouchAt:)) ?? Date().timeIntervalSince1970
     }
 
     /// `UITouch.timestamp` is seconds since boot, not since the epoch, so it has to be rebased

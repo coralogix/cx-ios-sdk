@@ -49,28 +49,47 @@ final class CaptureCompletionOutcomeTests: XCTestCase {
         }
     }
 
+    /// Carries a completion's result across the queue boundary. The completion runs on
+    /// `encodingQueue` (or the main queue, for the hop test) while the assertions run on the test
+    /// thread, so the handoff is guarded rather than relying on the expectation for ordering.
+    private final class Answer {
+        private let lock = NSLock()
+        private var _outcome: Result<Void, CaptureEventError>?
+        private var _savedCount = 0
+
+        func record(_ outcome: Result<Void, CaptureEventError>, savedCount: Int) {
+            lock.lock(); defer { lock.unlock() }
+            _outcome = outcome
+            _savedCount = savedCount
+        }
+
+        var value: (outcome: Result<Void, CaptureEventError>?, savedCount: Int) {
+            lock.lock(); defer { lock.unlock() }
+            return (_outcome, _savedCount)
+        }
+    }
+
     /// Runs one encode and returns the reported outcome together with the save count at that moment.
     private func encode(_ image: UIImage,
                         properties: [String: Any]? = nil) -> (Result<Void, CaptureEventError>, Int) {
         let answered = expectation(description: "completion called")
         answered.assertForOverFulfill = true
-        var outcome: Result<Void, CaptureEventError>?
-        var savedAtCompletion = 0
+        let answer = Answer()
 
         model.encodeAndProcess(image: image,
                                compressionQuality: 0.8,
                                properties: properties) { [weak self] result in
-            outcome = result
-            savedAtCompletion = self?.model.savedCount ?? -1
+            answer.record(result, savedCount: self?.model.savedCount ?? -1)
             answered.fulfill()
         }
 
         wait(for: [answered], timeout: 5)
+        let (outcome, savedCount) = answer.value
         guard let outcome else {
             XCTFail("The completion must report an outcome")
-            return (.failure(.captureFailed), savedAtCompletion)
+            return (.failure(.captureFailed), savedCount)
         }
-        return (outcome, savedAtCompletion)
+        return (outcome, savedCount)
     }
 
     // MARK: - A capture requested off the main thread
@@ -108,12 +127,12 @@ final class CaptureCompletionOutcomeTests: XCTestCase {
         let model = ThreadRecordingModel(sessionReplayOptions: SessionReplayOptions(recordingType: .image))
         let answered = expectation(description: "completion called")
         answered.assertForOverFulfill = true
-        var outcome: Result<Void, CaptureEventError>?
+        let answer = Answer()
 
         DispatchQueue.global(qos: .userInitiated).async {
             XCTAssertFalse(Thread.isMainThread, "The request must start off the main thread")
             _ = model.captureAutomatic(properties: nil) { result in
-                outcome = result
+                answer.record(result, savedCount: 0)
                 answered.fulfill()
             }
         }
@@ -121,8 +140,8 @@ final class CaptureCompletionOutcomeTests: XCTestCase {
         wait(for: [answered], timeout: 5)
         XCTAssertEqual(model.preparedOnMain, true,
                        "The capture must be moved to the main thread, not dropped")
-        guard case .success = outcome else {
-            XCTFail("An off-main request must still ship a frame, got \(String(describing: outcome))")
+        guard case .success = answer.value.outcome else {
+            XCTFail("An off-main request must still ship a frame, got \(String(describing: answer.value.outcome))")
             return
         }
     }

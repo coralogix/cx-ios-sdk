@@ -128,7 +128,8 @@ extension UISwipeGestureRecognizer {
         NotificationCenter.default.post(
             name: .cxRumNotificationUserActions,
             object: TouchEvent(view: view, location: touch.location(in: nil),
-                               eventType: .swipe, scrollDirection: scrollDir)
+                               eventType: .swipe, scrollDirection: scrollDir,
+                               touchUptime: touch.timestamp)
         )
     }
 
@@ -229,7 +230,8 @@ extension UIApplication {
                     case .tap(let view, let location):
                         NotificationCenter.default.post(
                             name: .cxRumNotificationUserActions,
-                            object: TouchEvent(view: view, location: location, eventType: .click)
+                            object: TouchEvent(view: view, location: location, eventType: .click,
+                                               touchUptime: touch.timestamp)
                         )
                     }
                 }
@@ -250,7 +252,8 @@ extension UIApplication {
                     case .tap(let view, let location):
                         NotificationCenter.default.post(
                             name: .cxRumNotificationUserActions,
-                            object: TouchEvent(view: view, location: location, eventType: .click)
+                            object: TouchEvent(view: view, location: location, eventType: .click,
+                                               touchUptime: touch.timestamp)
                         )
                     }
                 }

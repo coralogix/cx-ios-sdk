@@ -92,9 +92,10 @@ public struct FlutterViewBitmap {
 /// call for the same cycle is ignored.
 ///
 /// The completion may be called from any thread; the SDK moves the work to the main thread
-/// itself. It does not time the round-trip out, so a provider that never calls the
-/// completion produces no capture for that cycle. Answering is the provider's
-/// responsibility.
+/// itself. Answer within one second: the capture gives up after that and reports the event
+/// without a screenshot. The cap is there because the event's own span closes when the capture
+/// resolves, so an unanswered provider would hold back error, log, tap and navigation events
+/// rather than merely cost a frame. A late answer is ignored, not composited.
 public typealias FlutterViewBitmapProvider =
     (_ viewId: String, _ frameId: Int64, _ isClick: Bool, _ tapTimestampMs: Int64?,
      _ completion: @escaping (FlutterViewBitmap?) -> Void) -> Void
