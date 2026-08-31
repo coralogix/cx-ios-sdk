@@ -187,10 +187,14 @@ public class SessionReplayModel {
     }
 
     /// `completion` — when supplied — fires exactly once with the outcome the return value
-    /// cannot carry: whether a frame was actually encoded and queued for upload. Both capture
-    /// paths finish after this call returns (the native one encodes off-main, the Flutter one
-    /// waits on Dart), so a caller that stamps a span with screenshot attributes must wait for
-    /// it rather than trust `.success` here.
+    /// cannot carry: whether a frame was encoded and queued for upload. Both capture paths
+    /// finish after this call returns (the native one encodes off-main, the Flutter one waits
+    /// on Dart), so a caller that stamps a span with screenshot attributes must wait for it
+    /// rather than trust `.success` here.
+    ///
+    /// Queued, not delivered: upload happens later and is retried out of band, well after a
+    /// span has to close. The question a screenshot attribute asks is whether a frame exists
+    /// for that index, and that is what this answers.
     internal func captureImage(properties: [String: Any]? = nil,
                                completion: CaptureEventCompletion? = nil) -> Result<Void, CaptureEventError> {
         guard !sessionId.isEmpty else {

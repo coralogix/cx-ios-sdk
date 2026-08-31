@@ -76,26 +76,20 @@ public struct FlutterViewBitmap {
 
 /// Callback signature used by [SessionReplayOptions.flutterViewBitmapProvider].
 ///
-/// Invoked by the SDK per FlutterView per capture cycle. `viewId` is the
-/// Flutter-allocated stable identifier (format `cx_flutter_view_<counter>`,
-/// see `docs/session-replay-shared.md` §3). `frameId` is a monotonic
-/// SDK-generated counter (see §2 — opaque to the provider; do not
-/// interpret as a timestamp). `isClick` marks a capture triggered by a user
-/// tap, and `tapTimestampMs` carries that tap's epoch-ms timestamp (`nil` for
-/// periodic captures) — together they let Dart rasterise a tap at the next
-/// committed frame, or answer `nil` when the tap is already too old to
-/// represent honestly. Same inputs the Android provider receives.
+/// Invoked once per FlutterView per capture cycle.
 ///
-/// The completion handler must be called exactly once, with the bytes or with
-/// `nil`. `nil` means "no frame for this cycle" — whatever the reason (not
-/// ready, gated, coalesced, too stale, failed) — and the SDK drops the whole
-/// capture: no black fill, no raw FlutterView pixels (the leak case), and no
-/// substituted frame from an earlier cycle. Matches Android, where a provider
-/// that yields null drops the frame and lets the next capture proceed.
+/// - `viewId`: the Flutter-allocated stable identifier (`cx_flutter_view_<counter>`).
+/// - `frameId`: a monotonic SDK counter. Opaque — not a timestamp.
+/// - `isClick`: this capture was triggered by a user tap.
+/// - `tapTimestampMs`: that tap's epoch-ms timestamp, `nil` for periodic captures.
 ///
-/// A provider that never calls the handler produces no capture at all for that
-/// cycle — the SDK does not time the round-trip out, so the answer is the
-/// provider's responsibility.
+/// Call the completion exactly once, with the bytes or with `nil`. `nil` means "no frame
+/// for this cycle", whatever the reason, and the SDK drops the capture: never a black
+/// fill, never the raw FlutterView pixels, never a frame from an earlier cycle.
+///
+/// The SDK does not time the round-trip out, so a provider that never calls the
+/// completion produces no capture for that cycle. Answering is the provider's
+/// responsibility.
 public typealias FlutterViewBitmapProvider =
     (_ viewId: String, _ frameId: Int64, _ isClick: Bool, _ tapTimestampMs: Int64?,
      _ completion: @escaping (FlutterViewBitmap?) -> Void) -> Void

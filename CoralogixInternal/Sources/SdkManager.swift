@@ -54,9 +54,13 @@ public protocol SessionReplayInterface {
     /// encodes off-main, the Flutter one waits on Dart — so `.success` here means "the capture
     /// started", not "a frame shipped". Kept for hybrid bridges that have no span to stamp.
     func captureEvent(properties: [String: Any]?) -> Result<Void, CaptureEventError>
-    /// Reports whether a frame actually shipped. `completion` fires exactly once. Callers that
+    /// Reports whether a frame was captured. `completion` fires exactly once. Callers that
     /// attach `screenshotId`/`page` to a span must use this one: on `.failure(.skippingEvent)`
     /// the screenshot index has been handed back and no frame will ever carry it.
+    ///
+    /// `.success` means the frame was encoded and queued for upload, not that the backend has
+    /// it — delivery is retried out of band, long after a span has to close. So it answers
+    /// "is there a frame for this index", which is the question a screenshot attribute asks.
     func captureEvent(properties: [String: Any]?, completion: @escaping CaptureEventCompletion)
     func update(sessionId: String)
     func isRecording() -> Bool
