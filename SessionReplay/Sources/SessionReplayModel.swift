@@ -446,6 +446,13 @@ public class SessionReplayModel {
     // suppression against the wrong frame's mask rects — a marker over a field that is masked
     // now but was not masked then. Android drops on the same terms; see
     // `composeFlutterRegionOrDrop` in its FrameCapturer.
+    //
+    // The watermark rejects an out-of-order delivery on top of that, and the reason is delivery
+    // order rather than metadata pairing. A late reply's pixels were rasterised when the reply
+    // was made, not when its cycle was requested — so if cycle 8 answers before cycle 7, frame
+    // 7's pixels show a *later* screen than frame 8's while carrying an *earlier* timestamp.
+    // Shipping both makes the replay run backwards over that pair. Dropping the straggler costs
+    // one rasterisation; keeping it corrupts the ordering the player depends on.
     internal func acceptFlutterDelivery(freshBitmap: FlutterViewBitmap?,
                                         frameId: Int64,
                                         requestGeneration: Int64) -> FlutterDeliveryOutcome {
