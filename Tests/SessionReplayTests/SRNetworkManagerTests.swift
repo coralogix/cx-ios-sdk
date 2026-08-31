@@ -364,8 +364,10 @@ class MockCoralogix: CoralogixInterface {
         return [:]
     }
     
+    var revertScreenshotCounterCallCount = 0
+
     func revertScreenshotCounter() {
-        // No-op for mock
+        revertScreenshotCounterCallCount += 1
     }
 
     func reportSessionReplayInit(snapshot: [String: Any]) {

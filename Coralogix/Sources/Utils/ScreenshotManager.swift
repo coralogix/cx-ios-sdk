@@ -56,8 +56,9 @@ public class ScreenshotManager {
             screenshotCount -= 1
             
             if screenshotCount < 1 {
-                // Go back one page, but don't go below page 1
-                if page > 1 {
+                // Step back a page, down to page 0 — the first page is 0, not 1, so stopping at 1
+                // would strand the counter a whole page ahead of the frames that shipped.
+                if page > 0 {
                     page -= 1
                     screenshotCount = maxScreenshotsPerPage
                 } else {

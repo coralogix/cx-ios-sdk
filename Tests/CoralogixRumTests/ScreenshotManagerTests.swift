@@ -60,6 +60,31 @@ class ScreenshotManagerTests: XCTestCase {
         XCTAssertEqual(segments, [1,2,1,2,1,2,1])
     }
     
+    func testRevertScreenshotCounterStepsBackToPageZero() {
+        let manager = ScreenshotManager(maxScreenShotsPerPage: 2)
+        _ = manager.nextScreenshotLocation // (page 0, 1)
+        _ = manager.nextScreenshotLocation // (page 0, 2)
+        _ = manager.nextScreenshotLocation // (page 1, 1)
+
+        manager.revertScreenshotCounter()
+
+        // Page 0 is the first page, so reverting the first slot of page 1 belongs on page 0 —
+        // stopping at page 1 would strand the counter a whole page ahead of the frames that shipped.
+        XCTAssertEqual(manager.page, 0)
+        XCTAssertEqual(manager.screenshotCount, 2)
+    }
+
+    func testRevertingEveryAllocationReturnsToTheFirstLocation() {
+        let manager = ScreenshotManager(maxScreenShotsPerPage: 2)
+        for _ in 0..<5 { _ = manager.nextScreenshotLocation } // walks to (page 2, 1)
+        for _ in 0..<5 { manager.revertScreenshotCounter() }
+
+        let next = manager.nextScreenshotLocation
+        XCTAssertEqual(next.page, 0)
+        XCTAssertEqual(next.segmentIndex, 1,
+                       "a session whose captures were all rejected must still start at page 0, segment 1")
+    }
+
     func testResetSessionResetsPageAndScreenshotCountAndGeneratesNewId() {
         // Arrange
         let manager = ScreenshotManager()

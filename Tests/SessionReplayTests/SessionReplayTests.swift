@@ -204,6 +204,47 @@ class SessionReplayTests: XCTestCase {
             XCTAssertEqual(error, .notRecording)
         }
     }
+
+    /// A rejection that returns before the model runs still has to hand the caller's screenshot
+    /// index back. Left burned, the replay stream starts at a page and segment the player has no
+    /// frames for — every upload succeeds and the recording is still unplayable.
+    func testCaptureEventRejectedBeforeTheModelReturnsTheCallerScreenshotIndex() {
+        let mockCoralogix = MockCoralogix()
+        mockCoralogix.idle = false
+        SdkManager.shared.register(coralogixInterface: mockCoralogix)
+
+        let options = SessionReplayOptions(recordingType: .image)
+        SessionReplay.initializeWithOptions(sessionReplayOptions: options)
+        SessionReplay.shared.sessionReplayModel = MockSessionReplayModel(sessionReplayOptions: options)
+
+        let result = SessionReplay.shared.captureEvent(
+            properties: [Keys.segmentIndex.rawValue: 7, Keys.page.rawValue: 0]
+        )
+
+        if case .failure(let error) = result {
+            XCTAssertEqual(error, .notRecording)
+        } else {
+            XCTFail("Expected .failure(.notRecording) but got success")
+        }
+        XCTAssertEqual(mockCoralogix.revertScreenshotCounterCallCount, 1,
+                       "a caller-allocated index must be returned when the capture is rejected")
+    }
+
+    /// Only an index the caller actually took is ours to give back; it signals that by putting
+    /// `segmentIndex` in the properties. Reverting without one would corrupt the counter downwards.
+    func testCaptureEventRejectionWithoutACallerIndexDoesNotRevert() {
+        let mockCoralogix = MockCoralogix()
+        mockCoralogix.idle = false
+        SdkManager.shared.register(coralogixInterface: mockCoralogix)
+
+        let options = SessionReplayOptions(recordingType: .image)
+        SessionReplay.initializeWithOptions(sessionReplayOptions: options)
+        SessionReplay.shared.sessionReplayModel = MockSessionReplayModel(sessionReplayOptions: options)
+
+        _ = SessionReplay.shared.captureEvent(properties: ["key": "value"])
+
+        XCTAssertEqual(mockCoralogix.revertScreenshotCounterCallCount, 0)
+    }
 }
 
 class MockSessionReplayModel3: SessionReplayModel {

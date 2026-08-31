@@ -255,7 +255,12 @@ public class SessionReplay: SessionReplayInterface {
     /// here for every rejection, or by the model once the frame is encoded or dropped.
     private func startCapture(properties: [String: Any]?,
                               completion: CaptureEventCompletion?) -> Result<Void, CaptureEventError> {
+        // The caller allocated a screenshot index before calling in, and these rejections all
+        // return before the model runs — so the model's own revert never fires for them. Hand the
+        // index back here or it is burned for good, and the replay stream starts at a page and
+        // segment the player has no frames for.
         func reject(_ error: CaptureEventError) -> Result<Void, CaptureEventError> {
+            revertCallerScreenshotIndex(properties: properties)
             completion?(.failure(error))
             return .failure(error)
         }
@@ -289,9 +294,21 @@ public class SessionReplay: SessionReplayInterface {
         }
         // .video produces no frame today (RecordingType.video is TBD), so a caller waiting on the
         // outcome must not stamp a span for one. The synchronous return stays .success — it means
-        // "accepted", and existing callers read it that way.
+        // "accepted", and existing callers read it that way. The index still has to go back: no
+        // frame ships, so nothing will ever point at it.
+        revertCallerScreenshotIndex(properties: properties)
         completion?(.failure(.skippingEvent))
         return .success(())
+    }
+
+    /// Returns a screenshot index the caller allocated for a capture that will never ship.
+    ///
+    /// Mirrors `SessionReplayModel`'s `callerIncrementedCounter` test: an index is only ours to
+    /// hand back when the caller actually took one, which it signals by putting `segmentIndex`
+    /// in the properties.
+    private func revertCallerScreenshotIndex(properties: [String: Any]?) {
+        guard properties?[Keys.segmentIndex.rawValue] as? Int != nil else { return }
+        SdkManager.shared.getCoralogixSdk()?.revertScreenshotCounter()
     }
 
     public func isRecording() -> Bool {
