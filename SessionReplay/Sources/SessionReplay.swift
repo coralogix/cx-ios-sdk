@@ -306,12 +306,14 @@ public class SessionReplay: SessionReplayInterface {
 
     /// Returns a screenshot index the caller allocated for a capture that will never ship.
     ///
-    /// Mirrors `SessionReplayModel`'s `callerIncrementedCounter` test: an index is only ours to
-    /// hand back when the caller actually took one, which it signals by putting `segmentIndex`
-    /// in the properties.
+    /// Identified by the page and segment index the caller put in the properties, so returning it
+    /// cannot roll back a newer capture's reservation. An absent index means the caller never took
+    /// one, and nothing is ours to hand back.
     private func revertCallerScreenshotIndex(properties: [String: Any]?) {
-        guard properties?[Keys.segmentIndex.rawValue] as? Int != nil else { return }
-        SdkManager.shared.getCoralogixSdk()?.revertScreenshotCounter()
+        guard let page = properties?[Keys.page.rawValue] as? Int,
+              let segmentIndex = properties?[Keys.segmentIndex.rawValue] as? Int else { return }
+        SdkManager.shared.getCoralogixSdk()?.revertScreenshotCounter(page: page,
+                                                                    segmentIndex: segmentIndex)
     }
 
     public func isRecording() -> Bool {

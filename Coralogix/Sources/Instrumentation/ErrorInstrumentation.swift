@@ -279,21 +279,21 @@ extension CoralogixRum {
         let screenshotLocation = coralogixExporter.getScreenshotManager().nextScreenshotLocation
         let properties = buildMetadata(properties: extraProperties, screenshotLocation: screenshotLocation)
         sessionReplay.captureEvent(properties: properties) { [weak self] result in
-            guard case .success = result else {
-                // The model already handed the screenshot index back; there is no frame to
-                // point at, so the span stays unstamped.
+            // `true` has to mean the span really carries the attributes. If this instance went
+            // away between the request and the answer — shutdown, re-init — the stamp is skipped,
+            // and reporting success anyway would end a screenshot span pointing at nothing.
+            guard let self = self, case .success = result else {
                 finish(false)
                 return
             }
-            self?.applyScreenshotAttributes(screenshotLocation, to: span)
+            self.applyScreenshotAttributes(screenshotLocation, to: span)
             finish(true)
         }
     }
 
-    /// Kept for API compatibility; `Span` is a reference type, so the `inout` buys nothing.
+    @available(*, deprecated, message: "Use applyScreenshotAttributes(_:to:) taking a non-inout `any Span`. Span is a class-bound protocol, so the inout achieves nothing.")
     public func applyScreenshotAttributes(_ location: ScreenshotLocation, to span: inout any Span) {
-        let target: any Span = span
-        applyScreenshotAttributes(location, to: target)
+        applyScreenshotAttributes(location, to: span as any Span)
     }
 
     internal func applyScreenshotAttributes(_ location: ScreenshotLocation, to span: any Span) {
@@ -353,12 +353,25 @@ extension CoralogixRum {
         }
         // Note: hybrid error paths (Flutter/RN) intentionally omit the code attribute — there is
         // no meaningful error code in these contexts. Native paths pass an explicit code when relevant.
-        recordScreenshotForSpan(on: span) { _ in
+        let endSpan = {
             if let recoveredCrashDate {
                 span.end(time: recoveredCrashDate)
             } else {
                 span.end()
             }
         }
+
+        // A crash span does not wait for a capture. `reportErrorInternal` force-flushes the
+        // moment this returns, precisely because the process is about to die, and a span that
+        // ends later than that flush misses the batch it was written for — the crash would then
+        // surface only on the next launch. Nor is there time for the round-trip: on the Flutter
+        // path Dart is usually already gone, so the answer never arrives at all. Close it now
+        // and carry no screenshot rather than a promise nothing will keep.
+        guard !isCrash else {
+            endSpan()
+            return
+        }
+
+        recordScreenshotForSpan(on: span) { _ in endSpan() }
     }
 }

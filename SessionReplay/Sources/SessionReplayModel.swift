@@ -36,8 +36,18 @@ public class SessionReplayModel {
 
     private lazy var comparisonContext = CIContext(options: [.workingColorSpace: NSNull()])
 
-    /// Monotonic counter passed to flutterViewBitmapProvider as frameId.
-    private var captureFrameCounter: Int64 = 0
+    /// Monotonic counter passed to flutterViewBitmapProvider as frameId. Guarded by
+    /// `flutterFrameQueue`: `frameId` is the only admission gate a delivery passes, so two
+    /// captures reading the same value would make one of them lose a perfectly good bitmap.
+    private var _captureFrameCounter: Int64 = 0
+
+    /// Reserves the next frameId.
+    private func nextCaptureFrameId() -> Int64 {
+        flutterFrameQueue.sync {
+            _captureFrameCounter &+= 1
+            return _captureFrameCounter
+        }
+    }
 
     // Guards the two fields below (same serial-queue-as-mutex pattern as
     // `screenshotDataQueue`). The provider callback runs on main; `updateSessionId`
@@ -61,6 +71,11 @@ public class SessionReplayModel {
         case staleSession
         case noFrame
     }
+
+    /// How long a capture waits for Dart before giving up on the frame. Matches Android's
+    /// FLUTTER_PROVIDER_TIMEOUT_MS. Unlike Android's, this timeout exists for the span rather
+    /// than the frame: nothing here is blocked waiting, but a span cannot stay open forever.
+    internal static let flutterProviderTimeout: TimeInterval = 1.0
 
     /// One-shot gate for a single provider delivery. Carries its own lock rather than borrowing
     /// `flutterFrameQueue`: the claim has to work before `self` is resolved, and a provider that
@@ -186,6 +201,22 @@ public class SessionReplayModel {
         }
     }
 
+    /// Reports a capture that produced no frame, and returns the screenshot slot the caller
+    /// reserved for it.
+    ///
+    /// One definition on purpose: this used to be four near-copies, and the bug that started
+    /// this branch was one of them being absent. The reservation is identified by the page and
+    /// segment index the caller put in the properties, so returning it cannot roll back a newer
+    /// capture's slot and make the next allocation overwrite a frame that already shipped.
+    internal func dropCapture(properties: [String: Any]?, completion: CaptureEventCompletion?) {
+        if let page = properties?[Keys.page.rawValue] as? Int,
+           let segmentIndex = properties?[Keys.segmentIndex.rawValue] as? Int {
+            SdkManager.shared.getCoralogixSdk()?.revertScreenshotCounter(page: page,
+                                                                        segmentIndex: segmentIndex)
+        }
+        completion?(.failure(.skippingEvent))
+    }
+
     /// `completion` — when supplied — fires exactly once with the outcome the return value
     /// cannot carry: whether a frame was encoded and queued for upload. Both capture paths
     /// finish after this call returns (the native one encodes off-main, the Flutter one waits
@@ -198,7 +229,10 @@ public class SessionReplayModel {
     internal func captureImage(properties: [String: Any]? = nil,
                                completion: CaptureEventCompletion? = nil) -> Result<Void, CaptureEventError> {
         guard !sessionId.isEmpty else {
+            // startRecording fires the first periodic capture before update(sessionId:) may have
+            // landed, so this is a routine early-session exit — and it burned a slot every time.
             Log.e("[SessionReplayModel] Invalid sessionId")
+            dropCapture(properties: properties, completion: nil)
             completion?(.failure(.invalidSessionId))
             return .failure(.invalidSessionId)
         }
@@ -241,16 +275,15 @@ public class SessionReplayModel {
         // Native path: synchronous UIView walk on main thread, encode off-main.
         guard let frame = prepareCapturedFrameOnMain(properties: properties),
               let options = sessionReplayOptions else {
+            dropCapture(properties: properties, completion: nil)
             completion?(.failure(.captureFailed))
             return .failure(.captureFailed)
         }
 
-        let callerIncrementedCounter = properties?[Keys.segmentIndex.rawValue] as? Int != nil
         encodeAndProcess(
             image: frame.image,
             compressionQuality: options.captureCompressionQuality,
             properties: propertiesWithCaptureMetadata(properties, maskRects: frame.maskRects),
-            callerIncrementedCounter: callerIncrementedCounter,
             completion: completion
         )
         return .success(())
@@ -271,19 +304,11 @@ public class SessionReplayModel {
             return
         }
 
-        captureFrameCounter &+= 1
-        let frameId = captureFrameCounter
-        let callerIncrementedCounter = properties?[Keys.segmentIndex.rawValue] as? Int != nil
+        let frameId = nextCaptureFrameId()
         let isClickFrame = getClickPoint(from: properties) != nil
 
-        // Nothing shipped for this cycle: give the caller's screenshot index back (it was
-        // minted for a frame that will never exist) and report the drop so no span advertises
-        // a screenshot the backend never receives.
-        let drop: () -> Void = {
-            if callerIncrementedCounter {
-                SdkManager.shared.getCoralogixSdk()?.revertScreenshotCounter()
-            }
-            completion?(.failure(.skippingEvent))
+        let drop: () -> Void = { [weak self] in
+            self?.dropCapture(properties: properties, completion: completion)
         }
 
         // Locate the FlutterView on screen synchronously before yielding.
@@ -299,7 +324,6 @@ public class SessionReplayModel {
             }
             encodeAndProcess(image: frame.image, compressionQuality: options.captureCompressionQuality,
                              properties: propertiesWithCaptureMetadata(properties, maskRects: frame.maskRects),
-                             callerIncrementedCounter: callerIncrementedCounter,
                              completion: completion)
             return
         }
@@ -309,6 +333,18 @@ public class SessionReplayModel {
         // The provider is host-app code (the Flutter plugin), so a second delivery for the
         // same cycle is possible; it must not composite twice or report the capture twice.
         let delivery = FlutterDeliveryGate()
+
+        // Every span that carries a screenshot now closes in this capture's completion, so an
+        // unanswered provider would stop error, log, tap and navigation events from being
+        // exported at all — not just cost a frame — and pin each span in plugin-owned storage
+        // with no ceiling. A wedged Dart isolate, a dropped MethodChannel reply or an engine
+        // torn down mid-session all reach that state. Give up on the frame after a bounded wait
+        // and let the span go; the gate makes a late reply harmless.
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.flutterProviderTimeout) {
+            guard delivery.claim() else { return }
+            Log.w("[SessionReplayModel] flutterViewBitmapProvider did not answer frameId \(frameId) within \(Self.flutterProviderTimeout)s — dropping the capture")
+            drop()
+        }
 
         // Everything the delivery does walks UIKit, so it has to run on main.
         let handleDelivery: (FlutterViewBitmap?) -> Void = { [weak self] bitmap in
@@ -321,14 +357,17 @@ public class SessionReplayModel {
             // A delivery that outlived its session is dropped too, but keeps the screenshot
             // index: after a rotation that index belongs to the new session, so handing it back
             // would corrupt it. A one-index gap in the old session is the lesser evil.
-            let outcome = self.acceptFlutterDelivery(freshBitmap: bitmap, frameId: frameId,
-                                                     requestGeneration: requestGeneration)
-            guard case .composite(let flutterFrame) = outcome else {
-                if case .staleSession = outcome {
-                    completion?(.failure(.skippingEvent))
-                } else {
-                    drop()
-                }
+            let flutterFrame: FlutterFrame
+            switch self.acceptFlutterDelivery(freshBitmap: bitmap, frameId: frameId,
+                                              requestGeneration: requestGeneration) {
+            case .composite(let frame):
+                flutterFrame = frame
+            case .staleSession:
+                // The index belongs to the new session now, so it is not ours to hand back.
+                completion?(.failure(.skippingEvent))
+                return
+            case .noFrame:
+                drop()
                 return
             }
 
@@ -347,7 +386,6 @@ public class SessionReplayModel {
 
             self.encodeAndProcess(image: frame.image, compressionQuality: options.captureCompressionQuality,
                                   properties: self.propertiesWithCaptureMetadata(properties, maskRects: frame.maskRects),
-                                  callerIncrementedCounter: callerIncrementedCounter,
                                   completion: completion)
         }
 
@@ -381,17 +419,17 @@ public class SessionReplayModel {
     /// click whose properties carry no timestamp — omitting the value skips the staleness check,
     /// which beats guessing at it.
     ///
-    /// Reads the key directly rather than through `getTimestamp`, whose fallback is already in
-    /// milliseconds while its stored value is in seconds (`SessionReplay.captureEvent` stores
-    /// `Date().timeIntervalSince1970`). Multiplying that fallback by 1000 would hand Dart
-    /// microseconds — a tap dated far in the future.
+    /// Reads `tapTimestamp`, the touch's own time, and not `timestamp` — every capture
+    /// overwrites that one with its own wall clock in `SessionReplay.captureEvent`, so reading it
+    /// here handed Dart the moment the capture started and a staleness delta of roughly zero, no
+    /// matter how long the tap had actually been queued.
     ///
     /// `Int64(exactly:)` rather than a trapping conversion: the value is read out of an untyped
     /// properties dictionary that hybrid bridges also populate, and a NaN or out-of-range Double
     /// must never crash the host app.
     internal func tapTimestampMilliseconds(from properties: [String: Any]?, isClick: Bool) -> Int64? {
         guard isClick,
-              let seconds = properties?[Keys.timestamp.rawValue] as? TimeInterval else { return nil }
+              let seconds = properties?[Keys.tapTimestamp.rawValue] as? TimeInterval else { return nil }
         return Int64(exactly: (seconds * 1_000).rounded())
     }
 
@@ -498,22 +536,22 @@ public class SessionReplayModel {
         image: UIImage,
         compressionQuality: CGFloat,
         properties: [String: Any]?,
-        callerIncrementedCounter: Bool,
         completion: CaptureEventCompletion? = nil
     ) {
         encodingQueue.async { [weak self] in
             guard let self = self else {
+                // The model went away mid-encode; the slot still has to go back.
+                if let page = properties?[Keys.page.rawValue] as? Int,
+                   let segmentIndex = properties?[Keys.segmentIndex.rawValue] as? Int {
+                    SdkManager.shared.getCoralogixSdk()?.revertScreenshotCounter(page: page,
+                                                                                segmentIndex: segmentIndex)
+                }
                 completion?(.failure(.captureFailed))
                 return
             }
 
-            // Nothing shipped: hand the caller's screenshot index back and say so, so no span
-            // advertises a screenshot the backend never receives.
             let drop: () -> Void = {
-                if callerIncrementedCounter {
-                    SdkManager.shared.getCoralogixSdk()?.revertScreenshotCounter()
-                }
-                completion?(.failure(.skippingEvent))
+                self.dropCapture(properties: properties, completion: completion)
             }
 
             guard let screenshotData = image.jpegData(compressionQuality: compressionQuality) else {
@@ -521,8 +559,12 @@ public class SessionReplayModel {
                 return
             }
 
+            // A manual capture bypasses deduplication for the same reason a click frame does: the
+            // host asked for this frame, and answering "identical to the last one" by silently
+            // reporting nothing leaves a void-returning public API with no way to say so.
+            let isManual = (properties?[Keys.isManual.rawValue] as? Bool) == true
             let isClickFrame = self.getClickPoint(from: properties) != nil
-            let shouldSkip = !isClickFrame && self.screenshotDataQueue.sync { () -> Bool in
+            let shouldSkip = !isClickFrame && !isManual && self.screenshotDataQueue.sync { () -> Bool in
                 if let prvData = self._prvScreenshotData,
                    !self.imagesAreDifferent(screenshotData, prvData) {
                     return true

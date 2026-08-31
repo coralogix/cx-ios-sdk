@@ -101,3 +101,37 @@ class ScreenshotManagerTests: XCTestCase {
         XCTAssertEqual(manager.screenshotId.count, 36) // UUID format
     }
 }
+
+extension ScreenshotManagerTests {
+
+    /// The counter is a single high-water mark, so returning a slot that is no longer the most
+    /// recent would reissue an index a shipped frame already used — `generateFileName` builds the
+    /// filename from page and segment, so the second upload overwrites the first.
+    func testRevertForLocation_ignoresAReservationThatIsNoLongerTheMostRecent() {
+        let manager = ScreenshotManager()
+
+        let first = manager.nextScreenshotLocation   // segment 1
+        let second = manager.nextScreenshotLocation  // segment 2
+        XCTAssertEqual(first.segmentIndex, 1)
+        XCTAssertEqual(second.segmentIndex, 2)
+
+        // The older capture drops. Rolling the counter back to 1 would make the next allocation
+        // hand out 2 again, colliding with the frame `second` is about to ship.
+        manager.revertScreenshotCounter(for: first)
+
+        XCTAssertEqual(manager.nextScreenshotLocation.segmentIndex, 3,
+                       "A stale reservation must not be returned — the next slot stays unique")
+    }
+
+    func testRevertForLocation_returnsTheMostRecentReservation() {
+        let manager = ScreenshotManager()
+
+        _ = manager.nextScreenshotLocation           // segment 1
+        let latest = manager.nextScreenshotLocation  // segment 2
+
+        manager.revertScreenshotCounter(for: latest)
+
+        XCTAssertEqual(manager.nextScreenshotLocation.segmentIndex, 2,
+                       "The most recent reservation is the one that can be reused")
+    }
+}

@@ -38,6 +38,12 @@ public protocol CoralogixInterface {
     /// Reverts the screenshot counter when a capture is skipped.
     func revertScreenshotCounter()
 
+    /// Returns the reservation a capture was given, identified by page and segment index.
+    /// Only the most recent reservation can be returned, so this is a no-op when a newer
+    /// capture has already taken an index — rolling back blindly would reissue that index and
+    /// overwrite a frame that already shipped.
+    func revertScreenshotCounter(page: Int, segmentIndex: Int)
+
     /// Emits the one-shot session-replay init log carrying the SessionReplayOptions snapshot.
     /// SessionReplay builds the snapshot (it owns the options type) and passes it as a dictionary,
     /// since the Coralogix module can't reference SessionReplayOptions.

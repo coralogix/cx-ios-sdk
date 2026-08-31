@@ -51,8 +51,7 @@ final class CaptureCompletionOutcomeTests: XCTestCase {
 
     /// Runs one encode and returns the reported outcome together with the save count at that moment.
     private func encode(_ image: UIImage,
-                        properties: [String: Any]? = nil,
-                        callerIncrementedCounter: Bool = false) -> (Result<Void, CaptureEventError>, Int) {
+                        properties: [String: Any]? = nil) -> (Result<Void, CaptureEventError>, Int) {
         let answered = expectation(description: "completion called")
         answered.assertForOverFulfill = true
         var outcome: Result<Void, CaptureEventError>?
@@ -60,8 +59,7 @@ final class CaptureCompletionOutcomeTests: XCTestCase {
 
         model.encodeAndProcess(image: image,
                                compressionQuality: 0.8,
-                               properties: properties,
-                               callerIncrementedCounter: callerIncrementedCounter) { [weak self] result in
+                               properties: properties) { [weak self] result in
             outcome = result
             savedAtCompletion = self?.model.savedCount ?? -1
             answered.fulfill()
@@ -171,6 +169,24 @@ final class CaptureCompletionOutcomeTests: XCTestCase {
             return
         }
         XCTAssertEqual(saved, 2, "A changed frame must reach the save path too")
+    }
+
+    // MARK: - A manual capture bypasses deduplication
+
+    /// `CoralogixRum.captureEvent()` is public, returns void, and both demo apps drive it. Tapping
+    /// it twice on a static screen used to drop the second frame, emit no span and log nothing,
+    /// leaving the host no way to tell.
+    func testCompletion_reportsSuccessForAnIdenticalManualFrame() {
+        _ = encode(solidImage(red: 1.0))
+
+        let (outcome, saved) = encode(solidImage(red: 1.0),
+                                      properties: [Keys.isManual.rawValue: true])
+
+        guard case .success = outcome else {
+            XCTFail("A manual capture must ship even when the pixels are unchanged, got \(outcome)")
+            return
+        }
+        XCTAssertEqual(saved, 2, "The manual frame must reach the save path despite identical pixels")
     }
 
     // MARK: - A click frame bypasses deduplication

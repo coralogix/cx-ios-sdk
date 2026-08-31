@@ -251,15 +251,31 @@ final class FlutterViewDropOnNilTests: XCTestCase {
 
     func testTapTimestamp_isConvertedToMilliseconds() throws {
         let seconds = 1_767_225_600.123
-        let properties: [String: Any] = [Keys.timestamp.rawValue: seconds]
+        let properties: [String: Any] = [Keys.tapTimestamp.rawValue: seconds]
 
         let ms = try XCTUnwrap(model.tapTimestampMilliseconds(from: properties, isClick: true))
         XCTAssertEqual(ms, 1_767_225_600_123,
                        "Dart measures tap staleness in ms; seconds would read as hours stale")
     }
 
+    /// The whole point of widening the provider signature. Reading the capture's own `timestamp`
+    /// instead handed Dart the moment the capture started, so the staleness delta was always ~0
+    /// and Dart could never refuse a tap it was too late to draw.
+    func testTapTimestamp_comesFromTheTouchNotTheCapture() throws {
+        let tapSeconds = 1_767_225_600.5
+        let properties: [String: Any] = [
+            Keys.tapTimestamp.rawValue: tapSeconds,
+            // What SessionReplay.captureEvent stamps on every capture on the way through.
+            Keys.timestamp.rawValue: tapSeconds + 4.0
+        ]
+
+        let ms = try XCTUnwrap(model.tapTimestampMilliseconds(from: properties, isClick: true))
+        XCTAssertEqual(ms, 1_767_225_600_500,
+                       "The tap's own time must win over the capture's wall clock")
+    }
+
     func testTapTimestamp_isNilForAPeriodicCapture() {
-        let properties: [String: Any] = [Keys.timestamp.rawValue: 1_767_225_600.0]
+        let properties: [String: Any] = [Keys.tapTimestamp.rawValue: 1_767_225_600.0]
         XCTAssertNil(model.tapTimestampMilliseconds(from: properties, isClick: false),
                      "Only a click capture carries a tap timestamp")
     }
@@ -274,7 +290,7 @@ final class FlutterViewDropOnNilTests: XCTestCase {
     }
 
     func testTapTimestamp_isNilForANonFiniteTimestamp() {
-        let properties: [String: Any] = [Keys.timestamp.rawValue: Double.nan]
+        let properties: [String: Any] = [Keys.tapTimestamp.rawValue: Double.nan]
         XCTAssertNil(model.tapTimestampMilliseconds(from: properties, isClick: true),
                      "A NaN timestamp from a hybrid bridge must yield nil, not trap")
     }

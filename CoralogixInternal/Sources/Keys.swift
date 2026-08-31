@@ -219,6 +219,10 @@ public enum Keys: String {
     case appDidReceiveMemoryWarningNotification
     case positionX = "x"
     case positionY = "y"
+    /// Epoch seconds of the touch that produced an interaction, carried on the capture
+    /// properties. Distinct from `timestamp`, which every capture overwrites with its own
+    /// wall clock on the way through `SessionReplay.captureEvent`.
+    case tapTimestamp = "tap_timestamp"
     case errorType = "error_type"
     case keyStackTrace = "stack_trace"
     case application

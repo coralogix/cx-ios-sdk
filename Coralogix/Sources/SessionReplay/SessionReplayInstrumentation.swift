@@ -108,9 +108,14 @@ extension CoralogixRum: CoralogixInterface {
         if isManual { span.setAttribute(key: Keys.isManual.rawValue, value: AttributeValue(true)) }
         // A screenshot span exists only to point at a frame, so a dropped capture emits no span
         // at all — the same rule Android applies, where the screenshot log is reported only for a
-        // frame that shipped.
-        self.recordScreenshotForSpan(on: span) { didCapture in
-            guard didCapture else { return }
+        // frame that shipped. `isManual` travels with the capture so the host's own
+        // `captureEvent()` is not deduplicated away: it asked for this frame explicitly.
+        let extra: [String: Any] = isManual ? [Keys.isManual.rawValue: true] : [:]
+        self.recordScreenshotForSpan(on: span, extraProperties: extra) { didCapture in
+            guard didCapture else {
+                Log.d("[SessionReplay] capture produced no frame — screenshot event not reported")
+                return
+            }
             span.end()
         }
     }
@@ -129,6 +134,11 @@ extension CoralogixRum: CoralogixInterface {
     
     public func revertScreenshotCounter() {
         self.coralogixExporter?.getScreenshotManager().revertScreenshotCounter()
+    }
+
+    public func revertScreenshotCounter(page: Int, segmentIndex: Int) {
+        let location = ScreenshotLocation(segmentIndex: segmentIndex, page: page, screenshotId: "")
+        self.coralogixExporter?.getScreenshotManager().revertScreenshotCounter(for: location)
     }
 
     public func reportSessionReplayInit(snapshot: [String: Any]) {

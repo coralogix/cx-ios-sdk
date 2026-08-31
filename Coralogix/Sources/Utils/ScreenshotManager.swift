@@ -51,19 +51,42 @@ public class ScreenshotManager {
         }
     }
     
+    /// Returns a reservation, identified by the location it was minted as.
+    ///
+    /// The counter is a single high-water mark, so only the most recent reservation can be
+    /// returned: stepping it back when a newer capture has already taken an index would reissue
+    /// that index, and `generateFileName` would then overwrite a frame that already shipped.
+    /// A mismatch means a newer capture is in flight, so the slot is left burned — a gap is
+    /// recoverable, a collision is not.
+    public func revertScreenshotCounter(for location: ScreenshotLocation) {
+        queue.sync(flags: .barrier) {
+            guard page == location.page, screenshotCount == location.segmentIndex else {
+                return
+            }
+            revertLocked()
+        }
+    }
+
+    /// Unconditional revert, kept for callers that do not know which slot they are returning.
+    /// Prefer `revertScreenshotCounter(for:)`, which cannot roll back someone else's.
     public func revertScreenshotCounter() {
         queue.sync(flags: .barrier) {
-            screenshotCount -= 1
-            
-            if screenshotCount < 1 {
-                // Step back a page, down to page 0 — the first page is 0, not 1, so stopping at 1
-                // would strand the counter a whole page ahead of the frames that shipped.
-                if page > 0 {
-                    page -= 1
-                    screenshotCount = maxScreenshotsPerPage
-                } else {
-                    screenshotCount = 0
-                }
+            revertLocked()
+        }
+    }
+
+    /// Caller must hold the barrier.
+    private func revertLocked() {
+        screenshotCount -= 1
+
+        if screenshotCount < 1 {
+            // Step back a page, down to page 0 — the first page is 0, not 1, so stopping at 1
+            // would strand the counter a whole page ahead of the frames that shipped.
+            if page > 0 {
+                page -= 1
+                screenshotCount = maxScreenshotsPerPage
+            } else {
+                screenshotCount = 0
             }
         }
     }

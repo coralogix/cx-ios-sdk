@@ -526,8 +526,7 @@ final class SessionReplayModelTests: XCTestCase {
         model.encodeAndProcess(
             image: image,
             compressionQuality: 0.8,
-            properties: nil,
-            callerIncrementedCounter: false
+            properties: nil
         )
 
         wait(for: [exp], timeout: 2.0)
@@ -761,7 +760,6 @@ class MockSessionReplayModel2: SessionReplayModel {
         image: UIImage,
         compressionQuality: CGFloat,
         properties: [String : Any]?,
-        callerIncrementedCounter: Bool,
         completion: CaptureEventCompletion? = nil
     ) {
         let data = "mock image".data(using: .utf8)!

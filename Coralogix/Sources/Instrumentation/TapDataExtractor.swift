@@ -20,6 +20,10 @@ struct TouchEvent {
     let location: CGPoint     // screen-coordinate position (top-left origin)
     let eventType: InteractionEventName
     let scrollDirection: ScrollDirection?
+    /// When the touch happened, in epoch seconds. Session replay hands this to the Flutter
+    /// bitmap provider so Dart can refuse to draw a tap it can no longer represent honestly,
+    /// which only works if the value is the touch's own time rather than the capture's.
+    let timestamp: TimeInterval
 
     /// Standard init — position is derived from the live UITouch (tap / scroll path).
     init(view: UIView,
@@ -31,9 +35,11 @@ struct TouchEvent {
         self.location = touch.location(in: nil)
         self.eventType = eventType
         self.scrollDirection = scrollDirection
+        self.timestamp = Self.epochSeconds(ofTouchAt: touch.timestamp)
     }
 
-    /// Gesture-recogniser init — no live UITouch available (swipe path).
+    /// Gesture-recogniser init — no live UITouch available (swipe path), so the recogniser's
+    /// firing time is the closest thing to the touch's own.
     init(view: UIView,
          location: CGPoint,
          eventType: InteractionEventName,
@@ -43,6 +49,14 @@ struct TouchEvent {
         self.location = location
         self.eventType = eventType
         self.scrollDirection = scrollDirection
+        self.timestamp = Date().timeIntervalSince1970
+    }
+
+    /// `UITouch.timestamp` is seconds since boot, not since the epoch, so it has to be rebased
+    /// against the current uptime rather than used directly.
+    internal static func epochSeconds(ofTouchAt touchUptime: TimeInterval) -> TimeInterval {
+        let age = ProcessInfo.processInfo.systemUptime - touchUptime
+        return Date().timeIntervalSince1970 - max(0, age)
     }
 }
 
@@ -308,6 +322,7 @@ enum TapDataExtractor {
         var attributes = [String: Any]()
         Global.updateLocation(tapData: &attributes, location: event.location)
         tapData.merge(attributes) { _, new in new }
+        tapData[Keys.tapTimestamp.rawValue] = event.timestamp
         tapData[Keys.attributes.rawValue] = attributes
 
         return tapData
