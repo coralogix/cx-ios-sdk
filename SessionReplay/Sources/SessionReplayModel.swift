@@ -320,20 +320,22 @@ public class SessionReplayModel {
     }
 
     /// Epoch-milliseconds timestamp of the tap that triggered this capture, so Dart can drop a
-    /// click frame that would land too long after the tap. `nil` for periodic captures.
+    /// click frame that would land too long after the tap. `nil` for periodic captures, and for a
+    /// click whose properties carry no timestamp — omitting the value skips the staleness check,
+    /// which beats guessing at it.
     ///
-    /// `getTimestamp` returns SECONDS on the capture path — `SessionReplay.captureEvent` stores
-    /// `Date().timeIntervalSince1970` — and callers convert, the same way `handleCapturedData`
-    /// hands its value to `SRNetworkManager` as `timestamp.milliseconds`. Sending seconds would
-    /// make every tap read as hours stale, so Dart would drop every click frame.
+    /// Reads the key directly rather than through `getTimestamp`, whose fallback is already in
+    /// milliseconds while its stored value is in seconds (`SessionReplay.captureEvent` stores
+    /// `Date().timeIntervalSince1970`). Multiplying that fallback by 1000 would hand Dart
+    /// microseconds — a tap dated far in the future.
     ///
     /// `Int64(exactly:)` rather than a trapping conversion: the value is read out of an untyped
     /// properties dictionary that hybrid bridges also populate, and a NaN or out-of-range Double
-    /// must never crash the host app. `nil` omits the staleness check, which is already how a
-    /// capture with no tap timestamp behaves.
+    /// must never crash the host app.
     internal func tapTimestampMilliseconds(from properties: [String: Any]?, isClick: Bool) -> Int64? {
-        guard isClick else { return nil }
-        return Int64(exactly: (getTimestamp(from: properties) * 1_000).rounded())
+        guard isClick,
+              let seconds = properties?[Keys.timestamp.rawValue] as? TimeInterval else { return nil }
+        return Int64(exactly: (seconds * 1_000).rounded())
     }
 
     // Returns the frame to composite, or nil to drop the whole capture.

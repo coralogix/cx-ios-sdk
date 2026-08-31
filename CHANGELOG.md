@@ -11,6 +11,9 @@ omitted; the focus here is user-facing behavior changes. Tickets are referenced 
 
 ## [2.18.0] - 2026-08-31
 
+### Added
+- `SessionReplay.shared.captureEvent(properties:completion:)` — a completion-based variant of the manual capture call that reports whether a frame actually shipped. The existing synchronous overload returns before the frame is encoded, so its `.success` means "the capture started"; the completion runs once and fails with `skippingEvent` when the frame was dropped as a duplicate, or when Dart had no frame for that moment.
+
 ### Changed
 - **Session Replay no longer substitutes an earlier frame when Flutter has no frame to give.** When the Dart bitmap provider answers with no bitmap, the whole capture is dropped and the next one proceeds — matching the Android SDK, which drops a frame its provider does not deliver. Previously the SDK composited the last frame Dart had delivered, so a gated or coalesced tick re-uploaded stale pixels under a fresh timestamp: the frame count looked healthy while the replay showed a frozen screen, and a tap marker could be drawn onto a frame whose mask rects no longer matched what was on screen.
 - `flutterViewBitmapProvider` now receives `isClick` and `tapTimestampMs` alongside `viewId` and `frameId`, so Dart can hold a tap capture for the next committed frame or answer with no frame when the tap is already too old to draw honestly. Same inputs the Android provider receives. Flutter apps get this through a plugin update; apps that supply their own provider closure need to widen its signature.

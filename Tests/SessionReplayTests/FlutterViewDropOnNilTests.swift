@@ -183,6 +183,15 @@ final class FlutterViewDropOnNilTests: XCTestCase {
                      "Only a click capture carries a tap timestamp")
     }
 
+    func testTapTimestamp_isNilWhenTheCaptureCarriesNone() {
+        // getTimestamp's fallback is already in milliseconds while its stored value is in
+        // seconds, so converting it would hand Dart microseconds — a tap dated far in the future.
+        XCTAssertNil(model.tapTimestampMilliseconds(from: [:], isClick: true),
+                     "A click with no timestamp must omit the value, not synthesise one")
+        XCTAssertNil(model.tapTimestampMilliseconds(from: nil, isClick: true),
+                     "Nil properties must omit the value too")
+    }
+
     func testTapTimestamp_isNilForANonFiniteTimestamp() {
         let properties: [String: Any] = [Keys.timestamp.rawValue: Double.nan]
         XCTAssertNil(model.tapTimestampMilliseconds(from: properties, isClick: true),

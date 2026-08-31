@@ -287,7 +287,10 @@ public class SessionReplay: SessionReplayInterface {
             }
             return sessionReplayModel.captureImage(properties: updatedProperties, completion: completion)
         }
-        completion?(.success(()))
+        // .video produces no frame today (RecordingType.video is TBD), so a caller waiting on the
+        // outcome must not stamp a span for one. The synchronous return stays .success — it means
+        // "accepted", and existing callers read it that way.
+        completion?(.failure(.skippingEvent))
         return .success(())
     }
 

@@ -132,11 +132,27 @@ SessionReplay.shared.stopRecording()
 ```
 
 ##### `captureEvent`
-Captures a specific event during the session.
+Captures a single frame outside the configured interval.
 
 ```swift
-let result = SessionReplay.shared.captureEvent()
+let result = SessionReplay.shared.captureEvent(properties: nil)
 ```
+
+The returned result tells you the capture was accepted, not that a frame reached Coralogix. Encoding runs off the main thread, and the frame is dropped when it is identical to the previous one or, in a Flutter app, when Dart has no frame for that moment. Use the completion overload when you need the real outcome. It runs once, and reports `skippingEvent` when no frame shipped.
+
+```swift
+SessionReplay.shared.captureEvent(properties: nil) { result in
+    switch result {
+    case .success:
+        print("Frame captured")
+    case .failure(let error):
+        print("No frame captured: \(error)")
+    }
+}
+```
+
+> [!NOTE]
+> The completion overload is available from version 2.18.0.
 
 #### Example Usage
 ```swift
