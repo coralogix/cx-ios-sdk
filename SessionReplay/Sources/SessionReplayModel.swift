@@ -25,16 +25,15 @@ public class SessionReplayModel {
     private let srNetworkManager: SRNetworkManager?
 
     private let screenshotDataQueue = DispatchQueue(label: "com.coralogix.sessionReplay.screenshotDataQueue")
-    private var _prvScreenshotData: Data? = nil
+    private var _prvFingerprint: FrameFingerprint? = nil
+    private let frameDiffOptions = FrameDiffOptions()
 
     /// Serial queue for off-main JPEG encoding. Serial so skip-identical comparison
-    /// sees _prvScreenshotData updates in capture order.
+    /// sees _prvFingerprint updates in capture order.
     internal let encodingQueue = DispatchQueue(
         label: "com.coralogix.sessionReplay.encodingQueue",
         qos: .userInitiated
     )
-
-    private lazy var comparisonContext = CIContext(options: [.workingColorSpace: NSNull()])
 
     /// Monotonic counter passed to flutterViewBitmapProvider as frameId. Guarded by
     /// `flutterFrameQueue`: `frameId` is the only admission gate a delivery passes, so two
@@ -561,26 +560,40 @@ public class SessionReplayModel {
                 self.dropCapture(properties: properties, completion: completion)
             }
 
-            guard let screenshotData = image.jpegData(compressionQuality: compressionQuality) else {
-                drop()
-                return
-            }
-
-            // A manual capture bypasses deduplication for the same reason a click frame does: the
-            // host asked for this frame, and answering "identical to the last one" by silently
-            // reporting nothing leaves a void-returning public API with no way to say so.
+            // Both exemptions survive the move to fingerprint matching.
+            //
+            // A click frame is exempt because the tap marker is drawn by the scanner pipeline,
+            // downstream of here — the image being compared does not carry it yet, so a tap on
+            // an unchanged screen would dedup away and lose its marker frame. Android draws its
+            // marker before its own check and so needs no exemption; this one is an ordering
+            // difference, not a policy difference.
+            //
+            // A manual capture is exempt because the host asked for this frame, and the
+            // void-returning public overload has no way to answer "identical to the last one".
             let isManual = (properties?[Keys.isManual.rawValue] as? Bool) == true
             let isClickFrame = self.getClickPoint(from: properties) != nil
+
+            // Compared before encoding, so a dropped frame costs no JPEG. A frame whose
+            // fingerprint cannot be built is kept: shipping it twice beats losing it.
             let shouldSkip = !isClickFrame && !isManual && self.screenshotDataQueue.sync { () -> Bool in
-                if let prvData = self._prvScreenshotData,
-                   !self.imagesAreDifferent(screenshotData, prvData) {
+                guard let cgImage = image.cgImage,
+                      let fingerprint = FrameFingerprint.make(from: cgImage,
+                                                              options: self.frameDiffOptions)
+                else { return false }
+                if let previous = self._prvFingerprint,
+                   FrameSimilarity.isSame(previous, fingerprint, options: self.frameDiffOptions) {
                     return true
                 }
-                self._prvScreenshotData = screenshotData
+                self._prvFingerprint = fingerprint
                 return false
             }
 
             if shouldSkip {
+                drop()
+                return
+            }
+
+            guard let screenshotData = image.jpegData(compressionQuality: compressionQuality) else {
                 drop()
                 return
             }
@@ -597,7 +610,7 @@ public class SessionReplayModel {
     internal func updateSessionId(with sessionId: String) {
         if sessionId != self.sessionId {
             self.sessionId = sessionId
-            screenshotDataQueue.sync { _prvScreenshotData = nil }
+            screenshotDataQueue.sync { _prvFingerprint = nil }
             flutterFrameQueue.sync {
                 _latestAcceptedFlutterFrameId = 0
                 _flutterFrameGeneration &+= 1
@@ -813,41 +826,4 @@ public class SessionReplayModel {
             }
         }
 
-    func imagesAreDifferent(_ data1: Data, _ data2: Data, threshold: Double = 0.01) -> Bool {
-        guard
-            let image1 = CIImage(data: data1),
-            let image2 = CIImage(data: data2),
-            image1.extent == image2.extent
-        else {
-            return true
-        }
-
-        let diffFilter = CIFilter(name: "CIDifferenceBlendMode")!
-        diffFilter.setValue(image1, forKey: kCIInputImageKey)
-        diffFilter.setValue(image2, forKey: kCIInputBackgroundImageKey)
-        guard let diffImage = diffFilter.outputImage else { return true }
-
-        let extentVector = CIVector(x: diffImage.extent.origin.x,
-                                    y: diffImage.extent.origin.y,
-                                    z: diffImage.extent.size.width,
-                                    w: diffImage.extent.size.height)
-
-        guard let avgFilter = CIFilter(name: "CIAreaAverage",
-                                       parameters: [kCIInputImageKey: diffImage,
-                                                   kCIInputExtentKey: extentVector]),
-              let outputImage = avgFilter.outputImage else {
-            return true
-        }
-
-        var bitmap = [UInt8](repeating: 0, count: 4)
-        comparisonContext.render(outputImage,
-                       toBitmap: &bitmap,
-                       rowBytes: 4,
-                       bounds: CGRect(x: 0, y: 0, width: 1, height: 1),
-                       format: .RGBA8,
-                       colorSpace: nil)
-
-        let avgDiff = (Double(bitmap[0]) + Double(bitmap[1]) + Double(bitmap[2])) / (3.0 * 255.0)
-        return avgDiff > threshold
-    }
 }
