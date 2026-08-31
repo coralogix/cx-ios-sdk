@@ -241,9 +241,17 @@ class SessionReplayTests: XCTestCase {
         SessionReplay.initializeWithOptions(sessionReplayOptions: options)
         SessionReplay.shared.sessionReplayModel = MockSessionReplayModel(sessionReplayOptions: options)
 
-        _ = SessionReplay.shared.captureEvent(properties: ["key": "value"])
+        let result = SessionReplay.shared.captureEvent(properties: ["key": "value"])
 
-        XCTAssertEqual(mockCoralogix.revertScreenshotCounterCallCount, 0)
+        // Assert the rejection was actually reached: without this the revert count alone would
+        // read as 0 for a capture that was never rejected in the first place.
+        if case .failure(let error) = result {
+            XCTAssertEqual(error, .notRecording)
+        } else {
+            XCTFail("Expected .failure(.notRecording) but got success")
+        }
+        XCTAssertEqual(mockCoralogix.revertScreenshotCounterCallCount, 0,
+                       "an index the caller never took is not ours to give back")
     }
 }
 

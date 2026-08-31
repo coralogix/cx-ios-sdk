@@ -52,6 +52,33 @@ public class SessionReplayModel {
         let maskRects: [CGRect]
     }
 
+    /// What to do with one provider delivery. Three cases because the call site acts differently
+    /// on each: only `composite` produces a frame, and only `staleSession` leaves the screenshot
+    /// counter alone — after a rotation the index belongs to the new session, so handing it back
+    /// would corrupt it.
+    internal enum FlutterDeliveryOutcome {
+        case composite(FlutterFrame)
+        case staleSession
+        case noFrame
+    }
+
+    /// One-shot gate for a single provider delivery. Carries its own lock rather than borrowing
+    /// `flutterFrameQueue`: the claim has to work before `self` is resolved, and a provider that
+    /// breaks the main-thread contract must still not slip two deliveries past the check.
+    internal final class FlutterDeliveryGate {
+        private let lock = NSLock()
+        private var isAnswered = false
+
+        /// True for the first caller only.
+        func claim() -> Bool {
+            lock.lock()
+            defer { lock.unlock() }
+            guard !isAnswered else { return false }
+            isAnswered = true
+            return true
+        }
+    }
+
     // frameId of the newest delivery already composited. A late, out-of-order callback
     // carrying an older frameId is dropped, not shipped behind the newer frame.
     private var _latestAcceptedFlutterFrameId: Int64 = 0
@@ -260,9 +287,7 @@ public class SessionReplayModel {
 
         // The provider is host-app code (the Flutter plugin), so a second delivery for the
         // same cycle is possible; it must not composite twice or report the capture twice.
-        // Plain captured state, not a lock: the contract puts the callback on main, and an
-        // off-main delivery is already dropped by `prepareCapturedFrameOnMain`.
-        var didAnswer = false
+        let delivery = FlutterDeliveryGate()
 
         // viewId is intentionally "implicit_view" — the cx-flutter-plugin ignores it (uses `_`)
         // and routes all captures to Flutter's single implicit view. Only frameId matters.
@@ -272,30 +297,28 @@ public class SessionReplayModel {
         // inputs the Android provider receives.
         provider("implicit_view", frameId, isClickFrame,
                  tapTimestampMilliseconds(from: properties, isClick: isClickFrame)) { [weak self] bitmap in
-            guard !didAnswer else {
+            guard delivery.claim() else {
                 Log.w("[SessionReplayModel] flutterViewBitmapProvider answered twice for frameId \(frameId) — ignoring")
                 return
             }
-            didAnswer = true
 
             guard let self = self, let options = self.sessionReplayOptions else {
                 drop()
                 return
             }
 
-            // Drop a callback that outlived its session: its frame belongs to a
-            // previous session and must not poison the new one. Reported to the caller like
-            // any other drop, but without the counter revert — after a rotation the counter
-            // belongs to the new session, so reverting would corrupt it; a one-index gap in
-            // the old session is the lesser evil.
-            guard self.flutterFrameGeneration == requestGeneration else {
-                completion?(.failure(.skippingEvent))
-                return
-            }
-
             // nil = no frame for this cycle. Drop it — never black, never an earlier frame.
-            guard let flutterFrame = self.resolveFlutterFrame(freshBitmap: bitmap, frameId: frameId) else {
-                drop()
+            // A delivery that outlived its session is dropped too, but keeps the screenshot
+            // index: after a rotation that index belongs to the new session, so handing it back
+            // would corrupt it. A one-index gap in the old session is the lesser evil.
+            let outcome = self.acceptFlutterDelivery(freshBitmap: bitmap, frameId: frameId,
+                                                     requestGeneration: requestGeneration)
+            guard case .composite(let flutterFrame) = outcome else {
+                if case .staleSession = outcome {
+                    completion?(.failure(.skippingEvent))
+                } else {
+                    drop()
+                }
                 return
             }
 
@@ -338,22 +361,31 @@ public class SessionReplayModel {
         return Int64(exactly: (seconds * 1_000).rounded())
     }
 
-    // Returns the frame to composite, or nil to drop the whole capture.
+    // Decides what to do with one delivery, in a single critical section.
+    //
+    // The session generation and the frameId watermark are tested together on purpose. Read
+    // separately, `updateSessionId` can bump the generation and reset the watermark in the window
+    // between the two reads, and a pre-rotation bitmap then passes both checks and is composited
+    // into the new session — the exact leak the generation guard exists to prevent.
     //
     // Nothing is ever carried across capture cycles: a nil delivery, a bitmap that fails to
-    // decode, and a late out-of-order delivery all return nil. Substituting an earlier frame
+    // decode, and a late out-of-order delivery all yield `noFrame`. Substituting an earlier frame
     // would ship stale pixels under a fresh timestamp, and for a tap it would test marker
     // suppression against the wrong frame's mask rects — a marker over a field that is masked
     // now but was not masked then. Android drops on the same terms; see
     // `composeFlutterRegionOrDrop` in its FrameCapturer.
-    internal func resolveFlutterFrame(freshBitmap: FlutterViewBitmap?, frameId: Int64) -> FlutterFrame? {
+    internal func acceptFlutterDelivery(freshBitmap: FlutterViewBitmap?,
+                                        frameId: Int64,
+                                        requestGeneration: Int64) -> FlutterDeliveryOutcome {
         // Decode outside the lock (cheap — no pixel copy).
-        guard let bitmap = freshBitmap, let image = Self.makeCGImage(from: bitmap) else { return nil }
-        let frame = FlutterFrame(image: image, maskRects: bitmap.maskRects)
+        let decoded = freshBitmap.flatMap { bitmap in
+            Self.makeCGImage(from: bitmap).map { FlutterFrame(image: $0, maskRects: bitmap.maskRects) }
+        }
         return flutterFrameQueue.sync {
-            guard frameId > _latestAcceptedFlutterFrameId else { return nil }
+            guard _flutterFrameGeneration == requestGeneration else { return .staleSession }
+            guard let decoded, frameId > _latestAcceptedFlutterFrameId else { return .noFrame }
             _latestAcceptedFlutterFrameId = frameId
-            return frame
+            return .composite(decoded)
         }
     }
 
