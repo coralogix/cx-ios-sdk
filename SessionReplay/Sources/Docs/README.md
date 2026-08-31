@@ -75,7 +75,7 @@ Masking does not suppress the interaction event itself, and the event still carr
 
 ### Which masking sources suppress a tap marker and set `is_masked_element`
 
-Only masking that reports geometry to the capture pass can suppress a marker, because the marker is tested against the exact rectangles the frame blacked out — the pixels and the marker can never disagree. The synchronous `UIView` walk reports geometry, and the Flutter plugin reports the rects it masked alongside each bitmap. The Vision-based scanners modify pixels in place and report none, so masking that relies on them cannot suppress a marker.
+Only masking that reports geometry to the capture pass can suppress a marker, because the marker is tested against the exact rectangles the frame blacked out — the pixels and the marker can never disagree. The synchronous `UIView` walk reports geometry, the Flutter plugin reports the rects it masked alongside each bitmap, and a Flutter view the SDK has no bitmap for reports the whole region it blacks out. The Vision-based scanners modify pixels in place and report none, so masking that relies on them cannot suppress a marker.
 
 Interaction events ask a **different question** and so use different geometry. The marker asks *should these pixels be hidden in this frame*; `is_masked_element` asks *may this text leave the device*. Only deliberate masking answers the second: the tap point is tested against `cxMask` rects alone — set directly, inherited from an ancestor, or applied to SwiftUI content via the `.cxMask()` overlay — with the replay's pixel policy (`maskText`, `maskAllImages`) excluded. A tap inside one redacts `target_element_inner_text` to `***` and reports `interaction_context.is_masked_element: true`. The view-tree walk (`cxMask` inheritance) and the sensitive-field traits answer alongside it, and still answer when no geometry is available.
 
@@ -92,6 +92,7 @@ Interaction events ask a **different question** and so use different geometry. T
 | `maskText` / `maskAllImages` on **SwiftUI** content (OCR / rectangle detection) | ✅ | ❌ | ❌ | ❌ |
 | `maskFaces`, `creditCardPredicate` (Vision) | ✅ | ❌ | ❌ | ❌ |
 | Flutter (Dart-supplied pre-masked bitmap) | ✅ | ✅ — with plugin-reported rects (`FlutterViewBitmap.maskRects`) | ✅ — via `is_masked` on `setUserInteraction` | ✅ — same |
+| Flutter with no bitmap to paste (a plugin that predates the bitmap provider, or a replay initialized natively) | ✅ — the whole Flutter region is blacked out | ✅ — that region | ✅ — via `is_masked` on `setUserInteraction` | ✅ — same |
 | Secure text entry / sensitive `textContentType` | n/a (system-drawn dots) | ❌ — paints no rect | ✅ | ✅ |
 
 Interaction reporting does not depend on session replay being initialized: `cxMask` geometry needs none of the replay's options to collect, so the verdict resolves whether or not a replay is running. Password fields and fields with a sensitive `textContentType` are redacted to `***` independently of any of this. Any **new masking source must state which of the two channels it feeds**: geometry to the capture pass (suppresses markers; sets the flag only when it is deliberate masking rather than pixel policy) or pixels only (neither).

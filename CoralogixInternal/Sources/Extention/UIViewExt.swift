@@ -310,10 +310,11 @@ public extension UIView {
     /// As `captureScreenshotImage`, but also returns the mask rectangles painted onto the frame
     /// so a later stage can decide whether a tap landed inside one. See `CapturedFrame`.
     ///
-    /// The Flutter branch contributes only the rects Dart reported alongside the bitmap
+    /// The Flutter branch contributes the rects Dart reported alongside the bitmap
     /// (`flutterMaskRects`, Flutter-view-local points — offset here by `flutterViewRect.origin`).
     /// The host cannot derive them itself: Dart masks the widget tree inside its own bitmap.
-    /// With no reported rects, tap markers over masked Flutter content are not suppressed.
+    /// With no bitmap to paste, the whole Flutter region is blacked out and that region is
+    /// reported as the mask rect.
     ///
     /// Must be called on the main thread.
     func captureFrame(
@@ -337,12 +338,39 @@ public extension UIView {
 
         guard let scene = activeForegroundWindowScene() else { return nil }
 
-        let windows = scene.windows
+        return captureFrame(in: scene.windows,
+                            bounds: scene.screen.bounds,
+                            scale: scale,
+                            maskText: maskText,
+                            maskAllImages: maskAllImages,
+                            flutterCGImage: flutterCGImage,
+                            flutterViewRect: flutterViewRect,
+                            flutterMaskRects: flutterMaskRects)
+    }
+
+    /// The windows-taking half of `captureFrame`, split out so a caller that already holds a
+    /// window list can reach the same routing — and so tests, which have no foreground scene to
+    /// resolve, can exercise the real capture rather than re-deriving the geometry it reports.
+    /// Mirrors the split on `collectScreenMaskRects` / `collectMaskRects(in:)`.
+    ///
+    /// Explicitly `internal` inside this public extension: no consumer composes a window list of
+    /// its own, so this is not API to keep working, and tests reach it with `@testable`.
+    internal func captureFrame(in windows: [UIWindow],
+                               bounds: CGRect,
+                               scale: CGFloat,
+                               maskText: [String]?,
+                               maskAllImages: Bool,
+                               flutterCGImage: CGImage?,
+                               flutterViewRect: CGRect?,
+                               flutterMaskRects: [CGRect]) -> CapturedFrame {
+        let windows = windows
             .filter { !$0.isHidden && $0.alpha > 0 }
             .sorted(by: { $0.windowLevel < $1.windowLevel })
 
-        var nativeMaskRects: [CGRect] = []
-        let bounds = scene.screen.bounds
+        // Split by when they are painted, not by where they came from. Both halves are reported
+        // as the frame's mask geometry; only the deferred half is filled after the window loop.
+        var deferredMaskRects: [CGRect] = []
+        var inlineMaskRects: [CGRect] = []
         let format = UIGraphicsImageRendererFormat()
         format.scale = scale
         let renderer = UIGraphicsImageRenderer(bounds: bounds, format: format)
@@ -359,15 +387,36 @@ public extension UIView {
                         uiImage.draw(in: rect)
                         // Dart rects are Flutter-view-local; the view sits at rect.origin in
                         // screen space, the renderer's coordinate space.
-                        nativeMaskRects += flutterMaskRects
-                            .map { $0.offsetBy(dx: rect.origin.x, dy: rect.origin.y) }
+                        //
+                        // Clipped first, because the geometry must not claim more than the
+                        // pixels it describes: an oversized rect from the plugin would suppress
+                        // tap markers outside the composited region, and these rects are painted
+                        // too, so it would black out native content there as well. The bitmap is
+                        // drawn to fill `rect`, so the region is `rect.size` from its own origin.
+                        let compositedBounds = CGRect(origin: .zero, size: rect.size)
+                        deferredMaskRects += flutterMaskRects.compactMap { maskRect in
+                            let clipped = maskRect.intersection(compositedBounds)
+                            guard !clipped.isEmpty else { return nil }
+                            return clipped.offsetBy(dx: rect.origin.x, dy: rect.origin.y)
+                        }
                     } else {
                         // Screen-space fallback: flutterViewRect is already in screen
                         // coordinates (flutterView.convert(_, to: nil)); win.frame matches
                         // the renderer's screen-coordinate space, win.bounds (origin 0,0)
-                        // would black-fill the wrong spot for an offset window (BUGV2-6045).
+                        // would black-fill the wrong spot for an offset window.
+                        //
+                        // Filled here rather than with the deferred rects because this one
+                        // covers a whole window: a higher window drawn after it — a keyboard,
+                        // an alert — has to paint over the fill, not be blacked out by it.
+                        //
+                        // Reported as well as filled: the hidden region has to absorb tap
+                        // markers too. A marker on top of the fill reveals where inside the
+                        // hidden Flutter content the user touched, and a run of them
+                        // reconstructs what was entered on a masked keypad.
+                        let region = flutterViewRect ?? win.frame
                         UIColor.black.setFill()
-                        UIRectFill(flutterViewRect ?? win.frame)
+                        UIRectFill(region)
+                        inlineMaskRects.append(region)
                     }
                 } else {
                     // Native window: drawHierarchy goes through the screen compositor
@@ -384,21 +433,21 @@ public extension UIView {
                     }
                     ctx.restoreGState()
 
-                    nativeMaskRects += collectNativeMaskRects(in: win,
-                                                              maskText: maskText,
-                                                              maskAllImages: maskAllImages)
+                    deferredMaskRects += collectNativeMaskRects(in: win,
+                                                                maskText: maskText,
+                                                                maskAllImages: maskAllImages)
                 }
             }
 
-            if !nativeMaskRects.isEmpty {
+            if !deferredMaskRects.isEmpty {
                 UIColor.black.setFill()
-                for rect in nativeMaskRects { UIRectFill(rect) }
+                for rect in deferredMaskRects { UIRectFill(rect) }
             }
         }
 
         // Read after the renderer block, which runs synchronously — every rect the frame masked
         // has been appended by this point.
-        return CapturedFrame(image: image, maskRects: nativeMaskRects)
+        return CapturedFrame(image: image, maskRects: deferredMaskRects + inlineMaskRects)
     }
 
     /// Convenience wrapper — captures and JPEG-encodes inline. Prefer calling

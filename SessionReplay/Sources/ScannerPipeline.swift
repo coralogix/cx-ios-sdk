@@ -60,7 +60,8 @@ class ScannerPipeline {
         //
         // The UIKit walk reports geometry back (URLEntry.maskRects), and the Dart bitmap
         // provider reports the rects it masked alongside each frame (FlutterViewBitmap.maskRects,
-        // merged in captureFrame). The OCR/Vision stages mask pixels in place and report none,
+        // merged in captureFrame) — with no bitmap to paste, the blacked-out Flutter region is
+        // reported whole. The OCR/Vision stages mask pixels in place and report none,
         // so a tap over content masked only by those still draws its marker. Suppressing those
         // needs the scanners to surface their observation rects in screen points, which is its
         // own work.
