@@ -293,19 +293,8 @@ public class SessionReplayModel {
         // same cycle is possible; it must not composite twice or report the capture twice.
         let delivery = FlutterDeliveryGate()
 
-        // viewId is intentionally "implicit_view" — the cx-flutter-plugin ignores it (uses `_`)
-        // and routes all captures to Flutter's single implicit view. Only frameId matters.
-        //
-        // isClick/tapTimestampMs let Dart hold a tap capture for the next committed frame
-        // (or answer nil when the tap is already too stale to draw honestly) — the same
-        // inputs the Android provider receives.
-        provider("implicit_view", frameId, isClickFrame,
-                 tapTimestampMilliseconds(from: properties, isClick: isClickFrame)) { [weak self] bitmap in
-            guard delivery.claim() else {
-                Log.w("[SessionReplayModel] flutterViewBitmapProvider answered twice for frameId \(frameId) — ignoring")
-                return
-            }
-
+        // Everything the delivery does walks UIKit, so it has to run on main.
+        let handleDelivery: (FlutterViewBitmap?) -> Void = { [weak self] bitmap in
             guard let self = self, let options = self.sessionReplayOptions else {
                 drop()
                 return
@@ -343,6 +332,30 @@ public class SessionReplayModel {
                                   properties: self.propertiesWithCaptureMetadata(properties, maskRects: frame.maskRects),
                                   callerIncrementedCounter: callerIncrementedCounter,
                                   completion: completion)
+        }
+
+        // viewId is intentionally "implicit_view": the plugin ignores the argument and routes
+        // every capture to Flutter's single implicit view, which is also the only view this path
+        // composites. Only frameId matters.
+        //
+        // isClick/tapTimestampMs let Dart hold a tap capture for the next committed frame, or
+        // answer nil when the tap is already too stale to draw honestly.
+        provider("implicit_view", frameId, isClickFrame,
+                 tapTimestampMilliseconds(from: properties, isClick: isClickFrame)) { bitmap in
+            guard delivery.claim() else {
+                Log.w("[SessionReplayModel] flutterViewBitmapProvider answered twice for frameId \(frameId) — ignoring")
+                return
+            }
+
+            // A MethodChannel reply lands on whatever queue it likes, and a provider that hands
+            // the bitmap over from a background queue has no reason to know better. Hop instead
+            // of letting `prepareCapturedFrameOnMain`'s main-thread guard drop a good frame as if
+            // Dart had sent nothing.
+            guard Thread.isMainThread else {
+                DispatchQueue.main.async { handleDelivery(bitmap) }
+                return
+            }
+            handleDelivery(bitmap)
         }
     }
 

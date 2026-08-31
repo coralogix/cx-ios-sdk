@@ -76,18 +76,23 @@ public struct FlutterViewBitmap {
 
 /// Callback signature used by [SessionReplayOptions.flutterViewBitmapProvider].
 ///
-/// Invoked once per FlutterView per capture cycle.
+/// Invoked once per capture cycle, for Flutter's implicit view.
 ///
-/// - `viewId`: the Flutter-allocated stable identifier (`cx_flutter_view_<counter>`).
+/// - `viewId`: always `"implicit_view"`. The SDK composites one FlutterView per capture —
+///   the first it finds on screen — and the plugin routes every capture to Flutter's single
+///   implicit view, so the argument carries no information today. A host with several
+///   FlutterViews is not supported by this path.
 /// - `frameId`: a monotonic SDK counter. Opaque — not a timestamp.
 /// - `isClick`: this capture was triggered by a user tap.
 /// - `tapTimestampMs`: that tap's epoch-ms timestamp, `nil` for periodic captures.
 ///
 /// Call the completion exactly once, with the bytes or with `nil`. `nil` means "no frame
 /// for this cycle", whatever the reason, and the SDK drops the capture: never a black
-/// fill, never the raw FlutterView pixels, never a frame from an earlier cycle.
+/// fill, never the raw FlutterView pixels, never a frame from an earlier cycle. A second
+/// call for the same cycle is ignored.
 ///
-/// The SDK does not time the round-trip out, so a provider that never calls the
+/// The completion may be called from any thread; the SDK moves the work to the main thread
+/// itself. It does not time the round-trip out, so a provider that never calls the
 /// completion produces no capture for that cycle. Answering is the provider's
 /// responsibility.
 public typealias FlutterViewBitmapProvider =
