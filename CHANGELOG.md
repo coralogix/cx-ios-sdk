@@ -9,14 +9,47 @@ Release-mechanics commits (version bumps, podspec/script tweaks, README edits) a
 omitted; the focus here is user-facing behavior changes. Tickets are referenced as
 `CX-XXXXX` (Jira) or `ALPH-XXXX` (legacy). Pull request numbers are in parentheses.
 
-## [2.18.0] - 2026-08-31
+## [3.0.0] - 2026-08-31
+
+Two public declarations changed shape, so this is a major release. Both are Session Replay
+integration points rather than everyday API — most apps upgrade without touching code.
+
+### Breaking
+- **`FlutterViewBitmapProvider` takes two more arguments.** The closure now receives `isClick` and `tapTimestampMs` between `frameId` and the completion handler, and answers with an optional bitmap as before:
+
+  ```swift
+  // 2.x
+  flutterViewBitmapProvider: { viewId, frameId, completion in
+      completion(bitmap)
+  }
+
+  // 3.0
+  flutterViewBitmapProvider: { viewId, frameId, isClick, tapTimestampMs, completion in
+      completion(bitmap)
+  }
+  ```
+
+  Flutter apps get this through a plugin update and need no change of their own. Only an app that supplies its own provider closure has to widen the signature; ignore the two new arguments to keep the previous behaviour. `nil` now drops the capture instead of reusing an earlier frame — see Changed.
+
+- **`SessionReplayInterface` requires `captureEvent(properties:completion:)`.** Any type conforming to the protocol has to add it. There is no default implementation, because a conformer that silently never reports an outcome would leave every screenshot-carrying event unsent. Forward it to the synchronous overload and call the completion with the result if the outcome is not knowable:
+
+  ```swift
+  func captureEvent(properties: [String: Any]?, completion: @escaping CaptureEventCompletion) {
+      completion(captureEvent(properties: properties))
+  }
+  ```
+
+  This protocol exists to wire the `SessionReplay` module to the main SDK; apps that only consume `SessionReplay.shared` are unaffected.
+
+### Deprecated
+- `applyScreenshotAttributes(_:to:)` taking an `inout any Span`. `Span` is a class-bound protocol, so the `inout` achieves nothing — use the overload taking `any Span`. The deprecated form still works and will be removed in a future major.
 
 ### Added
 - `SessionReplay.shared.captureEvent(properties:completion:)` — a completion-based variant of the manual capture call that reports whether a frame actually shipped. The existing synchronous overload returns before the frame is encoded, so its `.success` means "the capture started"; the completion runs once and fails with `skippingEvent` when the frame was dropped as a duplicate, or when Dart had no frame for that moment.
 
 ### Changed
 - **Session Replay no longer substitutes an earlier frame when Flutter has no frame to give.** When the Dart bitmap provider answers with no bitmap, the whole capture is dropped and the next one proceeds — matching the Android SDK, which drops a frame its provider does not deliver. Previously the SDK composited the last frame Dart had delivered, so a gated or coalesced tick re-uploaded stale pixels under a fresh timestamp: the frame count looked healthy while the replay showed a frozen screen, and a tap marker could be drawn onto a frame whose mask rects no longer matched what was on screen.
-- `flutterViewBitmapProvider` now receives `isClick` and `tapTimestampMs` alongside `viewId` and `frameId`, so Dart can hold a tap capture for the next committed frame or answer with no frame when the tap is already too old to draw honestly. Same inputs the Android provider receives. Flutter apps get this through a plugin update; apps that supply their own provider closure need to widen its signature.
+- `flutterViewBitmapProvider` now receives `isClick` and `tapTimestampMs` alongside `viewId` and `frameId`, so Dart can hold a tap capture for the next committed frame or answer with no frame when the tap is already too old to draw honestly. Same inputs the Android provider receives.
 - A screenshot event is now emitted only for a frame that actually shipped, and error, navigation and user-interaction events carry `screenshot_id` / `page` only when their frame shipped. Previously every capture stamped its span before the frame was known to exist, so a dropped or deduplicated frame left an event pointing at an image the backend never received — and, because the screenshot index was handed back for reuse, at whichever frame took that index next. The events themselves are unaffected: an interaction or error is still reported when its frame is dropped, just without screenshot attributes, as on Android.
 
 - Spans that carry a screenshot — error, navigation, user-interaction, ANR and screenshot events — now end once the capture resolves rather than immediately, so their end time includes the encode (and, on Flutter, the Dart round-trip). Start times, and therefore RUM attribution, are unchanged: session, user and view are frozen onto the span when it is created. Consumers reading raw `SpanData` through `tracesExporter` will see longer durations on these spans, and a Flutter provider that never answers leaves its span unsent.
