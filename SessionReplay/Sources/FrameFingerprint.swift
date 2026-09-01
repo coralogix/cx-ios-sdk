@@ -7,6 +7,18 @@
 //  Any change to the metrics or thresholds here must be mirrored there, or the
 //  two platforms will disagree about which frames are worth uploading.
 //
+//  Two points already diverge, both making this side strictly more willing to keep a frame,
+//  and both need mirroring on Android:
+//
+//  1. The tile scan compares colour, not luma. Rec.601 maps distinct hues onto the same
+//     brightness — pure red and mid green both land on 76 — so a luma-only scan cannot see a
+//     colour-only change at all. A status dot going red to green scored SSIM 1.000000 and zero
+//     changed tiles: invisible to every metric, and dropped.
+//  2. Any changed tile keeps the frame. Expressed as a ratio it could not: 16 tiles per axis
+//     make the finest non-zero value 1/256 = 0.0039, already under the 0.005 Android ships, so
+//     a single changed tile still voted "same" and the one metric meant to catch a local change
+//     was blind to the smallest change it exists to detect.
+//
 
 import Foundation
 import CoreGraphics
@@ -23,9 +35,11 @@ internal struct FrameDiffOptions {
     let ssimMinSame: Double
     /// Tiles per axis; the scan runs over `tiles * tiles` cells.
     let tiles: Int
-    /// Mean absolute luma difference at or above which one tile counts as changed.
+    /// Mean absolute per-channel difference at or above which one tile counts as changed.
     let tileMadThreshold: Int
-    let changedTilesMaxRatio: Double
+    /// How many changed tiles still count as the same frame. Zero — any tile that moved is a
+    /// change worth uploading. See the divergence note at the top of the file.
+    let changedTilesMaxSame: Int
     /// How many of the three metrics must agree before a frame is dropped.
     let minVotesForSame: Int
 
@@ -36,7 +50,7 @@ internal struct FrameDiffOptions {
          ssimMinSame: Double = 0.999,
          tiles: Int = 16,
          tileMadThreshold: Int = 4,
-         changedTilesMaxRatio: Double = 0.005,
+         changedTilesMaxSame: Int = 0,
          minVotesForSame: Int = 3) {
         self.workSize = workSize
         self.dHashWidth = dHashWidth
@@ -45,13 +59,13 @@ internal struct FrameDiffOptions {
         self.ssimMinSame = ssimMinSame
         self.tiles = tiles
         self.tileMadThreshold = tileMadThreshold
-        self.changedTilesMaxRatio = changedTilesMaxRatio
+        self.changedTilesMaxSame = changedTilesMaxSame
         self.minVotesForSame = minVotesForSame
     }
 }
 
 /// A cheap, comparable summary of one frame: its dimensions, a structure-sensitive
-/// difference hash, and a downscaled luma buffer.
+/// difference hash, and a downscaled colour buffer with its luma plane.
 ///
 /// Holding this instead of the previous frame's JPEG is what lets the comparison see
 /// *where* a frame changed. A whole-frame average cannot: it divides a local change by
@@ -61,18 +75,21 @@ internal struct FrameFingerprint: Equatable {
     let width: Int
     let height: Int
     let dHash: UInt64
-    /// `workSize * workSize` luma samples, row-major.
+    /// `workSize * workSize * 4` samples, row-major, R G B A. The tile scan reads this rather
+    /// than `luma` so a change carried entirely in hue is visible to it.
+    let rgba: [UInt8]
+    /// `workSize * workSize` luma samples, row-major, derived from `rgba`. SSIM reads this.
     let luma: [UInt8]
 
     /// Builds a fingerprint from the frame the encoder is about to compress. Returns nil
     /// only if the scratch contexts cannot be created, in which case the caller keeps the
     /// frame — a frame shipped twice beats a frame silently lost.
     static func make(from image: CGImage, options: FrameDiffOptions) -> FrameFingerprint? {
-        guard let luma = downscaleToLuma(image, size: options.workSize),
+        guard let rgba = renderRGBA(image, width: options.workSize, height: options.workSize),
               let hash = dHash64(image, width: options.dHashWidth, height: options.dHashHeight)
         else { return nil }
         return FrameFingerprint(width: image.width, height: image.height,
-                                dHash: hash, luma: luma)
+                                dHash: hash, rgba: rgba, luma: lumaPlane(from: rgba))
     }
 }
 
@@ -86,23 +103,29 @@ internal enum FrameSimilarity {
     /// SSIM to tiny high-contrast edits, the tile scan to changes spread thinly across the
     /// whole screen — so requiring agreement means a change any one of them can see is
     /// enough to keep the frame.
+    ///
+    /// The tile scan carries most of that weight in practice. Measured over a range of edits on
+    /// a 402x874 frame, dHash called all but a half-screen fill "same": a 9x8 hash of a phone
+    /// screen rarely dissents, so treat the vote as SSIM and the tile scan with dHash as a
+    /// tie-breaker, and keep the tile scan the sensitive one.
     static func isSame(_ previous: FrameFingerprint,
                        _ next: FrameFingerprint,
                        options: FrameDiffOptions) -> Bool {
         guard previous.width == next.width, previous.height == next.height else { return false }
-        guard previous.luma.count == next.luma.count else { return false }
+        guard previous.luma.count == next.luma.count,
+              previous.rgba.count == next.rgba.count else { return false }
 
         let hamming = (previous.dHash ^ next.dHash).nonzeroBitCount
         let ssim = ssimGlobal(previous.luma, next.luma)
-        let ratio = changedTileRatio(previous.luma, next.luma,
-                                     size: options.workSize,
-                                     tiles: options.tiles,
-                                     tileThreshold: options.tileMadThreshold)
+        let changedTiles = changedTileCount(previous.rgba, next.rgba,
+                                            size: options.workSize,
+                                            tiles: options.tiles,
+                                            tileThreshold: options.tileMadThreshold)
 
         var votes = 0
         if hamming <= options.dHashMaxSame { votes += 1 }
         if ssim >= options.ssimMinSame { votes += 1 }
-        if ratio < options.changedTilesMaxRatio { votes += 1 }
+        if changedTiles <= options.changedTilesMaxSame { votes += 1 }
         return votes >= options.minVotesForSame
     }
 }
@@ -147,17 +170,22 @@ internal func renderRGBA(_ image: CGImage, width: Int, height: Int) -> [UInt8]? 
     return drawn ? rgba : nil
 }
 
-/// Samples `image` down to a `size * size` single-channel luma buffer for the SSIM and tile
-/// comparisons, which care about brightness rather than colour.
-internal func downscaleToLuma(_ image: CGImage, size: Int) -> [UInt8]? {
-    guard size > 0, let rgba = renderRGBA(image, width: size, height: size) else { return nil }
-
-    var out = [UInt8](repeating: 0, count: size * size)
-    for i in 0..<(size * size) {
+/// Collapses a tightly-packed RGBA buffer to one luma sample per pixel, for SSIM — which
+/// measures structure, and reads brightness rather than colour.
+internal func lumaPlane(from rgba: [UInt8]) -> [UInt8] {
+    let count = rgba.count / 4
+    var out = [UInt8](repeating: 0, count: count)
+    for i in 0..<count {
         let p = i * 4
         out[i] = luma(r: Int(rgba[p]), g: Int(rgba[p + 1]), b: Int(rgba[p + 2]))
     }
     return out
+}
+
+/// Samples `image` down to a `size * size` single-channel luma buffer.
+internal func downscaleToLuma(_ image: CGImage, size: Int) -> [UInt8]? {
+    guard size > 0, let rgba = renderRGBA(image, width: size, height: size) else { return nil }
+    return lumaPlane(from: rgba)
 }
 
 /// 64-bit difference hash: one bit per horizontally adjacent pair, set when the left
@@ -215,30 +243,38 @@ internal func ssimGlobal(_ a: [UInt8], _ b: [UInt8]) -> Double {
     return min(1.0, max(-1.0, num / den))
 }
 
-/// Fraction of tiles whose mean absolute luma difference reaches `tileThreshold`.
+/// How many tiles have a mean absolute per-channel difference reaching `tileThreshold`.
 ///
 /// This is the metric that sees a small, local edit: the change is averaged over one
-/// tile rather than the whole screen.
-internal func changedTileRatio(_ a: [UInt8], _ b: [UInt8],
-                               size: Int, tiles: Int, tileThreshold: Int) -> Double {
+/// tile rather than the whole screen. It reads all three colour channels, so a change
+/// carried entirely in hue registers here even where luma is identical.
+///
+/// Both buffers are `size * size * 4` RGBA. Alpha is skipped — the render composites onto
+/// opaque black, so it holds no information about the frame.
+internal func changedTileCount(_ a: [UInt8], _ b: [UInt8],
+                               size: Int, tiles: Int, tileThreshold: Int) -> Int {
+    let total = max(0, tiles * tiles)
     guard size > 0, tiles > 0,
-          a.count == size * size, b.count == size * size else { return 1.0 }
+          a.count == size * size * 4, b.count == size * size * 4 else { return total }
     let tw = max(1, size / tiles)
     var changed = 0
     for ty in 0..<tiles {
         for tx in 0..<tiles {
             var sum = 0
+            var samples = 0
             for y in 0..<tw {
                 let row = (ty * tw + y) * size + (tx * tw)
                 for x in 0..<tw {
-                    let i = row + x
-                    guard i < a.count else { continue }
-                    sum += abs(Int(a[i]) - Int(b[i]))
+                    let p = (row + x) * 4
+                    guard p + 2 < a.count else { continue }
+                    sum += abs(Int(a[p]) - Int(b[p]))
+                        + abs(Int(a[p + 1]) - Int(b[p + 1]))
+                        + abs(Int(a[p + 2]) - Int(b[p + 2]))
+                    samples += 3
                 }
             }
-            if sum / (tw * tw) >= tileThreshold { changed += 1 }
+            if samples > 0, sum / samples >= tileThreshold { changed += 1 }
         }
     }
-    let total = tiles * tiles
-    return total == 0 ? 1.0 : Double(changed) / Double(total)
+    return changed
 }
