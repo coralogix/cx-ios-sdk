@@ -15,7 +15,7 @@ import CoralogixInternal
 final class CaptureCompletionOutcomeTests: XCTestCase {
 
     /// Stubs the save so nothing touches disk or the network; counts what would have shipped.
-    private final class SaveCountingModel: SessionReplayModel {
+    private class SaveCountingModel: SessionReplayModel {
         private let lock = NSLock()
         private var _savedCount = 0
 
@@ -71,15 +71,17 @@ final class CaptureCompletionOutcomeTests: XCTestCase {
 
     /// Runs one encode and returns the reported outcome together with the save count at that moment.
     private func encode(_ image: UIImage,
-                        properties: [String: Any]? = nil) -> (Result<Void, CaptureEventError>, Int) {
+                        properties: [String: Any]? = nil,
+                        model: SaveCountingModel? = nil) -> (Result<Void, CaptureEventError>, Int) {
+        let target = model ?? self.model!
         let answered = expectation(description: "completion called")
         answered.assertForOverFulfill = true
         let answer = Answer()
 
-        model.encodeAndProcess(image: image,
-                               compressionQuality: 0.8,
-                               properties: properties) { [weak self] result in
-            answer.record(result, savedCount: self?.model.savedCount ?? -1)
+        target.encodeAndProcess(image: image,
+                                compressionQuality: 0.8,
+                                properties: properties) { result in
+            answer.record(result, savedCount: target.savedCount)
             answered.fulfill()
         }
 
@@ -324,7 +326,7 @@ final class CaptureCompletionOutcomeTests: XCTestCase {
         let tapUnderAMask: [String: Any] = [
             Keys.positionX.rawValue: 10.0,
             Keys.positionY.rawValue: 20.0,
-            Keys.maskRects.rawValue: [CGRect(x: 0, y: 0, width: 100, height: 100)]
+            Keys.nativeMaskRects.rawValue: [CGRect(x: 0, y: 0, width: 100, height: 100)]
         ]
         let (outcome, saved) = encode(solidImage(red: 1.0), properties: tapUnderAMask)
 
@@ -334,5 +336,67 @@ final class CaptureCompletionOutcomeTests: XCTestCase {
         }
         XCTAssertEqual(error, .skippingEvent)
         XCTAssertEqual(saved, 1, "no second frame should reach the save path")
+    }
+
+    /// Dart reports every masked row behind a modal barrier, which unions to the whole screen.
+    /// Read as "this tap landed on masked content", that removes the exemption from every tap
+    /// taken while a Flutter dialog is open — a tap on the barrier, a disabled row or an already
+    /// focused field would drop its frame and leave the interaction span pointing at nothing.
+    /// Only the rects the capture pass painted itself decide this.
+    func testCompletion_keepsAClickFrameWhenOnlyDartReportedTheTapAsMasked() {
+        _ = encode(solidImage(red: 1.0))
+
+        let tapWithADialogOpen: [String: Any] = [
+            Keys.positionX.rawValue: 10.0,
+            Keys.positionY.rawValue: 20.0,
+            // What a Flutter dialog produces: the merged set covers the tap, the native set is empty.
+            Keys.maskRects.rawValue: [CGRect(x: 0, y: 0, width: 1_000, height: 1_000)],
+            Keys.nativeMaskRects.rawValue: [CGRect]()
+        ]
+        let (outcome, saved) = encode(solidImage(red: 1.0), properties: tapWithADialogOpen)
+
+        guard case .success = outcome else {
+            XCTFail("A tap must keep its frame when only Dart's over-report covers it, got \(outcome)")
+            return
+        }
+        XCTAssertEqual(saved, 2, "the click frame must reach the save path")
+    }
+
+    /// A frame that ships sets the baseline the next one is measured against. If the baseline is
+    /// released while that frame is still encoding — a session rotation, or a host frame shipped
+    /// through `captureManual` — the release must win: reinstating the older fingerprint measures
+    /// the next capture against a screen the replay has moved on from, and on an idle rotation,
+    /// where nothing visibly changed, drops the new session's very first frame.
+    func testCompletion_aBaselineReleasedMidEncodeIsNotReinstated() {
+        let rotating = ReleaseDuringEncodeModel()
+
+        // The first frame ships, and would normally become the baseline — but this model rotates
+        // the session from inside its own encode, after the comparison has already run.
+        _ = encode(solidImage(red: 1.0), model: rotating)
+        rotating.releaseDuringEncode = false
+
+        // An identical second frame must still ship: there is no baseline left to match it.
+        let (outcome, saved) = encode(solidImage(red: 1.0), model: rotating)
+        guard case .success = outcome else {
+            XCTFail("The released baseline must not be reinstated by the in-flight encode, got \(outcome)")
+            return
+        }
+        XCTAssertEqual(saved, 2, "both frames must reach the save path")
+    }
+
+    /// Releases the baseline from inside the JPEG encode — the window between the comparison and
+    /// the commit. `jpegData(from:compressionQuality:)` is the seam the model exposes for exactly
+    /// this kind of interleaving.
+    private final class ReleaseDuringEncodeModel: SaveCountingModel {
+        var releaseDuringEncode = true
+
+        override func jpegData(from image: UIImage, compressionQuality: CGFloat) -> Data? {
+            let data = super.jpegData(from: image, compressionQuality: compressionQuality)
+            if releaseDuringEncode {
+                // What a session rotation does, mid-encode.
+                updateSessionId(with: "rotated-\(UUID().uuidString)")
+            }
+            return data
+        }
     }
 }

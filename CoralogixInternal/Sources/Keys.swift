@@ -242,6 +242,7 @@ public enum Keys: String {
     case screenshotData
     case containsSwiftUIContent
     case maskRects
+    case nativeMaskRects
     case screenshotContext = "screenshot_context"
     case queueScreenshotManager = "com.coralogix.screenshotmanager.queue"
     case queueExporter = "com.coralogix.exporter.queue"

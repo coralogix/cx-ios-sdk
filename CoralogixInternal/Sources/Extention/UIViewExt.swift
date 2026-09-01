@@ -17,22 +17,32 @@ private var kCxMaskKey: UInt8 = 0
 /// hierarchy that has since moved on. One capture, one answer — the pixels and the tap marker
 /// cannot disagree.
 ///
-/// Two provenances, deliberately merged: rects this capture pass painted black itself, and rects
-/// Dart reported as already masked inside a Flutter bitmap it composited. Both hide an element,
-/// so both must suppress a tap marker, and a consumer testing a point does not care which.
+/// Two provenances: rects this capture pass painted black itself, and rects Dart reported as
+/// already masked inside a Flutter bitmap it composited. Both hide an element, so `maskRects`
+/// merges them — a consumer asking "is this point hidden in this frame" does not care which.
 ///
-/// **Do not repaint these.** The Dart entries describe pixels that are already masked, so filling
-/// them again can only cover content Dart chose to keep — with a dialog open Dart reports every
-/// masked row behind the barrier, which unions to the whole screen and renders the frame solid
-/// black. A consumer that needs to paint has to distinguish the two, which this type does not
-/// let it do; the capture pass is the only place that knows.
+/// `nativeMaskRects` is the first set alone, for the two questions where the difference matters:
+///
+/// - **Do not repaint the merged set.** The Dart entries describe pixels that are already masked,
+///   so filling them again can only cover content Dart chose to keep — with a dialog open Dart
+///   reports every masked row behind the barrier, which unions to the whole screen and renders
+///   the frame solid black.
+/// - **Do not let the merged set decide whether a frame is worth keeping.** That same
+///   whole-screen over-report makes any tap look like a tap on masked content, which silently
+///   removes a tap frame's exemption from deduplication. Suppressing a marker in error costs a
+///   marker; dropping a frame in error costs the frame.
 public struct CapturedFrame {
     public let image: UIImage
     public let maskRects: [CGRect]
+    /// The subset of `maskRects` this capture pass painted itself.
+    public let nativeMaskRects: [CGRect]
 
-    public init(image: UIImage, maskRects: [CGRect]) {
+    /// `nativeMaskRects` defaults to all of them: a frame assembled without a Dart bitmap has
+    /// no other provenance to distinguish.
+    public init(image: UIImage, maskRects: [CGRect], nativeMaskRects: [CGRect]? = nil) {
         self.image = image
         self.maskRects = maskRects
+        self.nativeMaskRects = nativeMaskRects ?? maskRects
     }
 }
 
@@ -305,6 +315,7 @@ public extension UIView {
         maskAllImages: Bool = false,
         flutterCGImage: CGImage? = nil,
         flutterViewRect: CGRect? = nil,
+        expectsFlutterBitmap: Bool = false,
         isClickFrame: Bool = false
     ) -> UIImage? {
         return captureFrame(
@@ -313,6 +324,7 @@ public extension UIView {
             maskAllImages: maskAllImages,
             flutterCGImage: flutterCGImage,
             flutterViewRect: flutterViewRect,
+            expectsFlutterBitmap: expectsFlutterBitmap,
             isClickFrame: isClickFrame
         )?.image
     }
@@ -326,6 +338,13 @@ public extension UIView {
     /// The host cannot derive them itself: Dart masks the widget tree inside its own bitmap.
     /// With no reported rects, tap markers over masked Flutter content are not suppressed.
     ///
+    /// `expectsFlutterBitmap` says whether a bitmap provider was asked for this frame, and it
+    /// decides what a FlutterView with no bitmap means. Asked and unanswered is a frame that
+    /// must not publish, so the capture is dropped. Never asked is an app with no provider at
+    /// all — add-to-app, a native host embedding a `FlutterViewController` without the plugin —
+    /// where the pixels are simply unobtainable and dropping would record nothing for the whole
+    /// session. That case black-fills the region and keeps the rest of the frame.
+    ///
     /// Must be called on the main thread.
     func captureFrame(
         scale: CGFloat = UIScreen.main.scale,
@@ -334,6 +353,7 @@ public extension UIView {
         flutterCGImage: CGImage? = nil,
         flutterViewRect: CGRect? = nil,
         flutterMaskRects: [CGRect] = [],
+        expectsFlutterBitmap: Bool = false,
         isClickFrame: Bool = false
     ) -> CapturedFrame? {
         guard Thread.isMainThread else {
@@ -384,14 +404,32 @@ public extension UIView {
                         // screen space, the renderer's coordinate space.
                         flutterReportedMaskRects += flutterMaskRects
                             .map { $0.offsetBy(dx: rect.origin.x, dy: rect.origin.y) }
-                    } else {
-                        // A FlutterView with no bitmap to paste. Black-filling it here produced a
+                    } else if expectsFlutterBitmap {
+                        // A bitmap was asked for and none came back. Black-filling here produced a
                         // frame that was solid black over the whole app window and shipped as if
                         // it were a real capture — the caller decided there was no FlutterView to
                         // ask Dart about, and this loop disagreed. Drop the capture instead: no
                         // black fill, no raw GPU surface, which is the rule the Flutter provider
                         // path already follows when Dart answers with no frame.
                         flutterRegionUnavailable = true
+                    } else {
+                        // No provider was ever configured, so nothing was asked and nothing is
+                        // missing — these pixels cannot be obtained at all. Dropping would record
+                        // zero frames for the entire session, so black-fill the region and keep
+                        // the native chrome around it.
+                        //
+                        // Screen-space fallback: flutterViewRect is already in screen coordinates
+                        // (flutterView.convert(_, to: nil)); win.frame matches the renderer's
+                        // screen-coordinate space, win.bounds (origin 0,0) would black-fill the
+                        // wrong spot for an offset window.
+                        //
+                        // Filled here rather than added to `nativeMaskRects`: those are painted
+                        // after the window loop, which would put this rectangle on top of any
+                        // window drawn above the Flutter one. Not recorded as a mask rect either
+                        // — it hides nothing that was ever on screen to hide, so it is not a
+                        // masking source and does not answer a masking question.
+                        UIColor.black.setFill()
+                        UIRectFill(flutterViewRect ?? win.frame)
                     }
                 } else {
                     // Native window: drawHierarchy goes through the screen compositor
@@ -428,8 +466,11 @@ public extension UIView {
         // Read after the renderer block, which runs synchronously — every rect the frame masked
         // has been appended by this point.
         // Both sets travel on the frame — tap suppression asks "is this point masked", and a
-        // Dart-masked region hides an element just as a native one does.
-        return CapturedFrame(image: image, maskRects: nativeMaskRects + flutterReportedMaskRects)
+        // Dart-masked region hides an element just as a native one does — and the native subset
+        // travels alongside for the decisions that must not trust Dart's over-report.
+        return CapturedFrame(image: image,
+                             maskRects: nativeMaskRects + flutterReportedMaskRects,
+                             nativeMaskRects: nativeMaskRects)
     }
 
     /// Convenience wrapper — captures and JPEG-encodes inline. Prefer calling

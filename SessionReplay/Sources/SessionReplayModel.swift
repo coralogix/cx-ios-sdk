@@ -26,6 +26,10 @@ public class SessionReplayModel {
 
     private let screenshotDataQueue = DispatchQueue(label: "com.coralogix.sessionReplay.screenshotDataQueue")
     private var _previousFingerprint: FrameFingerprint? = nil
+    /// Bumped every time the baseline is released, so an encode that started before the release
+    /// can tell that its own fingerprint is no longer the right thing to compare the next frame
+    /// against. Both are guarded by `screenshotDataQueue`.
+    private var _fingerprintEpoch = 0
     private let frameDiffOptions = FrameDiffOptions()
 
     /// Serial queue for off-main JPEG encoding. Serial so skip-identical comparison
@@ -132,6 +136,7 @@ public class SessionReplayModel {
         flutterCGImage: CGImage?,
         flutterViewRect: CGRect?,
         flutterMaskRects: [CGRect] = [],
+        expectsFlutterBitmap: Bool = false,
         isClickFrame: Bool = false
     ) -> CapturedFrame? {
         guard Thread.isMainThread else { return nil }
@@ -146,15 +151,21 @@ public class SessionReplayModel {
             flutterCGImage: flutterCGImage,
             flutterViewRect: flutterViewRect,
             flutterMaskRects: flutterMaskRects,
+            expectsFlutterBitmap: expectsFlutterBitmap,
             isClickFrame: isClickFrame
         )
     }
 
     /// Legacy signature kept for test compatibility and the synchronous captureAutomatic path.
+    ///
+    /// Reached only when no bitmap provider is configured, so it asks for none: a FlutterView on
+    /// screen here has pixels nobody can supply, and the capture keeps going with that region
+    /// black-filled rather than dropping every frame for the session.
     internal func prepareCapturedFrameOnMain(properties: [String: Any]?) -> CapturedFrame? {
         guard let options = sessionReplayOptions else { return nil }
         let isClickFrame = getClickPoint(from: properties) != nil
-        return prepareCapturedFrameOnMain(options: options, flutterCGImage: nil, flutterViewRect: nil, isClickFrame: isClickFrame)
+        return prepareCapturedFrameOnMain(options: options, flutterCGImage: nil, flutterViewRect: nil,
+                                          expectsFlutterBitmap: false, isClickFrame: isClickFrame)
     }
 
     /// Synchronous capture-and-encode, retained as a back-compat shim.
@@ -258,7 +269,9 @@ public class SessionReplayModel {
         guard Thread.isMainThread else {
             DispatchQueue.main.async { [weak self] in
                 guard let self = self else {
-                    completion?(.failure(.captureFailed))
+                    // Torn down between the request and this hop; the slot still has to go back.
+                    Self.dropCapture(properties: properties, completion: completion,
+                                     error: .captureFailed)
                     return
                 }
                 _ = self.captureAutomatic(properties: properties, completion: completion)
@@ -284,7 +297,7 @@ public class SessionReplayModel {
         encodeAndProcess(
             image: frame.image,
             compressionQuality: options.captureCompressionQuality,
-            properties: propertiesWithCaptureMetadata(properties, maskRects: frame.maskRects),
+            properties: propertiesWithCaptureMetadata(properties, frame: frame),
             completion: completion
         )
         return .success(())
@@ -299,9 +312,12 @@ public class SessionReplayModel {
     /// the capture; nothing is carried over from an earlier cycle.
     private func captureAutomaticFlutter(properties: [String: Any]?,
                                          completion: CaptureEventCompletion? = nil) {
+        // captureAutomatic read the provider before dispatching here, so a shutdown or re-init
+        // landing between the two reads reaches this guard with a slot already reserved.
         guard let options = sessionReplayOptions,
               let provider = options.flutterViewBitmapProvider else {
-            completion?(.failure(.missingSessionReplayOptions))
+            Self.dropCapture(properties: properties, completion: completion,
+                             error: .missingSessionReplayOptions)
             return
         }
 
@@ -322,13 +338,14 @@ public class SessionReplayModel {
         // No FlutterView visible — capture native windows only.
         guard let rect = flutterViewRect else {
             guard let frame = prepareCapturedFrameOnMain(
-                options: options, flutterCGImage: nil, flutterViewRect: nil, isClickFrame: isClickFrame
+                options: options, flutterCGImage: nil, flutterViewRect: nil,
+                expectsFlutterBitmap: true, isClickFrame: isClickFrame
             ) else {
                 drop()
                 return
             }
             encodeAndProcess(image: frame.image, compressionQuality: options.captureCompressionQuality,
-                             properties: propertiesWithCaptureMetadata(properties, maskRects: frame.maskRects),
+                             properties: propertiesWithCaptureMetadata(properties, frame: frame),
                              completion: completion)
             return
         }
@@ -383,14 +400,15 @@ public class SessionReplayModel {
 
             guard let frame = self.prepareCapturedFrameOnMain(
                 options: options, flutterCGImage: flutterFrame.image, flutterViewRect: compositeRect,
-                flutterMaskRects: flutterFrame.maskRects, isClickFrame: isClickFrame
+                flutterMaskRects: flutterFrame.maskRects, expectsFlutterBitmap: true,
+                isClickFrame: isClickFrame
             ) else {
                 drop()
                 return
             }
 
             self.encodeAndProcess(image: frame.image, compressionQuality: options.captureCompressionQuality,
-                                  properties: self.propertiesWithCaptureMetadata(properties, maskRects: frame.maskRects),
+                                  properties: self.propertiesWithCaptureMetadata(properties, frame: frame),
                                   completion: completion)
         }
 
@@ -574,11 +592,12 @@ public class SessionReplayModel {
     /// reach `handleCapturedData` → `URLEntry`. Same channel the click point already travels on.
     private func propertiesWithCaptureMetadata(
         _ properties: [String: Any]?,
-        maskRects: [CGRect]
+        frame: CapturedFrame
     ) -> [String: Any] {
         var props = properties ?? [:]
         props[Keys.containsSwiftUIContent.rawValue] = detectSwiftUIContentOnMain()
-        props[Keys.maskRects.rawValue] = maskRects
+        props[Keys.maskRects.rawValue] = frame.maskRects
+        props[Keys.nativeMaskRects.rawValue] = frame.nativeMaskRects
         return props
     }
 
@@ -610,11 +629,19 @@ public class SessionReplayModel {
             // does not carry it yet and an unchanged screen would otherwise dedup the marker
             // frame away. But a tap inside a masked region is never drawn — the pipeline
             // suppresses it so a run of markers cannot reconstruct what was typed on a masked
-            // keypad — and that frame is a true duplicate. Tested against the same rects the
-            // pipeline will test, so the two cannot disagree.
+            // keypad — and that frame is a true duplicate.
+            //
+            // Tested against the rects this pass painted, and deliberately not against Dart's.
+            // With a Flutter dialog open Dart reports every masked row behind the barrier, which
+            // unions to the whole screen, so a tap anywhere would read as a tap on masked content
+            // and lose the exemption — a tap on the modal barrier, a disabled row or an already
+            // focused field would drop its frame and leave the interaction span pointing at no
+            // screenshot. The pipeline still suppresses the marker over Dart's rects, so the two
+            // can disagree for Dart-masked content: the cost is one duplicate frame, against a
+            // lost frame the other way. Shipping one frame twice beats losing one.
             let clickPoint = self.getClickPoint(from: properties)
-            let maskRects = (properties?[Keys.maskRects.rawValue] as? [CGRect]) ?? []
-            let willDrawMarker = clickPoint.map { !maskRects.containsTap($0) } ?? false
+            let nativeMaskRects = (properties?[Keys.nativeMaskRects.rawValue] as? [CGRect]) ?? []
+            let willDrawMarker = clickPoint.map { !nativeMaskRects.containsTap($0) } ?? false
 
             // Compared before encoding, so a dropped frame costs no JPEG. A frame whose
             // fingerprint cannot be built is kept: shipping it twice beats losing it.
@@ -626,7 +653,16 @@ public class SessionReplayModel {
             let fingerprint = image.cgImage.flatMap {
                 FrameFingerprint.make(from: $0, options: self.frameDiffOptions)
             }
+            // Read with the comparison, checked again at the commit. The encode between them is
+            // tens of milliseconds, and the writers that *clear* the baseline — a session
+            // rotation, a host frame shipped through captureManual — do not run on encodingQueue.
+            // Without this, a rotation mid-encode was undone: this frame's pre-rotation
+            // fingerprint went back in afterwards, and the new session's first frame was measured
+            // against the old session's screen. On an idle-timeout rotation, where the screen has
+            // not changed, that dropped it — the new replay opening with no first frame.
+            var baselineEpoch = 0
             let shouldSkip = !willDrawMarker && !isManual && self.screenshotDataQueue.sync {
+                baselineEpoch = self._fingerprintEpoch
                 guard let fingerprint, let previous = self._previousFingerprint else { return false }
                 return FrameSimilarity.isSame(previous, fingerprint, options: self.frameDiffOptions)
             }
@@ -645,7 +681,10 @@ public class SessionReplayModel {
             }
 
             if let fingerprint {
-                self.screenshotDataQueue.sync { self._previousFingerprint = fingerprint }
+                self.screenshotDataQueue.sync {
+                    guard self._fingerprintEpoch == baselineEpoch else { return }
+                    self._previousFingerprint = fingerprint
+                }
             }
             self.saveScreenshotToFileSystem(screenshotData: screenshotData, properties: properties)
             completion?(.success(()))
@@ -666,14 +705,23 @@ public class SessionReplayModel {
     /// the next frame ships either way. This is the file's standing trade — shipping one frame
     /// twice beats losing one.
     internal func captureManual(properties: [String: Any]?, screenshotData: Data) {
-        screenshotDataQueue.sync { _previousFingerprint = nil }
+        releaseFingerprintBaseline()
         saveScreenshotToFileSystem(screenshotData: screenshotData, properties: properties)
+    }
+
+    /// Drops the frame the next automatic capture would be compared against, and marks the
+    /// release so an encode already in flight cannot reinstate it.
+    private func releaseFingerprintBaseline() {
+        screenshotDataQueue.sync {
+            _previousFingerprint = nil
+            _fingerprintEpoch &+= 1
+        }
     }
 
     internal func updateSessionId(with sessionId: String) {
         if sessionId != self.sessionId {
             self.sessionId = sessionId
-            screenshotDataQueue.sync { _previousFingerprint = nil }
+            releaseFingerprintBaseline()
             flutterFrameQueue.sync {
                 _latestAcceptedFlutterFrameId = 0
                 _flutterFrameGeneration &+= 1
