@@ -298,6 +298,74 @@ extension SessionReplayTests {
     }
 }
 
+/// Stands in the UIKit walk so the capture can run without a foreground scene, but leaves the
+/// real deduplication, encoding and completion path intact.
+final class StubbedWalkModel: SessionReplayModel {
+    let frameImage: UIImage
+    private let lock = NSLock()
+    private var _savedCount = 0
+
+    var savedCount: Int { lock.lock(); defer { lock.unlock() }; return _savedCount }
+
+    init(options: SessionReplayOptions, image: UIImage) {
+        self.frameImage = image
+        super.init(sessionReplayOptions: options)
+    }
+
+    override func prepareCapturedFrameOnMain(properties: [String: Any]?) -> CapturedFrame? {
+        CapturedFrame(image: frameImage, maskRects: [])
+    }
+
+    override func saveScreenshotToFileSystem(screenshotData: Data, properties: [String: Any]?) {
+        lock.lock(); defer { lock.unlock() }; _savedCount += 1
+    }
+}
+
+extension SessionReplayTests {
+
+    /// End to end through the public completion overload, with the real deduplication path: two
+    /// identical captures a host asked for must both ship. `captureEvent` returns void to the
+    /// host, so answering the second with silence leaves it no way to know the frame was dropped.
+    func testPublicCaptureEventTwiceOnAnUnchangedScreen_shipsBothFrames() {
+        SdkManager.shared.register(coralogixInterface: MockCoralogix())
+        let options = SessionReplayOptions(recordingType: .image)
+        SessionReplay.initializeWithOptions(sessionReplayOptions: options)
+
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: 8, height: 8))
+        let image = renderer.image { ctx in
+            UIColor.magenta.setFill()
+            ctx.fill(CGRect(x: 0, y: 0, width: 8, height: 8))
+        }
+        let model = StubbedWalkModel(options: options, image: image)
+        model.isRecording = true
+        model.updateSessionId(with: "session-\(UUID().uuidString)")
+        SessionReplay.shared.update(sessionReplayModel: model)
+
+        func capture() -> Result<Void, CaptureEventError> {
+            let answered = expectation(description: "capture answered")
+            var outcome: Result<Void, CaptureEventError>?
+            let lock = NSLock()
+            SessionReplay.shared.captureEvent(properties: nil) { result in
+                lock.lock(); outcome = result; lock.unlock()
+                answered.fulfill()
+            }
+            wait(for: [answered], timeout: 5)
+            lock.lock(); defer { lock.unlock() }
+            return outcome ?? .failure(.captureFailed)
+        }
+
+        guard case .success = capture() else {
+            XCTFail("The first host capture must ship")
+            return
+        }
+        guard case .success = capture() else {
+            XCTFail("The second host capture must ship too — identical pixels, but explicitly requested")
+            return
+        }
+        XCTAssertEqual(model.savedCount, 2, "Both requested frames must reach the save path")
+    }
+}
+
 class MockSessionReplayModel3: SessionReplayModel {
     var updatedSessionId: String?
 

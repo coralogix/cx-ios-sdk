@@ -119,26 +119,37 @@ private func luma(r: Int, g: Int, b: Int) -> UInt8 {
 ///
 /// Black-filled rather than transparent because a captured frame may carry alpha, and
 /// Android composites onto black before sampling.
-internal func downscaleToLuma(_ image: CGImage, size: Int) -> [UInt8]? {
-    guard size > 0 else { return nil }
-    let bytesPerRow = size * 4
-    var rgba = [UInt8](repeating: 0, count: size * size * 4)
+/// Renders `image` into a tightly-packed RGBA buffer at the requested size.
+///
+/// Both metrics sample the same pixels by construction. They are blind to different things on
+/// purpose, but only if they are looking at the same rendering — a divergence in colour space,
+/// fill, or interpolation between two copies of this setup would make them disagree for reasons
+/// that have nothing to do with the frame.
+internal func renderRGBA(_ image: CGImage, width: Int, height: Int) -> [UInt8]? {
+    guard width > 0, height > 0 else { return nil }
+    var rgba = [UInt8](repeating: 0, count: width * height * 4)
 
     let drawn: Bool = rgba.withUnsafeMutableBytes { buffer -> Bool in
         guard let base = buffer.baseAddress,
               let context = CGContext(data: base,
-                                      width: size, height: size,
-                                      bitsPerComponent: 8, bytesPerRow: bytesPerRow,
+                                      width: width, height: height,
+                                      bitsPerComponent: 8, bytesPerRow: width * 4,
                                       space: CGColorSpaceCreateDeviceRGB(),
                                       bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
         else { return false }
+        // Opaque black behind the draw: a transparent source must compare as black rather than
+        // as whatever the buffer happened to hold.
         context.setFillColor(red: 0, green: 0, blue: 0, alpha: 1)
-        context.fill(CGRect(x: 0, y: 0, width: size, height: size))
+        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
         context.interpolationQuality = .medium
-        context.draw(image, in: CGRect(x: 0, y: 0, width: size, height: size))
+        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
         return true
     }
-    guard drawn else { return nil }
+    return drawn ? rgba : nil
+}
+
+internal func downscaleToLuma(_ image: CGImage, size: Int) -> [UInt8]? {
+    guard size > 0, let rgba = renderRGBA(image, width: size, height: size) else { return nil }
 
     var out = [UInt8](repeating: 0, count: size * size)
     for i in 0..<(size * size) {
@@ -151,25 +162,7 @@ internal func downscaleToLuma(_ image: CGImage, size: Int) -> [UInt8]? {
 /// 64-bit difference hash: one bit per horizontally adjacent pair, set when the left
 /// sample is brighter. Structure-sensitive and very cheap.
 internal func dHash64(_ image: CGImage, width: Int, height: Int) -> UInt64? {
-    guard width > 1, height > 0 else { return nil }
-    let bytesPerRow = width * 4
-    var rgba = [UInt8](repeating: 0, count: width * height * 4)
-
-    let drawn: Bool = rgba.withUnsafeMutableBytes { buffer -> Bool in
-        guard let base = buffer.baseAddress,
-              let context = CGContext(data: base,
-                                      width: width, height: height,
-                                      bitsPerComponent: 8, bytesPerRow: bytesPerRow,
-                                      space: CGColorSpaceCreateDeviceRGB(),
-                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
-        else { return false }
-        context.setFillColor(red: 0, green: 0, blue: 0, alpha: 1)
-        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
-        context.interpolationQuality = .medium
-        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
-        return true
-    }
-    guard drawn else { return nil }
+    guard width > 1, let rgba = renderRGBA(image, width: width, height: height) else { return nil }
 
     var gray = [Int](repeating: 0, count: width * height)
     for i in 0..<(width * height) {

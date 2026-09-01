@@ -190,6 +190,62 @@ final class CaptureCompletionOutcomeTests: XCTestCase {
         XCTAssertEqual(saved, 2, "A changed frame must reach the save path too")
     }
 
+    // MARK: - Only a frame that ships sets the baseline
+
+    /// Fails the encode so the frame cannot ship, then offers the same pixels again. If the
+    /// unshipped frame had become the comparison baseline, the retry would be read as a duplicate
+    /// and the screen would never appear in the replay at all.
+    private final class FailingEncodeModel: SessionReplayModel {
+        var failNextEncode = true
+        private let lock = NSLock()
+        private var _savedCount = 0
+
+        var savedCount: Int { lock.lock(); defer { lock.unlock() }; return _savedCount }
+
+        override func jpegData(from image: UIImage, compressionQuality: CGFloat) -> Data? {
+            if failNextEncode {
+                failNextEncode = false
+                return nil
+            }
+            return super.jpegData(from: image, compressionQuality: compressionQuality)
+        }
+
+        override func saveScreenshotToFileSystem(screenshotData: Data, properties: [String: Any]?) {
+            lock.lock(); defer { lock.unlock() }; _savedCount += 1
+        }
+    }
+
+    func testFailedEncode_doesNotBecomeTheDeduplicationBaseline() {
+        let failing = FailingEncodeModel()
+        let image = solidImage(red: 1.0)
+
+        func run() -> Result<Void, CaptureEventError> {
+            let answered = expectation(description: "completion called")
+            let answer = Answer()
+            failing.encodeAndProcess(image: image, compressionQuality: 0.8, properties: nil) { result in
+                answer.record(result, savedCount: 0)
+                answered.fulfill()
+            }
+            wait(for: [answered], timeout: 5)
+            return answer.value.outcome ?? .failure(.captureFailed)
+        }
+
+        // First attempt cannot encode, so nothing ships.
+        guard case .failure = run() else {
+            XCTFail("A failed encode must report failure")
+            return
+        }
+        XCTAssertEqual(failing.savedCount, 0)
+
+        // Same pixels again, this time encodable. It has to ship: no frame for this screen has
+        // reached the save path yet.
+        guard case .success = run() else {
+            XCTFail("The retry must ship — the failed frame never became the baseline")
+            return
+        }
+        XCTAssertEqual(failing.savedCount, 1, "The retry must reach the save path")
+    }
+
     // MARK: - A manual capture bypasses deduplication
 
     /// `CoralogixRum.captureEvent()` is public, returns void, and both demo apps drive it. Tapping

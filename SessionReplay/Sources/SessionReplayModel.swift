@@ -25,11 +25,11 @@ public class SessionReplayModel {
     private let srNetworkManager: SRNetworkManager?
 
     private let screenshotDataQueue = DispatchQueue(label: "com.coralogix.sessionReplay.screenshotDataQueue")
-    private var _prvFingerprint: FrameFingerprint? = nil
+    private var _previousFingerprint: FrameFingerprint? = nil
     private let frameDiffOptions = FrameDiffOptions()
 
     /// Serial queue for off-main JPEG encoding. Serial so skip-identical comparison
-    /// sees _prvFingerprint updates in capture order.
+    /// sees _previousFingerprint updates in capture order.
     internal let encodingQueue = DispatchQueue(
         label: "com.coralogix.sessionReplay.encodingQueue",
         qos: .userInitiated
@@ -417,6 +417,12 @@ public class SessionReplayModel {
         }
     }
 
+    /// JPEG-encodes a captured frame. Its own method so a test can fail the encode, which is the
+    /// one path where a frame is compared, kept, and then still does not ship.
+    internal func jpegData(from image: UIImage, compressionQuality: CGFloat) -> Data? {
+        image.jpegData(compressionQuality: compressionQuality)
+    }
+
     /// Whether this capture was triggered by a tap, as opposed to a scroll or a swipe.
     ///
     /// Distinct from `isClickFrame`, which asks "does this capture carry a touch position" — true
@@ -587,17 +593,17 @@ public class SessionReplayModel {
 
             // Compared before encoding, so a dropped frame costs no JPEG. A frame whose
             // fingerprint cannot be built is kept: shipping it twice beats losing it.
-            let shouldSkip = !willDrawMarker && !isManual && self.screenshotDataQueue.sync { () -> Bool in
-                guard let cgImage = image.cgImage,
-                      let fingerprint = FrameFingerprint.make(from: cgImage,
-                                                              options: self.frameDiffOptions)
-                else { return false }
-                if let previous = self._prvFingerprint,
-                   FrameSimilarity.isSame(previous, fingerprint, options: self.frameDiffOptions) {
-                    return true
-                }
-                self._prvFingerprint = fingerprint
-                return false
+            //
+            // The comparison does not commit the baseline. Only a frame that reaches the save
+            // path becomes what the next one is compared against — a frame whose encode fails
+            // never shipped, and letting it set the baseline would silently skip the next
+            // identical frame that could have.
+            let fingerprint = image.cgImage.flatMap {
+                FrameFingerprint.make(from: $0, options: self.frameDiffOptions)
+            }
+            let shouldSkip = !willDrawMarker && !isManual && self.screenshotDataQueue.sync {
+                guard let fingerprint, let previous = self._previousFingerprint else { return false }
+                return FrameSimilarity.isSame(previous, fingerprint, options: self.frameDiffOptions)
             }
 
             if shouldSkip {
@@ -605,11 +611,15 @@ public class SessionReplayModel {
                 return
             }
 
-            guard let screenshotData = image.jpegData(compressionQuality: compressionQuality) else {
+            guard let screenshotData = self.jpegData(from: image,
+                                                     compressionQuality: compressionQuality) else {
                 drop()
                 return
             }
 
+            if let fingerprint {
+                self.screenshotDataQueue.sync { self._previousFingerprint = fingerprint }
+            }
             self.saveScreenshotToFileSystem(screenshotData: screenshotData, properties: properties)
             completion?(.success(()))
         }
@@ -622,7 +632,7 @@ public class SessionReplayModel {
     internal func updateSessionId(with sessionId: String) {
         if sessionId != self.sessionId {
             self.sessionId = sessionId
-            screenshotDataQueue.sync { _prvFingerprint = nil }
+            screenshotDataQueue.sync { _previousFingerprint = nil }
             flutterFrameQueue.sync {
                 _latestAcceptedFlutterFrameId = 0
                 _flutterFrameGeneration &+= 1
