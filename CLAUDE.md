@@ -112,8 +112,9 @@ The review rules in `AGENTS.md` apply **while writing code**, not only at PR tim
 
   Corollary: an internal-only change needs **no** README edit at all. Adding a public
   declaration is not by itself a reason to document it — an API that exists so our own
-  modules or plugins can call each other is not something to advertise to customers. Use the
-  `rum-readme-authoring` skill for anything that does belong on a synced README.
+  modules or plugins can call each other is not something to advertise to customers. The
+  `rum-readme-authoring` skill carries this rule in full, for a release entry as well as a
+  synced README; invoke it before writing either.
 
 - **Demo-app changes must land in both `Example/DemoAppSwift` (UIKit) and `Example/DemoAppSwiftUI` (SwiftUI).** When adding a new screen, section, or interactive control to one demo app, mirror it in the other so feature parity holds across both targets and the UI tests (`DemoAppUITests`, `DemoAppSwiftUIUITests`) stay symmetrical.
 

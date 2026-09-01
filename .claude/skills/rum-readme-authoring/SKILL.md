@@ -1,9 +1,13 @@
 ---
 name: rum-readme-authoring
-description: Write or edit a README in a Coralogix RUM SDK repo (android-sdk, cx-ios-sdk, coralogix-browser-sdk, cx-flutter-plugin, cx-react-native-plugin, rum-cli) so it publishes correctly to coralogix.com/docs. Use whenever a change touches a README that the docs sync mirrors — adding a feature, documenting an option, restructuring sections, or splitting a README into separate doc pages. Covers accuracy checks against the SDK source, the split-marker mechanics, and the house style the docs site expects.
+description: Write or edit the customer-facing writing in a Coralogix RUM SDK repo (android-sdk, cx-ios-sdk, coralogix-browser-sdk, cx-flutter-plugin, cx-react-native-plugin, rum-cli) — a README the docs sync mirrors to coralogix.com/docs, or a CHANGELOG release entry. Use whenever a change touches either: adding a feature, documenting an option, restructuring sections, splitting a README into separate doc pages, or writing up a version. Covers what belongs on a customer-facing page at all — internal mechanism and internal-only API stay out, and an internal change often needs no doc edit — plus accuracy checks against the SDK source, the split-marker mechanics, and the house style the docs site expects.
 ---
 
-# Authoring a RUM SDK README that publishes as documentation
+# Authoring the customer-facing writing in a RUM SDK repo
+
+Two files in these repos are read by customers rather than by us: a synced README, and
+`CHANGELOG.md`. The scope rules in the next section govern both. Everything after it —
+the sync mechanics, the split markers, the house style — is README-only.
 
 These READMEs are not just repo files any more. A nightly job in `coralogix/documentation` mirrors them and publishes them as customer-facing pages on `coralogix.com/docs`, so a README edit is a documentation edit.
 
@@ -30,9 +34,10 @@ assuming the README you are editing is one of them.
 
 **Nothing downstream checks your prose.** The docs repo runs Vale over its own pages but explicitly disables every style rule for synced content (`.vale.ini`, `[docs/external/**]`), because a flag can't be fixed there without diverging from this repo. This file is the only style gate there is.
 
-## What belongs on the page, and what does not
+## What belongs in front of a customer, and what does not
 
-Before checking whether a sentence is *true*, check whether it belongs. The failure this
+Applies to a synced README and to a `CHANGELOG.md` entry alike. Before checking whether a
+sentence is *true*, check whether it belongs. The failure this
 catches is the opposite of the accuracy one below: a correct, careful, thorough page that
 tells a customer things they have no use for. A customer reads these pages to get the SDK
 working and to decide what to configure. Anything else on the page costs them attention, and
@@ -66,9 +71,12 @@ When you are unsure whether an item belongs, leave it out and say so in the PR, 
 reviewer can ask for it back. Adding a paragraph later costs nothing; a published page that
 over-explains has already been read.
 
-The same rule governs `CHANGELOG.md`, which customers read as release notes: keep an entry the
-size of its neighbours in the file, group related fixes into one generic line rather than
-listing each, and leave the mechanism out.
+**In a `CHANGELOG.md` entry the same rule has a measurable form.** Keep an entry the size of its
+neighbours in the file — open it and compare, since a release several times longer than the rest
+is a defect rather than thoroughness. One line per bullet. Group a batch of related fixes into
+one generic line ("session recording frame capture: …") rather than listing each. No section for
+deprecating internal API, and no reasoning: what went wrong and why belong in the commit and the
+PR, which is where a reviewer looks.
 
 ## Accuracy first, and it is not a formality
 
