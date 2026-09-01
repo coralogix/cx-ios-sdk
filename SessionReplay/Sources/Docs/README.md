@@ -94,8 +94,6 @@ Interaction events ask a **different question** and so use different geometry. T
 | Flutter (Dart-supplied pre-masked bitmap) | ✅ | ✅ — with plugin-reported rects (`FlutterViewBitmap.maskRects`) | ✅ — via `is_masked` on `setUserInteraction` | ✅ — same |
 | Secure text entry / sensitive `textContentType` | n/a (system-drawn dots) | ❌ — paints no rect | ✅ | ✅ |
 
-> **Dart's reported rects answer one question only: is this point hidden in this frame.** They are never repainted, and they never decide whether a frame is worth keeping. With a dialog open Dart reports every masked row behind the modal barrier, which unions to the whole screen — repainting that turns the frame black, and reading it as "this tap landed on masked content" drops the frame of every tap taken while the dialog is up. Both of those decisions use only the rects the native capture pass painted itself.
-
 Interaction reporting does not depend on session replay being initialized: `cxMask` geometry needs none of the replay's options to collect, so the verdict resolves whether or not a replay is running. Password fields and fields with a sensitive `textContentType` are redacted to `***` independently of any of this. Any **new masking source must state which of the two channels it feeds**: geometry to the capture pass (suppresses markers; sets the flag only when it is deliberate masking rather than pixel policy) or pixels only (neither).
 
 `is_masked_element` is always present and defaults to `false` whenever masking cannot be resolved — the flag under-reports rather than over-reports when the SDK has no answer. The known unresolvable cases on iOS: a hybrid `setUserInteraction` payload with no coordinates (React Native scroll and swipe carry none), and no view hierarchy to walk (off the main thread, or no active foreground scene).
@@ -139,22 +137,6 @@ Captures a single frame outside the configured interval.
 ```swift
 let result = SessionReplay.shared.captureEvent(properties: nil)
 ```
-
-The returned result tells you the capture was accepted, not that a frame reached Coralogix. Encoding runs off the main thread, and the frame is dropped when it is identical to the previous one or, in a Flutter app, when Dart has no frame for that moment. Use the completion overload when you need the real outcome. It runs once, and reports `skippingEvent` when no frame shipped.
-
-```swift
-SessionReplay.shared.captureEvent(properties: nil) { result in
-    switch result {
-    case .success:
-        print("Frame captured")
-    case .failure(let error):
-        print("No frame captured: \(error)")
-    }
-}
-```
-
-> [!NOTE]
-> The completion overload is available from version 2.18.0.
 
 #### Example Usage
 ```swift

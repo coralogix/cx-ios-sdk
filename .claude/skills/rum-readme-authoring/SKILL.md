@@ -30,6 +30,46 @@ assuming the README you are editing is one of them.
 
 **Nothing downstream checks your prose.** The docs repo runs Vale over its own pages but explicitly disables every style rule for synced content (`.vale.ini`, `[docs/external/**]`), because a flag can't be fixed there without diverging from this repo. This file is the only style gate there is.
 
+## What belongs on the page, and what does not
+
+Before checking whether a sentence is *true*, check whether it belongs. The failure this
+catches is the opposite of the accuracy one below: a correct, careful, thorough page that
+tells a customer things they have no use for. A customer reads these pages to get the SDK
+working and to decide what to configure. Anything else on the page costs them attention, and
+detail about our internals reads to them as risk rather than transparency.
+
+**On the page:** public API a customer would call, options they would set, what a value does
+and what its default is, an installation or upgrade step, a limitation that changes what they
+can build, and behaviour they can observe in their own data.
+
+**Not on the page:**
+
+- **Internal mechanism.** Algorithms, thresholds, comparison metrics, queue and locking
+  design, how frames are deduplicated, which of two rect sets a decision reads. If a sentence
+  would only make sense to someone who has read the implementation, it belongs in a code
+  comment or the PR, not here.
+- **API that exists so our own modules and plugins can call each other.** A declaration being
+  `public` is a language requirement for cross-module visibility, not a statement of intent.
+  Documenting it invites customers onto a contract we intend to keep changing. If the only
+  caller is our own wrapper — the Flutter plugin, the React Native bridge, another module in
+  the same repo — leave it out.
+- **Deprecations and removals of the above.** A customer who was never told the API exists
+  does not need to be told it is going away.
+- **The reasoning behind a fix.** What went wrong, why, and what it cost belong in the commit
+  message and the PR description.
+
+**An internal-only change needs no README edit.** An empty diff is a normal, correct outcome
+here, and often the right one. Do not reach for a README change because a change felt
+significant: significance to us is not the test.
+
+When you are unsure whether an item belongs, leave it out and say so in the PR, where a
+reviewer can ask for it back. Adding a paragraph later costs nothing; a published page that
+over-explains has already been read.
+
+The same rule governs `CHANGELOG.md`, which customers read as release notes: keep an entry the
+size of its neighbours in the file, group related fixes into one generic line rather than
+listing each, and leave the mechanism out.
+
 ## Accuracy first, and it is not a formality
 
 The single most common defect in these pages has been confident documentation of things that do not exist. Real examples, all shipped and all caught late:
@@ -97,6 +137,8 @@ Mechanical rules, in rough order of how often they are missed:
 
 ## Before you merge
 
+- Every sentence on the page is something a customer can act on. No internal mechanism, no API
+  that exists only so our own modules or plugins can call each other, no reasoning behind a fix
 - Every type, option name, default and enum case checked against the source in this repo
 - Every code sample compiles, imports included
 - Callouts use `> [!NOTE]` style; no `---` dividers; headings sentence case with no trailing period

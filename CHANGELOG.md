@@ -11,21 +11,14 @@ omitted; the focus here is user-facing behavior changes. Tickets are referenced 
 
 ## [2.18.0] - 2026-08-31
 
-### Added
-- `SessionReplay.shared.captureEvent(properties:completion:)` — a completion-based manual capture that reports whether a frame actually shipped. The existing overload returns as soon as the capture starts.
-
 ### Changed
-- `flutterViewBitmapProvider` now takes `isClick` and `tapTimestampMs` before the completion handler, so Dart can decline a tap it is too late to draw. Flutter apps get this through a plugin update; an app supplying its own provider closure widens the signature and can ignore the two new arguments.
-- `SessionReplayInterface` requires `captureEvent(properties:completion:)`. Affects only types conforming to the protocol directly.
-- Spans carrying a screenshot now end once the capture resolves, so their duration includes the encode. Visible to consumers reading raw `SpanData` through `tracesExporter`; start times, and RUM attribution, are unchanged.
-
-### Deprecated
-- `applyScreenshotAttributes(_:to:)` taking an `inout any Span` — use the overload taking `any Span`.
+- `flutterViewBitmapProvider` takes two more arguments, `isClick` and `tapTimestampMs`, before its completion handler. Flutter apps get this through a plugin update; an app supplying its own provider closure widens the signature and can ignore both.
+- Spans that carry a screenshot now end once the capture finishes, so their duration includes it. Visible only to consumers reading raw `SpanData` through `tracesExporter`.
 
 ### Fixed
-- Session recording frame capture: a frame Dart has no bitmap for is dropped rather than replaced with an earlier one, frames that should ship are no longer discarded as duplicates, and a capture requested off the main thread now produces a frame.
-- Screenshot correlation: an event carries `screenshot_id` and `page` only when its frame actually shipped, and a recording always begins at a slot the player has frames for.
-- Crash events reach their force-flush instead of surfacing on the next launch.
+- Session recording frame capture: a frame Flutter has no bitmap for is dropped rather than replaced with an earlier one, frames that should ship are no longer discarded as duplicates, and a capture requested off the main thread now produces a frame.
+- Screenshot correlation: an event carries `screenshot_id` and `page` only when its frame actually shipped, and a recording always begins at a segment the player has frames for.
+- Crash events are exported with the crash rather than on the next launch.
 
 ## [2.17.0] - 2026-08-26
 
