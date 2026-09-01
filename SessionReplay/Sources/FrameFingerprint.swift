@@ -115,16 +115,17 @@ private func luma(r: Int, g: Int, b: Int) -> UInt8 {
     UInt8(min(255, Int(0.299 * Double(r) + 0.587 * Double(g) + 0.114 * Double(b))))
 }
 
-/// Draws `image` into a `size * size` RGBA scratch over black and returns its luma.
+/// Renders `image` at the requested size into a tightly-packed RGBA buffer: `width * height * 4`
+/// bytes, premultiplied, four channels per pixel in R, G, B, A order, no row padding.
 ///
-/// Black-filled rather than transparent because a captured frame may carry alpha, and
-/// Android composites onto black before sampling.
-/// Renders `image` into a tightly-packed RGBA buffer at the requested size.
+/// Black-filled rather than transparent because a captured frame may carry alpha, and Android
+/// composites onto black before sampling — a transparent region has to compare as black on both
+/// platforms, not as whatever the buffer happened to hold.
 ///
-/// Both metrics sample the same pixels by construction. They are blind to different things on
-/// purpose, but only if they are looking at the same rendering — a divergence in colour space,
-/// fill, or interpolation between two copies of this setup would make them disagree for reasons
-/// that have nothing to do with the frame.
+/// Shared so both metrics sample the same pixels by construction. They are blind to different
+/// things on purpose, but only while they are looking at the same rendering: a divergence in
+/// colour space, fill, or interpolation between two copies of this setup would have them
+/// disagreeing about the rendering rather than about the frame.
 internal func renderRGBA(_ image: CGImage, width: Int, height: Int) -> [UInt8]? {
     guard width > 0, height > 0 else { return nil }
     var rgba = [UInt8](repeating: 0, count: width * height * 4)
@@ -137,8 +138,6 @@ internal func renderRGBA(_ image: CGImage, width: Int, height: Int) -> [UInt8]? 
                                       space: CGColorSpaceCreateDeviceRGB(),
                                       bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
         else { return false }
-        // Opaque black behind the draw: a transparent source must compare as black rather than
-        // as whatever the buffer happened to hold.
         context.setFillColor(red: 0, green: 0, blue: 0, alpha: 1)
         context.fill(CGRect(x: 0, y: 0, width: width, height: height))
         context.interpolationQuality = .medium
@@ -148,6 +147,8 @@ internal func renderRGBA(_ image: CGImage, width: Int, height: Int) -> [UInt8]? 
     return drawn ? rgba : nil
 }
 
+/// Samples `image` down to a `size * size` single-channel luma buffer for the SSIM and tile
+/// comparisons, which care about brightness rather than colour.
 internal func downscaleToLuma(_ image: CGImage, size: Int) -> [UInt8]? {
     guard size > 0, let rgba = renderRGBA(image, width: size, height: size) else { return nil }
 

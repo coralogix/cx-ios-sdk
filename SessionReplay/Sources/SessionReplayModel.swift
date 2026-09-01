@@ -207,13 +207,15 @@ public class SessionReplayModel {
     /// this branch was one of them being absent. The reservation is identified by the page and
     /// segment index the caller put in the properties, so returning it cannot roll back a newer
     /// capture's slot and make the next allocation overwrite a frame that already shipped.
-    internal static func dropCapture(properties: [String: Any]?, completion: CaptureEventCompletion?) {
+    internal static func dropCapture(properties: [String: Any]?,
+                                     completion: CaptureEventCompletion?,
+                                     error: CaptureEventError = .skippingEvent) {
         if let page = properties?[Keys.page.rawValue] as? Int,
            let segmentIndex = properties?[Keys.segmentIndex.rawValue] as? Int {
             SdkManager.shared.getCoralogixSdk()?.revertScreenshotCounter(page: page,
                                                                         segmentIndex: segmentIndex)
         }
-        completion?(.failure(.skippingEvent))
+        completion?(.failure(error))
     }
 
     /// `completion` — when supplied — fires exactly once with the outcome the return value
@@ -449,8 +451,23 @@ public class SessionReplayModel {
     /// must never crash the host app.
     internal func tapTimestampMilliseconds(from properties: [String: Any]?, isClick: Bool) -> Int64? {
         guard isClick,
-              let seconds = properties?[Keys.tapTimestamp.rawValue] as? TimeInterval else { return nil }
+              let seconds = Self.seconds(from: properties?[Keys.tapTimestamp.rawValue]) else { return nil }
         return Int64(exactly: (seconds * 1_000).rounded())
+    }
+
+    /// Normalises a numeric value out of the untyped properties dictionary, the same way
+    /// `coordinate(from:)` does for tap positions.
+    ///
+    /// `as? TimeInterval` alone is not enough: a caller writing an epoch value as an integer
+    /// leaves a Swift `Int` in the box, which does not cast to `Double`, and the staleness budget
+    /// would silently go missing for every tap that came in that way.
+    internal static func seconds(from value: Any?) -> TimeInterval? {
+        switch value {
+        case let d as Double: return d
+        case let i as Int: return TimeInterval(i)
+        case let n as NSNumber: return n.doubleValue
+        default: return nil
+        }
     }
 
     // Decides what to do with one delivery, in a single critical section.
@@ -613,7 +630,9 @@ public class SessionReplayModel {
 
             guard let screenshotData = self.jpegData(from: image,
                                                      compressionQuality: compressionQuality) else {
-                drop()
+                // Not a skip: the frame was wanted and the encode failed. Reported as such so a
+                // caller — and anyone reading the logs — can tell a policy decision from a fault.
+                Self.dropCapture(properties: properties, completion: completion, error: .captureFailed)
                 return
             }
 

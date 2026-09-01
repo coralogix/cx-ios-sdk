@@ -230,11 +230,14 @@ final class CaptureCompletionOutcomeTests: XCTestCase {
             return answer.value.outcome ?? .failure(.captureFailed)
         }
 
-        // First attempt cannot encode, so nothing ships.
-        guard case .failure = run() else {
+        // First attempt cannot encode, so nothing ships. A fault, not a policy decision — the
+        // frame was wanted and the encoder let us down, and a caller can tell the two apart.
+        guard case .failure(let error) = run() else {
             XCTFail("A failed encode must report failure")
             return
         }
+        XCTAssertEqual(error, .captureFailed,
+                       "an encode failure is a fault, not an expected skip")
         XCTAssertEqual(failing.savedCount, 0)
 
         // Same pixels again, this time encodable. It has to ship: no frame for this screen has

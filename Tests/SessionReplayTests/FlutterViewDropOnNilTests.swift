@@ -302,6 +302,23 @@ final class FlutterViewDropOnNilTests: XCTestCase {
                        "The tap's own time must win over the capture's wall clock")
     }
 
+    /// The value crosses a public `[String: Any]` boundary, so a caller writing an epoch value as
+    /// an integer leaves a Swift `Int` in the box. `as? TimeInterval` alone drops that to nil and
+    /// the staleness budget goes missing for every tap that arrived that way.
+    func testTapTimestamp_acceptsTheNumericTypesAPublicDictionaryCanHold() throws {
+        let expected: Int64 = 1_767_225_600_000
+
+        for value in [1_767_225_600.0 as Any,
+                      1_767_225_600 as Any,
+                      NSNumber(value: 1_767_225_600.0) as Any,
+                      NSNumber(value: 1_767_225_600) as Any] {
+            let ms = try XCTUnwrap(
+                model.tapTimestampMilliseconds(from: [Keys.tapTimestamp.rawValue: value], isClick: true),
+                "a \(type(of: value)) timestamp must still yield a staleness budget")
+            XCTAssertEqual(ms, expected)
+        }
+    }
+
     func testTapTimestamp_isNilForAPeriodicCapture() {
         let properties: [String: Any] = [Keys.tapTimestamp.rawValue: 1_767_225_600.0]
         XCTAssertNil(model.tapTimestampMilliseconds(from: properties, isClick: false),
