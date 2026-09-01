@@ -461,7 +461,15 @@ public class SessionReplayModel {
     /// `as? TimeInterval` alone is not enough: a caller writing an epoch value as an integer
     /// leaves a Swift `Int` in the box, which does not cast to `Double`, and the staleness budget
     /// would silently go missing for every tap that came in that way.
+    ///
+    /// A boolean has to be turned away before any numeric case runs, because Swift bridges one
+    /// through `NSNumber` and `true as? Double` therefore succeeds as `1.0`. Left to run, a
+    /// bridge that put a flag in this slot would date the tap a second after the epoch and Dart
+    /// would decline every capture as impossibly stale — the opposite of the "no timestamp means
+    /// skip the check" contract above. `CFBooleanGetTypeID` rather than `is Bool`, because an
+    /// `NSNumber` holding 0 or 1 also satisfies `is Bool` and those are numbers.
     internal static func seconds(from value: Any?) -> TimeInterval? {
+        guard let value, CFGetTypeID(value as CFTypeRef) != CFBooleanGetTypeID() else { return nil }
         switch value {
         case let d as Double: return d
         case let i as Int: return TimeInterval(i)

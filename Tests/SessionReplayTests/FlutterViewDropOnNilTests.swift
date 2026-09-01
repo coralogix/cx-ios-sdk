@@ -334,6 +334,34 @@ final class FlutterViewDropOnNilTests: XCTestCase {
                      "Nil properties must omit the value too")
     }
 
+    /// A flag is not a time. Swift bridges `Bool` through `NSNumber`, so `true as? Double`
+    /// succeeds as `1.0` and the tap would be dated a second after the epoch — which Dart reads
+    /// as decades stale and declines, silently dropping every tap capture from a bridge that
+    /// wrote a boolean here. Omitting the value skips the check instead, as with no value at all.
+    func testTapTimestamp_isNilForABooleanInTheTimestampSlot() {
+        for value in [true as Any,
+                      false as Any,
+                      NSNumber(value: true) as Any,
+                      NSNumber(value: false) as Any,
+                      kCFBooleanTrue as Any] {
+            XCTAssertNil(
+                model.tapTimestampMilliseconds(from: [Keys.tapTimestamp.rawValue: value], isClick: true),
+                "a \(type(of: value)) boolean must omit the budget, not date the tap to the epoch")
+        }
+    }
+
+    /// The boolean guard must not swallow the two integers that also satisfy `is Bool` once
+    /// boxed in an `NSNumber` — they are numbers, however implausible as epochs.
+    func testTapTimestamp_stillAcceptsTheNumbersZeroAndOne() throws {
+        for (value, expected) in [(NSNumber(value: 0) as Any, Int64(0)),
+                                  (NSNumber(value: 1) as Any, Int64(1_000))] {
+            let ms = try XCTUnwrap(
+                model.tapTimestampMilliseconds(from: [Keys.tapTimestamp.rawValue: value], isClick: true),
+                "a numeric NSNumber must survive the boolean guard")
+            XCTAssertEqual(ms, expected)
+        }
+    }
+
     func testTapTimestamp_isNilForANonFiniteTimestamp() {
         let properties: [String: Any] = [Keys.tapTimestamp.rawValue: Double.nan]
         XCTAssertNil(model.tapTimestampMilliseconds(from: properties, isClick: true),
