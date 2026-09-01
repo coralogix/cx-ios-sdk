@@ -152,7 +152,7 @@ SessionReplay.shared.captureEvent(properties: nil) { result in
 ```
 
 > [!NOTE]
-> The completion overload is available from version 3.0.0.
+> The completion overload is available from version 2.18.0.
 
 #### Example Usage
 ```swift
