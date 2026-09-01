@@ -226,7 +226,8 @@ extension CoralogixRum {
                 labels: (event[Keys.customLabels.rawValue] as? String)
                     .flatMap { Helper.convertJsonStringToDict(jsonString: $0) },
                 crashTimestamp: event[Keys.crashTimestamp.rawValue] as? String,
-                crashEventId: event[CrashEventStore.eventIdKey] as? String
+                crashEventId: event[CrashEventStore.eventIdKey] as? String,
+                isRecoveredEvent: true
             )
         }
         let resentIds = Set(pending.compactMap { $0[CrashEventStore.eventIdKey] as? String })
@@ -321,6 +322,7 @@ extension CoralogixRum {
                             labels: [String: Any]? = nil,
                             crashTimestamp: String? = nil,
                             crashEventId: String? = nil,
+                            isRecoveredEvent: Bool = false,
                             then: (() -> Void)? = nil) {
         // `crashTimestamp` is set only for events recovered from CrashEventStore on
         // the launch after a crash. Anchor those to the original crash time and to
@@ -371,19 +373,22 @@ extension CoralogixRum {
             then?()
         }
 
-        // A crash replayed from CrashEventStore takes no screenshot. It is being re-emitted on
-        // the launch *after* the crash, so the only frame available shows this launch's screen —
+        // An event replayed from CrashEventStore takes no screenshot. It is re-emitted on the
+        // launch *after* the crash, so the only frame available shows this launch's screen —
         // attached to an event dated to the previous session, it would be actively misleading.
-        // `crashTimestamp`, which is what binds `recoveredCrashDate`, is set on exactly that
-        // path and nothing else.
         //
-        // `isCrash` alone is not that test. It is a caller-supplied flag on a public entry
+        // Asked as its own question rather than inferred from `recoveredCrashDate`. That date
+        // answers *when* to anchor the span, and it is nil whenever the persisted timestamp is
+        // missing, empty or unparsable — the store keeps any record whose outer JSON is an array,
+        // so a malformed one would have replayed and captured the relaunch screen.
+        //
+        // `isCrash` is not this question either. It is a caller-supplied flag on a public entry
         // point, and the documented hybrid path — an RN or Flutter host reporting a JS or Dart
         // fatal — passes it while the native process carries on. Skipping there would throw away
         // the frame from the moment of failure, which for a hybrid fatal is the most useful
         // artifact there is. The force-flush this guard once existed to protect is sequenced on
         // `then` instead, so the span is in the batch before the flush runs either way.
-        guard recoveredCrashDate == nil else {
+        guard !isRecoveredEvent else {
             endSpan()
             return
         }

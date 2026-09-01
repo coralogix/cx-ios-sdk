@@ -463,6 +463,30 @@ final class CrashDeliveryTests: XCTestCase {
                      "a replayed crash must not attach this launch's screen to last session's crash")
     }
 
+    /// The skip is asked as its own question, not inferred from a parsable `crash_timestamp`.
+    /// The store keeps any record whose outer JSON is an array, so a record with a missing or
+    /// malformed timestamp still replays — and would otherwise attach this launch's screen to it.
+    func test_resendStoredCrashEvents_capturesNoScreenshot_evenWithAnUnusableTimestamp() {
+        coralogixRum = CoralogixRum(options: makeSamplingOptions(sampleRate: 100, exclude: []))
+        coralogixRum.coralogixExporter?.spanUploader = StubUploader()
+        let store = makeTempStore()
+        coralogixRum.crashEventStore = store
+        store.append([
+            Keys.errorMessage.rawValue: "crash-with-broken-timestamp",
+            Keys.errorType.rawValue: "Error",
+            Keys.crashTimestamp.rawValue: "not-a-number"
+        ])
+        let mockSessionReplay = MockSessionReplay()
+        SdkManager.shared.register(sessionReplayInterface: mockSessionReplay)
+        defer { SdkManager.shared.register(sessionReplayInterface: nil) }
+
+        coralogixRum.resendPendingStoredCrashEvents()
+        coralogixRum.completeCrashRecovery()
+
+        XCTAssertNil(mockSessionReplay.captureEventCalledWith,
+                     "a replayed crash must skip the capture however bad its stored timestamp is")
+    }
+
     func test_resendStoredCrashEvents_uploadsWithOriginalTimestamp_andClearsOnConfirm() throws {
         coralogixRum = CoralogixRum(options: makeSamplingOptions(sampleRate: 100, exclude: []))
         let uploader = StubUploader()
