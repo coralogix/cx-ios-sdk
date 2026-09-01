@@ -50,12 +50,15 @@ public struct SessionReplayOptions {
     /// Automatically starts session recording if enabled in the options.
     public var autoStartSessionRecording: Bool
 
-    /// When set, the SDK requests a pre-masked bitmap from this provider
-    /// for each FlutterView found in the captured view hierarchy.
+    /// When set, the SDK requests a pre-masked bitmap from this provider once per capture,
+    /// for the first FlutterView it finds in the captured view hierarchy.
     ///
     /// The Flutter plugin registers this callback to return finished RGBA pixel data;
     /// the SDK substitutes it into the FlutterView region of the captured host bitmap.
     /// This path replaces the frame-skew-prone pull-based maskRegionsProvider.
+    ///
+    /// See [FlutterViewBitmapProvider] for the full contract, including the single-implicit-view
+    /// assumption this path shares with the Android SDK.
     public var flutterViewBitmapProvider: FlutterViewBitmapProvider?
 
     public init(recordingType: RecordingType = .image,
@@ -242,34 +245,83 @@ public class SessionReplay: SessionReplayInterface {
     }
 
     public func captureEvent(properties: [String : Any]?) -> Result<Void, CaptureEventError> {
+        startCapture(properties: properties, completion: nil)
+    }
+
+    public func captureEvent(properties: [String : Any]?,
+                             completion: @escaping CaptureEventCompletion) {
+        _ = startCapture(properties: properties, completion: completion)
+    }
+
+    /// Single implementation behind both `captureEvent` overloads. Returns the immediately-known
+    /// outcome for the synchronous caller; `completion`, when supplied, is called exactly once —
+    /// here for every rejection, or by the model once the frame is encoded or dropped.
+    private func startCapture(properties: [String: Any]?,
+                              completion: CaptureEventCompletion?) -> Result<Void, CaptureEventError> {
+        // The caller allocated a screenshot index before calling in, and these rejections all
+        // return before the model runs — so the model's own revert never fires for them. Hand the
+        // index back here or it is burned for good, and the replay stream starts at a page and
+        // segment the player has no frames for.
+        func reject(_ error: CaptureEventError) -> Result<Void, CaptureEventError> {
+            revertCallerScreenshotIndex(properties: properties)
+            completion?(.failure(error))
+            return .failure(error)
+        }
+
         if isDummyInstance {
             Log.d("[SessionReplay] captureEvent() called on inactive instance (skipped by sampling)")
-            return .failure(.dummyInstance)
+            return reject(.dummyInstance)
         }
 
         guard let coralogixSdk = SdkManager.shared.getCoralogixSdk(),
               !coralogixSdk.isIdle() else {
             Log.d("[SessionReplay] CoralogixSdk is idle and skiped capture event")
-            return .failure(.sdkIdle)
+            return reject(.sdkIdle)
         }
 
         guard let sessionReplayModel = self.sessionReplayModel,
               let sessionReplayOptions = sessionReplayModel.sessionReplayOptions else {
             Log.e("[SessionReplay] missing sessionReplayOptions")
-            return .failure(.missingSessionReplayOptions)
+            return reject(.missingSessionReplayOptions)
         }
 
         var updatedProperties = properties ?? [:]
         updatedProperties[Keys.timestamp.rawValue] = Date().timeIntervalSince1970
 
+        // The SDK's own instrumentation always reserves a screenshot slot before it captures, so
+        // a capture arriving without one came from the host asking for a frame directly — this
+        // API, or the plugin bridge. Mark it manual so deduplication cannot answer an explicit
+        // request with silence: the call returns void, and there would be nothing to tell.
+        if updatedProperties[Keys.segmentIndex.rawValue] == nil {
+            updatedProperties[Keys.isManual.rawValue] = true
+        }
+
         if sessionReplayOptions.recordingType == .image {
             guard sessionReplayModel.isRecording else {
                 Log.e("[SessionReplay] Session Replay not recording ...")
-                return .failure(.notRecording)
+                return reject(.notRecording)
             }
-            return sessionReplayModel.captureImage(properties: updatedProperties)
+            return sessionReplayModel.captureImage(properties: updatedProperties, completion: completion)
         }
+        // .video produces no frame today (RecordingType.video is TBD), so a caller waiting on the
+        // outcome must not stamp a span for one. The synchronous return stays .success — it means
+        // "accepted", and existing callers read it that way. The index still has to go back: no
+        // frame ships, so nothing will ever point at it.
+        revertCallerScreenshotIndex(properties: properties)
+        completion?(.failure(.skippingEvent))
         return .success(())
+    }
+
+    /// Returns a screenshot index the caller allocated for a capture that will never ship.
+    ///
+    /// Identified by the page and segment index the caller put in the properties, so returning it
+    /// cannot roll back a newer capture's reservation. An absent index means the caller never took
+    /// one, and nothing is ours to hand back.
+    private func revertCallerScreenshotIndex(properties: [String: Any]?) {
+        guard let page = properties?[Keys.page.rawValue] as? Int,
+              let segmentIndex = properties?[Keys.segmentIndex.rawValue] as? Int else { return }
+        SdkManager.shared.getCoralogixSdk()?.revertScreenshotCounter(page: page,
+                                                                    segmentIndex: segmentIndex)
     }
 
     public func isRecording() -> Bool {

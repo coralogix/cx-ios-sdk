@@ -9,6 +9,17 @@ Release-mechanics commits (version bumps, podspec/script tweaks, README edits) a
 omitted; the focus here is user-facing behavior changes. Tickets are referenced as
 `CX-XXXXX` (Jira) or `ALPH-XXXX` (legacy). Pull request numbers are in parentheses.
 
+## [2.18.0] - 2026-08-31
+
+### Changed
+- `flutterViewBitmapProvider` takes two more arguments, `isClick` and `tapTimestampMs`, before its completion handler. Flutter apps get this through a plugin update; an app supplying its own provider closure widens the signature and can ignore both.
+- Spans that carry a screenshot now end once the capture finishes, so their duration includes it. Visible only to consumers reading raw `SpanData` through `tracesExporter`.
+
+### Fixed
+- Session recording frame capture: a frame Flutter has no bitmap for is dropped rather than replaced with an earlier one, frames that should ship are no longer discarded as duplicates, and a capture requested off the main thread now produces a frame.
+- Screenshot correlation: an event carries `screenshot_id` and `page` only when its frame actually shipped, and a recording always begins at a segment the player has frames for.
+- Crash events are exported with the crash rather than on the next launch.
+
 ## [2.17.0] - 2026-08-26
 
 ### Changed

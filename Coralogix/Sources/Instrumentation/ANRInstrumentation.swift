@@ -21,8 +21,12 @@ extension CoralogixRum {
             createErrorSpan: { [weak self] in
                 self?.makeSpan(event: .error, source: .code, severity: .error)
             },
-            recordScreenshot: { [weak self] span in
-                self?.recordScreenshotForSpan(to: &span)
+            recordScreenshot: { [weak self] span, finish in
+                guard let self = self else {
+                    finish()
+                    return
+                }
+                self.recordScreenshotForSpan(on: span) { _ in finish() }
             }
         )
         self.metricsManager.startANRMonitoring()

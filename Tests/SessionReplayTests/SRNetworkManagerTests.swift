@@ -364,8 +364,18 @@ class MockCoralogix: CoralogixInterface {
         return [:]
     }
     
+    var revertScreenshotCounterCallCount = 0
+
+    /// Records the locations handed back, so a test can assert which slot was returned.
+    var revertedLocations: [(page: Int, segmentIndex: Int)] = []
+
+    func revertScreenshotCounter(page: Int, segmentIndex: Int) {
+        revertScreenshotCounterCallCount += 1
+        revertedLocations.append((page: page, segmentIndex: segmentIndex))
+    }
+
     func revertScreenshotCounter() {
-        // No-op for mock
+        revertScreenshotCounterCallCount += 1
     }
 
     func reportSessionReplayInit(snapshot: [String: Any]) {

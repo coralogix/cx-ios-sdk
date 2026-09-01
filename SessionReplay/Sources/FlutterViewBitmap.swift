@@ -44,8 +44,8 @@ public struct FlutterViewBitmap {
     /// payload is dp and the host rects are px). The host offsets them by the FlutterView's
     /// screen origin and merges them into `CapturedFrame.maskRects`, so tap markers over
     /// masked Flutter content are suppressed on the same terms as native masks. They travel
-    /// with the bytes — a reused stale bitmap must carry the rects of *its* frame, never a
-    /// newer frame's (see `SessionReplayModel.resolveFlutterFrame`).
+    /// with the bytes, so the geometry and the pixels it describes always reference the same
+    /// frame by construction.
     public let maskRects: [CGRect]
 
     public init?(bytes: Data, width: Int, height: Int, maskRects: [CGRect] = []) {
@@ -76,18 +76,28 @@ public struct FlutterViewBitmap {
 
 /// Callback signature used by [SessionReplayOptions.flutterViewBitmapProvider].
 ///
-/// Invoked by the SDK per FlutterView per capture cycle. `viewId` is the
-/// Flutter-allocated stable identifier (format `cx_flutter_view_<counter>`,
-/// see `docs/session-replay-shared.md` §3). `frameId` is a monotonic
-/// SDK-generated counter (see §2 — opaque to the provider; do not
-/// interpret as a timestamp).
+/// Invoked once per capture cycle, for Flutter's implicit view.
 ///
-/// The completion handler must be called with the bytes, or `nil` if the
-/// FlutterView isn't ready yet. On `nil` the SDK reuses the last delivered
-/// bitmap, or skips the frame if none has arrived — never black, and never
-/// the raw FlutterView pixels (the leak case).
+/// - `viewId`: always `"implicit_view"`. The SDK composites one FlutterView per capture —
+///   the first it finds on screen — and the plugin routes every capture to Flutter's single
+///   implicit view, so the argument carries no information today. A host with several
+///   FlutterViews is not supported by this path.
+/// - `frameId`: a monotonic SDK counter. Opaque — not a timestamp.
+/// - `isClick`: this capture was triggered by a user tap.
+/// - `tapTimestampMs`: that tap's epoch-ms timestamp, `nil` for periodic captures.
+///
+/// Call the completion exactly once, with the bytes or with `nil`. `nil` means "no frame
+/// for this cycle", whatever the reason, and the SDK drops the capture: never a black
+/// fill, never the raw FlutterView pixels, never a frame from an earlier cycle. A second
+/// call for the same cycle is ignored.
+///
+/// The completion may be called from any thread; the SDK moves the work to the main thread
+/// itself. Answer within one second: the capture gives up after that and reports the event
+/// without a screenshot. The cap is there because the event's own span closes when the capture
+/// resolves, so an unanswered provider would hold back error, log, tap and navigation events
+/// rather than merely cost a frame. A late answer is ignored, not composited.
 public typealias FlutterViewBitmapProvider =
-    (_ viewId: String, _ frameId: Int64,
+    (_ viewId: String, _ frameId: Int64, _ isClick: Bool, _ tapTimestampMs: Int64?,
      _ completion: @escaping (FlutterViewBitmap?) -> Void) -> Void
 
 /// Callback signature used by [SessionReplayOptions.flutterPlatformViewsProvider].

@@ -132,10 +132,10 @@ SessionReplay.shared.stopRecording()
 ```
 
 ##### `captureEvent`
-Captures a specific event during the session.
+Captures a single frame outside the configured interval.
 
 ```swift
-let result = SessionReplay.shared.captureEvent()
+let result = SessionReplay.shared.captureEvent(properties: nil)
 ```
 
 #### Example Usage

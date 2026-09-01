@@ -32,33 +32,23 @@ extension CoralogixRum {
 
                 coralogixExporter?.set(cxView: cxView)
 
-                var span = makeSpan(event: .navigation, source: .console, severity: .info)
-                handleAppearStateIfNeeded(cxView: cxView, span: &span)
-                span.end()
+                let span = makeSpan(event: .navigation, source: .console, severity: .info)
+                handleAppearStateIfNeeded(cxView: cxView, span: span) { span.end() }
                 return
             }
         }
         coralogixExporter?.set(cxView: cxView)
     }
     
-    internal func handleAppearStateIfNeeded(cxView: CXView, span: inout any Span) {
-        guard cxView.state == .notifyOnAppear else { return }
-        
-        guard let sessionReplay = SdkManager.shared.getSessionReplay(),
-              let coralogixExporter = self.coralogixExporter else {
-            Log.e("[SessionReplay] is not initialized")
+    /// Attaches a session-replay frame to an appear-navigation span. `finish` runs exactly once —
+    /// including for a disappear event, which captures nothing — and is where the caller ends the
+    /// span; the capture resolves asynchronously.
+    internal func handleAppearStateIfNeeded(cxView: CXView, span: any Span,
+                                           then finish: @escaping () -> Void) {
+        guard cxView.state == .notifyOnAppear else {
+            finish()
             return
         }
-        
-        let screenshotLocation = coralogixExporter.getScreenshotManager().nextScreenshotLocation
-        let result = sessionReplay.captureEvent(properties: screenshotLocation.toProperties())
-        switch result {
-        case .success:
-            self.applyScreenshotAttributes(screenshotLocation, to: &span)
-        case .failure(let error):
-            if error == .skippingEvent {
-                self.coralogixExporter?.getScreenshotManager().revertScreenshotCounter()
-            }
-        }
+        recordScreenshotForSpan(on: span) { _ in finish() }
     }
 }

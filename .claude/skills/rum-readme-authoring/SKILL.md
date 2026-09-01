@@ -1,9 +1,13 @@
 ---
 name: rum-readme-authoring
-description: Write or edit a README in a Coralogix RUM SDK repo (android-sdk, cx-ios-sdk, coralogix-browser-sdk, cx-flutter-plugin, cx-react-native-plugin, rum-cli) so it publishes correctly to coralogix.com/docs. Use whenever a change touches a README that the docs sync mirrors — adding a feature, documenting an option, restructuring sections, or splitting a README into separate doc pages. Covers accuracy checks against the SDK source, the split-marker mechanics, and the house style the docs site expects.
+description: Write or edit the customer-facing writing in a Coralogix RUM SDK repo (android-sdk, cx-ios-sdk, coralogix-browser-sdk, cx-flutter-plugin, cx-react-native-plugin, rum-cli) — a README the docs sync mirrors to coralogix.com/docs, or a CHANGELOG release entry. Use whenever a change touches either: adding a feature, documenting an option, restructuring sections, splitting a README into separate doc pages, or writing up a version. Covers what belongs on a customer-facing page at all — internal mechanism and internal-only API stay out, and an internal change often needs no doc edit — plus accuracy checks against the SDK source, the split-marker mechanics, and the house style the docs site expects.
 ---
 
-# Authoring a RUM SDK README that publishes as documentation
+# Authoring the customer-facing writing in a RUM SDK repo
+
+Two files in these repos are read by customers rather than by us: a synced README, and
+`CHANGELOG.md`. The scope rules in the next section govern both. Everything after it —
+the sync mechanics, the split markers, the house style — is README-only.
 
 These READMEs are not just repo files any more. A nightly job in `coralogix/documentation` mirrors them and publishes them as customer-facing pages on `coralogix.com/docs`, so a README edit is a documentation edit.
 
@@ -29,6 +33,50 @@ assuming the README you are editing is one of them.
 **The synced README is the single source.** Editing the published page is pointless — the next sync overwrites it. Content fixes only stick here.
 
 **Nothing downstream checks your prose.** The docs repo runs Vale over its own pages but explicitly disables every style rule for synced content (`.vale.ini`, `[docs/external/**]`), because a flag can't be fixed there without diverging from this repo. This file is the only style gate there is.
+
+## What belongs in front of a customer, and what does not
+
+Applies to a synced README and to a `CHANGELOG.md` entry alike. Before checking whether a
+sentence is *true*, check whether it belongs. The failure this
+catches is the opposite of the accuracy one below: a correct, careful, thorough page that
+tells a customer things they have no use for. A customer reads these pages to get the SDK
+working and to decide what to configure. Anything else on the page costs them attention, and
+detail about our internals reads to them as risk rather than transparency.
+
+**On the page:** public API a customer would call, options they would set, what a value does
+and what its default is, an installation or upgrade step, a limitation that changes what they
+can build, and behaviour they can observe in their own data.
+
+**Not on the page:**
+
+- **Internal mechanism.** Algorithms, thresholds, comparison metrics, queue and locking
+  design, how frames are deduplicated, which of two rect sets a decision reads. If a sentence
+  would only make sense to someone who has read the implementation, it belongs in a code
+  comment or the PR, not here.
+- **API that exists so our own modules and plugins can call each other.** A declaration being
+  `public` is a language requirement for cross-module visibility, not a statement of intent.
+  Documenting it invites customers onto a contract we intend to keep changing. If the only
+  caller is our own wrapper — the Flutter plugin, the React Native bridge, another module in
+  the same repo — leave it out.
+- **Deprecations and removals of the above.** A customer who was never told the API exists
+  does not need to be told it is going away.
+- **The reasoning behind a fix.** What went wrong, why, and what it cost belong in the commit
+  message and the PR description.
+
+**An internal-only change needs no README edit.** An empty diff is a normal, correct outcome
+here, and often the right one. Do not reach for a README change because a change felt
+significant: significance to us is not the test.
+
+When you are unsure whether an item belongs, leave it out and say so in the PR, where a
+reviewer can ask for it back. Adding a paragraph later costs nothing; a published page that
+over-explains has already been read.
+
+**In a `CHANGELOG.md` entry the same rule has a measurable form.** Keep an entry the size of its
+neighbours in the file — open it and compare, since a release several times longer than the rest
+is a defect rather than thoroughness. One line per bullet. Group a batch of related fixes into
+one generic line ("session recording frame capture: …") rather than listing each. No section for
+deprecating internal API, and no reasoning: what went wrong and why belong in the commit and the
+PR, which is where a reviewer looks.
 
 ## Accuracy first, and it is not a formality
 
@@ -97,6 +145,8 @@ Mechanical rules, in rough order of how often they are missed:
 
 ## Before you merge
 
+- Every sentence on the page is something a customer can act on. No internal mechanism, no API
+  that exists only so our own modules or plugins can call each other, no reasoning behind a fix
 - Every type, option name, default and enum case checked against the source in this repo
 - Every code sample compiles, imports included
 - Callouts use `> [!NOTE]` style; no `---` dividers; headings sentence case with no trailing period

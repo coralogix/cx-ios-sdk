@@ -96,6 +96,26 @@ The review rules in `AGENTS.md` apply **while writing code**, not only at PR tim
 
 - **A new masking source must state which of the two channels it feeds:** geometry to the capture pass (the UIKit walk and Dart-reported rects do — these suppress tap markers and set `is_masked_element`), or pixels only (OCR/Vision do — these can never suppress a marker or set the flag). Record the answer in the masking table in `SessionReplay/Sources/Docs/README.md`.
 
+- **Write `CHANGELOG.md` and the READMEs for a customer, not for a reviewer.** These are the only
+  two things on this branch a customer reads — the READMEs are mirrored to coralogix.com/docs.
+  Keep them short, generic, and limited to what a customer can act on: public API they would
+  call, a change that breaks their build, and behaviour they can observe. Leave out internal
+  mechanism (algorithms, thresholds, queue and locking design, mask-rect provenance), protocols
+  and API that exist only to wire our own modules together, deprecations of internal API, and
+  the reasoning behind a fix. Detail there does not reassure a customer — it reads as risk.
+
+  A release entry should be the size of its neighbours in the file: roughly 100–300 words,
+  one line per bullet. Group a batch of related fixes into one generic line ("session
+  recording frame capture: …") rather than listing each. The mechanism, the measurements and
+  the why belong in the commit message and the PR description, which is where a reviewer
+  looks. When in doubt about a given item, leave it out and say so in the PR.
+
+  Corollary: an internal-only change needs **no** README edit at all. Adding a public
+  declaration is not by itself a reason to document it — an API that exists so our own
+  modules or plugins can call each other is not something to advertise to customers. The
+  `rum-readme-authoring` skill carries this rule in full, for a release entry as well as a
+  synced README; invoke it before writing either.
+
 - **Demo-app changes must land in both `Example/DemoAppSwift` (UIKit) and `Example/DemoAppSwiftUI` (SwiftUI).** When adding a new screen, section, or interactive control to one demo app, mirror it in the other so feature parity holds across both targets and the UI tests (`DemoAppUITests`, `DemoAppSwiftUIUITests`) stay symmetrical.
 
 ## Skills available
@@ -191,6 +211,9 @@ For `CHANGELOG.md` at the repo root:
 
 - The current SDK version must have an entry
 - The entry accurately describes the changes in this PR (not a placeholder)
+- The entry is written for a customer and is the size of its neighbours — see the Rules section.
+  No internal mechanism, no deprecations of internal API, no reasoning. A release entry several
+  times longer than the rest of the file is a defect, not thoroughness.
 
 Block if `CHANGELOG.md` is missing the version entry or the entry doesn't reflect the actual changes.
 
@@ -198,13 +221,17 @@ Block if `CHANGELOG.md` is missing the version entry or the entry doesn't reflec
 
 ### 6. README
 
-For `README.md` at the repo root:
+For `README.md` at the repo root, and `SessionReplay/Sources/Docs/README.md` — both are mirrored
+to coralogix.com/docs:
 
-- New public API is documented
+- Customer-facing public API is documented; API that exists to wire our own modules or plugins
+  together is not. An internal-only change needs no README edit — the right answer here is
+  often an empty diff.
 - Removed or changed API is updated or removed
 - Installation instructions reference the current version
+- No implementation detail, and every code sample compiles
 
-Block if the README doesn't reflect the current state of the SDK.
+Block if the README doesn't reflect the current state of the SDK, or if it explains internals.
 
 ## Distribution
 

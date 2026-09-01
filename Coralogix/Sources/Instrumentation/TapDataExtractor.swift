@@ -20,6 +20,10 @@ struct TouchEvent {
     let location: CGPoint     // screen-coordinate position (top-left origin)
     let eventType: InteractionEventName
     let scrollDirection: ScrollDirection?
+    /// When the touch happened, in epoch seconds. Session replay hands this to the Flutter
+    /// bitmap provider so Dart can refuse to draw a tap it can no longer represent honestly,
+    /// which only works if the value is the touch's own time rather than the capture's.
+    let timestamp: TimeInterval
 
     /// Standard init — position is derived from the live UITouch (tap / scroll path).
     init(view: UIView,
@@ -31,18 +35,33 @@ struct TouchEvent {
         self.location = touch.location(in: nil)
         self.eventType = eventType
         self.scrollDirection = scrollDirection
+        self.timestamp = Self.epochSeconds(ofTouchAt: touch.timestamp)
     }
 
-    /// Gesture-recogniser init — no live UITouch available (swipe path).
+    /// Position-only init — the location comes from state recorded at `.began` rather than from
+    /// `touch.view`, which UIKit may clear before the `.ended` event is delivered.
+    ///
+    /// `touchUptime` is the originating `UITouch.timestamp` when the caller still has the touch,
+    /// which the tap and swipe paths do. Without one — a recogniser firing with no touch behind
+    /// it — the recogniser's own firing time is the closest thing to the touch's.
     init(view: UIView,
          location: CGPoint,
          eventType: InteractionEventName,
-         scrollDirection: ScrollDirection? = nil) {
+         scrollDirection: ScrollDirection? = nil,
+         touchUptime: TimeInterval? = nil) {
         self.view = view
         self.touch = nil
         self.location = location
         self.eventType = eventType
         self.scrollDirection = scrollDirection
+        self.timestamp = touchUptime.map(Self.epochSeconds(ofTouchAt:)) ?? Date().timeIntervalSince1970
+    }
+
+    /// `UITouch.timestamp` is seconds since boot, not since the epoch, so it has to be rebased
+    /// against the current uptime rather than used directly.
+    internal static func epochSeconds(ofTouchAt touchUptime: TimeInterval) -> TimeInterval {
+        let age = ProcessInfo.processInfo.systemUptime - touchUptime
+        return Date().timeIntervalSince1970 - max(0, age)
     }
 }
 
@@ -308,6 +327,7 @@ enum TapDataExtractor {
         var attributes = [String: Any]()
         Global.updateLocation(tapData: &attributes, location: event.location)
         tapData.merge(attributes) { _, new in new }
+        tapData[Keys.tapTimestamp.rawValue] = event.timestamp
         tapData[Keys.attributes.rawValue] = attributes
 
         return tapData

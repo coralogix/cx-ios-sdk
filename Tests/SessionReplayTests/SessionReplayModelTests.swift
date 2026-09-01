@@ -526,8 +526,7 @@ final class SessionReplayModelTests: XCTestCase {
         model.encodeAndProcess(
             image: image,
             compressionQuality: 0.8,
-            properties: nil,
-            callerIncrementedCounter: false
+            properties: nil
         )
 
         wait(for: [exp], timeout: 2.0)
@@ -706,13 +705,19 @@ class MockSessionReplayModel: SessionReplayModel {
         return .success
     }
     
-    override func captureImage(properties: [String : Any]? = nil) -> Result<Void, CaptureEventError> {
+    /// Properties as `startCapture` handed them over, so a test can assert what it added.
+    var captureImageProperties: [String: Any]?
+
+    override func captureImage(properties: [String : Any]? = nil,
+                               completion: CaptureEventCompletion? = nil) -> Result<Void, CaptureEventError> {
         captureImageCallCount += 1
+        captureImageProperties = properties
 
         captureCalled = true
         capturedData = "mock image".data(using: .utf8)
         XCTAssertTrue(Thread.isMainThread, "captureImage should be called on the main thread")
         expectation?.fulfill()
+        completion?(.success(()))
         return .success(())
     }
     
@@ -759,10 +764,11 @@ class MockSessionReplayModel2: SessionReplayModel {
         image: UIImage,
         compressionQuality: CGFloat,
         properties: [String : Any]?,
-        callerIncrementedCounter: Bool
+        completion: CaptureEventCompletion? = nil
     ) {
         let data = "mock image".data(using: .utf8)!
         saveScreenshotToFileSystem(screenshotData: data, properties: properties)
+        completion?(.success(()))
     }
 
     override func saveScreenshotToFileSystem(screenshotData: Data, properties: [String : Any]?) {

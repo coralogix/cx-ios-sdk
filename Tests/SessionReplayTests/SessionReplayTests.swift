@@ -204,6 +204,166 @@ class SessionReplayTests: XCTestCase {
             XCTAssertEqual(error, .notRecording)
         }
     }
+
+    /// A rejection that returns before the model runs still has to hand the caller's screenshot
+    /// index back. Left burned, the replay stream starts at a page and segment the player has no
+    /// frames for — every upload succeeds and the recording is still unplayable.
+    func testCaptureEventRejectedBeforeTheModelReturnsTheCallerScreenshotIndex() {
+        let mockCoralogix = MockCoralogix()
+        mockCoralogix.idle = false
+        SdkManager.shared.register(coralogixInterface: mockCoralogix)
+
+        let options = SessionReplayOptions(recordingType: .image)
+        SessionReplay.initializeWithOptions(sessionReplayOptions: options)
+        SessionReplay.shared.sessionReplayModel = MockSessionReplayModel(sessionReplayOptions: options)
+
+        let result = SessionReplay.shared.captureEvent(
+            properties: [Keys.segmentIndex.rawValue: 7, Keys.page.rawValue: 0]
+        )
+
+        if case .failure(let error) = result {
+            XCTAssertEqual(error, .notRecording)
+        } else {
+            XCTFail("Expected .failure(.notRecording) but got success")
+        }
+        XCTAssertEqual(mockCoralogix.revertScreenshotCounterCallCount, 1,
+                       "a caller-allocated index must be returned when the capture is rejected")
+    }
+
+    /// Only an index the caller actually took is ours to give back; it signals that by putting
+    /// `segmentIndex` in the properties. Reverting without one would corrupt the counter downwards.
+    func testCaptureEventRejectionWithoutACallerIndexDoesNotRevert() {
+        let mockCoralogix = MockCoralogix()
+        mockCoralogix.idle = false
+        SdkManager.shared.register(coralogixInterface: mockCoralogix)
+
+        let options = SessionReplayOptions(recordingType: .image)
+        SessionReplay.initializeWithOptions(sessionReplayOptions: options)
+        SessionReplay.shared.sessionReplayModel = MockSessionReplayModel(sessionReplayOptions: options)
+
+        let result = SessionReplay.shared.captureEvent(properties: ["key": "value"])
+
+        // Assert the rejection was actually reached: without this the revert count alone would
+        // read as 0 for a capture that was never rejected in the first place.
+        if case .failure(let error) = result {
+            XCTAssertEqual(error, .notRecording)
+        } else {
+            XCTFail("Expected .failure(.notRecording) but got success")
+        }
+        XCTAssertEqual(mockCoralogix.revertScreenshotCounterCallCount, 0,
+                       "an index the caller never took is not ours to give back")
+    }
+}
+
+extension SessionReplayTests {
+
+    /// A host calling `captureEvent` asked for this frame. Deduplication answering that with
+    /// silence leaves a void-returning public API with nothing to report, so the capture is
+    /// marked manual and exempted — the same exemption a tap frame gets.
+    func testCaptureEventFromTheHostIsMarkedManualSoItIsNotDeduplicated() throws {
+        SdkManager.shared.register(coralogixInterface: MockCoralogix())
+        let options = SessionReplayOptions(recordingType: .image)
+        SessionReplay.initializeWithOptions(sessionReplayOptions: options)
+        let model = MockSessionReplayModel(sessionReplayOptions: options)
+        model.isRecording = true
+        SessionReplay.shared.update(sessionReplayModel: model)
+
+        _ = SessionReplay.shared.captureEvent(properties: [Keys.event.rawValue: "screenshot"])
+
+        let properties = try XCTUnwrap(model.captureImageProperties)
+        XCTAssertEqual(properties[Keys.isManual.rawValue] as? Bool, true,
+                       "a capture the host requested directly must be exempt from deduplication")
+    }
+
+    /// The SDK's own instrumentation reserves a slot first, so it must not pick up the exemption —
+    /// otherwise every periodic tick bypasses deduplication and the replay ships identical frames.
+    func testInstrumentationCaptureIsNotMarkedManual() throws {
+        SdkManager.shared.register(coralogixInterface: MockCoralogix())
+        let options = SessionReplayOptions(recordingType: .image)
+        SessionReplay.initializeWithOptions(sessionReplayOptions: options)
+        let model = MockSessionReplayModel(sessionReplayOptions: options)
+        model.isRecording = true
+        SessionReplay.shared.update(sessionReplayModel: model)
+
+        // What recordScreenshotForSpan passes: a reserved page and segment index.
+        _ = SessionReplay.shared.captureEvent(properties: [
+            Keys.page.rawValue: 0,
+            Keys.segmentIndex.rawValue: 4,
+            Keys.screenshotId.rawValue: "sid"
+        ])
+
+        let properties = try XCTUnwrap(model.captureImageProperties)
+        XCTAssertNil(properties[Keys.isManual.rawValue],
+                     "a capture the SDK originated must stay subject to deduplication")
+    }
+}
+
+/// Stands in the UIKit walk so the capture can run without a foreground scene, but leaves the
+/// real deduplication, encoding and completion path intact.
+final class StubbedWalkModel: SessionReplayModel {
+    let frameImage: UIImage
+    private let lock = NSLock()
+    private var _savedCount = 0
+
+    var savedCount: Int { lock.lock(); defer { lock.unlock() }; return _savedCount }
+
+    init(options: SessionReplayOptions, image: UIImage) {
+        self.frameImage = image
+        super.init(sessionReplayOptions: options)
+    }
+
+    override func prepareCapturedFrameOnMain(properties: [String: Any]?) -> CapturedFrame? {
+        CapturedFrame(image: frameImage, maskRects: [])
+    }
+
+    override func saveScreenshotToFileSystem(screenshotData: Data, properties: [String: Any]?) {
+        lock.lock(); defer { lock.unlock() }; _savedCount += 1
+    }
+}
+
+extension SessionReplayTests {
+
+    /// End to end through the public completion overload, with the real deduplication path: two
+    /// identical captures a host asked for must both ship. `captureEvent` returns void to the
+    /// host, so answering the second with silence leaves it no way to know the frame was dropped.
+    func testPublicCaptureEventTwiceOnAnUnchangedScreen_shipsBothFrames() {
+        SdkManager.shared.register(coralogixInterface: MockCoralogix())
+        let options = SessionReplayOptions(recordingType: .image)
+        SessionReplay.initializeWithOptions(sessionReplayOptions: options)
+
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: 8, height: 8))
+        let image = renderer.image { ctx in
+            UIColor.magenta.setFill()
+            ctx.fill(CGRect(x: 0, y: 0, width: 8, height: 8))
+        }
+        let model = StubbedWalkModel(options: options, image: image)
+        model.isRecording = true
+        model.updateSessionId(with: "session-\(UUID().uuidString)")
+        SessionReplay.shared.update(sessionReplayModel: model)
+
+        func capture() -> Result<Void, CaptureEventError> {
+            let answered = expectation(description: "capture answered")
+            var outcome: Result<Void, CaptureEventError>?
+            let lock = NSLock()
+            SessionReplay.shared.captureEvent(properties: nil) { result in
+                lock.lock(); outcome = result; lock.unlock()
+                answered.fulfill()
+            }
+            wait(for: [answered], timeout: 5)
+            lock.lock(); defer { lock.unlock() }
+            return outcome ?? .failure(.captureFailed)
+        }
+
+        guard case .success = capture() else {
+            XCTFail("The first host capture must ship")
+            return
+        }
+        guard case .success = capture() else {
+            XCTFail("The second host capture must ship too — identical pixels, but explicitly requested")
+            return
+        }
+        XCTAssertEqual(model.savedCount, 2, "Both requested frames must reach the save path")
+    }
 }
 
 class MockSessionReplayModel3: SessionReplayModel {
