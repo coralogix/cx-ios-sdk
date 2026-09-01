@@ -1,0 +1,602 @@
+name: UI Tests (BrowserStack real devices)
+
+# A/B experiment against "UI Tests (fast — cache + shard)", which runs the same
+# XCUITest suites on GitHub-hosted simulators. workflow_dispatch + a branch
+# scoped push trigger: this gates nothing.
+#
+# Baseline to beat (simulator, last green): build 3m, shards 4/8/8/9m in
+# parallel, wall clock ~12m.
+#
+# Measured cost model from the first real-device run (run 31377282463):
+#   832s of actual test execution, 1394s of session wall -> 40% overhead.
+#   ~45s to allocate a device + install the .ipa per session, and ~70s of
+#   tearDown+setUp between two tests inside the same session.
+# So a shard holding m tests costs sum(tests) + 45 + 70*(m-1), and
+#   total_work(k shards) = 832 + 45k + 70*(11-k) = 1602 - 25k
+# i.e. splitting is strictly a win because a gap (70s) costs more than a fresh
+# session's install (45s). Shard count is capped by the plan's queue limit
+# (queued_sessions_max_allowed = 5) rather than by anything about the tests.
+
+permissions:
+  contents: read
+
+# Two overlapping runs would compete for the same 2 paid parallel sessions and
+# corrupt each other's timings, so a newer run always supersedes an older one.
+concurrency:
+  group: browserstack-ui-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  # workflow_dispatch alone is not enough: GitHub only offers a dispatch for
+  # workflows present on the default branch, and this file lives on the
+  # experiment branch. The push trigger is scoped so it cannot fire elsewhere.
+  push:
+    branches:
+      - perf/unit-tests-ci-speedup
+  workflow_dispatch:
+    inputs:
+      devices:
+        description: 'BrowserStack devices (comma-separated, "Device-OSVersion")'
+        default: 'iPhone 16-18,iPhone 14-18'
+        required: false
+      shards:
+        description: 'Shards for the largest target (blank = fill the paid capacity)'
+        default: ''
+        required: false
+      parallel:
+        description: 'Cap on concurrent sessions (plan.json over-reports; raise when the plan really grows)'
+        default: '2'
+        required: false
+
+jobs:
+  browserstack:
+    name: BrowserStack XCUITest
+    runs-on: macos-15
+    timeout-minutes: 60
+    env:
+      BS_AUTH: ${{ secrets.BROWSERSTACK_USERNAME }}:${{ secrets.BROWSERSTACK_ACCESS_KEY }}
+      API: https://api-cloud.browserstack.com/app-automate/xcuitest/v2
+      # `inputs.*` are only populated for workflow_dispatch, so a push-triggered
+      # run must fall back to the same defaults or it posts an empty device list.
+      DEVICES: ${{ inputs.devices || 'iPhone 16-18,iPhone 14-18' }}
+      # Blank on purpose so the plan step sizes shards to the paid capacity.
+      # BrowserStack discards sessions past running+queued rather than waiting,
+      # which would report unrun tests as a pass — so this must not be a
+      # hardcoded number that the suite can silently outgrow.
+      NUM_SHARDS: ${{ inputs.shards }}
+      # plan.json reported parallel_sessions_max_allowed=5 on 2026-08-16 while the
+      # account actually grants 2. Trusting it sized 9 shards for 7 real slots, and
+      # BrowserStack DISCARDS sessions past running+queued instead of waiting — so
+      # the surplus never runs and reports as passed. Cap to what we truly have.
+      MAX_PARALLEL: ${{ inputs.parallel || '2' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Verify BrowserStack credentials and parallel capacity
+        run: |
+          curl -s -u "$BS_AUTH" https://api-cloud.browserstack.com/app-automate/plan.json \
+            | tee plan.json | jq '.'
+          jq -e '.parallel_sessions_max_allowed > 0' plan.json > /dev/null \
+            || { echo "::error::BrowserStack credentials rejected or no parallel capacity"; exit 1; }
+          PLAN_PAR=$(jq -r '.parallel_sessions_max_allowed' plan.json)
+          PAR=$PLAN_PAR
+          if [ -n "${MAX_PARALLEL:-}" ] && [ "$PLAN_PAR" -gt "$MAX_PARALLEL" ]; then
+            echo "::notice::plan.json reports $PLAN_PAR parallel sessions; capping at $MAX_PARALLEL"
+            PAR=$MAX_PARALLEL
+          fi
+          echo "PARALLEL=$PAR" >> $GITHUB_ENV
+          echo "QUEUE_MAX=$(jq -r '.queued_sessions_max_allowed' plan.json)" >> $GITHUB_ENV
+
+      - name: Select Xcode
+        run: |
+          for v in 16.4 16.3 16.2 16.1 16.0; do
+            if [ -d "/Applications/Xcode_$v.app" ]; then
+              echo "DEVELOPER_DIR=/Applications/Xcode_$v.app/Contents/Developer" >> $GITHUB_ENV; break
+            fi
+          done
+
+      - name: Configure Xcode
+        run: |
+          if [ -n "${DEVELOPER_DIR:-}" ]; then sudo xcode-select -s "$DEVELOPER_DIR"; fi
+          sudo xcodebuild -license accept || true
+          xcodebuild -version
+
+      # Same generated inputs the simulator workflow creates.
+      - name: Generate envs.swift (CI)
+        run: |
+          cd Example
+          PUBLIC_KEY="${{ secrets.DEMOAPP_API_KEY || 'CI_DUMMY' }}"
+          printf 'import Foundation\n\npublic enum Envs: String {\n    case PUBLIC_KEY = "%s"\n    case PROXY_URL = "https://schema-validator-latest.onrender.com/logs"\n}\n' "$PUBLIC_KEY" > envs.swift
+
+      - name: Create placeholder GoogleService-Info.plist (CI)
+        run: |
+          cd Example
+          printf '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0">\n<dict>\n  <key>BUNDLE_ID</key>\n  <string>com.coralogix.DemoAppSwift</string>\n  <key>PROJECT_ID</key>\n  <string>placeholder-project</string>\n  <key>GOOGLE_APP_ID</key>\n  <string>1:000000000000:ios:0000000000000000000000</string>\n  <key>GCM_SENDER_ID</key>\n  <string>000000000000</string>\n  <key>API_KEY</key>\n  <string>AIzaSyAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA</string>\n  <key>IS_ANALYTICS_ENABLED</key>\n  <false/>\n</dict>\n</plist>\n' > GoogleService-Info.plist
+
+      - name: Patch Xcodeproj for objectVersion 70
+        run: |
+          for CONST in $(find /opt/homebrew /usr/local /Library/Ruby "$HOME/.gem" \
+              -path '*/gems/xcodeproj-*/lib/xcodeproj/constants.rb' 2>/dev/null); do
+            ruby -e '
+              f = ARGV[0]; s = File.read(f)
+              unless s =~ /^\s*70\s*=>/
+                s = s.sub("COMPATIBILITY_VERSION_BY_OBJECT_VERSION = {",
+                          "COMPATIBILITY_VERSION_BY_OBJECT_VERSION = {\n      70 => \x27Xcode 16.0\x27,")
+                File.write(f, s)
+              end' "$CONST" || true
+          done
+
+      # Caching: the first device build cost 217s with none of this in place.
+      # Keys are deliberately distinct from the simulator workflow's — these are
+      # iphoneos products and must never be restored into a simulator run.
+      # Shared key with ui-tests-fast.yml: package SOURCE checkouts (~535MB) are
+      # identical for simulator and device builds. The compiled products cache
+      # below keeps its own prefix — those binaries must never cross.
+      - name: Cache SPM checkouts (Firebase etc.)
+        uses: actions/cache@v4
+        with:
+          path: DerivedData/SourcePackages
+          key: spm-src-${{ runner.os }}-${{ hashFiles('Example/DemoApp.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+          restore-keys: spm-src-${{ runner.os }}-
+
+      # Device build products. Keyed on every input that can change the binary,
+      # so a source change still rebuilds while a workflow-only edit does not.
+      - name: Cache device build products
+        id: dd-cache
+        uses: actions/cache@v4
+        with:
+          path: DerivedData/Build
+          key: bs-dd-${{ runner.os }}-${{ hashFiles('Example/**/*.swift', 'Example/Podfile', 'Coralogix/Sources/**/*.swift', 'CoralogixInternal/Sources/**/*.swift', 'SessionReplay/Sources/**/*.swift') }}
+          # Deliberately no restore-keys. A partial restore hands Xcode another
+          # runner's DerivedData and an incremental build over absolute paths and
+          # stale module caches — a hit that doesn't match the sources would test
+          # the wrong binary. Exact match or clean build, nothing in between.
+
+      - name: Install CocoaPods dependencies
+        run: cd Example && pod install --no-repo-update
+
+      # -sdk iphoneos, not iphonesimulator. Unsigned: BrowserStack resigns
+      # uploads, confirmed working — both artifacts uploaded fine on the first run.
+      - name: Build for testing (real device)
+        run: |
+          set -o pipefail
+          cd Example
+          START=$(date +%s)
+          if ls ../DerivedData/Build/Products/*.xctestrun >/dev/null 2>&1; then
+            echo "cache hit — verifying products are complete"
+          fi
+          xcodebuild build-for-testing \
+            -workspace DemoApp.xcworkspace \
+            -scheme DemoAppSwift \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath ../DerivedData \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO DEVELOPMENT_TEAM="" \
+            IPHONEOS_DEPLOYMENT_TARGET="18.0" \
+            ARCHS=arm64 ONLY_ACTIVE_ARCH=NO \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            DEBUG_INFORMATION_FORMAT=dwarf \
+            -jobs $(sysctl -n hw.ncpu)
+          echo "BUILD_SECONDS=$(( $(date +%s) - START ))" >> $GITHUB_ENV
+
+      # Shards are derived from source (same rule as ui-tests-fast.yml) so there
+      # is no hand-maintained list to drift, then packed by MEASURED duration —
+      # equal test counts produced a 790s shard next to a 137s one last time.
+      - name: Plan duration-balanced shards
+        run: |
+          python3 - <<'PY'
+          import json, os, plistlib, re
+          from pathlib import Path
+
+          # Measured on run 31377282463 (seconds of pure execution, real device).
+          # Unknown/new tests fall back to the mean so a new test never silently
+          # lands in an under-weighted shard.
+          MEASURED = {
+              "SessionReplayLeakUITests/test_navigationTransition": 125.2,
+              "NetworkInstrumentationUITests/testAllNetworkInstrumentationWithSchemaValidation": 114.2,
+              "DemoAppUITests/testSchemaValidationFlow": 93.6,
+              "SessionReplayLeakUITests/test_listSlowScroll_1fps": 80.5,
+              "UserInteractionUITests/testResolveTargetName_tapLoginButton_customNameInBackend": 70.4,
+              "UserInteractionUITests/testAllInteractionEvents_areAttributedToActiveSession": 64.1,
+              "UserInteractionUITests/testAllUserInteractionEvents_combinedSchemaValidation": 63.4,
+              "UserInteractionUITests/testSwipeEvents_leftAndRight_areCorrectlyCaptured": 56.2,
+              "UserInteractionUITests/testShouldSendText_sensitiveLabel_noInnerTextInBackend": 53.4,
+              "UserInteractionUITests/testScrollEvents_downAndUp_areCorrectlyCaptured": 49.6,
+          }
+          DEFAULT = round(sum(MEASURED.values()) / len(MEASURED), 1)
+          GAP = 70.0      # tearDown+setUp between two tests in one session
+          INSTALL = 45.0  # device allocation + .ipa install per session
+
+          roots = {
+              "DemoAppUITests": "Example/DemoAppUITests",
+              "DemoAppSwiftUIUITests": "Example/DemoAppSwiftUIUITests",
+          }
+          tests = {}   # target -> [(Class/method, seconds)]
+          for target, root in roots.items():
+              for dp, _, files in os.walk(Path(root)):
+                  for fn in sorted(files):
+                      if not fn.endswith(".swift"):
+                          continue
+                      cls = None
+                      for line in (Path(dp) / fn).read_text(encoding="utf-8").splitlines():
+                          m = re.search(r"class\s+([A-Za-z0-9_]+)\s*:\s*[^\{]*XCTestCase", line)
+                          if m:
+                              cls = m.group(1)
+                          fm = re.search(r"func\s+(test[A-Za-z0-9_]*)\s*\(", line)
+                          if fm and cls:
+                              tid = f"{cls}/{fm.group(1)}"
+                              tests.setdefault(target, []).append((tid, MEASURED.get(tid, DEFAULT)))
+
+          # Saturate the paid capacity instead of hardcoding a count: every slot
+          # BrowserStack will hold for us (running + queued) should carry a shard.
+          # One session is spent on the second test target's build, so the UIKit
+          # target gets the rest. A hardcoded number silently starts rejecting
+          # shards the moment the suite grows past the queue limit.
+          par = int(os.environ.get("PARALLEL") or 2)
+          qmax = int(os.environ.get("QUEUE_MAX") or 5)
+          n_targets = len([t for t in tests if t])
+          want = int(os.environ["NUM_SHARDS"]) if os.environ.get("NUM_SHARDS") \
+              else max(1, par + qmax - max(0, n_targets - 1))
+          print(f"capacity: {par} running + {qmax} queued = {par + qmax} slots; "
+                f"{n_targets} targets -> {want} shards for the largest target")
+
+          products = Path("DerivedData/Build/Products")
+          runs = sorted(products.glob("*.xctestrun"))
+          if not runs:
+              raise SystemExit(f"no .xctestrun in {products}")
+          data = plistlib.loads(runs[0].read_bytes())
+          targets = [t for c in data.get("TestConfigurations", []) for t in c.get("TestTargets", [])]
+          pairs = {}
+          for t in targets:
+              name, app, runner = t.get("BlueprintName"), t.get("UITargetAppPath"), t.get("TestHostPath")
+              if name and app and runner:
+                  fix = lambda p: p.replace("__TESTROOT__", str(products))
+                  pairs[name] = {"app": fix(app), "runner": fix(runner)}
+
+          plan = {}
+          for target, items in tests.items():
+              # Longest-processing-time-first into k bins: the standard greedy
+              # that bounds the makespan, and it beats count-based splitting
+              # whenever durations differ by more than ~2x (they differ by 2.5x).
+              k = max(1, min(want, len(items)))
+              bins = [{"ids": [], "cost": 0.0} for _ in range(k)]
+              for tid, secs in sorted(items, key=lambda x: -x[1]):
+                  b = min(bins, key=lambda b: b["cost"])
+                  # Adding to a non-empty bin also buys a GAP; a new session buys
+                  # INSTALL instead. The packer must price both to be honest.
+                  b["cost"] += secs + (GAP if b["ids"] else INSTALL)
+                  b["ids"].append(tid)
+              mapping = [{"name": f"{target}-s{i+1}", "values": b["ids"], "cost": round(b["cost"])}
+                         for i, b in enumerate(bins) if b["ids"]]
+              plan[target] = {"mapping": mapping, **pairs.get(target, {})}
+
+          Path("bs-plan.json").write_text(json.dumps(plan, indent=1))
+
+          total = sum(m["cost"] for p in plan.values() for m in p["mapping"])
+          sessions = sum(len(p["mapping"]) for p in plan.values())
+          print(f"{sum(len(v) for v in tests.values())} tests -> {sessions} sessions, "
+                f"{total}s of work, {par} in parallel -> ideal wall ~{total // par}s")
+          for t, p in plan.items():
+              print(f"  {t}: {'OK' if 'app' in p else 'NO PRODUCTS'}")
+              for m in p["mapping"]:
+                  print(f"      [{m['name']}] {m['cost']:>4}s  {len(m['values'])} tests")
+          PY
+
+      - name: Package, upload, and run on BrowserStack
+        id: package
+        env:
+          # Resolved by the cache step BEFORE `pod install` runs. Re-deriving the
+          # hash here would not work: `pod install` writes ~43 Swift files into
+          # Example/Pods (untracked) and the Example/**/*.swift pattern matches
+          # them, so a hash taken after that step changes on every run.
+          BIN_KEY: ${{ steps.dd-cache.outputs.cache-primary-key }}
+        run: |
+          set -euo pipefail
+          RUN_START=$(date +%s)
+          : > build_ids.txt
+          WORK=$(mktemp -d)
+          URLDIR="$WORK/urls"
+          mkdir -p "$URLDIR"
+
+          # One row per DISTINCT artifact path rather than per target. The two
+          # UI-test targets drive different host apps (DemoAppSwift.app vs
+          # DemoAppSwiftUI.app) and each ships its own -Runner.app, so all four
+          # artifacts really are distinct here — but keying the work by path
+          # means a target pair that ever does share a bundle pays once, and it
+          # is what lets packaging and uploading fan out below.
+          python3 - <<'PY' > artifacts.txt
+          import json, os
+          plan = json.load(open("bs-plan.json"))
+          seen = set()
+          for target, p in plan.items():
+              for kind in ("app", "runner"):
+                  path = p.get(kind)
+                  if not path or path in seen:
+                      continue
+                  seen.add(path)
+                  # Slot name is derived from the basename so it stays stable
+                  # across runs — it is also the cache filename.
+                  print(f"{kind}-{os.path.basename(path)} {kind} "
+                        f"{'ipa' if kind == 'app' else 'zip'} {path}")
+          PY
+          echo "── artifacts"; cat artifacts.txt
+
+          # Dedupe server-side on BrowserStack rather than through an Actions
+          # cache. Each artifact is uploaded under a custom_id derived from the
+          # same source hash that keys the build-products cache, so asking
+          # "?custom_id=<hash>-<slot>" answers "is the binary built from exactly
+          # this tree already on BrowserStack, unexpired?" — the API is the one
+          # source of truth and there is nothing local to go stale.
+          #
+          # The previous Actions-cache approach could not work, two ways:
+          #   * the liveness check read $API/apps and $API/test-suites, which
+          #     return only the last 10 uploads with no pagination. Each run adds
+          #     4, so a still-valid URL (30-day expiry) dropped out of the window
+          #     after ~5 runs and was re-uploaded regardless.
+          #   * the save step was gated on `cache-hit != 'true'`, so an entry
+          #     that hit but yielded no usable URL could never repair itself: it
+          #     hit forever, reused nothing, and discarded each run's fresh URLs.
+          # Run 31937728903 shows the signature — cache hit, yet 4 fresh, 0
+          # reused. custom_id removes both failure modes and two workflow steps.
+          H=${BIN_KEY##*-}          # strip the bs-dd-<os>- prefix, keep the hash
+          H=${H:0:32}
+          PIDS=""
+          while read -r SLOT KIND EXT SRC; do
+            (
+              CID=$(printf 'bs-%s-%s' "$H" "$SLOT" | tr -c 'A-Za-z0-9_-' '-')
+              printf '%s' "$CID" > "$URLDIR/$SLOT.cid"
+              if [ "$KIND" = app ]; then EP=apps; else EP=test-suites; fi
+              # The custom_id in the query string is NOT trusted to have been
+              # applied. Verified against the live API on 2026-08-17:
+              # /apps?custom_id=bogus correctly returns [], but
+              # /test-suites?custom_id=bogus IGNORES the filter and returns the
+              # last 10 suites — so taking [0] would hand this slot some other
+              # target's runner. Re-check custom_id on the returned rows and let
+              # the server-side filter be a bandwidth optimisation only.
+              #
+              # An empty result means "never uploaded"; any other outcome (404,
+              # schema drift, network) also yields empty, which just falls
+              # through to uploading as before.
+              curl -s -u "$BS_AUTH" --get "$API/$EP" --data-urlencode "custom_id=$CID" \
+                | jq -r --arg cid "$CID" '(.apps // .test_suites // [])
+                         | map(select(.custom_id == $cid)) | .[0] // {}
+                         | (.app_url // .test_suite_url) // empty' \
+                > "$URLDIR/$SLOT.url" 2>/dev/null || : > "$URLDIR/$SLOT.url"
+            ) &
+            PIDS="$PIDS $!"
+          done < artifacts.txt
+          # Lookups are advisory: a failed probe must not fail the job, it must
+          # only mean "upload this one".
+          for p in $PIDS; do wait "$p" || true; done
+
+          : > todo.txt
+          REUSED=0
+          while read -r SLOT KIND EXT SRC; do
+            KNOWN=$(tr -d '[:space:]' < "$URLDIR/$SLOT.url" 2>/dev/null || true)
+            if [ -n "$KNOWN" ]; then
+              printf '%s' "$KNOWN" > "$URLDIR/$SLOT.url"
+              echo "  reuse    $SLOT -> $KNOWN"
+              REUSED=$(( REUSED + 1 ))
+            else
+              # Drop it so a failed upload can never leave an empty file behind
+              # for the submit loop to pick up as if it were a URL.
+              rm -f "$URLDIR/$SLOT.url"
+              echo "$SLOT $KIND $EXT $SRC" >> todo.txt
+              echo "  upload   $SLOT"
+            fi
+          done < artifacts.txt
+          FRESH=$(wc -l < todo.txt | tr -d ' ')
+
+          # Package everything still outstanding at once. These are independent
+          # zips of independent bundles, so the only reason they were serial was
+          # that the old loop was keyed by target.
+          PIDS=""
+          while read -r SLOT KIND EXT SRC; do
+            (
+              if [ "$KIND" = app ]; then
+                # App: .ipa (Payload/ layout). Test suite: plain zip of -Runner.app.
+                mkdir -p "$WORK/$SLOT/Payload"
+                cp -R "$SRC" "$WORK/$SLOT/Payload/"
+                ( cd "$WORK/$SLOT" && zip -qry "$WORK/$SLOT.$EXT" Payload )
+              else
+                ( cd "$(dirname "$SRC")" && zip --symlinks -qr "$WORK/$SLOT.$EXT" "$(basename "$SRC")" )
+              fi
+            ) &
+            PIDS="$PIDS $!"
+          done < todo.txt
+          # `wait` with no arguments always reports success, so each job is
+          # waited on by pid — otherwise a failed zip would upload nothing.
+          for p in $PIDS; do wait "$p" || { echo "::error::packaging failed"; exit 1; }; done
+
+          PIDS=""
+          while read -r SLOT KIND EXT SRC; do
+            (
+              if [ "$KIND" = app ]; then EP=app; FIELD=app_url; else EP=test-suite; FIELD=test_suite_url; fi
+              # custom_id is what makes the next run's lookup hit. Upload
+              # endpoints are singular (app/test-suite); the query endpoints
+              # above are plural (apps/test-suites).
+              RESP=$(curl -s -u "$BS_AUTH" -X POST "$API/$EP" \
+                -F "file=@$WORK/$SLOT.$EXT" \
+                -F "custom_id=$(cat "$URLDIR/$SLOT.cid")")
+              URL=$(printf '%s' "$RESP" | jq -r --arg f "$FIELD" '.[$f] // empty')
+              if [ -z "$URL" ]; then
+                # Severity is decided after the wait below, once we know whether
+                # this is an exhausted plan (skip) or a real fault (fail) — an
+                # ::error:: here would paint a green skip red.
+                printf '%s' "$RESP" > "$WORK/$SLOT.err"
+                echo "  upload rejected: $SLOT — $RESP"; exit 1
+              fi
+              printf '%s' "$URL" > "$URLDIR/$SLOT.url"
+            ) &
+            PIDS="$PIDS $!"
+          done < todo.txt
+
+          UPLOAD_FAILED=0
+          for p in $PIDS; do wait "$p" || UPLOAD_FAILED=1; done
+          if [ "$UPLOAD_FAILED" = 1 ]; then
+            # Every upload failure fails the job, including an exhausted plan.
+            # A green tick on a run that submitted nothing reads as "tests
+            # passed" — the run finishes in ~2 minutes with no device involved,
+            # and that is far more dangerous than a red X nobody can fix in code.
+            for e in "$WORK"/*.err; do
+              [ -f "$e" ] && echo "::error::upload failed for $(basename "$e" .err) — response: $(cat "$e")"
+            done
+            exit 1
+          fi
+
+          # Timed separately from the build submissions: this is the number the
+          # dedupe/parallel/cache work is meant to move, and folding it into
+          # SUBMIT_SECONDS would hide it behind BrowserStack's queueing.
+          echo "UPLOAD_SECONDS=$(( $(date +%s) - RUN_START ))" >> $GITHUB_ENV
+          echo "UPLOADS_FRESH=$FRESH" >> $GITHUB_ENV
+          echo "UPLOADS_REUSED=$REUSED" >> $GITHUB_ENV
+
+          DEVICES_JSON=$(python3 -c "import json,os;print(json.dumps([d.strip() for d in os.environ['DEVICES'].split(',') if d.strip()]))")
+
+          # Smallest target first: submitting the 1-test SwiftUI build after the
+          # 10-test one left it queued behind every UIKit session last run, so a
+          # 76s job reported 974s of wall clock.
+          for TARGET in $(jq -r 'to_entries | sort_by(.value.mapping | length) | .[].key' bs-plan.json); do
+            APP=$(jq -r --arg t "$TARGET" '.[$t].app // empty' bs-plan.json)
+            RUNNER=$(jq -r --arg t "$TARGET" '.[$t].runner // empty' bs-plan.json)
+            if [ -z "$APP" ] || [ -z "$RUNNER" ]; then
+              echo "::warning::no build products for $TARGET — skipping"; continue
+            fi
+
+            echo "── $TARGET"
+            APP_URL=$(cat "$URLDIR/app-$(basename "$APP").url" 2>/dev/null || true)
+            TEST_URL=$(cat "$URLDIR/runner-$(basename "$RUNNER").url" 2>/dev/null || true)
+            if [ -z "$APP_URL" ] || [ -z "$TEST_URL" ]; then
+              echo "::error::no upload URL for $TARGET (app='$APP_URL' test='$TEST_URL')"; exit 1
+            fi
+
+            PAYLOAD=$(jq -n \
+              --arg app "$APP_URL" --arg test "$TEST_URL" --arg name "$TARGET" \
+              --argjson devices "$DEVICES_JSON" \
+              --argjson mapping "$(jq -c --arg t "$TARGET" '[.[$t].mapping[] | {name, strategy:"only-testing", values}]' bs-plan.json)" \
+              '{app:$app, testSuite:$test, devices:$devices, buildName:$name,
+                deviceLogs:false, networkLogs:false,
+                shards:{numberOfShards:($mapping|length), deviceSelection:"any", mapping:$mapping}}')
+
+            RESP=$(curl -s -u "$BS_AUTH" -X POST "$API/build" \
+              -H 'Content-Type: application/json' -d "$PAYLOAD")
+            BUILD_ID=$(echo "$RESP" | jq -r '.build_id // empty')
+            if [ -z "$BUILD_ID" ]; then
+              # Echo the body: the API reports the actual rejection reason here,
+              # and swallowing it turns every failure into a guessing game.
+              echo "::error::could not start build for $TARGET — response: $RESP"
+              exit 1
+            fi
+            echo "$TARGET $BUILD_ID" >> build_ids.txt
+            echo "  $(jq -r --arg t "$TARGET" '.[$t].mapping | length' bs-plan.json) shards -> $BUILD_ID"
+          done
+
+          echo "SUBMIT_SECONDS=$(( $(date +%s) - RUN_START ))" >> $GITHUB_ENV
+
+      # No save step: BrowserStack itself now remembers each binary by custom_id,
+      # so there is nothing to persist between runs.
+
+      - name: Wait for results and summarise
+        run: |
+          set -uo pipefail
+          POLL_START=$(date +%s)
+          # A session cannot report a terminal status before BrowserStack has
+          # allocated a device and installed the .ipa (~45s measured), so every
+          # poll inside that window is a request that can only answer "running".
+          sleep 45
+          while read -r TARGET BUILD_ID; do
+            while :; do
+              curl -s -u "$BS_AUTH" "$API/builds/$BUILD_ID" > "res-$TARGET.json"
+              STATUS=$(jq -r '.status // "unknown"' "res-$TARGET.json")
+              case "$STATUS" in
+                running|queued) sleep 10 ;;
+                *) echo "$TARGET: $STATUS"; break ;;
+              esac
+            done
+          done < build_ids.txt
+          POLL_SECONDS=$(( $(date +%s) - POLL_START ))
+          TOTAL=$(( BUILD_SECONDS + SUBMIT_SECONDS + POLL_SECONDS ))
+
+          {
+            echo "### BrowserStack real devices vs GitHub simulators"
+            echo
+            echo "| phase | BrowserStack | simulators (last green) |"
+            echo "|---|---|---|"
+            echo "| build | ${BUILD_SECONDS}s (device, cached) | ~180s (simulator, cached) |"
+            echo "| package + upload | ${UPLOAD_SECONDS}s (${UPLOADS_FRESH} fresh, ${UPLOADS_REUSED} reused) | n/a |"
+            echo "| submit | $(( SUBMIT_SECONDS - UPLOAD_SECONDS ))s | n/a |"
+            echo "| test execution | ${POLL_SECONDS}s | ~540s (slowest of 4 shards) |"
+            echo "| **total** | **${TOTAL}s** | **~720s** |"
+            echo
+            echo "Devices: \`$DEVICES\` · parallel sessions: \`${PARALLEL}\` · shards: \`$NUM_SHARDS\`"
+            echo
+            echo "#### Per-device load (imbalance is the thing to watch)"
+            echo
+            echo "| target | device | sessions | session seconds |"
+            echo "|---|---|---|---|"
+            while read -r TARGET BUILD_ID; do
+              jq -r --arg t "$TARGET" '
+                (.devices // [])[]
+                | "| \($t) | \(.device // "-") | \((.sessions // []) | length) | \([(.sessions // [])[].duration] | add // 0)s |"
+              ' "res-$TARGET.json"
+            done < build_ids.txt
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # Raw payloads: the v2 schema drives the table above, so keep them for
+          # debugging when a field name shifts.
+          for f in res-*.json; do echo "── $f"; jq '.' "$f"; done
+
+          # Coverage guard, mirroring ui-tests-fast.yml's verify job. A build whose
+          # only-testing values match nothing runs zero tests and BrowserStack
+          # still reports "passed" — so status alone is not evidence the suite ran.
+          PLANNED=$(jq '[.[].mapping[].values | length] | add // 0' bs-plan.json)
+          EXECUTED=0
+          for f in res-*.json; do
+            n=$(jq '[(.devices // [])[] | (.sessions // [])[] | (.testcases.count // 0)] | add // 0' "$f")
+            EXECUTED=$(( EXECUTED + n ))
+          done
+          FAILURES=0
+          for f in res-*.json; do
+            n=$(jq '[(.devices // [])[] | (.sessions // [])[]
+                    | ((.testcases.status.failed // 0) + (.testcases.status.error // 0)
+                       + (.testcases.status.timedout // 0))] | add // 0' "$f")
+            FAILURES=$(( FAILURES + n ))
+          done
+
+          echo "planned=$PLANNED executed=$EXECUTED failures=$FAILURES"
+          {
+            echo
+            echo "#### Coverage guard"
+            echo
+            echo "| planned | executed | failures | verdict |"
+            echo "|---|---|---|---|"
+            echo "| $PLANNED | $EXECUTED | $FAILURES | $([ "$EXECUTED" -eq "$PLANNED" ] && [ "$FAILURES" -eq 0 ] && echo '✅ full coverage' || echo '❌ MISMATCH') |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          RC=0
+          while read -r TARGET BUILD_ID; do
+            S=$(jq -r '.status // "unknown"' "res-$TARGET.json")
+            [ "$S" = "passed" ] || { echo "::error::$TARGET finished as $S"; RC=1; }
+          done < build_ids.txt
+          if [ "$EXECUTED" -ne "$PLANNED" ]; then
+            echo "::error::coverage regression: $EXECUTED of $PLANNED tests ran"; RC=1
+          fi
+          if [ "$FAILURES" -ne 0 ]; then
+            echo "::error::$FAILURES test case(s) failed/errored/timed out"; RC=1
+          fi
+          [ "$RC" -eq 0 ] && echo "✅ all $PLANNED tests ran and passed on real devices"
+          exit $RC
+
+      - name: Upload raw BrowserStack payloads
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browserstack-results
+          path: |
+            bs-plan.json
+            artifacts.txt
+            build_ids.txt
+            res-*.json
+          if-no-files-found: ignore
