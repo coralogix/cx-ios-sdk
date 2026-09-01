@@ -625,7 +625,21 @@ public class SessionReplayModel {
         }
     }
 
+    /// Ships a frame the caller encoded itself, bypassing the capture and comparison pipeline.
+    ///
+    /// Reached only by a host passing `Keys.screenshotData` to `captureEvent`; nothing inside the
+    /// SDK does. The baseline still has to be released: this frame becomes the last one shipped,
+    /// so leaving the previous automatic frame's fingerprint in place would measure the next
+    /// automatic capture against a frame that is no longer what the replay last showed — and drop
+    /// it as a duplicate when the screen had in fact changed twice.
+    ///
+    /// Cleared rather than replaced with this frame's own fingerprint. Decoding host-supplied data
+    /// of unknown size on the capture path buys nothing: rendered by someone else, at their scale
+    /// and quality, its fingerprint would not match our own capture of the same screen anyway, so
+    /// the next frame ships either way. This is the file's standing trade — shipping one frame
+    /// twice beats losing one.
     internal func captureManual(properties: [String: Any]?, screenshotData: Data) {
+        screenshotDataQueue.sync { _previousFingerprint = nil }
         saveScreenshotToFileSystem(screenshotData: screenshotData, properties: properties)
     }
 

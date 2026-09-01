@@ -246,6 +246,33 @@ final class CaptureCompletionOutcomeTests: XCTestCase {
         XCTAssertEqual(failing.savedCount, 1, "The retry must reach the save path")
     }
 
+    /// A host-encoded frame ships without going through the comparison, so it has to release the
+    /// baseline. Otherwise the next automatic capture is measured against the frame before it —
+    /// and an unchanged-looking screen is dropped as a duplicate when the replay has in fact
+    /// moved on and come back.
+    func testCaptureManual_releasesTheDeduplicationBaseline() {
+        let image = solidImage(red: 1.0)
+
+        // An automatic frame ships and sets the baseline.
+        let (first, savedAfterFirst) = encode(image)
+        guard case .success = first else {
+            XCTFail("The first frame must ship, got \(first)")
+            return
+        }
+        XCTAssertEqual(savedAfterFirst, 1)
+
+        // A host supplies its own encoded frame. It ships, and is now the last frame shown.
+        model.captureManual(properties: nil, screenshotData: Data("host frame".utf8))
+
+        // The same pixels as the first frame. The screen has changed twice since that frame, so
+        // this has to ship — comparing it against the pre-manual baseline would drop it.
+        let (third, _) = encode(image)
+        guard case .success = third else {
+            XCTFail("An automatic capture after a manual one must not be compared against the frame before it, got \(third)")
+            return
+        }
+    }
+
     // MARK: - A manual capture bypasses deduplication
 
     /// `CoralogixRum.captureEvent()` is public, returns void, and both demo apps drive it. Tapping
