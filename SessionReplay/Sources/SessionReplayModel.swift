@@ -207,7 +207,7 @@ public class SessionReplayModel {
     /// this branch was one of them being absent. The reservation is identified by the page and
     /// segment index the caller put in the properties, so returning it cannot roll back a newer
     /// capture's slot and make the next allocation overwrite a frame that already shipped.
-    internal func dropCapture(properties: [String: Any]?, completion: CaptureEventCompletion?) {
+    internal static func dropCapture(properties: [String: Any]?, completion: CaptureEventCompletion?) {
         if let page = properties?[Keys.page.rawValue] as? Int,
            let segmentIndex = properties?[Keys.segmentIndex.rawValue] as? Int {
             SdkManager.shared.getCoralogixSdk()?.revertScreenshotCounter(page: page,
@@ -231,7 +231,7 @@ public class SessionReplayModel {
             // startRecording fires the first periodic capture before update(sessionId:) may have
             // landed, so this is a routine early-session exit — and it burned a slot every time.
             Log.e("[SessionReplayModel] Invalid sessionId")
-            dropCapture(properties: properties, completion: nil)
+            Self.dropCapture(properties: properties, completion: nil)
             completion?(.failure(.invalidSessionId))
             return .failure(.invalidSessionId)
         }
@@ -274,7 +274,7 @@ public class SessionReplayModel {
         // Native path: synchronous UIView walk on main thread, encode off-main.
         guard let frame = prepareCapturedFrameOnMain(properties: properties),
               let options = sessionReplayOptions else {
-            dropCapture(properties: properties, completion: nil)
+            Self.dropCapture(properties: properties, completion: nil)
             completion?(.failure(.captureFailed))
             return .failure(.captureFailed)
         }
@@ -306,8 +306,12 @@ public class SessionReplayModel {
         let frameId = nextCaptureFrameId()
         let isClickFrame = getClickPoint(from: properties) != nil
 
-        let drop: () -> Void = { [weak self] in
-            self?.dropCapture(properties: properties, completion: completion)
+        let isTap = isTapCapture(properties: properties)
+
+        let drop: () -> Void = {
+            // Deliberately not weak: the watchdog below has to be able to close the event out
+            // after the model is gone, and dropCapture needs nothing from the instance.
+            Self.dropCapture(properties: properties, completion: completion)
         }
 
         // Locate the FlutterView on screen synchronously before yielding.
@@ -394,8 +398,8 @@ public class SessionReplayModel {
         //
         // isClick/tapTimestampMs let Dart hold a tap capture for the next committed frame, or
         // answer nil when the tap is already too stale to draw honestly.
-        provider("implicit_view", frameId, isClickFrame,
-                 tapTimestampMilliseconds(from: properties, isClick: isClickFrame)) { bitmap in
+        provider("implicit_view", frameId, isTap,
+                 tapTimestampMilliseconds(from: properties, isClick: isTap)) { bitmap in
             guard delivery.claim() else {
                 Log.w("[SessionReplayModel] flutterViewBitmapProvider answered twice for frameId \(frameId) — ignoring")
                 return
@@ -411,6 +415,17 @@ public class SessionReplayModel {
             }
             handleDelivery(bitmap)
         }
+    }
+
+    /// Whether this capture was triggered by a tap, as opposed to a scroll or a swipe.
+    ///
+    /// Distinct from `isClickFrame`, which asks "does this capture carry a touch position" — true
+    /// of a scroll and a swipe too, since every interaction records coordinates. What the Flutter
+    /// provider is told has to be narrower: hold this frame for a tap and judge it against the
+    /// tap's age. A scroll has no single moment to be late for, so applying the One-Frame Rule
+    /// and a staleness budget to one would drop frames for a gesture that never asked for either.
+    internal func isTapCapture(properties: [String: Any]?) -> Bool {
+        (properties?[Keys.eventName.rawValue] as? String) == InteractionEventName.click.rawValue
     }
 
     /// Epoch-milliseconds timestamp of the tap that triggered this capture, so Dart can drop a
@@ -547,17 +562,12 @@ public class SessionReplayModel {
         encodingQueue.async { [weak self] in
             guard let self = self else {
                 // The model went away mid-encode; the slot still has to go back.
-                if let page = properties?[Keys.page.rawValue] as? Int,
-                   let segmentIndex = properties?[Keys.segmentIndex.rawValue] as? Int {
-                    SdkManager.shared.getCoralogixSdk()?.revertScreenshotCounter(page: page,
-                                                                                segmentIndex: segmentIndex)
-                }
-                completion?(.failure(.captureFailed))
+                Self.dropCapture(properties: properties, completion: completion)
                 return
             }
 
             let drop: () -> Void = {
-                self.dropCapture(properties: properties, completion: completion)
+                Self.dropCapture(properties: properties, completion: completion)
             }
 
             // A manual capture is exempt from deduplication: the host asked for this frame, and

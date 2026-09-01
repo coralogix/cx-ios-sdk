@@ -705,9 +705,13 @@ class MockSessionReplayModel: SessionReplayModel {
         return .success
     }
     
+    /// Properties as `startCapture` handed them over, so a test can assert what it added.
+    var captureImageProperties: [String: Any]?
+
     override func captureImage(properties: [String : Any]? = nil,
                                completion: CaptureEventCompletion? = nil) -> Result<Void, CaptureEventError> {
         captureImageCallCount += 1
+        captureImageProperties = properties
 
         captureCalled = true
         capturedData = "mock image".data(using: .utf8)

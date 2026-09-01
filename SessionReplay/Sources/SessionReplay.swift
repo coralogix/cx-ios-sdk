@@ -288,6 +288,14 @@ public class SessionReplay: SessionReplayInterface {
         var updatedProperties = properties ?? [:]
         updatedProperties[Keys.timestamp.rawValue] = Date().timeIntervalSince1970
 
+        // The SDK's own instrumentation always reserves a screenshot slot before it captures, so
+        // a capture arriving without one came from the host asking for a frame directly — this
+        // API, or the plugin bridge. Mark it manual so deduplication cannot answer an explicit
+        // request with silence: the call returns void, and there would be nothing to tell.
+        if updatedProperties[Keys.segmentIndex.rawValue] == nil {
+            updatedProperties[Keys.isManual.rawValue] = true
+        }
+
         if sessionReplayOptions.recordingType == .image {
             guard sessionReplayModel.isRecording else {
                 Log.e("[SessionReplay] Session Replay not recording ...")

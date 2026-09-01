@@ -255,6 +255,49 @@ class SessionReplayTests: XCTestCase {
     }
 }
 
+extension SessionReplayTests {
+
+    /// A host calling `captureEvent` asked for this frame. Deduplication answering that with
+    /// silence leaves a void-returning public API with nothing to report, so the capture is
+    /// marked manual and exempted — the same exemption a tap frame gets.
+    func testCaptureEventFromTheHostIsMarkedManualSoItIsNotDeduplicated() throws {
+        SdkManager.shared.register(coralogixInterface: MockCoralogix())
+        let options = SessionReplayOptions(recordingType: .image)
+        SessionReplay.initializeWithOptions(sessionReplayOptions: options)
+        let model = MockSessionReplayModel(sessionReplayOptions: options)
+        model.isRecording = true
+        SessionReplay.shared.update(sessionReplayModel: model)
+
+        _ = SessionReplay.shared.captureEvent(properties: [Keys.event.rawValue: "screenshot"])
+
+        let properties = try XCTUnwrap(model.captureImageProperties)
+        XCTAssertEqual(properties[Keys.isManual.rawValue] as? Bool, true,
+                       "a capture the host requested directly must be exempt from deduplication")
+    }
+
+    /// The SDK's own instrumentation reserves a slot first, so it must not pick up the exemption —
+    /// otherwise every periodic tick bypasses deduplication and the replay ships identical frames.
+    func testInstrumentationCaptureIsNotMarkedManual() throws {
+        SdkManager.shared.register(coralogixInterface: MockCoralogix())
+        let options = SessionReplayOptions(recordingType: .image)
+        SessionReplay.initializeWithOptions(sessionReplayOptions: options)
+        let model = MockSessionReplayModel(sessionReplayOptions: options)
+        model.isRecording = true
+        SessionReplay.shared.update(sessionReplayModel: model)
+
+        // What recordScreenshotForSpan passes: a reserved page and segment index.
+        _ = SessionReplay.shared.captureEvent(properties: [
+            Keys.page.rawValue: 0,
+            Keys.segmentIndex.rawValue: 4,
+            Keys.screenshotId.rawValue: "sid"
+        ])
+
+        let properties = try XCTUnwrap(model.captureImageProperties)
+        XCTAssertNil(properties[Keys.isManual.rawValue],
+                     "a capture the SDK originated must stay subject to deduplication")
+    }
+}
+
 class MockSessionReplayModel3: SessionReplayModel {
     var updatedSessionId: String?
 

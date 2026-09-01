@@ -247,6 +247,34 @@ final class FlutterViewDropOnNilTests: XCTestCase {
         XCTAssertEqual(admittedCount, 1, "Exactly one concurrent delivery may be admitted")
     }
 
+    // MARK: - Only a tap is reported to the provider as one
+
+    func testIsTapCapture_isTrueForAClick() {
+        let properties: [String: Any] = [Keys.eventName.rawValue: InteractionEventName.click.rawValue]
+        XCTAssertTrue(model.isTapCapture(properties: properties))
+    }
+
+    /// Every interaction records coordinates, so a position-derived flag calls a scroll a tap.
+    /// Telling Dart that makes it hold the frame for a committed tap and judge it against a tap
+    /// age, for a gesture with no single moment to be late for.
+    func testIsTapCapture_isFalseForAScrollOrSwipe() {
+        for gesture in [InteractionEventName.scroll, .swipe] {
+            let properties: [String: Any] = [
+                Keys.eventName.rawValue: gesture.rawValue,
+                // Present exactly as they are for a tap — this is what made the flag wrong.
+                Keys.positionX.rawValue: 10.0,
+                Keys.positionY.rawValue: 20.0
+            ]
+            XCTAssertFalse(model.isTapCapture(properties: properties),
+                           "\(gesture.rawValue) must not be reported to the provider as a tap")
+        }
+    }
+
+    func testIsTapCapture_isFalseForAPeriodicCaptureWithNoInteraction() {
+        XCTAssertFalse(model.isTapCapture(properties: nil))
+        XCTAssertFalse(model.isTapCapture(properties: [:]))
+    }
+
     // MARK: - Tap context handed to the provider
 
     func testTapTimestamp_isConvertedToMilliseconds() throws {
