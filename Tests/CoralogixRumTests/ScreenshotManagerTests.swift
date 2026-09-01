@@ -60,6 +60,9 @@ class ScreenshotManagerTests: XCTestCase {
         XCTAssertEqual(segments, [1,2,1,2,1,2,1])
     }
     
+    // Drives revertLocked through the deprecated unconditional overload, which is the
+    // only way to step the counter back repeatedly without matching a slot each time.
+    @available(*, deprecated)
     func testRevertScreenshotCounterStepsBackToPageZero() {
         let manager = ScreenshotManager(maxScreenShotsPerPage: 2)
         _ = manager.nextScreenshotLocation // (page 0, 1)
@@ -74,6 +77,9 @@ class ScreenshotManagerTests: XCTestCase {
         XCTAssertEqual(manager.screenshotCount, 2)
     }
 
+    // Drives revertLocked through the deprecated unconditional overload, which is the
+    // only way to step the counter back repeatedly without matching a slot each time.
+    @available(*, deprecated)
     func testRevertingEveryAllocationReturnsToTheFirstLocation() {
         let manager = ScreenshotManager(maxScreenShotsPerPage: 2)
         for _ in 0..<5 { _ = manager.nextScreenshotLocation } // walks to (page 2, 1)

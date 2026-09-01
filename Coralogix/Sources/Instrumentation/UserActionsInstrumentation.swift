@@ -176,6 +176,13 @@ extension CoralogixRum {
         if let v = dictionary[Keys.attributes.rawValue] { result[Keys.attributes.rawValue] = Self.attributesWithRoundedCoordinates(v, depth: 0, maxDepth: 10) }
         if let v = dictionary[Keys.positionX.rawValue] { result[Keys.positionX.rawValue] = Self.roundCoordinateForRum(v) }
         if let v = dictionary[Keys.positionY.rawValue] { result[Keys.positionY.rawValue] = Self.roundCoordinateForRum(v) }
+        // The tap's own time, in epoch seconds. Forwarded verbatim — it reaches the capture, not
+        // the span, and tells a Flutter bitmap provider how old the tap already is so Dart can
+        // decline to draw one it is too late to represent. Without it a bridge-reported tap asks
+        // Dart to hold a frame with no age to judge it against, and the capture waits out its
+        // watchdog. Nothing is synthesised when the bridge sends none: no value means no
+        // staleness check, which beats guessing at one.
+        if let v = dictionary[Keys.tapTimestamp.rawValue] { result[Keys.tapTimestamp.rawValue] = v }
 
         // scroll_direction: include only when present and a known ScrollDirection value.
         let scrollKey = Keys.scrollDirection.rawValue

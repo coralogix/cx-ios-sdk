@@ -141,6 +141,22 @@ extension CoralogixRum {
                                                       customAttributes: customAttributes,
                                                       labels: labels)
         }
+        // A crash report may precede process death — don't leave the event in the batch queue
+        // (up to 2s) where it would die with the process. Sequenced on the span actually having
+        // ended, because a live crash now waits for its screenshot: flushing before that would
+        // miss the very event it was called for. If the process does die first, the copy
+        // persisted above is re-sent next launch, which is the same net as a failed flush.
+        // Remove only THIS event, and only once ITS OWN upload is confirmed: the store may hold
+        // an unconfirmed backlog from a previous launch, and an earlier crash's success must not
+        // delete a later crash that failed.
+        let flushCrash: (() -> Void)? = isCrash ? { [weak self] in
+            self?.flush { [weak self] in
+                guard let self, let persistedEventId,
+                      self.coralogixExporter?.didConfirmCrashUpload(id: persistedEventId) == true else { return }
+                self.crashEventStore.remove(ids: [persistedEventId])
+            }
+        } : nil
+
         self.writeError(
             domain: "",
             message: message,
@@ -152,20 +168,9 @@ extension CoralogixRum {
             stackTraceType: stackTraceType,
             customAttributes: customAttributes,
             labels: labels,
-            crashEventId: persistedEventId
+            crashEventId: persistedEventId,
+            then: flushCrash
         )
-        if isCrash {
-            // A crash report usually precedes process death — don't leave the event
-            // in the batch queue (up to 2s) where it would die with the process.
-            // Remove only THIS event, and only once ITS OWN upload is confirmed:
-            // the store may hold an unconfirmed backlog from a previous launch, and
-            // an earlier crash's success must not delete a later crash that failed.
-            self.flush { [weak self] in
-                guard let self, let persistedEventId,
-                      self.coralogixExporter?.didConfirmCrashUpload(id: persistedEventId) == true else { return }
-                self.crashEventStore.remove(ids: [persistedEventId])
-            }
-        }
     }
 
     private func persistCrashEvent(message: String,
@@ -301,6 +306,9 @@ extension CoralogixRum {
         span.setAttribute(key: Keys.page.rawValue,         value: location.page)
     }
     
+    /// `then` fires once the span has ended, which for a live error is after its screenshot
+    /// resolves. The crash force-flush is sequenced on it: a span that ends after the flush
+    /// misses the batch it was written for.
     private func writeError(domain: String, code: Int? = nil, message: String,
                             userInfo: [String: Any]? = nil,
                             stackTraceJson: String? = nil,
@@ -312,7 +320,8 @@ extension CoralogixRum {
                             customAttributes: [String: Any]? = nil,
                             labels: [String: Any]? = nil,
                             crashTimestamp: String? = nil,
-                            crashEventId: String? = nil) {
+                            crashEventId: String? = nil,
+                            then: (() -> Void)? = nil) {
         // `crashTimestamp` is set only for events recovered from CrashEventStore on
         // the launch after a crash. Anchor those to the original crash time and to
         // the session that was live when the process died — the same attribution
@@ -359,15 +368,22 @@ extension CoralogixRum {
             } else {
                 span.end()
             }
+            then?()
         }
 
-        // A crash span does not wait for a capture. `reportErrorInternal` force-flushes the
-        // moment this returns, precisely because the process is about to die, and a span that
-        // ends later than that flush misses the batch it was written for — the crash would then
-        // surface only on the next launch. Nor is there time for the round-trip: on the Flutter
-        // path Dart is usually already gone, so the answer never arrives at all. Close it now
-        // and carry no screenshot rather than a promise nothing will keep.
-        guard !isCrash else {
+        // A crash replayed from CrashEventStore takes no screenshot. It is being re-emitted on
+        // the launch *after* the crash, so the only frame available shows this launch's screen —
+        // attached to an event dated to the previous session, it would be actively misleading.
+        // `crashTimestamp`, which is what binds `recoveredCrashDate`, is set on exactly that
+        // path and nothing else.
+        //
+        // `isCrash` alone is not that test. It is a caller-supplied flag on a public entry
+        // point, and the documented hybrid path — an RN or Flutter host reporting a JS or Dart
+        // fatal — passes it while the native process carries on. Skipping there would throw away
+        // the frame from the moment of failure, which for a hybrid fatal is the most useful
+        // artifact there is. The force-flush this guard once existed to protect is sequenced on
+        // `then` instead, so the span is in the batch before the flush runs either way.
+        guard recoveredCrashDate == nil else {
             endSpan()
             return
         }

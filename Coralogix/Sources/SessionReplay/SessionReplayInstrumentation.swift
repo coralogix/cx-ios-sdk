@@ -132,6 +132,7 @@ extension CoralogixRum: CoralogixInterface {
         return screenshotManager.nextScreenshotLocation.toProperties()
     }
     
+    @available(*, deprecated, message: "Use revertScreenshotCounter(page:segmentIndex:).")
     public func revertScreenshotCounter() {
         self.coralogixExporter?.getScreenshotManager().revertScreenshotCounter()
     }

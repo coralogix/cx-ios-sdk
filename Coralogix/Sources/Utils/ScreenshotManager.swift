@@ -67,8 +67,10 @@ public class ScreenshotManager {
         }
     }
 
-    /// Unconditional revert, kept for callers that do not know which slot they are returning.
-    /// Prefer `revertScreenshotCounter(for:)`, which cannot roll back someone else's.
+    /// Unconditional revert. No caller inside the SDK reaches this any more — every capture
+    /// knows the page and segment index it reserved — and its only remaining effect is the
+    /// counter collision `revertScreenshotCounter(for:)` exists to prevent.
+    @available(*, deprecated, message: "Use revertScreenshotCounter(for:), which cannot roll back a reservation a newer capture already took.")
     public func revertScreenshotCounter() {
         queue.sync(flags: .barrier) {
             revertLocked()

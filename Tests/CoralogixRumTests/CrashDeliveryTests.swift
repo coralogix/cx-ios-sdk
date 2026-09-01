@@ -416,6 +416,53 @@ final class CrashDeliveryTests: XCTestCase {
                       "the stored copy must be cleared after the upload is confirmed")
     }
 
+    // MARK: - Screenshots on the crash path
+
+    /// `isCrash` is a caller-supplied flag on a public entry point, and the documented hybrid
+    /// path — an RN or Flutter host reporting a JS or Dart fatal — passes it while the native
+    /// process carries on. The frame from the moment of failure is the most useful artifact
+    /// there is for those, so a live crash report captures one like any other error.
+    func test_reportCrash_live_capturesAScreenshot() {
+        coralogixRum = CoralogixRum(options: makeSamplingOptions(sampleRate: 100, exclude: []))
+        coralogixRum.coralogixExporter?.spanUploader = StubUploader()
+        coralogixRum.crashEventStore = makeTempStore()
+        let mockSessionReplay = MockSessionReplay()
+        SdkManager.shared.register(sessionReplayInterface: mockSessionReplay)
+        defer { SdkManager.shared.register(sessionReplayInterface: nil) }
+
+        coralogixRum.reportError(message: "fatal-js-error",
+                                 stackTrace: [],
+                                 errorType: "Error",
+                                 isCrash: true)
+
+        XCTAssertTrue(waitUntil { mockSessionReplay.captureEventCalledWith != nil },
+                      "a live crash report must capture the screen it crashed on")
+    }
+
+    /// A crash replayed from the store is re-emitted on the launch *after* the crash, so the only
+    /// frame available shows this launch's screen. Attached to an event dated to the previous
+    /// session it would be actively misleading, so this path alone takes no screenshot.
+    func test_resendStoredCrashEvents_capturesNoScreenshot() {
+        coralogixRum = CoralogixRum(options: makeSamplingOptions(sampleRate: 100, exclude: []))
+        coralogixRum.coralogixExporter?.spanUploader = StubUploader()
+        let store = makeTempStore()
+        coralogixRum.crashEventStore = store
+        store.append([
+            Keys.errorMessage.rawValue: "crash-from-previous-launch",
+            Keys.errorType.rawValue: "Error",
+            Keys.crashTimestamp.rawValue: "1700000000000"
+        ])
+        let mockSessionReplay = MockSessionReplay()
+        SdkManager.shared.register(sessionReplayInterface: mockSessionReplay)
+        defer { SdkManager.shared.register(sessionReplayInterface: nil) }
+
+        coralogixRum.resendPendingStoredCrashEvents()
+        coralogixRum.completeCrashRecovery()
+
+        XCTAssertNil(mockSessionReplay.captureEventCalledWith,
+                     "a replayed crash must not attach this launch's screen to last session's crash")
+    }
+
     func test_resendStoredCrashEvents_uploadsWithOriginalTimestamp_andClearsOnConfirm() throws {
         coralogixRum = CoralogixRum(options: makeSamplingOptions(sampleRate: 100, exclude: []))
         let uploader = StubUploader()

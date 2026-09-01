@@ -275,6 +275,51 @@ final class HybridAPITests: XCTestCase {
         XCTAssertEqual(attrs?["y"] as? Double, 466.33)
     }
 
+    /// The bridge-reported tap is the one whose span carries the screenshot, so it is the one
+    /// that has to hand a Flutter bitmap provider the tap's age. Without the timestamp the
+    /// provider is told "this is a tap, hold it for the next committed frame" with nothing to
+    /// judge staleness against, and the capture waits out its watchdog instead.
+    func testValidateHybridInteraction_forwardsTheTapTimestampForTheCaptureToRead() {
+        let dict: [String: Any] = [
+            Keys.eventName.rawValue: "click",
+            Keys.targetElement.rawValue: "Card",
+            Keys.tapTimestamp.rawValue: 1_767_225_600.5
+        ]
+
+        let result = coralogixRum.validateHybridInteraction(dict)
+
+        XCTAssertEqual(result?[Keys.tapTimestamp.rawValue] as? TimeInterval, 1_767_225_600.5,
+                       "the tap's own time must survive the allowlist")
+    }
+
+    /// Whatever numeric shape the bridge boxes it in. A JSON channel hands over an integer as
+    /// readily as a double, and the capture normalises both.
+    func testValidateHybridInteraction_forwardsAnIntegerTapTimestamp() {
+        let dict: [String: Any] = [
+            Keys.eventName.rawValue: "click",
+            Keys.targetElement.rawValue: "Card",
+            Keys.tapTimestamp.rawValue: 1_767_225_600
+        ]
+
+        let result = coralogixRum.validateHybridInteraction(dict)
+
+        XCTAssertEqual(result?[Keys.tapTimestamp.rawValue] as? Int, 1_767_225_600)
+    }
+
+    /// Nothing is synthesised when the bridge sends none: an absent value means no staleness
+    /// check, which beats dating the tap to whenever the bridge call happened to arrive.
+    func testValidateHybridInteraction_synthesisesNoTapTimestamp() {
+        let dict: [String: Any] = [
+            Keys.eventName.rawValue: "click",
+            Keys.targetElement.rawValue: "Card"
+        ]
+
+        let result = coralogixRum.validateHybridInteraction(dict)
+
+        XCTAssertNotNil(result)
+        XCTAssertNil(result?[Keys.tapTimestamp.rawValue])
+    }
+
     // MARK: - validateHybridInteraction: edge cases
 
     func testValidateHybridInteraction_eventNameWrongType_returnsNil() {

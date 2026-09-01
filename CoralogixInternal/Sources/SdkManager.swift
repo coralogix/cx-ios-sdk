@@ -35,7 +35,9 @@ public protocol CoralogixInterface {
     /// Used by SessionReplay when captureEvent is called without properties.
     func getNextScreenshotLocationProperties() -> [String: Any]
     
-    /// Reverts the screenshot counter when a capture is skipped.
+    /// Reverts the screenshot counter when a capture is skipped, without checking which slot is
+    /// being returned. Unused — every capture path knows its own reservation.
+    @available(*, deprecated, message: "Use revertScreenshotCounter(page:segmentIndex:).")
     func revertScreenshotCounter()
 
     /// Returns the reservation a capture was given, identified by page and segment index.
