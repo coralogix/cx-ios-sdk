@@ -22,6 +22,18 @@ enum CrashDeliveryPolicy {
     /// has no equivalent — it is only ever sent on a later launch — so an absent
     /// sidecar there means nothing has been sent yet.
     static let crashTimeAttempt = 1
+
+    /// Reads a count off disk into the range the cap logic can reason about.
+    ///
+    /// These files are ours, so a negative count or one past the cap means the file was
+    /// truncated or edited. Such a count is treated as fully spent rather than allowed to
+    /// grant extra retries — a negative value would otherwise take many launches to reach
+    /// the cap, silently restoring the unbounded re-sending this cap exists to stop. It
+    /// also keeps the caller's `+ 1` away from an overflow trap, which would crash the
+    /// host app during startup.
+    static func attemptsSpent(fromPersisted count: Int) -> Int {
+        return (0...maxDeliveryAttempts).contains(count) ? count : maxDeliveryAttempts
+    }
 }
 
 /// Delivery-attempt count for the pending PLCrashReporter report, which carries no
@@ -77,7 +89,7 @@ final class CrashReportAttemptCounter {
               let attempts = record[Self.attemptsKey] as? Int else {
             return 0
         }
-        return attempts
+        return CrashDeliveryPolicy.attemptsSpent(fromPersisted: attempts)
     }
 
     private func writeLocked(identity: String, attempts: Int) -> Bool {

@@ -239,6 +239,16 @@ final class CrashDeliveryTests: XCTestCase {
         try data.write(to: folder.appendingPathComponent("pending_crash_events.json"))
     }
 
+    /// Writes the PLCrashReporter attempt sidecar directly, to stand in for a file left by
+    /// an earlier launch — or a truncated or edited one.
+    private func seedAttemptSidecar(at directory: URL, identity: String, attempts: Int) throws {
+        let folder = directory.appendingPathComponent("CoralogixRum", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let record: [String: Any] = ["report_identity": identity, "delivery_attempts": attempts]
+        let data = try JSONSerialization.data(withJSONObject: record)
+        try data.write(to: folder.appendingPathComponent("crash_report_attempts.json"))
+    }
+
     /// Leaves `url` readable but not writable — a disk that still hands back what it holds
     /// but has stopped accepting writes.
     private func makeReadOnly(_ url: URL) throws {
@@ -768,5 +778,44 @@ final class CrashDeliveryTests: XCTestCase {
 
         XCTAssertFalse(counter.registerAttempt(identity: "1700000000000"),
                        "an attempt that leaves no durable trace would be repeated on every launch")
+    }
+
+    // A count read off disk is untrusted input: these files live in the app container and
+    // a truncated or edited one can hold anything JSON can express. `Int.max` would trap
+    // on `+ 1` and take the host app down during startup, and a negative count would take
+    // many launches to reach the cap — silently restoring the unbounded re-sending the cap
+    // exists to stop.
+
+    func test_claimEventsForResend_treatsAnUnusableCountAsSpent_ratherThanTrappingOrGrantingRetries() throws {
+        for unusable in [Int.max, Int.min, -1, -5000, CrashDeliveryPolicy.maxDeliveryAttempts + 1] {
+            let directory = makeTempDirectory()
+            try seedStoreFile(at: directory, events: [
+                [Keys.errorMessage.rawValue: "tampered", CrashEventStore.attemptCountKey: unusable]
+            ])
+            let store = CrashEventStore(directory: directory)
+
+            XCTAssertTrue(store.claimEventsForResend().isEmpty,
+                          "a count of \(unusable) must read as fully spent, not as attempts remaining")
+            XCTAssertTrue(store.loadAll().isEmpty,
+                          "and the event must leave the disk rather than be reconsidered next launch")
+        }
+    }
+
+    func test_crashReportAttemptCounter_treatsAnUnusableCountAsSpent() throws {
+        for unusable in [Int.max, Int.min, -1, CrashDeliveryPolicy.maxDeliveryAttempts + 1] {
+            let directory = makeTempDirectory()
+            let identity = "1700000000000"
+            try seedAttemptSidecar(at: directory, identity: identity, attempts: unusable)
+
+            XCTAssertFalse(CrashReportAttemptCounter(directory: directory).registerAttempt(identity: identity),
+                           "a sidecar count of \(unusable) must read as fully spent")
+        }
+    }
+
+    func test_attemptsSpent_passesThroughEveryCountInRange() {
+        for valid in 0...CrashDeliveryPolicy.maxDeliveryAttempts {
+            XCTAssertEqual(CrashDeliveryPolicy.attemptsSpent(fromPersisted: valid), valid,
+                           "clamping must not disturb a count the SDK itself wrote")
+        }
     }
 }

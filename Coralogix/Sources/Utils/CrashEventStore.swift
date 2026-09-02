@@ -82,7 +82,12 @@ final class CrashEventStore {
 
         var claimed = [[String: Any]]()
         for var event in stored {
-            let spent = event[Self.attemptCountKey] as? Int ?? CrashDeliveryPolicy.crashTimeAttempt
+            // An absent count is a build that predates the counter, whose crash-time send
+            // is the one attempt it is known to have spent. A present but unusable count
+            // is clamped rather than trusted.
+            let spent = (event[Self.attemptCountKey] as? Int)
+                .map(CrashDeliveryPolicy.attemptsSpent(fromPersisted:))
+                ?? CrashDeliveryPolicy.crashTimeAttempt
             let attempts = spent + 1
             guard attempts <= CrashDeliveryPolicy.maxDeliveryAttempts else {
                 Log.w("[CrashEventStore] crash event reached its delivery-attempt cap after \(spent) uploads — dropping it")
