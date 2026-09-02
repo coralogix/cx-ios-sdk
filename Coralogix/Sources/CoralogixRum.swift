@@ -18,6 +18,9 @@ public class CoralogixRum {
     internal var tracerProviderSdk: TracerProviderSdk?
     /// Disk store for hybrid crash events (see `CrashEventStore`).
     internal lazy var crashEventStore = CrashEventStore()
+    /// Delivery-attempt count for the pending PLCrashReporter report, which has no
+    /// metadata of its own to carry one (see `CrashReportAttemptCounter`).
+    internal lazy var crashReportAttemptCounter = CrashReportAttemptCounter()
     /// Deferred purge of the pending PLCrashReporter report. Set by
     /// `initializeCrashInstrumentation`, executed by `completeCrashRecovery()`
     /// after init finishes — the uploader rejects requests while

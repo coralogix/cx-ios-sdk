@@ -9,6 +9,11 @@ Release-mechanics commits (version bumps, podspec/script tweaks, README edits) a
 omitted; the focus here is user-facing behavior changes. Tickets are referenced as
 `CX-XXXXX` (Jira) or `ALPH-XXXX` (legacy). Pull request numbers are in parentheses.
 
+## [2.18.1] - 2026-09-02
+
+### Fixed
+- A crash whose upload never completes is now retried a limited number of times and then dropped, so a single crash is no longer reported again on every app launch.
+
 ## [2.18.0] - 2026-08-31
 
 ### Changed
