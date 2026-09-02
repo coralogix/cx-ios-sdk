@@ -223,6 +223,53 @@ final class CrashDeliveryTests: XCTestCase {
         )
     }
 
+
+    private func makeTempDirectory() -> URL {
+        return FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    }
+
+    /// Writes events straight into the store's file, bypassing `append`. Stands in for a
+    /// store left behind by an earlier launch: the only way to produce an entry whose
+    /// delivery count is already at the cap, or one written by a build that had no count
+    /// at all.
+    private func seedStoreFile(at directory: URL, events: [[String: Any]]) throws {
+        let folder = directory.appendingPathComponent("CoralogixRum", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let data = try JSONSerialization.data(withJSONObject: events)
+        try data.write(to: folder.appendingPathComponent("pending_crash_events.json"))
+    }
+
+    /// Writes the PLCrashReporter attempt sidecar directly, to stand in for a file left by
+    /// an earlier launch — or a truncated or edited one.
+    private func seedAttemptSidecar(at directory: URL, identity: String, attempts: Int) throws {
+        let folder = directory.appendingPathComponent("CoralogixRum", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let record: [String: Any] = ["report_identity": identity, "delivery_attempts": attempts]
+        let data = try JSONSerialization.data(withJSONObject: record)
+        try data.write(to: folder.appendingPathComponent("crash_report_attempts.json"))
+    }
+
+    /// Leaves `url` readable but not writable — a disk that still hands back what it holds
+    /// but has stopped accepting writes.
+    private func makeReadOnly(_ url: URL) throws {
+        try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: url.path)
+    }
+
+    private func makeWritable(_ url: URL) throws {
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)
+    }
+
+    private func errorMessage(of event: [String: Any]) -> String? {
+        let text = event[Keys.text.rawValue] as? [String: Any]
+        let cxRum = text?[Keys.cxRum.rawValue] as? [String: Any]
+        let errorContext = cxRum?[Keys.errorContext.rawValue] as? [String: Any]
+        return errorContext?[Keys.errorMessage.rawValue] as? String
+    }
+
+    private func storedMessages(_ events: [[String: Any]]) -> [String?] {
+        return events.map { $0[Keys.errorMessage.rawValue] as? String }
+    }
+
     /// Spins the run loop until `condition` holds or `timeout` elapses.
     private func waitUntil(timeout: TimeInterval = 5, _ condition: () -> Bool) -> Bool {
         let deadline = Date().addingTimeInterval(timeout)
@@ -544,5 +591,231 @@ final class CrashDeliveryTests: XCTestCase {
         _ = waitUntil(timeout: 2) { !uploader.uploadedBatches.isEmpty }
         XCTAssertEqual(store.loadAll().count, 1,
                        "unconfirmed recovery must keep the stored copy for the next launch")
+    }
+
+    // MARK: - Delivery-attempt cap
+    //
+    // A crash report is kept on disk until its upload is confirmed. Confirmation is a
+    // force flush bounded by `forceFlushTimeout`, which a cold launch on poor
+    // connectivity misses — so without a ceiling the same report is re-emitted on every
+    // launch for the life of the install. `CrashDeliveryPolicy.maxDeliveryAttempts` is
+    // that ceiling, charged on read so a report already stuck on a device clears itself
+    // on upgrade instead of needing a migration.
+    //
+    // The PLCrashReporter side is covered through `CrashReportAttemptCounter` directly: a
+    // unit test cannot manufacture a real pending PLCrashReporter report, and the counter
+    // is the whole of the decision `recoverPendingCrashReport` makes.
+
+    func test_append_stampsTheCrashTimeSendAsTheFirstAttempt() {
+        let store = makeTempStore()
+        store.append([Keys.errorMessage.rawValue: "crash"])
+
+        XCTAssertEqual(store.loadAll().first?[CrashEventStore.attemptCountKey] as? Int,
+                       CrashDeliveryPolicy.crashTimeAttempt,
+                       "persisting happens immediately before the live upload — that send is attempt one")
+    }
+
+    func test_claimEventsForResend_chargesAnAttempt_andDropsTheEventThatRanOut() throws {
+        let directory = makeTempDirectory()
+        try seedStoreFile(at: directory, events: [
+            [Keys.errorMessage.rawValue: "at-cap",
+             CrashEventStore.attemptCountKey: CrashDeliveryPolicy.maxDeliveryAttempts],
+            [Keys.errorMessage.rawValue: "under-cap",
+             CrashEventStore.attemptCountKey: CrashDeliveryPolicy.maxDeliveryAttempts - 1]
+        ])
+        let store = CrashEventStore(directory: directory)
+
+        let claimed = store.claimEventsForResend()
+
+        XCTAssertEqual(storedMessages(claimed), ["under-cap"])
+        XCTAssertEqual(claimed.first?[CrashEventStore.attemptCountKey] as? Int,
+                       CrashDeliveryPolicy.maxDeliveryAttempts,
+                       "the claim spends the event's last attempt")
+        XCTAssertEqual(storedMessages(store.loadAll()), ["under-cap"],
+                       "the capped event must be gone from disk, not merely skipped this launch")
+    }
+
+    func test_resendStoredCrashEvents_uploadsOnlyTheEventStillUnderTheCap() throws {
+        coralogixRum = CoralogixRum(options: makeSamplingOptions(sampleRate: 100, exclude: []))
+        let uploader = StubUploader()
+        coralogixRum.coralogixExporter?.spanUploader = uploader
+        let directory = makeTempDirectory()
+        try seedStoreFile(at: directory, events: [
+            [Keys.errorMessage.rawValue: "at-cap",
+             CrashEventStore.eventIdKey: "id-at-cap",
+             CrashEventStore.attemptCountKey: CrashDeliveryPolicy.maxDeliveryAttempts],
+            [Keys.errorMessage.rawValue: "under-cap",
+             CrashEventStore.eventIdKey: "id-under-cap",
+             CrashEventStore.attemptCountKey: CrashDeliveryPolicy.maxDeliveryAttempts - 1]
+        ])
+        coralogixRum.crashEventStore = CrashEventStore(directory: directory)
+
+        coralogixRum.resendPendingStoredCrashEvents()
+        coralogixRum.completeCrashRecovery()
+
+        XCTAssertTrue(waitUntil { !uploader.uploadedBatches.isEmpty })
+        let crashMessages = uploader.uploadedEvents.filter { isCrashEvent($0) }.compactMap(errorMessage(of:))
+        XCTAssertEqual(crashMessages, ["under-cap"],
+                       "the resend path must emit the event with attempts left and nothing else")
+    }
+
+    func test_crashEventStore_attemptCountSurvivesLaunches_untilTheCapIsSpent() {
+        let directory = makeTempDirectory()
+        // The crash itself: persisted, then uploaded live. That is attempt one.
+        CrashEventStore(directory: directory).append([Keys.errorMessage.rawValue: "crash"])
+
+        // A fresh store instance per launch, so the count has to come off disk rather
+        // than out of an in-memory field.
+        XCTAssertEqual(CrashEventStore(directory: directory).claimEventsForResend().count, 1,
+                       "attempt 2 of \(CrashDeliveryPolicy.maxDeliveryAttempts)")
+        XCTAssertEqual(CrashEventStore(directory: directory).claimEventsForResend().count, 1,
+                       "attempt 3 of \(CrashDeliveryPolicy.maxDeliveryAttempts)")
+        XCTAssertEqual(CrashEventStore(directory: directory).claimEventsForResend().count, 0,
+                       "the cap is spent — the event must not be re-sent a fourth time")
+        XCTAssertTrue(CrashEventStore(directory: directory).loadAll().isEmpty,
+                      "a spent event must leave the disk so it stops being rescanned")
+    }
+
+    func test_claimEventsForResend_aNewCrashStartsItsOwnCount() {
+        let store = makeTempStore()
+        store.append([Keys.errorMessage.rawValue: "old-crash"])
+        _ = store.claimEventsForResend()
+        _ = store.claimEventsForResend()
+
+        store.append([Keys.errorMessage.rawValue: "new-crash"])
+
+        XCTAssertEqual(storedMessages(store.claimEventsForResend()), ["new-crash"],
+                       "a fresh crash starts from its own crash-time send, not the exhausted count of the last one")
+    }
+
+    func test_claimEventsForResend_clearsAnEventInheritedWithoutACount() throws {
+        let directory = makeTempDirectory()
+        // Written by a build that had no delivery counter: the field is simply absent, and
+        // the crash-time send is the one attempt it is known to have spent.
+        try seedStoreFile(at: directory, events: [[Keys.errorMessage.rawValue: "stuck-since-an-earlier-build"]])
+
+        XCTAssertEqual(CrashEventStore(directory: directory).claimEventsForResend().count, 1)
+        XCTAssertEqual(CrashEventStore(directory: directory).claimEventsForResend().count, 1)
+        XCTAssertEqual(CrashEventStore(directory: directory).claimEventsForResend().count, 0,
+                       "an event stuck since an earlier build must stop re-sending by the third launch of the fixed one")
+        XCTAssertTrue(CrashEventStore(directory: directory).loadAll().isEmpty)
+    }
+
+    func test_claimEventsForResend_dropsTheResend_whenTheCountCannotBePersisted() throws {
+        let directory = makeTempDirectory()
+        try seedStoreFile(at: directory, events: [
+            [Keys.errorMessage.rawValue: "crash",
+             CrashEventStore.attemptCountKey: CrashDeliveryPolicy.crashTimeAttempt]
+        ])
+        let store = CrashEventStore(directory: directory)
+        let folder = directory.appendingPathComponent("CoralogixRum", isDirectory: true)
+        try makeReadOnly(folder)
+        defer { try? makeWritable(folder) }
+
+        XCTAssertEqual(store.loadAll().count, 1,
+                       "the event must still be readable, or this test would pass for the wrong reason")
+        XCTAssertTrue(store.claimEventsForResend().isEmpty,
+                      "a count that cannot be persisted is no count at all — drop rather than re-send uncounted")
+    }
+
+    func test_crashReportAttemptCounter_allowsTheCappedNumberOfAttempts_thenDenies() {
+        let counter = CrashReportAttemptCounter(directory: makeTempDirectory())
+        let identity = "1700000000000"
+
+        for attempt in 1...CrashDeliveryPolicy.maxDeliveryAttempts {
+            XCTAssertTrue(counter.registerAttempt(identity: identity), "attempt \(attempt) must be allowed")
+        }
+
+        XCTAssertFalse(counter.registerAttempt(identity: identity),
+                       "a pending report may be uploaded at most \(CrashDeliveryPolicy.maxDeliveryAttempts) times")
+    }
+
+    func test_crashReportAttemptCounter_countSurvivesLaunches() {
+        let directory = makeTempDirectory()
+        let identity = "1700000000000"
+
+        // A fresh counter per launch — the count has to be read back off disk.
+        for attempt in 1...CrashDeliveryPolicy.maxDeliveryAttempts {
+            XCTAssertTrue(CrashReportAttemptCounter(directory: directory).registerAttempt(identity: identity),
+                          "attempt \(attempt) must be allowed")
+        }
+
+        XCTAssertFalse(CrashReportAttemptCounter(directory: directory).registerAttempt(identity: identity),
+                       "the count must outlive the process that wrote it")
+    }
+
+    func test_crashReportAttemptCounter_aNewReportIdentityStartsFromZero() {
+        let counter = CrashReportAttemptCounter(directory: makeTempDirectory())
+        for _ in 1...CrashDeliveryPolicy.maxDeliveryAttempts {
+            _ = counter.registerAttempt(identity: "old-crash")
+        }
+        XCTAssertFalse(counter.registerAttempt(identity: "old-crash"))
+
+        XCTAssertTrue(counter.registerAttempt(identity: "new-crash"),
+                      "a different report is a different crash and gets its own attempts")
+    }
+
+    func test_crashReportAttemptCounter_forget_clearsTheCount() {
+        let counter = CrashReportAttemptCounter(directory: makeTempDirectory())
+        let identity = "1700000000000"
+        for _ in 1...CrashDeliveryPolicy.maxDeliveryAttempts {
+            _ = counter.registerAttempt(identity: identity)
+        }
+        XCTAssertFalse(counter.registerAttempt(identity: identity))
+
+        counter.forget()
+
+        XCTAssertTrue(counter.registerAttempt(identity: identity),
+                      "the count is discarded with the report it counts, so nothing later inherits it")
+    }
+
+    func test_crashReportAttemptCounter_deniesTheAttempt_whenTheCountCannotBePersisted() throws {
+        let directory = makeTempDirectory()
+        let counter = CrashReportAttemptCounter(directory: directory)
+        let folder = directory.appendingPathComponent("CoralogixRum", isDirectory: true)
+        try makeReadOnly(folder)
+        defer { try? makeWritable(folder) }
+
+        XCTAssertFalse(counter.registerAttempt(identity: "1700000000000"),
+                       "an attempt that leaves no durable trace would be repeated on every launch")
+    }
+
+    // A count read off disk is untrusted input: these files live in the app container and
+    // a truncated or edited one can hold anything JSON can express. `Int.max` would trap
+    // on `+ 1` and take the host app down during startup, and a negative count would take
+    // many launches to reach the cap — silently restoring the unbounded re-sending the cap
+    // exists to stop.
+
+    func test_claimEventsForResend_treatsAnUnusableCountAsSpent_ratherThanTrappingOrGrantingRetries() throws {
+        for unusable in [Int.max, Int.min, -1, -5000, CrashDeliveryPolicy.maxDeliveryAttempts + 1] {
+            let directory = makeTempDirectory()
+            try seedStoreFile(at: directory, events: [
+                [Keys.errorMessage.rawValue: "tampered", CrashEventStore.attemptCountKey: unusable]
+            ])
+            let store = CrashEventStore(directory: directory)
+
+            XCTAssertTrue(store.claimEventsForResend().isEmpty,
+                          "a count of \(unusable) must read as fully spent, not as attempts remaining")
+            XCTAssertTrue(store.loadAll().isEmpty,
+                          "and the event must leave the disk rather than be reconsidered next launch")
+        }
+    }
+
+    func test_crashReportAttemptCounter_treatsAnUnusableCountAsSpent() throws {
+        for unusable in [Int.max, Int.min, -1, CrashDeliveryPolicy.maxDeliveryAttempts + 1] {
+            let directory = makeTempDirectory()
+            let identity = "1700000000000"
+            try seedAttemptSidecar(at: directory, identity: identity, attempts: unusable)
+
+            XCTAssertFalse(CrashReportAttemptCounter(directory: directory).registerAttempt(identity: identity),
+                           "a sidecar count of \(unusable) must read as fully spent")
+        }
+    }
+
+    func test_attemptsSpent_passesThroughEveryCountInRange() {
+        for valid in 0...CrashDeliveryPolicy.maxDeliveryAttempts {
+            XCTAssertEqual(CrashDeliveryPolicy.attemptsSpent(fromPersisted: valid), valid,
+                           "clamping must not disturb a count the SDK itself wrote")
+        }
     }
 }

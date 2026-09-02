@@ -33,24 +33,7 @@ extension CoralogixRum {
 
         // Try loading the crash report.
         if crashReporter.hasPendingCrashReport() {
-            // Correlation id tying the emitted crash span to its upload confirmation,
-            // so the purge is gated on THIS report's own delivery.
-            let reportId = UUID().uuidString
-            if self.processPendingCrashReport(using: crashReporter, crashEventId: reportId) {
-                // Purge is deferred to completeCrashRecovery(): it must only happen
-                // after the upload is confirmed, and the uploader rejects requests
-                // until init finishes. Previously the purge was unconditional and ran
-                // before the span even left the batch queue, so a short-lived relaunch
-                // or an upload failure lost the crash permanently.
-                crashRecoveryLock.lock()
-                self.pendingCrashPurge = { crashReporter.purgePendingCrashReport() }
-                self.pendingCrashReportId = reportId
-                crashRecoveryLock.unlock()
-            } else {
-                // Nothing recoverable was emitted — drop the corrupt report so it
-                // isn't reprocessed (and re-fails) on every launch.
-                crashReporter.purgePendingCrashReport()
-            }
+            self.recoverPendingCrashReport(using: crashReporter)
         }
 
         // Hybrid crash events persisted by a previous process (see CrashEventStore).
@@ -99,62 +82,120 @@ extension CoralogixRum {
         }
     }
 
-    /// Returns `true` when the report was parsed and emitted as a crash span,
-    /// `false` when the report could not be loaded or parsed. `crashEventId`
-    /// correlates the emitted span with its upload confirmation.
-    private func processPendingCrashReport(using crashReporter: PLCrashReporter, crashEventId: String) -> Bool {
+    /// Emits the pending report as a crash span, unless it has run out of delivery
+    /// attempts. Nothing here confirms the upload — that is `completeCrashRecovery()`'s
+    /// job once init has finished and the uploader accepts requests.
+    ///
+    /// The attempt is charged before the span is emitted. A report whose upload is never
+    /// confirmed stays on disk by design, so counting on read is what stops it being
+    /// re-emitted on every launch forever — and it clears reports already stuck on
+    /// devices in the field without needing a migration step.
+    private func recoverPendingCrashReport(using crashReporter: PLCrashReporter) {
+        let counter = self.crashReportAttemptCounter
+        // Purges the report and the count together, so a later crash can never inherit
+        // a count. Captures the counter rather than self: this outlives init.
+        let discardReport = {
+            crashReporter.purgePendingCrashReport()
+            counter.forget()
+        }
+
+        guard let report = self.loadPendingCrashReport(using: crashReporter) else {
+            // Nothing recoverable was parsed — drop the corrupt report so it
+            // isn't reprocessed (and re-fails) on every launch.
+            discardReport()
+            return
+        }
+
+        guard counter.registerAttempt(identity: Self.crashReportIdentity(of: report)) else {
+            Log.w("Crash report reached its delivery-attempt cap — dropping it rather than re-sending")
+            discardReport()
+            return
+        }
+
+        // Correlation id tying the emitted crash span to its upload confirmation,
+        // so the purge is gated on THIS report's own delivery.
+        let reportId = UUID().uuidString
+        self.emitCrashSpan(for: report, crashEventId: reportId)
+
+        // Purge is deferred to completeCrashRecovery(): it must only happen
+        // after the upload is confirmed, and the uploader rejects requests
+        // until init finishes. Previously the purge was unconditional and ran
+        // before the span even left the batch queue, so a short-lived relaunch
+        // or an upload failure lost the crash permanently.
+        crashRecoveryLock.lock()
+        self.pendingCrashPurge = discardReport
+        self.pendingCrashReportId = reportId
+        crashRecoveryLock.unlock()
+    }
+
+    private func loadPendingCrashReport(using crashReporter: PLCrashReporter) -> PLCrashReport? {
         do {
             let data = try crashReporter.loadPendingCrashReportDataAndReturnError()
-            
-            // Retrieving crash reporter data.
-            let report = try PLCrashReport(data: data)
-
-            // A crash is captured on the *next* launch, after a fresh session has
-            // already been created. Anchor the span to the crash time (not relaunch
-            // time) and burn it under the session that was live when it crashed —
-            // recovered from the keychain into SessionManager at init.
-            let crashTimestamp = report.systemInfo.timestamp
-            let span = makeSpan(event: .error, source: .console, severity: .error, startTime: crashTimestamp)
-            self.overrideSessionForCrashedSession(on: span)
-            self.overrideViewForCrashedSession(on: span)
-
-            span.setAttribute(key: Keys.crashEventId.rawValue, value: crashEventId)
-            span.setAttribute(key: Keys.exceptionType.rawValue, value: report.signalInfo.name)
-            if let crashTimestamp {
-                span.setAttribute(key: Keys.crashTimestamp.rawValue, value: "\(crashTimestamp.timeIntervalSince1970.milliseconds)")
-            }
-            span.setAttribute(key: Keys.processName.rawValue, value: report.processInfo.processName)
-            span.setAttribute(key: Keys.applicationIdentifier.rawValue, value: report.applicationInfo.applicationIdentifier)
-            span.setAttribute(key: Keys.pid.rawValue, value: "\(report.processInfo.processID)")
-            
-            self.createStackTrace(report: report, span: span)
-            
-            if let text = PLCrashReportTextFormatter.stringValue(for: report, with: PLCrashReportTextFormatiOS) {
-                let substrings = text.components(separatedBy: "\n")
-                for value in substrings {
-                    if let processName = report.processInfo.processName,
-                       value.contains("+\(processName)") {
-                        let details = extractMemoryAddressAndArchitecture(input: value)
-                        if details.count == 7 {
-                            let baseAddress = details[0]  // Extracting the base memory address
-                            span.setAttribute(key: Keys.baseAddress.rawValue, value: "\(baseAddress)")
-                            let arch = details[4]     // Extracting the architecture
-                            span.setAttribute(key: Keys.arch.rawValue, value: "\(arch)")
-                        }
-                    }
-                }
-            } else {
-                Log.e("CrashReporter: can't convert report to text")
-            }
-            if let crashTimestamp {
-                span.end(time: crashTimestamp)
-            } else {
-                span.end()
-            }
-            return true
+            return try PLCrashReport(data: data)
         } catch let error {
             Log.e("CrashReporter failed to load and parse with error: \(error)")
-            return false
+            return nil
+        }
+    }
+
+    /// A report's identity: stable across launches, distinct between crashes, so a
+    /// genuinely new crash starts its attempt count from zero. The crash time is the
+    /// natural key; process start time and pid stand in when a report carries no
+    /// timestamp, which is rare but would otherwise collapse every such crash onto one
+    /// key and let one report's attempts exhaust the next one's.
+    private static func crashReportIdentity(of report: PLCrashReport) -> String {
+        if let timestamp = report.systemInfo.timestamp {
+            return "\(timestamp.timeIntervalSince1970.milliseconds)"
+        }
+        guard report.hasProcessInfo, let startTime = report.processInfo.processStartTime else {
+            return "unidentified-crash-report"
+        }
+        return "\(startTime.timeIntervalSince1970.milliseconds)-\(report.processInfo.processID)"
+    }
+
+    /// `crashEventId` correlates the emitted span with its upload confirmation.
+    private func emitCrashSpan(for report: PLCrashReport, crashEventId: String) {
+        // A crash is captured on the *next* launch, after a fresh session has
+        // already been created. Anchor the span to the crash time (not relaunch
+        // time) and burn it under the session that was live when it crashed —
+        // recovered from the keychain into SessionManager at init.
+        let crashTimestamp = report.systemInfo.timestamp
+        let span = makeSpan(event: .error, source: .console, severity: .error, startTime: crashTimestamp)
+        self.overrideSessionForCrashedSession(on: span)
+        self.overrideViewForCrashedSession(on: span)
+
+        span.setAttribute(key: Keys.crashEventId.rawValue, value: crashEventId)
+        span.setAttribute(key: Keys.exceptionType.rawValue, value: report.signalInfo.name)
+        if let crashTimestamp {
+            span.setAttribute(key: Keys.crashTimestamp.rawValue, value: "\(crashTimestamp.timeIntervalSince1970.milliseconds)")
+        }
+        span.setAttribute(key: Keys.processName.rawValue, value: report.processInfo.processName)
+        span.setAttribute(key: Keys.applicationIdentifier.rawValue, value: report.applicationInfo.applicationIdentifier)
+        span.setAttribute(key: Keys.pid.rawValue, value: "\(report.processInfo.processID)")
+        
+        self.createStackTrace(report: report, span: span)
+        
+        if let text = PLCrashReportTextFormatter.stringValue(for: report, with: PLCrashReportTextFormatiOS) {
+            let substrings = text.components(separatedBy: "\n")
+            for value in substrings {
+                if let processName = report.processInfo.processName,
+                   value.contains("+\(processName)") {
+                    let details = extractMemoryAddressAndArchitecture(input: value)
+                    if details.count == 7 {
+                        let baseAddress = details[0]  // Extracting the base memory address
+                        span.setAttribute(key: Keys.baseAddress.rawValue, value: "\(baseAddress)")
+                        let arch = details[4]     // Extracting the architecture
+                        span.setAttribute(key: Keys.arch.rawValue, value: "\(arch)")
+                    }
+                }
+            }
+        } else {
+            Log.e("CrashReporter: can't convert report to text")
+        }
+        if let crashTimestamp {
+            span.end(time: crashTimestamp)
+        } else {
+            span.end()
         }
     }
 

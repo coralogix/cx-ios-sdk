@@ -17,6 +17,10 @@ final class CrashEventStore {
     /// confirmed upload deletes only its own event — never an unconfirmed backlog
     /// entry from an earlier launch that happens to share the store.
     static let eventIdKey = "store_event_id"
+    /// Store-internal delivery counter, stamped by `append` and incremented by
+    /// `claimEventsForResend`. Never reaches the wire: the resend reads named fields
+    /// off the stored event rather than forwarding the dictionary wholesale.
+    static let attemptCountKey = "store_delivery_attempts"
 
     private let fileUrl: URL
     private let lock = NSLock()
@@ -42,6 +46,9 @@ final class CrashEventStore {
         let id = UUID().uuidString
         var stamped = event
         stamped[Self.eventIdKey] = id
+        // The caller uploads this event immediately after persisting it: that send is
+        // the first of its allowed attempts.
+        stamped[Self.attemptCountKey] = CrashDeliveryPolicy.crashTimeAttempt
         var events = readAllLocked()
         events.append(stamped)
         if events.count > maxStoredEvents {
@@ -55,6 +62,50 @@ final class CrashEventStore {
         lock.lock()
         defer { lock.unlock() }
         return readAllLocked()
+    }
+
+    /// Charges every stored event one delivery attempt and returns those still within
+    /// `CrashDeliveryPolicy.maxDeliveryAttempts`, dropping the ones that have run out.
+    ///
+    /// The charge happens here, on read, before anything is emitted — devices in the
+    /// field already carry events that have been re-sent on every launch, and counting
+    /// at read time is what lets an upgraded build clear them with no migration step.
+    ///
+    /// Returns nothing when the new counts could not be persisted. Re-sending against a
+    /// count that didn't survive the launch is indistinguishable from having no count at
+    /// all, which is the unbounded loop this exists to break.
+    func claimEventsForResend() -> [[String: Any]] {
+        lock.lock()
+        defer { lock.unlock() }
+        let stored = readAllLocked()
+        guard !stored.isEmpty else { return [] }
+
+        var claimed = [[String: Any]]()
+        for var event in stored {
+            // An absent count is a build that predates the counter, whose crash-time send
+            // is the one attempt it is known to have spent. A present but unusable count
+            // is clamped rather than trusted.
+            let spent = (event[Self.attemptCountKey] as? Int)
+                .map(CrashDeliveryPolicy.attemptsSpent(fromPersisted:))
+                ?? CrashDeliveryPolicy.crashTimeAttempt
+            let attempts = spent + 1
+            guard attempts <= CrashDeliveryPolicy.maxDeliveryAttempts else {
+                Log.w("[CrashEventStore] crash event reached its delivery-attempt cap after \(spent) uploads — dropping it")
+                continue
+            }
+            event[Self.attemptCountKey] = attempts
+            claimed.append(event)
+        }
+
+        guard !claimed.isEmpty else {
+            try? FileManager.default.removeItem(at: fileUrl)
+            return []
+        }
+        guard writeLocked(claimed) else {
+            Log.w("[CrashEventStore] could not persist delivery counts — skipping this resend rather than re-sending uncounted")
+            return []
+        }
+        return claimed
     }
 
     /// Removes only the events with the given identities, keeping any other
@@ -94,16 +145,21 @@ final class CrashEventStore {
         return events
     }
 
-    private func writeLocked(_ events: [[String: Any]]) {
+    /// Returns whether the events reached the disk. Callers that re-send what they wrote
+    /// must know, so a failed write can drop the event instead of sending it uncounted.
+    @discardableResult
+    private func writeLocked(_ events: [[String: Any]]) -> Bool {
         guard JSONSerialization.isValidJSONObject(events),
               let data = try? JSONSerialization.data(withJSONObject: events) else {
             Log.e("[CrashEventStore] crash event is not JSON-serializable, skipping persist")
-            return
+            return false
         }
         do {
             try data.write(to: fileUrl, options: .atomic)
+            return true
         } catch {
             Log.e("[CrashEventStore] failed to persist crash events: \(error)")
+            return false
         }
     }
 }

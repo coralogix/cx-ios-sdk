@@ -209,7 +209,7 @@ extension CoralogixRum {
     /// the original `crash_timestamp`; session attribution follows the same
     /// prev-session stitching as PLCR crash reports.
     internal func resendPendingStoredCrashEvents() {
-        let pending = crashEventStore.loadAll()
+        let pending = crashEventStore.claimEventsForResend()
         guard !pending.isEmpty else { return }
         for event in pending {
             self.writeError(
