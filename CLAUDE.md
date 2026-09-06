@@ -32,8 +32,10 @@ pod lib lint Coralogix.podspec --include-podspecs=CoralogixInternal.podspec
 ./lint_and_push_cocoapods.sh
 ```
 
-CI runs on macOS 15 with Xcode 16.4, pinned. Three SPM test targets:
-`CoralogixRumTests`, `CoralogixInternalTests`, `SessionReplayTests`.
+Toolchains are pinned per workflow, not shared: tests and the demo-app build run
+on macOS 15 with Xcode 16.4, while podspec lint stays on macOS 14 with Xcode 15.3.
+Three SPM test targets: `CoralogixRumTests`, `CoralogixInternalTests`,
+`SessionReplayTests`.
 
 `ci.yml` is the single entry point; the checks under it are reusable workflows
 and the shared steps are composite actions in `.github/actions/`. XCUITests are

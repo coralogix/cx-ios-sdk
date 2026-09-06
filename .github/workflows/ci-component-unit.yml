@@ -1,6 +1,6 @@
 name: Component Tests (unit)
 
-# Reusable. The three SPM test targets: 1148 fast, isolated tests over the SDK.
+# Reusable. The three SPM test targets: 1133 fast, isolated tests over the SDK.
 #
 # Deliberately NOT sharded. Measured on macos-15: the tests themselves take 93s
 # (CoralogixRumTests 70s / SessionReplayTests 23s / CoralogixInternalTests 0.1s)

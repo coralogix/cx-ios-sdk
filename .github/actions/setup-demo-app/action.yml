@@ -95,9 +95,13 @@ runs:
           Example/Podfile.lock
           ~/Library/Caches/CocoaPods
           ~/.cocoapods/repos
-        key: ${{ inputs.cache-prefix }}-${{ runner.os }}-${{ hashFiles('Example/Podfile') }}
+        # v2 because the cached paths changed (~/.cocoapods/repos was added);
+        # without a new key, restore-keys would keep returning pre-v2 entries
+        # that lack the specs metadata this now depends on. Bump on every path
+        # change.
+        key: ${{ inputs.cache-prefix }}-v2-${{ runner.os }}-${{ hashFiles('Example/Podfile') }}
         restore-keys: |
-          ${{ inputs.cache-prefix }}-${{ runner.os }}-
+          ${{ inputs.cache-prefix }}-v2-${{ runner.os }}-
 
     # `pod install` reaches cdn.cocoapods.org even with Pods/ restored, and that
     # connection times out often enough to fail a build on its own. Caching

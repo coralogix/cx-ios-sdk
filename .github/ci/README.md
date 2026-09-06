@@ -1,8 +1,8 @@
 # CI layout
 
 `ci.yml` is the only workflow that reacts to a pull request. Everything it needs
-is a reusable workflow, so the same definitions serve PRs, master, the nightly
-run and manual dispatch.
+is a reusable workflow, so the same definitions serve PRs, master and manual
+dispatch.
 
 ```
 ci.yml ─┬─ ci-component-unit.yml   SPM unit tests

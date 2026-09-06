@@ -75,7 +75,20 @@ jobs:
               }' {} \
           | sort -u > actual.txt
 
-          BAD_HARNESS=$(jq -r '.shards[] | select(.harness == true and (.tests|length) != 1) | .id' .github/ci/ui-suites.json)
+          # An empty array yields an empty -only-testing list, and xcodebuild with
+          # no filter runs the whole bundle — a shard silently becomes a full
+          # suite run.
+          EMPTY=$(jq -r '.shards[] | select((.tests|length) == 0) | .id' .github/ci/ui-suites.json)
+          if [ -n "$EMPTY" ]; then
+            echo "::error::these shards name no tests, so xcodebuild would run the entire scheme:"
+            echo "$EMPTY" | awk '{print "  " $0}'
+            exit 1
+          fi
+
+          # Truthiness, not equality: "harness": "true" as a JSON string would
+          # evade `== true` here yet still take the harness branch at runtime,
+          # where only the first test is used.
+          BAD_HARNESS=$(jq -r '.shards[] | select((.harness // false) != false and (.tests|length) != 1) | .id' .github/ci/ui-suites.json)
           if [ -n "$BAD_HARNESS" ]; then
             echo "::error::harness shards take a single -only-testing filter, so they must hold exactly one test:"
             echo "$BAD_HARNESS" | awk '{print "  " $0}'
@@ -130,7 +143,7 @@ jobs:
           SHARDS=$(jq -c --argjson tiers "$TIERS" \
             '[.shards[] | select(.tier as $t | $tiers | index($t))
               | {id, name, scheme, tier,
-                 harness: (.harness // false),
+                 harness: ((.harness // false) != false),
                  test_id: .tests[0],
                  only: ([.tests[] | "-only-testing:" + .] | join(" "))}]' \
             .github/ci/ui-suites.json)
@@ -391,12 +404,9 @@ jobs:
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
-          # "Executed 0 tests" exits 0, so an -only-testing typo would otherwise
-          # look like a pass.
-          if echo "$EXECUTED" | grep -q "Executed 0 tests"; then
-            echo "::error::No tests executed — check the -only-testing identifiers for this shard."
-            exit 1
-          fi
+          # Status first: a harness exit 2 (infra failure) produces no
+          # "Executed ..." line, and checking for that first would relabel it as
+          # "no tests executed" and discard the infrastructure diagnostic.
           if [ "$EXIT" -ne 0 ]; then
             if [ "$IS_HARNESS" = "true" ]; then
               # run_leak_harness.sh: 1 = a captured frame showed an unmasked
@@ -412,6 +422,13 @@ jobs:
               grep -iE "error:|failed|XCTAssert" test-output.log | tail -40 || true
             fi
             exit "$EXIT"
+          fi
+
+          # Reached only on a clean exit: "Executed 0 tests" also exits 0, so an
+          # -only-testing typo would otherwise look like a pass.
+          if echo "$EXECUTED" | grep -q "Executed 0 tests"; then
+            echo "::error::No tests executed — check the -only-testing identifiers for this shard."
+            exit 1
           fi
           echo "${{ matrix.name }} passed in ${TOTAL}s"
 
