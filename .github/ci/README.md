@@ -24,7 +24,7 @@ Shared steps live in `.github/actions/`: `setup-xcode`, `boot-simulator`,
 |---|---|---|
 | `component` | One test drives one feature and asserts on it. | every PR |
 | `smoke` | One test walks a path that joins several features — interaction capture + session context + export + schema validation. | every PR |
-| `soak` | Leak and performance probes. Not feature tests, and the slowest shards here — measured 6.9m and 9.5m, so they set the critical path. Split one-test-per-shard; paired they were one ~8.8m shard. | every PR |
+| `soak` | Leak probes, run through `tool/run_leak_harness.sh`. The slowest shards here, so they set the critical path. | every PR |
 
 The SPM unit tests in `Tests/` are the `component` tier at the unit level and run
 as a single job — see the header of `ci-component-unit.yml` for why they are not
@@ -57,6 +57,28 @@ roughly 200s.
 - **Unit tests stay serial.** The SDK swizzles global process state, so tests
   sharing a process must not interleave.
 
+## The soak tier needs the harness
+
+`SessionReplayLeakUITests` asserts only that the screen appeared. The leak check
+is a pixel scan for unmasked magenta sentinels, run by
+`tool/run_leak_harness.sh` over frames captured by its mock upload server — so
+running those tests bare proves nothing beyond "the app did not crash while
+scrolling".
+
+Shards marked `"harness": true` therefore invoke the script instead of calling
+xcodebuild directly. The workflow passes it `CX_IOS_XCTESTRUN` so it reuses the
+shared build rather than rebuilding the workspace, and `CX_IOS_ONLY_TESTING` so
+each scenario gets its own shard and the two run in parallel. Both default to
+standalone behaviour when unset, which is how the script still works locally:
+
+```bash
+tool/run_leak_harness.sh          # builds and runs the whole leak suite
+```
+
+Exit codes are meaningful: 1 is a real leak, 2 is an infrastructure failure and
+not a verdict. A harness shard must hold exactly one test — the harness takes a
+single `-only-testing` filter — and the plan job enforces that.
+
 ## What actually makes this fast
 
 Measured, so that the next person optimising here starts from evidence:
@@ -69,6 +91,7 @@ Measured, so that the next person optimising here starts from evidence:
 | `ARCHS` pinned to one slice | not a win over the old workflow — it offsets one. A *concrete* destination (what the old job used) already built one arch; `generic/platform` builds arm64 *and* x86_64, so pinning restores parity while keeping the build simulator-free |
 | SPM / Pods caches | small; `pod install` is 8s and the SPM graph is mostly binary targets |
 | DerivedData cache | **removed — it made things slower** |
+| zstd instead of gzip for the test-products artifact | gzip decompression was costing each shard 33-48s |
 
 The DerivedData cache is the trap. `actions/cache` resets mtimes on extraction,
 so every source file looks newer than its build products and xcodebuild rebuilds
