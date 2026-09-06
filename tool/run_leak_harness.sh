@@ -84,15 +84,21 @@ rm -f "$LOG_FILE"
 swift "$HARNESS_DIR/mock_upload_server.swift" 0 > "$LOG_FILE" 2>&1 &
 SERVER_PID=$!
 
-# Allow up to 60 s: first-run Swift compilation can take ~10-20 s.
-for _ in $(seq 1 120); do
+# `swift file.swift` compiles before it runs, emitting nothing until it is ready,
+# so this budget covers compilation. 60s was enough locally (~10-20s) but not
+# always on a cold CI runner, where a shard failed with a 0-byte server log —
+# still compiling. The loop breaks as soon as the server reports ready, so a
+# larger budget costs nothing on the success path; it only lengthens the wait
+# before declaring a genuine failure.
+for _ in $(seq 1 360); do
   if grep -q '^\[mock-upload\] ready' "$LOG_FILE" 2>/dev/null; then
     break
   fi
   sleep 0.5
 done
 if ! grep -q '^\[mock-upload\] ready' "$LOG_FILE" 2>/dev/null; then
-  echo "[leak-harness] FATAL: mock server failed to start within 60s" >&2
+  echo "[leak-harness] FATAL: mock server failed to start within 180s" >&2
+  echo "[leak-harness] (an empty log below means it was still compiling, not erroring)" >&2
   tail -40 "$LOG_FILE" >&2
   exit 2
 fi
