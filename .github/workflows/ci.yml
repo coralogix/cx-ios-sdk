@@ -24,10 +24,11 @@ jobs:
     uses: ./.github/workflows/ci-component-unit.yml
 
   ui-tests:
-    # All three tiers gate a PR. soak is split one-test-per-shard so both of its
-    # shards finish inside the slowest smoke shard — adding them costs runner
-    # minutes, not wall-clock. ci-nightly.yml still runs soak on a schedule as a
-    # canary on master.
+    # All three tiers gate every PR, so there is no scheduled run — this is the
+    # only thing that executes the UI suite. soak is split one-test-per-shard
+    # because paired the two leak probes were a single ~8.8m shard; even split
+    # they are the slowest jobs here (6.9m and 9.5m measured), so they set the
+    # critical path rather than riding under it.
     uses: ./.github/workflows/ci-ui-tests.yml
     with:
       tiers: '["component","smoke","soak"]'

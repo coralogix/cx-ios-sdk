@@ -13,7 +13,6 @@ ci.yml ─┬─ ci-component-unit.yml   SPM unit tests
                                     name master's protection still requires;
                                     delete once protection points at ci-passed
 
-ci-nightly.yml ── ci-ui-tests.yml  tier: soak
 ```
 
 Shared steps live in `.github/actions/`: `setup-xcode`, `boot-simulator`,
@@ -25,7 +24,7 @@ Shared steps live in `.github/actions/`: `setup-xcode`, `boot-simulator`,
 |---|---|---|
 | `component` | One test drives one feature and asserts on it. | every PR |
 | `smoke` | One test walks a path that joins several features — interaction capture + session context + export + schema validation. | every PR |
-| `soak` | Leak and performance probes. Not feature tests, but split one-test-per-shard they finish inside the slowest smoke shard, so gating on them is free in wall-clock. | every PR, plus nightly on master |
+| `soak` | Leak and performance probes. Not feature tests, and the slowest shards here — measured 6.9m and 9.5m, so they set the critical path. Split one-test-per-shard; paired they were one ~8.8m shard. | every PR |
 
 The SPM unit tests in `Tests/` are the `component` tier at the unit level and run
 as a single job — see the header of `ci-component-unit.yml` for why they are not
