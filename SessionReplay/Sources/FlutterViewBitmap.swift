@@ -83,8 +83,6 @@ public struct FlutterViewBitmap {
 ///   implicit view, so the argument carries no information today. A host with several
 ///   FlutterViews is not supported by this path.
 /// - `frameId`: a monotonic SDK counter. Opaque — not a timestamp.
-/// - `isClick`: this capture was triggered by a user tap.
-/// - `tapTimestampMs`: that tap's epoch-ms timestamp, `nil` for periodic captures.
 ///
 /// Call the completion exactly once, with the bytes or with `nil`. `nil` means "no frame
 /// for this cycle", whatever the reason, and the SDK drops the capture: never a black
@@ -94,11 +92,10 @@ public struct FlutterViewBitmap {
 /// The completion may be called from any thread; the SDK moves the work to the main thread
 /// itself. Answer within one second: the capture gives up after that and reports the event
 /// without a screenshot. The cap is there because the event's own span closes when the capture
-/// resolves, so an unanswered provider would hold back error, log, tap and navigation events
+/// resolves, so an unanswered provider would hold back error, log and navigation events
 /// rather than merely cost a frame. A late answer is ignored, not composited.
 public typealias FlutterViewBitmapProvider =
-    (_ viewId: String, _ frameId: Int64, _ isClick: Bool, _ tapTimestampMs: Int64?,
-     _ completion: @escaping (FlutterViewBitmap?) -> Void) -> Void
+    (_ viewId: String, _ frameId: Int64, _ completion: @escaping (FlutterViewBitmap?) -> Void) -> Void
 
 /// Callback signature used by [SessionReplayOptions.flutterPlatformViewsProvider].
 ///

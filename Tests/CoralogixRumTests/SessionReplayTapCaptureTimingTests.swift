@@ -75,15 +75,13 @@ final class SessionReplayTapCaptureTimingTests: XCTestCase {
     /// The event `cx_sendEvent` posts at `.began`: a click, because nothing is classified yet.
     private func fingerDown(on view: UIView = UIView()) -> Notification {
         Notification(name: .cxRumNotificationUserActions,
-                     object: TouchEvent(view: view, location: tapLocation, eventType: .click,
-                                        touchUptime: ProcessInfo.processInfo.systemUptime, phase: .began))
+                     object: TouchEvent(view: view, location: tapLocation, eventType: .click, phase: .began))
     }
 
     /// The event `cx_sendEvent` posts at `.ended` once the touch is classified as a tap.
     private func fingerUpTap(on view: UIView = UIView()) -> Notification {
         Notification(name: .cxRumNotificationUserActions,
-                     object: TouchEvent(view: view, location: tapLocation, eventType: .click,
-                                        touchUptime: ProcessInfo.processInfo.systemUptime))
+                     object: TouchEvent(view: view, location: tapLocation, eventType: .click))
     }
 
     /// The event `cx_sendEvent` posts at `.ended` once the touch is classified as a scroll.
@@ -160,8 +158,6 @@ final class SessionReplayTapCaptureTimingTests: XCTestCase {
                            "\(framework): the marker is painted from the top-level x")
             XCTAssertEqual(properties[Keys.positionY.rawValue] as? Double, 340,
                            "\(framework): the marker is painted from the top-level y")
-            XCTAssertNotNil(properties[Keys.tapTimestamp.rawValue] as? TimeInterval,
-                            "\(framework): a Flutter bitmap provider judges the tap's age from its own time")
             XCTAssertEqual(properties[Keys.segmentIndex.rawValue] as? Int, 1,
                            "\(framework): the capture must reserve a screenshot slot, so it is deduplicated like any SDK capture rather than treated as manual")
             XCTAssertEqual(properties[Keys.page.rawValue] as? Int, 0)

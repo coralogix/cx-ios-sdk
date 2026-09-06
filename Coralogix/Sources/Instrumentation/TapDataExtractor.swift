@@ -30,10 +30,6 @@ struct TouchEvent {
     let eventType: InteractionEventName
     let scrollDirection: ScrollDirection?
     let phase: Phase
-    /// When the touch happened, in epoch seconds. Session replay hands this to the Flutter
-    /// bitmap provider so Dart can refuse to draw a tap it can no longer represent honestly,
-    /// which only works if the value is the touch's own time rather than the capture's.
-    let timestamp: TimeInterval
 
     /// Standard init — position is derived from the live UITouch (tap / scroll path).
     init(view: UIView,
@@ -47,20 +43,14 @@ struct TouchEvent {
         self.eventType = eventType
         self.scrollDirection = scrollDirection
         self.phase = phase
-        self.timestamp = Self.epochSeconds(ofTouchAt: touch.timestamp)
     }
 
     /// Position-only init — the location comes from state recorded at `.began` rather than from
     /// `touch.view`, which UIKit may clear before the `.ended` event is delivered.
-    ///
-    /// `touchUptime` is the originating `UITouch.timestamp` when the caller still has the touch,
-    /// which the tap and swipe paths do. Without one — a recogniser firing with no touch behind
-    /// it — the recogniser's own firing time is the closest thing to the touch's.
     init(view: UIView,
          location: CGPoint,
          eventType: InteractionEventName,
          scrollDirection: ScrollDirection? = nil,
-         touchUptime: TimeInterval? = nil,
          phase: Phase = .ended) {
         self.view = view
         self.touch = nil
@@ -68,14 +58,6 @@ struct TouchEvent {
         self.eventType = eventType
         self.scrollDirection = scrollDirection
         self.phase = phase
-        self.timestamp = touchUptime.map(Self.epochSeconds(ofTouchAt:)) ?? Date().timeIntervalSince1970
-    }
-
-    /// `UITouch.timestamp` is seconds since boot, not since the epoch, so it has to be rebased
-    /// against the current uptime rather than used directly.
-    internal static func epochSeconds(ofTouchAt touchUptime: TimeInterval) -> TimeInterval {
-        let age = ProcessInfo.processInfo.systemUptime - touchUptime
-        return Date().timeIntervalSince1970 - max(0, age)
     }
 }
 
@@ -262,15 +244,12 @@ final class ScrollTracker {
 /// This is the single place that knows how to map UIKit view metadata
 /// to the interaction_context schema.
 enum TapDataExtractor {
-    /// What a session replay capture reads from a touch, and nothing more: the event name, the
-    /// position the marker is painted at, and the touch's own time. Nothing is read from the
-    /// view, so no view walk is paid and the customer's `shouldSendText` and `resolveTargetName`
-    /// are not consulted — they are consulted once per interaction, by `extract`, at finger-up.
+    /// What a session replay capture reads from a touch, and nothing more: the event name and the
+    /// position the marker is painted at. Nothing is read from the view, so no view walk is paid
+    /// and the customer's `shouldSendText` and `resolveTargetName` are not consulted — they are
+    /// consulted once per interaction, by `extract`, at finger-up.
     static func captureProperties(from event: TouchEvent) -> [String: Any] {
-        var properties: [String: Any] = [
-            Keys.eventName.rawValue: event.eventType.rawValue,
-            Keys.tapTimestamp.rawValue: event.timestamp
-        ]
+        var properties: [String: Any] = [Keys.eventName.rawValue: event.eventType.rawValue]
         Global.updateLocation(tapData: &properties, location: event.location)
         return properties
     }

@@ -163,8 +163,6 @@ extension CoralogixRum {
         if let v = dictionary[Keys.attributes.rawValue] { result[Keys.attributes.rawValue] = Self.attributesWithRoundedCoordinates(v, depth: 0, maxDepth: 10) }
         if let v = dictionary[Keys.positionX.rawValue] { result[Keys.positionX.rawValue] = Self.roundCoordinateForRum(v) }
         if let v = dictionary[Keys.positionY.rawValue] { result[Keys.positionY.rawValue] = Self.roundCoordinateForRum(v) }
-        // The tap's own time, in epoch seconds, forwarded verbatim like every other bridge field.
-        if let v = dictionary[Keys.tapTimestamp.rawValue] { result[Keys.tapTimestamp.rawValue] = v }
 
         // scroll_direction: include only when present and a known ScrollDirection value.
         let scrollKey = Keys.scrollDirection.rawValue
