@@ -18,6 +18,14 @@ inputs:
       18.5 SDK) and picking one of those fails at launch.
     required: false
     default: ''
+  boot:
+    description: >-
+      Boot the simulator here. Set to 'false' to only resolve the device —
+      appropriate for `xcodebuild test`, which boots the destination itself, so
+      booting first only serialises work it already does internally. The shards
+      run `test-without-building` and do want the boot started early.
+    required: false
+    default: 'true'
   wait:
     description: >-
       Block until the simulator finishes booting. Set to 'false' to overlap the
@@ -44,6 +52,7 @@ runs:
         WANT_DEVICE: ${{ inputs.device }}
         WANT_RUNTIME: ${{ inputs.runtime }}
         WANT_WAIT: ${{ inputs.wait }}
+        WANT_BOOT: ${{ inputs.boot }}
       run: |
         set -euo pipefail
         DEVICES=$(xcrun simctl list devices available -j)
@@ -113,7 +122,9 @@ runs:
         # caller would pay the boot here AND again in `bootstatus`. CoreSimulator
         # continues the boot even if this client is reaped, and `bootstatus -b`
         # re-boots if it somehow did not start. Already-booted is not an error.
-        if [ "${WANT_WAIT}" = "true" ]; then
+        if [ "${WANT_BOOT}" != "true" ]; then
+          echo "boot skipped — xcodebuild will boot this destination itself"
+        elif [ "${WANT_WAIT}" = "true" ]; then
           xcrun simctl boot "$UDID" 2>/dev/null || true
         else
           nohup xcrun simctl boot "$UDID" >/dev/null 2>&1 &
@@ -121,6 +132,6 @@ runs:
         fi
 
     - name: Wait for boot
-      if: inputs.wait == 'true'
+      if: inputs.wait == 'true' && inputs.boot == 'true'
       shell: bash
       run: xcrun simctl bootstatus "${{ steps.pick.outputs.udid }}" -b

@@ -160,7 +160,6 @@ jobs:
           # build step below.
           spm-path: DerivedData/SourcePackages
           spm-key: spm-ui-${{ runner.os }}-xc${{ inputs.xcode-version }}-${{ hashFiles('Example/DemoApp.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
-          derived-data-key: dd-ui-${{ runner.os }}-xc${{ inputs.xcode-version }}-${{ hashFiles('Example/Podfile', 'Coralogix/Sources/**/*.swift', 'CoralogixInternal/Sources/**/*.swift', 'SessionReplay/Sources/**/*.swift', 'Example/DemoAppSwift/**', 'Example/DemoAppSwiftUI/**', 'Example/Shared/**') }}
 
       - uses: ./.github/actions/setup-demo-app
         with:

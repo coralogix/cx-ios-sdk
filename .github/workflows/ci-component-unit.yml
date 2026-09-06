@@ -36,20 +36,16 @@ jobs:
         with:
           xcode-version: ${{ inputs.xcode-version }}
 
-      # Started first and awaited last: CoreSimulator's cold start (~3 min) runs
-      # concurrently with the cache restore instead of after it.
       - uses: ./.github/actions/boot-simulator
         with:
-          wait: 'false'
+          # No pre-boot: xcodebuild boots the destination as part of `test`, and
+          # doing it here only serialised what it already does internally.
+          boot: 'false'
 
       - uses: ./.github/actions/cache-xcode-build
         with:
           key-prefix: unit
           spm-key: spm-unit-${{ runner.os }}-xc${{ inputs.xcode-version }}-${{ hashFiles('Package.resolved') }}
-          derived-data-key: dd-unit-${{ runner.os }}-xc${{ inputs.xcode-version }}-${{ hashFiles('Package.swift', 'Package.resolved', 'Coralogix/Sources/**/*.swift', 'CoralogixInternal/Sources/**/*.swift', 'SessionReplay/Sources/**/*.swift', 'Tests/**/*.swift') }}
-
-      - name: Wait for simulator
-        run: xcrun simctl bootstatus "$SIM_UDID" -b
 
       # No `clean`: a fresh runner has nothing to clean, and it only discards the
       # DerivedData restored above — which is the entire point of the cache.
