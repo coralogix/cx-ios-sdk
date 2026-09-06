@@ -35,9 +35,20 @@ jobs:
     uses: ./.github/workflows/ci-podspec-lint.yml
 
   ci-passed:
-    name: ci-passed
-    # The single required status check. Runs even when something upstream fails
-    # so the gate always reports rather than being skipped into a pending state.
+    # NAME IS LOAD-BEARING. This is the aggregate gate — it runs no tests itself —
+    # but branch protection on master requires a check literally called
+    # "Run DemoApp UI Tests", the job name from the ui-tests.yml this workflow
+    # replaced. Keeping the name means PRs opened before and after this change
+    # both satisfy the same gate, with no admin action and no window where
+    # everything is blocked.
+    #
+    # To rename it to something accurate, repoint branch protection first:
+    #   gh api -X PATCH repos/coralogix/cx-ios-sdk/branches/master/protection/required_status_checks \
+    #     -F strict=true -f 'contexts[]=ci-passed'
+    # then change this `name:` in the same merge.
+    name: Run DemoApp UI Tests
+    # Runs even when something upstream fails so the gate always reports rather
+    # than being skipped into a pending state.
     if: always()
     needs: [component-unit, ui-tests, podspec-lint]
     runs-on: ubuntu-latest
