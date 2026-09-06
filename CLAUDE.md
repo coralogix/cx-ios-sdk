@@ -1,6 +1,7 @@
 # cx-ios-sdk
 
 @.claude/rules/CODING_STANDARDS.md
+@.claude/rules/TESTING_AND_CI.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
@@ -41,7 +42,12 @@ Three SPM test targets: `CoralogixRumTests`, `CoralogixInternalTests`,
 and the shared steps are composite actions in `.github/actions/`. XCUITests are
 split into `component`, `smoke` and `soak` tiers and sharded across parallel
 jobs — **a new UI test must be added to `.github/ci/ui-suites.json` or CI fails
-the build for leaving it unrun.** See `.github/ci/README.md`.
+the build for leaving it unrun.**
+
+`.claude/rules/TESTING_AND_CI.md` covers where a test belongs, how shards are
+packed, what the leak harness does, and which optimisations were measured and
+rejected — read it before adding a test or touching a workflow.
+`.github/ci/README.md` is the same ground for human readers.
 
 ## Architecture
 
