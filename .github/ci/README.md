@@ -61,9 +61,9 @@ Measured, so that the next person optimising here starts from evidence:
 
 | lever | effect |
 |---|---|
-| parallel shards / matrix | UI 32m → ~10m, podspec lint 10.5m → 5.2m |
-| `macos-15-xlarge` for the build | part of build 5m50s → ~2m |
-| `ARCHS` pinned to one slice | the other part — a generic simulator destination builds arm64 *and* x86_64 |
+| parallel shards / matrix | UI 32m → ~8.5m, podspec lint 10.5m → ~7m |
+| `macos-15-xlarge` for the build | build 5m50s → ~1.5m |
+| `ARCHS` pinned to one slice | not a win over the old workflow — it offsets one. A *concrete* destination (what the old job used) already built one arch; `generic/platform` builds arm64 *and* x86_64, so pinning restores parity while keeping the build simulator-free |
 | SPM / Pods caches | small; `pod install` is 8s and the SPM graph is mostly binary targets |
 | DerivedData cache | **removed — it made things slower** |
 
