@@ -156,6 +156,9 @@ jobs:
       - uses: ./.github/actions/cache-xcode-build
         with:
           key-prefix: ui
+          # Must stay at the default location inside DerivedData — see the
+          # build step below.
+          spm-path: DerivedData/SourcePackages
           spm-key: spm-ui-${{ runner.os }}-xc${{ inputs.xcode-version }}-${{ hashFiles('Example/DemoApp.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
           derived-data-key: dd-ui-${{ runner.os }}-xc${{ inputs.xcode-version }}-${{ hashFiles('Example/Podfile', 'Coralogix/Sources/**/*.swift', 'CoralogixInternal/Sources/**/*.swift', 'SessionReplay/Sources/**/*.swift', 'Example/DemoAppSwift/**', 'Example/DemoAppSwiftUI/**', 'Example/Shared/**') }}
 
@@ -168,6 +171,12 @@ jobs:
       # to boot here at all, and ARCHS is pinned to the runner's own architecture
       # — a generic simulator destination otherwise builds arm64 AND x86_64, and
       # the shards only ever run the one the runner matches.
+      #
+      # Deliberately no -clonedSourcePackagesDirPath: the app's Crashlytics run
+      # script resolves the Firebase checkout as
+      # `${BUILD_DIR%/Build/*}/SourcePackages/checkouts/firebase-ios-sdk/...`,
+      # which only exists if SPM stays at its default location under
+      # -derivedDataPath. Relocating the checkouts fails that build phase.
       - name: Build for testing
         env:
           SCHEMES: ${{ needs.plan.outputs.schemes }}
@@ -184,7 +193,6 @@ jobs:
               -sdk iphonesimulator \
               -destination "generic/platform=iOS Simulator" \
               -derivedDataPath ../DerivedData \
-              -clonedSourcePackagesDirPath ../SourcePackages \
               -jobs "$(sysctl -n hw.ncpu)" \
               CODE_SIGNING_ALLOWED=NO \
               CODE_SIGN_IDENTITY="" \
