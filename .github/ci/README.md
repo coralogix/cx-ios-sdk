@@ -51,9 +51,28 @@ roughly 200s.
   can carry runtimes newer than its SDK (18.6 and 26.x alongside an 18.5 SDK) and
   picking one of those fails at launch. Overriding `runtime` opts out of that.
 - **Xcode is pinned, not probed.** A fallback ladder silently changes the
-  compiler, which invalidates every DerivedData cache entry built with it.
+  compiler under you, so a green run proves nothing about which toolchain ran.
 - **Unit tests stay serial.** The SDK swizzles global process state, so tests
   sharing a process must not interleave.
+
+## What actually makes this fast
+
+Measured, so that the next person optimising here starts from evidence:
+
+| lever | effect |
+|---|---|
+| parallel shards / matrix | UI 32m → ~10m, podspec lint 10.5m → 5.2m |
+| `macos-15-xlarge` for the build | part of build 5m50s → ~2m |
+| `ARCHS` pinned to one slice | the other part — a generic simulator destination builds arm64 *and* x86_64 |
+| SPM / Pods caches | small; `pod install` is 8s and the SPM graph is mostly binary targets |
+| DerivedData cache | **removed — it made things slower** |
+
+The DerivedData cache is the trap. `actions/cache` resets mtimes on extraction,
+so every source file looks newer than its build products and xcodebuild rebuilds
+regardless: the unit job hit both cache keys exactly and still took 302s against
+282s cold, having spent 99s on the restore. The UI build compiles in ~111s with
+every cache missing, because firebase-ios-sdk ships most of its weight as binary
+targets. Don't re-add it without measuring first.
 
 ## Running a tier by hand
 
