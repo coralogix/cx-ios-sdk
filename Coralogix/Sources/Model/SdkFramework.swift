@@ -28,11 +28,6 @@ public enum SdkFramework: Equatable {
             return false
         }
     }
-
-    var isFlutter: Bool {
-        if case .flutter = self { return true }
-        return false
-    }
     
     var version: String {
         switch self {

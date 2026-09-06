@@ -357,7 +357,7 @@ public class SessionReplayModel {
         let delivery = FlutterDeliveryGate()
 
         // Every span that carries a screenshot now closes in this capture's completion, so an
-        // unanswered provider would stop error, log, tap and navigation events from being
+        // unanswered provider would stop error, log and navigation events from being
         // exported at all — not just cost a frame — and pin each span in plugin-owned storage
         // with no ceiling. A wedged Dart isolate, a dropped MethodChannel reply or an engine
         // torn down mid-session all reach that state. Give up on the frame after a bounded wait
@@ -446,7 +446,7 @@ public class SessionReplayModel {
     /// Whether this capture was triggered by a tap, as opposed to a scroll or a swipe.
     ///
     /// Distinct from `isClickFrame`, which asks "does this capture carry a touch position" — true
-    /// of a scroll and a swipe too, since every interaction records coordinates. What the Flutter
+    /// of any capture that carries coordinates, whatever gesture produced it. What the Flutter
     /// provider is told has to be narrower: hold this frame for a tap and judge it against the
     /// tap's age. A scroll has no single moment to be late for, so applying the One-Frame Rule
     /// and a staleness budget to one would drop frames for a gesture that never asked for either.
@@ -635,8 +635,8 @@ public class SessionReplayModel {
             // With a Flutter dialog open Dart reports every masked row behind the barrier, which
             // unions to the whole screen, so a tap anywhere would read as a tap on masked content
             // and lose the exemption — a tap on the modal barrier, a disabled row or an already
-            // focused field would drop its frame and leave the interaction span pointing at no
-            // screenshot. The pipeline still suppresses the marker over Dart's rects, so the two
+            // focused field would drop its frame, and the recording would have none for that
+            // tap. The pipeline still suppresses the marker over Dart's rects, so the two
             // can disagree for Dart-masked content: the cost is one duplicate frame, against a
             // lost frame the other way. Shipping one frame twice beats losing one.
             let clickPoint = self.getClickPoint(from: properties)

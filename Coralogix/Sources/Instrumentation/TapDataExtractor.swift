@@ -262,6 +262,19 @@ final class ScrollTracker {
 /// This is the single place that knows how to map UIKit view metadata
 /// to the interaction_context schema.
 enum TapDataExtractor {
+    /// What a session replay capture reads from a touch, and nothing more: the event name, the
+    /// position the marker is painted at, and the touch's own time. Nothing is read from the
+    /// view, so no view walk is paid and the customer's `shouldSendText` and `resolveTargetName`
+    /// are not consulted — they are consulted once per interaction, by `extract`, at finger-up.
+    static func captureProperties(from event: TouchEvent) -> [String: Any] {
+        var properties: [String: Any] = [
+            Keys.eventName.rawValue: event.eventType.rawValue,
+            Keys.tapTimestamp.rawValue: event.timestamp
+        ]
+        Global.updateLocation(tapData: &properties, location: event.location)
+        return properties
+    }
+
     /// - Parameter shouldSendText: Optional delegate from `CoralogixExporterOptions`.
     ///   When provided, it is called with the view and candidate text before recording
     ///   `target_element_inner_text`. Return `false` to redact the text to `***` — the key is
@@ -280,10 +293,8 @@ enum TapDataExtractor {
                         shouldSendText: ((UIView, String) -> Bool)? = nil,
                         resolveTargetName: ((UIView) -> String?)? = nil,
                         maskRects: [CGRect]? = nil) -> [String: Any] {
-        var tapData = [String: Any]()
+        var tapData = captureProperties(from: event)
         let view = event.view
-
-        tapData[Keys.eventName.rawValue] = event.eventType.rawValue
 
         // Masked = deliberate-masking geometry (needed for SwiftUI `.cxMask()`, which overlays
         // a masked sibling the view tree cannot see) unioned with the view-tree walk, which
@@ -335,13 +346,10 @@ enum TapDataExtractor {
             tapData[Keys.scrollDirection.rawValue] = direction.rawValue
         }
 
-        // x/y coordinates are stored both in tapData root (session replay compatibility)
-        // and in the nested attributes dict (interaction_context schema).
-        // On key collision, the incoming value wins — attributes data overrides earlier values.
+        // x/y already sit at the root (session replay reads them there) and are repeated in the
+        // nested attributes dict, which is what the interaction_context schema reads.
         var attributes = [String: Any]()
         Global.updateLocation(tapData: &attributes, location: event.location)
-        tapData.merge(attributes) { _, new in new }
-        tapData[Keys.tapTimestamp.rawValue] = event.timestamp
         tapData[Keys.attributes.rawValue] = attributes
 
         return tapData

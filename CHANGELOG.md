@@ -9,10 +9,11 @@ Release-mechanics commits (version bumps, podspec/script tweaks, README edits) a
 omitted; the focus here is user-facing behavior changes. Tickets are referenced as
 `CX-XXXXX` (Jira) or `ALPH-XXXX` (legacy). Pull request numbers are in parentheses.
 
-## [2.18.1] - 2026-09-06
+## [2.19.0] - 2026-09-06
 
-### Fixed
-- Flutter: the tap frame in a session recording is now captured when the finger touches down, once per tap.
+### Changed
+- The tap frame in a session recording is captured when the finger touches down, once per tap, in native, React Native and Flutter apps alike. Previously it was captured when the finger lifted, twice per tap in React Native and Flutter apps, and scrolls and swipes added a frame of their own.
+- User-interaction events no longer carry `screenshot_id` and `page`. The recording's tap frame is matched to the interaction by time, as on Android.
 
 ## [2.18.0] - 2026-08-31
 
