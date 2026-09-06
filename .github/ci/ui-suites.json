@@ -6,7 +6,7 @@
     "  component  focused: one test drives one feature and asserts on it.",
     "  smoke      broad: one test walks a path that joins several features",
     "             (interaction capture + session context + export + schema).",
-    "  soak       leak/perf probes. Not feature tests — nightly only.",
+    "  soak       leak/perf probes. Not feature tests, but cheap enough to gate a\n             PR once split one-test-per-shard, so they ride under the slowest\n             smoke shard rather than extending it.",
     "",
     "Shards run as parallel jobs against one shared build, so wall-clock is the",
     "SLOWEST shard, not the sum. `seconds` is the measured runtime of the tests",
@@ -20,7 +20,7 @@
   "shards": [
     {
       "id": "component-gestures",
-      "name": "component · gestures",
+      "name": "component \u00b7 gestures",
       "tier": "component",
       "scheme": "DemoAppSwift",
       "seconds": 116,
@@ -31,7 +31,7 @@
     },
     {
       "id": "component-redaction",
-      "name": "component · naming & redaction",
+      "name": "component \u00b7 naming & redaction",
       "tier": "component",
       "scheme": "DemoAppSwift",
       "seconds": 124,
@@ -42,7 +42,7 @@
     },
     {
       "id": "smoke-interaction",
-      "name": "smoke · interaction + session",
+      "name": "smoke \u00b7 interaction + session",
       "tier": "smoke",
       "scheme": "DemoAppSwift",
       "seconds": 124,
@@ -53,7 +53,7 @@
     },
     {
       "id": "smoke-network",
-      "name": "smoke · network + app launch",
+      "name": "smoke \u00b7 network + app launch",
       "tier": "smoke",
       "scheme": "DemoAppSwift",
       "seconds": 183,
@@ -64,7 +64,7 @@
     },
     {
       "id": "smoke-swiftui",
-      "name": "smoke · SwiftUI interaction",
+      "name": "smoke \u00b7 SwiftUI interaction",
       "tier": "smoke",
       "scheme": "DemoAppSwiftUI",
       "seconds": 62,
@@ -73,13 +73,22 @@
       ]
     },
     {
-      "id": "soak-session-replay",
-      "name": "soak · session replay leaks",
+      "id": "soak-replay-scroll",
+      "name": "soak \u00b7 replay scroll leak",
       "tier": "soak",
       "scheme": "DemoAppSwift",
-      "seconds": 228,
+      "seconds": 114,
       "tests": [
-        "DemoAppUITests/SessionReplayLeakUITests/test_listSlowScroll_1fps",
+        "DemoAppUITests/SessionReplayLeakUITests/test_listSlowScroll_1fps"
+      ]
+    },
+    {
+      "id": "soak-replay-navigation",
+      "name": "soak \u00b7 replay navigation leak",
+      "tier": "soak",
+      "scheme": "DemoAppSwift",
+      "seconds": 114,
+      "tests": [
         "DemoAppUITests/SessionReplayLeakUITests/test_navigationTransition"
       ]
     }

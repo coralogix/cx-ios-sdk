@@ -24,10 +24,13 @@ jobs:
     uses: ./.github/workflows/ci-component-unit.yml
 
   ui-tests:
-    # component + smoke on every PR; the soak tier runs in ci-nightly.yml.
+    # All three tiers gate a PR. soak is split one-test-per-shard so both of its
+    # shards finish inside the slowest smoke shard — adding them costs runner
+    # minutes, not wall-clock. ci-nightly.yml still runs soak on a schedule as a
+    # canary on master.
     uses: ./.github/workflows/ci-ui-tests.yml
     with:
-      tiers: '["component","smoke"]'
+      tiers: '["component","smoke","soak"]'
     secrets:
       demoapp_api_key: ${{ secrets.DEMOAPP_API_KEY }}
 

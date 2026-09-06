@@ -25,7 +25,7 @@ Shared steps live in `.github/actions/`: `setup-xcode`, `boot-simulator`,
 |---|---|---|
 | `component` | One test drives one feature and asserts on it. | every PR |
 | `smoke` | One test walks a path that joins several features — interaction capture + session context + export + schema validation. | every PR |
-| `soak` | Leak and performance probes. Not feature tests; too slow and too environment-sensitive to gate a PR. | nightly |
+| `soak` | Leak and performance probes. Not feature tests, but split one-test-per-shard they finish inside the slowest smoke shard, so gating on them is free in wall-clock. | every PR, plus nightly on master |
 
 The SPM unit tests in `Tests/` are the `component` tier at the unit level and run
 as a single job — see the header of `ci-component-unit.yml` for why they are not
