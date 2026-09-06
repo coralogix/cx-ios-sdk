@@ -94,13 +94,28 @@ runs:
           Example/Pods
           Example/Podfile.lock
           ~/Library/Caches/CocoaPods
+          ~/.cocoapods/repos
         key: ${{ inputs.cache-prefix }}-${{ runner.os }}-${{ hashFiles('Example/Podfile') }}
         restore-keys: |
           ${{ inputs.cache-prefix }}-${{ runner.os }}-
 
+    # `pod install` reaches cdn.cocoapods.org even with Pods/ restored, and that
+    # connection times out often enough to fail a build on its own. Caching
+    # ~/.cocoapods/repos above keeps the trunk metadata local; this retries what
+    # still has to cross the network.
     - name: Install pods
       shell: bash
       run: |
         set -euo pipefail
         cd Example
-        pod install --no-repo-update
+        for attempt in 1 2 3; do
+          if pod install --no-repo-update; then
+            exit 0
+          fi
+          if [ "$attempt" -lt 3 ]; then
+            echo "::warning::pod install failed (attempt $attempt/3) — retrying in $((attempt * 15))s"
+            sleep $((attempt * 15))
+          fi
+        done
+        echo "::error::pod install failed after 3 attempts"
+        exit 1
