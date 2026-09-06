@@ -35,20 +35,9 @@ jobs:
     uses: ./.github/workflows/ci-podspec-lint.yml
 
   ci-passed:
-    # NAME IS LOAD-BEARING. This is the aggregate gate — it runs no tests itself —
-    # but branch protection on master requires a check literally called
-    # "Run DemoApp UI Tests", the job name from the ui-tests.yml this workflow
-    # replaced. Keeping the name means PRs opened before and after this change
-    # both satisfy the same gate, with no admin action and no window where
-    # everything is blocked.
-    #
-    # To rename it to something accurate, repoint branch protection first:
-    #   gh api -X PATCH repos/coralogix/cx-ios-sdk/branches/master/protection/required_status_checks \
-    #     -F strict=true -f 'contexts[]=ci-passed'
-    # then change this `name:` in the same merge.
-    name: Run DemoApp UI Tests
-    # Runs even when something upstream fails so the gate always reports rather
-    # than being skipped into a pending state.
+    name: ci-passed
+    # The real gate. Runs even when something upstream fails so it always
+    # reports rather than being skipped into a pending state.
     if: always()
     needs: [component-unit, ui-tests, podspec-lint]
     runs-on: ubuntu-latest
@@ -68,3 +57,33 @@ jobs:
             exit 1
           fi
           echo "All required jobs passed (or were skipped)."
+
+  # Compatibility shim — mirrors ci-passed under the name master's branch
+  # protection still requires ("Run DemoApp UI Tests", the job name from the
+  # ui-tests.yml this workflow replaces).
+  #
+  # Required checks are AND-ed and GitHub has no "any of" semantics, so while PRs
+  # based on the old master are still open, the gate cannot simply be renamed:
+  # requiring both names would block every PR, and requiring only the new one
+  # would strand the old PRs until they rebased. Reporting under both names costs
+  # one ubuntu job and keeps `ci-passed` honestly named.
+  #
+  # Delete this job once protection points at ci-passed:
+  #   gh api -X PATCH repos/coralogix/cx-ios-sdk/branches/master/protection/required_status_checks \
+  #     -F strict=true -f 'contexts[]=ci-passed'
+  legacy-required-check:
+    name: Run DemoApp UI Tests
+    if: always()
+    needs: ci-passed
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mirror the ci-passed result
+        env:
+          GATE: ${{ needs.ci-passed.result }}
+        run: |
+          set -euo pipefail
+          echo "ci-passed = $GATE"
+          # Anything other than success — failure, cancelled, or skipped — must
+          # not report green under the required name.
+          [ "$GATE" = "success" ] || { echo "::error::ci-passed did not succeed (result: $GATE)"; exit 1; }
+          echo "Gate satisfied."

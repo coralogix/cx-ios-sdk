@@ -8,8 +8,10 @@ run and manual dispatch.
 ci.yml ─┬─ ci-component-unit.yml   SPM unit tests
         ├─ ci-ui-tests.yml         XCUITest, tiers: component + smoke
         ├─ ci-podspec-lint.yml     the three podspecs, in parallel
-        └─ ci-passed               the one status branch protection requires,
-                                   reported as "Run DemoApp UI Tests" (see ci.yml)
+        ├─ ci-passed               the real gate
+        └─ legacy-required-check    mirrors it as "Run DemoApp UI Tests", the
+                                    name master's protection still requires;
+                                    delete once protection points at ci-passed
 
 ci-nightly.yml ── ci-ui-tests.yml  tier: soak
 ```
