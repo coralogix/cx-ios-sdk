@@ -12,7 +12,7 @@ omitted; the focus here is user-facing behavior changes. Tickets are referenced 
 ## [2.18.1] - 2026-09-06
 
 ### Fixed
-- The tap frame in a session recording is captured when the finger touches down, once per tap, in native, React Native and Flutter apps alike; previously it was captured when the finger lifted, twice per tap in React Native and Flutter apps, and scrolls and swipes added a frame of their own. User-interaction events no longer carry `screenshot_id` and `page`; the frame is matched to the interaction by time, as on Android.
+- The tap frame in a session recording is captured when the finger touches down, once per tap, in native, React Native and Flutter apps alike, and is reported as a `screenshot` event; previously it was captured when the finger lifted, twice per tap in React Native and Flutter apps, and scrolls and swipes added a frame of their own. User-interaction events no longer carry `screenshot_id` and `page`; the frame is matched to the interaction by time, as on Android.
 
 ### Changed
 - `flutterViewBitmapProvider` is `(viewId, frameId, completion)` again, matching Android. The `isClick` and `tapTimestampMs` arguments added in 2.18.0 are removed; an app supplying its own provider closure drops them.

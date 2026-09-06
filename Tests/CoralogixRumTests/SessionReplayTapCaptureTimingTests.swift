@@ -3,8 +3,9 @@
 //  Coralogix-Rum-Tests
 //
 //  The same rule for every framework, as on Android: session replay takes its frame when the
-//  finger lands, once per tap, and a user-interaction span — native or bridge-reported — carries
-//  the payload and no screenshot. The classified gesture at finger-up captures nothing.
+//  finger lands, once per tap, and reports it as a `screenshot` event when it ships; a
+//  user-interaction span — native or bridge-reported — carries the payload and no screenshot. The
+//  classified gesture at finger-up captures nothing.
 //
 
 import XCTest
@@ -100,9 +101,12 @@ final class SessionReplayTapCaptureTimingTests: XCTestCase {
          Keys.isMasked.rawValue: false]
     }
 
-    private var userInteractionSpans: [MockSpan] {
+    private var userInteractionSpans: [MockSpan] { spans(of: .userInteraction) }
+    private var screenshotSpans: [MockSpan] { spans(of: .screenshot) }
+
+    private func spans(of type: CoralogixEventType) -> [MockSpan] {
         tracer.mockSpanBuilder.startedSpans.filter {
-            $0.recordedAttributes[Keys.eventType.rawValue] == .string(CoralogixEventType.userInteraction.rawValue)
+            $0.recordedAttributes[Keys.eventType.rawValue] == .string(type.rawValue)
         }
     }
 
@@ -163,8 +167,50 @@ final class SessionReplayTapCaptureTimingTests: XCTestCase {
             XCTAssertEqual(properties[Keys.page.rawValue] as? Int, 0)
             XCTAssertNotNil(properties[Keys.screenshotId.rawValue] as? String)
             XCTAssertTrue(userInteractionSpans.isEmpty,
-                          "\(framework): finger-down must never become a span — it may still turn into a scroll")
+                          "\(framework): finger-down must never become an interaction span — it may still turn into a scroll")
+
+            // The frame is findable from the event stream: one `screenshot` event points at it,
+            // as Android exports one for every tap frame. It carries the frame and nothing else.
+            XCTAssertEqual(screenshotSpans.count, 1, "\(framework): one shipped tap frame is one screenshot event")
+            let shot = try XCTUnwrap(screenshotSpans.first)
+            XCTAssertTrue(shot.didEnd, "\(framework): the screenshot event is reported once the frame shipped")
+            XCTAssertEqual(shot.recordedAttributes[Keys.screenshotId.rawValue],
+                           .string(try XCTUnwrap(properties[Keys.screenshotId.rawValue] as? String)),
+                           "\(framework): the event points at the slot the capture reserved")
+            XCTAssertEqual(shot.recordedAttributes[Keys.page.rawValue], .int(0), file: #filePath, line: #line)
+            XCTAssertNil(shot.recordedAttributes[Keys.tapObject.rawValue],
+                         "\(framework): a screenshot event carries no interaction payload")
+            XCTAssertNil(shot.recordedAttributes[Keys.isManual.rawValue],
+                         "\(framework): a tap frame is not a manual capture")
         }
+    }
+
+    /// The event exists only to point at a frame, so a capture the model drops — a duplicate, or a
+    /// Flutter provider answering nil — reports nothing, and the reserved slot is handed back by
+    /// the model. Android's rule: the screenshot log is reported only for a frame that shipped.
+    func testFingerDown_droppedFrame_reportsNoScreenshotEvent() throws {
+        let rum = makeRum(.flutter(version: "1.0.0"))
+        sessionReplay.captureEventResult = .failure(.skippingEvent)
+
+        rum.handleInteractionNotification(notification: fingerDown())
+
+        XCTAssertEqual(sessionReplay.captureEventCallCount, 1, "The frame was still requested")
+        let shot = try XCTUnwrap(screenshotSpans.first, "The span is opened before the outcome is known")
+        XCTAssertFalse(shot.didEnd, "A dropped frame must leave the screenshot event unreported")
+        XCTAssertNil(shot.recordedAttributes[Keys.screenshotId.rawValue])
+    }
+
+    /// An app without session replay pays nothing per touch: no capture, and no span opened that
+    /// would never end. The test above is the positive counterpart with a replay registered.
+    func testFingerDown_withoutSessionReplay_opensNoSpan() {
+        let rum = makeRum(.swift)
+        SdkManager.shared.register(sessionReplayInterface: nil)
+
+        rum.handleInteractionNotification(notification: fingerDown())
+
+        XCTAssertEqual(sessionReplay.captureEventCallCount, 0)
+        XCTAssertTrue(tracer.mockSpanBuilder.startedSpans.isEmpty,
+                      "Finger-down without a replay must not start any span")
     }
 
     func testFingerDown_reachesTheCaptureThroughTheNotification() {

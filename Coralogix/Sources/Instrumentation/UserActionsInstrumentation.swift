@@ -39,8 +39,8 @@ extension CoralogixRum {
         case .began:
             // Session replay's frame, for every framework, as Android captures from
             // `GestureDetector.onDown`: asked for while the tapped screen is still the one on
-            // display, and before Dart or a recogniser has moved anything. Never a span — the same
-            // touch may still turn into a scroll.
+            // display, and before Dart or a recogniser has moved anything. Never an interaction
+            // span — the same touch may still turn into a scroll.
             captureSessionReplayEventIfNeeded(for: touchEvent)
         case .ended:
             // The classified gesture becomes a span only where native touches report spans at
@@ -68,16 +68,14 @@ extension CoralogixRum {
         Helper.shouldEmitUserActionSpan(options: coralogixExporter?.getOptions(), sdkFramework: CoralogixRum.mobileSDK.sdkFramework)
     }
 
-    /// Feeds session replay with the finger-down: a reserved screenshot slot plus what the marker is
-    /// painted from. Guarded before anything is built, so an app without session replay pays
-    /// nothing per touch. No RUM span, and no span waits on it — the model hands the screenshot
-    /// index back on its own if the frame is dropped.
+    /// The finger-down frame, and the `screenshot` event that points at it. Android exports one
+    /// for every tap frame (`CaptureEvent.Tap.shouldExportLog()`), so the frame stays findable
+    /// from the event stream whether or not an interaction span is emitted for the tap — the
+    /// interaction span never carries it. Guarded before anything is built, so an app without
+    /// session replay pays nothing per touch and opens no span it would never end.
     private func captureSessionReplayEventIfNeeded(for touchEvent: TouchEvent) {
-        guard let sessionReplay = SdkManager.shared.getSessionReplay(),
-              let screenshotManager = coralogixExporter?.getScreenshotManager() else { return }
-        let metadata = buildMetadata(properties: TapDataExtractor.captureProperties(from: touchEvent),
-                                     screenshotLocation: screenshotManager.nextScreenshotLocation)
-        _ = sessionReplay.captureEvent(properties: metadata)
+        guard SdkManager.shared.getSessionReplay() != nil else { return }
+        reportScreenshot(properties: TapDataExtractor.captureProperties(from: touchEvent))
     }
 
     /// One `user_interaction` span per interaction, native or bridge-reported, carrying the payload

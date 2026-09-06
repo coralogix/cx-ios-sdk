@@ -104,14 +104,23 @@ extension CoralogixRum: CoralogixInterface {
     }
     
     internal func makeSpan(isManual: Bool = false) {
+        // `isManual` travels with the capture so the host's own `captureEvent()` is not
+        // deduplicated away: it asked for this frame explicitly.
+        reportScreenshot(properties: isManual ? [Keys.isManual.rawValue: true] : [:])
+    }
+
+    /// One `screenshot` event for a capture no other event owns: the periodic tick, the host's
+    /// manual capture, and a touch's finger-down frame. `properties` travel with the capture — the
+    /// tap position the marker is painted from, or `isManual` — and `isManual` is echoed on the
+    /// event. A screenshot span exists only to point at a frame, so a dropped capture emits no
+    /// span at all — the same rule Android applies, where the screenshot log is reported only for
+    /// a frame that shipped.
+    internal func reportScreenshot(properties: [String: Any]) {
         let span = makeSpan(event: .screenshot, source: .console, severity: .info)
-        if isManual { span.setAttribute(key: Keys.isManual.rawValue, value: AttributeValue(true)) }
-        // A screenshot span exists only to point at a frame, so a dropped capture emits no span
-        // at all — the same rule Android applies, where the screenshot log is reported only for a
-        // frame that shipped. `isManual` travels with the capture so the host's own
-        // `captureEvent()` is not deduplicated away: it asked for this frame explicitly.
-        let extra: [String: Any] = isManual ? [Keys.isManual.rawValue: true] : [:]
-        self.recordScreenshotForSpan(on: span, extraProperties: extra) { didCapture in
+        if properties[Keys.isManual.rawValue] as? Bool == true {
+            span.setAttribute(key: Keys.isManual.rawValue, value: AttributeValue(true))
+        }
+        self.recordScreenshotForSpan(on: span, extraProperties: properties) { didCapture in
             guard didCapture else {
                 Log.d("[SessionReplay] capture produced no frame — screenshot event not reported")
                 return
