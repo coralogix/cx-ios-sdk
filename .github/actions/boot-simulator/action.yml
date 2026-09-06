@@ -43,6 +43,7 @@ runs:
       env:
         WANT_DEVICE: ${{ inputs.device }}
         WANT_RUNTIME: ${{ inputs.runtime }}
+        WANT_WAIT: ${{ inputs.wait }}
       run: |
         set -euo pipefail
         DEVICES=$(xcrun simctl list devices available -j)
@@ -107,8 +108,17 @@ runs:
         echo "SIM_UDID=$UDID" >> "$GITHUB_ENV"
         echo "SIM_DESTINATION=platform=iOS Simulator,id=$UDID" >> "$GITHUB_ENV"
 
-        # Already-booted is not an error; bootstatus below is the real gate.
-        xcrun simctl boot "$UDID" 2>/dev/null || true
+        # `simctl boot` blocks until the device is up (~80s cold), so with
+        # wait=false it must be detached or there is no overlap to be had — the
+        # caller would pay the boot here AND again in `bootstatus`. CoreSimulator
+        # continues the boot even if this client is reaped, and `bootstatus -b`
+        # re-boots if it somehow did not start. Already-booted is not an error.
+        if [ "${WANT_WAIT}" = "true" ]; then
+          xcrun simctl boot "$UDID" 2>/dev/null || true
+        else
+          nohup xcrun simctl boot "$UDID" >/dev/null 2>&1 &
+          echo "boot detached — join it with: xcrun simctl bootstatus \"\$SIM_UDID\" -b"
+        fi
 
     - name: Wait for boot
       if: inputs.wait == 'true'
