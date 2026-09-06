@@ -65,9 +65,9 @@ final class SessionReplayTapCaptureTimingTests: XCTestCase {
 
     /// The event `cx_sendEvent` posts at `.began`: a click, because nothing is classified yet.
     private func fingerDown() -> Notification {
-        Notification(name: .cxRumNotificationTouchBegan,
+        Notification(name: .cxRumNotificationUserActions,
                      object: TouchEvent(view: UIView(), location: tapLocation, eventType: .click,
-                                        touchUptime: ProcessInfo.processInfo.systemUptime))
+                                        touchUptime: ProcessInfo.processInfo.systemUptime, phase: .began))
     }
 
     /// The event `cx_sendEvent` posts at `.ended` once the touch is classified as a tap.
@@ -99,12 +99,23 @@ final class SessionReplayTapCaptureTimingTests: XCTestCase {
         return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
     }
 
+    // MARK: - The phase every existing producer reports
+
+    /// Only the `.began` case in `cx_sendEvent` says otherwise, so every tap, scroll and swipe the
+    /// swizzles and the SwiftUI recognisers already post keeps being a classified gesture.
+    func testTouchEvent_isAClassifiedGestureUnlessTheProducerSaysOtherwise() {
+        XCTAssertEqual(TouchEvent(view: UIView(), location: tapLocation, eventType: .click).phase, .ended)
+        XCTAssertEqual(TouchEvent(view: UIView(), touch: UITouch(), eventType: .scroll).phase, .ended)
+        XCTAssertEqual(TouchEvent(view: UIView(), location: tapLocation, eventType: .click, phase: .began).phase,
+                       .began)
+    }
+
     // MARK: - Flutter: one frame, at finger-down, span-only bridge path
 
     func testFlutter_fingerDown_requestsOneFrameWithTheTapPositionAndAReservedSlot() throws {
         let rum = makeRum(.flutter(version: "1.0.0"))
 
-        rum.handleTouchBeganNotification(notification: fingerDown())
+        rum.handleInteractionNotification(notification: fingerDown())
 
         XCTAssertEqual(sessionReplay.captureEventCallCount, 1,
                        "Finger-down must request exactly one frame")
@@ -128,9 +139,9 @@ final class SessionReplayTapCaptureTimingTests: XCTestCase {
         NotificationCenter.default.post(fingerDown())
 
         // Other tests may leave instances observing the same notification, so the count is
-        // a floor: zero here means the observer was never registered.
+        // a floor: zero here means a finger-down never reaches the capture through the observer.
         XCTAssertGreaterThanOrEqual(sessionReplay.captureEventCallCount, 1,
-                                    "initializeUserActionsInstrumentation must observe the finger-down notification")
+                                    "The user-actions observer must act on a `.began` event")
     }
 
     func testFlutter_fingerUpTap_requestsNoFrame() {
@@ -183,7 +194,7 @@ final class SessionReplayTapCaptureTimingTests: XCTestCase {
     func testReactNative_fingerDown_requestsNoFrame() {
         let rum = makeRum(.reactNative(version: "2.0.0"))
 
-        rum.handleTouchBeganNotification(notification: fingerDown())
+        rum.handleInteractionNotification(notification: fingerDown())
 
         XCTAssertEqual(sessionReplay.captureEventCallCount, 0,
                        "Only Flutter captures at finger-down")
@@ -223,7 +234,7 @@ final class SessionReplayTapCaptureTimingTests: XCTestCase {
     func testNative_fingerDown_requestsNoFrame() {
         let rum = makeRum(.swift)
 
-        rum.handleTouchBeganNotification(notification: fingerDown())
+        rum.handleInteractionNotification(notification: fingerDown())
 
         XCTAssertEqual(sessionReplay.captureEventCallCount, 0,
                        "A native app must not capture before the gesture is classified")

@@ -27,22 +27,6 @@ extension CoralogixRum {
         NotificationCenter.default.addObserver(self,
                                                selector: #selector(handleInteractionNotification(notification:)),
                                                name: .cxRumNotificationUserActions, object: nil)
-        NotificationCenter.default.addObserver(self,
-                                               selector: #selector(handleTouchBeganNotification(notification:)),
-                                               name: .cxRumNotificationTouchBegan, object: nil)
-    }
-
-    /// Finger-down. Only Flutter acts on it: its replay frame is requested here, before the
-    /// gesture is classified, so the capture reaches Dart while the tapped frame is still the one
-    /// on screen. Android's plugin does the same from `GestureDetector.onDown`. Everyone else
-    /// waits for the classified gesture on `handleInteractionNotification`.
-    @objc func handleTouchBeganNotification(notification: Notification) {
-        guard capturesSessionReplayAtTouchDown else { return }
-        guard let touchEvent = notification.object as? TouchEvent else {
-            Log.e("Touch-began notification received with no TouchEvent object")
-            return
-        }
-        captureSessionReplayEventIfNeeded(interactionProperties(from: touchEvent, maskRects: nil))
     }
 
     @objc func handleInteractionNotification(notification: Notification) {
@@ -50,10 +34,25 @@ extension CoralogixRum {
             Log.e("Notification received with no TouchEvent object")
             return
         }
-        // A Flutter touch asked for its frame at finger-down and its span comes from the bridge,
-        // so the classified gesture has nothing left to do — asking again here would request two
-        // frames for one tap, and the extraction below would be built to be thrown away.
-        if capturesSessionReplayAtTouchDown { return }
+
+        // Flutter acts on the finger-down and on nothing else: its replay frame is requested
+        // there, before the gesture is classified, so the capture reaches Dart while the tapped
+        // frame is still on screen — Android's plugin does the same from `GestureDetector.onDown`
+        // — and its span comes from the bridge. Everyone else acts on the classified gesture.
+        switch touchEvent.phase {
+        case .began where capturesSessionReplayAtTouchDown:
+            captureSessionReplayEventIfNeeded(interactionProperties(from: touchEvent, maskRects: nil))
+            return
+        case .began:
+            // Never a span: the same touch may still turn into a scroll.
+            return
+        case .ended where capturesSessionReplayAtTouchDown:
+            // The frame went out at finger-down; a second request here would be Android's one
+            // frame per tap turned into two.
+            return
+        case .ended:
+            break
+        }
 
         // The window walk is only worth paying for when this dictionary becomes a span.
         // When no span is emitted (hybrid, or userActions off) it only feeds session

@@ -8,10 +8,6 @@ import UIKit
 extension Notification.Name {
     static let cxRumNotification = Notification.Name("cxRumNotification")
     static let cxRumNotificationUserActions = Notification.Name("cxRumNotificationUserActions")
-    /// A single finger has landed, before the gesture is classified as a tap or a scroll. It can
-    /// start a session replay capture but must never become a span: a native app would turn it
-    /// into a click for every scroll. Classified gestures arrive on `cxRumNotificationUserActions`.
-    static let cxRumNotificationTouchBegan = Notification.Name("cxRumNotificationTouchBegan")
 }
 
 public class CoralogixRum {
@@ -114,7 +110,6 @@ public class CoralogixRum {
     private func removeNotification() {
         NotificationCenter.default.removeObserver(self, name: .cxRumNotification, object: nil)
         NotificationCenter.default.removeObserver(self, name: .cxRumNotificationUserActions, object: nil)
-        NotificationCenter.default.removeObserver(self, name: .cxRumNotificationTouchBegan, object: nil)
         NotificationCenter.default.removeObserver(self, name: UIApplication.didFinishLaunchingNotification, object: nil)
         NotificationCenter.default.removeObserver(self, name: UIApplication.didBecomeActiveNotification, object: nil)
         NotificationCenter.default.removeObserver(self, name: UIApplication.didEnterBackgroundNotification, object: nil)

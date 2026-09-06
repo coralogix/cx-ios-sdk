@@ -211,13 +211,14 @@ extension UIApplication {
                 // Store the originating view — it will be nil by the time .cancelled fires.
                 guard let view = touch.view else { continue }
                 ScrollTracker.shared.recordBegan(touch, view: view)
-                // Nothing is classified yet, so every finger-down is reported as a click and the
-                // observer decides whether it wants one this early (Flutter's replay frame does).
+                // Nothing is classified yet, so the finger-down goes out as a click in the `.began`
+                // phase and the observer decides whether it wants one this early (Flutter's replay
+                // frame does; a span never does).
                 if isSingleTouch {
                     NotificationCenter.default.post(
-                        name: .cxRumNotificationTouchBegan,
+                        name: .cxRumNotificationUserActions,
                         object: TouchEvent(view: view, location: touch.location(in: nil), eventType: .click,
-                                           touchUptime: touch.timestamp)
+                                           touchUptime: touch.timestamp, phase: .began)
                     )
                 }
 

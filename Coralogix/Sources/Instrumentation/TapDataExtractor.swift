@@ -15,11 +15,21 @@ import CoralogixInternal
 /// Carries the raw UIKit touch objects and resolved interaction type
 /// from the swizzle layer to the instrumentation layer.
 struct TouchEvent {
+    /// Where in the touch the event was reported from.
+    enum Phase {
+        /// The finger has landed and nothing is classified yet, so the event is reported as a
+        /// click. It must never become a span — the same touch may still turn into a scroll.
+        case began
+        /// The gesture is over and classified: a tap, a scroll or a swipe.
+        case ended
+    }
+
     let view: UIView
     let touch: UITouch?       // nil when the event originates from a gesture recogniser
     let location: CGPoint     // screen-coordinate position (top-left origin)
     let eventType: InteractionEventName
     let scrollDirection: ScrollDirection?
+    let phase: Phase
     /// When the touch happened, in epoch seconds. Session replay hands this to the Flutter
     /// bitmap provider so Dart can refuse to draw a tap it can no longer represent honestly,
     /// which only works if the value is the touch's own time rather than the capture's.
@@ -29,12 +39,14 @@ struct TouchEvent {
     init(view: UIView,
          touch: UITouch,
          eventType: InteractionEventName = .click,
-         scrollDirection: ScrollDirection? = nil) {
+         scrollDirection: ScrollDirection? = nil,
+         phase: Phase = .ended) {
         self.view = view
         self.touch = touch
         self.location = touch.location(in: nil)
         self.eventType = eventType
         self.scrollDirection = scrollDirection
+        self.phase = phase
         self.timestamp = Self.epochSeconds(ofTouchAt: touch.timestamp)
     }
 
@@ -48,12 +60,14 @@ struct TouchEvent {
          location: CGPoint,
          eventType: InteractionEventName,
          scrollDirection: ScrollDirection? = nil,
-         touchUptime: TimeInterval? = nil) {
+         touchUptime: TimeInterval? = nil,
+         phase: Phase = .ended) {
         self.view = view
         self.touch = nil
         self.location = location
         self.eventType = eventType
         self.scrollDirection = scrollDirection
+        self.phase = phase
         self.timestamp = touchUptime.map(Self.epochSeconds(ofTouchAt:)) ?? Date().timeIntervalSince1970
     }
 
