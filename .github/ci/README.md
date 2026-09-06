@@ -65,6 +65,7 @@ Measured, so that the next person optimising here starts from evidence:
 | lever | effect |
 |---|---|
 | parallel shards / matrix | UI 32m → ~8.5m, podspec lint 10.5m → ~7m |
+| `--skip-tests` on podspec lint | ~7m → ~1m; lint was re-running 1081 unit tests |
 | `macos-15-xlarge` for the build | build 5m50s → ~1.5m |
 | `ARCHS` pinned to one slice | not a win over the old workflow — it offsets one. A *concrete* destination (what the old job used) already built one arch; `generic/platform` builds arm64 *and* x86_64, so pinning restores parity while keeping the build simulator-free |
 | SPM / Pods caches | small; `pod install` is 8s and the SPM graph is mostly binary targets |
@@ -76,6 +77,22 @@ regardless: the unit job hit both cache keys exactly and still took 302s against
 282s cold, having spent 99s on the restore. The UI build compiles in ~111s with
 every cache missing, because firebase-ios-sdk ships most of its weight as binary
 targets. Don't re-add it without measuring first.
+
+## Where the unit tests run
+
+Once, in `ci-component-unit.yml`, over all three targets (1133 tests).
+
+`pod lib lint` used to run them a second time, because `Coralogix.podspec` and
+`SessionReplay.podspec` declare `test_spec` blocks. That was dropped with
+`--skip-tests`: it covered only two of the three targets
+(`CoralogixInternal.podspec` has no `test_spec`), it was the copy that flaked,
+and SDK logic does not change with the distribution channel. Lint still builds
+each pod under `--use-static-frameworks`, which is the part that genuinely
+differs from the SPM path.
+
+If you add a `test_spec` to a podspec expecting CI to run it, it will not —
+remove `--skip-tests` from `ci-podspec-lint.yml` first, and be explicit about
+what that buys over the unit job.
 
 ## Running a tier by hand
 

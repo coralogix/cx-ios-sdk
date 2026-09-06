@@ -7,6 +7,15 @@ name: Podspec Lint
 # dependency from the local file, so each lint is self-contained. Run serially
 # they cost 44s + 253s + 343s = 10.5 min; in parallel the slowest one is the
 # whole job. See lint_and_push_cocoapods.sh for the ordered publish path.
+#
+# --skip-tests: Coralogix.podspec and SessionReplay.podspec declare test_specs,
+# so lint was also building and running 1081 unit tests — the whole difference
+# between CoralogixInternal's 0.6 min and the other two's 5-10. Those tests
+# already run in ci-component-unit.yml, over all three targets rather than two
+# (CoralogixInternal.podspec has no test_spec), and they test SDK logic, which
+# does not change with the distribution channel. What lint uniquely proves is
+# that the pod BUILDS as a consumer integrates it — static frameworks, complete
+# source_files globs, declared dependencies — and --skip-tests keeps all of it.
 
 on:
   workflow_call:
@@ -88,6 +97,7 @@ jobs:
             --allow-warnings \
             --fail-fast \
             --no-clean \
+            --skip-tests \
             --verbose > "$LOG" 2>&1
           EXIT=$?
           set -e
