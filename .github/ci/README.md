@@ -7,6 +7,7 @@ dispatch.
 ```
 ci.yml ─┬─ ci-component-unit.yml   SPM unit tests
         ├─ ci-ui-tests.yml         XCUITest, tiers: component + smoke + soak
+        │                          (a `quarantine` tier exists and never runs)
         ├─ ci-podspec-lint.yml     the three podspecs, in parallel
         ├─ ci-passed               the real gate
         └─ legacy-required-check   mirrors it under the name master's branch

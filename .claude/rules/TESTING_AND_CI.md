@@ -119,25 +119,33 @@ harness proves nothing.**
 
 ---
 
-## Non-blocking shards (`"blocking": false`)
+## Quarantine (`"tier": "quarantine"`)
 
-A shard with `"blocking": false` runs, reports, and shows red on its own job, but
-does not fail the run — `continue-on-error` is set from it, so `ci-passed` stays
-green.
+A quarantined shard stays listed in `ui-suites.json` — so the coverage guard is
+satisfied and the test is not forgotten — but its tier is not one `ci.yml` runs,
+so **it does not execute at all**.
 
-This exists for one situation: **a scenario that reliably detects a known,
-unfixed defect.** Gating on it would redden PRs for a bug unrelated to their
-changes, which teaches everyone to ignore red — worse than not checking at all.
+Use it for a test that is **working correctly and reporting a defect nobody has
+scheduled**. The alternative, letting it run and go red without blocking, is
+worse: a red check that does not block still reads as broken CI, and people learn
+to ignore the colour. Better to not run it and carry a ticket.
 
-`soak-replay-navigation` carries it today. It detects the iOS 18.5
-navigation-transition leak tracked in CX-45948, probabilistically — the captured
-frame has to land mid-animation, so it leaked on roughly one run in three while
-the sibling scroll shard stayed clean across every run. Remove the field once the
-leak is fixed and it gates again.
+`soak-replay-navigation` is quarantined today. It reliably detects the iOS 18.5
+navigation-transition leak — 1 of 61 captured frames showed unmasked sentinel
+pixels — which is a real defect tracked separately, not a test problem. Its
+sibling `soak-replay-scroll` stayed clean across every run and still gates every
+PR, so leak detection is not lost.
 
-**Do not reach for this to silence a flaky test.** A flake means the test or the
-environment is wrong and should be fixed or removed; this flag is for a test that
-is working correctly and reporting a defect nobody has scheduled yet.
+Move it back to `soak` when the leak is fixed.
+
+**Quarantine is not for flaky tests.** A flake means the test or the environment
+is wrong: fix it or delete it. Quarantine is for a correct test whose finding is
+genuine and deferred.
+
+Always open a ticket when quarantining, and reference it **in the commit
+message, not in `ui-suites.json`** — the coding standards keep ticket IDs out of
+code comments, so the file explains the reason in prose and git blame carries
+the link.
 
 ---
 

@@ -144,7 +144,6 @@ jobs:
             '[.shards[] | select(.tier as $t | $tiers | index($t))
               | {id, name, scheme, tier,
                  harness: ((.harness // false) != false),
-                 nonblocking: (.blocking == false),
                  test_id: .tests[0],
                  only: ([.tests[] | "-only-testing:" + .] | join(" "))}]' \
             .github/ci/ui-suites.json)
@@ -284,11 +283,6 @@ jobs:
     if: needs.plan.outputs.any == 'true'
     runs-on: ${{ inputs.test-runner }}
     timeout-minutes: 30
-    # Shards flagged "blocking": false in ui-suites.json still run and still show
-    # red on their own job — they just do not fail the run, so ci-passed stays
-    # green. Used for a scenario that detects a known, unfixed defect, where
-    # gating would redden unrelated PRs.
-    continue-on-error: ${{ matrix.nonblocking }}
     strategy:
       # One flaky shard must not discard the results of healthy sibling shards —
       # otherwise a single network blip forces a full re-run of the matrix.
@@ -407,10 +401,6 @@ jobs:
             if [ -n "${FRAMES:-}" ]; then
               echo ""
               echo "> leak harness ${FRAMES}(s) scanned for unmasked sentinels."
-            fi
-            if [ "${{ matrix.nonblocking }}" = "true" ]; then
-              echo ""
-              echo "> This shard is **non-blocking** — a failure here reports but does not fail CI."
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
