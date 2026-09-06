@@ -1,0 +1,59 @@
+name: CI
+
+# Single entry point for pull requests and master. Every check below is a
+# reusable workflow so the same job definitions serve CI, nightly and manual
+# runs, and `ci-passed` is the one status branch protection needs to require.
+
+on:
+  pull_request:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # Superseded PR pushes are cancelled; master runs are keyed by SHA so each
+  # commit's result is preserved.
+  group: ci-${{ github.workflow }}-${{ github.ref == 'refs/heads/master' && github.sha || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
+
+jobs:
+  component-unit:
+    uses: ./.github/workflows/ci-component-unit.yml
+
+  ui-tests:
+    # component + smoke on every PR; the soak tier runs in ci-nightly.yml.
+    uses: ./.github/workflows/ci-ui-tests.yml
+    with:
+      tiers: '["component","smoke"]'
+    secrets:
+      demoapp_api_key: ${{ secrets.DEMOAPP_API_KEY }}
+
+  podspec-lint:
+    uses: ./.github/workflows/ci-podspec-lint.yml
+
+  ci-passed:
+    name: ci-passed
+    # The single required status check. Runs even when something upstream fails
+    # so the gate always reports rather than being skipped into a pending state.
+    if: always()
+    needs: [component-unit, ui-tests, podspec-lint]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify all CI jobs passed
+        # Derived from the whole `needs` object rather than a hand-listed set of
+        # `<job>.result` checks, which would need updating twice per new job.
+        # `skipped` passes; only `failure` and `cancelled` fail the gate.
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: |
+          set -euo pipefail
+          echo "$NEEDS_JSON"
+          failed=$(echo "$NEEDS_JSON" | jq -r 'to_entries[] | select(.value.result == "failure" or .value.result == "cancelled") | .key')
+          if [ -n "$failed" ]; then
+            echo "::error::Failed or cancelled jobs: $(echo "$failed" | tr '\n' ' ')"
+            exit 1
+          fi
+          echo "All required jobs passed (or were skipped)."

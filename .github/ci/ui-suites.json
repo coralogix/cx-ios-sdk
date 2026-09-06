@@ -1,0 +1,87 @@
+{
+  "_comment": [
+    "Single source of truth for how the XCUITest suites are tiered and sharded.",
+    "",
+    "TIERS",
+    "  component  focused: one test drives one feature and asserts on it.",
+    "  smoke      broad: one test walks a path that joins several features",
+    "             (interaction capture + session context + export + schema).",
+    "  soak       leak/perf probes. Not feature tests — nightly only.",
+    "",
+    "Shards run as parallel jobs against one shared build, so wall-clock is the",
+    "SLOWEST shard, not the sum. `seconds` is the measured runtime of the tests",
+    "in that shard (GitHub macos-15, run 33612331880) and exists so the packing",
+    "can be rebalanced from data rather than guesswork. Keep shards under ~200s.",
+    "",
+    "Adding a UI test? Add it to a shard here or it will not run in CI.",
+    "The tier-coverage check in ci-ui-tests.yml fails the build if a test method",
+    "exists in the source but is missing from this file."
+  ],
+  "shards": [
+    {
+      "id": "component-gestures",
+      "name": "component · gestures",
+      "tier": "component",
+      "scheme": "DemoAppSwift",
+      "seconds": 116,
+      "tests": [
+        "DemoAppUITests/UserInteractionUITests/testScrollEvents_downAndUp_areCorrectlyCaptured",
+        "DemoAppUITests/UserInteractionUITests/testSwipeEvents_leftAndRight_areCorrectlyCaptured"
+      ]
+    },
+    {
+      "id": "component-redaction",
+      "name": "component · naming & redaction",
+      "tier": "component",
+      "scheme": "DemoAppSwift",
+      "seconds": 124,
+      "tests": [
+        "DemoAppUITests/UserInteractionUITests/testResolveTargetName_tapLoginButton_customNameInBackend",
+        "DemoAppUITests/UserInteractionUITests/testShouldSendText_sensitiveLabel_noInnerTextInBackend"
+      ]
+    },
+    {
+      "id": "smoke-interaction",
+      "name": "smoke · interaction + session",
+      "tier": "smoke",
+      "scheme": "DemoAppSwift",
+      "seconds": 124,
+      "tests": [
+        "DemoAppUITests/UserInteractionUITests/testAllUserInteractionEvents_combinedSchemaValidation",
+        "DemoAppUITests/UserInteractionUITests/testAllInteractionEvents_areAttributedToActiveSession"
+      ]
+    },
+    {
+      "id": "smoke-network",
+      "name": "smoke · network + app launch",
+      "tier": "smoke",
+      "scheme": "DemoAppSwift",
+      "seconds": 183,
+      "tests": [
+        "DemoAppUITests/NetworkInstrumentationUITests/testAllNetworkInstrumentationWithSchemaValidation",
+        "DemoAppUITests/DemoAppUITests/testSchemaValidationFlow"
+      ]
+    },
+    {
+      "id": "smoke-swiftui",
+      "name": "smoke · SwiftUI interaction",
+      "tier": "smoke",
+      "scheme": "DemoAppSwiftUI",
+      "seconds": 62,
+      "tests": [
+        "DemoAppSwiftUIUITests/UserInteractionUITests/testAllUserInteractionEvents_combinedSchemaValidation"
+      ]
+    },
+    {
+      "id": "soak-session-replay",
+      "name": "soak · session replay leaks",
+      "tier": "soak",
+      "scheme": "DemoAppSwift",
+      "seconds": 228,
+      "tests": [
+        "DemoAppUITests/SessionReplayLeakUITests/test_listSlowScroll_1fps",
+        "DemoAppUITests/SessionReplayLeakUITests/test_navigationTransition"
+      ]
+    }
+  ]
+}

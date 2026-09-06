@@ -1,0 +1,105 @@
+name: Component Tests (unit)
+
+# Reusable. The three SPM test targets: 1148 fast, isolated tests over the SDK.
+#
+# Deliberately NOT sharded. Measured on macos-15: the tests themselves take 93s
+# (CoralogixRumTests 70s / SessionReplayTests 23s / CoralogixInternalTests 0.1s)
+# while the build takes ~160s cold and booting a simulator takes ~180s. Splitting
+# across jobs would pay a fresh simulator boot per shard to save ~20s of tests.
+# The win here is caching the build, not fanning out.
+#
+# Execution stays serial (-parallel-testing-enabled NO): the SDK swizzles global
+# process state, so tests sharing a process must not interleave.
+
+on:
+  workflow_call:
+    inputs:
+      runner:
+        type: string
+        default: macos-15
+      xcode-version:
+        type: string
+        default: '16.4'
+
+permissions:
+  contents: read
+
+jobs:
+  unit:
+    name: component · unit
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-xcode
+        with:
+          xcode-version: ${{ inputs.xcode-version }}
+
+      # Started first and awaited last: CoreSimulator's cold start (~3 min) runs
+      # concurrently with the cache restore instead of after it.
+      - uses: ./.github/actions/boot-simulator
+        with:
+          wait: 'false'
+
+      - uses: ./.github/actions/cache-xcode-build
+        with:
+          key-prefix: unit
+          spm-key: spm-unit-${{ runner.os }}-xc${{ inputs.xcode-version }}-${{ hashFiles('Package.resolved') }}
+          derived-data-key: dd-unit-${{ runner.os }}-xc${{ inputs.xcode-version }}-${{ hashFiles('Package.swift', 'Package.resolved', 'Coralogix/Sources/**/*.swift', 'CoralogixInternal/Sources/**/*.swift', 'SessionReplay/Sources/**/*.swift', 'Tests/**/*.swift') }}
+
+      - name: Wait for simulator
+        run: xcrun simctl bootstatus "$SIM_UDID" -b
+
+      # No `clean`: a fresh runner has nothing to clean, and it only discards the
+      # DerivedData restored above — which is the entire point of the cache.
+      - name: Run unit tests
+        run: |
+          set -euo pipefail
+          START=$(date +%s)
+          set +e
+          xcodebuild test \
+            -scheme Coralogix-Package \
+            -destination "$SIM_DESTINATION" \
+            -derivedDataPath DerivedData \
+            -clonedSourcePackagesDirPath SourcePackages \
+            -resultBundlePath TestResults.xcresult \
+            -parallel-testing-enabled NO \
+            -skipPackagePluginValidation \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            2>&1 | tee test-output.log | xcpretty
+          EXIT=${PIPESTATUS[0]}
+          set -e
+          TOTAL=$(( $(date +%s) - START ))
+
+          {
+            echo "### Component tests (unit)"
+            echo ""
+            echo "| result | wall-clock |"
+            echo "|---|---|"
+            echo "| $([ "$EXIT" -eq 0 ] && echo 'passed' || echo 'FAILED') | ${TOTAL}s |"
+            echo ""
+            echo '```'
+            grep -oE "Executed [0-9]+ tests?, with [0-9]+ failures? \([0-9]+ unexpected\) in [0-9.]+ " test-output.log | sort -u || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # A nonzero exit must never be reported as a pass, and "Executed 0
+          # tests" exits 0 — so require both signals.
+          if [ "$EXIT" -ne 0 ] || ! grep -qE "Executed [1-9][0-9]* tests?, with 0 failures" test-output.log; then
+            echo "::error::Unit tests failed (exit $EXIT)"
+            grep -iE "error:|failed|XCTAssert" test-output.log | tail -40 || true
+            exit 1
+          fi
+          echo "Unit tests passed in ${TOTAL}s"
+
+      - name: Upload failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-failure
+          path: |
+            test-output.log
+            TestResults.xcresult
+          if-no-files-found: ignore
+          retention-days: 5

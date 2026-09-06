@@ -1,0 +1,116 @@
+name: Boot iOS Simulator
+description: >-
+  Pick an available iPhone simulator with simctl and start booting it. Replaces
+  the `xcodebuild -showdestinations` probe, which resolves the whole SPM graph
+  just to list devices (~80s) before a blind `boot` + `sleep`.
+
+inputs:
+  device:
+    description: Preferred device name, matched as a regex. Falls back to any iPhone.
+    required: false
+    default: 'iPhone 16'
+  runtime:
+    description: >-
+      Pin the iOS runtime, matched against the SimRuntime identifier (e.g.
+      "18-5"). Leave empty to derive it from the selected Xcode's simulator SDK,
+      which is what the old `xcodebuild -showdestinations` probe did implicitly:
+      a runner can carry runtimes newer than the SDK (18.6, 26.x alongside an
+      18.5 SDK) and picking one of those fails at launch.
+    required: false
+    default: ''
+  wait:
+    description: >-
+      Block until the simulator finishes booting. Set to 'false' to overlap the
+      boot with later setup steps, then join with `xcrun simctl bootstatus
+      "$SIM_UDID" -b` once that setup is done.
+    required: false
+    default: 'true'
+
+outputs:
+  udid:
+    description: UDID of the selected simulator.
+    value: ${{ steps.pick.outputs.udid }}
+  destination:
+    description: An xcodebuild -destination string for the selected simulator.
+    value: ${{ steps.pick.outputs.destination }}
+
+runs:
+  using: composite
+  steps:
+    - name: Pick and boot a simulator
+      id: pick
+      shell: bash
+      env:
+        WANT_DEVICE: ${{ inputs.device }}
+        WANT_RUNTIME: ${{ inputs.runtime }}
+      run: |
+        set -euo pipefail
+        DEVICES=$(xcrun simctl list devices available -j)
+
+        # e.g. SDK 18.5 -> "18-5" (exact) and "18-" (same major).
+        SDK_VER=$(xcrun --sdk iphonesimulator --show-sdk-version 2>/dev/null || echo "")
+        # Full regexes, not fragments: jq matches them against the whole
+        # SimRuntime identifier, so the trailing anchor has to be part of them.
+        RT_PREFIX='SimRuntime\.iOS-'
+        if [ -n "$WANT_RUNTIME" ]; then
+          EXACT="${RT_PREFIX}${WANT_RUNTIME}"; MAJOR="$EXACT"
+        elif [ -n "$SDK_VER" ]; then
+          EXACT="${RT_PREFIX}${SDK_VER//./-}$"; MAJOR="${RT_PREFIX}${SDK_VER%%.*}-"
+        else
+          EXACT=""; MAJOR="${RT_PREFIX}[0-9]"
+        fi
+        echo "simulator SDK: ${SDK_VER:-unknown}" 
+
+        # Newest matching runtime first, then any iOS runtime. `sort -V` on the
+        # runtime suffix keeps iOS-18-10 above iOS-18-9.
+        pick() {
+          echo "$DEVICES" | jq -r --arg rt "$1" --arg dev "$2" '
+            .devices | to_entries[]
+            | select(.key | test($rt))
+            | .key as $runtime
+            | .value[]
+            | select(.isAvailable != false)
+            | select(.name | test($dev))
+            | "\($runtime)\t\(.udid)\t\(.name)"' \
+          | sort -V | tail -1
+        }
+
+        # Narrowest first. Each fallback is announced so a silent downgrade onto
+        # an SDK-incompatible runtime cannot pass unnoticed.
+        MATCH=""
+        if [ -n "$EXACT" ]; then
+          MATCH=$(pick "$EXACT" "$WANT_DEVICE")
+          [ -n "$MATCH" ] || MATCH=$(pick "$EXACT" "iPhone")
+        fi
+        if [ -z "$MATCH" ]; then
+          MATCH=$(pick "$MAJOR" "iPhone")
+          [ -n "$MATCH" ] && echo "::warning::No iOS ${SDK_VER:-?} simulator; falling back within the same major version."
+        fi
+        if [ -z "$MATCH" ]; then
+          MATCH=$(pick "${RT_PREFIX}[0-9]" "iPhone")
+          [ -n "$MATCH" ] && echo "::warning::No simulator matching the ${SDK_VER:-?} SDK; using any available iOS runtime. Tests may fail to launch."
+        fi
+
+        if [ -z "$MATCH" ]; then
+          echo "::error::No available iPhone simulator found."
+          xcrun simctl list devices available || true
+          exit 1
+        fi
+
+        UDID=$(echo "$MATCH" | cut -f2)
+        NAME=$(echo "$MATCH" | cut -f3)
+        RUNTIME=$(echo "$MATCH" | cut -f1 | sed 's/.*SimRuntime\.iOS-//; s/-/./g')
+
+        echo "Selected $NAME (iOS $RUNTIME) — $UDID"
+        echo "udid=$UDID" >> "$GITHUB_OUTPUT"
+        echo "destination=platform=iOS Simulator,id=$UDID" >> "$GITHUB_OUTPUT"
+        echo "SIM_UDID=$UDID" >> "$GITHUB_ENV"
+        echo "SIM_DESTINATION=platform=iOS Simulator,id=$UDID" >> "$GITHUB_ENV"
+
+        # Already-booted is not an error; bootstatus below is the real gate.
+        xcrun simctl boot "$UDID" 2>/dev/null || true
+
+    - name: Wait for boot
+      if: inputs.wait == 'true'
+      shell: bash
+      run: xcrun simctl bootstatus "${{ steps.pick.outputs.udid }}" -b

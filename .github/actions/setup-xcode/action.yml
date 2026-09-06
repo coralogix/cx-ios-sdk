@@ -1,0 +1,53 @@
+name: Setup Xcode
+description: >-
+  Select a pinned Xcode toolchain and install xcpretty. The version is pinned
+  rather than probed so DerivedData cache keys stay valid — a fallback ladder
+  silently changes the compiler and poisons every cache entry built with it.
+
+inputs:
+  xcode-version:
+    description: Exact Xcode version to select, e.g. "16.4".
+    required: false
+    default: '16.4'
+  install-xcpretty:
+    description: Install the xcpretty gem for readable xcodebuild output.
+    required: false
+    default: 'true'
+
+outputs:
+  xcode-version:
+    description: The Xcode version actually selected.
+    value: ${{ steps.select.outputs.version }}
+  developer-dir:
+    description: DEVELOPER_DIR of the selected toolchain.
+    value: ${{ steps.select.outputs.developer-dir }}
+
+runs:
+  using: composite
+  steps:
+    - name: Select Xcode ${{ inputs.xcode-version }}
+      id: select
+      shell: bash
+      run: |
+        set -euo pipefail
+        APP="/Applications/Xcode_${{ inputs.xcode-version }}.app"
+        if [ ! -d "$APP" ]; then
+          echo "::error::Xcode ${{ inputs.xcode-version }} not installed on this runner."
+          echo "Installed Xcodes:"
+          ls -d /Applications/Xcode*.app 2>/dev/null || true
+          exit 1
+        fi
+        DEV_DIR="$APP/Contents/Developer"
+        echo "DEVELOPER_DIR=$DEV_DIR" >> "$GITHUB_ENV"
+        sudo xcode-select -s "$DEV_DIR"
+        sudo xcodebuild -license accept || true
+
+        VERSION=$(DEVELOPER_DIR="$DEV_DIR" xcodebuild -version | head -1 | awk '{print $2}')
+        echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+        echo "developer-dir=$DEV_DIR" >> "$GITHUB_OUTPUT"
+        echo "Selected Xcode $VERSION ($DEV_DIR)"
+
+    - name: Install xcpretty
+      if: inputs.install-xcpretty == 'true'
+      shell: bash
+      run: command -v xcpretty >/dev/null 2>&1 || gem install xcpretty --no-document || true

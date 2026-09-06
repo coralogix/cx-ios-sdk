@@ -1,0 +1,106 @@
+name: Setup Demo App
+description: >-
+  Prepare Example/ for a build: generate the two gitignored config files, make
+  CocoaPods understand the Xcode 16 project format, and install pods from cache.
+
+inputs:
+  api-key:
+    description: Coralogix public key for the demo app. A dummy is used when empty.
+    required: false
+    default: ''
+  cache-prefix:
+    description: Prefix for the CocoaPods cache key, to segment caches per workflow.
+    required: false
+    default: 'pods'
+
+runs:
+  using: composite
+  steps:
+    # Both files are gitignored (they normally hold real credentials), so CI has
+    # to synthesize them or the build fails on a missing import.
+    - name: Generate envs.swift
+      shell: bash
+      env:
+        PUBLIC_KEY: ${{ inputs.api-key }}
+      run: |
+        set -euo pipefail
+        printf 'import Foundation\n\npublic enum Envs: String {\n    case PUBLIC_KEY = "%s"\n    case PROXY_URL = "https://schema-validator-latest.onrender.com/logs"\n}\n' \
+          "${PUBLIC_KEY:-CI_DUMMY}" > Example/envs.swift
+
+    # The app detects the placeholder and skips Firebase init; the file only has
+    # to exist and parse for the build phase to succeed.
+    - name: Generate placeholder GoogleService-Info.plist
+      shell: bash
+      run: |
+        set -euo pipefail
+        cat > Example/GoogleService-Info.plist <<'PLIST'
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0">
+        <dict>
+          <key>API_KEY</key><string>AIzaSyAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA</string>
+          <key>GCM_SENDER_ID</key><string>000000000000</string>
+          <key>PLIST_VERSION</key><string>1</string>
+          <key>BUNDLE_ID</key><string>com.coralogix.DemoAppSwift</string>
+          <key>PROJECT_ID</key><string>placeholder-project</string>
+          <key>STORAGE_BUCKET</key><string>placeholder-project.appspot.com</string>
+          <key>IS_ADS_ENABLED</key><false/>
+          <key>IS_ANALYTICS_ENABLED</key><false/>
+          <key>IS_APPINVITE_ENABLED</key><false/>
+          <key>IS_GCM_ENABLED</key><false/>
+          <key>IS_SIGNIN_ENABLED</key><false/>
+          <key>GOOGLE_APP_ID</key><string>1:000000000000:ios:0000000000000000000000</string>
+        </dict>
+        </plist>
+        PLIST
+        plutil -lint Example/GoogleService-Info.plist
+
+    # DemoApp.xcodeproj is objectVersion 70 (needed for
+    # PBXFileSystemSynchronizedRootGroup). Xcodeproj <= 1.27.0 has no mapping for
+    # 70 and aborts pod install. Patch only the constants.rb belonging to the
+    # interpreter that actually runs `pod` — the old filesystem-wide `find` cost
+    # ~25s per run. No-op once a fixed gem ships.
+    - name: Teach Xcodeproj about objectVersion 70
+      shell: bash
+      run: |
+        set -euo pipefail
+        POD_RUBY=$(head -1 "$(command -v pod)" | sed 's|^#!||' | awk '{print $1}')
+        [ -x "$POD_RUBY" ] || POD_RUBY=$(command -v ruby)
+
+        CONST=$("$POD_RUBY" -e 'require "xcodeproj/constants"; puts $LOADED_FEATURES.grep(%r{xcodeproj/constants\.rb$}).first' 2>/dev/null || true)
+        if [ -z "$CONST" ] || [ ! -f "$CONST" ]; then
+          echo "::warning::Could not locate xcodeproj/constants.rb — skipping objectVersion 70 patch."
+          exit 0
+        fi
+
+        "$POD_RUBY" -e '
+          path = ARGV[0]
+          src  = File.read(path)
+          if src =~ /^\s*70\s*=>/
+            puts "objectVersion 70 already supported — no patch needed."
+          else
+            File.write(path, src.sub("COMPATIBILITY_VERSION_BY_OBJECT_VERSION = {",
+              "COMPATIBILITY_VERSION_BY_OBJECT_VERSION = {\n      70 => \x27Xcode 16.0\x27,"))
+            puts "Patched #{path}"
+          end' "$CONST"
+
+    # Podfile.lock is gitignored, so it is cached alongside Pods/ — restoring the
+    # pair together keeps the install deterministic even without a committed lock.
+    - name: Restore CocoaPods cache
+      id: pods-cache
+      uses: actions/cache@v4
+      with:
+        path: |
+          Example/Pods
+          Example/Podfile.lock
+          ~/Library/Caches/CocoaPods
+        key: ${{ inputs.cache-prefix }}-${{ runner.os }}-${{ hashFiles('Example/Podfile') }}
+        restore-keys: |
+          ${{ inputs.cache-prefix }}-${{ runner.os }}-
+
+    - name: Install pods
+      shell: bash
+      run: |
+        set -euo pipefail
+        cd Example
+        pod install --no-repo-update

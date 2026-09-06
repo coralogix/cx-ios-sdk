@@ -32,7 +32,14 @@ pod lib lint Coralogix.podspec --include-podspecs=CoralogixInternal.podspec
 ./lint_and_push_cocoapods.sh
 ```
 
-CI runs on macOS 14 with Xcode 16.x. Three test targets: `CoralogixRumTests`, `CoralogixInternalTests`, `SessionReplayTests`.
+CI runs on macOS 15 with Xcode 16.4, pinned. Three SPM test targets:
+`CoralogixRumTests`, `CoralogixInternalTests`, `SessionReplayTests`.
+
+`ci.yml` is the single entry point; the checks under it are reusable workflows
+and the shared steps are composite actions in `.github/actions/`. XCUITests are
+split into `component`, `smoke` and `soak` tiers and sharded across parallel
+jobs — **a new UI test must be added to `.github/ci/ui-suites.json` or CI fails
+the build for leaving it unrun.** See `.github/ci/README.md`.
 
 ## Architecture
 
