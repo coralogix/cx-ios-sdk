@@ -119,6 +119,28 @@ harness proves nothing.**
 
 ---
 
+## Non-blocking shards (`"blocking": false`)
+
+A shard with `"blocking": false` runs, reports, and shows red on its own job, but
+does not fail the run — `continue-on-error` is set from it, so `ci-passed` stays
+green.
+
+This exists for one situation: **a scenario that reliably detects a known,
+unfixed defect.** Gating on it would redden PRs for a bug unrelated to their
+changes, which teaches everyone to ignore red — worse than not checking at all.
+
+`soak-replay-navigation` carries it today. It detects the iOS 18.5
+navigation-transition leak tracked in CX-45948, probabilistically — the captured
+frame has to land mid-animation, so it leaked on roughly one run in three while
+the sibling scroll shard stayed clean across every run. Remove the field once the
+leak is fixed and it gates again.
+
+**Do not reach for this to silence a flaky test.** A flake means the test or the
+environment is wrong and should be fixed or removed; this flag is for a test that
+is working correctly and reporting a defect nobody has scheduled yet.
+
+---
+
 ## Caching — measure before you add any
 
 The instinct to cache is usually wrong here, and it was wrong twice:
