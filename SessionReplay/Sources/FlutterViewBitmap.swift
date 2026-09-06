@@ -78,7 +78,8 @@ public struct FlutterViewBitmap {
 ///
 /// Invoked once per capture cycle, for Flutter's implicit view.
 ///
-/// - `viewId`: always `"cx_flutter_implicit_view"`. The SDK composites one FlutterView per capture —
+/// - `viewId`: always `Keys.flutterImplicitViewId` (`"cx_flutter_implicit_view"`, the id Android
+///   passes too). The SDK composites one FlutterView per capture —
 ///   the first it finds on screen — and the plugin routes every capture to Flutter's single
 ///   implicit view, so the argument carries no information today. A host with several
 ///   FlutterViews is not supported by this path.

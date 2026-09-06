@@ -410,10 +410,8 @@ public class SessionReplayModel {
                                   completion: completion)
         }
 
-        // The same id Android passes. The plugin ignores the argument on both platforms and
-        // routes every capture to Flutter's single implicit view, which is also the only view
-        // this path composites. Only frameId matters.
-        provider("cx_flutter_implicit_view", frameId) { bitmap in
+        // The implicit view is also the only view this path composites. Only frameId matters.
+        provider(Keys.flutterImplicitViewId.rawValue, frameId) { bitmap in
             guard delivery.claim() else {
                 Log.w("[SessionReplayModel] flutterViewBitmapProvider answered twice for frameId \(frameId) — ignoring")
                 return

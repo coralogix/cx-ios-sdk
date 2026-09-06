@@ -239,6 +239,9 @@ public enum Keys: String {
     case containsSwiftUIContent
     case maskRects
     case nativeMaskRects
+    /// The view id handed to `flutterViewBitmapProvider`. The same string Android passes; the
+    /// plugin ignores it on both platforms and routes every capture to Flutter's implicit view.
+    case flutterImplicitViewId = "cx_flutter_implicit_view"
     case screenshotContext = "screenshot_context"
     case queueScreenshotManager = "com.coralogix.screenshotmanager.queue"
     case queueExporter = "com.coralogix.exporter.queue"
