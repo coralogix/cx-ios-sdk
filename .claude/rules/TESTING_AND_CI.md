@@ -19,6 +19,44 @@ must land in both demo apps.
 
 ---
 
+## Adding a test — the procedure
+
+1. **Pick the tier** from the table above. If a UI test drives one feature, it is
+   `component`; if it walks a path joining several, it is `smoke`.
+2. **Write it** in the matching target. A demo-app change (new screen, control)
+   must be mirrored in *both* `Example/DemoAppSwift` and `Example/DemoAppSwiftUI`.
+3. **Run it locally** before pushing:
+   ```bash
+   # one unit test target
+   xcodebuild test -scheme Coralogix-Package \
+     -destination "platform=iOS Simulator,name=iPhone 16" \
+     -only-testing:CoralogixRumTests
+
+   # one UI test
+   xcodebuild test -workspace Example/DemoApp.xcworkspace -scheme DemoAppSwift \
+     -destination "platform=iOS Simulator,name=iPhone 16" \
+     -only-testing:DemoAppUITests/UserInteractionUITests/testMyNewThing
+
+   # the leak harness, end to end (builds, captures frames, scans them)
+   tool/run_leak_harness.sh
+   ```
+4. **UI tests only — register it** in `.github/ci/ui-suites.json`: add the
+   identifier to an existing shard, or add a shard if the nearest one is already
+   near the top of its tier's range. Set `seconds` from what step 3 measured.
+5. **Push.** The `plan` job runs on ubuntu in ~9s and fails immediately if the
+   registration is wrong, so you do not wait on macOS runners to find out.
+
+To reproduce one shard exactly as CI runs it:
+
+```bash
+xcodebuild test -workspace Example/DemoApp.xcworkspace -scheme DemoAppSwift \
+  -destination "platform=iOS Simulator,name=iPhone 16" \
+  $(jq -r '.shards[] | select(.id=="smoke-interaction") | .tests[] | "-only-testing:" + .' \
+      .github/ci/ui-suites.json)
+```
+
+---
+
 ## A new UI test MUST be registered
 
 Add its identifier to a shard in `.github/ci/ui-suites.json`. The `plan` job
@@ -53,11 +91,14 @@ So:
 
 - **Don't create a shard for less than ~2 minutes of tests.** It will spend more
   on setup than it saves.
-- **Do split a shard that dominates the critical path.** Two leak tests paired
-  were one ~8.8m shard; split one-per-shard they run ~6.5m each in parallel.
+- **Do split a shard that dominates the critical path.** The two leak tests were
+  split one-per-shard and measured 6.4-7.3m each running in parallel. (They were
+  never run paired as a single shard, so the saving is inferred, not measured —
+  the point stands, the figure does not exist.)
 - Record measured runtime in `seconds` so the next repack is a data decision.
-- Shard wall-clock varies **±4 minutes run to run for identical tests**. Never
-  tune packing from a single run, and never quote a single run as "the" number.
+- Shard wall-clock varies enormously run to run for identical tests: one smoke
+  shard measured **3.9m and 10.0m on the same commit**, a 2.5x swing. Never tune
+  packing from a single run, and never quote a single run as "the" number.
 
 ---
 
