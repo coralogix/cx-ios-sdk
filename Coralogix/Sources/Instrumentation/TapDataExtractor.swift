@@ -325,8 +325,8 @@ enum TapDataExtractor {
             tapData[Keys.scrollDirection.rawValue] = direction.rawValue
         }
 
-        // x/y already sit at the root (session replay reads them there) and are repeated in the
-        // nested attributes dict, which is what the interaction_context schema reads.
+        // x/y sit at the root, where the span payload has always carried them, and are repeated in
+        // the nested attributes dict, which is what the interaction_context schema reads.
         var attributes = [String: Any]()
         Global.updateLocation(tapData: &attributes, location: event.location)
         tapData[Keys.attributes.rawValue] = attributes

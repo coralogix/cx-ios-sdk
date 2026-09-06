@@ -12,8 +12,9 @@ import CoralogixInternal
 
 extension CoralogixRum {
     public func initializeUserActionsInstrumentation() {
-        // Install touch-event swizzles only when userActions is enabled.
-        // These are no-ops if called more than once (static let guarantees single execution).
+        // Installed when userActions is enabled or the app is hybrid (`Helper.shouldInstallTouchSwizzles`):
+        // the swizzles feed session replay as well as spans. No-ops if called more than once
+        // (static let guarantees single execution).
         UIApplication.swizzleTouchesEnded
         UIApplication.swizzleSendEvent
         UIApplication.swizzleSwipeGestureRecognizer
@@ -61,8 +62,9 @@ extension CoralogixRum {
     }
 
     /// When true, native touch events produce RUM user_interaction spans.
-    /// When false (hybrid or instrumentations[.userActions] == false), we still install swizzles
-    /// so session replay can capture clicks; we just don't emit spans (hybrid uses setUserInteraction).
+    /// When false, no span comes from a native touch: hybrids report theirs through
+    /// `setUserInteraction` while their swizzles keep feeding session replay, and a native app with
+    /// `instrumentations[.userActions] == false` installs no touch swizzles at all.
     /// - Note: `internal` for unit testing.
     internal var shouldEmitUserActionSpan: Bool {
         Helper.shouldEmitUserActionSpan(options: coralogixExporter?.getOptions(), sdkFramework: CoralogixRum.mobileSDK.sdkFramework)

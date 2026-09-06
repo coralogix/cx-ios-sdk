@@ -177,7 +177,7 @@ final class SessionReplayTapCaptureTimingTests: XCTestCase {
             XCTAssertEqual(shot.recordedAttributes[Keys.screenshotId.rawValue],
                            .string(try XCTUnwrap(properties[Keys.screenshotId.rawValue] as? String)),
                            "\(framework): the event points at the slot the capture reserved")
-            XCTAssertEqual(shot.recordedAttributes[Keys.page.rawValue], .int(0), file: #filePath, line: #line)
+            XCTAssertEqual(shot.recordedAttributes[Keys.page.rawValue], .int(0))
             XCTAssertNil(shot.recordedAttributes[Keys.tapObject.rawValue],
                          "\(framework): a screenshot event carries no interaction payload")
             XCTAssertNil(shot.recordedAttributes[Keys.isManual.rawValue],

@@ -449,6 +449,28 @@ final class CoralogixRumTests: XCTestCase {
         SdkManager.shared.register(sessionReplayInterface: nil)
     }
 
+    /// The host's own `captureEvent()` is the one capture a customer requests directly, so it is
+    /// pinned end to end: the event says it was manual, and so does the capture, which is what
+    /// exempts it from deduplication.
+    func testManualScreenshotSpan_carriesIsManualOnTheSpanAndTheCapture() throws {
+        let mockSessionReplay = MockSessionReplay()
+        SdkManager.shared.register(sessionReplayInterface: mockSessionReplay)
+        defer { SdkManager.shared.register(sessionReplayInterface: nil) }
+        let coralogixRum = makeMockCoralogixRum()
+        let tracer = MockTracer()
+        coralogixRum.tracerProvider = { tracer }
+
+        coralogixRum.captureEvent()
+
+        let span = try XCTUnwrap(tracer.mockSpanBuilder.startedSpan)
+        XCTAssertTrue(span.didEnd, "A shipped manual frame is reported")
+        XCTAssertEqual(span.recordedAttributes[Keys.isManual.rawValue], .bool(true),
+                       "The event must say the host asked for this frame")
+        XCTAssertNotNil(span.recordedAttributes[Keys.screenshotId.rawValue])
+        XCTAssertEqual(mockSessionReplay.captureEventCalledWith?[Keys.isManual.rawValue] as? Bool, true,
+                       "The capture must carry the flag too, or deduplication could drop an explicit request")
+    }
+
     func testGetErrorSpanSetsAttributesAndCallsHelpers() {
         let mockSessionReplay = MockSessionReplay()
         SdkManager.shared.register(sessionReplayInterface: mockSessionReplay)
