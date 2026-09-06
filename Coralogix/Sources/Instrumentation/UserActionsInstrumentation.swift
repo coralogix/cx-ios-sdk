@@ -27,6 +27,22 @@ extension CoralogixRum {
         NotificationCenter.default.addObserver(self,
                                                selector: #selector(handleInteractionNotification(notification:)),
                                                name: .cxRumNotificationUserActions, object: nil)
+        NotificationCenter.default.addObserver(self,
+                                               selector: #selector(handleTouchBeganNotification(notification:)),
+                                               name: .cxRumNotificationTouchBegan, object: nil)
+    }
+
+    /// Finger-down. Only Flutter acts on it: its replay frame is requested here, before the
+    /// gesture is classified, so the capture reaches Dart while the tapped frame is still the one
+    /// on screen. Android's plugin does the same from `GestureDetector.onDown`. Everyone else
+    /// waits for the classified gesture on `handleInteractionNotification`.
+    @objc func handleTouchBeganNotification(notification: Notification) {
+        guard capturesSessionReplayAtTouchDown else { return }
+        guard let touchEvent = notification.object as? TouchEvent else {
+            Log.e("Touch-began notification received with no TouchEvent object")
+            return
+        }
+        captureSessionReplayEventIfNeeded(interactionProperties(from: touchEvent, maskRects: nil))
     }
 
     @objc func handleInteractionNotification(notification: Notification) {
@@ -34,6 +50,10 @@ extension CoralogixRum {
             Log.e("Notification received with no TouchEvent object")
             return
         }
+        // A Flutter touch asked for its frame at finger-down and its span comes from the bridge,
+        // so the classified gesture has nothing left to do — asking again here would request two
+        // frames for one tap, and the extraction below would be built to be thrown away.
+        if capturesSessionReplayAtTouchDown { return }
 
         // The window walk is only worth paying for when this dictionary becomes a span.
         // When no span is emitted (hybrid, or userActions off) it only feeds session
@@ -48,10 +68,14 @@ extension CoralogixRum {
         // walk is not on a hot enough path to warrant caching or a global "any mask set" flag.
         let maskRects: [CGRect]? = shouldEmitUserActionSpan ? UIView.deliberateMaskRects() : nil
 
-        processInteractionEvent(TapDataExtractor.extract(from: touchEvent,
-                                                         shouldSendText: userActionsDelegates?.shouldSendText,
-                                                         resolveTargetName: userActionsDelegates?.resolveTargetName,
-                                                         maskRects: maskRects))
+        processInteractionEvent(interactionProperties(from: touchEvent, maskRects: maskRects))
+    }
+
+    private func interactionProperties(from touchEvent: TouchEvent, maskRects: [CGRect]?) -> [String: Any] {
+        TapDataExtractor.extract(from: touchEvent,
+                                 shouldSendText: userActionsDelegates?.shouldSendText,
+                                 resolveTargetName: userActionsDelegates?.resolveTargetName,
+                                 maskRects: maskRects)
     }
 
     private func processInteractionEvent(_ properties: [String: Any]) {
@@ -72,6 +96,16 @@ extension CoralogixRum {
         Helper.shouldEmitUserActionSpan(options: coralogixExporter?.getOptions(), sdkFramework: CoralogixRum.mobileSDK.sdkFramework)
     }
 
+    /// When true, a touch requests its session replay frame at finger-down and that is the only
+    /// frame it requests: the classified gesture at finger-up captures nothing, and the span the
+    /// bridge reports through `setUserInteraction` carries no screenshot of its own. This is the
+    /// Flutter plugin contract, shared with Android. React Native keeps the finger-up capture and
+    /// a screenshot on its bridge span.
+    /// - Note: `internal` for unit testing.
+    internal var capturesSessionReplayAtTouchDown: Bool {
+        CoralogixRum.mobileSDK.sdkFramework.isFlutter
+    }
+
     /// Feeds session replay with interaction metadata (screenshot + properties). No RUM span.
     /// Used when native touch is detected but we are not emitting a user action span (hybrid or userActions off).
     /// With no span to stamp there is nothing to wait for — the model hands the screenshot index
@@ -90,11 +124,13 @@ extension CoralogixRum {
     internal func handleUserInteractionEvent(_ properties: [String: Any],
                                              span: any Span,
                                              window: UIWindow? = Global.getKeyWindow()) {
-        span.setAttribute(
-            key: Keys.tapObject.rawValue,
-            value: Helper.convertDictionaryToJsonString(dict: properties)
-        )
+        setTapObject(properties, on: span)
         recordScreenshotForSpan(on: span, extraProperties: properties) { _ in span.end() }
+    }
+
+    private func setTapObject(_ properties: [String: Any], on span: any Span) {
+        span.setAttribute(key: Keys.tapObject.rawValue,
+                          value: Helper.convertDictionaryToJsonString(dict: properties))
     }
     
     internal func buildMetadata(properties: [String: Any],
@@ -112,8 +148,9 @@ extension CoralogixRum {
 
     /// Implementation called by `CoralogixRum.setUserInteraction(_:)`.
     /// Validates the dictionary from the hybrid bridge, then builds a `.userInteraction`
-    /// span (user/environment context is added by makeSpan via addUserMetadata) and
-    /// hands off to `handleUserInteractionEvent`, which serialises the payload and closes the span.
+    /// span (user/environment context is added by makeSpan via addUserMetadata). React Native
+    /// hands off to `handleUserInteractionEvent`, which stamps the frame it captures onto the
+    /// span; Flutter's span closes with the payload alone.
     internal func reportHybridUserInteraction(_ dictionary: [String: Any]) {
         // Masking resolution walks UIKit windows, so it needs the main thread. Bridge calls
         // (React Native modules, Flutter channels) often arrive off-main; hop asynchronously
@@ -127,7 +164,14 @@ extension CoralogixRum {
         guard let validated = validateHybridInteraction(dictionary) else { return }
 
         let span = makeSpan(event: .userInteraction, source: .console, severity: .info)
-        handleUserInteractionEvent(validated, span: span)
+        if capturesSessionReplayAtTouchDown {
+            // The frame for this tap was requested when the finger landed, so the bridge's span
+            // carries no screenshot of its own — the shape Android's dispatch emits.
+            setTapObject(validated, on: span)
+            span.end()
+        } else {
+            handleUserInteractionEvent(validated, span: span)
+        }
     }
 
     /// Validates a dictionary received from a hybrid bridge before it is written into a span.
@@ -176,12 +220,11 @@ extension CoralogixRum {
         if let v = dictionary[Keys.attributes.rawValue] { result[Keys.attributes.rawValue] = Self.attributesWithRoundedCoordinates(v, depth: 0, maxDepth: 10) }
         if let v = dictionary[Keys.positionX.rawValue] { result[Keys.positionX.rawValue] = Self.roundCoordinateForRum(v) }
         if let v = dictionary[Keys.positionY.rawValue] { result[Keys.positionY.rawValue] = Self.roundCoordinateForRum(v) }
-        // The tap's own time, in epoch seconds. Forwarded verbatim — it reaches the capture, not
-        // the span, and tells a Flutter bitmap provider how old the tap already is so Dart can
-        // decline to draw one it is too late to represent. Without it a bridge-reported tap asks
-        // Dart to hold a frame with no age to judge it against, and the capture waits out its
-        // watchdog. Nothing is synthesised when the bridge sends none: no value means no
-        // staleness check, which beats guessing at one.
+        // The tap's own time, in epoch seconds, forwarded verbatim so a bridge-reported tap's
+        // capture carries the same age a native touch's does. Only the React Native bridge span
+        // still captures here; Flutter's frame was requested at finger-down with the touch's own
+        // time, so for it the value goes no further than the payload. Nothing is synthesised when
+        // the bridge sends none: no value means no staleness check, which beats guessing at one.
         if let v = dictionary[Keys.tapTimestamp.rawValue] { result[Keys.tapTimestamp.rawValue] = v }
 
         // scroll_direction: include only when present and a known ScrollDirection value.

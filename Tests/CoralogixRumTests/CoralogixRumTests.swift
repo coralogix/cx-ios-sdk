@@ -922,10 +922,13 @@ final class MockSpanBuilder: SpanBuilder {
     }
     
     var startedSpan: MockSpan?
+    /// Every span this builder started, oldest first, so a test can count them.
+    var startedSpans: [MockSpan] = []
     
     func startSpan() -> any Span {
         let span = MockSpan()
         startedSpan = span
+        startedSpans.append(span)
         return span
     }
     
@@ -939,6 +942,7 @@ final class MockSessionReplay: SessionReplayInterface {
     
     func captureEvent(properties: [String : Any]?) -> Result<Void, CoralogixInternal.CaptureEventError> {
         captureEventCalledWith = properties
+        captureEventCallCount += 1
         return .success(())
     }
 
@@ -947,10 +951,13 @@ final class MockSessionReplay: SessionReplayInterface {
     func captureEvent(properties: [String : Any]?,
                       completion: @escaping CaptureEventCompletion) {
         captureEventCalledWith = properties
+        captureEventCallCount += 1
         completion(captureEventResult)
     }
 
     var captureEventCalledWith: [String: Any]?
+    /// Captures requested through either overload.
+    var captureEventCallCount = 0
     var captureEventResult: Result<Void, CoralogixInternal.CaptureEventError> = .success(())
     
     func startRecording() {
