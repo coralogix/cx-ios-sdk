@@ -60,12 +60,18 @@ jobs:
       - name: Check every UI test is assigned to a shard
         run: |
           set -euo pipefail
-          jq -r '.shards[].tests[]' .github/ci/ui-suites.json | sort -u > declared.txt
+          # Outside the working tree on purpose: these landed in a commit once,
+          # swept up by `git add -A` after a local run.
+          TMP="${RUNNER_TEMP:-${TMPDIR:-/tmp}}"
+          jq -r '.shards[].tests[]' .github/ci/ui-suites.json | sort -u > "$TMP/declared.txt"
 
           # shellcheck disable=SC2016  # $0/$RSTART are awk fields, not shell vars
-          find Example/DemoAppUITests Example/DemoAppSwiftUIUITests -name '*.swift' -print0 \
+          find Example -path 'Example/*UITests/*' -name '*.swift' -print0 \
           | xargs -0 -I{} awk -v path="{}" '
-              BEGIN { split(path, seg, "/"); tgt = seg[length(seg) - 1] }
+              BEGIN {
+                split(path, seg, "/")
+                for (i = 1; i <= length(seg); i++) if (seg[i] ~ /UITests$/) tgt = seg[i]
+              }
               match($0, /(^|[ \t])class[ \t]+[A-Za-z0-9_]+/) {
                 cls = substr($0, RSTART, RLENGTH); sub(/.*class[ \t]+/, "", cls)
               }
@@ -73,7 +79,20 @@ jobs:
                 m = substr($0, RSTART, RLENGTH); sub(/.*func[ \t]+/, "", m)
                 if (cls != "") print tgt "/" cls "/" m
               }' {} \
-          | sort -u > actual.txt
+          | sort -u > "$TMP/actual.txt"
+
+          # A tier typo drops the shard from every run with no error, and since
+          # `quarantine` is a legitimate never-runs tier, a typo is otherwise
+          # indistinguishable from an intentional quarantine.
+          VALID_TIERS='["component","smoke","soak","quarantine"]'
+          BAD_TIER=$(jq -r --argjson v "$VALID_TIERS" \
+            '.shards[] | select(.tier as $t | $v | index($t) | not) | "\(.id) (tier: \(.tier))"' \
+            .github/ci/ui-suites.json)
+          if [ -n "$BAD_TIER" ]; then
+            echo "::error::unknown tier — must be one of $VALID_TIERS:"
+            echo "$BAD_TIER" | awk '{print "  " $0}'
+            exit 1
+          fi
 
           # An empty array yields an empty -only-testing list, and xcodebuild with
           # no filter runs the whole bundle — a shard silently becomes a full
@@ -95,8 +114,8 @@ jobs:
             exit 1
           fi
 
-          UNRUN=$(comm -23 actual.txt declared.txt)
-          STALE=$(comm -13 actual.txt declared.txt)
+          UNRUN=$(comm -23 "$TMP/actual.txt" "$TMP/declared.txt")
+          STALE=$(comm -13 "$TMP/actual.txt" "$TMP/declared.txt")
           FAIL=0
 
           if [ -n "$UNRUN" ]; then
@@ -110,7 +129,7 @@ jobs:
             FAIL=1
           fi
           [ "$FAIL" -eq 0 ] || exit 1
-          echo "All $(wc -l < actual.txt | tr -d ' ') UI tests are assigned to a shard."
+          echo "All $(wc -l < "$TMP/actual.txt" | tr -d ' ') UI tests are assigned to a shard."
 
       # A shard whose scheme does not build the target its tests live in runs
       # nothing, and xcodebuild calls that success. Cheap to check, and the only
@@ -140,6 +159,13 @@ jobs:
           TIERS: ${{ inputs.tiers }}
         run: |
           set -euo pipefail
+          BAD_REQ=$(jq -r --argjson v '["component","smoke","soak","quarantine"]' \
+            --argjson t "$TIERS" '$t - $v | .[]' <<<'null')
+          if [ -n "$BAD_REQ" ]; then
+            echo "::error::caller requested unknown tier(s): $(echo "$BAD_REQ" | tr '\n' ' ')"
+            exit 1
+          fi
+
           SHARDS=$(jq -c --argjson tiers "$TIERS" \
             '[.shards[] | select(.tier as $t | $tiers | index($t))
               | {id, name, scheme, tier,

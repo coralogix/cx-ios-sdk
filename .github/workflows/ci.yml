@@ -61,33 +61,3 @@ jobs:
             exit 1
           fi
           echo "All required jobs passed (or were skipped)."
-
-  # Compatibility shim — mirrors ci-passed under the name master's branch
-  # protection still requires ("Run DemoApp UI Tests", the job name from the
-  # ui-tests.yml this workflow replaces).
-  #
-  # Required checks are AND-ed and GitHub has no "any of" semantics, so while PRs
-  # based on the old master are still open, the gate cannot simply be renamed:
-  # requiring both names would block every PR, and requiring only the new one
-  # would strand the old PRs until they rebased. Reporting under both names costs
-  # one ubuntu job and keeps `ci-passed` honestly named.
-  #
-  # Delete this job once protection points at ci-passed:
-  #   gh api -X PATCH repos/coralogix/cx-ios-sdk/branches/master/protection/required_status_checks \
-  #     -F strict=true -f 'contexts[]=ci-passed'
-  legacy-required-check:
-    name: Run DemoApp UI Tests
-    if: always()
-    needs: ci-passed
-    runs-on: ubuntu-latest
-    steps:
-      - name: Mirror the ci-passed result
-        env:
-          GATE: ${{ needs.ci-passed.result }}
-        run: |
-          set -euo pipefail
-          echo "ci-passed = $GATE"
-          # Anything other than success — failure, cancelled, or skipped — must
-          # not report green under the required name.
-          [ "$GATE" = "success" ] || { echo "::error::ci-passed did not succeed (result: $GATE)"; exit 1; }
-          echo "Gate satisfied."

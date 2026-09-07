@@ -6,9 +6,13 @@ description: >-
 
 inputs:
   device:
-    description: Preferred device name, matched as a regex. Falls back to any iPhone.
+    description: >-
+      Preferred device, matched as a regex against the device name. Anchor it —
+      an unanchored "iPhone 16" also matches 16 Plus, 16 Pro, 16 Pro Max and 16e,
+      and the gesture tests are sensitive to screen size. Falls back to any
+      iPhone, deterministically, if nothing matches.
     required: false
-    default: 'iPhone 16'
+    default: '^iPhone 16$'
   runtime:
     description: >-
       Pin the iOS runtime, matched against the SimRuntime identifier (e.g.
@@ -71,8 +75,10 @@ runs:
         fi
         echo "simulator SDK: ${SDK_VER:-unknown}" 
 
-        # Newest matching runtime first, then any iOS runtime. `sort -V` on the
-        # runtime suffix keeps iOS-18-10 above iOS-18-9.
+        # Newest runtime first (field 1, version-sorted so iOS-18-10 beats
+        # iOS-18-9), then highest device name (field 3). Sorting the whole line
+        # instead made the UDID the tiebreaker, which picked an arbitrary model
+        # out of the matches.
         pick() {
           echo "$DEVICES" | jq -r --arg rt "$1" --arg dev "$2" '
             .devices | to_entries[]
@@ -82,7 +88,7 @@ runs:
             | select(.isAvailable != false)
             | select(.name | test($dev))
             | "\($runtime)\t\(.udid)\t\(.name)"' \
-          | sort -V | tail -1
+          | sort -t"$(printf '\t')" -k1,1V -k3,3 | tail -1
         }
 
         # Narrowest first. Each fallback is announced so a silent downgrade onto
@@ -90,7 +96,13 @@ runs:
         MATCH=""
         if [ -n "$EXACT" ]; then
           MATCH=$(pick "$EXACT" "$WANT_DEVICE")
-          [ -n "$MATCH" ] || MATCH=$(pick "$EXACT" "iPhone")
+          if [ -z "$MATCH" ]; then
+            # Announce this: silently booting a different model is the
+            # non-determinism the anchored default exists to prevent, and screen
+            # size changes how the gesture tests behave.
+            MATCH=$(pick "$EXACT" "iPhone")
+            [ -n "$MATCH" ] && echo "::warning::No simulator matching '$WANT_DEVICE'; using $(echo "$MATCH" | cut -f3) instead."
+          fi
         fi
         if [ -z "$MATCH" ]; then
           MATCH=$(pick "$MAJOR" "iPhone")

@@ -187,6 +187,14 @@ job, pinning `ARCHS` to a single slice, and not running the unit tests twice.
 - **The simulator runtime is derived from the selected Xcode's SDK.** A runner
   carries runtimes newer than its SDK (18.6 and 26.x beside an 18.5 SDK); picking
   one fails at launch.
+- **Anchor the device regex.** An unanchored `iPhone 16` also matches 16 Plus,
+  16 Pro, 16 Pro Max and 16e — on a realistic device list it selects the 16e. The
+  gesture tests are sensitive to screen size, so `boot-simulator` defaults to
+  `^iPhone 16$`, sorts by runtime then device name (never by UDID, which made the
+  model arbitrary), and warns when it has to substitute a different model.
+- **Every tier name is validated.** A typo drops the shard from every run, and
+  since `quarantine` is a legitimate never-runs tier, a typo would otherwise look
+  intentional.
 - **`xcodebuild ... | head` aborts with 134.** `head` closes the pipe, xcodebuild
   takes the EPIPE as an uncaught Foundation exception. Capture output in full,
   then parse.
