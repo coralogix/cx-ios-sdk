@@ -15,53 +15,49 @@ import CoralogixInternal
 /// Carries the raw UIKit touch objects and resolved interaction type
 /// from the swizzle layer to the instrumentation layer.
 struct TouchEvent {
+    /// Where in the touch the event was reported from.
+    enum Phase {
+        /// The finger has landed and nothing is classified yet, so the event is reported as a
+        /// click. It must never become a span — the same touch may still turn into a scroll.
+        case began
+        /// The gesture is over and classified: a tap, a scroll or a swipe.
+        case ended
+    }
+
     let view: UIView
     let touch: UITouch?       // nil when the event originates from a gesture recogniser
     let location: CGPoint     // screen-coordinate position (top-left origin)
     let eventType: InteractionEventName
     let scrollDirection: ScrollDirection?
-    /// When the touch happened, in epoch seconds. Session replay hands this to the Flutter
-    /// bitmap provider so Dart can refuse to draw a tap it can no longer represent honestly,
-    /// which only works if the value is the touch's own time rather than the capture's.
-    let timestamp: TimeInterval
+    let phase: Phase
 
     /// Standard init — position is derived from the live UITouch (tap / scroll path).
     init(view: UIView,
          touch: UITouch,
          eventType: InteractionEventName = .click,
-         scrollDirection: ScrollDirection? = nil) {
+         scrollDirection: ScrollDirection? = nil,
+         phase: Phase = .ended) {
         self.view = view
         self.touch = touch
         self.location = touch.location(in: nil)
         self.eventType = eventType
         self.scrollDirection = scrollDirection
-        self.timestamp = Self.epochSeconds(ofTouchAt: touch.timestamp)
+        self.phase = phase
     }
 
     /// Position-only init — the location comes from state recorded at `.began` rather than from
     /// `touch.view`, which UIKit may clear before the `.ended` event is delivered.
-    ///
-    /// `touchUptime` is the originating `UITouch.timestamp` when the caller still has the touch,
-    /// which the tap and swipe paths do. Without one — a recogniser firing with no touch behind
-    /// it — the recogniser's own firing time is the closest thing to the touch's.
     init(view: UIView,
          location: CGPoint,
          eventType: InteractionEventName,
          scrollDirection: ScrollDirection? = nil,
-         touchUptime: TimeInterval? = nil) {
+         phase: Phase = .ended) {
         self.view = view
         self.touch = nil
         self.location = location
         self.eventType = eventType
         self.scrollDirection = scrollDirection
-        self.timestamp = touchUptime.map(Self.epochSeconds(ofTouchAt:)) ?? Date().timeIntervalSince1970
-    }
-
-    /// `UITouch.timestamp` is seconds since boot, not since the epoch, so it has to be rebased
-    /// against the current uptime rather than used directly.
-    internal static func epochSeconds(ofTouchAt touchUptime: TimeInterval) -> TimeInterval {
-        let age = ProcessInfo.processInfo.systemUptime - touchUptime
-        return Date().timeIntervalSince1970 - max(0, age)
+        self.phase = phase
     }
 }
 
@@ -248,6 +244,16 @@ final class ScrollTracker {
 /// This is the single place that knows how to map UIKit view metadata
 /// to the interaction_context schema.
 enum TapDataExtractor {
+    /// What a session replay capture reads from a touch, and nothing more: the event name and the
+    /// position the marker is painted at. Nothing is read from the view, so no view walk is paid
+    /// and the customer's `shouldSendText` and `resolveTargetName` are not consulted — they are
+    /// consulted once per interaction, by `extract`, at finger-up.
+    static func captureProperties(from event: TouchEvent) -> [String: Any] {
+        var properties: [String: Any] = [Keys.eventName.rawValue: event.eventType.rawValue]
+        Global.updateLocation(tapData: &properties, location: event.location)
+        return properties
+    }
+
     /// - Parameter shouldSendText: Optional delegate from `CoralogixExporterOptions`.
     ///   When provided, it is called with the view and candidate text before recording
     ///   `target_element_inner_text`. Return `false` to redact the text to `***` — the key is
@@ -266,10 +272,8 @@ enum TapDataExtractor {
                         shouldSendText: ((UIView, String) -> Bool)? = nil,
                         resolveTargetName: ((UIView) -> String?)? = nil,
                         maskRects: [CGRect]? = nil) -> [String: Any] {
-        var tapData = [String: Any]()
+        var tapData = captureProperties(from: event)
         let view = event.view
-
-        tapData[Keys.eventName.rawValue] = event.eventType.rawValue
 
         // Masked = deliberate-masking geometry (needed for SwiftUI `.cxMask()`, which overlays
         // a masked sibling the view tree cannot see) unioned with the view-tree walk, which
@@ -321,13 +325,10 @@ enum TapDataExtractor {
             tapData[Keys.scrollDirection.rawValue] = direction.rawValue
         }
 
-        // x/y coordinates are stored both in tapData root (session replay compatibility)
-        // and in the nested attributes dict (interaction_context schema).
-        // On key collision, the incoming value wins — attributes data overrides earlier values.
+        // x/y sit at the root, where the span payload has always carried them, and are repeated in
+        // the nested attributes dict, which is what the interaction_context schema reads.
         var attributes = [String: Any]()
         Global.updateLocation(tapData: &attributes, location: event.location)
-        tapData.merge(attributes) { _, new in new }
-        tapData[Keys.tapTimestamp.rawValue] = event.timestamp
         tapData[Keys.attributes.rawValue] = attributes
 
         return tapData

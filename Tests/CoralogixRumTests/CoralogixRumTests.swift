@@ -343,74 +343,6 @@ final class CoralogixRumTests: XCTestCase {
         XCTAssertEqual(result["key2"] as? Int, 123)
     }
     
-    func testContainsXYReturnsTrueWhenBothKeysExist() {
-        let coralogixRum = makeMockCoralogixRum()
-        let dict: [String: Any] = [
-            Keys.positionX.rawValue: 100,
-            Keys.positionY.rawValue: 200
-        ]
-        
-        // Act
-        let result = coralogixRum.containsXY(dict)
-        
-        // Assert
-        XCTAssertTrue(result)
-    }
-    
-    func testContainsXYReturnsFalseWhenOnlyXExists() {
-        let mockOptions = CoralogixExporterOptions(
-            coralogixDomain: .US2,
-            userContext: nil,
-            environment: "PROD",
-            application: "TestApp-iOS",
-            version: "1.0",
-            publicKey: "token",
-            ignoreUrls: [],
-            ignoreErrors: [],
-            sessionSampleRate: 100,
-            debug: true
-        )
-        
-        let coralogixRum = CoralogixRum(options: mockOptions)
-
-        let dict: [String: Any] = [
-            Keys.positionX.rawValue: 100
-        ]
-        
-        // Act
-        let result = coralogixRum.containsXY(dict)
-        
-        // Assert
-        XCTAssertFalse(result)
-    }
-    
-    func testContainsXYReturnsFalseWhenOnlyYExists() {
-        let coralogixRum = makeMockCoralogixRum()
-        let dict: [String: Any] = [
-            Keys.positionY.rawValue: 200
-        ]
-        
-        // Act
-        let result = coralogixRum.containsXY(dict)
-        
-        // Assert
-        XCTAssertFalse(result)
-    }
-    
-    func testContainsXYReturnsFalseWhenNeitherExist() {
-        let coralogixRum = makeMockCoralogixRum()
-        
-        let dict: [String: Any] = [
-            "someKey": "someValue"
-        ]
-        
-        // Act
-        let result = coralogixRum.containsXY(dict)
-        
-        // Assert
-        XCTAssertFalse(result)
-    }
-    
     func testGetUserActionsSpanSetsCorrectAttributes() {
         let coralogixRum = makeMockCoralogixRum()
         coralogixRum.tracerProvider = {
@@ -501,7 +433,7 @@ final class CoralogixRumTests: XCTestCase {
         coralogixRum.tracerProvider = { tracer }
 
         // A frame shipped: the span closes and is exported.
-        coralogixRum.makeSpan()
+        coralogixRum.reportScreenshot()
         let captured = try XCTUnwrap(tracer.mockSpanBuilder.startedSpan)
         XCTAssertTrue(captured.didEnd, "A captured frame must produce a closed screenshot span")
         XCTAssertNotNil(captured.recordedAttributes[Keys.screenshotId.rawValue],
@@ -509,12 +441,34 @@ final class CoralogixRumTests: XCTestCase {
 
         // The frame was dropped: a screenshot span with nothing to point at is not emitted.
         mockSessionReplay.captureEventResult = .failure(.skippingEvent)
-        coralogixRum.makeSpan()
+        coralogixRum.reportScreenshot()
         let dropped = try XCTUnwrap(tracer.mockSpanBuilder.startedSpan)
         XCTAssertFalse(dropped === captured, "Each makeSpan call must build its own span")
         XCTAssertFalse(dropped.didEnd,
                        "A dropped frame must leave the screenshot span unemitted")
         SdkManager.shared.register(sessionReplayInterface: nil)
+    }
+
+    /// The host's own `captureEvent()` is the one capture a customer requests directly, so it is
+    /// pinned end to end: the event says it was manual, and so does the capture, which is what
+    /// exempts it from deduplication.
+    func testManualScreenshotSpan_carriesIsManualOnTheSpanAndTheCapture() throws {
+        let mockSessionReplay = MockSessionReplay()
+        SdkManager.shared.register(sessionReplayInterface: mockSessionReplay)
+        defer { SdkManager.shared.register(sessionReplayInterface: nil) }
+        let coralogixRum = makeMockCoralogixRum()
+        let tracer = MockTracer()
+        coralogixRum.tracerProvider = { tracer }
+
+        coralogixRum.captureEvent()
+
+        let span = try XCTUnwrap(tracer.mockSpanBuilder.startedSpan)
+        XCTAssertTrue(span.didEnd, "A shipped manual frame is reported")
+        XCTAssertEqual(span.recordedAttributes[Keys.isManual.rawValue], .bool(true),
+                       "The event must say the host asked for this frame")
+        XCTAssertNotNil(span.recordedAttributes[Keys.screenshotId.rawValue])
+        XCTAssertEqual(mockSessionReplay.captureEventCalledWith?[Keys.isManual.rawValue] as? Bool, true,
+                       "The capture must carry the flag too, or deduplication could drop an explicit request")
     }
 
     func testGetErrorSpanSetsAttributesAndCallsHelpers() {
@@ -922,10 +876,13 @@ final class MockSpanBuilder: SpanBuilder {
     }
     
     var startedSpan: MockSpan?
+    /// Every span this builder started, oldest first, so a test can count them.
+    var startedSpans: [MockSpan] = []
     
     func startSpan() -> any Span {
         let span = MockSpan()
         startedSpan = span
+        startedSpans.append(span)
         return span
     }
     
@@ -939,6 +896,7 @@ final class MockSessionReplay: SessionReplayInterface {
     
     func captureEvent(properties: [String : Any]?) -> Result<Void, CoralogixInternal.CaptureEventError> {
         captureEventCalledWith = properties
+        captureEventCallCount += 1
         return .success(())
     }
 
@@ -947,10 +905,13 @@ final class MockSessionReplay: SessionReplayInterface {
     func captureEvent(properties: [String : Any]?,
                       completion: @escaping CaptureEventCompletion) {
         captureEventCalledWith = properties
+        captureEventCallCount += 1
         completion(captureEventResult)
     }
 
     var captureEventCalledWith: [String: Any]?
+    /// Captures requested through either overload.
+    var captureEventCallCount = 0
     var captureEventResult: Result<Void, CoralogixInternal.CaptureEventError> = .success(())
     
     func startRecording() {
@@ -965,8 +926,11 @@ final class MockSessionReplay: SessionReplayInterface {
         
     }
     
+    /// Whether the double reports itself as recording; the finger-down capture is gated on it.
+    var recording = true
+
     func isRecording() -> Bool {
-        return true
+        return recording
     }
     
     func isInitialized() -> Bool {

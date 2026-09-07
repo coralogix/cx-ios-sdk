@@ -10,7 +10,7 @@ import CoralogixInternal
 
 extension CoralogixRum: CoralogixInterface {
     public func periodicallyCaptureEventTriggered() {
-        self.makeSpan()
+        self.reportScreenshot()
     }
     
     public func hasSessionRecording(_ hasSessionRecording: Bool) {
@@ -78,7 +78,7 @@ extension CoralogixRum: CoralogixInterface {
     }
     
     public func captureEvent() {
-        self.makeSpan(isManual: true)
+        self.reportScreenshot(isManual: true)
     }
     
     public func isSRRecording() -> Bool {
@@ -103,15 +103,21 @@ extension CoralogixRum: CoralogixInterface {
         sessionReplay.update(sessionId: sessionId)
     }
     
-    internal func makeSpan(isManual: Bool = false) {
+    /// One `screenshot` event for a capture no other event owns: the periodic tick, the host's
+    /// manual capture, and a touch's finger-down frame. `properties` travel with the capture (the
+    /// tap position the marker is painted from). `isManual` marks the host's own `captureEvent()`:
+    /// it is echoed on the event and travels with the capture so an explicit request is not
+    /// deduplicated away. A screenshot span exists only to point at a frame, so a dropped capture
+    /// emits no span at all — the same rule Android applies, where the screenshot log is reported
+    /// only for a frame that shipped.
+    internal func reportScreenshot(properties: [String: Any] = [:], isManual: Bool = false) {
         let span = makeSpan(event: .screenshot, source: .console, severity: .info)
-        if isManual { span.setAttribute(key: Keys.isManual.rawValue, value: AttributeValue(true)) }
-        // A screenshot span exists only to point at a frame, so a dropped capture emits no span
-        // at all — the same rule Android applies, where the screenshot log is reported only for a
-        // frame that shipped. `isManual` travels with the capture so the host's own
-        // `captureEvent()` is not deduplicated away: it asked for this frame explicitly.
-        let extra: [String: Any] = isManual ? [Keys.isManual.rawValue: true] : [:]
-        self.recordScreenshotForSpan(on: span, extraProperties: extra) { didCapture in
+        var properties = properties
+        if isManual {
+            span.setAttribute(key: Keys.isManual.rawValue, value: AttributeValue(true))
+            properties[Keys.isManual.rawValue] = true
+        }
+        self.recordScreenshotForSpan(on: span, extraProperties: properties) { didCapture in
             guard didCapture else {
                 Log.d("[SessionReplay] capture produced no frame — screenshot event not reported")
                 return

@@ -324,8 +324,6 @@ public class SessionReplayModel {
         let frameId = nextCaptureFrameId()
         let isClickFrame = getClickPoint(from: properties) != nil
 
-        let isTap = isTapCapture(properties: properties)
-
         let drop: () -> Void = {
             // Deliberately not weak: the watchdog below has to be able to close the event out
             // after the model is gone, and dropCapture needs nothing from the instance.
@@ -357,7 +355,7 @@ public class SessionReplayModel {
         let delivery = FlutterDeliveryGate()
 
         // Every span that carries a screenshot now closes in this capture's completion, so an
-        // unanswered provider would stop error, log, tap and navigation events from being
+        // unanswered provider would stop error, log and navigation events from being
         // exported at all — not just cost a frame — and pin each span in plugin-owned storage
         // with no ceiling. A wedged Dart isolate, a dropped MethodChannel reply or an engine
         // torn down mid-session all reach that state. Give up on the frame after a bounded wait
@@ -412,14 +410,8 @@ public class SessionReplayModel {
                                   completion: completion)
         }
 
-        // viewId is intentionally "implicit_view": the plugin ignores the argument and routes
-        // every capture to Flutter's single implicit view, which is also the only view this path
-        // composites. Only frameId matters.
-        //
-        // isClick/tapTimestampMs let Dart hold a tap capture for the next committed frame, or
-        // answer nil when the tap is already too stale to draw honestly.
-        provider("implicit_view", frameId, isTap,
-                 tapTimestampMilliseconds(from: properties, isClick: isTap)) { bitmap in
+        // The implicit view is also the only view this path composites. Only frameId matters.
+        provider(Keys.flutterImplicitViewId.rawValue, frameId) { bitmap in
             guard delivery.claim() else {
                 Log.w("[SessionReplayModel] flutterViewBitmapProvider answered twice for frameId \(frameId) — ignoring")
                 return
@@ -441,59 +433,6 @@ public class SessionReplayModel {
     /// one path where a frame is compared, kept, and then still does not ship.
     internal func jpegData(from image: UIImage, compressionQuality: CGFloat) -> Data? {
         image.jpegData(compressionQuality: compressionQuality)
-    }
-
-    /// Whether this capture was triggered by a tap, as opposed to a scroll or a swipe.
-    ///
-    /// Distinct from `isClickFrame`, which asks "does this capture carry a touch position" — true
-    /// of a scroll and a swipe too, since every interaction records coordinates. What the Flutter
-    /// provider is told has to be narrower: hold this frame for a tap and judge it against the
-    /// tap's age. A scroll has no single moment to be late for, so applying the One-Frame Rule
-    /// and a staleness budget to one would drop frames for a gesture that never asked for either.
-    internal func isTapCapture(properties: [String: Any]?) -> Bool {
-        (properties?[Keys.eventName.rawValue] as? String) == InteractionEventName.click.rawValue
-    }
-
-    /// Epoch-milliseconds timestamp of the tap that triggered this capture, so Dart can drop a
-    /// click frame that would land too long after the tap. `nil` for periodic captures, and for a
-    /// click whose properties carry no timestamp — omitting the value skips the staleness check,
-    /// which beats guessing at it.
-    ///
-    /// Reads `tapTimestamp`, the touch's own time, and not `timestamp` — every capture
-    /// overwrites that one with its own wall clock in `SessionReplay.captureEvent`, so reading it
-    /// here handed Dart the moment the capture started and a staleness delta of roughly zero, no
-    /// matter how long the tap had actually been queued.
-    ///
-    /// `Int64(exactly:)` rather than a trapping conversion: the value is read out of an untyped
-    /// properties dictionary that hybrid bridges also populate, and a NaN or out-of-range Double
-    /// must never crash the host app.
-    internal func tapTimestampMilliseconds(from properties: [String: Any]?, isClick: Bool) -> Int64? {
-        guard isClick,
-              let seconds = Self.seconds(from: properties?[Keys.tapTimestamp.rawValue]) else { return nil }
-        return Int64(exactly: (seconds * 1_000).rounded())
-    }
-
-    /// Normalises a numeric value out of the untyped properties dictionary, the same way
-    /// `coordinate(from:)` does for tap positions.
-    ///
-    /// `as? TimeInterval` alone is not enough: a caller writing an epoch value as an integer
-    /// leaves a Swift `Int` in the box, which does not cast to `Double`, and the staleness budget
-    /// would silently go missing for every tap that came in that way.
-    ///
-    /// A boolean has to be turned away before any numeric case runs, because Swift bridges one
-    /// through `NSNumber` and `true as? Double` therefore succeeds as `1.0`. Left to run, a
-    /// bridge that put a flag in this slot would date the tap a second after the epoch and Dart
-    /// would decline every capture as impossibly stale — the opposite of the "no timestamp means
-    /// skip the check" contract above. `CFBooleanGetTypeID` rather than `is Bool`, because an
-    /// `NSNumber` holding 0 or 1 also satisfies `is Bool` and those are numbers.
-    internal static func seconds(from value: Any?) -> TimeInterval? {
-        guard let value, CFGetTypeID(value as CFTypeRef) != CFBooleanGetTypeID() else { return nil }
-        switch value {
-        case let d as Double: return d
-        case let i as Int: return TimeInterval(i)
-        case let n as NSNumber: return n.doubleValue
-        default: return nil
-        }
     }
 
     // Decides what to do with one delivery, in a single critical section.
@@ -635,8 +574,8 @@ public class SessionReplayModel {
             // With a Flutter dialog open Dart reports every masked row behind the barrier, which
             // unions to the whole screen, so a tap anywhere would read as a tap on masked content
             // and lose the exemption — a tap on the modal barrier, a disabled row or an already
-            // focused field would drop its frame and leave the interaction span pointing at no
-            // screenshot. The pipeline still suppresses the marker over Dart's rects, so the two
+            // focused field would drop its frame, and the recording would have none for that
+            // tap. The pipeline still suppresses the marker over Dart's rects, so the two
             // can disagree for Dart-masked content: the cost is one duplicate frame, against a
             // lost frame the other way. Shipping one frame twice beats losing one.
             let clickPoint = self.getClickPoint(from: properties)

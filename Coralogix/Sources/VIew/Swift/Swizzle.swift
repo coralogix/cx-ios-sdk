@@ -128,8 +128,7 @@ extension UISwipeGestureRecognizer {
         NotificationCenter.default.post(
             name: .cxRumNotificationUserActions,
             object: TouchEvent(view: view, location: touch.location(in: nil),
-                               eventType: .swipe, scrollDirection: scrollDir,
-                               touchUptime: touch.timestamp)
+                               eventType: .swipe, scrollDirection: scrollDir)
         )
     }
 
@@ -211,6 +210,15 @@ extension UIApplication {
                 // Store the originating view — it will be nil by the time .cancelled fires.
                 guard let view = touch.view else { continue }
                 ScrollTracker.shared.recordBegan(touch, view: view)
+                // Nothing is classified yet, so the finger-down goes out as a click in the `.began`
+                // phase: session replay wants its frame this early, a span never does.
+                if isSingleTouch {
+                    NotificationCenter.default.post(
+                        name: .cxRumNotificationUserActions,
+                        object: TouchEvent(view: view, location: touch.location(in: nil), eventType: .click,
+                                           phase: .began)
+                    )
+                }
 
             case .moved:
                 // Keep current position updated so processCancelled has accurate data.
@@ -230,8 +238,7 @@ extension UIApplication {
                     case .tap(let view, let location):
                         NotificationCenter.default.post(
                             name: .cxRumNotificationUserActions,
-                            object: TouchEvent(view: view, location: location, eventType: .click,
-                                               touchUptime: touch.timestamp)
+                            object: TouchEvent(view: view, location: location, eventType: .click)
                         )
                     }
                 }
@@ -252,8 +259,7 @@ extension UIApplication {
                     case .tap(let view, let location):
                         NotificationCenter.default.post(
                             name: .cxRumNotificationUserActions,
-                            object: TouchEvent(view: view, location: location, eventType: .click,
-                                               touchUptime: touch.timestamp)
+                            object: TouchEvent(view: view, location: location, eventType: .click)
                         )
                     }
                 }
