@@ -1,0 +1,237 @@
+# Testing & CI
+
+Read this before adding a test, changing a workflow, or trying to make CI faster.
+
+---
+
+## Where a new test goes
+
+| The test… | Target | Runs in |
+|---|---|---|
+| exercises SDK logic in-process | `Tests/CoralogixRumTests`, `Tests/CoralogixInternalTests`, `Tests/SessionReplayTests` | `component · unit` |
+| drives the demo app and asserts one feature | `Example/DemoAppUITests` | a `component` UI shard |
+| drives a path joining several features (interaction + session + export + schema) | `Example/DemoAppUITests` | a `smoke` shard |
+| probes for leaks or performance | `Example/DemoAppUITests/SessionReplayLeakUITests` | a `soak` shard, **via the harness** |
+
+A SwiftUI-side UI test goes in `Example/DemoAppSwiftUIUITests` against the
+`DemoAppSwiftUI` scheme. Demo-app parity still applies: a new screen or control
+must land in both demo apps.
+
+---
+
+## Adding a test — the procedure
+
+1. **Pick the tier** from the table above. If a UI test drives one feature, it is
+   `component`; if it walks a path joining several, it is `smoke`.
+2. **Write it** in the matching target. A demo-app change (new screen, control)
+   must be mirrored in *both* `Example/DemoAppSwift` and `Example/DemoAppSwiftUI`.
+3. **Run it locally** before pushing:
+   ```bash
+   # one unit test target
+   xcodebuild test -scheme Coralogix-Package \
+     -destination "platform=iOS Simulator,name=iPhone 16" \
+     -only-testing:CoralogixRumTests
+
+   # one UI test
+   xcodebuild test -workspace Example/DemoApp.xcworkspace -scheme DemoAppSwift \
+     -destination "platform=iOS Simulator,name=iPhone 16" \
+     -only-testing:DemoAppUITests/UserInteractionUITests/testMyNewThing
+
+   # the leak harness, end to end (builds, captures frames, scans them)
+   tool/run_leak_harness.sh
+   ```
+4. **UI tests only — register it** in `.github/ci/ui-suites.json`: add the
+   identifier to an existing shard, or add a shard if the nearest one is already
+   near the top of its tier's range. Set `seconds` from what step 3 measured.
+5. **Push.** The `plan` job runs on ubuntu in ~9s and fails immediately if the
+   registration is wrong, so you do not wait on macOS runners to find out.
+
+To reproduce one shard exactly as CI runs it:
+
+```bash
+xcodebuild test -workspace Example/DemoApp.xcworkspace -scheme DemoAppSwift \
+  -destination "platform=iOS Simulator,name=iPhone 16" \
+  $(jq -r '.shards[] | select(.id=="smoke-interaction") | .tests[] | "-only-testing:" + .' \
+      .github/ci/ui-suites.json)
+```
+
+---
+
+## A new UI test MUST be registered
+
+Add its identifier to a shard in `.github/ci/ui-suites.json`. The `plan` job
+fails the build if you don't, and that guard exists because
+`DemoAppSwiftUIUITests` sat wired into a scheme executing **zero tests** without
+anyone noticing.
+
+`plan` rejects every way a shard can silently run the wrong thing — all of which
+`xcodebuild` otherwise reports as success:
+
+- a test in the source but in no shard
+- a declared identifier matching no test (its shard would run nothing)
+- a shard with an empty `tests` array (no `-only-testing` filter runs the *whole* bundle)
+- a harness shard holding more than one test (only the first would run)
+- a shard naming a scheme with no shared `.xcscheme`, or one that does not build
+  the target its tests live in
+
+Identifiers are `TestTarget/TestClass/testMethod`.
+
+---
+
+## Shard packing
+
+Shards run as parallel jobs against one shared build, so a tier costs its
+**slowest shard**, not the sum. But:
+
+> **Per-shard overhead is ~5-6 minutes** — simulator boot (~60-76s), artifact
+> unpack (4-104s), and xcodebuild's app install/launch (143-193s) — for 2-3
+> minutes of actual testing.
+
+So:
+
+- **Don't create a shard for less than ~2 minutes of tests.** It will spend more
+  on setup than it saves.
+- **Do split a shard that dominates the critical path.** The two leak tests were
+  split one-per-shard and measured 6.4-7.3m each running in parallel. (They were
+  never run paired as a single shard, so the saving is inferred, not measured —
+  the point stands, the figure does not exist.)
+- Record measured runtime in `seconds` so the next repack is a data decision.
+- Shard wall-clock varies enormously run to run for identical tests: one smoke
+  shard measured **3.9m and 10.0m on the same commit**, a 2.5x swing. Never tune
+  packing from a single run, and never quote a single run as "the" number.
+
+---
+
+## Harness shards (`"harness": true`)
+
+`SessionReplayLeakUITests` asserts only that a screen appeared. The leak check is
+a pixel scan for unmasked sentinels performed by `tool/run_leak_harness.sh` over
+frames captured by its mock upload server. **Running those tests without the
+harness proves nothing.**
+
+- A harness shard holds **exactly one test** — the harness takes a single
+  `-only-testing` filter. `plan` enforces this.
+- CI passes `CX_IOS_XCTESTRUN` (reuse the shared build, don't rebuild) and
+  `CX_IOS_ONLY_TESTING` (one scenario per shard). Both default to standalone
+  behaviour, so `tool/run_leak_harness.sh` still works locally with no arguments.
+- Exit codes are meaningful: **1 = a real leak, 2 = infrastructure failure and
+  not a verdict.** Keep them distinguishable in any error reporting you touch.
+
+---
+
+## Quarantine (`"tier": "quarantine"`)
+
+A quarantined shard stays listed in `ui-suites.json` — so the coverage guard is
+satisfied and the test is not forgotten — but its tier is not one `ci.yml` runs,
+so **it does not execute at all**.
+
+Use it for a test that is **working correctly and reporting a defect nobody has
+scheduled**. The alternative, letting it run and go red without blocking, is
+worse: a red check that does not block still reads as broken CI, and people learn
+to ignore the colour. Better to not run it and carry a ticket.
+
+`soak-replay-navigation` is quarantined today. It reliably detects the iOS 18.5
+navigation-transition leak — 1 of 61 captured frames showed unmasked sentinel
+pixels — which is a real defect tracked separately, not a test problem. Its
+sibling `soak-replay-scroll` stayed clean across every run and still gates every
+PR, so leak detection is not lost.
+
+Move it back to `soak` when the leak is fixed.
+
+**Quarantine is not for flaky tests.** A flake means the test or the environment
+is wrong: fix it or delete it. Quarantine is for a correct test whose finding is
+genuine and deferred.
+
+Always open a ticket when quarantining, and reference it **in the commit
+message, not in `ui-suites.json`** — the coding standards keep ticket IDs out of
+code comments, so the file explains the reason in prose and git blame carries
+the link.
+
+---
+
+## Caching — measure before you add any
+
+The instinct to cache is usually wrong here, and it was wrong twice:
+
+- **Never cache DerivedData.** `actions/cache` resets mtimes on extraction, so
+  every source looks newer than its build products and xcodebuild rebuilds
+  anyway. Measured: an exact cache hit produced a **slower** build (302s vs 282s
+  cold) after paying 99s to restore. Removing it took the UI build 2.3m → 1.5m.
+- The demo app's SPM graph is mostly **binary** targets (firebase-ios-sdk, grpc,
+  abseil), so it was never the expensive thing. The UI build compiles in ~111s
+  with every cache missing.
+- SPM and CocoaPods caches are cheap and fine. **Bump the cache key whenever you
+  change the cached paths**, or `restore-keys` will keep returning entries that
+  lack the new content.
+- Shards read no cache at all — they consume the build artifact — so caching
+  barely touches the critical path.
+
+**What actually made CI fast:** parallelism, a larger runner for the one build
+job, pinning `ARCHS` to a single slice, and not running the unit tests twice.
+
+---
+
+## Things that will bite you
+
+- **`pod lib lint` runs the unit tests.** `Coralogix.podspec` and
+  `SessionReplay.podspec` declare `test_spec` blocks. Lint passes `--skip-tests`
+  because `component · unit` already covers them, over all three targets rather
+  than two. If you add a `test_spec` expecting CI to run it, it won't.
+- **Build and test runners must share a CPU architecture.** Shards execute the
+  build job's simulator binaries. GitHub's `-large` macOS runners are Intel;
+  `macos-15` and `-xlarge` are Apple Silicon. A `lipo` check fails loudly if this
+  ever diverges.
+- **Pin Xcode, never probe it.** A fallback ladder silently changes the compiler,
+  so a green run proves nothing about which toolchain ran. Toolchains differ per
+  workflow — tests on macOS 15 / Xcode 16.4, podspec lint on macOS 14 / Xcode 15.3.
+- **The simulator runtime is derived from the selected Xcode's SDK.** A runner
+  carries runtimes newer than its SDK (18.6 and 26.x beside an 18.5 SDK); picking
+  one fails at launch.
+- **Anchor the device regex.** An unanchored `iPhone 16` also matches 16 Plus,
+  16 Pro, 16 Pro Max and 16e — on a realistic device list it selects the 16e. The
+  gesture tests are sensitive to screen size, so `boot-simulator` defaults to
+  `^iPhone 16$`, sorts by runtime then device name (never by UDID, which made the
+  model arbitrary), and warns when it has to substitute a different model.
+- **Every tier name is validated.** A typo drops the shard from every run, and
+  since `quarantine` is a legitimate never-runs tier, a typo would otherwise look
+  intentional.
+- **A pinned `runtime` is strict.** If no simulator has it the action fails
+  rather than substituting — accepting 26.2 while refusing 18.6 would make the
+  pin meaningless. Leaving it empty keeps the SDK-derived preference and its
+  fallbacks.
+- **The coverage scan reads `extension` as well as `class`.** Test methods
+  declared in an extension are used elsewhere in this repo's tests, and they used
+  to emit no identifier at all — invisible to the guard in one direction, falsely
+  "stale" in the other.
+- **A test may appear in only one shard.** Duplicated across two, it runs twice:
+  the declared list is de-duplicated for comparison, but each shard keeps its own
+  `-only-testing` list.
+- **`xcodebuild ... | head` aborts with 134.** `head` closes the pipe, xcodebuild
+  takes the EPIPE as an uncaught Foundation exception. Capture output in full,
+  then parse.
+- **`xcrun simctl boot` blocks.** Detach it if you want it overlapped with other
+  setup; a "non-blocking" flag that only skips the later wait buys nothing.
+- **Don't relocate the demo app's SPM checkouts.** Its Crashlytics run script
+  resolves Firebase at `${BUILD_DIR%/Build/*}/SourcePackages/...`, which only
+  exists at the default location under `-derivedDataPath`.
+
+---
+
+## Unit tests stay serial, and un-retried
+
+`-parallel-testing-enabled NO` is deliberate: the SDK swizzles global process
+state, so tests sharing a process must not interleave.
+
+UI shards use `-retry-tests-on-failure` because they round-trip through a live
+schema-validator and absorb network blips. **Do not add retries to the unit
+job** — there, a flaky test is more likely to be a real swizzling race, and a
+retry would hide exactly the signal worth having.
+
+---
+
+## Before claiming a speed-up
+
+State whether a number is **measured or estimated**, and say which run it came
+from. Given ±4m shard variance, a single green run is not evidence. Compare
+against a baseline on the *same commit* — comparing across branches once made a
+10.9m job look like a 4m15s regression that never happened.

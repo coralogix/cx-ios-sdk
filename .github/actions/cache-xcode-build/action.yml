@@ -1,0 +1,62 @@
+name: Cache Xcode build state
+description: >-
+  Cache the two expensive, mostly-static parts of an Xcode build: resolved SPM
+  checkouts and compiled DerivedData. Callers pass precomputed keys so each
+  workflow controls its own invalidation without this action guessing at globs.
+
+inputs:
+  spm-key:
+    description: Cache key for the SPM checkout directory. Required.
+    required: true
+  derived-data-key:
+    description: >-
+      Cache key for DerivedData. Leave empty to skip the DerivedData cache —
+      appropriate when the build output is handed to later jobs as an artifact
+      and cross-run reuse is not worth the cache footprint.
+    required: false
+    default: ''
+  key-prefix:
+    description: Namespace shared by both restore-keys, e.g. "unit" or "ui".
+    required: true
+  spm-path:
+    description: >-
+      Directory to cache SPM checkouts from. This action only caches it — it
+      does not pass it to xcodebuild. A caller that also wants the checkouts
+      relocated must pass -clonedSourcePackagesDirPath itself and keep the two
+      in sync. The UI build deliberately does not: the demo app's Crashlytics
+      run script resolves the Firebase checkout relative to -derivedDataPath, so
+      it caches DerivedData/SourcePackages and leaves the clone path at default.
+    required: false
+    default: SourcePackages
+  derived-data-path:
+    description: Directory passed to xcodebuild -derivedDataPath.
+    required: false
+    default: DerivedData
+
+runs:
+  using: composite
+  steps:
+    # Cheap and almost always a hit: the checkouts only move when a
+    # Package.resolved pin changes. firebase-ios-sdk + grpc + abseil alone are
+    # several hundred MB of git clone on a miss.
+    - name: Cache SPM checkouts
+      uses: actions/cache@v4
+      with:
+        path: ${{ inputs.spm-path }}
+        key: ${{ inputs.spm-key }}
+        restore-keys: |
+          spm-${{ inputs.key-prefix }}-${{ runner.os }}-
+
+    # Only Build/ and the module cache are stored. Index.noindex is the largest
+    # directory in a DerivedData tree and is dead weight in CI — the builds also
+    # pass COMPILER_INDEX_STORE_ENABLE=NO so it is never populated.
+    - name: Cache DerivedData
+      if: inputs.derived-data-key != ''
+      uses: actions/cache@v4
+      with:
+        path: |
+          ${{ inputs.derived-data-path }}/Build
+          ${{ inputs.derived-data-path }}/ModuleCache.noindex
+        key: ${{ inputs.derived-data-key }}
+        restore-keys: |
+          dd-${{ inputs.key-prefix }}-${{ runner.os }}-

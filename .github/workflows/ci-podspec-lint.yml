@@ -1,0 +1,129 @@
+name: Podspec Lint
+
+# Reusable. Lints the three podspecs as parallel matrix jobs.
+#
+# Publishing them is strictly ordered (CoralogixInternal must reach trunk before
+# the two that depend on it), but LINTING is not: --include-podspecs resolves the
+# dependency from the local file, so each lint is self-contained. Run serially
+# they cost 44s + 253s + 343s = 10.5 min; in parallel the slowest one is the
+# whole job. See lint_and_push_cocoapods.sh for the ordered publish path.
+#
+# --skip-tests: Coralogix.podspec and SessionReplay.podspec declare test_specs,
+# so lint was also building and running 1081 unit tests — the whole difference
+# between CoralogixInternal's 0.6 min and the other two's 5-10. Those tests
+# already run in ci-component-unit.yml, over all three targets rather than two
+# (CoralogixInternal.podspec has no test_spec), and they test SDK logic, which
+# does not change with the distribution channel. What lint uniquely proves is
+# that the pod BUILDS as a consumer integrates it — static frameworks, complete
+# source_files globs, declared dependencies — and --skip-tests keeps all of it.
+
+on:
+  workflow_call:
+    inputs:
+      runner:
+        type: string
+        default: macos-14
+      xcode-version:
+        type: string
+        default: '15.3'
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: lint · ${{ matrix.podspec }}
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 30
+    strategy:
+      # Report every podspec's result in one run rather than stopping at the
+      # first failure and hiding whether the others also broke.
+      fail-fast: false
+      matrix:
+        include:
+          - podspec: CoralogixInternal
+            include-podspecs: ''
+          - podspec: SessionReplay
+            include-podspecs: '--include-podspecs=CoralogixInternal.podspec'
+          - podspec: Coralogix
+            include-podspecs: '--include-podspecs=CoralogixInternal.podspec'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode ${{ inputs.xcode-version }}
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: ${{ inputs.xcode-version }}
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+          bundler-cache: false
+
+      # Saves re-fetching the trunk CDN metadata and any already-downloaded pod
+      # sources on every one of the three parallel jobs.
+      - name: Cache CocoaPods state
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cocoapods/repos
+            ~/Library/Caches/CocoaPods
+          key: podlint-${{ runner.os }}-${{ hashFiles('*.podspec') }}
+          restore-keys: |
+            podlint-${{ runner.os }}-
+
+      - name: Install CocoaPods
+        run: |
+          set -euo pipefail
+          gem install cocoapods -v 1.16.2 --no-document
+          pod --version
+
+      - name: Lint ${{ matrix.podspec }}.podspec
+        run: |
+          set -euo pipefail
+          LOG="lint_${{ matrix.podspec }}.log"
+          START=$(date +%s)
+
+          # --verbose output goes to a file rather than the live log: CocoaPods
+          # emits every compiler invocation, and streaming that to Actions is a
+          # measurable share of the job's wall-clock. It is uploaded on failure.
+          set +e
+          # shellcheck disable=SC2086
+          pod lib lint ${{ matrix.podspec }}.podspec \
+            ${{ matrix.include-podspecs }} \
+            --platforms=iOS \
+            --use-static-frameworks \
+            --allow-warnings \
+            --fail-fast \
+            --no-clean \
+            --skip-tests \
+            --verbose > "$LOG" 2>&1
+          EXIT=$?
+          set -e
+          TOTAL=$(( $(date +%s) - START ))
+
+          {
+            echo "### lint · ${{ matrix.podspec }}"
+            echo ""
+            echo "| result | wall-clock |"
+            echo "|---|---|"
+            echo "| $([ "$EXIT" -eq 0 ] && echo 'passed' || echo 'FAILED') | ${TOTAL}s |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$EXIT" -ne 0 ]; then
+            echo "::error::${{ matrix.podspec }}.podspec failed lint (exit $EXIT)"
+            echo "---- error context ----"
+            grep -nE "error:|ERROR|\[!\]" "$LOG" | tail -40 || tail -80 "$LOG"
+            exit "$EXIT"
+          fi
+          echo "${{ matrix.podspec }}.podspec passed lint in ${TOTAL}s"
+
+      - name: Upload lint log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: podspec-lint-${{ matrix.podspec }}
+          path: lint_${{ matrix.podspec }}.log
+          if-no-files-found: ignore
+          retention-days: 5

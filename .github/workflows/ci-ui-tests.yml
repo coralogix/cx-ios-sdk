@@ -1,0 +1,490 @@
+name: UI Tests
+
+# Reusable. Builds the demo apps once, then runs the XCUITest shards declared in
+# .github/ci/ui-suites.json as parallel jobs against that one build. Wall-clock
+# is the slowest shard rather than the sum of every test.
+
+on:
+  workflow_call:
+    inputs:
+      tiers:
+        description: 'JSON array of tiers to run, e.g. ["component","smoke"].'
+        type: string
+        required: true
+      build-runner:
+        description: >-
+          Runner for the single build job, where compile time dominates. MUST be
+          the same CPU architecture as test-runner: the shards consume this job's
+          simulator binaries, and an x86_64 bundle will not run on an arm64
+          runner's simulator. GitHub's `-large` macOS runners are Intel while
+          `macos-15` and `-xlarge` are Apple Silicon, so the larger runner that
+          pairs with a standard macos-15 shard is `-xlarge`, not `-large`.
+        type: string
+        default: macos-15-xlarge
+      test-runner:
+        description: Runner for the shard jobs. These are simulator-bound, not CPU-bound.
+        type: string
+        default: macos-15
+      xcode-version:
+        type: string
+        default: '16.4'
+      deployment-target:
+        description: IPHONEOS_DEPLOYMENT_TARGET override for CI builds.
+        type: string
+        default: '18.0'
+    secrets:
+      demoapp_api_key:
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    name: plan
+    # Pure jq/grep over the repo — no toolchain needed, so this stays off the
+    # macOS runner pool and gives fast feedback before anything expensive starts.
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      shards: ${{ steps.resolve.outputs.shards }}
+      schemes: ${{ steps.resolve.outputs.schemes }}
+      any: ${{ steps.resolve.outputs.any }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # A UI test present in source but in no shard would silently never run —
+      # exactly the state DemoAppSwiftUIUITests was already in. The reverse
+      # direction matters too: a typo in an identifier makes its shard execute
+      # nothing, which xcodebuild reports as success.
+      - name: Check every UI test is assigned to a shard
+        run: |
+          set -euo pipefail
+          # Outside the working tree on purpose: these landed in a commit once,
+          # swept up by `git add -A` after a local run.
+          TMP="${RUNNER_TEMP:-${TMPDIR:-/tmp}}"
+          jq -r '.shards[].tests[]' .github/ci/ui-suites.json | sort -u > "$TMP/declared.txt"
+
+          # shellcheck disable=SC2016  # $0/$RSTART are awk fields, not shell vars
+          find Example -path 'Example/*UITests/*' -name '*.swift' -print0 \
+          | xargs -0 -I{} awk -v path="{}" '
+              BEGIN {
+                split(path, seg, "/")
+                for (i = 1; i <= length(seg); i++) if (seg[i] ~ /UITests$/) tgt = seg[i]
+              }
+              match($0, /(^|[ \t])(class|extension)[ \t]+[A-Za-z0-9_]+/) {
+                cls = substr($0, RSTART, RLENGTH)
+                sub(/.*[ \t](class|extension)[ \t]+/, "", cls); sub(/^(class|extension)[ \t]+/, "", cls)
+              }
+              match($0, /func[ \t]+test[A-Za-z0-9_]*/) {
+                m = substr($0, RSTART, RLENGTH); sub(/.*func[ \t]+/, "", m)
+                if (cls != "") print tgt "/" cls "/" m
+              }' {} \
+          | sort -u > "$TMP/actual.txt"
+
+          # sort -u below hides a duplicate identifier, but each shard keeps its
+          # own -only-testing list, so the test would just run once per shard.
+          DUPES=$(jq -r '[.shards[].tests[]] | group_by(.) | map(select(length > 1)) | .[] | "\(.[0]) (x\(length))"' \
+            .github/ci/ui-suites.json)
+          if [ -n "$DUPES" ]; then
+            echo "::error::these tests are registered in more than one shard and would run repeatedly:"
+            echo "$DUPES" | awk '{print "  " $0}'
+            exit 1
+          fi
+
+          # A tier typo drops the shard from every run with no error, and since
+          # `quarantine` is a legitimate never-runs tier, a typo is otherwise
+          # indistinguishable from an intentional quarantine.
+          VALID_TIERS='["component","smoke","soak","quarantine"]'
+          BAD_TIER=$(jq -r --argjson v "$VALID_TIERS" \
+            '.shards[] | select(.tier as $t | $v | index($t) | not) | "\(.id) (tier: \(.tier))"' \
+            .github/ci/ui-suites.json)
+          if [ -n "$BAD_TIER" ]; then
+            echo "::error::unknown tier — must be one of $VALID_TIERS:"
+            echo "$BAD_TIER" | awk '{print "  " $0}'
+            exit 1
+          fi
+
+          # An empty array yields an empty -only-testing list, and xcodebuild with
+          # no filter runs the whole bundle — a shard silently becomes a full
+          # suite run.
+          EMPTY=$(jq -r '.shards[] | select((.tests|length) == 0) | .id' .github/ci/ui-suites.json)
+          if [ -n "$EMPTY" ]; then
+            echo "::error::these shards name no tests, so xcodebuild would run the entire scheme:"
+            echo "$EMPTY" | awk '{print "  " $0}'
+            exit 1
+          fi
+
+          # Truthiness, not equality: "harness": "true" as a JSON string would
+          # evade `== true` here yet still take the harness branch at runtime,
+          # where only the first test is used.
+          BAD_HARNESS=$(jq -r '.shards[] | select((.harness // false) != false and (.tests|length) != 1) | .id' .github/ci/ui-suites.json)
+          if [ -n "$BAD_HARNESS" ]; then
+            echo "::error::harness shards take a single -only-testing filter, so they must hold exactly one test:"
+            echo "$BAD_HARNESS" | awk '{print "  " $0}'
+            exit 1
+          fi
+
+          UNRUN=$(comm -23 "$TMP/actual.txt" "$TMP/declared.txt")
+          STALE=$(comm -13 "$TMP/actual.txt" "$TMP/declared.txt")
+          FAIL=0
+
+          if [ -n "$UNRUN" ]; then
+            echo "::error::UI tests missing from .github/ci/ui-suites.json — they would never run:"
+            echo "$UNRUN" | awk '{print "  " $0}'
+            FAIL=1
+          fi
+          if [ -n "$STALE" ]; then
+            echo "::error::Identifiers in .github/ci/ui-suites.json with no matching test — their shard would run nothing:"
+            echo "$STALE" | awk '{print "  " $0}'
+            FAIL=1
+          fi
+          [ "$FAIL" -eq 0 ] || exit 1
+          echo "All $(wc -l < "$TMP/actual.txt" | tr -d ' ') UI tests are assigned to a shard."
+
+      # A shard whose scheme does not build the target its tests live in runs
+      # nothing, and xcodebuild calls that success. Cheap to check, and the only
+      # way this pairing is otherwise noticed is a suspiciously fast green job.
+      - name: Check each shard's scheme builds the targets it tests
+        run: |
+          set -euo pipefail
+          FAIL=0
+          while IFS=$'\t' read -r id scheme target; do
+            SCHEME_FILE="Example/DemoApp.xcodeproj/xcshareddata/xcschemes/${scheme}.xcscheme"
+            if [ ! -f "$SCHEME_FILE" ]; then
+              echo "::error::shard '$id' names scheme '$scheme', which has no shared .xcscheme"
+              FAIL=1; continue
+            fi
+            if ! grep -q "BlueprintName = \"${target}\"" "$SCHEME_FILE"; then
+              echo "::error::shard '$id' runs $target tests but scheme '$scheme' does not build that target — the shard would execute nothing"
+              FAIL=1
+            fi
+          done < <(jq -r '.shards[] | . as $s | .tests[] | [$s.id, $s.scheme, (split("/")[0])] | @tsv' \
+                     .github/ci/ui-suites.json | sort -u)
+          [ "$FAIL" -eq 0 ] || exit 1
+          echo "Every shard's tests belong to a target its scheme builds."
+
+      - name: Resolve shard matrix
+        id: resolve
+        env:
+          TIERS: ${{ inputs.tiers }}
+        run: |
+          set -euo pipefail
+          BAD_REQ=$(jq -r --argjson v '["component","smoke","soak","quarantine"]' \
+            --argjson t "$TIERS" '$t - $v | .[]' <<<'null')
+          if [ -n "$BAD_REQ" ]; then
+            echo "::error::caller requested unknown tier(s): $(echo "$BAD_REQ" | tr '\n' ' ')"
+            exit 1
+          fi
+
+          SHARDS=$(jq -c --argjson tiers "$TIERS" \
+            '[.shards[] | select(.tier as $t | $tiers | index($t))
+              | {id, name, scheme, tier,
+                 harness: ((.harness // false) != false),
+                 test_id: .tests[0],
+                 only: ([.tests[] | "-only-testing:" + .] | join(" "))}]' \
+            .github/ci/ui-suites.json)
+
+          COUNT=$(echo "$SHARDS" | jq 'length')
+          {
+            echo "shards=$SHARDS"
+            echo "schemes=$(echo "$SHARDS" | jq -c '[.[].scheme] | unique')"
+            echo "any=$([ "$COUNT" -gt 0 ] && echo true || echo false)"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### UI test plan"
+            echo ""
+            echo "| shard | tier | scheme | tests |"
+            echo "|---|---|---|---|"
+            echo "$SHARDS" | jq -r '.[] | "| \(.name) | \(.tier) | \(.scheme) | \(.only | split(" ") | length) |"'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  build:
+    name: build
+    needs: plan
+    if: needs.plan.outputs.any == 'true'
+    runs-on: ${{ inputs.build-runner }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-xcode
+        with:
+          xcode-version: ${{ inputs.xcode-version }}
+
+      - uses: ./.github/actions/cache-xcode-build
+        with:
+          key-prefix: ui
+          # Must stay at the default location inside DerivedData — see the
+          # build step below.
+          spm-path: DerivedData/SourcePackages
+          spm-key: spm-ui-${{ runner.os }}-xc${{ inputs.xcode-version }}-${{ hashFiles('Example/DemoApp.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+
+      - uses: ./.github/actions/setup-demo-app
+        with:
+          api-key: ${{ secrets.demoapp_api_key }}
+          cache-prefix: pods-ui
+
+      # Two things keep this job lean: `generic/platform` means no simulator has
+      # to boot here at all, and ARCHS is pinned to the runner's own architecture
+      # — a generic simulator destination otherwise builds arm64 AND x86_64, and
+      # the shards only ever run the one the runner matches.
+      #
+      # Deliberately no -clonedSourcePackagesDirPath: the app's Crashlytics run
+      # script resolves the Firebase checkout as
+      # `${BUILD_DIR%/Build/*}/SourcePackages/checkouts/firebase-ios-sdk/...`,
+      # which only exists if SPM stays at its default location under
+      # -derivedDataPath. Relocating the checkouts fails that build phase.
+      - name: Build for testing
+        env:
+          SCHEMES: ${{ needs.plan.outputs.schemes }}
+        run: |
+          set -euo pipefail
+          cd Example
+          for SCHEME in $(echo "$SCHEMES" | jq -r '.[]'); do
+            echo "::group::build-for-testing $SCHEME"
+            START=$(date +%s)
+            set +e
+            xcodebuild build-for-testing \
+              -workspace DemoApp.xcworkspace \
+              -scheme "$SCHEME" \
+              -sdk iphonesimulator \
+              -destination "generic/platform=iOS Simulator" \
+              -derivedDataPath ../DerivedData \
+              -jobs "$(sysctl -n hw.ncpu)" \
+              CODE_SIGNING_ALLOWED=NO \
+              CODE_SIGN_IDENTITY="" \
+              CODE_SIGN_ENTITLEMENTS="" \
+              DEVELOPMENT_TEAM="" \
+              COMPILER_INDEX_STORE_ENABLE=NO \
+              ARCHS="$(uname -m)" \
+              IPHONEOS_DEPLOYMENT_TARGET="${{ inputs.deployment-target }}" \
+              2>&1 | tee "../build-$SCHEME.log" | xcpretty --color
+            EXIT=${PIPESTATUS[0]}
+            set -e
+            echo "::endgroup::"
+
+            if [ "$EXIT" -ne 0 ]; then
+              echo "::error::build-for-testing failed for $SCHEME (exit $EXIT)"
+              grep -iE "error:" "../build-$SCHEME.log" | tail -20 || true
+              exit "$EXIT"
+            fi
+            # A build can succeed yet emit no .xctestrun (e.g. a scheme with no
+            # enabled testables). Catch it here rather than in every shard.
+            FOUND=""
+            for f in ../DerivedData/Build/Products/*.xctestrun; do
+              [ -e "$f" ] || continue
+              base=$(basename "$f")
+              [ "${base%%_*}" = "$SCHEME" ] && FOUND="$f" && break
+            done
+            if [ -z "$FOUND" ]; then
+              echo "::error::$SCHEME built but produced no .xctestrun — check the scheme's Test action has enabled testables."
+              ls -1 ../DerivedData/Build/Products/*.xctestrun 2>/dev/null || echo "(none)"
+              exit 1
+            fi
+
+            echo "$SCHEME built in $(( $(date +%s) - START ))s -> $(basename "$FOUND")"
+          done
+
+      # .app bundles carry symlinks and exec bits that upload-artifact does not
+      # preserve, so hand it a single tar. The tar is already compressed, hence
+      # compression-level 0 — re-zipping it would just burn runner time.
+      # zstd rather than gzip: every shard pays the decompression, and gzip was
+      # costing 33-48s of each one.
+      - name: Package test products
+        run: |
+          set -euo pipefail
+          cd DerivedData/Build
+          tar -c Products | zstd -T0 -3 -o "$GITHUB_WORKSPACE/test-products.tar.zst"
+          ls -lh "$GITHUB_WORKSPACE/test-products.tar.zst"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ui-test-products
+          path: test-products.tar.zst
+          retention-days: 1
+          compression-level: 0
+
+      - name: Upload build logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-build-logs
+          path: build-*.log
+          if-no-files-found: ignore
+
+  test:
+    name: ${{ matrix.name }}
+    needs: [plan, build]
+    if: needs.plan.outputs.any == 'true'
+    runs-on: ${{ inputs.test-runner }}
+    timeout-minutes: 30
+    strategy:
+      # One flaky shard must not discard the results of healthy sibling shards —
+      # otherwise a single network blip forces a full re-run of the matrix.
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.shards) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-xcode
+        with:
+          xcode-version: ${{ inputs.xcode-version }}
+
+      # Boot is started but not awaited: CoreSimulator's cold start runs while
+      # the ~hundreds of MB of test products download.
+      - uses: ./.github/actions/boot-simulator
+        with:
+          wait: 'false'
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ui-test-products
+
+      - name: Unpack test products
+        run: |
+          set -euo pipefail
+          mkdir -p DerivedData/Build
+          zstd -d -c test-products.tar.zst | tar -x -C DerivedData/Build
+
+          # Guard the build-runner/test-runner architecture pairing. Without this
+          # a mismatch surfaces only as an opaque simulator launch failure.
+          APP=$(find DerivedData/Build/Products -maxdepth 2 -name '*.app' ! -name '*-Runner.app' | head -1)
+          if [ -n "$APP" ]; then
+            BIN="$APP/$(basename "${APP%.app}")"
+            if [ -f "$BIN" ]; then
+              PRODUCT_ARCHS=$(lipo -archs "$BIN" 2>/dev/null || echo unknown)
+              echo "test products: $PRODUCT_ARCHS | runner: $(uname -m)"
+              case " $PRODUCT_ARCHS " in
+                *" $(uname -m) "*) ;;
+                *) echo "::error::Test products are $PRODUCT_ARCHS but this runner is $(uname -m). build-runner and test-runner must share an architecture."; exit 1 ;;
+              esac
+            fi
+          fi
+
+      - name: Wait for simulator
+        run: xcrun simctl bootstatus "$SIM_UDID" -b
+
+      - name: Run ${{ matrix.name }}
+        env:
+          SCHEME: ${{ matrix.scheme }}
+          ONLY_TESTING: ${{ matrix.only }}
+          IS_HARNESS: ${{ matrix.harness }}
+          TEST_ID: ${{ matrix.test_id }}
+        run: |
+          set -euo pipefail
+
+          # Match the scheme prefix exactly: a `DemoAppSwift_*` glob would also
+          # match DemoAppSwiftUI's xctestrun.
+          XCTESTRUN=""
+          for f in DerivedData/Build/Products/*.xctestrun; do
+            [ -e "$f" ] || continue
+            base=$(basename "$f")
+            [ "${base%%_*}" = "$SCHEME" ] && XCTESTRUN="$f" && break
+          done
+          if [ -z "$XCTESTRUN" ]; then
+            echo "::error::No .xctestrun found for scheme $SCHEME"
+            ls -1 DerivedData/Build/Products/*.xctestrun 2>/dev/null || true
+            exit 1
+          fi
+          echo "Using $XCTESTRUN"
+
+          START=$(date +%s)
+          set +e
+          if [ "$IS_HARNESS" = "true" ]; then
+            # The leak tests assert only that the screen appeared; the actual
+            # check is a pixel scan of frames captured by the harness's mock
+            # upload server, so running them bare would prove nothing. Point the
+            # harness at the shared build so it does not rebuild the workspace.
+            CX_IOS_XCTESTRUN="$PWD/$XCTESTRUN" \
+            CX_IOS_ONLY_TESTING="$TEST_ID" \
+            CX_IOS_SIM_UDID="$SIM_UDID" \
+              tool/run_leak_harness.sh 2>&1 | tee test-output.log
+            EXIT=${PIPESTATUS[0]}
+          else
+            # These tests round-trip through a live schema-validator, so a single
+            # retry absorbs a transient network failure without hiding a real one:
+            # a genuinely broken assertion fails both attempts.
+            # shellcheck disable=SC2086
+            xcodebuild test-without-building \
+              -xctestrun "$XCTESTRUN" \
+              -destination "$SIM_DESTINATION" \
+              -resultBundlePath TestResults.xcresult \
+              -parallel-testing-enabled NO \
+              -retry-tests-on-failure -test-iterations 2 \
+              $ONLY_TESTING \
+              2>&1 | tee test-output.log | xcpretty
+            EXIT=${PIPESTATUS[0]}
+          fi
+          set -e
+          TOTAL=$(( $(date +%s) - START ))
+
+          EXECUTED=$(grep -oE "Executed [0-9]+ tests?" test-output.log | tail -1 || echo "Executed 0 tests")
+          RETRIED=$(grep -cE "Test Case .* failed \(" test-output.log || true)
+          FRAMES=$(grep -oE "captured [0-9]+ frame" test-output.log | tail -1 || true)
+
+          {
+            echo "### ${{ matrix.name }}"
+            echo ""
+            echo "| shard | tier | result | wall-clock | tests |"
+            echo "|---|---|---|---|---|"
+            echo "| \`${{ matrix.id }}\` | ${{ matrix.tier }} | $([ "$EXIT" -eq 0 ] && echo 'passed' || echo 'FAILED') | ${TOTAL}s | ${EXECUTED#Executed } |"
+            if [ "${RETRIED:-0}" -gt 0 ]; then
+              echo ""
+              echo "> ${RETRIED} test attempt(s) failed and were retried — check for flakiness."
+            fi
+            if [ -n "${FRAMES:-}" ]; then
+              echo ""
+              echo "> leak harness ${FRAMES}(s) scanned for unmasked sentinels."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # Status first: a harness exit 2 (infra failure) produces no
+          # "Executed ..." line, and checking for that first would relabel it as
+          # "no tests executed" and discard the infrastructure diagnostic.
+          if [ "$EXIT" -ne 0 ]; then
+            if [ "$IS_HARNESS" = "true" ]; then
+              # run_leak_harness.sh: 1 = a captured frame showed an unmasked
+              # sentinel, 2 = the harness could not produce samples at all.
+              case "$EXIT" in
+                1) echo "::error::${{ matrix.name }}: session-replay leak detected — a captured frame contained unmasked sentinel pixels." ;;
+                2) echo "::error::${{ matrix.name }}: harness infrastructure failure (mock server, no frames, or test run) — this is not a leak verdict." ;;
+                *) echo "::error::${{ matrix.name }} failed (exit $EXIT)" ;;
+              esac
+              grep -iE "\[leak-harness\]|error:|failed" test-output.log | tail -40 || true
+            else
+              echo "::error::${{ matrix.name }} failed"
+              grep -iE "error:|failed|XCTAssert" test-output.log | tail -40 || true
+            fi
+            exit "$EXIT"
+          fi
+
+          # Reached only on a clean exit: "Executed 0 tests" also exits 0, so an
+          # -only-testing typo would otherwise look like a pass.
+          if echo "$EXECUTED" | grep -q "Executed 0 tests"; then
+            echo "::error::No tests executed — check the -only-testing identifiers for this shard."
+            exit 1
+          fi
+          echo "${{ matrix.name }} passed in ${TOTAL}s"
+
+      - name: Collect leak-harness logs
+        if: failure() && matrix.harness
+        run: |
+          set -uo pipefail
+          mkdir -p harness-logs
+          cp "${TMPDIR:-/tmp}"/cx-leak-harness-ios-*.log harness-logs/ 2>/dev/null || true
+          ls -la harness-logs || true
+
+      - name: Upload failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-failure-${{ matrix.id }}
+          path: |
+            test-output.log
+            TestResults.xcresult
+            harness-logs
+          if-no-files-found: ignore
+          retention-days: 5

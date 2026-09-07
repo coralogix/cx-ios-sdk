@@ -1,0 +1,98 @@
+{
+  "_comment": [
+    "Single source of truth for how the XCUITest suites are tiered and sharded.",
+    "",
+    "TIERS",
+    "  component  focused: one test drives one feature and asserts on it.",
+    "  smoke      broad: one test walks a path that joins several features",
+    "             (interaction capture + session context + export + schema).",
+    "  soak       leak probes, run through tool/run_leak_harness.sh (harness: true).\n             The tests themselves only assert the screen appeared \u2014 the actual\n             leak check is a pixel scan of frames captured by the harness's mock\n             upload server, so running them WITHOUT the harness proves nothing.\n             A harness shard must hold exactly one test; the plan job enforces it.\n\n  quarantine  registered so the coverage guard is satisfied, but in no tier that\n              ci.yml runs \u2014 so it does not execute at all. For a test that is\n              working correctly and reporting a defect nobody has scheduled:\n              running it would only produce a red check people learn to ignore.\n              Move it back to its real tier when the defect is fixed.\n             Formerly described as cheap enough to gate a\n             PR once split one-test-per-shard, so they ride under the slowest\n             smoke shard rather than extending it.",
+    "",
+    "Shards run as parallel jobs against one shared build, so wall-clock is the",
+    "SLOWEST shard, not the sum. `seconds` is the measured runtime of the tests",
+    "in that shard (GitHub macos-15, run 33612331880) and exists so the packing",
+    "can be rebalanced from data rather than guesswork. Keep shards under ~200s.",
+    "",
+    "Adding a UI test? Add it to a shard here or it will not run in CI.",
+    "The tier-coverage check in ci-ui-tests.yml fails the build if a test method",
+    "exists in the source but is missing from this file."
+  ],
+  "shards": [
+    {
+      "id": "component-gestures",
+      "name": "component \u00b7 gestures",
+      "tier": "component",
+      "scheme": "DemoAppSwift",
+      "seconds": 116,
+      "tests": [
+        "DemoAppUITests/UserInteractionUITests/testScrollEvents_downAndUp_areCorrectlyCaptured",
+        "DemoAppUITests/UserInteractionUITests/testSwipeEvents_leftAndRight_areCorrectlyCaptured"
+      ]
+    },
+    {
+      "id": "component-redaction",
+      "name": "component \u00b7 naming & redaction",
+      "tier": "component",
+      "scheme": "DemoAppSwift",
+      "seconds": 124,
+      "tests": [
+        "DemoAppUITests/UserInteractionUITests/testResolveTargetName_tapLoginButton_customNameInBackend",
+        "DemoAppUITests/UserInteractionUITests/testShouldSendText_sensitiveLabel_noInnerTextInBackend"
+      ]
+    },
+    {
+      "id": "smoke-interaction",
+      "name": "smoke \u00b7 interaction + session",
+      "tier": "smoke",
+      "scheme": "DemoAppSwift",
+      "seconds": 124,
+      "tests": [
+        "DemoAppUITests/UserInteractionUITests/testAllUserInteractionEvents_combinedSchemaValidation",
+        "DemoAppUITests/UserInteractionUITests/testAllInteractionEvents_areAttributedToActiveSession"
+      ]
+    },
+    {
+      "id": "smoke-network",
+      "name": "smoke \u00b7 network + app launch",
+      "tier": "smoke",
+      "scheme": "DemoAppSwift",
+      "seconds": 183,
+      "tests": [
+        "DemoAppUITests/NetworkInstrumentationUITests/testAllNetworkInstrumentationWithSchemaValidation",
+        "DemoAppUITests/DemoAppUITests/testSchemaValidationFlow"
+      ]
+    },
+    {
+      "id": "smoke-swiftui",
+      "name": "smoke \u00b7 SwiftUI interaction",
+      "tier": "smoke",
+      "scheme": "DemoAppSwiftUI",
+      "seconds": 62,
+      "tests": [
+        "DemoAppSwiftUIUITests/UserInteractionUITests/testAllUserInteractionEvents_combinedSchemaValidation"
+      ]
+    },
+    {
+      "id": "soak-replay-scroll",
+      "name": "soak \u00b7 replay scroll leak",
+      "tier": "soak",
+      "harness": true,
+      "scheme": "DemoAppSwift",
+      "seconds": 114,
+      "tests": [
+        "DemoAppUITests/SessionReplayLeakUITests/test_listSlowScroll_1fps"
+      ]
+    },
+    {
+      "id": "soak-replay-navigation",
+      "name": "quarantine \u00b7 replay navigation leak",
+      "tier": "quarantine",
+      "harness": true,
+      "scheme": "DemoAppSwift",
+      "seconds": 114,
+      "tests": [
+        "DemoAppUITests/SessionReplayLeakUITests/test_navigationTransition"
+      ]
+    }
+  ]
+}

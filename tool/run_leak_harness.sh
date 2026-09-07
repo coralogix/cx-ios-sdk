@@ -14,6 +14,14 @@
 # implementation is copied here so this repo runs without depending on
 # any sibling-repo layout.
 #
+# CI knobs (both optional; defaults preserve standalone local behaviour):
+#   CX_IOS_XCTESTRUN    absolute path to a prebuilt .xctestrun. Set it to run
+#                       test-without-building against products built elsewhere,
+#                       instead of rebuilding the workspace here.
+#   CX_IOS_ONLY_TESTING xcodebuild test identifier to run. Defaults to the whole
+#                       SessionReplayLeakUITests class; CI narrows it to one
+#                       scenario per shard so they run in parallel.
+#
 # Exit codes:
 #   0 — no leaks
 #   1 — at least one frame leaked
@@ -69,19 +77,28 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
+ONLY_TESTING="${CX_IOS_ONLY_TESTING:-DemoAppUITests/SessionReplayLeakUITests}"
+echo "[leak-harness] test filter: $ONLY_TESTING"
+
 rm -f "$LOG_FILE"
 swift "$HARNESS_DIR/mock_upload_server.swift" 0 > "$LOG_FILE" 2>&1 &
 SERVER_PID=$!
 
-# Allow up to 60 s: first-run Swift compilation can take ~10-20 s.
-for _ in $(seq 1 120); do
+# `swift file.swift` compiles before it runs, emitting nothing until it is ready,
+# so this budget covers compilation. 60s was enough locally (~10-20s) but not
+# always on a cold CI runner, where a shard failed with a 0-byte server log —
+# still compiling. The loop breaks as soon as the server reports ready, so a
+# larger budget costs nothing on the success path; it only lengthens the wait
+# before declaring a genuine failure.
+for _ in $(seq 1 360); do
   if grep -q '^\[mock-upload\] ready' "$LOG_FILE" 2>/dev/null; then
     break
   fi
   sleep 0.5
 done
 if ! grep -q '^\[mock-upload\] ready' "$LOG_FILE" 2>/dev/null; then
-  echo "[leak-harness] FATAL: mock server failed to start within 60s" >&2
+  echo "[leak-harness] FATAL: mock server failed to start within 180s" >&2
+  echo "[leak-harness] (an empty log below means it was still compiling, not erroring)" >&2
   tail -40 "$LOG_FILE" >&2
   exit 2
 fi
@@ -128,20 +145,34 @@ fi
 
 echo "[leak-harness] Running XCUITest on ${IOS_DESTINATION}..."
 rm -f "$XCODE_LOG"
-CX_MOCK_PORT="$PORT" TEST_RUNNER_CX_MOCK_PORT="$PORT" xcodebuild \
-  -workspace DemoApp.xcworkspace \
-  -scheme DemoAppSwift \
-  -sdk iphonesimulator \
-  -destination "$IOS_DESTINATION" \
-  -only-testing:DemoAppUITests/SessionReplayLeakUITests \
-  -parallel-testing-enabled NO \
-  -disable-concurrent-destination-testing \
-  ENABLE_USER_SCRIPT_SANDBOXING=NO \
-  CODE_SIGNING_ALLOWED=NO \
-  CODE_SIGN_IDENTITY="" \
-  CODE_SIGN_ENTITLEMENTS="" \
-  DEVELOPMENT_TEAM="" \
-  test 2>&1 | tee "$XCODE_LOG" | tail -50
+if [ -n "${CX_IOS_XCTESTRUN:-}" ]; then
+  # Products were built elsewhere (in CI, once, and shared across shards), so
+  # skip the rebuild entirely. --leak-harness is a launch argument, not a build
+  # setting, so the ordinary test products serve the harness unchanged.
+  echo "[leak-harness] using prebuilt products: $CX_IOS_XCTESTRUN"
+  CX_MOCK_PORT="$PORT" TEST_RUNNER_CX_MOCK_PORT="$PORT" xcodebuild \
+    -xctestrun "$CX_IOS_XCTESTRUN" \
+    -destination "$IOS_DESTINATION" \
+    -only-testing:"$ONLY_TESTING" \
+    -parallel-testing-enabled NO \
+    -disable-concurrent-destination-testing \
+    test-without-building 2>&1 | tee "$XCODE_LOG" | tail -50
+else
+  CX_MOCK_PORT="$PORT" TEST_RUNNER_CX_MOCK_PORT="$PORT" xcodebuild \
+    -workspace DemoApp.xcworkspace \
+    -scheme DemoAppSwift \
+    -sdk iphonesimulator \
+    -destination "$IOS_DESTINATION" \
+    -only-testing:"$ONLY_TESTING" \
+    -parallel-testing-enabled NO \
+    -disable-concurrent-destination-testing \
+    ENABLE_USER_SCRIPT_SANDBOXING=NO \
+    CODE_SIGNING_ALLOWED=NO \
+    CODE_SIGN_IDENTITY="" \
+    CODE_SIGN_ENTITLEMENTS="" \
+    DEVELOPMENT_TEAM="" \
+    test 2>&1 | tee "$XCODE_LOG" | tail -50
+fi
 TEST_EXIT=${PIPESTATUS[0]}
 echo "[leak-harness] UIKit xcodebuild test exit=$TEST_EXIT"
 
