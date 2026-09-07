@@ -2,10 +2,7 @@
 //  SessionReplayTapCaptureTimingTests.swift
 //  Coralogix-Rum-Tests
 //
-//  The same rule for every framework, as on Android: session replay takes its frame when the
-//  finger lands, once per tap, and reports it as a `screenshot` event when it ships; a
-//  user-interaction span — native or bridge-reported — carries the payload and no screenshot. The
-//  classified gesture at finger-up captures nothing.
+//  Pins the touch contract stated on `handleInteractionNotification`, for every framework.
 //
 
 import XCTest

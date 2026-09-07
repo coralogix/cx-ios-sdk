@@ -36,12 +36,13 @@ extension CoralogixRum {
             return
         }
 
+        // Android's touch contract, for every framework: the replay frame is captured at finger-down
+        // (`GestureDetector.onDown`), reported as a `screenshot` event only if it ships
+        // (`CaptureEvent.Tap.shouldExportLog()`), and the interaction span at finger-up carries the
+        // payload and no screenshot. Finger-down is never an interaction span — the same touch may
+        // still turn into a scroll.
         switch touchEvent.phase {
         case .began:
-            // Session replay's frame, for every framework, as Android captures from
-            // `GestureDetector.onDown`: asked for while the tapped screen is still the one on
-            // display, and before Dart or a recogniser has moved anything. Never an interaction
-            // span — the same touch may still turn into a scroll.
             captureSessionReplayEventIfNeeded(for: touchEvent)
         case .ended:
             // The classified gesture becomes a span only where native touches report spans at
@@ -70,21 +71,16 @@ extension CoralogixRum {
         Helper.shouldEmitUserActionSpan(options: coralogixExporter?.getOptions(), sdkFramework: CoralogixRum.mobileSDK.sdkFramework)
     }
 
-    /// The finger-down frame, and the `screenshot` event that points at it. Android exports one
-    /// for every tap frame (`CaptureEvent.Tap.shouldExportLog()`), so the frame stays findable
-    /// from the event stream whether or not an interaction span is emitted for the tap — the
-    /// interaction span never carries it. Guarded on *recording*, not merely on a replay module
-    /// being registered: with replay initialised but stopped, the capture would otherwise open a
-    /// span, reserve a slot, be rejected as not recording, revert the slot and log an error, on
-    /// every touch. Checked before anything is built, so such an app pays one read per touch.
+    /// The finger-down frame and its `screenshot` event (contract: `handleInteractionNotification`).
+    /// Guarded on *recording*, not on a replay module being registered: initialised-but-stopped
+    /// replay would otherwise open a span, reserve and revert a slot and log an error per touch.
     private func captureSessionReplayEventIfNeeded(for touchEvent: TouchEvent) {
         guard SdkManager.shared.getSessionReplay()?.isRecording() == true else { return }
         reportScreenshot(properties: TapDataExtractor.captureProperties(from: touchEvent))
     }
 
-    /// One `user_interaction` span per interaction, native or bridge-reported, carrying the payload
-    /// and no screenshot. Session replay took its frame at finger-down, and the two are correlated
-    /// by time, as on Android, where no interaction event carries a screenshot context.
+    /// One `user_interaction` span per interaction, native or bridge-reported: the payload and no
+    /// screenshot (contract: `handleInteractionNotification`).
     internal func reportUserInteraction(_ properties: [String: Any]) {
         let span = makeSpan(event: .userInteraction, source: .console, severity: .info)
         span.setAttribute(key: Keys.tapObject.rawValue,
