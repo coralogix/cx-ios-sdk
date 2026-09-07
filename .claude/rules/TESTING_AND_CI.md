@@ -195,6 +195,17 @@ job, pinning `ARCHS` to a single slice, and not running the unit tests twice.
 - **Every tier name is validated.** A typo drops the shard from every run, and
   since `quarantine` is a legitimate never-runs tier, a typo would otherwise look
   intentional.
+- **A pinned `runtime` is strict.** If no simulator has it the action fails
+  rather than substituting — accepting 26.2 while refusing 18.6 would make the
+  pin meaningless. Leaving it empty keeps the SDK-derived preference and its
+  fallbacks.
+- **The coverage scan reads `extension` as well as `class`.** Test methods
+  declared in an extension are used elsewhere in this repo's tests, and they used
+  to emit no identifier at all — invisible to the guard in one direction, falsely
+  "stale" in the other.
+- **A test may appear in only one shard.** Duplicated across two, it runs twice:
+  the declared list is de-duplicated for comparison, but each shard keeps its own
+  `-only-testing` list.
 - **`xcodebuild ... | head` aborts with 134.** `head` closes the pipe, xcodebuild
   takes the EPIPE as an uncaught Foundation exception. Capture output in full,
   then parse.

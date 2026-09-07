@@ -16,7 +16,10 @@ inputs:
   runtime:
     description: >-
       Pin the iOS runtime, matched against the SimRuntime identifier (e.g.
-      "18-5"). Leave empty to derive it from the selected Xcode's simulator SDK,
+      "18-5"). A pin is honoured strictly — if no simulator has that runtime the
+      action fails rather than substituting another, since silently accepting
+      26-2 while refusing 18-6 would make the pin meaningless.
+      Leave empty to derive it from the selected Xcode's simulator SDK,
       which is what the old `xcodebuild -showdestinations` probe did implicitly:
       a runner can carry runtimes newer than the SDK (18.6, 26.x alongside an
       18.5 SDK) and picking one of those fails at launch.
@@ -66,8 +69,12 @@ runs:
         # Full regexes, not fragments: jq matches them against the whole
         # SimRuntime identifier, so the trailing anchor has to be part of them.
         RT_PREFIX='SimRuntime\.iOS-'
+        PINNED=false
         if [ -n "$WANT_RUNTIME" ]; then
-          EXACT="${RT_PREFIX}${WANT_RUNTIME}"; MAJOR="$EXACT"
+          # A caller-supplied runtime is a constraint, not a preference: anchor
+          # it so a suffixed identifier cannot satisfy it, and skip the
+          # broadening fallbacks entirely.
+          EXACT="${RT_PREFIX}${WANT_RUNTIME}$"; MAJOR="$EXACT"; PINNED=true
         elif [ -n "$SDK_VER" ]; then
           EXACT="${RT_PREFIX}${SDK_VER//./-}$"; MAJOR="${RT_PREFIX}${SDK_VER%%.*}-"
         else
@@ -104,19 +111,26 @@ runs:
             [ -n "$MATCH" ] && echo "::warning::No simulator matching '$WANT_DEVICE'; using $(echo "$MATCH" | cut -f3) instead."
           fi
         fi
-        if [ -z "$MATCH" ]; then
-          MATCH=$(pick "$MAJOR" "iPhone")
-          [ -n "$MATCH" ] && echo "::warning::No iOS ${SDK_VER:-?} simulator; falling back within the same major version."
-        fi
-        if [ -z "$MATCH" ]; then
-          MATCH=$(pick "${RT_PREFIX}[0-9]" "iPhone")
-          [ -n "$MATCH" ] && echo "::warning::No simulator matching the ${SDK_VER:-?} SDK; using any available iOS runtime. Tests may fail to launch."
-        fi
-
-        if [ -z "$MATCH" ]; then
-          echo "::error::No available iPhone simulator found."
-          xcrun simctl list devices available || true
-          exit 1
+        if [ "$PINNED" = true ]; then
+          if [ -z "$MATCH" ]; then
+            echo "::error::runtime '$WANT_RUNTIME' was pinned but no matching iPhone simulator is available."
+            xcrun simctl list devices available || true
+            exit 1
+          fi
+        else
+          if [ -z "$MATCH" ]; then
+            MATCH=$(pick "$MAJOR" "iPhone")
+            [ -n "$MATCH" ] && echo "::warning::No iOS ${SDK_VER:-?} simulator; falling back within the same major version."
+          fi
+          if [ -z "$MATCH" ]; then
+            MATCH=$(pick "${RT_PREFIX}[0-9]" "iPhone")
+            [ -n "$MATCH" ] && echo "::warning::No simulator matching the ${SDK_VER:-?} SDK; using any available iOS runtime. Tests may fail to launch."
+          fi
+          if [ -z "$MATCH" ]; then
+            echo "::error::No available iPhone simulator found."
+            xcrun simctl list devices available || true
+            exit 1
+          fi
         fi
 
         UDID=$(echo "$MATCH" | cut -f2)

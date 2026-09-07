@@ -72,14 +72,25 @@ jobs:
                 split(path, seg, "/")
                 for (i = 1; i <= length(seg); i++) if (seg[i] ~ /UITests$/) tgt = seg[i]
               }
-              match($0, /(^|[ \t])class[ \t]+[A-Za-z0-9_]+/) {
-                cls = substr($0, RSTART, RLENGTH); sub(/.*class[ \t]+/, "", cls)
+              match($0, /(^|[ \t])(class|extension)[ \t]+[A-Za-z0-9_]+/) {
+                cls = substr($0, RSTART, RLENGTH)
+                sub(/.*[ \t](class|extension)[ \t]+/, "", cls); sub(/^(class|extension)[ \t]+/, "", cls)
               }
               match($0, /func[ \t]+test[A-Za-z0-9_]*/) {
                 m = substr($0, RSTART, RLENGTH); sub(/.*func[ \t]+/, "", m)
                 if (cls != "") print tgt "/" cls "/" m
               }' {} \
           | sort -u > "$TMP/actual.txt"
+
+          # sort -u below hides a duplicate identifier, but each shard keeps its
+          # own -only-testing list, so the test would just run once per shard.
+          DUPES=$(jq -r '[.shards[].tests[]] | group_by(.) | map(select(length > 1)) | .[] | "\(.[0]) (x\(length))"' \
+            .github/ci/ui-suites.json)
+          if [ -n "$DUPES" ]; then
+            echo "::error::these tests are registered in more than one shard and would run repeatedly:"
+            echo "$DUPES" | awk '{print "  " $0}'
+            exit 1
+          fi
 
           # A tier typo drops the shard from every run with no error, and since
           # `quarantine` is a legitimate never-runs tier, a typo is otherwise
