@@ -926,8 +926,11 @@ final class MockSessionReplay: SessionReplayInterface {
         
     }
     
+    /// Whether the double reports itself as recording; the finger-down capture is gated on it.
+    var recording = true
+
     func isRecording() -> Bool {
-        return true
+        return recording
     }
     
     func isInitialized() -> Bool {

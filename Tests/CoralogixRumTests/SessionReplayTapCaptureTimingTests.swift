@@ -213,6 +213,23 @@ final class SessionReplayTapCaptureTimingTests: XCTestCase {
                       "Finger-down without a replay must not start any span")
     }
 
+    /// Replay initialised but not recording — `autoStartSessionRecording: false` before the host
+    /// starts it, or after `stopRecording()` — is the common idle state, and it must cost a touch
+    /// nothing: no span, no slot reserved and handed back, no capture the module would only reject.
+    func testFingerDown_whileReplayIsNotRecording_opensNoSpanAndRequestsNoFrame() {
+        let rum = makeRum(.flutter(version: "1.0.0"))
+        sessionReplay.recording = false
+
+        rum.handleInteractionNotification(notification: fingerDown())
+
+        XCTAssertEqual(sessionReplay.captureEventCallCount, 0,
+                       "A stopped replay must not be asked for a frame it will reject")
+        XCTAssertTrue(tracer.mockSpanBuilder.startedSpans.isEmpty,
+                      "Finger-down while not recording must not start any span")
+        XCTAssertEqual(rum.coralogixExporter?.getScreenshotManager().screenshotCount, 0,
+                       "No screenshot slot may be reserved for a capture that cannot ship")
+    }
+
     func testFingerDown_reachesTheCaptureThroughTheNotification() {
         _ = makeRum(.swift)
 

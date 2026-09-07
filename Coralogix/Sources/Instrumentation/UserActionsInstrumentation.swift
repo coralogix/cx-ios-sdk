@@ -73,10 +73,12 @@ extension CoralogixRum {
     /// The finger-down frame, and the `screenshot` event that points at it. Android exports one
     /// for every tap frame (`CaptureEvent.Tap.shouldExportLog()`), so the frame stays findable
     /// from the event stream whether or not an interaction span is emitted for the tap — the
-    /// interaction span never carries it. Guarded before anything is built, so an app without
-    /// session replay pays nothing per touch and opens no span it would never end.
+    /// interaction span never carries it. Guarded on *recording*, not merely on a replay module
+    /// being registered: with replay initialised but stopped, the capture would otherwise open a
+    /// span, reserve a slot, be rejected as not recording, revert the slot and log an error, on
+    /// every touch. Checked before anything is built, so such an app pays one read per touch.
     private func captureSessionReplayEventIfNeeded(for touchEvent: TouchEvent) {
-        guard SdkManager.shared.getSessionReplay() != nil else { return }
+        guard SdkManager.shared.getSessionReplay()?.isRecording() == true else { return }
         reportScreenshot(properties: TapDataExtractor.captureProperties(from: touchEvent))
     }
 
