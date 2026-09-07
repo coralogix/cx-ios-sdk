@@ -433,7 +433,7 @@ final class CoralogixRumTests: XCTestCase {
         coralogixRum.tracerProvider = { tracer }
 
         // A frame shipped: the span closes and is exported.
-        coralogixRum.makeSpan()
+        coralogixRum.reportScreenshot()
         let captured = try XCTUnwrap(tracer.mockSpanBuilder.startedSpan)
         XCTAssertTrue(captured.didEnd, "A captured frame must produce a closed screenshot span")
         XCTAssertNotNil(captured.recordedAttributes[Keys.screenshotId.rawValue],
@@ -441,7 +441,7 @@ final class CoralogixRumTests: XCTestCase {
 
         // The frame was dropped: a screenshot span with nothing to point at is not emitted.
         mockSessionReplay.captureEventResult = .failure(.skippingEvent)
-        coralogixRum.makeSpan()
+        coralogixRum.reportScreenshot()
         let dropped = try XCTUnwrap(tracer.mockSpanBuilder.startedSpan)
         XCTAssertFalse(dropped === captured, "Each makeSpan call must build its own span")
         XCTAssertFalse(dropped.didEnd,
