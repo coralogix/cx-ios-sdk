@@ -194,8 +194,12 @@ public enum Keys: String {
     case click
     case errorMessage = "error_message"
     case isCrash = "is_crash"
-    // Internal correlation id for crash-upload confirmation. Set as a span
-    // attribute only; not mapped into cx_rum, so it never reaches the wire.
+    // Receipt for a crash held on disk — a PLCrashReporter report or a CrashEventStore
+    // entry. Stamped ONLY by the two producers that will purge it after upload, so its
+    // presence on a raw span is the complete confirmation signal: do not gate on
+    // `is_crash` as well — the PLCrashReporter path never sets that attribute. Set as a
+    // span attribute only; not mapped into cx_rum, so it never reaches the wire and a
+    // beforeSend callback cannot forge it.
     case crashEventId = "crash_event_id"
     case buildId = "build_id"
     case stackTraceType = "stack_trace_type"
