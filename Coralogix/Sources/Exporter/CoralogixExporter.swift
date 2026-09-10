@@ -50,8 +50,10 @@ public class CoralogixExporter: SpanExporter {
     private func crashEventIds(in spans: [SpanData]) -> Set<String> {
         var ids: Set<String> = []
         for span in spans {
-            guard (span.getAttribute(forKey: Keys.isCrash.rawValue) as? String) == "true",
-                  let id = span.getAttribute(forKey: Keys.crashEventId.rawValue) as? String else {
+            // Keyed on the correlation id alone: it is stamped only on crash spans, by both
+            // paths, and only where a confirmation is awaited. Gating on is_crash as well
+            // would miss the PLCrashReporter path, which never sets that attribute.
+            guard let id = span.getAttribute(forKey: Keys.crashEventId.rawValue) as? String else {
                 continue
             }
             ids.insert(id)

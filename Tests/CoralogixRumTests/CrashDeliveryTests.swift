@@ -65,6 +65,34 @@ final class CrashDeliveryTests: XCTestCase {
                         hasEnded: true)
     }
 
+    /// A recovered PLCrashReporter report, shaped the way `processPendingCrashReport` shapes one: an
+    /// error event carrying a `threads` stack and a `crash_event_id`, and **no** `is_crash`
+    /// attribute — that path never sets one. Every other crash fixture here sets it by hand,
+    /// which is why none of them exercised the confirmation gate against a real crash span.
+    private func makePendingReportSpan(crashEventId: String = "report-id") -> SpanData {
+        let threads = Helper.convertArrayOfStringToJsonString(array: [
+            Helper.convertArrayToJsonString(array: [["frame_number": "0", "binary": "HostApp"]])
+        ])
+        return SpanData(traceId: TraceId.random(),
+                        spanId: SpanId.random(),
+                        name: "pendingCrashReportSpan",
+                        kind: .client,
+                        startTime: Date(),
+                        attributes: [
+                            Keys.eventType.rawValue: AttributeValue(CoralogixEventType.error.rawValue),
+                            Keys.severity.rawValue: AttributeValue("5"),
+                            Keys.source.rawValue: AttributeValue("console"),
+                            Keys.environment.rawValue: AttributeValue("test"),
+                            Keys.sessionId.rawValue: AttributeValue("session_001"),
+                            Keys.sessionCreationDate.rawValue: AttributeValue("1609459200"),
+                            Keys.exceptionType.rawValue: AttributeValue("SIGSEGV"),
+                            Keys.threads.rawValue: AttributeValue(threads),
+                            Keys.crashEventId.rawValue: AttributeValue(crashEventId)
+                        ],
+                        endTime: Date(),
+                        hasEnded: true)
+    }
+
     private func isCrashEvent(_ event: [String: Any]) -> Bool {
         let text = event[Keys.text.rawValue] as? [String: Any]
         let cxRum = text?[Keys.cxRum.rawValue] as? [String: Any]
@@ -181,6 +209,43 @@ final class CrashDeliveryTests: XCTestCase {
     }
 
     // MARK: - flush()
+
+    /// A recovered PLCrashReporter report whose upload succeeds must be confirmed, because
+    /// that confirmation is the only thing that purges it from the device. Without it the
+    /// report is kept and re-emitted on every launch for the life of the install, while the
+    /// backend records the crash every time.
+    func test_pendingReportUpload_isConfirmed_soTheReportCanBePurged() throws {
+        coralogixRum = CoralogixRum(options: makeSamplingOptions(sampleRate: 100, exclude: []))
+        let exporter = try XCTUnwrap(coralogixRum.coralogixExporter)
+        let uploader = StubUploader()
+        exporter.spanUploader = uploader
+
+        let result = exporter.export(spans: [makePendingReportSpan()], explicitTimeout: nil)
+
+        XCTAssertEqual(result, .success)
+        let uploaded = try XCTUnwrap(uploader.uploadedEvents.first)
+        XCTAssertTrue(isCrashEvent(uploaded),
+                      "a pending report is reported to the backend as a crash")
+        XCTAssertTrue(exporter.didConfirmCrashUpload(id: "report-id"),
+                      "the SDK must recognise the crash it just uploaded — this is what purges the report")
+    }
+
+    /// The confirmation must still be per-report: a failed upload cannot be confirmed, or a
+    /// report would be purged before it was ever delivered.
+    func test_pendingReportUpload_isNotConfirmed_whenTheUploadFails() throws {
+        coralogixRum = CoralogixRum(options: makeSamplingOptions(sampleRate: 100, exclude: []))
+        let exporter = try XCTUnwrap(coralogixRum.coralogixExporter)
+        let uploader = StubUploader()
+        uploader.result = .failure
+        exporter.spanUploader = uploader
+
+        _ = exporter.export(spans: [makePendingReportSpan(crashEventId: "failed-report")], explicitTimeout: nil)
+
+        XCTAssertEqual(uploader.uploadedEvents.count, 1,
+                       "the upload must have been attempted, or this proves nothing")
+        XCTAssertFalse(exporter.didConfirmCrashUpload(id: "failed-report"),
+                       "an unconfirmed report must stay on disk for the next launch")
+    }
 
     func test_flush_forceExportsQueuedSpans_withoutWaitingForScheduleDelay() throws {
         coralogixRum = CoralogixRum(options: makeSamplingOptions(sampleRate: 100, exclude: []))
