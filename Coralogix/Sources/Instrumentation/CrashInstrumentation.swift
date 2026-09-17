@@ -62,6 +62,8 @@ extension CoralogixRum {
     /// The fallback enables one here, which is what this method did before the bootstrap
     /// existed: a reporter that captures correctly but only from this point on, so a crash
     /// reporter configured earlier can still pre-empt it. Better than no crash reporting at all.
+    /// It is reached when the load-time install failed, or when the host app opted out with
+    /// `CoralogixDisableEarlyCrashHandler`.
     ///
     /// `candidate` is a parameter so tests can exercise the fallback — `+load` has already run
     /// by the time any test does, and cannot be undone within the process.
@@ -72,7 +74,9 @@ extension CoralogixRum {
             return candidate
         }
 
-        if let error = CRXCrashBootstrap.enableError {
+        if CRXCrashBootstrap.disabledByHostApp {
+            Log.d("[CrashInstrumentation] early crash-handler install disabled by CoralogixDisableEarlyCrashHandler — enabling at init instead, which a crash reporter configured before this SDK can displace")
+        } else if let error = CRXCrashBootstrap.enableError {
             Log.e("[CrashInstrumentation] crash bootstrap could not enable at load: \(error)")
         }
 

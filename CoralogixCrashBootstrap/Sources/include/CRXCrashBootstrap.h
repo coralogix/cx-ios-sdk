@@ -25,6 +25,9 @@ NS_ASSUME_NONNULL_BEGIN
 ///
 /// This is Objective-C because `+load` has no Swift equivalent, and it is a separate target
 /// because SPM targets are single-language.
+///
+/// A host app that needs to opt out can set `CoralogixDisableEarlyCrashHandler` to `YES` in its
+/// Info.plist; see `disabledByHostApp`.
 @interface CRXCrashBootstrap : NSObject
 
 /// The reporter enabled during `+load`, or `nil` if enabling failed (see `enableError`).
@@ -33,6 +36,16 @@ NS_ASSUME_NONNULL_BEGIN
 /// Why enabling failed, if it did. Stored rather than logged: `Log` lives in a Swift module
 /// that must not be pulled into a pre-`main()` path. The Swift side reports it at init.
 @property (class, nonatomic, readonly, nullable) NSError *enableError;
+
+/// `YES` when the host app set `CoralogixDisableEarlyCrashHandler` to `YES` in its Info.plist,
+/// which skips the load-time install.
+///
+/// This is an escape hatch, not a configuration knob: it does not turn crash reporting off, it
+/// reverts to the pre-`+load` behaviour where `initializeCrashInstrumentation` enables
+/// PLCrashReporter itself. Crashes are still captured, but only from SDK init onwards — so a
+/// crash reporter the host configures earlier can displace our handler again, which is the
+/// failure this target exists to prevent.
+@property (class, nonatomic, readonly) BOOL disabledByHostApp;
 
 @end
 
