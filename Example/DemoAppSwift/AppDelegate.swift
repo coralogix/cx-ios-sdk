@@ -23,6 +23,17 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         }
         #endif
 
+        let args = ProcessInfo.processInfo.arguments
+
+        // --firebase-first reproduces the customer setup in which Firebase Crashlytics is
+        // configured before the Coralogix SDK (always the case in React Native / Flutter).
+        // Crashlytics then owns the Mach exception port and, at crash time, restores the
+        // signal handlers that predate it — which do not include ours.
+        let firebaseFirst = args.contains("--firebase-first")
+        if firebaseFirst {
+            configureFirebaseIfAvailable(args: args)
+        }
+
         CoralogixRumManager.shared.initialize()
 
         // BUGV2-6045 leak-harness mode: when launched with --leak-harness,
@@ -30,7 +41,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         // For normal launches, SR is initialized with demo defaults so the
         // Start/Stop Recording buttons in SessionReplayViewController work.
         let srOptions: SessionReplayOptions
-        let args = ProcessInfo.processInfo.arguments
         if args.contains("--leak-harness") {
             srOptions = SessionReplayOptions(
                 recordingType: .image,
@@ -68,20 +78,25 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         }
         SessionReplay.initializeWithOptions(sessionReplayOptions: srOptions)
 
-        // Only configure Firebase if GoogleService-Info.plist exists and is valid.
-        // Skipped in leak-harness mode because the harness uses a stub plist
-        // that doesn't pass Firebase's API-key validation; the harness doesn't
-        // exercise Firebase anyway.
-        let isLeakHarness = args.contains("--leak-harness") || args.contains("--leak-harness-navigate")
-        if !isLeakHarness,
-           let path = Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist"),
-           FileManager.default.fileExists(atPath: path) {
-            FirebaseApp.configure()
-        } else if !isLeakHarness {
-            print("⚠️ Firebase not configured: GoogleService-Info.plist not found (this is expected in CI)")
+        if !firebaseFirst {
+            configureFirebaseIfAvailable(args: args)
         }
 
         return true
+    }
+
+    /// Configures Firebase when GoogleService-Info.plist is present. Skipped in leak-harness
+    /// mode because the harness uses a stub plist that doesn't pass Firebase's API-key
+    /// validation; the harness doesn't exercise Firebase anyway.
+    private func configureFirebaseIfAvailable(args: [String]) {
+        let isLeakHarness = args.contains("--leak-harness") || args.contains("--leak-harness-navigate")
+        guard !isLeakHarness else { return }
+        guard let path = Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist"),
+              FileManager.default.fileExists(atPath: path) else {
+            print("⚠️ Firebase not configured: GoogleService-Info.plist not found (this is expected in CI)")
+            return
+        }
+        FirebaseApp.configure()
     }
     
     // MARK: UISceneSession Lifecycle

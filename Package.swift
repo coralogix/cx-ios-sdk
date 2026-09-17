@@ -25,9 +25,18 @@ let package = Package(
             path: "CoralogixInternal/Sources/"
         ),
         .target(
+            name: "CoralogixCrashBootstrap",
+            dependencies: [
+                .product(name: "CrashReporter", package: "plcrashreporter")
+            ],
+            path: "CoralogixCrashBootstrap/Sources/",
+            publicHeadersPath: "include"
+        ),
+        .target(
             name: "Coralogix",
             dependencies: [
                 .target(name: "CoralogixInternal"),
+                .target(name: "CoralogixCrashBootstrap"),
                 .product(name: "CrashReporter", package: "plcrashreporter")
             ],
             path: "Coralogix/Sources/"

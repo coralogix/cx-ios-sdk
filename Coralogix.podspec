@@ -24,7 +24,9 @@ Pod::Spec.new do |spec|
   spec.author             = { "Coralogix" => "www.coralogix.com" }
   spec.ios.deployment_target = "13.0"
 
-  spec.source_files  = 'Coralogix/Sources/**/*.swift'
+  spec.source_files  = ['Coralogix/Sources/**/*.swift',
+                        'CoralogixCrashBootstrap/Sources/**/*.{h,m}']
+  spec.public_header_files = 'CoralogixCrashBootstrap/Sources/include/*.h'
   spec.exclude_files = 'Coralogix/Sources/Exclude'
 
   spec.static_framework = true
