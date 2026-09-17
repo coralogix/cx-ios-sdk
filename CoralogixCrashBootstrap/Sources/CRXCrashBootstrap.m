@@ -17,8 +17,8 @@
 /// main bundle, which dyld has already loaded by the time `+load` runs.
 static NSString *const kCRXDisableEarlyCrashHandlerKey = @"CoralogixDisableEarlyCrashHandler";
 
-/// Written once from `+load` on the main thread, before any other code of ours can run, and
-/// read-only afterwards. That ordering is the synchronization — no lock is needed.
+/// Written once from `+load`, before any other code of ours can run, and read-only afterwards.
+/// That ordering is the synchronization — no lock is needed.
 static PLCrashReporter *_crx_reporter;
 static NSError *_crx_enableError;
 static BOOL _crx_disabledByHostApp;
@@ -43,6 +43,13 @@ static BOOL _crx_disabledByHostApp;
 
         PLCrashReporter *reporter = [[PLCrashReporter alloc] initWithConfiguration:config];
         if (reporter == nil) {
+            // Recorded rather than returned silently: without it the Swift side cannot tell an
+            // allocation failure apart from +load never having run, and both look like "no
+            // reporter" at init.
+            _crx_enableError = [NSError errorWithDomain:@"com.coralogix.crashbootstrap"
+                                                   code:1
+                                               userInfo:@{NSLocalizedDescriptionKey:
+                                                              @"PLCrashReporter could not be created"}];
             return;
         }
 

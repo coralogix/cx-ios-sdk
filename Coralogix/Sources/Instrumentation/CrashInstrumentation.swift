@@ -19,7 +19,7 @@ extension CoralogixRum {
 
         switch FirebaseRuntimeDetector.presence() {
         case .configured:
-            Log.d("host app called FirebaseApp.configure() before your Coralogix SDK init")
+            Log.d("host app called FirebaseApp.configure() before your Coralogix SDK init; the crash handler is installed at image load, so the order is handled")
         case .linkedButNotConfigured:
             Log.d("Firebase exists, but not configured yet (or you checked too early)")
         case .notLinked:
@@ -65,8 +65,9 @@ extension CoralogixRum {
     /// It is reached when the load-time install failed, or when the host app opted out with
     /// `CoralogixDisableEarlyCrashHandler`.
     ///
-    /// `candidate` is a parameter so tests can exercise the fallback — `+load` has already run
-    /// by the time any test does, and cannot be undone within the process.
+    /// `candidate` is a parameter so tests can assert the adoption path against a known
+    /// instance. They do not drive it to the fallback: that calls `enable()`, which installs
+    /// signal handlers process-wide with no way to undo them afterwards.
     internal static func installedCrashReporter(
         candidate: PLCrashReporter? = CRXCrashBootstrap.reporter
     ) -> PLCrashReporter? {
@@ -75,7 +76,10 @@ extension CoralogixRum {
         }
 
         if CRXCrashBootstrap.disabledByHostApp {
-            Log.d("[CrashInstrumentation] early crash-handler install disabled by CoralogixDisableEarlyCrashHandler — enabling at init instead, which a crash reporter configured before this SDK can displace")
+            // Warning rather than debug: this is the line support reads to explain why a
+            // customer's crashes are being displaced again, and os_log debug is absent from
+            // `log show` and from a console capture.
+            Log.w("[CrashInstrumentation] early crash-handler install disabled by CoralogixDisableEarlyCrashHandler — enabling at init instead, which a crash reporter configured before this SDK can displace")
         } else if let error = CRXCrashBootstrap.enableError {
             Log.e("[CrashInstrumentation] crash bootstrap could not enable at load: \(error)")
         }
