@@ -279,6 +279,18 @@ public class SessionReplay: SessionReplayInterface {
             return reject(.sdkIdle)
         }
 
+        // A sampled-out session's `screenshot` events are dropped at export, so a frame captured
+        // for one uploads with nothing to index it — stored, unplayable, and paid for in capture,
+        // masking and encoding on the way out. Read per capture rather than once at init: the roll
+        // repeats on every session rotation, so recording pauses while a session is sampled out
+        // and resumes on the next one that is sampled in, with nothing to stop or restart. Not
+        // opt-outable through `excludeFromSampling`, which gates the span pipeline; frames travel
+        // their own — the same reasoning Android records on its `ExcludableInstrumentation`.
+        guard coralogixSdk.isSessionSampledIn() else {
+            Log.d("[SessionReplay] session sampled out — capture skipped")
+            return reject(.sessionSampledOut)
+        }
+
         guard let sessionReplayModel = self.sessionReplayModel,
               let sessionReplayOptions = sessionReplayModel.sessionReplayOptions else {
             Log.e("[SessionReplay] missing sessionReplayOptions")

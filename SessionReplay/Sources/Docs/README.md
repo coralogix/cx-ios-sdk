@@ -16,7 +16,7 @@ Holds the configuration used to initialize SessionReplay. This includes capture 
 - `captureTimeInterval`: Time interval between each capture in seconds.
 - `captureScale`: Scale factor for image resolution.
 - `captureCompressionQuality`: Compression level for image quality (0.0–1.0).
-- `sessionRecordingSampleRate`: Sampling percentage (0–100) to determine whether the session is recorded.
+- `sessionRecordingSampleRate`: Sampling percentage (0–100) to determine whether the session is recorded. Applies on top of `sessionSampleRate` in `CoralogixExporterOptions`: a session that is not sampled in is never recorded, and recording resumes with the next session that is.
 - `maskText`: List of strings to mask by case-insensitive substring match (UILabel, UITextField, UITextView).
 - `maskAllImages`: Whether all images should be masked.
 - `maskFaces`: Whether faces should be masked (default: `false`).

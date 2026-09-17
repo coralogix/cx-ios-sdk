@@ -374,3 +374,103 @@ class MockSessionReplayModel3: SessionReplayModel {
     }
 }
 
+
+// MARK: - Session sampling gate
+
+/// Every capture converges on `startCapture`: the periodic tick, the native touch's finger-down
+/// frame, the hybrid bridge's captures, the error/ANR/navigation attachments and the host's own
+/// `captureEvent`. One gate there is what makes "a sampled-out session captures nothing" hold
+/// for all of them at once, so these tests drive the public entry point and assert on the model.
+extension SessionReplayTests {
+
+    /// A model that would happily capture, so the only thing standing between the call and the
+    /// capture is the sampling decision under test. Without `isRecording = true` a rejection here
+    /// could be `.notRecording` and the gate would never be exercised.
+    private func makeRecordingModel(_ options: SessionReplayOptions) -> MockSessionReplayModel {
+        let model = MockSessionReplayModel(sessionReplayOptions: options)
+        model.isRecording = true
+        return model
+    }
+
+    func testCaptureEventSkippedWhenSessionSampledOut_beforeTheModelRuns() {
+        let mockCoralogix = MockCoralogix()
+        mockCoralogix.idle = false
+        mockCoralogix.sessionSampledIn = false
+        SdkManager.shared.register(coralogixInterface: mockCoralogix)
+
+        let options = SessionReplayOptions(recordingType: .image)
+        let model = makeRecordingModel(options)
+        SessionReplay.initializeWithOptions(sessionReplayOptions: options)
+        SessionReplay.shared.sessionReplayModel = model
+        SessionReplay.shared.isDummyInstance = false
+
+        let result = SessionReplay.shared.captureEvent(
+            properties: [Keys.segmentIndex.rawValue: 3, Keys.page.rawValue: 0]
+        )
+
+        if case .failure(let error) = result {
+            XCTAssertEqual(error, .sessionSampledOut)
+        } else {
+            XCTFail("Expected .failure(.sessionSampledOut) but got success")
+        }
+        XCTAssertEqual(model.captureImageCallCount, 0,
+                       "a sampled-out session must not reach the model: no capture, no masking walk, no encode")
+        XCTAssertEqual(mockCoralogix.revertScreenshotCounterCallCount, 1,
+                       "the caller's screenshot index is handed back like every other pre-model rejection")
+    }
+
+    /// The decision is read on every capture, not latched at init: a session that rotates from
+    /// sampled out to sampled in starts recording again with nothing restarted.
+    func testCaptureEventResumesWhenTheSessionRotatesIntoSampledIn() {
+        let mockCoralogix = MockCoralogix()
+        mockCoralogix.idle = false
+        mockCoralogix.sessionSampledIn = false
+        SdkManager.shared.register(coralogixInterface: mockCoralogix)
+
+        let options = SessionReplayOptions(recordingType: .image)
+        let model = makeRecordingModel(options)
+        SessionReplay.initializeWithOptions(sessionReplayOptions: options)
+        SessionReplay.shared.sessionReplayModel = model
+        SessionReplay.shared.isDummyInstance = false
+
+        _ = SessionReplay.shared.captureEvent(properties: ["key": "value"])
+        XCTAssertEqual(model.captureImageCallCount, 0, "Precondition: sampled out, nothing captured.")
+
+        mockCoralogix.sessionSampledIn = true
+        let result = SessionReplay.shared.captureEvent(properties: ["key": "value"])
+
+        if case .failure(let error) = result {
+            XCTFail("Expected success once the session is sampled in, got \(error)")
+        }
+        XCTAssertEqual(model.captureImageCallCount, 1,
+                       "the first capture after rotating into a sampled-in session must reach the model")
+    }
+
+    /// The reverse rotation: recording that was under way stops at the first capture after the
+    /// session rolls sampled out. Frames already captured are not this gate's concern.
+    func testCaptureEventStopsWhenTheSessionRotatesIntoSampledOut() {
+        let mockCoralogix = MockCoralogix()
+        mockCoralogix.idle = false
+        mockCoralogix.sessionSampledIn = true
+        SdkManager.shared.register(coralogixInterface: mockCoralogix)
+
+        let options = SessionReplayOptions(recordingType: .image)
+        let model = makeRecordingModel(options)
+        SessionReplay.initializeWithOptions(sessionReplayOptions: options)
+        SessionReplay.shared.sessionReplayModel = model
+        SessionReplay.shared.isDummyInstance = false
+
+        _ = SessionReplay.shared.captureEvent(properties: ["key": "value"])
+        XCTAssertEqual(model.captureImageCallCount, 1, "Precondition: sampled in, the capture ran.")
+
+        mockCoralogix.sessionSampledIn = false
+        let result = SessionReplay.shared.captureEvent(properties: ["key": "value"])
+
+        if case .failure(let error) = result {
+            XCTAssertEqual(error, .sessionSampledOut)
+        } else {
+            XCTFail("Expected .failure(.sessionSampledOut) after the session rolled sampled out")
+        }
+        XCTAssertEqual(model.captureImageCallCount, 1, "no further capture once the session is sampled out")
+    }
+}
