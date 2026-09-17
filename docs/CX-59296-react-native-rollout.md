@@ -82,22 +82,34 @@ instead of downgrading the whole SDK.
 
 ### What the customer changes
 
-One key in their **app's** `Info.plist` — no code, nothing to call:
+One key in the `Info.plist` of the **host application target** — the app they ship. No code,
+nothing to call:
 
 ```xml
 <key>CoralogixDisableEarlyCrashHandler</key>
 <true/>
 ```
 
-In Xcode: app target, **Info** tab, **+** on any row, key `CoralogixDisableEarlyCrashHandler`,
-type **Boolean**, value **YES**. A string `"YES"` is accepted too. The key is read from the app
-bundle at launch, so it needs a rebuild rather than just a restart.
+> **Not the SDK, and not a pod or framework target.** The key is read with
+> `[[NSBundle mainBundle] objectForInfoDictionaryKey:]`, and `mainBundle` is always the running
+> application's bundle. A copy placed anywhere else is read by nothing — and there is nowhere
+> else to put it in practice: under SPM the SDK has no `Info.plist`, and under CocoaPods with
+> static frameworks the pod's plist is not consulted at runtime.
 
-| | Path |
+In Xcode: select the **app** target, **Info** tab, **+** on any row, key
+`CoralogixDisableEarlyCrashHandler`, type **Boolean**, value **YES**. A string `"YES"` is
+accepted too. The key is read from the app bundle at launch, so it needs a rebuild rather than
+just a restart.
+
+| | File on the host app target |
 |---|---|
 | Native iOS | `<AppName>/Info.plist` |
 | React Native | `ios/<AppName>/Info.plist` |
 | Flutter | `ios/Runner/Info.plist` |
+
+If the key is set and nothing changes, check first that it landed on the app target rather than
+a framework or pod target — that is the likely mistake, and the warning line below is what
+proves it was actually read.
 
 ### What it does, and what it costs
 
