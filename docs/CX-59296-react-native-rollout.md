@@ -71,7 +71,58 @@ dependency in `cx-flutter-plugin`; no plugin code changes.
 
 ## Escape hatch
 
-A host app can set `CoralogixDisableEarlyCrashHandler` to `YES` in its Info.plist to skip the
-load-time install. Crash reporting stays on — the SDK enables PLCrashReporter at init as before —
-but the ordering guarantee is lost, so a crash reporter configured earlier can displace our handler
-again. Deliberately absent from the README: it is a support escape hatch, not a feature.
+Deliberately absent from the README, and from the docs site with it: setting this key restores the
+bug the fix removes, and the customers most likely to find it in public docs are the ones who can
+least afford to flip it. This section is where support finds it instead.
+
+**Reach for it only** when a customer reports something that began with 2.18.4 and looks tied to
+the SDK being active before their own startup code — a conflict with another pre-`main()` library,
+or a launch-time failure they cannot otherwise isolate. It settles the question in one build
+instead of downgrading the whole SDK.
+
+### What the customer changes
+
+One key in their **app's** `Info.plist` — no code, nothing to call:
+
+```xml
+<key>CoralogixDisableEarlyCrashHandler</key>
+<true/>
+```
+
+In Xcode: app target, **Info** tab, **+** on any row, key `CoralogixDisableEarlyCrashHandler`,
+type **Boolean**, value **YES**. A string `"YES"` is accepted too. The key is read from the app
+bundle at launch, so it needs a rebuild rather than just a restart.
+
+| | Path |
+|---|---|
+| Native iOS | `<AppName>/Info.plist` |
+| React Native | `ios/<AppName>/Info.plist` |
+| Flutter | `ios/Runner/Info.plist` |
+
+### What it does, and what it costs
+
+Crash reporting stays on. Only the load-time install is skipped, so the SDK enables
+PLCrashReporter at `CoralogixRum.init` — exactly how 2.18.3 and earlier behaved.
+
+What is given up is the ordering guarantee. If the app configures another crash reporter before
+our init, that reporter can displace our handler again and native crashes are lost, which is the
+whole failure CX-59296 fixes. Removing the key and rebuilding reverts it.
+
+### Confirming it took effect
+
+Two independent signals in the device log (Console.app, filtered to the app):
+
+- Ours, at warning level so ordinary log collection carries it:
+
+  ```
+  [CrashInstrumentation] early crash-handler install disabled by
+  CoralogixDisableEarlyCrashHandler — enabling at init instead…
+  ```
+
+- Crashlytics', one line per signal, which reappear only when the early install is skipped:
+
+  ```
+  [Crashlytics] The signal SIGTRAP has a non-Crashlytics handler (plcrash_signal_handler).
+  ```
+
+  With the key absent those lines are gone. That contrast is how the switch was verified.
