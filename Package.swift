@@ -50,7 +50,7 @@ let package = Package(
         ),
         .testTarget(
             name: "CoralogixRumTests",
-            dependencies: ["Coralogix"],
+            dependencies: ["Coralogix", "CoralogixCrashBootstrap"],
             path: "Tests/CoralogixRumTests/"
         ),
         .testTarget(
