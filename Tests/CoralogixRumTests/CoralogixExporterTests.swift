@@ -458,6 +458,7 @@ final class CoralogixExporterTests: XCTestCase {
         // the callback (platform channel) instead of the native uploader.
         let expectation = expectation(description: "beforeSendCallBack should be invoked")
         var receivedSpans: [[String: Any]]?
+        var didFulfill = false
 
         var opts = CoralogixExporterOptions(coralogixDomain: .US2,
                                             userContext: nil,
@@ -470,6 +471,13 @@ final class CoralogixExporterTests: XCTestCase {
                                             labels: ["item": "banana"],
                                             debug: true)
         opts.beforeSendCallBack = { spans in
+            // The SDK's own init span follows through the batch processor about two seconds
+            // later and reaches this closure again if another hybrid-mode test is still running
+            // (the exporter reads the framework from a static). Fulfilling a one-shot
+            // expectation twice is an XCTest API violation that aborts the whole bundle, so
+            // record the first batch only.
+            guard !didFulfill else { return }
+            didFulfill = true
             receivedSpans = spans
             expectation.fulfill()
         }

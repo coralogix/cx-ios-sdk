@@ -9,6 +9,11 @@ Release-mechanics commits (version bumps, podspec/script tweaks, README edits) a
 omitted; the focus here is user-facing behavior changes. Tickets are referenced as
 `CX-XXXXX` (Jira) or `ALPH-XXXX` (legacy). Pull request numbers are in parentheses.
 
+## [2.18.3] - 2026-09-15
+
+### Fixed
+- Session recording now follows `sessionSampleRate`: a session that is not sampled in captures and uploads no frames, and recording resumes with the next session that is sampled in.
+
 ## [2.18.2] - 2026-09-09
 
 ### Fixed

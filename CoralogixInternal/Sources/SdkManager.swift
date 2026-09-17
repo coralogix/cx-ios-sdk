@@ -11,6 +11,7 @@ import CoreGraphics
 public enum CaptureEventError: Error {
     case dummyInstance
     case sdkIdle
+    case sessionSampledOut
     case missingSessionReplayOptions
     case notRecording
     case skippingEvent
@@ -30,6 +31,11 @@ public protocol CoralogixInterface {
     func periodicallyCaptureEventTriggered()
     func getProxyUrl() -> String
     func isIdle() -> Bool
+
+    /// Whether the current RUM session was sampled in. Session replay asks before every capture:
+    /// a sampled-out session drops its `screenshot` events at export, so a frame captured for one
+    /// would upload with nothing to index it.
+    func isSessionSampledIn() -> Bool
     
     /// Returns the next screenshot location properties (segmentIndex, page, screenshotId).
     /// Used by SessionReplay when captureEvent is called without properties.

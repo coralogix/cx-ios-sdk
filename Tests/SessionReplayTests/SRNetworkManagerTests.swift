@@ -359,6 +359,12 @@ class MockCoralogix: CoralogixInterface {
     func isIdle() -> Bool {
         return idle
     }
+
+    var sessionSampledIn: Bool = true
+
+    func isSessionSampledIn() -> Bool {
+        return sessionSampledIn
+    }
     
     func getNextScreenshotLocationProperties() -> [String: Any] {
         return [:]

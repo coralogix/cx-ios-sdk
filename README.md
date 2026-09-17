@@ -198,7 +198,9 @@ Number between 0 and 100 as a percentage of sessions that report the full event 
 
 A sampled-out session still starts. Network instrumentation stays installed so outgoing requests keep
 carrying `traceparent` and your backend traces stay correlated across the whole population; the events
-that would otherwise be reported are dropped before they leave the device.
+that would otherwise be reported are dropped before they leave the device. Session recording follows the
+same decision: a session that is not sampled in records no frames, and recording resumes with the next
+session that is sampled in. `excludeFromSampling` does not apply to session recording.
 ```swift
 let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
                                         environment: "ENVIRONMENT",
