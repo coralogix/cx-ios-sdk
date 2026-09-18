@@ -11,7 +11,13 @@
 
 import XCTest
 import CrashReporter
+// SPM builds the bootstrap as its own module; under CocoaPods it is part of the Coralogix pod
+// and reaches this file through `@testable import Coralogix`. The podspec's test_spec compiles
+// these tests, and the publish script lints with tests on — so an unconditional import fails
+// the release, not just CI.
+#if canImport(CoralogixCrashBootstrap)
 import CoralogixCrashBootstrap
+#endif
 
 @testable import Coralogix
 
