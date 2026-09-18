@@ -19,7 +19,13 @@ extension CoralogixRum {
 
         switch FirebaseRuntimeDetector.presence() {
         case .configured:
-            Log.d("host app called FirebaseApp.configure() before your Coralogix SDK init; the crash handler is installed at image load, so the order is handled")
+            // True only when the load-time install holds the process-wide slot. On the fallback
+            // path — opt-out, +load failure, or +load never running — the order is not handled,
+            // and saying so here is the one place Firebase-first and weak-path meet in the log.
+            let orderHandled = CRXCrashBootstrap.reporter != nil
+            Log.d(orderHandled
+                  ? "host app called FirebaseApp.configure() before your Coralogix SDK init; the crash handler was installed at image load, so the order is handled"
+                  : "host app called FirebaseApp.configure() before your Coralogix SDK init; the crash handler was installed at init instead, so Crashlytics can displace it")
         case .linkedButNotConfigured:
             Log.d("Firebase exists, but not configured yet (or you checked too early)")
         case .notLinked:
