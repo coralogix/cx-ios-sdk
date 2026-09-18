@@ -88,10 +88,13 @@ final class CoralogixRumManager {
             keyPrefix = publicKey.count > 9 ? String(publicKey.prefix(9)) + "…" : publicKey
         }
 
-        /// Two lines: where, then how and with which key.
+        /// One compact line so the demo's main-screen header gains no height — a taller
+        /// header pushes lower menu rows off-screen and breaks the SwiftUI smoke test's
+        /// un-scrolled taps. Region already identifies the ingress; the host is dropped to
+        /// stay on one line, the proxy and key are what actually catch a misconfigured build.
         var summary: String {
             let route = proxyHost.map { "via \($0)" } ?? "direct"
-            return "\(ingressHost) (\(region))\n\(route) · key \(keyPrefix)"
+            return "\(region) · \(route) · \(keyPrefix)"
         }
     }
 

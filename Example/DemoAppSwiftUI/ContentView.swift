@@ -144,30 +144,27 @@ struct ContentView: View {
     @SwiftUI.ViewBuilder
     private var sessionHeader: some View {
         Section {
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Session ID")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                    Text(sessionID)
-                        .font(.system(.footnote, design: .monospaced))
-                        .foregroundColor(.primary)
+            // Session ID and the destination live in one cell: adding a second row to this
+            // Section grew the header enough to push "Schema validation" under the fold, and
+            // the SwiftUI smoke test taps that row without scrolling.
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Session ID")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                        Text(sessionID)
+                            .font(.system(.footnote, design: .monospaced))
+                            .foregroundColor(.primary)
+                    }
+                    Spacer()
+                    Button("Copy") {
+                        copySessionID()
+                    }
                 }
-                Spacer()
-                Button("Copy") {
-                    copySessionID()
-                }
-            }
-            .padding(.vertical, 2)
-
-            // Where this build sends its data — mirrors the UIKit demo's card.
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Sending to")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
                 Text(destinationSummary)
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundColor(.primary)
+                    .font(.system(.caption2, design: .monospaced))
+                    .foregroundColor(.secondary)
                     .accessibilityIdentifier("destinationValue")
             }
             .padding(.vertical, 2)

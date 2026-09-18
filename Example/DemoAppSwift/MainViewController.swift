@@ -158,31 +158,19 @@ final class MainViewController: UITableViewController {
         card.addSubview(copyButton)
         container.addSubview(card)
 
-        // Where this build sends its data — a proxy in the path or a stale key has silently
-        // broken more than one test run, and nothing else on the device shows either.
-        let destinationCard = UIView()
-        destinationCard.translatesAutoresizingMaskIntoConstraints = false
-        destinationCard.backgroundColor = .secondarySystemGroupedBackground
-        destinationCard.layer.cornerRadius = 14
-        destinationCard.layer.masksToBounds = true
-
-        let destinationTitle = UILabel()
-        destinationTitle.translatesAutoresizingMaskIntoConstraints = false
-        destinationTitle.text = "Sending to"
-        destinationTitle.font = UIFont.preferredFont(forTextStyle: .subheadline)
-        destinationTitle.textColor = .secondaryLabel
-
+        // Where this build sends its data, in the same card as the session id — a proxy in
+        // the path or a stale key has silently broken more than one test run, and nothing else
+        // on the device shows it. One compact line so the header gains no meaningful height.
         let destinationValue = UILabel()
         destinationValue.translatesAutoresizingMaskIntoConstraints = false
         destinationValue.text = CoralogixRumManager.shared.destination?.summary ?? "SDK not initialized"
-        destinationValue.font = UIFont.monospacedSystemFont(ofSize: 12, weight: .medium)
-        destinationValue.textColor = .label
-        destinationValue.numberOfLines = 0
+        destinationValue.font = UIFont.monospacedSystemFont(ofSize: 11, weight: .regular)
+        destinationValue.textColor = .secondaryLabel
+        destinationValue.numberOfLines = 1
+        destinationValue.adjustsFontSizeToFitWidth = true
+        destinationValue.minimumScaleFactor = 0.8
         destinationValue.accessibilityIdentifier = "destinationValue"
-
-        destinationCard.addSubview(destinationTitle)
-        destinationCard.addSubview(destinationValue)
-        container.addSubview(destinationCard)
+        card.addSubview(destinationValue)
 
         let layoutMargins: CGFloat = 16
 
@@ -190,20 +178,7 @@ final class MainViewController: UITableViewController {
             card.topAnchor.constraint(equalTo: container.topAnchor, constant: 12),
             card.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: layoutMargins),
             card.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -layoutMargins),
-
-            destinationCard.topAnchor.constraint(equalTo: card.bottomAnchor, constant: 8),
-            destinationCard.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: layoutMargins),
-            destinationCard.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -layoutMargins),
-            destinationCard.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -12),
-
-            destinationTitle.topAnchor.constraint(equalTo: destinationCard.topAnchor, constant: 12),
-            destinationTitle.leadingAnchor.constraint(equalTo: destinationCard.leadingAnchor, constant: 12),
-            destinationTitle.trailingAnchor.constraint(equalTo: destinationCard.trailingAnchor, constant: -12),
-
-            destinationValue.topAnchor.constraint(equalTo: destinationTitle.bottomAnchor, constant: 4),
-            destinationValue.leadingAnchor.constraint(equalTo: destinationCard.leadingAnchor, constant: 12),
-            destinationValue.trailingAnchor.constraint(equalTo: destinationCard.trailingAnchor, constant: -12),
-            destinationValue.bottomAnchor.constraint(equalTo: destinationCard.bottomAnchor, constant: -12),
+            card.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -12),
 
             titleLabel.topAnchor.constraint(equalTo: card.topAnchor, constant: 12),
             titleLabel.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 12),
@@ -212,7 +187,11 @@ final class MainViewController: UITableViewController {
             valueLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 4),
             valueLabel.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 12),
             valueLabel.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -12),
-            valueLabel.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -12),
+
+            destinationValue.topAnchor.constraint(equalTo: valueLabel.bottomAnchor, constant: 6),
+            destinationValue.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 12),
+            destinationValue.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -12),
+            destinationValue.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -12),
 
             copyButton.centerYAnchor.constraint(equalTo: card.centerYAnchor),
             copyButton.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -12)
