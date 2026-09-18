@@ -91,7 +91,16 @@ extension CoralogixRum {
             Log.e("Could not create an instance of PLCrashReporter")
             return nil
         }
-        crashReporter.enable()
+        // PLCrashReporter allows one enabled instance per process. If the host app enabled its
+        // own before us (App Center Crashes wraps it; some apps use it directly) this fails with
+        // PLCrashReporterErrorResourceBusy and ours captures nothing. The reporter is still
+        // returned: reading a pending report from an earlier launch does not need the live
+        // handler, so recovery should not be lost along with capture.
+        do {
+            try crashReporter.enable()
+        } catch {
+            Log.e("[CrashInstrumentation] PLCrashReporter could not be enabled — another instance already owns the process-wide slot, so crashes from this launch will not be captured: \(error)")
+        }
         return crashReporter
     }
 
