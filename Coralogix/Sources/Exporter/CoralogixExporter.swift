@@ -45,6 +45,19 @@ public class CoralogixExporter: SpanExporter {
         crashUploadLock.unlock()
     }
 
+    /// Resolves the crash spans this exporter itself declined to send — dropped by session
+    /// sampling or by `ignoreErrors` — by recording their ids as confirmed. "Confirmed" here
+    /// means the report is finished with, whether by delivery or by policy: `completeCrashRecovery`
+    /// gates the purge of a pending PLCrashReporter report, and `CrashEventStore` its removal, on
+    /// that flag alone. Without this a crash from a sampled-out session is re-parsed, re-emitted
+    /// and re-dropped on every launch until another crash overwrites the file. The idle-session
+    /// early return is deliberately not routed here: that is a deferral, and retrying it on the
+    /// next launch is the right outcome.
+    private func resolveCrashSpansDroppedByPolicy(incoming: Set<String>, surviving spans: [SpanData]) {
+        let dropped = incoming.subtracting(crashEventIds(in: spans))
+        recordCrashUpload(ids: dropped, succeeded: true)
+    }
+
     /// Correlation ids of the crash events in this batch, read from the raw span
     /// attribute. The attribute is not mapped into cx_rum, so it stays off the wire.
     private func crashEventIds(in spans: [SpanData]) -> Set<String> {
@@ -203,15 +216,25 @@ public class CoralogixExporter: SpanExporter {
         // propagate-only network check, which catches the case sampling cannot. Placed above
         // URL/error filters and the tracesExporter callback so hybrid + external OTLP consumers
         // inherit the same behavior.
+        // Crash correlation ids present before any filter runs: a crash span this method decides
+        // not to send still has to be resolved, see `resolveCrashSpansDroppedByPolicy`.
+        let incomingCrashIds = self.crashEventIds(in: spans)
+
         var filterSpans = spans.filter { self.passesSessionSampling($0) && self.reportsNetworkEvents($0) }
         if filterSpans.count != spans.count {
             Log.d("[CoralogixExporter] export: \(spans.count) in, \(filterSpans.count) after sampling and network-reporting filters")
         }
-        if filterSpans.isEmpty { return .success }
+        if filterSpans.isEmpty {
+            resolveCrashSpansDroppedByPolicy(incoming: incomingCrashIds, surviving: [])
+            return .success
+        }
 
         // ignore Urls
         filterSpans = filterSpans.filter { self.shouldRemoveSpan(span: $0) }
-        if filterSpans.isEmpty { return .failure }
+        if filterSpans.isEmpty {
+            resolveCrashSpansDroppedByPolicy(incoming: incomingCrashIds, surviving: [])
+            return .failure
+        }
 
         // ignore Error
         filterSpans = filterSpans.filter { self.shouldFilterIgnoreError(span: $0) }
@@ -219,6 +242,8 @@ public class CoralogixExporter: SpanExporter {
         // Deduplicate using spanId as key
         let uniqueSpansDict = Dictionary(grouping: filterSpans, by: { $0.spanId })
         let uniqueSpans = uniqueSpansDict.compactMap { $0.value.first }
+
+        resolveCrashSpansDroppedByPolicy(incoming: incomingCrashIds, surviving: uniqueSpans)
 
         if !uniqueSpans.isEmpty {
             // Invoke tracesExporter callback if configured (additive OTLP export path).
