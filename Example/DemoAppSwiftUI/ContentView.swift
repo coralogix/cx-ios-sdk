@@ -159,7 +159,23 @@ struct ContentView: View {
                 }
             }
             .padding(.vertical, 2)
+
+            // Where this build sends its data — mirrors the UIKit demo's card.
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Sending to")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                Text(destinationSummary)
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundColor(.primary)
+                    .accessibilityIdentifier("destinationValue")
+            }
+            .padding(.vertical, 2)
         }
+    }
+
+    private var destinationSummary: String {
+        CoralogixRumManager.shared.destination?.summary ?? "SDK not initialized"
     }
 
     private func copySessionID() {

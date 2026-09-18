@@ -158,13 +158,52 @@ final class MainViewController: UITableViewController {
         card.addSubview(copyButton)
         container.addSubview(card)
 
+        // Where this build sends its data — a proxy in the path or a stale key has silently
+        // broken more than one test run, and nothing else on the device shows either.
+        let destinationCard = UIView()
+        destinationCard.translatesAutoresizingMaskIntoConstraints = false
+        destinationCard.backgroundColor = .secondarySystemGroupedBackground
+        destinationCard.layer.cornerRadius = 14
+        destinationCard.layer.masksToBounds = true
+
+        let destinationTitle = UILabel()
+        destinationTitle.translatesAutoresizingMaskIntoConstraints = false
+        destinationTitle.text = "Sending to"
+        destinationTitle.font = UIFont.preferredFont(forTextStyle: .subheadline)
+        destinationTitle.textColor = .secondaryLabel
+
+        let destinationValue = UILabel()
+        destinationValue.translatesAutoresizingMaskIntoConstraints = false
+        destinationValue.text = CoralogixRumManager.shared.destination?.summary ?? "SDK not initialized"
+        destinationValue.font = UIFont.monospacedSystemFont(ofSize: 12, weight: .medium)
+        destinationValue.textColor = .label
+        destinationValue.numberOfLines = 0
+        destinationValue.accessibilityIdentifier = "destinationValue"
+
+        destinationCard.addSubview(destinationTitle)
+        destinationCard.addSubview(destinationValue)
+        container.addSubview(destinationCard)
+
         let layoutMargins: CGFloat = 16
 
         NSLayoutConstraint.activate([
             card.topAnchor.constraint(equalTo: container.topAnchor, constant: 12),
             card.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: layoutMargins),
             card.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -layoutMargins),
-            card.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -12),
+
+            destinationCard.topAnchor.constraint(equalTo: card.bottomAnchor, constant: 8),
+            destinationCard.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: layoutMargins),
+            destinationCard.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -layoutMargins),
+            destinationCard.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -12),
+
+            destinationTitle.topAnchor.constraint(equalTo: destinationCard.topAnchor, constant: 12),
+            destinationTitle.leadingAnchor.constraint(equalTo: destinationCard.leadingAnchor, constant: 12),
+            destinationTitle.trailingAnchor.constraint(equalTo: destinationCard.trailingAnchor, constant: -12),
+
+            destinationValue.topAnchor.constraint(equalTo: destinationTitle.bottomAnchor, constant: 4),
+            destinationValue.leadingAnchor.constraint(equalTo: destinationCard.leadingAnchor, constant: 12),
+            destinationValue.trailingAnchor.constraint(equalTo: destinationCard.trailingAnchor, constant: -12),
+            destinationValue.bottomAnchor.constraint(equalTo: destinationCard.bottomAnchor, constant: -12),
 
             titleLabel.topAnchor.constraint(equalTo: card.topAnchor, constant: 12),
             titleLabel.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 12),

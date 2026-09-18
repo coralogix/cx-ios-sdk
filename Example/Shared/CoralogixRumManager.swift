@@ -71,6 +71,32 @@ final class CoralogixRumManager {
         return maskedInteractionCounter % 2 == 0
     }
 
+    /// Where this build sends its data, captured when the options are built. Shown on the main
+    /// screen because the two things that have silently broken a test run — a proxy in the path
+    /// and a stale key — are not visible on the device any other way: the SDK does not expose
+    /// its domain or key back through the options object.
+    struct Destination {
+        let region: String
+        let ingressHost: String
+        let proxyHost: String?
+        let keyPrefix: String
+
+        init(domain: CoralogixDomain, proxyUrl: String?, publicKey: String) {
+            region = String(describing: domain)
+            ingressHost = URL(string: domain.rawValue)?.host ?? domain.rawValue
+            proxyHost = proxyUrl.flatMap { URL(string: $0)?.host }
+            keyPrefix = publicKey.count > 9 ? String(publicKey.prefix(9)) + "…" : publicKey
+        }
+
+        /// Two lines: where, then how and with which key.
+        var summary: String {
+            let route = proxyHost.map { "via \($0)" } ?? "direct"
+            return "\(ingressHost) (\(region))\n\(route) · key \(keyPrefix)"
+        }
+    }
+
+    private(set) var destination: Destination?
+
     private var _sdk: CoralogixRum?
     var sdk: CoralogixRum {
         guard let _sdk = _sdk else {
@@ -95,12 +121,14 @@ final class CoralogixRumManager {
             let configured = Envs.PROXY_URL.rawValue
             return configured.isEmpty ? nil : configured
         }()
-        let options = CoralogixExporterOptions(coralogixDomain: CoralogixDomain.EU2,
+        let domain = CoralogixDomain.EU2
+        let publicKey = Envs.PUBLIC_KEY.rawValue
+        let options = CoralogixExporterOptions(coralogixDomain: domain,
                                                userContext: userContext,
                                                environment: "PROD",
                                                application: "DemoApp-iOS-swift",
                                                version: "1",
-                                               publicKey: Envs.PUBLIC_KEY.rawValue,
+                                               publicKey: publicKey,
                                                instrumentations: [
                                                 .mobileVitals: true,
                                                                   .custom: true,
@@ -147,6 +175,7 @@ final class CoralogixRumManager {
 //        let log = OSLog(subsystem: "test.CoralogixTest", category: .pointsOfInterest)
 //        let signpostID = OSSignpostID(log: log)
 //        os_signpost(.begin, log: log, name: "Init Coralogix", signpostID: signpostID)
+        self.destination = Destination(domain: domain, proxyUrl: proxyUrl, publicKey: publicKey)
         self._sdk = CoralogixRum(options: options)
 //        os_signpost(.end, log: log, name: "Init Coralogix", signpostID: signpostID)
         print("SDK initialized:\(self._sdk?.isInitialized.description ?? "not initialized")")
