@@ -8,28 +8,29 @@
 import Foundation
 import CrashReporter
 import CoralogixInternal
+#if canImport(CoralogixCrashBootstrap)
+// SPM builds the bootstrap as its own module; under CocoaPods it is part of this pod.
+import CoralogixCrashBootstrap
+#endif
 
 extension CoralogixRum {
     public func initializeCrashInstrumentation() {
-        
-        // It is strongly recommended that local symbolication only be enabled for non-release builds.
-        // Use [] for release versions.
-        let config = PLCrashReporterConfig(signalHandlerType: .BSD, symbolicationStrategy: .all)
-        guard let crashReporter = PLCrashReporter(configuration: config) else {
-            Log.e("Could not create an instance of PLCrashReporter")
-            return
-        }
-        
+        guard let crashReporter = Self.installedCrashReporter() else { return }
+
         switch FirebaseRuntimeDetector.presence() {
         case .configured:
-            Log.d("host app called FirebaseApp.configure() before your Coralogix SDK init, some crash reports may be dropped")
+            // True only when the load-time install holds the process-wide slot. On the fallback
+            // path — opt-out, +load failure, or +load never running — the order is not handled,
+            // and saying so here is the one place Firebase-first and weak-path meet in the log.
+            let orderHandled = CRXCrashBootstrap.reporter != nil
+            Log.d(orderHandled
+                  ? "host app called FirebaseApp.configure() before your Coralogix SDK init; the crash handler was installed at image load, so the order is handled"
+                  : "host app called FirebaseApp.configure() before your Coralogix SDK init; the crash handler was installed at init instead, so Crashlytics can displace it")
         case .linkedButNotConfigured:
             Log.d("Firebase exists, but not configured yet (or you checked too early)")
         case .notLinked:
             Log.d("host app didn't include Firebase at all")
         }
-        
-        crashReporter.enable()
 
         // Try loading the crash report.
         if crashReporter.hasPendingCrashReport() {
@@ -55,6 +56,58 @@ extension CoralogixRum {
 
         // Hybrid crash events persisted by a previous process (see CrashEventStore).
         self.resendPendingStoredCrashEvents()
+    }
+
+    /// The reporter to recover from and to keep capturing with.
+    ///
+    /// Normally this is the instance `CRXCrashBootstrap` enabled at image load — already
+    /// capturing, and installed early enough that a crash reporter configured by the host app
+    /// (Firebase Crashlytics) reinstates our signal handlers instead of replacing them. See
+    /// `CRXCrashBootstrap` for why the install has to happen before `main()`.
+    ///
+    /// The fallback enables one here, which is what this method did before the bootstrap
+    /// existed: a reporter that captures correctly but only from this point on, so a crash
+    /// reporter configured earlier can still pre-empt it. Better than no crash reporting at all.
+    /// It is reached when the load-time install failed, or when the host app opted out with
+    /// `CoralogixDisableEarlyCrashHandler`.
+    ///
+    /// `candidate` is a parameter so tests can assert the adoption path against a known
+    /// instance. They do not drive it to the fallback: that calls `enable()`, which installs
+    /// signal handlers process-wide with no way to undo them afterwards.
+    internal static func installedCrashReporter(
+        candidate: PLCrashReporter? = CRXCrashBootstrap.reporter
+    ) -> PLCrashReporter? {
+        if let candidate {
+            return candidate
+        }
+
+        if CRXCrashBootstrap.disabledByHostApp {
+            // Warning rather than debug: this is the line support reads to explain why a
+            // customer's crashes are being displaced again, and os_log debug is absent from
+            // `log show` and from a console capture.
+            Log.w("[CrashInstrumentation] early crash-handler install disabled by CoralogixDisableEarlyCrashHandler — enabling at init instead, which a crash reporter configured before this SDK can displace")
+        } else if let error = CRXCrashBootstrap.enableError {
+            Log.e("[CrashInstrumentation] crash bootstrap could not enable at load: \(error)")
+        }
+
+        // Local symbolication is strongly recommended for non-release builds only; kept as-is
+        // here so the fallback produces the same reports the bootstrap does.
+        let config = PLCrashReporterConfig(signalHandlerType: .BSD, symbolicationStrategy: .all)
+        guard let crashReporter = PLCrashReporter(configuration: config) else {
+            Log.e("Could not create an instance of PLCrashReporter")
+            return nil
+        }
+        // PLCrashReporter allows one enabled instance per process. If the host app enabled its
+        // own before us (App Center Crashes wraps it; some apps use it directly) this fails with
+        // PLCrashReporterErrorResourceBusy and ours captures nothing. The reporter is still
+        // returned: reading a pending report from an earlier launch does not need the live
+        // handler, so recovery should not be lost along with capture.
+        do {
+            try crashReporter.enable()
+        } catch {
+            Log.e("[CrashInstrumentation] PLCrashReporter could not be enabled — another instance already owns the process-wide slot, so crashes from this launch will not be captured: \(error)")
+        }
+        return crashReporter
     }
 
     /// Final step of crash recovery, run right after init completes: force-flushes

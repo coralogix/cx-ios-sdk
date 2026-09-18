@@ -9,6 +9,11 @@ Release-mechanics commits (version bumps, podspec/script tweaks, README edits) a
 omitted; the focus here is user-facing behavior changes. Tickets are referenced as
 `CX-XXXXX` (Jira) or `ALPH-XXXX` (legacy). Pull request numbers are in parentheses.
 
+## [2.18.4] - 2026-09-17
+
+### Fixed
+- Crashes are now reported when another crash reporter, such as Firebase Crashlytics, is initialized before the Coralogix SDK; previously they reached only the other reporter.
+
 ## [2.18.3] - 2026-09-15
 
 ### Fixed

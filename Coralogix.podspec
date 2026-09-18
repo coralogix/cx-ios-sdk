@@ -1,7 +1,7 @@
 Pod::Spec.new do |spec|
 
   spec.name         = "Coralogix"
-  spec.version      = "2.18.3"
+  spec.version      = "2.18.4"
   spec.summary      = "Coralogix OpenTelemetry pod for iOS."
 
   spec.description  = <<-DESC
@@ -24,12 +24,14 @@ Pod::Spec.new do |spec|
   spec.author             = { "Coralogix" => "www.coralogix.com" }
   spec.ios.deployment_target = "13.0"
 
-  spec.source_files  = 'Coralogix/Sources/**/*.swift'
+  spec.source_files  = ['Coralogix/Sources/**/*.swift',
+                        'CoralogixCrashBootstrap/Sources/**/*.{h,m}']
+  spec.public_header_files = 'CoralogixCrashBootstrap/Sources/include/*.h'
   spec.exclude_files = 'Coralogix/Sources/Exclude'
 
   spec.static_framework = true
   spec.dependency 'PLCrashReporter', '~> 1.12'
-  spec.dependency 'CoralogixInternal', '2.18.3'
+  spec.dependency 'CoralogixInternal', '2.18.4'
 
   spec.test_spec 'Tests' do |test|
     test.source_files = 'Tests/CoralogixRumTests/**/*.swift'

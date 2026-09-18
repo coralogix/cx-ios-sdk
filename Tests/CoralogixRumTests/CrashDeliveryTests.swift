@@ -69,26 +69,34 @@ final class CrashDeliveryTests: XCTestCase {
     /// error event carrying a `threads` stack and a `crash_event_id`, and **no** `is_crash`
     /// attribute — that path never sets one. Every other crash fixture here sets it by hand,
     /// which is why none of them exercised the confirmation gate against a real crash span.
-    private func makePendingReportSpan(crashEventId: String = "report-id") -> SpanData {
+    /// `sessionSampledIn` mirrors the stamp `overrideSessionForCrashedSession` copies from the
+    /// keychain onto a recovered crash span; `nil` leaves it unstamped, which the exporter treats
+    /// as sampled in.
+    private func makePendingReportSpan(crashEventId: String = "report-id",
+                                       sessionSampledIn: Bool? = nil) -> SpanData {
         let threads = Helper.convertArrayOfStringToJsonString(array: [
             Helper.convertArrayToJsonString(array: [["frame_number": "0", "binary": "HostApp"]])
         ])
+        var attributes: [String: AttributeValue] = [
+            Keys.eventType.rawValue: AttributeValue(CoralogixEventType.error.rawValue),
+            Keys.severity.rawValue: AttributeValue("5"),
+            Keys.source.rawValue: AttributeValue("console"),
+            Keys.environment.rawValue: AttributeValue("test"),
+            Keys.sessionId.rawValue: AttributeValue("session_001"),
+            Keys.sessionCreationDate.rawValue: AttributeValue("1609459200"),
+            Keys.exceptionType.rawValue: AttributeValue("SIGSEGV"),
+            Keys.threads.rawValue: AttributeValue(threads),
+            Keys.crashEventId.rawValue: AttributeValue(crashEventId)
+        ]
+        if let sessionSampledIn {
+            attributes[Keys.spanSessionSampledIn.rawValue] = AttributeValue(String(sessionSampledIn))
+        }
         return SpanData(traceId: TraceId.random(),
                         spanId: SpanId.random(),
                         name: "pendingCrashReportSpan",
                         kind: .client,
                         startTime: Date(),
-                        attributes: [
-                            Keys.eventType.rawValue: AttributeValue(CoralogixEventType.error.rawValue),
-                            Keys.severity.rawValue: AttributeValue("5"),
-                            Keys.source.rawValue: AttributeValue("console"),
-                            Keys.environment.rawValue: AttributeValue("test"),
-                            Keys.sessionId.rawValue: AttributeValue("session_001"),
-                            Keys.sessionCreationDate.rawValue: AttributeValue("1609459200"),
-                            Keys.exceptionType.rawValue: AttributeValue("SIGSEGV"),
-                            Keys.threads.rawValue: AttributeValue(threads),
-                            Keys.crashEventId.rawValue: AttributeValue(crashEventId)
-                        ],
+                        attributes: attributes,
                         endTime: Date(),
                         hasEnded: true)
     }
@@ -214,6 +222,45 @@ final class CrashDeliveryTests: XCTestCase {
     /// that confirmation is the only thing that purges it from the device. Without it the
     /// report is kept and re-emitted on every launch for the life of the install, while the
     /// backend records the crash every time.
+    /// A crash captured in a sampled-out session is recovered on a later, sampled-in launch
+    /// still stamped with the crashed session's decision, so the exporter drops it — correctly.
+    /// The report must be released all the same: with the handler installed at image load a
+    /// sampled-out session now writes a report at all, and an unconfirmed one is re-parsed,
+    /// re-emitted and re-dropped on every launch until another crash overwrites it.
+    func test_pendingReportFromSampledOutSession_isDroppedButConfirmed_soTheReportIsPurged() throws {
+        coralogixRum = CoralogixRum(options: makeSamplingOptions(sampleRate: 100, exclude: []))
+        let exporter = try XCTUnwrap(coralogixRum.coralogixExporter)
+        let uploader = StubUploader()
+        exporter.spanUploader = uploader
+
+        let result = exporter.export(spans: [makePendingReportSpan(crashEventId: "sampled-out-report",
+                                                                   sessionSampledIn: false)],
+                                     explicitTimeout: nil)
+
+        XCTAssertEqual(result, .success)
+        XCTAssertTrue(uploader.uploadedEvents.isEmpty,
+                      "sampling must still drop the span — resolving the report is not delivering it")
+        XCTAssertTrue(exporter.didConfirmCrashUpload(id: "sampled-out-report"),
+                      "a crash the exporter itself declined to send is finished with; the purge gate must open")
+    }
+
+    /// The other half of the same rule: when `.errors` is excluded from sampling the recovered
+    /// crash is delivered, not dropped, and is confirmed by the upload rather than by policy.
+    func test_pendingReportFromSampledOutSession_isDelivered_whenErrorsAreExcludedFromSampling() throws {
+        coralogixRum = CoralogixRum(options: makeSamplingOptions(sampleRate: 100, exclude: [.errors]))
+        let exporter = try XCTUnwrap(coralogixRum.coralogixExporter)
+        let uploader = StubUploader()
+        exporter.spanUploader = uploader
+
+        let result = exporter.export(spans: [makePendingReportSpan(crashEventId: "excluded-report",
+                                                                   sessionSampledIn: false)],
+                                     explicitTimeout: nil)
+
+        XCTAssertEqual(result, .success)
+        XCTAssertEqual(uploader.uploadedEvents.count, 1)
+        XCTAssertTrue(exporter.didConfirmCrashUpload(id: "excluded-report"))
+    }
+
     func test_pendingReportUpload_isConfirmed_soTheReportCanBePurged() throws {
         coralogixRum = CoralogixRum(options: makeSamplingOptions(sampleRate: 100, exclude: []))
         let exporter = try XCTUnwrap(coralogixRum.coralogixExporter)

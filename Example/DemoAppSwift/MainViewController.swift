@@ -158,6 +158,20 @@ final class MainViewController: UITableViewController {
         card.addSubview(copyButton)
         container.addSubview(card)
 
+        // Where this build sends its data, in the same card as the session id — a proxy in
+        // the path or a stale key has silently broken more than one test run, and nothing else
+        // on the device shows it. One compact line so the header gains no meaningful height.
+        let destinationValue = UILabel()
+        destinationValue.translatesAutoresizingMaskIntoConstraints = false
+        destinationValue.text = CoralogixRumManager.shared.destination?.summary ?? "SDK not initialized"
+        destinationValue.font = UIFont.monospacedSystemFont(ofSize: 11, weight: .regular)
+        destinationValue.textColor = .secondaryLabel
+        destinationValue.numberOfLines = 1
+        destinationValue.adjustsFontSizeToFitWidth = true
+        destinationValue.minimumScaleFactor = 0.8
+        destinationValue.accessibilityIdentifier = "destinationValue"
+        card.addSubview(destinationValue)
+
         let layoutMargins: CGFloat = 16
 
         NSLayoutConstraint.activate([
@@ -173,7 +187,11 @@ final class MainViewController: UITableViewController {
             valueLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 4),
             valueLabel.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 12),
             valueLabel.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -12),
-            valueLabel.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -12),
+
+            destinationValue.topAnchor.constraint(equalTo: valueLabel.bottomAnchor, constant: 6),
+            destinationValue.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 12),
+            destinationValue.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -12),
+            destinationValue.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -12),
 
             copyButton.centerYAnchor.constraint(equalTo: card.centerYAnchor),
             copyButton.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -12)

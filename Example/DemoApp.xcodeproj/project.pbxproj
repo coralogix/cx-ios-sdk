@@ -619,7 +619,7 @@
 			);
 			mainGroup = E6320F792BE7C94F00A4547E;
 			packageReferences = (
-				E66E3B662DA7F76C00FBC86B /* XCLocalSwiftPackageReference "../../cx-ios-sdk" */,
+				E66E3B662DA7F76C00FBC86B /* XCLocalSwiftPackageReference ".." */,
 				E690EADA2EF182F60011C147 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
 				E64ABB292F3C5ECB00D990A9 /* XCRemoteSwiftPackageReference "SDWebImage" */,
 				E64ABB2C2F3C5F0300D990A9 /* XCRemoteSwiftPackageReference "Alamofire" */,
@@ -1394,9 +1394,9 @@
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
-		E66E3B662DA7F76C00FBC86B /* XCLocalSwiftPackageReference "../../cx-ios-sdk" */ = {
+		E66E3B662DA7F76C00FBC86B /* XCLocalSwiftPackageReference ".." */ = {
 			isa = XCLocalSwiftPackageReference;
-			relativePath = "../../cx-ios-sdk";
+			relativePath = "..";
 		};
 /* End XCLocalSwiftPackageReference section */
 
@@ -1454,12 +1454,12 @@
 		};
 		E66E3B692DA7FAE900FBC86B /* Coralogix */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = E66E3B662DA7F76C00FBC86B /* XCLocalSwiftPackageReference "../../cx-ios-sdk" */;
+			package = E66E3B662DA7F76C00FBC86B /* XCLocalSwiftPackageReference ".." */;
 			productName = Coralogix;
 		};
 		E66E3B6B2DA7FB6400FBC86B /* Coralogix */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = E66E3B662DA7F76C00FBC86B /* XCLocalSwiftPackageReference "../../cx-ios-sdk" */;
+			package = E66E3B662DA7F76C00FBC86B /* XCLocalSwiftPackageReference ".." */;
 			productName = Coralogix;
 		};
 		E690EADB2EF182F60011C147 /* FirebaseAnalytics */ = {
@@ -1479,17 +1479,17 @@
 		};
 		E6B609FF2DB4E531003AD35D /* SessionReplay */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = E66E3B662DA7F76C00FBC86B /* XCLocalSwiftPackageReference "../../cx-ios-sdk" */;
+			package = E66E3B662DA7F76C00FBC86B /* XCLocalSwiftPackageReference ".." */;
 			productName = SessionReplay;
 		};
 		E6B60A012DB4E53F003AD35D /* SessionReplay */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = E66E3B662DA7F76C00FBC86B /* XCLocalSwiftPackageReference "../../cx-ios-sdk" */;
+			package = E66E3B662DA7F76C00FBC86B /* XCLocalSwiftPackageReference ".." */;
 			productName = SessionReplay;
 		};
 		E6B60A032DB4E544003AD35D /* SessionReplay */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = E66E3B662DA7F76C00FBC86B /* XCLocalSwiftPackageReference "../../cx-ios-sdk" */;
+			package = E66E3B662DA7F76C00FBC86B /* XCLocalSwiftPackageReference ".." */;
 			productName = SessionReplay;
 		};
 /* End XCSwiftPackageProductDependency section */
