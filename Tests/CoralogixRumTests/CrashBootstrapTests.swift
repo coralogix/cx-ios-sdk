@@ -15,8 +15,8 @@ import CrashReporter
 // and reaches this file through `@testable import Coralogix`. The podspec's test_spec compiles
 // these tests, and the publish script lints with tests on — so an unconditional import fails
 // the release, not just CI.
-#if canImport(CoralogixCrashBootstrap)
-import CoralogixCrashBootstrap
+#if canImport(CoralogixBootstrap)
+import CoralogixBootstrap
 #endif
 
 @testable import Coralogix

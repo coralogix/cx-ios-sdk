@@ -8,6 +8,10 @@
 import Darwin
 import Foundation
 import UIKit
+#if canImport(CoralogixBootstrap)
+// SPM builds the bootstrap as its own module; under CocoaPods it is part of this pod.
+import CoralogixBootstrap
+#endif
 
 final class ColdDetector {
     // Launches longer than this are background/prewarm artifacts (the process was spawned
@@ -25,6 +29,16 @@ final class ColdDetector {
         ProcessInfo.processInfo.environment["ActivePrewarm"] == "1"
     }
 
+    /// The process's first activation as stamped by `CRXLaunchRecorder` from `+load`, or `nil` if
+    /// the app has not been active yet. Overridable in tests.
+    var recordedFirstActivation: () -> CFAbsoluteTime? = {
+        let time = CRXLaunchRecorder.firstDidBecomeActiveTime
+        return time > 0 ? time : nil
+    }
+
+    /// Process-wide once-only claim on reporting the launch. Overridable in tests.
+    var claimColdStartReport: () -> Bool = { CRXLaunchRecorder.claimColdStartReport() }
+
     func startMonitoring() {
         // Use kernel process birth time for the most accurate cold-start start point.
         // Falls back to the current time (SDK init) if the syscall is unavailable.
@@ -33,6 +47,13 @@ final class ColdDetector {
         } else {
             Log.w("ColdDetector: sysctl failed to read process start time, falling back to SDK init time")
             self.launchStartTime = CFAbsoluteTimeGetCurrent()
+        }
+
+        // Hybrid apps initialize after the first activation; report it now instead of waiting
+        // for the next one, which would measure a re-activation rather than the launch.
+        if let firstActivation = recordedFirstActivation() {
+            reportColdStart(endTime: firstActivation)
+            return
         }
 
         NotificationCenter.default.addObserver(self,
@@ -48,11 +69,21 @@ final class ColdDetector {
                                                   name: UIApplication.didBecomeActiveNotification,
                                                   object: nil)
 
+        // Prefer the recorder's stamp: if init raced the first activation, this delivery may be a
+        // later one, and only the first activation ends the launch.
+        reportColdStart(endTime: recordedFirstActivation() ?? CFAbsoluteTimeGetCurrent())
+    }
+
+    private func reportColdStart(endTime launchEndTime: CFAbsoluteTime) {
         guard let launchStartTime = self.launchStartTime,
               self.launchEndTime == nil else { return }
 
-        let launchEndTime = CFAbsoluteTimeGetCurrent()
         self.launchEndTime = launchEndTime
+
+        guard claimColdStartReport() else {
+            Log.d("ColdDetector: this launch was already reported by an earlier SDK init")
+            return
+        }
 
         // A prewarmed process is spawned in the background before the user opens the app,
         // so the kernel birth time → didBecomeActive delta isn't a real cold start. Skip it.

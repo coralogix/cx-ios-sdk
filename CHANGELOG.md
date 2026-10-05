@@ -9,6 +9,11 @@ Release-mechanics commits (version bumps, podspec/script tweaks, README edits) a
 omitted; the focus here is user-facing behavior changes. Tickets are referenced as
 `CX-XXXXX` (Jira) or `ALPH-XXXX` (legacy). Pull request numbers are in parentheses.
 
+## [2.18.5] - 2026-10-05
+
+### Fixed
+- In React Native and Flutter apps, `cold` mobile vitals now measure the app launch, from process start to the first time the app becomes active; previously they measured the time to a later re-activation, such as returning from the background or a Face ID prompt, so earlier values are not launch times. Later activations report `warm` only.
+
 ## [2.18.4] - 2026-09-17
 
 ### Fixed
