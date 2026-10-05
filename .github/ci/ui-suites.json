@@ -74,8 +74,8 @@
     },
     {
       "id": "soak-replay-scroll",
-      "name": "soak \u00b7 replay scroll leak",
-      "tier": "soak",
+      "name": "quarantine \u00b7 replay scroll leak",
+      "tier": "quarantine",
       "harness": true,
       "scheme": "DemoAppSwift",
       "seconds": 114,
