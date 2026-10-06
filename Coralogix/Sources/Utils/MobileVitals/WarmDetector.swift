@@ -37,6 +37,11 @@ final class WarmDetector {
                                                object: nil)
     }
     
+    func stopMonitoring() {
+        NotificationCenter.default.removeObserver(self)
+        isMonitoring = false
+    }
+
     @objc internal func appWillEnterForegroundNotification() {
         if warmMetricIsActive {
             self.foregroundStartTime = CFAbsoluteTimeGetCurrent()

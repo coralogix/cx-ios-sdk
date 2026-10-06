@@ -13,6 +13,24 @@ import UIKit
 import CoralogixBootstrap
 #endif
 
+/// What `CRXLaunchRecorder` observed about this process's launch. A protocol so tests can supply a
+/// launch instead of inheriting the test host's.
+protocol LaunchRecording {
+    var firstActivation: CFAbsoluteTime? { get }
+    var launchWasInterrupted: Bool { get }
+    var launchStartedInBackground: Bool { get }
+    func claimColdStartReport() -> Bool
+}
+
+struct RecorderLaunchRecording: LaunchRecording {
+    var firstActivation: CFAbsoluteTime? {
+        CRXLaunchRecorder.hasRecordedFirstActivation ? CRXLaunchRecorder.firstDidBecomeActiveTime : nil
+    }
+    var launchWasInterrupted: Bool { CRXLaunchRecorder.launchWasInterrupted }
+    var launchStartedInBackground: Bool { CRXLaunchRecorder.launchStartedInBackground }
+    func claimColdStartReport() -> Bool { CRXLaunchRecorder.claimColdStartReport() }
+}
+
 final class ColdDetector {
     // Launches longer than this are background/prewarm artifacts (the process was spawned
     // long before the user foregrounded the app), not a user-perceived cold start. Dropping
@@ -29,15 +47,11 @@ final class ColdDetector {
         ProcessInfo.processInfo.environment["ActivePrewarm"] == "1"
     }
 
-    /// The process's first activation as stamped by `CRXLaunchRecorder` from `+load`, or `nil` if
-    /// the app has not been active yet. Overridable in tests.
-    var recordedFirstActivation: () -> CFAbsoluteTime? = {
-        let time = CRXLaunchRecorder.firstDidBecomeActiveTime
-        return time > 0 ? time : nil
-    }
+    private let launchRecording: LaunchRecording
 
-    /// Process-wide once-only claim on reporting the launch. Overridable in tests.
-    var claimColdStartReport: () -> Bool = { CRXLaunchRecorder.claimColdStartReport() }
+    init(launchRecording: LaunchRecording = RecorderLaunchRecording()) {
+        self.launchRecording = launchRecording
+    }
 
     func startMonitoring() {
         // Use kernel process birth time for the most accurate cold-start start point.
@@ -49,41 +63,44 @@ final class ColdDetector {
             self.launchStartTime = CFAbsoluteTimeGetCurrent()
         }
 
-        // Hybrid apps initialize after the first activation; report it now instead of waiting
-        // for the next one, which would measure a re-activation rather than the launch.
-        if let firstActivation = recordedFirstActivation() {
-            reportColdStart(endTime: firstActivation)
-            return
-        }
-
         NotificationCenter.default.addObserver(self,
                                                selector: #selector(appDidBecomeActive),
                                                name: UIApplication.didBecomeActiveNotification,
                                                object: nil)
+
+        // A late init (React Native, Flutter) finds the first activation already recorded and
+        // reports it from here instead of waiting for the next activation, which would measure a
+        // re-activation. Deferring to the next main-queue turn keeps the report out of SDK init, so
+        // it never depends on the metrics collector being wired first, and it also catches an
+        // off-main init that raced the activation past the observer above.
+        DispatchQueue.main.async { [weak self] in
+            guard let self, let firstActivation = self.launchRecording.firstActivation else { return }
+            self.stopMonitoring()
+            self.reportColdStart(activationTime: firstActivation)
+        }
+    }
+
+    func stopMonitoring() {
+        NotificationCenter.default.removeObserver(self,
+                                                  name: UIApplication.didBecomeActiveNotification,
+                                                  object: nil)
     }
 
     @objc private func appDidBecomeActive() {
         // Remove the observer unconditionally on first delivery so it never
         // leaks into subsequent foreground cycles regardless of guard outcome.
-        NotificationCenter.default.removeObserver(self,
-                                                  name: UIApplication.didBecomeActiveNotification,
-                                                  object: nil)
+        stopMonitoring()
 
         // Prefer the recorder's stamp: if init raced the first activation, this delivery may be a
         // later one, and only the first activation ends the launch.
-        reportColdStart(endTime: recordedFirstActivation() ?? CFAbsoluteTimeGetCurrent())
+        reportColdStart(activationTime: launchRecording.firstActivation ?? CFAbsoluteTimeGetCurrent())
     }
 
-    private func reportColdStart(endTime launchEndTime: CFAbsoluteTime) {
+    private func reportColdStart(activationTime: CFAbsoluteTime) {
         guard let launchStartTime = self.launchStartTime,
               self.launchEndTime == nil else { return }
 
-        self.launchEndTime = launchEndTime
-
-        guard claimColdStartReport() else {
-            Log.d("ColdDetector: this launch was already reported by an earlier SDK init")
-            return
-        }
+        self.launchEndTime = activationTime
 
         // A prewarmed process is spawned in the background before the user opens the app,
         // so the kernel birth time → didBecomeActive delta isn't a real cold start. Skip it.
@@ -92,14 +109,34 @@ final class ColdDetector {
             return
         }
 
+        // Started by the system (silent push, background fetch) and opened later: the delta
+        // includes the time the process sat in the background.
+        guard !launchRecording.launchStartedInBackground else {
+            Log.d("ColdDetector: process started in the background — skipping cold-start metric")
+            return
+        }
+
+        // The user left during the launch: the delta includes the time away, and the return is
+        // already reported as a warm start.
+        guard !launchRecording.launchWasInterrupted else {
+            Log.d("ColdDetector: launch interrupted before first activation — skipping cold-start metric")
+            return
+        }
+
         let epochStartTime = Helper.convertCFAbsoluteTimeToEpoch(launchStartTime)
-        let epochEndTime = Helper.convertCFAbsoluteTimeToEpoch(launchEndTime)
+        let epochEndTime = Helper.convertCFAbsoluteTimeToEpoch(activationTime)
         let duration = calculateTime(start: epochStartTime, stop: epochEndTime)
 
-        // Background launches (push, fetch, location) aren't flagged by ActivePrewarm but show
-        // the same multi-hour skew. Drop anything beyond the sane ceiling rather than emit it.
+        // Backstop for background starts the task role cannot classify, which show the same
+        // multi-hour skew. Drop anything beyond the sane ceiling rather than emit it.
         guard duration <= ColdDetector.maxReasonableColdStartMs else {
             Log.d("ColdDetector: cold-start duration \(duration)ms exceeds cap — likely a background launch, dropping")
+            return
+        }
+
+        // Taken last, so it is spent only on a report that is actually emitted.
+        guard launchRecording.claimColdStartReport() else {
+            Log.d("ColdDetector: this launch was already reported by an earlier SDK init")
             return
         }
 

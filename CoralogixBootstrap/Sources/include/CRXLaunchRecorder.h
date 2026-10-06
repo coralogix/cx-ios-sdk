@@ -15,12 +15,27 @@ NS_ASSUME_NONNULL_BEGIN
 /// re-activation latency as a cold start. Observing from `+load` means the first activation is
 /// always seen, however late the SDK is initialized.
 ///
-/// This runs before `main()` in every consuming app, so it only stamps a timestamp — no SDK
-/// state, configuration or I/O.
+/// This runs before `main()` in every consuming app, so it only stamps values into statics — no
+/// SDK state, configuration or I/O.
 @interface CRXLaunchRecorder : NSObject
 
-/// `CFAbsoluteTimeGetCurrent()` at the first activation, or `0` if the app has not been active yet.
+/// Whether the app has become active at least once in this process.
+@property (class, nonatomic, readonly) BOOL hasRecordedFirstActivation;
+
+/// `CFAbsoluteTimeGetCurrent()` at the first activation. Meaningful only when
+/// `hasRecordedFirstActivation` is `YES`.
 @property (class, nonatomic, readonly) CFAbsoluteTime firstDidBecomeActiveTime;
+
+/// `YES` when the app entered the background before its first activation — the user left during
+/// the launch, so process birth → first activation includes time spent away.
+@property (class, nonatomic, readonly) BOOL launchWasInterrupted;
+
+/// `YES` when the process was not started by the user: at `didFinishLaunching` its task role was
+/// something other than `TASK_FOREGROUND_APPLICATION` (a silent push, background fetch, location
+/// event). Reading the kernel task role works the same for app-delegate and scene-based apps,
+/// unlike `applicationState` at launch. `NO` when the role could not be read, so an unreadable
+/// role never suppresses a real cold start.
+@property (class, nonatomic, readonly) BOOL launchStartedInBackground;
 
 /// Returns `YES` exactly once per process. A process has one launch, but the SDK can be
 /// initialized more than once in it (shutdown and re-init, a Flutter hot restart); without a

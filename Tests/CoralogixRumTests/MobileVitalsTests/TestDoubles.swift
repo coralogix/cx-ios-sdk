@@ -32,3 +32,18 @@ struct RecordingEventReporter: EventReporter {
         onEvent(event)
     }
 }
+
+/// A launch the test controls, so cold-start tests do not inherit the test host's real one (which
+/// has already been active, and whose process-wide claim may already be spent).
+final class FakeLaunchRecording: LaunchRecording {
+    var firstActivation: CFAbsoluteTime?
+    var launchWasInterrupted = false
+    var launchStartedInBackground = false
+    var claimGranted = true
+    private(set) var claimCount = 0
+
+    func claimColdStartReport() -> Bool {
+        claimCount += 1
+        return claimGranted
+    }
+}

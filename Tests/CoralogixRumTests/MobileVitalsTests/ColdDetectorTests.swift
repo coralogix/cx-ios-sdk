@@ -16,19 +16,18 @@ import CoralogixBootstrap
 
 class ColdDetectorTests: XCTestCase {
     var sut: ColdDetector!
+    var launch: FakeLaunchRecording!
 
     override func setUp() {
         super.setUp()
-        sut = ColdDetector()
-        // The test host has already been active, so the real recorder holds a stamp. Default to
-        // the native-init path (no activation yet); the hand-off tests opt back in.
-        sut.recordedFirstActivation = { nil }
-        // The real claim is process-wide, so the first test to report would starve the rest.
-        sut.claimColdStartReport = { true }
+        // Defaults to the native-init path: no activation recorded yet, claim available.
+        launch = FakeLaunchRecording()
+        sut = ColdDetector(launchRecording: launch)
     }
 
     override func tearDown() {
         sut = nil
+        launch = nil
         super.tearDown()
     }
 
@@ -232,77 +231,170 @@ class ColdDetectorTests: XCTestCase {
 
     // MARK: - Recorder hand-off (late init)
 
-    /// Late init (React Native / Flutter): the first activation already happened, so the cold
-    /// start is emitted during `startMonitoring()` and measures process birth → that activation.
-    /// A later activation must not produce a second cold — that was the re-activation bug.
-    func testStartMonitoring_whenFirstActivationRecorded_reportsAtInitAndIgnoresLaterActivations() throws {
-        let processStart = try XCTUnwrap(ColdDetector.processStartTime(), "sysctl unavailable")
-        sut.recordedFirstActivation = { processStart + 0.5 }
+    /// Runs the main-queue turn `startMonitoring()` defers the recorded-activation report to.
+    private func drainMainQueue() {
+        let drained = expectation(description: "main queue drained")
+        DispatchQueue.main.async { drained.fulfill() }
+        wait(for: [drained], timeout: 1)
+    }
 
+    /// Captures each reported cold duration.
+    private func recordColdDurations() -> () -> [Double] {
         var durations: [Double] = []
         sut.handleColdClosure = { dict in
             let inner = dict[MobileVitalsType.cold.stringValue] as? [String: Any]
             if let value = inner?[Keys.value.rawValue] as? Double { durations.append(value) }
         }
+        return { durations }
+    }
+
+    /// Late init (React Native / Flutter): the first activation already happened, so the cold
+    /// start is reported on the next main-queue turn and measures process birth → that activation.
+    /// A later activation must not produce a second cold — that was the re-activation bug.
+    func testStartMonitoring_whenFirstActivationRecorded_reportsAndIgnoresLaterActivations() throws {
+        let processStart = try XCTUnwrap(ColdDetector.processStartTime(), "sysctl unavailable")
+        launch.firstActivation = processStart + 0.5
+        let durations = recordColdDurations()
 
         sut.startMonitoring()
-        XCTAssertEqual(durations.count, 1, "Cold start must be emitted at init when the activation was recorded")
-        XCTAssertEqual(durations.first ?? -1, 500, accuracy: 1)
+        drainMainQueue()
+        XCTAssertEqual(durations(), [500], "Cold start must be reported once, from the recorded activation")
 
         NotificationCenter.default.post(name: UIApplication.didBecomeActiveNotification, object: nil)
-        XCTAssertEqual(durations.count, 1, "A later activation must never be reported as cold")
+        XCTAssertEqual(durations().count, 1, "A later activation must never be reported as cold")
+    }
+
+    /// The report is deferred out of SDK init, so it never runs before the code that called
+    /// `startMonitoring()` has finished wiring the metrics pipeline.
+    func testStartMonitoring_whenFirstActivationRecorded_doesNotReportInsideTheCall() throws {
+        let processStart = try XCTUnwrap(ColdDetector.processStartTime(), "sysctl unavailable")
+        launch.firstActivation = processStart + 0.5
+        let durations = recordColdDurations()
+
+        sut.startMonitoring()
+        XCTAssertTrue(durations().isEmpty)
+        drainMainQueue()
+        XCTAssertEqual(durations().count, 1)
     }
 
     /// Init raced the first activation: nothing was recorded at `startMonitoring()`, but by the
     /// time our observer fires the recorder has the first activation. The measurement must end at
     /// the recorded stamp, not at this delivery.
     func testDidBecomeActive_prefersRecordedActivationOverDeliveryTime() throws {
-        var recorded: CFAbsoluteTime?
-        sut.recordedFirstActivation = { recorded }
         sut.startMonitoring()
+        drainMainQueue()
         let start = try XCTUnwrap(sut.launchStartTime)
-        recorded = start + 0.25
-
-        var duration: Double?
-        sut.handleColdClosure = { dict in
-            let inner = dict[MobileVitalsType.cold.stringValue] as? [String: Any]
-            duration = inner?[Keys.value.rawValue] as? Double
-        }
+        launch.firstActivation = start + 0.25
+        let durations = recordColdDurations()
 
         NotificationCenter.default.post(name: UIApplication.didBecomeActiveNotification, object: nil)
 
-        XCTAssertEqual(try XCTUnwrap(duration), 250, accuracy: 1)
+        XCTAssertEqual(try XCTUnwrap(durations().first), 250, accuracy: 1)
+    }
+
+    /// A recorded activation more than the cap after process birth is a background start the task
+    /// role missed, and is dropped on the late path as on the native one.
+    func testStartMonitoring_whenRecordedActivationExceedsCap_doesNotReport() throws {
+        let processStart = try XCTUnwrap(ColdDetector.processStartTime(), "sysctl unavailable")
+        launch.firstActivation = processStart + (ColdDetector.maxReasonableColdStartMs / 1000) + 1
+        let durations = recordColdDurations()
+
+        sut.startMonitoring()
+        drainMainQueue()
+
+        XCTAssertTrue(durations().isEmpty)
+        XCTAssertEqual(launch.claimCount, 0, "A dropped launch must not spend the process-wide claim")
+    }
+
+    /// The user left during the launch: process birth → first activation includes the time away.
+    func testStartMonitoring_whenLaunchInterrupted_doesNotReport() throws {
+        let processStart = try XCTUnwrap(ColdDetector.processStartTime(), "sysctl unavailable")
+        launch.firstActivation = processStart + 20
+        launch.launchWasInterrupted = true
+        let durations = recordColdDurations()
+
+        sut.startMonitoring()
+        drainMainQueue()
+
+        XCTAssertTrue(durations().isEmpty)
+    }
+
+    /// The interrupted-launch guard applies on the native path too, where the observer delivers.
+    func testDidBecomeActive_whenLaunchInterrupted_doesNotReport() {
+        launch.launchWasInterrupted = true
+        sut.startMonitoring()
+        drainMainQueue()
+        sut.launchStartTime = CFAbsoluteTimeGetCurrent() - 1
+        let durations = recordColdDurations()
+
+        NotificationCenter.default.post(name: UIApplication.didBecomeActiveNotification, object: nil)
+
+        XCTAssertTrue(durations().isEmpty)
+    }
+
+    /// Started by the system (silent push) and opened a few seconds later: a plausible-looking
+    /// value that is not a launch, so the cap alone would let it through.
+    func testStartMonitoring_whenStartedInBackground_doesNotReport() throws {
+        let processStart = try XCTUnwrap(ColdDetector.processStartTime(), "sysctl unavailable")
+        launch.firstActivation = processStart + 4
+        launch.launchStartedInBackground = true
+        let durations = recordColdDurations()
+
+        sut.startMonitoring()
+        drainMainQueue()
+
+        XCTAssertTrue(durations().isEmpty)
     }
 
     /// The prewarm guard still applies when the activation comes from the recorder.
     func testStartMonitoring_whenFirstActivationRecordedAndPrewarmed_doesNotReport() throws {
         let processStart = try XCTUnwrap(ColdDetector.processStartTime(), "sysctl unavailable")
-        sut.recordedFirstActivation = { processStart + 0.5 }
+        launch.firstActivation = processStart + 0.5
         sut.isPrewarmedLaunch = { true }
+        let durations = recordColdDurations()
 
-        var called = false
-        sut.handleColdClosure = { _ in called = true }
         sut.startMonitoring()
+        drainMainQueue()
 
-        XCTAssertFalse(called)
+        XCTAssertTrue(durations().isEmpty)
     }
 
     /// A re-init in the same process finds the launch already claimed and reports nothing, so one
     /// launch yields one cold start however many times the SDK is initialized.
     func testStartMonitoring_whenLaunchAlreadyClaimed_doesNotReport() throws {
         let processStart = try XCTUnwrap(ColdDetector.processStartTime(), "sysctl unavailable")
-        sut.recordedFirstActivation = { processStart + 0.5 }
-        sut.claimColdStartReport = { false }
+        launch.firstActivation = processStart + 0.5
+        launch.claimGranted = false
+        let durations = recordColdDurations()
 
-        var called = false
-        sut.handleColdClosure = { _ in called = true }
         sut.startMonitoring()
+        drainMainQueue()
 
-        XCTAssertFalse(called)
+        XCTAssertTrue(durations().isEmpty)
+        XCTAssertEqual(launch.claimCount, 1)
     }
+
+    /// `stopMonitoring()` (SDK shutdown) leaves no observer behind to report a later activation.
+    func testStopMonitoring_removesActivationObserver() {
+        sut.startMonitoring()
+        drainMainQueue()
+        sut.launchStartTime = CFAbsoluteTimeGetCurrent() - 1
+        let durations = recordColdDurations()
+
+        sut.stopMonitoring()
+        NotificationCenter.default.post(name: UIApplication.didBecomeActiveNotification, object: nil)
+
+        XCTAssertTrue(durations().isEmpty)
+    }
+
+    // MARK: - CRXLaunchRecorder
 
     /// The claim is granted at most once per process. The first call may already have happened
     /// (other suites initialize the SDK), so only the second call's answer is fixed.
+    ///
+    /// This spends the real process-wide claim: a future test that initializes the SDK and expects
+    /// a real `cold` span must not depend on running before this one — inject a
+    /// `FakeLaunchRecording` instead.
     func testLaunchRecorder_claimIsGrantedOnlyOnce() {
         _ = CRXLaunchRecorder.claimColdStartReport()
         XCTAssertFalse(CRXLaunchRecorder.claimColdStartReport())
@@ -312,12 +404,23 @@ class ColdDetectorTests: XCTestCase {
     /// activations leave the stamp untouched.
     func testLaunchRecorder_stampsFirstActivationOnly() {
         NotificationCenter.default.post(name: UIApplication.didBecomeActiveNotification, object: nil)
+        XCTAssertTrue(CRXLaunchRecorder.hasRecordedFirstActivation, "+load did not arm the recorder")
         let first = CRXLaunchRecorder.firstDidBecomeActiveTime
-        XCTAssertGreaterThan(first, 0, "+load did not arm the recorder")
         XCTAssertLessThanOrEqual(first, CFAbsoluteTimeGetCurrent())
 
         NotificationCenter.default.post(name: UIApplication.didBecomeActiveNotification, object: nil)
         XCTAssertEqual(CRXLaunchRecorder.firstDidBecomeActiveTime, first)
+    }
+
+    /// Backgrounding after the first activation is a normal warm cycle, so it must not mark the
+    /// launch as interrupted.
+    func testLaunchRecorder_backgroundAfterFirstActivation_isNotAnInterruptedLaunch() {
+        NotificationCenter.default.post(name: UIApplication.didBecomeActiveNotification, object: nil)
+        let interruptedBefore = CRXLaunchRecorder.launchWasInterrupted
+
+        NotificationCenter.default.post(name: UIApplication.didEnterBackgroundNotification, object: nil)
+
+        XCTAssertEqual(CRXLaunchRecorder.launchWasInterrupted, interruptedBefore)
     }
 
     // MARK: - calculateTime()
