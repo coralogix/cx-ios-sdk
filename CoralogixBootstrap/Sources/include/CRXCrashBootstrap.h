@@ -1,6 +1,6 @@
 //
 //  CRXCrashBootstrap.h
-//  CoralogixCrashBootstrap
+//  CoralogixBootstrap
 //
 
 #import <Foundation/Foundation.h>

@@ -20,6 +20,7 @@ public class MetricsManager {
     var memoryDetector: MemoryDetector?
     var slowFrozenFramesDetector: SlowFrozenFramesDetector?
     var fpsDetector: FPSDetector?
+    var launchRecording: LaunchRecording = RecorderLaunchRecording()
 
     // MARK: - Reporting dependencies (CX-40573)
     //
@@ -165,7 +166,7 @@ public class MetricsManager {
     
     func startColdStartMonitoring() {
         guard coldDetector == nil else { return }
-        let detector = ColdDetector()
+        let detector = ColdDetector(launchRecording: launchRecording)
         detector.handleColdClosure = { [weak self] dict in
             self?.emitMetricKitPayload(dict)
         }
@@ -227,6 +228,10 @@ public class MetricsManager {
     }
 
     private func stopAllDetectors() {
+        coldDetector?.stopMonitoring()
+        coldDetector = nil
+        warmDetector?.stopMonitoring()
+        warmDetector = nil
         anrDetector?.stopMonitoring()
         anrDetector = nil
         cpuDetector?.stopMonitoring()

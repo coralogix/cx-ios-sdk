@@ -25,18 +25,18 @@ let package = Package(
             path: "CoralogixInternal/Sources/"
         ),
         .target(
-            name: "CoralogixCrashBootstrap",
+            name: "CoralogixBootstrap",
             dependencies: [
                 .product(name: "CrashReporter", package: "plcrashreporter")
             ],
-            path: "CoralogixCrashBootstrap/Sources/",
+            path: "CoralogixBootstrap/Sources/",
             publicHeadersPath: "include"
         ),
         .target(
             name: "Coralogix",
             dependencies: [
                 .target(name: "CoralogixInternal"),
-                .target(name: "CoralogixCrashBootstrap"),
+                .target(name: "CoralogixBootstrap"),
                 .product(name: "CrashReporter", package: "plcrashreporter")
             ],
             path: "Coralogix/Sources/"
@@ -50,7 +50,7 @@ let package = Package(
         ),
         .testTarget(
             name: "CoralogixRumTests",
-            dependencies: ["Coralogix", "CoralogixCrashBootstrap"],
+            dependencies: ["Coralogix", "CoralogixBootstrap"],
             path: "Tests/CoralogixRumTests/"
         ),
         .testTarget(

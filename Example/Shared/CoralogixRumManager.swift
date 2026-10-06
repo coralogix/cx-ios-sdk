@@ -147,7 +147,8 @@ final class CoralogixRumManager {
                                                traceParentInHeader: ["enable": true],
                                                mobileVitals:[.cpuDetector: false,
                                                              .warmDetector: false,
-                                                             .coldDetector: false,
+                                                             // On so the network smoke test can assert a real launch reports one.
+                                                             .coldDetector: true,
                                                              .slowFrozenFramesDetector: false,
                                                              .memoryDetector: false,
                                                              .renderingDetector: false],

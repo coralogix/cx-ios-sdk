@@ -1,6 +1,6 @@
 //
 //  CRXCrashBootstrap.m
-//  CoralogixCrashBootstrap
+//  CoralogixBootstrap
 //
 
 #import "CRXCrashBootstrap.h"
