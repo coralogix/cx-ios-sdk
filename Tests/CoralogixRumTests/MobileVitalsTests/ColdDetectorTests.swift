@@ -232,10 +232,12 @@ class ColdDetectorTests: XCTestCase {
     // MARK: - Recorder hand-off (late init)
 
     /// Runs the main-queue turn `startMonitoring()` defers the recorded-activation report to.
+    /// The wait returns as soon as the block runs; the timeout is generous because a loaded CI
+    /// runner can take more than a second to give the main queue a turn.
     private func drainMainQueue() {
         let drained = expectation(description: "main queue drained")
         DispatchQueue.main.async { drained.fulfill() }
-        wait(for: [drained], timeout: 1)
+        wait(for: [drained], timeout: 10)
     }
 
     /// Captures each reported cold duration.
