@@ -72,6 +72,31 @@ final class SessionContextTests: XCTestCase {
         XCTAssertEqual(dictionary[Keys.hasRecording.rawValue] as? Bool, false)
     }
 
+    func testAccountFieldsWrittenToDictionary() {
+        guard let context = SessionContext(otel: mockSpanData,
+                                           userMetadata: nil,
+                                           accountId: "acc-42",
+                                           accountName: "Acme Corp") else {
+            XCTFail("SessionContext init failed")
+            return
+        }
+
+        let dictionary = context.getDictionary()
+        XCTAssertEqual(dictionary[Keys.accountId.rawValue] as? String, "acc-42")
+        XCTAssertEqual(dictionary[Keys.accountName.rawValue] as? String, "Acme Corp")
+    }
+
+    func testAccountFieldsOmittedFromDictionaryWhenUnset() {
+        guard let context = SessionContext(otel: mockSpanData, userMetadata: nil) else {
+            XCTFail("SessionContext init failed")
+            return
+        }
+
+        let dictionary = context.getDictionary()
+        XCTAssertNil(dictionary[Keys.accountId.rawValue])
+        XCTAssertNil(dictionary[Keys.accountName.rawValue])
+    }
+
     func testHasSessionReplay() {
         guard let context = SessionContext(otel: mockSpanData,
                                           userMetadata: ["role": "admin"],
