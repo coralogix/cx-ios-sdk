@@ -466,6 +466,31 @@ final class NetworkInstrumentationUITests: XCTestCase {
     
     /// Comprehensive test: Trigger all network requests and validate via backend schema
     /// This is the main E2E test that validates the full instrumentation pipeline
+    /// `XCUIApplication.launch()` is a real user launch, so the session must carry exactly one
+    /// `cold` with a plausible value. This is the only end-to-end check of the launch recorder's
+    /// task-role read: unit tests inject the launch, so a role misread as a background start would
+    /// drop every cold start without failing any of them.
+    private func verifyExactlyOneColdStart(
+        validationData: [[String: Any]],
+        file: StaticString = #file,
+        line: UInt = #line
+    ) {
+        let colds: [[String: Any]] = validationData.compactMap { logEntry in
+            let cxRum = (logEntry["text"] as? [String: Any])?["cx_rum"] as? [String: Any]
+            let vitals = (cxRum ?? logEntry)["mobile_vitals_context"] as? [String: Any]
+            return vitals?["cold"] as? [String: Any]
+        }
+        XCTAssertEqual(colds.count, 1, "❌ Expected exactly one cold start for this launch, found \(colds.count)",
+                       file: file, line: line)
+        guard let value = colds.first?["value"] as? Double else {
+            XCTFail("❌ Cold start has no numeric value: \(String(describing: colds.first))", file: file, line: line)
+            return
+        }
+        XCTAssertGreaterThan(value, 0, file: file, line: line)
+        XCTAssertLessThanOrEqual(value, 60_000, file: file, line: line)
+        print("✅ Launch reported one cold start: \(value) ms")
+    }
+
     func testAllNetworkInstrumentationWithSchemaValidation() throws {
         print("\n========================================")
         print("🧪 TEST: All Network Instrumentation (E2E)")
@@ -573,6 +598,13 @@ final class NetworkInstrumentationUITests: XCTestCase {
             )
         }
         
+        // A real launch must report its cold start (see verifyExactlyOneColdStart).
+        if let validationData = readValidationData() {
+            verifyExactlyOneColdStart(validationData: validationData)
+        } else {
+            XCTFail("❌ No validation data to check the launch's cold start against")
+        }
+
         print("\n✅ SUCCESS: All network instrumentation validated end-to-end!")
         print("========================================\n")
     }

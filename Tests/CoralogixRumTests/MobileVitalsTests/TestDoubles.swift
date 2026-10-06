@@ -39,6 +39,7 @@ final class FakeLaunchRecording: LaunchRecording {
     var firstActivation: CFAbsoluteTime?
     var launchWasInterrupted = false
     var launchStartedInBackground = false
+    var launchTaskRole: Int?
     var claimGranted = true
     private(set) var claimCount = 0
 

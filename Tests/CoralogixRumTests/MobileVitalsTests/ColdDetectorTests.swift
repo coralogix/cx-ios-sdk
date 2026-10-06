@@ -400,6 +400,22 @@ class ColdDetectorTests: XCTestCase {
         XCTAssertFalse(CRXLaunchRecorder.claimColdStartReport())
     }
 
+    /// The background-start check fails open: only the roles a system start is known to get are
+    /// dropped, and a user launch or any unclassified role keeps its cold start. A silent-push
+    /// launch on the simulator reads `TASK_BACKGROUND_APPLICATION`; a home-screen tap reads
+    /// `TASK_FOREGROUND_APPLICATION`.
+    func testLaunchRecorder_classifiesOnlyKnownSystemStartRolesAsBackground() {
+        for role in [TASK_BACKGROUND_APPLICATION, TASK_DARWINBG_APPLICATION, TASK_NONUI_APPLICATION] {
+            XCTAssertTrue(CRXLaunchRecorder.isSystemStartTaskRole(Int(role.rawValue)), "role \(role.rawValue)")
+        }
+        let kept = [TASK_FOREGROUND_APPLICATION, TASK_UNSPECIFIED, TASK_CONTROL_APPLICATION,
+                    TASK_GRAPHICS_SERVER, TASK_THROTTLE_APPLICATION, TASK_DEFAULT_APPLICATION]
+            .map { Int($0.rawValue) } + [Int(TASK_RENICED.rawValue), 99]
+        for role in kept {
+            XCTAssertFalse(CRXLaunchRecorder.isSystemStartTaskRole(role), "role \(role)")
+        }
+    }
+
     /// `+load` armed the recorder: the first activation in this process is stamped, and later
     /// activations leave the stamp untouched.
     func testLaunchRecorder_stampsFirstActivationOnly() {

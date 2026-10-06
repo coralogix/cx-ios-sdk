@@ -31,11 +31,20 @@ NS_ASSUME_NONNULL_BEGIN
 @property (class, nonatomic, readonly) BOOL launchWasInterrupted;
 
 /// `YES` when the process was not started by the user: at `didFinishLaunching` its task role was
-/// something other than `TASK_FOREGROUND_APPLICATION` (a silent push, background fetch, location
-/// event). Reading the kernel task role works the same for app-delegate and scene-based apps,
-/// unlike `applicationState` at launch. `NO` when the role could not be read, so an unreadable
-/// role never suppresses a real cold start.
+/// one known to mean a system start (`TASK_BACKGROUND_APPLICATION`, `TASK_DARWINBG_APPLICATION`,
+/// `TASK_NONUI_APPLICATION` — a silent push, background fetch, location event). Reading the kernel
+/// task role works the same for app-delegate and scene-based apps, unlike `applicationState` at
+/// launch. Any other role, or a role that could not be read, gives `NO`, so a misread never
+/// suppresses a real cold start.
 @property (class, nonatomic, readonly) BOOL launchStartedInBackground;
+
+/// The raw `task_role_t` read at `didFinishLaunching`, or `nil` before then or if it could not be
+/// read. Diagnostic: it explains why a launch was or was not classified as a background start.
+@property (class, nonatomic, readonly, nullable) NSNumber *launchTaskRole;
+
+/// Whether `role` is one known to mean the system started the process. Every other role —
+/// including ones not classified here — returns `NO`.
++ (BOOL)isSystemStartTaskRole:(NSInteger)role;
 
 /// Returns `YES` exactly once per process. A process has one launch, but the SDK can be
 /// initialized more than once in it (shutdown and re-init, a Flutter hot restart); without a

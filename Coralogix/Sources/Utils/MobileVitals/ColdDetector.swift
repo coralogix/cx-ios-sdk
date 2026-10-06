@@ -19,6 +19,7 @@ protocol LaunchRecording {
     var firstActivation: CFAbsoluteTime? { get }
     var launchWasInterrupted: Bool { get }
     var launchStartedInBackground: Bool { get }
+    var launchTaskRole: Int? { get }
     func claimColdStartReport() -> Bool
 }
 
@@ -28,6 +29,7 @@ struct RecorderLaunchRecording: LaunchRecording {
     }
     var launchWasInterrupted: Bool { CRXLaunchRecorder.launchWasInterrupted }
     var launchStartedInBackground: Bool { CRXLaunchRecorder.launchStartedInBackground }
+    var launchTaskRole: Int? { CRXLaunchRecorder.launchTaskRole?.intValue }
     func claimColdStartReport() -> Bool { CRXLaunchRecorder.claimColdStartReport() }
 }
 
@@ -112,7 +114,7 @@ final class ColdDetector {
         // Started by the system (silent push, background fetch) and opened later: the delta
         // includes the time the process sat in the background.
         guard !launchRecording.launchStartedInBackground else {
-            Log.d("ColdDetector: process started in the background — skipping cold-start metric")
+            Log.d("ColdDetector: process started in the background (task role \(launchRecording.launchTaskRole.map(String.init) ?? "unread")) — skipping cold-start metric")
             return
         }
 
