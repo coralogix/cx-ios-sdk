@@ -38,4 +38,23 @@ final class UserContextTests: XCTestCase {
         XCTAssertEqual(dictionary[Keys.userEmail.rawValue] as? String, userEmail, "The userEmail should be correctly set in the dictionary.")
         XCTAssertEqual(dictionary[Keys.userMetadata.rawValue] as? [String: String], userMetadata, "The userMetadata should be correctly set in the dictionary.")
     }
+
+    func testGetDictionaryIncludesAccountFieldsWhenSet() {
+        let userContext = UserContext(userId: "123", userName: "John Doe", userEmail: "john.doe@example.com",
+                                      userMetadata: [:], accountId: "acc-42", accountName: "Acme Corp")
+
+        let dictionary = userContext.getDictionary()
+
+        XCTAssertEqual(dictionary[Keys.accountId.rawValue] as? String, "acc-42")
+        XCTAssertEqual(dictionary[Keys.accountName.rawValue] as? String, "Acme Corp")
+    }
+
+    func testGetDictionaryOmitsAccountFieldsWhenUnset() {
+        let userContext = UserContext(userId: "123", userName: "John Doe", userEmail: "john.doe@example.com", userMetadata: [:])
+
+        let dictionary = userContext.getDictionary()
+
+        XCTAssertNil(dictionary[Keys.accountId.rawValue])
+        XCTAssertNil(dictionary[Keys.accountName.rawValue])
+    }
 }

@@ -552,9 +552,12 @@ coralogixRum.setUserContext(
     userContext: UserContext(userId: "user-123",
                              userName: "Jane Doe",
                              userEmail: "jane.doe@example.com",
-                             userMetadata: ["plan": "premium", "role": "admin"])
+                             userMetadata: ["plan": "premium", "role": "admin"],
+                             accountId: "acc-42",          // optional
+                             accountName: "Acme Corp")     // optional
 )
 ```
+`accountId` and `accountName` are optional; when set they are sent under `session_context.account_id` and `session_context.account_name`.
 Each call — including a clear — also promotes the next exported event to a snapshot event carrying the new identity, so session-level user information in Coralogix refreshes immediately instead of waiting for the next error, navigation, or one-minute snapshot.
 
 ### New Session on Logout

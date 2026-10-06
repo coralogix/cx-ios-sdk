@@ -268,6 +268,25 @@ class CxRumBuilderTests: XCTestCase {
         XCTAssertEqual(promoted.sessionContext?.userMetadata, ["plan": "pro"])
     }
 
+    func test_build_sessionContext_reflectsAccountFromCurrentUserContext() {
+        // setUserContext replaces options.userContext; the exporter hands the current
+        // options to the builder per span, so the new account lands on session_context.
+        guard makeSUT() != nil, var updated = options else { return XCTFail("Failed to instantiate CxRumBuilder") }
+        updated.userContext = UserContext(userId: "12345", userName: "John Doe", userEmail: "john.doe@example.com",
+                                          userMetadata: [:], accountId: "0101", accountName: "stas da vince")
+        let sut = CxRumBuilder(otel: mockOtel,
+                               versionMetadata: VersionMetadata(appName: "Test", appVersion: "1.0"),
+                               sessionManager: mockSessionManager,
+                               viewManager: mockViewManager,
+                               networkManager: NetworkManager(),
+                               options: updated)
+
+        let sessionContext = sut.build()?.sessionContext?.getDictionary()
+
+        XCTAssertEqual(sessionContext?[Keys.accountId.rawValue] as? String, "0101")
+        XCTAssertEqual(sessionContext?[Keys.accountName.rawValue] as? String, "stas da vince")
+    }
+
     func test_build_promotedEvent_clearedContext_reportsEmptyIdentity() {
         // setUserContext(nil) arms the token with a nil context — the promoted event
         // must report the cleared identity, not the span-stamped old user, and must

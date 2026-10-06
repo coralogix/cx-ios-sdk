@@ -229,6 +229,8 @@ For `CHANGELOG.md` at the repo root:
 - The entry is written for a customer and is the size of its neighbours — see the Rules section.
   No internal mechanism, no deprecations of internal API, no reasoning. A release entry several
   times longer than the rest of the file is a defect, not thoroughness.
+- **No ticket numbers or internal information** — no `CX-XXXXX` / Jira / PR numbers, internal
+  tool links, team or people names. Git history and the PR already carry them.
 
 Block if `CHANGELOG.md` is missing the version entry or the entry doesn't reflect the actual changes.
 

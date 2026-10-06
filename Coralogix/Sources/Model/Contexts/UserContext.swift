@@ -12,19 +12,31 @@ public struct UserContext: Equatable {
     let userName: String
     let userEmail: String
     let userMetadata: [String: String]
+    let accountId: String?
+    let accountName: String?
     
-    public init(userId: String, userName: String, userEmail: String, userMetadata: [String: String]) {
+    public init(userId: String,
+                userName: String,
+                userEmail: String,
+                userMetadata: [String: String],
+                accountId: String? = nil,
+                accountName: String? = nil) {
         self.userId = userId
         self.userName = userName
         self.userEmail = userEmail
         self.userMetadata = userMetadata
+        self.accountId = accountId
+        self.accountName = accountName
     }
     
     public func getDictionary() -> [String: Any] {
-        return [Keys.userId.rawValue: self.userId,
-                Keys.userName.rawValue: self.userName,
-                Keys.userEmail.rawValue: self.userEmail,
-                Keys.userMetadata.rawValue: self.userMetadata]
+        var result: [String: Any] = [Keys.userId.rawValue: self.userId,
+                                     Keys.userName.rawValue: self.userName,
+                                     Keys.userEmail.rawValue: self.userEmail,
+                                     Keys.userMetadata.rawValue: self.userMetadata]
+        if let accountId = self.accountId { result[Keys.accountId.rawValue] = accountId }
+        if let accountName = self.accountName { result[Keys.accountName.rawValue] = accountName }
+        return result
     }
     
     public static func == (lhs: UserContext, rhs: UserContext) -> Bool {

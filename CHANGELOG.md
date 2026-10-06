@@ -6,8 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 Release-mechanics commits (version bumps, podspec/script tweaks, README edits) are
-omitted; the focus here is user-facing behavior changes. Tickets are referenced as
-`CX-XXXXX` (Jira) or `ALPH-XXXX` (legacy). Pull request numbers are in parentheses.
+omitted; the focus here is user-facing behavior changes.
+
+## [2.19.0] - 2026-10-06
+
+### 🚀 Features
+- Added optional `accountId` and `accountName` to `UserContext`.
 
 ## [2.18.5] - 2026-10-06
 

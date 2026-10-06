@@ -14,6 +14,8 @@ struct SessionContext {
     private(set) var userName: String
     private(set) var userEmail: String
     private(set) var userMetadata: [String: String]?
+    private(set) var accountId: String?
+    private(set) var accountName: String?
     var isPidEqualToOldPid: Bool = false
     var hasRecording: Bool = false
     // Whether the session this event belongs to was sampled in. false means the event
@@ -25,6 +27,8 @@ struct SessionContext {
 
     init?(otel: SpanDataProtocol,
           userMetadata: [String: String]?,
+          accountId: String? = nil,
+          accountName: String? = nil,
           hasRecording: Bool = false) {
         guard let sessionInfo = SessionContext.resolveSession(from: otel) else {
             return nil  // Drop span if session attributes are missing
@@ -36,6 +40,8 @@ struct SessionContext {
         self.userName = otel.getString(forKey: .userName) ?? ""
         self.userEmail = otel.getString(forKey: .userEmail) ?? ""
         self.userMetadata = userMetadata
+        self.accountId = accountId
+        self.accountName = accountName
         self.hasRecording = hasRecording
         self.isSessionSampledIn = otel.getString(forKey: .spanSessionSampledIn).map { $0 == "true" } ?? true
     }
@@ -80,6 +86,8 @@ struct SessionContext {
         self.userName = userContext?.userName ?? ""
         self.userEmail = userContext?.userEmail ?? ""
         self.userMetadata = userContext?.userMetadata
+        self.accountId = userContext?.accountId
+        self.accountName = userContext?.accountName
     }
 
     static func shouldRestorePreviousSession(from otel: SpanDataProtocol) -> Bool {
@@ -102,6 +110,12 @@ struct SessionContext {
         result[Keys.isSessionSampledIn.rawValue] = self.isSessionSampledIn
         if let userMetadata = self.userMetadata {
             result[Keys.userMetadata.rawValue] = userMetadata
+        }
+        if let accountId = self.accountId {
+            result[Keys.accountId.rawValue] = accountId
+        }
+        if let accountName = self.accountName {
+            result[Keys.accountName.rawValue] = accountName
         }
         return result
     }

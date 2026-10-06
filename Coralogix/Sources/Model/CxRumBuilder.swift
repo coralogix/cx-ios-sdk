@@ -41,6 +41,8 @@ class CxRumBuilder {
         
         let traceContext = Helper.getTraceAndSpanId(otel: otel)
         let userMetadata = options.userContext?.userMetadata
+        let accountId = options.userContext?.accountId
+        let accountName = options.userContext?.accountName
         let hasRecording = sessionManager.doesSessionHasRecording()
         var timeStamp = otel.getStartTime() ?? Date().timeIntervalSince1970
         var prevSessionContext: SessionContext? = nil
@@ -48,6 +50,8 @@ class CxRumBuilder {
         // CRITICAL: If SessionContext creation fails (missing session attributes), drop the span
         guard var sessionContext = SessionContext(otel: otel,
                                                   userMetadata: userMetadata,
+                                                  accountId: accountId,
+                                                  accountName: accountName,
                                                   hasRecording: hasRecording) else {
             Log.w("[CxRumBuilder] Dropping span due to missing session attributes")
             return nil
@@ -94,6 +98,8 @@ class CxRumBuilder {
             // This is acceptable - we'll use the current session instead
             prevSessionContext = SessionContext(otel: otel,
                                                 userMetadata: userMetadata,
+                                                accountId: accountId,
+                                                accountName: accountName,
                                                 hasRecording: hasRecording)
         }
         

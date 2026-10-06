@@ -117,6 +117,12 @@ struct ContentView: View {
             .navigationTitle("Coralogix Demo")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Set User Context") {
+                        setUserContextWithAccount()
+                    }
+                    .accessibilityIdentifier("setUserContextButton")
+                }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button {
                         copySessionID()
@@ -173,6 +179,20 @@ struct ContentView: View {
 
     private var destinationSummary: String {
         CoralogixRumManager.shared.destination?.summary ?? "SDK not initialized"
+    }
+
+    private func setUserContextWithAccount() {
+        CoralogixRumManager.shared.sdk.setUserContext(
+            userContext: UserContext(
+                userId: "1234",
+                userName: "Daffy Duck",
+                userEmail: "daffy.duck@coralogix.com",
+                userMetadata: ["age": "18", "profession": "duck"],
+                accountId: "0101",
+                accountName: "stas de vince"
+            )
+        )
+        toastMessage = "User context set with account 0101"
     }
 
     private func copySessionID() {

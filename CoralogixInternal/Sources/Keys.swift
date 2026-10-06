@@ -43,6 +43,8 @@ public enum Keys: String {
     case userName = "user_name"
     case userEmail = "user_email"
     case userMetadata = "user_metadata"
+    case accountId = "account_id"
+    case accountName = "account_name"
     case timestamp
     case environment
     case versionMetaData = "version_metadata"
