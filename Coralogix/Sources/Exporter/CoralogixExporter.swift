@@ -8,13 +8,25 @@ import Foundation
 import CoralogixInternal
 
 public class CoralogixExporter: SpanExporter {
-    private var options: CoralogixExporterOptions
+    // Written from the caller's thread (set(labels:), setUserContext, setApplicationContext) and
+    // read on the span-processing queue and main thread. Copying the struct while another thread
+    // replaces its labels dictionary over-releases the storage, so every access takes the lock.
+    // Read through getOptions() only; never touch _options directly.
+    private var _options: CoralogixExporterOptions
+    private let optionsLock = NSLock()
+
+    // Not re-entrant: `body` must not call getOptions().
+    private func mutateOptions(_ body: (inout CoralogixExporterOptions) -> Void) {
+        optionsLock.lock()
+        defer { optionsLock.unlock() }
+        body(&_options)
+    }
     private var viewManager: ViewManager
     private var sessionManager: SessionManager
     private var networkManager: NetworkProtocol
     private var metricsManager: MetricsManager
     private var screenshotManager = ScreenshotManager()
-    lazy var spanUploader: SpanUploading = SpanUploader(options: self.options)
+    lazy var spanUploader: SpanUploading = SpanUploader(options: self.getOptions())
 
     private let spanProcessingQueue = DispatchQueue(label: Keys.queueSpanProcessingQueue.rawValue)
 
@@ -79,7 +91,7 @@ public class CoralogixExporter: SpanExporter {
                 networkManager: NetworkProtocol,
                 viewManager: ViewManager,
                 metricsManager: MetricsManager) {
-        self.options = options
+        self._options = options
         self.sessionManager = sessionManager
         self.networkManager = networkManager
         self.viewManager = viewManager
@@ -94,11 +106,13 @@ public class CoralogixExporter: SpanExporter {
     
     var pendingSpans: [SpanData] = []
     var endPoint: String {
-      return "\(self.options.coralogixDomain.rawValue)\(Global.coralogixPath.rawValue)"
+      return "\(getOptions().coralogixDomain.rawValue)\(Global.coralogixPath.rawValue)"
     }
     
     public func getOptions() -> CoralogixExporterOptions {
-        return self.options
+        optionsLock.lock()
+        defer { optionsLock.unlock() }
+        return _options
     }
     
     public func getViewManager() -> ViewManager {
@@ -122,11 +136,11 @@ public class CoralogixExporter: SpanExporter {
     }
     
     public func update(userContext: UserContext?) {
-        self.options.userContext = userContext
+        mutateOptions { $0.userContext = userContext }
     }
     
     public func update(labels: [String: Any]) {
-        self.options.labels = labels
+        mutateOptions { $0.labels = labels }
     }
     
     public func update(view: ViewManager) {
@@ -134,8 +148,10 @@ public class CoralogixExporter: SpanExporter {
     }
     
     public func update(application: String, version: String) {
-        self.options.version = version
-        self.options.application = application
+        mutateOptions {
+            $0.version = version
+            $0.application = application
+        }
     }
 
     /// Updates the per-session sampling decision. Called once at init and again on every session
@@ -246,10 +262,11 @@ public class CoralogixExporter: SpanExporter {
         resolveCrashSpansDroppedByPolicy(incoming: incomingCrashIds, surviving: uniqueSpans)
 
         if !uniqueSpans.isEmpty {
+            let options = getOptions()
             // Invoke tracesExporter callback if configured (additive OTLP export path).
             // This provides raw SpanData for external OTLP consumers and does NOT affect
             // the CX log pipeline — instrumentation_data is always preserved.
-            if let tracesExporter = self.options.tracesExporter {
+            if let tracesExporter = options.tracesExporter {
                 let exporterData = CoralogixTraceExporterData(spans: uniqueSpans)
                 do {
                     try tracesExporter(exporterData)
@@ -270,7 +287,7 @@ public class CoralogixExporter: SpanExporter {
             let crashIds = self.crashEventIds(in: uniqueSpans)
 
             let sdk = CoralogixRum.mobileSDK.sdkFramework
-            if !sdk.isNative, let callback = self.options.beforeSendCallBack {
+            if !sdk.isNative, let callback = options.beforeSendCallBack {
                 // Crash events skip the hybrid JS round trip: when a crash is exported the
                 // process is usually about to terminate, and the extra native→JS→native hop
                 // loses the race. The hybrid beforeSend callback cannot edit or drop them;
@@ -339,17 +356,18 @@ public class CoralogixExporter: SpanExporter {
             return nil
         }
         
-        let metatadata = VersionMetadata(appName: self.options.application,
-                                         appVersion: self.options.version)
+        let options = getOptions()
+        let metadata = VersionMetadata(appName: options.application,
+                                         appVersion: options.version)
         
         // CxSpan init can fail if session attributes are missing
         guard let cxSpan = CxSpan(otel: otelSpan,
-                                  versionMetadata: metatadata,
+                                  versionMetadata: metadata,
                                   sessionManager: self.sessionManager,
                                   networkManager: self.networkManager,
                                   viewManager: self.viewManager,
                                   metricsManager: self.metricsManager,
-                                  options: self.options) else {
+                                  options: options) else {
             return nil  // Span will be filtered out by compactMap
         }
         
@@ -418,7 +436,7 @@ public class CoralogixExporter: SpanExporter {
         // Requiring an SDK-private marker alongside the type would close it if that ever changes.
         if eventType == CoralogixEventType.internalKey.rawValue { return true }
 
-        return options.excludeFromSampling.contains { $0.eventType.rawValue == eventType }
+        return getOptions().excludeFromSampling.contains { $0.eventType.rawValue == eventType }
     }
 
     /// Returns `false` for a `network-request` span reported while network instrumentation is off.
@@ -430,7 +448,7 @@ public class CoralogixExporter: SpanExporter {
     internal func reportsNetworkEvents(_ span: SpanDataProtocol) -> Bool {
         let eventType = attributeStringValue(forKey: Keys.eventType.rawValue, span: span)
         guard eventType == CoralogixEventType.networkRequest.rawValue else { return true }
-        return options.shouldInitInstrumentation(instrumentation: .network)
+        return getOptions().shouldInitInstrumentation(instrumentation: .network)
     }
 
     internal func shouldRemoveSpan(span: SpanDataProtocol) -> Bool {
@@ -440,18 +458,9 @@ public class CoralogixExporter: SpanExporter {
         }
 
         if !Global.containsMonitoredPath(url) {
-            if let ignoreUrlsOrRejexs = self.options.ignoreUrls,
-               !ignoreUrlsOrRejexs.isEmpty,
-               ignoreUrlsOrRejexs.contains(url) {
-                return false
-            }
-
-            if let ignoreUrlsOrRejexs = self.options.ignoreUrls,
-               !ignoreUrlsOrRejexs.isEmpty {
-                let isMatch = Global.isURLMatchesRegexPattern(string: url, regexs: ignoreUrlsOrRejexs)
-                return !isMatch
-            }
-            return true
+            guard let ignoreUrls = getOptions().ignoreUrls, !ignoreUrls.isEmpty else { return true }
+            if ignoreUrls.contains(url) { return false }
+            return !Global.isURLMatchesRegexPattern(string: url, regexs: ignoreUrls)
         }
         return false
     }
@@ -462,18 +471,8 @@ public class CoralogixExporter: SpanExporter {
             return true
         }
         
-        if let ignoreErrorsOrRejexs = self.options.ignoreErrors,
-           !ignoreErrorsOrRejexs.isEmpty,
-           ignoreErrorsOrRejexs.contains(message) {
-            return false
-        }
-        
-        if let ignoreErrorsOrRejexs = self.options.ignoreErrors,
-           !ignoreErrorsOrRejexs.isEmpty {
-            let isMatch = self.isMatchesRegexPattern(string: message, regexs: ignoreErrorsOrRejexs)
-            return !isMatch
-        }
-        
-        return true
+        guard let ignoreErrors = getOptions().ignoreErrors, !ignoreErrors.isEmpty else { return true }
+        if ignoreErrors.contains(message) { return false }
+        return !self.isMatchesRegexPattern(string: message, regexs: ignoreErrors)
     }
 }
