@@ -8,7 +8,22 @@ import Foundation
 import CoralogixInternal
 
 public class CoralogixExporter: SpanExporter {
-    private var options: CoralogixExporterOptions
+    // Written from the caller's thread (setLabels, setUserContext, ...) and read on the span
+    // processing queue and main thread. Copying the struct while another thread mutates its
+    // labels dictionary over-releases the dictionary storage, so every access goes through the lock.
+    private var _options: CoralogixExporterOptions
+    private let optionsLock = NSLock()
+    private var options: CoralogixExporterOptions {
+        optionsLock.lock()
+        defer { optionsLock.unlock() }
+        return _options
+    }
+
+    private func mutateOptions(_ body: (inout CoralogixExporterOptions) -> Void) {
+        optionsLock.lock()
+        defer { optionsLock.unlock() }
+        body(&_options)
+    }
     private var viewManager: ViewManager
     private var sessionManager: SessionManager
     private var networkManager: NetworkProtocol
@@ -79,7 +94,7 @@ public class CoralogixExporter: SpanExporter {
                 networkManager: NetworkProtocol,
                 viewManager: ViewManager,
                 metricsManager: MetricsManager) {
-        self.options = options
+        self._options = options
         self.sessionManager = sessionManager
         self.networkManager = networkManager
         self.viewManager = viewManager
@@ -122,11 +137,11 @@ public class CoralogixExporter: SpanExporter {
     }
     
     public func update(userContext: UserContext?) {
-        self.options.userContext = userContext
+        mutateOptions { $0.userContext = userContext }
     }
     
     public func update(labels: [String: Any]) {
-        self.options.labels = labels
+        mutateOptions { $0.labels = labels }
     }
     
     public func update(view: ViewManager) {
@@ -134,8 +149,10 @@ public class CoralogixExporter: SpanExporter {
     }
     
     public func update(application: String, version: String) {
-        self.options.version = version
-        self.options.application = application
+        mutateOptions {
+            $0.version = version
+            $0.application = application
+        }
     }
 
     /// Updates the per-session sampling decision. Called once at init and again on every session
@@ -339,8 +356,9 @@ public class CoralogixExporter: SpanExporter {
             return nil
         }
         
-        let metatadata = VersionMetadata(appName: self.options.application,
-                                         appVersion: self.options.version)
+        let options = self.options
+        let metatadata = VersionMetadata(appName: options.application,
+                                         appVersion: options.version)
         
         // CxSpan init can fail if session attributes are missing
         guard let cxSpan = CxSpan(otel: otelSpan,
@@ -349,7 +367,7 @@ public class CoralogixExporter: SpanExporter {
                                   networkManager: self.networkManager,
                                   viewManager: self.viewManager,
                                   metricsManager: self.metricsManager,
-                                  options: self.options) else {
+                                  options: options) else {
             return nil  // Span will be filtered out by compactMap
         }
         

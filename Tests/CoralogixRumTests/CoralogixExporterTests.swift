@@ -561,6 +561,63 @@ final class CoralogixExporterTests: XCTestCase {
 
     // MARK: - BUGV2-5379: beforeSend severity change must adjust errorCount
 
+    // Writers run on the caller's thread (the React Native TurboModule queue in production)
+    // while spans encode on the processing queue. Unsynchronized, this over-releases the labels
+    // dictionary storage and the test process crashes within the first second.
+    func test_concurrentOptionUpdates_whileEncodingSpans_doNotRace() {
+        let opts = CoralogixExporterOptions(coralogixDomain: .US2,
+                                            userContext: nil,
+                                            environment: "PROD",
+                                            application: "TestApp-iOS",
+                                            version: "1.0",
+                                            publicKey: "token",
+                                            labels: [:],
+                                            debug: false)
+        let rum = CoralogixRum(options: opts)
+        guard let exporter = rum.coralogixExporter else { return XCTFail("Exporter nil") }
+
+        let iterations = 20000
+        let encodeIterations = 500
+        let span = makeErrorSpanData()
+        let group = DispatchGroup()
+        var encodedCount = 0
+
+        // Dedicated threads so the loops genuinely overlap rather than queueing on one worker.
+        // Copying the options is the racing read; encoding covers the real export path.
+        func run(_ body: @escaping () -> Void) {
+            group.enter()
+            Thread { body(); group.leave() }.start()
+        }
+        run {
+            for i in 0..<iterations {
+                var labels: [String: Any] = ["key": "value-\(i)"]
+                for k in 0..<16 { labels["k\(k)"] = "v\(i)-\(k)" }
+                rum.set(labels: labels)
+            }
+            rum.setUserContext(userContext: UserContext(userId: "user-final",
+                                                        userName: "name",
+                                                        userEmail: "e@x.com",
+                                                        userMetadata: [:]))
+            rum.setApplicationContext(application: "app-final", version: "v-final")
+        }
+        run {
+            for _ in 0..<iterations { _ = rum.options?.labels?.count }
+        }
+        run {
+            for _ in 0..<encodeIterations {
+                encodedCount += exporter.encodeSpans(spans: [span]).count
+            }
+        }
+
+        XCTAssertEqual(group.wait(timeout: .now() + 60), .success)
+        XCTAssertEqual(encodedCount, encodeIterations)
+        let final = exporter.getOptions()
+        XCTAssertEqual(final.labels?["key"] as? String, "value-\(iterations - 1)")
+        XCTAssertEqual(final.userContext?.userId, "user-final")
+        XCTAssertEqual(final.application, "app-final")
+        XCTAssertEqual(final.version, "v-final")
+    }
+
     private func makeErrorSpanData() -> SpanData {
         let attributes: [String: AttributeValue] = [
             Keys.severity.rawValue: AttributeValue("5"),
