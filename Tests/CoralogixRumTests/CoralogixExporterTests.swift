@@ -561,6 +561,8 @@ final class CoralogixExporterTests: XCTestCase {
 
     // MARK: - BUGV2-5379: beforeSend severity change must adjust errorCount
 
+    // MARK: - Concurrent option updates
+
     // Writers run on the caller's thread (the React Native TurboModule queue in production)
     // while spans encode on the processing queue. Unsynchronized, this over-releases the labels
     // dictionary storage and the test process crashes within the first second.
