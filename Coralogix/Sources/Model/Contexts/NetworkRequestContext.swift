@@ -71,14 +71,19 @@ struct NetworkRequestContext {
         
         self.fragments = otel.getAttribute(forKey: SemanticAttributes.httpTarget.rawValue) as? String ?? Keys.undefined.rawValue
         
-        self.host = otel.getAttribute(forKey: SemanticAttributes.netPeerName.rawValue) as? String ?? Keys.undefined.rawValue
+        // Taken from the URL when it parses, so native and hybrid requests agree with the browser
+        // SDK; the span attributes are the fallback.
+        let urlParts = Self.urlParts(url)
+        self.host = urlParts?.host
+            ?? otel.getAttribute(forKey: SemanticAttributes.netPeerName.rawValue) as? String
+            ?? Keys.undefined.rawValue
         
-        self.schema = otel.getAttribute(forKey: SemanticAttributes.httpScheme.rawValue) as? String ?? Keys.undefined.rawValue
+        self.schema = urlParts?.schema
+            ?? otel.getAttribute(forKey: SemanticAttributes.httpScheme.rawValue) as? String
+            ?? Keys.undefined.rawValue
 
-        // Derived from the URL rather than `host`, so native and hybrid requests split the same way.
-        let hostnameParts = Self.splitHostname(URL(string: url)?.host)
-        self.subdomain = hostnameParts?.subdomain
-        self.domain = hostnameParts?.domain
+        self.subdomain = urlParts?.subdomain
+        self.domain = urlParts?.domain
         
         if let startTime = otel.getStartTime(),
            let endTime = otel.getEndTime() {
@@ -122,6 +127,30 @@ struct NetworkRequestContext {
     /// the subdomain. Naive last-two-labels split matching the browser SDK — multi-part TLDs
     /// (e.g. "co.uk") are a known limitation.
     private static let registrableDomainLabelCount = 2
+
+    private static let defaultPorts = ["http": 80, "https": 443]
+
+    /// Extracts the URL parts the browser SDK reports, with the same meaning:
+    /// - `schema`: the lowercased scheme, e.g. "https".
+    /// - `host`: the hostname plus `:port` when the URL names a non-default port, like the
+    ///   browser's `URL.host` ("api.example.com:8443", but "api.example.com" for "https://...:443").
+    /// - `subdomain` / `domain`: see `splitHostname`.
+    /// `nil` when `url` has no parseable host.
+    static func urlParts(_ url: String) -> (schema: String, host: String, subdomain: String, domain: String)? {
+        guard let parsed = URL(string: url),
+              let scheme = parsed.scheme?.lowercased(),
+              let hostname = parsed.host?.lowercased(),
+              let hostnameParts = splitHostname(hostname) else { return nil }
+        // Foundation strips the brackets from IPv6 literals; the browser keeps them.
+        let bracketedHost = hostname.contains(":") ? "[\(hostname)]" : hostname
+        let host: String
+        if let port = parsed.port, port != defaultPorts[scheme] {
+            host = "\(bracketedHost):\(port)"
+        } else {
+            host = bracketedHost
+        }
+        return (schema: scheme, host: host, subdomain: hostnameParts.subdomain, domain: hostnameParts.domain)
+    }
 
     static func splitHostname(_ hostname: String?) -> (subdomain: String, domain: String)? {
         guard let hostname = hostname?.lowercased(), !hostname.isEmpty else { return nil }

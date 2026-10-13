@@ -221,6 +221,47 @@ final class NetworkRequestContextTests: XCTestCase {
         XCTAssertEqual(context.domain, "example.com")
     }
 
+    func testUrlParts_nonDefaultPort_keptInHostLikeTheBrowser() {
+        let context = makeContext(url: "https://blog.example.com:8080/a?b=1")
+
+        XCTAssertEqual(context.host, "blog.example.com:8080")
+        XCTAssertEqual(context.schema, "https")
+    }
+
+    func testUrlParts_defaultPort_droppedFromHost() {
+        let context = makeContext(url: "https://api.example.com:443/v1")
+
+        XCTAssertEqual(context.host, "api.example.com")
+    }
+
+    func testUrlParts_ipv6Host_bracketedLikeTheBrowser() {
+        let context = makeContext(url: "http://[::1]:8080/health")
+
+        XCTAssertEqual(context.host, "[::1]:8080")
+    }
+
+    func testUrlParts_urlWinsOverHostAndSchemeAttributes() {
+        let context = NetworkRequestContext(otel: MockSpanData(attributes: [
+            SemanticAttributes.httpUrl.rawValue: AttributeValue("http://localhost:3001/health"),
+            SemanticAttributes.netPeerName.rawValue: AttributeValue("localhost"),
+            SemanticAttributes.httpScheme.rawValue: AttributeValue("https")
+        ], status: "OK", endTime: Date()))
+
+        XCTAssertEqual(context.host, "localhost:3001")
+        XCTAssertEqual(context.schema, "http")
+    }
+
+    func testUrlParts_urlWithoutHost_fallsBackToHostAndSchemeAttributes() {
+        let context = NetworkRequestContext(otel: MockSpanData(attributes: [
+            SemanticAttributes.httpUrl.rawValue: AttributeValue("not a url"),
+            SemanticAttributes.netPeerName.rawValue: AttributeValue("reported.host"),
+            SemanticAttributes.httpScheme.rawValue: AttributeValue("https")
+        ], status: "OK", endTime: Date()))
+
+        XCTAssertEqual(context.host, "reported.host")
+        XCTAssertEqual(context.schema, "https")
+    }
+
     func testUrlParts_urlWithoutHost_partsOmittedFromDictionary() {
         let context = makeContext(url: "not a url")
         let dict = context.getDictionary()

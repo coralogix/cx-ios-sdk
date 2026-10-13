@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Release-mechanics commits (version bumps, podspec/script tweaks, README edits) are
 omitted; the focus here is user-facing behavior changes.
 
+## [2.20.0] - 2026-10-13
+
+### Added
+- Network events now include the URL's `subdomain` and `domain`.
+
+### Changed
+- Network `host` now keeps a non-default port (e.g. `api.example.com:8443`), matching the browser SDK.
+
 ## [2.19.1] - 2026-10-12
 
 ### Fixed
