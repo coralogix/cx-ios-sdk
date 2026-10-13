@@ -15,6 +15,11 @@ struct NetworkRequestContext {
     let fragments: String
     let host: String
     var schema: String
+    /// Hostname labels left of `domain` (e.g. "blog" for blog.example.com); empty when the
+    /// hostname has no more than two labels. `nil` when `url` has no parseable host.
+    let subdomain: String?
+    /// Last two hostname labels (e.g. "example.com"). `nil` when `url` has no parseable host.
+    let domain: String?
     let duration: UInt64
     var responseContentLength: Int = 0
     let statusText: String
@@ -69,6 +74,11 @@ struct NetworkRequestContext {
         self.host = otel.getAttribute(forKey: SemanticAttributes.netPeerName.rawValue) as? String ?? Keys.undefined.rawValue
         
         self.schema = otel.getAttribute(forKey: SemanticAttributes.httpScheme.rawValue) as? String ?? Keys.undefined.rawValue
+
+        // Derived from the URL rather than `host`, so native and hybrid requests split the same way.
+        let hostnameParts = Self.splitHostname(URL(string: url)?.host)
+        self.subdomain = hostnameParts?.subdomain
+        self.domain = hostnameParts?.domain
         
         if let startTime = otel.getStartTime(),
            let endTime = otel.getEndTime() {
@@ -108,6 +118,20 @@ struct NetworkRequestContext {
         self.responsePayload = Self.capResponsePayload(otel.getAttribute(forKey: Keys.responsePayload.rawValue) as? String)
     }
     
+    /// Labels that make up the registrable domain (e.g. "example.com"); everything to the left is
+    /// the subdomain. Naive last-two-labels split matching the browser SDK — multi-part TLDs
+    /// (e.g. "co.uk") are a known limitation.
+    private static let registrableDomainLabelCount = 2
+
+    static func splitHostname(_ hostname: String?) -> (subdomain: String, domain: String)? {
+        guard let hostname = hostname?.lowercased(), !hostname.isEmpty else { return nil }
+        let labels = hostname.split(separator: ".", omittingEmptySubsequences: false)
+        return (
+            subdomain: labels.dropLast(registrableDomainLabelCount).joined(separator: "."),
+            domain: labels.suffix(registrableDomainLabelCount).joined(separator: ".")
+        )
+    }
+
     func getDictionary() -> [String: Any] {
         var dict = [String: Any]()
         dict[Keys.method.rawValue]                = method
@@ -117,6 +141,8 @@ struct NetworkRequestContext {
         dict[Keys.fragments.rawValue]             = fragments
         dict[Keys.host.rawValue]                  = host
         dict[Keys.schema.rawValue]                = schema
+        if let v = subdomain { dict[Keys.subdomain.rawValue] = v }
+        if let v = domain    { dict[Keys.domain.rawValue]    = v }
         dict[Keys.duration.rawValue]              = duration
         dict[Keys.responseContentLength.rawValue] = responseContentLength
         // Capture-rule fields: included only when set, never serialised as null.

@@ -177,4 +177,59 @@ final class NetworkRequestContextTests: XCTestCase {
         XCTAssertEqual(dict[Keys.requestPayload.rawValue]  as? String, "req-body")
         XCTAssertEqual(dict[Keys.responsePayload.rawValue] as? String, "res-body")
     }
+
+    // MARK: - URL parts
+
+    private func makeContext(url: String) -> NetworkRequestContext {
+        NetworkRequestContext(otel: MockSpanData(attributes: [
+            SemanticAttributes.httpUrl.rawValue: AttributeValue(url)
+        ], status: "OK", endTime: Date()))
+    }
+
+    func testUrlParts_subdomainAndDomainSplitFromHostname_portPathQueryAndHashIgnored() {
+        let dict = makeContext(url: "https://blog.example.com:8080/articles/news?id=5&lang=en#top").getDictionary()
+
+        XCTAssertEqual(dict[Keys.subdomain.rawValue] as? String, "blog")
+        XCTAssertEqual(dict[Keys.domain.rawValue] as? String, "example.com")
+    }
+
+    func testUrlParts_multiLabelSubdomain_keepsEverythingLeftOfDomain() {
+        let context = makeContext(url: "https://a.b.c.example.com/path")
+
+        XCTAssertEqual(context.subdomain, "a.b.c")
+        XCTAssertEqual(context.domain, "example.com")
+    }
+
+    func testUrlParts_bareDomain_emptySubdomain() {
+        let context = makeContext(url: "https://example.com")
+
+        XCTAssertEqual(context.subdomain, "")
+        XCTAssertEqual(context.domain, "example.com")
+    }
+
+    func testUrlParts_singleLabelHost_isTheDomain() {
+        let context = makeContext(url: "http://localhost:3001/api")
+
+        XCTAssertEqual(context.subdomain, "")
+        XCTAssertEqual(context.domain, "localhost")
+    }
+
+    func testUrlParts_hostnameIsLowercased() {
+        let context = makeContext(url: "https://API.Example.COM/v1")
+
+        XCTAssertEqual(context.subdomain, "api")
+        XCTAssertEqual(context.domain, "example.com")
+    }
+
+    func testUrlParts_urlWithoutHost_partsOmittedFromDictionary() {
+        let context = makeContext(url: "not a url")
+        let dict = context.getDictionary()
+
+        XCTAssertNil(context.subdomain)
+        XCTAssertNil(context.domain)
+        XCTAssertFalse(dict.keys.contains(Keys.subdomain.rawValue))
+        XCTAssertFalse(dict.keys.contains(Keys.domain.rawValue))
+        // Existing fields are still serialised.
+        XCTAssertEqual(dict[Keys.url.rawValue] as? String, "not a url")
+    }
 }

@@ -96,6 +96,7 @@ public enum Keys: String {
     case statusText = "status_text"
     case url
     case host
+    case subdomain
     case responseContentLength = "response_content_length"
     case requestHeaders = "request_headers"
     case responseHeaders = "response_headers"

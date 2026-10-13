@@ -119,6 +119,9 @@ final class HybridNetworkContractTests: XCTestCase {
                        "status_text must survive the bridge — it shipped empty for years")
         XCTAssertEqual(context.fragments, "/contract/full")
         XCTAssertEqual(context.schema, "https")
+        // Not a bridge key: derived natively from `url`, so hybrid apps get it without a plugin change.
+        XCTAssertEqual(context.subdomain, "")
+        XCTAssertEqual(context.domain, "example.com")
         XCTAssertEqual(context.responseContentLength, 2387)
         XCTAssertGreaterThanOrEqual(context.duration, 350)
         XCTAssertLessThan(context.duration, 850)
