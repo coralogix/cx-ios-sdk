@@ -240,6 +240,60 @@ final class NetworkRequestContextTests: XCTestCase {
         XCTAssertEqual(context.host, "[::1]:8080")
     }
 
+    func testUrlParts_ipv6Host_subdomainAndDomainSplitFromBracketedHostLikeTheBrowser() {
+        let context = makeContext(url: "http://[::1]:8080/health")
+
+        XCTAssertEqual(context.subdomain, "")
+        XCTAssertEqual(context.domain, "[::1]")
+    }
+
+    func testUrlParts_ipv4Host_splitNaivelyLikeTheBrowser() {
+        let context = makeContext(url: "http://192.168.1.1:8080/")
+
+        XCTAssertEqual(context.host, "192.168.1.1:8080")
+        XCTAssertEqual(context.subdomain, "192.168")
+        XCTAssertEqual(context.domain, "1.1")
+    }
+
+    func testUrlParts_otherSchemesDefaultPort_keptInHost() {
+        let context = makeContext(url: "https://api.example.com:80/v1")
+
+        XCTAssertEqual(context.host, "api.example.com:80")
+    }
+
+    func testUrlParts_websocketDefaultPorts_droppedFromHost() {
+        XCTAssertEqual(makeContext(url: "ws://api.example.com:80/socket").host, "api.example.com")
+        XCTAssertEqual(makeContext(url: "wss://api.example.com:443/socket").host, "api.example.com")
+    }
+
+    func testUrlParts_schemeIsLowercased() {
+        let context = makeContext(url: "HTTPS://api.example.com/v1")
+
+        XCTAssertEqual(context.schema, "https")
+    }
+
+    func testUrlParts_userinfo_notPartOfHost() {
+        let context = makeContext(url: "https://user:pass@api.example.com/v1")
+
+        XCTAssertEqual(context.host, "api.example.com")
+        XCTAssertEqual(context.subdomain, "api")
+        XCTAssertEqual(context.domain, "example.com")
+    }
+
+    func testUrlParts_trailingDot_splitNaivelyLikeTheBrowser() {
+        let context = makeContext(url: "https://api.example.com./v1")
+
+        XCTAssertEqual(context.host, "api.example.com.")
+        XCTAssertEqual(context.subdomain, "api.example")
+        XCTAssertEqual(context.domain, "com.")
+    }
+
+    func testUrlParts_percentEncodedHost_decoded() {
+        let context = makeContext(url: "https://ex%41mple.com/v1")
+
+        XCTAssertEqual(context.host, "example.com")
+    }
+
     func testUrlParts_urlWinsOverHostAndSchemeAttributes() {
         let context = NetworkRequestContext(otel: MockSpanData(attributes: [
             SemanticAttributes.httpUrl.rawValue: AttributeValue("http://localhost:3001/health"),

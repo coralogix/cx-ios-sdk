@@ -128,7 +128,8 @@ struct NetworkRequestContext {
     /// (e.g. "co.uk") are a known limitation.
     private static let registrableDomainLabelCount = 2
 
-    private static let defaultPorts = ["http": 80, "https": 443]
+    /// Ports the browser's `URL.host` omits for their scheme.
+    private static let defaultPorts = ["http": 80, "https": 443, "ws": 80, "wss": 443]
 
     /// Extracts the URL parts the browser SDK reports, with the same meaning:
     /// - `schema`: the lowercased scheme, e.g. "https".
@@ -139,10 +140,11 @@ struct NetworkRequestContext {
     static func urlParts(_ url: String) -> (schema: String, host: String, subdomain: String, domain: String)? {
         guard let parsed = URL(string: url),
               let scheme = parsed.scheme?.lowercased(),
-              let hostname = parsed.host?.lowercased(),
-              let hostnameParts = splitHostname(hostname) else { return nil }
-        // Foundation strips the brackets from IPv6 literals; the browser keeps them.
+              let hostname = parsed.host?.lowercased() else { return nil }
+        // Foundation strips the brackets from IPv6 literals; the browser keeps them in both
+        // `host` and `hostname`, so the subdomain/domain split runs on the bracketed form too.
         let bracketedHost = hostname.contains(":") ? "[\(hostname)]" : hostname
+        guard let hostnameParts = splitHostname(bracketedHost) else { return nil }
         let host: String
         if let port = parsed.port, port != defaultPorts[scheme] {
             host = "\(bracketedHost):\(port)"
