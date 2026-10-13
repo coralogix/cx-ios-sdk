@@ -206,8 +206,11 @@ public extension UIView {
         func traverse(_ view: UIView) {
             guard !view.isHidden, view.alpha > 0 else { return }
             if let bar = view as? UINavigationBar {
-                let titles = ([bar.topItem?.title, bar.topItem?.prompt, bar.backItem?.title]
+                var titles = ([bar.topItem?.title, bar.backItem?.title]
                     .compactMap { $0 }) + (bar.items ?? []).compactMap { $0.title }
+                #if os(iOS)
+                if let prompt = bar.topItem?.prompt { titles.append(prompt) }
+                #endif
                 if titles.contains(where: { UIView.textMatchesAny($0, maskText) }) {
                     let rect = bar.convert(bar.bounds, to: rootView).intersection(rootView.bounds)
                     if !rect.isNull && !rect.isEmpty { rects.append(rect) }

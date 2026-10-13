@@ -155,8 +155,10 @@ struct SwipeDetectorView: UIViewRepresentable {
             target: context.coordinator,
             action: #selector(Coordinator.handlePan)
         )
+        #if os(iOS)
         pan.minimumNumberOfTouches = 1
         pan.maximumNumberOfTouches = 1
+        #endif
         pan.cancelsTouchesInView = false
         pan.delaysTouchesEnded = false
         pan.delegate = context.coordinator

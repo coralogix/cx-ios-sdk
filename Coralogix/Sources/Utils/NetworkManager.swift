@@ -45,7 +45,7 @@ public class NetworkManager: NetworkProtocol {
     }
     
     func getCellularNetworkType() -> String {
-#if targetEnvironment(simulator)
+#if targetEnvironment(simulator) || !canImport(CoreTelephony)
         return "Unknown"
 #else
         let networkInfo = CTTelephonyNetworkInfo()

@@ -6,7 +6,8 @@ import PackageDescription
 let package = Package(
     name: "Coralogix",
     platforms: [
-        .iOS(.v13)
+        .iOS(.v13),
+        .tvOS(.v14)
     ],
     products: [
         .library(name: "Coralogix", targets: ["Coralogix"]),

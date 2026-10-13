@@ -1,0 +1,49 @@
+name: tvOS Build
+
+# Reusable. Compiles every library target for tvOS — nothing else in CI does, so
+# an iOS-only API reaching shared code otherwise breaks tvOS customers silently.
+#
+# Builds for the device AND the simulator: the tvOS Simulator SDK carries
+# frameworks the device SDK lacks (CoreTelephony), and `#if
+# targetEnvironment(simulator)` hides different code in each, so one passing
+# never proves the other. `swift build` with an explicit --triple needs no
+# simulator runtime, so nothing is booted.
+
+on:
+  workflow_call:
+    inputs:
+      runner:
+        type: string
+        default: macos-15
+      xcode-version:
+        type: string
+        default: '16.4'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build · tvOS ${{ matrix.target.name }}
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - { name: device,    sdk: appletvos,        triple: arm64-apple-tvos14.0 }
+          - { name: simulator, sdk: appletvsimulator, triple: arm64-apple-tvos14.0-simulator }
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-xcode
+        with:
+          xcode-version: ${{ inputs.xcode-version }}
+          install-xcpretty: 'false'
+
+      - name: Build for tvOS ${{ matrix.target.name }}
+        run: |
+          set -euo pipefail
+          swift build \
+            --sdk "$(xcrun --sdk ${{ matrix.target.sdk }} --show-sdk-path)" \
+            --triple ${{ matrix.target.triple }}

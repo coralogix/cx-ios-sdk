@@ -103,6 +103,8 @@ The review rules in `AGENTS.md` apply **while writing code**, not only at PR tim
 
 - **iOS 13.0 minimum — guard any newer APIs with `#available`.** Code compiles fine but crashes at runtime on iOS 13 without availability checks.
 
+- **The SDK also builds for tvOS 14+ (SPM).** Wrap iOS-only API (WebKit, MetricKit, CoreTelephony, `UINavigationItem.prompt`, touch-count and paging properties, …) in `#if os(iOS)`; the `tvOS Build` CI job compiles for device and simulator and fails the PR otherwise.
+
 - **All span attribute key strings belong in `CoralogixInternal/Sources/Keys.swift`.** No inline string literals for attribute keys anywhere else.
 
 - **Protect all shared mutable state with `NSLock` or a serial `DispatchQueue`.** Follow the existing pattern — don't introduce unguarded shared state.

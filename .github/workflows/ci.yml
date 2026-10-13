@@ -38,12 +38,15 @@ jobs:
   podspec-lint:
     uses: ./.github/workflows/ci-podspec-lint.yml
 
+  tvos-build:
+    uses: ./.github/workflows/ci-tvos-build.yml
+
   ci-passed:
     name: ci-passed
     # The real gate. Runs even when something upstream fails so it always
     # reports rather than being skipped into a pending state.
     if: always()
-    needs: [component-unit, ui-tests, podspec-lint]
+    needs: [component-unit, ui-tests, podspec-lint, tvos-build]
     runs-on: ubuntu-latest
     steps:
       - name: Verify all CI jobs passed
