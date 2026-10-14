@@ -14,8 +14,10 @@ import CoralogixBootstrap
 #endif
 
 extension CoralogixRum {
+    /// Installs crash capture for this launch. Recovering the crashes earlier launches left behind
+    /// is a separate step, `recoverPendingCrashes`, which does not depend on this one.
     public func initializeCrashInstrumentation() {
-        guard let crashReporter = Self.installedCrashReporter() else { return }
+        guard Self.installedCrashReporter() != nil else { return }
 
         switch FirebaseRuntimeDetector.presence() {
         case .configured:
@@ -31,9 +33,19 @@ extension CoralogixRum {
         case .notLinked:
             Log.d("host app didn't include Firebase at all")
         }
+    }
 
-        // Try loading the crash report.
-        if crashReporter.hasPendingCrashReport() {
+    /// Re-emits the crashes earlier launches left behind: the pending PLCrashReporter report and the
+    /// hybrid crash events in `CrashEventStore`.
+    ///
+    /// Runs at init whenever crash reporting is on, whatever this launch's sampling roll. It cannot
+    /// wait for crash capture to be installed: a sampled-out launch never installs it, and a crash
+    /// recovered later — on the next sampled-in launch, or after a rotation — would be attributed to
+    /// whichever session was last on record rather than the one that crashed. Whether the crash is
+    /// sent is decided by the exporter from the crashed session's own sampling decision, which
+    /// `overrideSessionForCrashedSession` stamps on the span.
+    internal func recoverPendingCrashes() {
+        if let crashReporter = Self.crashReportReader(), crashReporter.hasPendingCrashReport() {
             // Correlation id tying the emitted crash span to its upload confirmation,
             // so the purge is gated on THIS report's own delivery.
             let reportId = UUID().uuidString
@@ -58,7 +70,7 @@ extension CoralogixRum {
         self.resendPendingStoredCrashEvents()
     }
 
-    /// The reporter to recover from and to keep capturing with.
+    /// The reporter to keep capturing with.
     ///
     /// Normally this is the instance `CRXCrashBootstrap` enabled at image load — already
     /// capturing, and installed early enough that a crash reporter configured by the host app
@@ -90,18 +102,10 @@ extension CoralogixRum {
             Log.e("[CrashInstrumentation] crash bootstrap could not enable at load: \(error)")
         }
 
-        // Local symbolication is strongly recommended for non-release builds only; kept as-is
-        // here so the fallback produces the same reports the bootstrap does.
-        let config = PLCrashReporterConfig(signalHandlerType: .BSD, symbolicationStrategy: .all)
-        guard let crashReporter = PLCrashReporter(configuration: config) else {
-            Log.e("Could not create an instance of PLCrashReporter")
-            return nil
-        }
+        guard let crashReporter = makeCrashReporter() else { return nil }
         // PLCrashReporter allows one enabled instance per process. If the host app enabled its
         // own before us (App Center Crashes wraps it; some apps use it directly) this fails with
-        // PLCrashReporterErrorResourceBusy and ours captures nothing. The reporter is still
-        // returned: reading a pending report from an earlier launch does not need the live
-        // handler, so recovery should not be lost along with capture.
+        // PLCrashReporterErrorResourceBusy and ours captures nothing.
         do {
             try crashReporter.enable()
         } catch {
@@ -110,8 +114,30 @@ extension CoralogixRum {
         return crashReporter
     }
 
+    /// The reporter `recoverPendingCrashes` reads the previous launch's report through.
+    ///
+    /// Reading and purging the pending report does not need the live signal handler, so when the
+    /// load-time install is missing this returns an instance that is never enabled. Recovery runs
+    /// on launches that do not install crash capture, and must not install it as a side effect.
+    internal static func crashReportReader(
+        candidate: PLCrashReporter? = CRXCrashBootstrap.reporter
+    ) -> PLCrashReporter? {
+        candidate ?? makeCrashReporter()
+    }
+
+    private static func makeCrashReporter() -> PLCrashReporter? {
+        // Local symbolication is strongly recommended for non-release builds only; kept as-is
+        // here so the fallback produces the same reports the bootstrap does.
+        let config = PLCrashReporterConfig(signalHandlerType: .BSD, symbolicationStrategy: .all)
+        guard let crashReporter = PLCrashReporter(configuration: config) else {
+            Log.e("Could not create an instance of PLCrashReporter")
+            return nil
+        }
+        return crashReporter
+    }
+
     /// Final step of crash recovery, run right after init completes: force-flushes
-    /// the crash spans emitted during `initializeCrashInstrumentation`, then decides
+    /// the crash spans emitted during `recoverPendingCrashes`, then decides
     /// per-event what to clean up. Each recovered crash is confirmed independently by
     /// its correlation id, so the PLCrashReporter report is purged only if its own
     /// span uploaded, and only the stored events whose own upload succeeded are
