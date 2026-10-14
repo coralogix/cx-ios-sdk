@@ -114,10 +114,8 @@ extension CoralogixRum {
     /// Reading and purging the pending report does not need the live signal handler, so when the
     /// load-time install is missing this returns an instance that is never enabled. Recovery runs
     /// on launches that do not install crash capture, and must not install it as a side effect.
-    internal static func crashReportReader(
-        candidate: PLCrashReporter? = CRXCrashBootstrap.reporter
-    ) -> PLCrashReporter? {
-        candidate ?? makeCrashReporter()
+    private static func crashReportReader() -> PLCrashReporter? {
+        CRXCrashBootstrap.reporter ?? makeCrashReporter()
     }
 
     private static func makeCrashReporter() -> PLCrashReporter? {
