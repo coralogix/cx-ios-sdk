@@ -391,46 +391,158 @@ final class CrashDeliveryTests: XCTestCase {
                        "an unconfirmed backlog entry must survive another event's confirmation")
     }
 
-    /// Crash recovery has to complete on the rotation top-up path too.
-    ///
-    /// A sampled-out session never installs crash instrumentation, so nothing scans the store. When a
-    /// rotation rolls the session sampled in, the top-up installs it and re-emits the backlog — but
-    /// `initializeCrashInstrumentation` defers the purge and the store cleanup to
-    /// `completeCrashRecovery`, which only `startup` used to call. Without that call the backlog is
-    /// re-emitted on every later launch and never removed.
-    func test_rotationIntoSampledIn_completesCrashRecovery_andClearsBacklogAfterConfirmation() throws {
+    // MARK: - Recovery is independent of this launch's sampling roll
+    //
+    // A crash is recovered on the launch after it, which rolls its own sampling decision. The crash
+    // belongs to the session that crashed, so whether it is sent follows that session's decision —
+    // never the recovering launch's.
+
+    /// A sampled-out launch with crash instrumentation switched on. Everything else is off so the
+    /// confirmation waited on below does not queue behind unrelated main-thread installs.
+    private func makeSampledOutRecoveringRum(exclude: Set<ExcludableInstrumentation> = []) -> CoralogixRum {
         CoralogixRum.isInitialized = false
-        // Everything except crash instrumentation is switched off, so the top-up installs only what
-        // this test is about. With the full set the main thread first installs URLSession swizzling,
-        // MetricKit and the mobile-vitals detectors, and the confirmation waited on below lands
-        // behind all of it — fast on an idle machine, intermittently past the budget on a busy one.
-        coralogixRum = CoralogixRum(options: makeSamplingOptions(
+        return CoralogixRum(options: makeSamplingOptions(
             sampleRate: 0,
-            exclude: [],
+            exclude: exclude,
             instrumentations: [.lifeCycle: false,
                                .userActions: false,
                                .network: false,
                                .mobileVitals: false,
                                .anr: false,
                                .custom: false]))
+    }
 
+    private func sessionContext(of event: [String: Any]) -> [String: Any]? {
+        let text = event[Keys.text.rawValue] as? [String: Any]
+        let cxRum = text?[Keys.cxRum.rawValue] as? [String: Any]
+        return cxRum?[Keys.sessionContext.rawValue] as? [String: Any]
+    }
+
+    /// Recovers one stored crash from a session with the given decision, on a sampled-out launch.
+    private func recoverStoredCrash(crashedSessionSampledIn: Bool,
+                                    exclude: Set<ExcludableInstrumentation> = []) throws -> (uploader: StubUploader, store: CrashEventStore) {
+        coralogixRum = makeSampledOutRecoveringRum(exclude: exclude)
         let uploader = StubUploader()
         coralogixRum.coralogixExporter?.spanUploader = uploader
         let store = makeTempStore()
         coralogixRum.crashEventStore = store
-        store.append([Keys.errorMessage.rawValue: "crash-from-a-previous-launch"])
+        store.append([
+            Keys.errorMessage.rawValue: "crash-from-previous-launch",
+            Keys.errorType.rawValue: "Error",
+            Keys.crashTimestamp.rawValue: "1700000000000"
+        ])
+        let sessionManager = try XCTUnwrap(coralogixRum.sessionManager)
+        sessionManager.lastLaunchSession = LastLaunchSession(sessionId: "crashed-session",
+                                                             creationDate: 1_699_999_000,
+                                                             sampledIn: crashedSessionSampledIn)
+        XCTAssertFalse(sessionManager.isSessionSampledIn, "Precondition: the recovering launch is sampled out.")
 
-        XCTAssertEqual(store.loadAll().count, 1,
-                       "Precondition: a sampled-out session installs no crash instrumentation, so the backlog is untouched.")
+        coralogixRum.recoverPendingCrashes()
+        coralogixRum.completeCrashRecovery()
+        return (uploader, store)
+    }
+
+    func test_shouldRecoverCrashes_followsTheErrorsSwitch_notSampling() {
+        XCTAssertTrue(CoralogixRum.shouldRecoverCrashes(options: makeSamplingOptions(sampleRate: 0, exclude: [])),
+                      "A sampled-out launch must still recover crashes left by earlier launches.")
+        XCTAssertFalse(CoralogixRum.shouldRecoverCrashes(options: makeSamplingOptions(sampleRate: 100,
+                                                                                      exclude: [],
+                                                                                      instrumentations: [.errors: false])),
+                       "instrumentations[.errors] = false must still mean no crash reporting at all.")
+    }
+
+    func test_sampledOutLaunch_deliversCrashFromSampledInSession_underTheCrashedSession() throws {
+        let (uploader, store) = try recoverStoredCrash(crashedSessionSampledIn: true)
+
+        XCTAssertTrue(waitUntil { store.loadAll().isEmpty },
+                      "The delivered crash must be confirmed and cleared from the store.")
+        let crash = try XCTUnwrap(uploader.uploadedEvents.first(where: { isCrashEvent($0) }),
+                                  "A crash from a sampled-in session must be sent whatever the recovering launch rolled.")
+        let session = try XCTUnwrap(sessionContext(of: crash))
+        XCTAssertEqual(session[Keys.sessionId.rawValue] as? String, "crashed-session")
+        XCTAssertEqual(session[Keys.isSessionSampledIn.rawValue] as? Bool, true)
+    }
+
+    func test_sampledOutLaunch_dropsAndResolvesCrashFromSampledOutSession() throws {
+        let (uploader, store) = try recoverStoredCrash(crashedSessionSampledIn: false)
+
+        XCTAssertTrue(waitUntil { store.loadAll().isEmpty },
+                      "A crash dropped by sampling must be resolved, or it is re-emitted on every launch.")
+        XCTAssertNil(uploader.uploadedEvents.first(where: { isCrashEvent($0) }),
+                     "A crash from a sampled-out session is not sent when errors are not excluded from sampling.")
+    }
+
+    func test_sampledOutLaunch_deliversCrashFromSampledOutSession_whenErrorsExcluded() throws {
+        let (uploader, store) = try recoverStoredCrash(crashedSessionSampledIn: false, exclude: [.errors])
+
+        XCTAssertTrue(waitUntil { store.loadAll().isEmpty })
+        let crash = try XCTUnwrap(uploader.uploadedEvents.first(where: { isCrashEvent($0) }),
+                                  "excludeFromSampling: [.errors] must send the crash of a sampled-out session.")
+        let session = try XCTUnwrap(sessionContext(of: crash))
+        XCTAssertEqual(session[Keys.sessionId.rawValue] as? String, "crashed-session")
+        XCTAssertEqual(session[Keys.isSessionSampledIn.rawValue] as? Bool, false)
+    }
+
+    /// A sampled-out relaunch with no record of the crashed session (locked keychain, or a crash
+    /// before the SDK ever initialized) must still send the crash rather than drop and purge it.
+    func test_sampledOutLaunch_deliversCrash_whenNoPreviousSessionIsOnRecord() throws {
+        coralogixRum = makeSampledOutRecoveringRum()
+        let uploader = StubUploader()
+        coralogixRum.coralogixExporter?.spanUploader = uploader
+        let store = makeTempStore()
+        coralogixRum.crashEventStore = store
+        store.append([
+            Keys.errorMessage.rawValue: "crash-with-no-session-on-record",
+            Keys.errorType.rawValue: "Error",
+            Keys.crashTimestamp.rawValue: "1700000000000"
+        ])
+        try XCTUnwrap(coralogixRum.sessionManager).lastLaunchSession = nil
+
+        coralogixRum.recoverPendingCrashes()
+        coralogixRum.completeCrashRecovery()
+
+        XCTAssertTrue(waitUntil { store.loadAll().isEmpty })
+        let crash = try XCTUnwrap(uploader.uploadedEvents.first(where: { isCrashEvent($0) }),
+                                  "An unknown sampling decision must not let a sampled-out relaunch drop the crash.")
+        XCTAssertEqual(sessionContext(of: crash)?[Keys.isSessionSampledIn.rawValue] as? Bool, true)
+    }
+
+    /// Recovery runs once, at init. A rotation that installs crash capture later must not run it
+    /// again — that would emit every recovered crash a second time.
+    func test_rotationIntoSampledIn_installsCrashCapture_withoutRecoveringAgain() throws {
+        coralogixRum = makeSampledOutRecoveringRum()
+        // No completeCrashRecovery below, so the stored crash is never confirmed and stays in the
+        // store: a second recovery would find it and emit it again.
+        coralogixRum.coralogixExporter?.spanUploader = StubUploader()
+        let store = makeTempStore()
+        coralogixRum.crashEventStore = store
+        let message = "recovered-crash-\(UUID().uuidString)"
+        store.append([Keys.errorMessage.rawValue: message])
+
+        let countLock = NSLock()
+        var emitted = 0
+        CoralogixExporter.testExportCallback = { spans in
+            let matching = spans.filter { $0.attributes[Keys.errorMessage.rawValue]?.description == message }.count
+            countLock.lock(); emitted += matching; countLock.unlock()
+        }
+        defer { CoralogixExporter.testExportCallback = nil }
+
+        // Stands in for init-time recovery, which ran against the default store before this
+        // test could swap its own in.
+        coralogixRum.recoverPendingCrashes()
 
         let sessionManager = try XCTUnwrap(coralogixRum.sessionManager)
         sessionManager.samplingRoller = { true }
         coralogixRum.createNewSession()
-
         XCTAssertTrue(coralogixRum.isInstrumentationInstalled(.errors),
-                      "The rotation must have installed crash instrumentation — otherwise the assertion below is vacuous.")
-        XCTAssertTrue(waitUntil { store.loadAll().isEmpty },
-                      "Having installed crash instrumentation, the top-up must also confirm the upload and clear the backlog. Still holding \(store.loadAll().count).")
+                      "The rotation must install crash capture — otherwise the count below proves nothing.")
+
+        let flushed = expectation(description: "flush")
+        coralogixRum.flush { flushed.fulfill() }
+        wait(for: [flushed], timeout: 5)
+
+        countLock.lock(); let count = emitted; countLock.unlock()
+        XCTAssertEqual(count, 1, "The stored crash must be emitted exactly once — by recovery, not again by the install.")
     }
 
     func test_crashEventStore_discardsCorruptFile() throws {
