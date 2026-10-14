@@ -14,7 +14,8 @@ omitted; the focus here is user-facing behavior changes.
 - Network events now include the URL's `subdomain` and `domain`.
 
 ### Changed
-- Network `host` now keeps a non-default port (e.g. `api.example.com:8443`), matching the browser SDK.
+- Network `host` now keeps a non-default port (e.g. `api.example.com:8443`) and brackets IPv6 addresses (e.g. `[::1]`), matching the browser SDK.
+- If your `beforeSend` callback redacts the network `url` or `host`, also clear `subdomain` and `domain`, which carry the hostname too.
 
 ## [2.19.1] - 2026-10-12
 

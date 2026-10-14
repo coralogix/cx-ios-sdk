@@ -131,20 +131,28 @@ struct NetworkRequestContext {
     /// Ports the browser's `URL.host` omits for their scheme.
     private static let defaultPorts = ["http": 80, "https": 443, "ws": 80, "wss": 443]
 
+    /// Characters left as-is when re-encoding a URL that failed to parse: everything valid in a
+    /// query, plus the delimiters and escapes a URL may already contain.
+    private static let urlRetryAllowedCharacters = CharacterSet.urlQueryAllowed.union(CharacterSet(charactersIn: "#[]%"))
+
     /// Extracts the URL parts the browser SDK reports, with the same meaning:
     /// - `schema`: the lowercased scheme, e.g. "https".
     /// - `host`: the hostname plus `:port` when the URL names a non-default port, like the
     ///   browser's `URL.host` ("api.example.com:8443", but "api.example.com" for "https://...:443").
     /// - `subdomain` / `domain`: see `splitHostname`.
     /// `nil` when `url` has no parseable host.
+    ///
+    /// Known differences from the browser: long-form IPv6 hosts are not shortened, and
+    /// internationalised hosts are reported as Unicode rather than punycode.
     static func urlParts(_ url: String) -> (schema: String, host: String, subdomain: String, domain: String)? {
-        guard let parsed = URL(string: url),
+        guard let parsed = parseURL(url),
               let scheme = parsed.scheme?.lowercased(),
-              let hostname = parsed.host?.lowercased() else { return nil }
+              let hostname = parsed.host?.lowercased(),
+              !hostname.isEmpty else { return nil }
         // Foundation strips the brackets from IPv6 literals; the browser keeps them in both
         // `host` and `hostname`, so the subdomain/domain split runs on the bracketed form too.
         let bracketedHost = hostname.contains(":") ? "[\(hostname)]" : hostname
-        guard let hostnameParts = splitHostname(bracketedHost) else { return nil }
+        let hostnameParts = splitHostname(bracketedHost)
         let host: String
         if let port = parsed.port, port != defaultPorts[scheme] {
             host = "\(bracketedHost):\(port)"
@@ -154,8 +162,22 @@ struct NetworkRequestContext {
         return (schema: scheme, host: host, subdomain: hostnameParts.subdomain, domain: hostnameParts.domain)
     }
 
-    static func splitHostname(_ hostname: String?) -> (subdomain: String, domain: String)? {
-        guard let hostname = hostname?.lowercased(), !hostname.isEmpty else { return nil }
+    /// Before iOS 17, `URL(string:)` rejects URLs with unencoded characters (a space in the query,
+    /// `|`, ...) that the browser accepts, so retry once with those characters percent-encoded.
+    /// The first attempt is strict on every OS version so all versions take the same path.
+    private static func parseURL(_ url: String) -> URL? {
+        let strict: URL?
+        if #available(iOS 17.0, tvOS 17.0, macOS 14.0, *) {
+            strict = URL(string: url, encodingInvalidCharacters: false)
+        } else {
+            strict = URL(string: url)
+        }
+        if let strict { return strict }
+        return url.addingPercentEncoding(withAllowedCharacters: urlRetryAllowedCharacters).flatMap(URL.init(string:))
+    }
+
+    /// Naive last-two-labels split of an already-lowercased hostname, matching the browser SDK.
+    private static func splitHostname(_ hostname: String) -> (subdomain: String, domain: String) {
         let labels = hostname.split(separator: ".", omittingEmptySubsequences: false)
         return (
             subdomain: labels.dropLast(registrableDomainLabelCount).joined(separator: "."),

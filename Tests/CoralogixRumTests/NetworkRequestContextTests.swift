@@ -255,7 +255,7 @@ final class NetworkRequestContextTests: XCTestCase {
         XCTAssertEqual(context.domain, "1.1")
     }
 
-    func testUrlParts_otherSchemesDefaultPort_keptInHost() {
+    func testUrlParts_httpPortOnHttps_keptInHost() {
         let context = makeContext(url: "https://api.example.com:80/v1")
 
         XCTAssertEqual(context.host, "api.example.com:80")
@@ -292,6 +292,14 @@ final class NetworkRequestContextTests: XCTestCase {
         let context = makeContext(url: "https://ex%41mple.com/v1")
 
         XCTAssertEqual(context.host, "example.com")
+    }
+
+    func testUrlParts_unencodedCharacters_parsedLikeTheBrowser() {
+        let context = makeContext(url: "https://api.example.com:8443/search?q=hello world|x")
+
+        XCTAssertEqual(context.host, "api.example.com:8443")
+        XCTAssertEqual(context.subdomain, "api")
+        XCTAssertEqual(context.domain, "example.com")
     }
 
     func testUrlParts_urlWinsOverHostAndSchemeAttributes() {
