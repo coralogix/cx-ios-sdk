@@ -89,6 +89,12 @@ struct PendingSnapshotTrigger {
 public class SessionManager {
     internal var sessionMetadata: SessionMetadata?
     private var prevSessionMetadata: SessionMetadata?
+    /// The session that was live when the previous launch ended, captured once at init.
+    ///
+    /// `sessionMetadata.old*` cannot serve: it is re-read from the keychain on every rotation, and by
+    /// then the keychain holds this launch's sessions. Guarded by `sessionLock`; written only at init
+    /// and by tests.
+    private var _lastLaunchSession: LastLaunchSession?
 
     internal var lastActivity = Date()
     private let idleInterval: TimeInterval = 15 * 60  // 15 minutes in seconds
@@ -213,6 +219,7 @@ public class SessionManager {
     
     public init() {
         self.setupSessionMetadata()
+        self.lastLaunchSession = self.sessionMetadata.flatMap(LastLaunchSession.init(previousOf:))
         NotificationCenter.default.addObserver(self,
                                                selector: #selector(appDidBecomeActiveNotification),
                                                name: UIApplication.didBecomeActiveNotification,
@@ -300,31 +307,40 @@ public class SessionManager {
         return attrs
     }
 
-    /// Session-identity attributes for the session that was live in the *previous*
-    /// process launch, recovered from the keychain into `sessionMetadata.old*` at
-    /// init (before the keychain was overwritten with this launch's identity).
-    /// Empty when there is no prior launch on record.
+    internal var lastLaunchSession: LastLaunchSession? {
+        get {
+            sessionLock.lock()
+            defer { sessionLock.unlock() }
+            return _lastLaunchSession
+        }
+        set {
+            sessionLock.lock()
+            defer { sessionLock.unlock() }
+            _lastLaunchSession = newValue
+        }
+    }
+
+    /// Session attributes for the session that was live when the previous launch ended
+    /// (`lastLaunchSession`).
     ///
     /// Crash instrumentation overrides the crash span's `session_id` /
-    /// `session_creation_date` with these: a crash captured on relaunch belongs to
-    /// the session that actually crashed, not the freshly-created one. This is the
-    /// only in-memory copy of the crashed session's identity — the keychain itself
-    /// already holds the current launch's session by the time crashes are processed.
+    /// `session_creation_date` / sampling stamp with these: a crash captured on relaunch
+    /// belongs to the session that actually crashed, not the freshly-created one, and the
+    /// result is the same however many times this launch has rotated since.
+    ///
+    /// An unknown decision — no prior launch on record, or one that predates the persisted
+    /// decision — is stamped sampled-in. Leaving the relaunch's own stamp would let a
+    /// sampled-out relaunch drop the crash and purge it as resolved, and a crash
+    /// misclassified as sampled-out could also be dropped by a customer's beforeSend filter.
+    /// With no record the session identity is left as the relaunch's: there is none to restore.
     func lastLaunchSessionSpanAttributes() -> [(key: String, value: String)] {
-        sessionLock.lock()
-        let oldSessionId = self.sessionMetadata?.oldSessionId
-        let oldCreationDate = self.sessionMetadata?.oldSessionTimeInterval
-        let oldSampledIn = self.sessionMetadata?.oldSessionSampledIn
-        sessionLock.unlock()
-
-        guard let oldSessionId, let oldCreationDate else { return [] }
-        // nil (prior launch predates the persisted decision) defaults to true: a
-        // recovered crash misclassified as sampled-out could be dropped by a
-        // customer's beforeSend filter — the failure mode this feature exists to avoid.
+        guard let last = self.lastLaunchSession else {
+            return [(Keys.spanSessionSampledIn.rawValue, String(true))]
+        }
         return [
-            (Keys.sessionId.rawValue, oldSessionId),
-            (Keys.sessionCreationDate.rawValue, String(Int(oldCreationDate))),
-            (Keys.spanSessionSampledIn.rawValue, String(oldSampledIn ?? true))
+            (Keys.sessionId.rawValue, last.sessionId),
+            (Keys.sessionCreationDate.rawValue, String(Int(last.creationDate))),
+            (Keys.spanSessionSampledIn.rawValue, String(last.sampledIn ?? true))
         ]
     }
 
@@ -537,5 +553,23 @@ public class SessionManager {
         NotificationCenter.default.removeObserver(self,
                                                   name: .cxRumNotificationUserActions,
                                                   object: nil)
+    }
+}
+
+/// Identity and sampling decision of the session that was live when the previous launch ended.
+struct LastLaunchSession: Equatable {
+    let sessionId: String
+    let creationDate: TimeInterval
+    /// nil when the previous launch predates the persisted decision.
+    let sampledIn: Bool?
+}
+
+extension LastLaunchSession {
+    /// Reads the previous-launch fields `SessionMetadata` recovered from the keychain. Only the first
+    /// metadata built in a process has them right; later ones hold this launch's earlier sessions.
+    init?(previousOf metadata: SessionMetadata) {
+        guard let sessionId = metadata.oldSessionId,
+              let creationDate = metadata.oldSessionTimeInterval else { return nil }
+        self.init(sessionId: sessionId, creationDate: creationDate, sampledIn: metadata.oldSessionSampledIn)
     }
 }

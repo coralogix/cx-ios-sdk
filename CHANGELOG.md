@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Release-mechanics commits (version bumps, podspec/script tweaks, README edits) are
 omitted; the focus here is user-facing behavior changes.
 
+## [2.19.2] - 2026-10-14
+
+### Fixed
+- Crashes from a sampled-in session are now reported even when the next launch is sampled out, under the session that crashed. Earlier versions could lose them when using `sessionSampleRate`.
+
 ## [2.19.1] - 2026-10-12
 
 ### Fixed
