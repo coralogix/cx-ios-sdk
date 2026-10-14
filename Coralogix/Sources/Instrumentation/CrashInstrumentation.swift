@@ -35,15 +35,10 @@ extension CoralogixRum {
         }
     }
 
-    /// Re-emits the crashes earlier launches left behind: the pending PLCrashReporter report and the
-    /// hybrid crash events in `CrashEventStore`.
+    /// Re-emits the crashes earlier launches left behind.
     ///
-    /// Runs at init whenever crash reporting is on, whatever this launch's sampling roll. It cannot
-    /// wait for crash capture to be installed: a sampled-out launch never installs it, and a crash
-    /// recovered later — on the next sampled-in launch, or after a rotation — would be attributed to
-    /// whichever session was last on record rather than the one that crashed. Whether the crash is
-    /// sent is decided by the exporter from the crashed session's own sampling decision, which
-    /// `overrideSessionForCrashedSession` stamps on the span.
+    /// Runs at init whatever this launch's sampling roll: the crash belongs to the session that
+    /// crashed, so whether it is sent follows that session's decision, not this launch's.
     internal func recoverPendingCrashes() {
         if let crashReporter = Self.crashReportReader(), crashReporter.hasPendingCrashReport() {
             // Correlation id tying the emitted crash span to its upload confirmation,

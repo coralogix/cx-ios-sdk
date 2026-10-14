@@ -235,12 +235,8 @@ public class CoralogixRum {
         return self.installedInstrumentations.insert(type).inserted
     }
 
-    /// Whether crashes left behind by earlier launches are recovered at init.
-    ///
-    /// Follows only the caller's on/off switch for `.errors`, never this launch's sampling roll: the
-    /// crash belongs to an earlier session, and the exporter decides from that session's own stamp
-    /// whether it is sent. Gating it on the roll postponed recovery to a later launch, by which time
-    /// the crash was attributed to the wrong session and dropped as sampled out.
+    /// Whether crashes left behind by earlier launches are recovered at init. Follows only the
+    /// `.errors` switch, never this launch's sampling roll — see `recoverPendingCrashes`.
     internal static func shouldRecoverCrashes(options: CoralogixExporterOptions) -> Bool {
         options.shouldInitInstrumentation(instrumentation: .errors)
     }
