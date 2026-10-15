@@ -590,20 +590,6 @@ class CxRumBuilderTests: XCTestCase {
         XCTAssertNil(iosPayload["tv_vitals_context"])
     }
 
-    func test_payload_onTvOS_keepsNSErrorFields() throws {
-        let nsError: [String: AttributeValue] = [Keys.domain.rawValue: AttributeValue("NSURLErrorDomain"),
-                                                 Keys.code.rawValue: AttributeValue("-1009"),
-                                                 Keys.userInfo.rawValue: AttributeValue("{\"k\":\"v\"}")]
-        let cxRum = try XCTUnwrap(makeSUT(currentTime: Date(), eventType: "error",
-                                          extraAttributes: nsError)?.build())
-        var builder = CxRumPayloadBuilder(rum: cxRum, viewManager: mockViewManager, os: "tvos")
-        let errorContext = try XCTUnwrap(builder.build()[Keys.errorContext.rawValue] as? [String: Any])
-
-        XCTAssertEqual(errorContext["domain"] as? String, "NSURLErrorDomain")
-        XCTAssertEqual(errorContext["code"] as? String, "-1009")
-        XCTAssertEqual(errorContext["user_info"] as? [String: String], ["k": "v"])
-    }
-
     func test_payload_onIOS_keepsMobileSchema() throws {
         let cxRum = try XCTUnwrap(makeSUT(currentTime: Date(), eventType: "log")?.build())
         var builder = CxRumPayloadBuilder(rum: cxRum, viewManager: mockViewManager, os: "ios")

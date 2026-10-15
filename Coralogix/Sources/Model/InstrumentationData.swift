@@ -86,6 +86,7 @@ struct OtelSpan {
     // be silently ignored by the backend with no compile-time warning.
     private enum AttrKey {
         static let mobileSdkVersion          = "cx_rum.mobile_sdk.version"
+        static let tvSdkVersion              = "cx_rum.tv_sdk.version"
         static let environment               = "cx_rum.environment"
         static let platform                  = "cx_rum.platform"
         static let versionMetadataAppName    = "cx_rum.version_metadata.app_name"
@@ -139,16 +140,16 @@ struct OtelSpan {
     internal static func buildRumContextAttributes(
         fromCxRumDict cxRumDict: [String: Any],
         viewManager: ViewManager?,
-        mobileSdkVersion: String
+        mobileSdkVersion: String,
+        os: String = Global.getOs()
     ) -> [String: Any] {
         var attrs = [String: Any]()
 
-        attrs[AttrKey.mobileSdkVersion] = mobileSdkVersion
+        addSdkVersionAndPlatform(to: &attrs, sdkVersion: mobileSdkVersion, os: os)
 
         if let env = cxRumDict[Keys.environment.rawValue] as? String, !env.isEmpty {
             attrs[AttrKey.environment] = env
         }
-        attrs[AttrKey.platform] = CxRumPayloadBuilder.platform(for: Global.getOs())
 
         if let vm = cxRumDict[Keys.versionMetaData.rawValue] as? [String: Any] {
             attrs[AttrKey.versionMetadataAppName]    = vm[Keys.appName.rawValue]
@@ -242,17 +243,22 @@ struct OtelSpan {
         return attrs
     }
 
+    /// Mirrors `text.cx_rum`: tvOS carries the SDK under `tv_sdk`, so its version does too.
+    private static func addSdkVersionAndPlatform(to attrs: inout [String: Any], sdkVersion: String, os: String) {
+        let isTv = CxRumPayloadBuilder.isTv(os: os)
+        attrs[isTv ? AttrKey.tvSdkVersion : AttrKey.mobileSdkVersion] = sdkVersion
+        attrs[AttrKey.platform] = CxRumPayloadBuilder.platform(for: os)
+    }
+
     private static func buildRumContextAttributes(cxRum: CxRum, viewManager: ViewManager?) -> [String: Any] {
         var attrs = [String: Any]()
 
-        // Mobile SDK version (browser SDK equivalent: cx_rum.browser_sdk.version)
-        attrs[AttrKey.mobileSdkVersion] = cxRum.mobileSDK.sdkFramework.version
+        // SDK version (browser SDK equivalent: cx_rum.browser_sdk.version) & platform
+        addSdkVersionAndPlatform(to: &attrs, sdkVersion: cxRum.mobileSDK.sdkFramework.version, os: Global.getOs())
 
-        // Environment & platform
         if !cxRum.environment.isEmpty {
             attrs[AttrKey.environment] = cxRum.environment
         }
-        attrs[AttrKey.platform] = CxRumPayloadBuilder.platform(for: Global.getOs())
 
         // Version metadata
         attrs[AttrKey.versionMetadataAppName]    = cxRum.versionMetadata.appName

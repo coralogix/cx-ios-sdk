@@ -32,7 +32,8 @@ XCODE_LOG="${TMPDIR:-/tmp}/cx-tvos-smoke-xcode.log"
 APP_LOG="${TMPDIR:-/tmp}/cx-tvos-smoke-app.log"
 RESULT_JSON="${TMPDIR:-/tmp}/cx-tvos-smoke-validate.json"
 BUNDLE_ID="com.coralogix.DemoAppTvOS"
-REQUIRED_TYPES=(network-request error log)
+# mobile-vitals carries tv_vitals_context; the demo's cold-start detector emits one per launch.
+REQUIRED_TYPES=(network-request error log mobile-vitals)
 
 infra() { echo "::error::tvOS smoke infra failure: $*" >&2; exit 2; }
 
@@ -75,6 +76,15 @@ xcodebuild build \
 
 APP=$(find "$DERIVED_DATA/Build/Products" -maxdepth 2 -name DemoAppTvOS.app -path '*appletvsimulator*' | head -1)
 [ -n "$APP" ] || infra "built app not found under $DERIVED_DATA"
+
+# The validator is a free-tier host that sleeps when idle, and the app uploads ~2s after
+# launch. Wake it first, so a cold start can't drop the session's first batches.
+VALIDATOR_UP=0
+for _ in $(seq 1 18); do
+  curl -s -o /dev/null --max-time 10 "$PROXY_URL/validate/warmup" && { VALIDATOR_UP=1; break; }
+  sleep 5
+done
+[ "$VALIDATOR_UP" -eq 1 ] || infra "validator at $PROXY_URL did not respond within 90s"
 
 xcrun simctl boot "$UDID" >/dev/null 2>&1 || true
 xcrun simctl bootstatus "$UDID" -b >/dev/null 2>&1 || infra "simulator did not boot"

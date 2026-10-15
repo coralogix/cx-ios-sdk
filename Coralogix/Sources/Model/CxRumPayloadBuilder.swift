@@ -17,7 +17,7 @@ struct CxRumPayloadBuilder {
     var os: String = Global.getOs()
 
     /// The `tv` platform carries the mobile objects under `tv_*` keys.
-    private var isTv: Bool { os == Keys.tvos.rawValue }
+    private var isTv: Bool { Self.isTv(os: os) }
     
     // MARK: - Public Methods
     
@@ -86,9 +86,14 @@ struct CxRumPayloadBuilder {
     }
     
 
+    /// Whether an OS name, as `Global.getOs()` reports it, sends under the `tv` platform.
+    static func isTv(os: String) -> Bool {
+        return os == Keys.tvos.rawValue
+    }
+
     /// The `platform` wire value for an OS name as `Global.getOs()` reports it.
     static func platform(for os: String) -> String {
-        return os == Keys.tvos.rawValue ? Keys.tv.rawValue : Keys.mobile.rawValue
+        return isTv(os: os) ? Keys.tv.rawValue : Keys.mobile.rawValue
     }
 
     // MARK: - Basic Detail Helpers
