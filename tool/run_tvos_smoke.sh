@@ -4,8 +4,9 @@
 # schema-validator to check every log of that session.
 #
 # Passes only when the validator holds logs for the session, every log batch was
-# accepted, and the session covers each type in REQUIRED_TYPES — so a payload the
-# `tv` schema rejects, or a tvOS instrumentation that silently stops sending, fails.
+# accepted, every log carries the tvOS identity, and the session covers each type in
+# REQUIRED_TYPES — so a payload the `tv` schema rejects, a log sent as mobile, or a tvOS
+# instrumentation that silently stops sending, fails.
 #
 # Reads PROXY_URL from Example/envs.swift (CI generates it in setup-demo-app).
 #
@@ -147,6 +148,16 @@ REJECTED=$(jq -r '.[] | select(.validationResult.statusCode != 200) | .validatio
 if [ -n "$REJECTED" ]; then
   echo "::error::schema-validator rejected tvOS logs:"
   echo "$REJECTED" | sed 's/^/  /'
+  FAILED=1
+fi
+# Every log must carry the tvOS identity end to end, independent of what the validator's
+# schema happens to allow: the platform, the SDK object's os, and the device os.
+NOT_TV=$(jq -r '[.[].logs[]?.text.cx_rum
+  | select(.platform != "tv" or .tv_sdk.os != "tvos" or .device_context.os != "tvos"
+           or has("mobile_sdk") or has("mobile_vitals_context"))
+  | .event_context.type] | join(" ")' "$RESULT_JSON")
+if [ -n "$NOT_TV" ]; then
+  echo "::error::logs without the tvOS identity (platform tv, tv_sdk/device os tvos, no mobile_* keys): $NOT_TV"
   FAILED=1
 fi
 if [ -n "${MISSING:-}" ]; then
