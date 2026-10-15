@@ -10,15 +10,17 @@
 # Reads PROXY_URL from Example/envs.swift (CI generates it in setup-demo-app).
 #
 # CI knobs (all optional):
-#   CX_TVOS_SIM_UDID      simulator to use; defaults to the first available Apple TV
-#                         on the newest installed tvOS runtime.
+#   CX_TVOS_SIM_UDID      simulator to use; defaults to an Apple TV on the runtime matching
+#                         the selected Xcode's tvOS SDK (else the newest one not newer than
+#                         it — a runtime newer than the SDK fails at launch).
 #   CX_TVOS_DERIVED_DATA  DerivedData path; defaults to a temp dir.
 #   CX_TVOS_WAIT_SECONDS  how long to poll the validator for the session (default 120).
 #
 # Exit codes:
 #   0 — every log valid and every required type present
 #   1 — the validator rejected a log, or a required type is missing
-#   2 — infra failure (no simulator, build, launch, validator unreachable)
+#   2 — infra failure (no simulator, build, launch, validator unreachable or holding no
+#       logs for the session — e.g. a cold-starting validator that dropped the uploads)
 
 set -uo pipefail
 
@@ -34,19 +36,30 @@ REQUIRED_TYPES=(network-request error log)
 
 infra() { echo "::error::tvOS smoke infra failure: $*" >&2; exit 2; }
 
+# A result left by an earlier run must never be judged as this session's.
+rm -f "$RESULT_JSON"
+
 PROXY_URL=$(sed -nE 's/^[[:space:]]*case PROXY_URL = "([^"]+)".*/\1/p' "$EXAMPLE_DIR/envs.swift" 2>/dev/null)
 [ -n "$PROXY_URL" ] || infra "no PROXY_URL in Example/envs.swift"
 
 UDID="${CX_TVOS_SIM_UDID:-}"
 if [ -z "$UDID" ]; then
-  UDID=$(xcrun simctl list devices available -j | jq -r '
+  SDK_VERSION=$(xcrun --sdk appletvsimulator --show-sdk-version 2>/dev/null)
+  [ -n "$SDK_VERSION" ] || infra "the selected Xcode has no tvOS Simulator SDK"
+  PICK=$(xcrun simctl list devices available -j | jq -r \
+    --argjson sdk "[$(echo "$SDK_VERSION" | tr '.' ',')]" '
     .devices | to_entries
-    | map(select(.key | test("tvOS")))
-    | sort_by(.key | capture("tvOS-(?<v>[0-9-]+)").v | split("-") | map(tonumber))
-    | reverse | map(.value[]) | map(select(.name | startswith("Apple TV")))
-    | first | .udid // empty')
+    | map(select(.key | test("tvOS-[0-9-]+$"))
+          | {v: (.key | capture("tvOS-(?<v>[0-9-]+)$").v | split("-") | map(tonumber)),
+             tv: (.value | map(select(.name | startswith("Apple TV"))))})
+    | map(select((.tv | length) > 0 and .v <= $sdk))
+    | sort_by(.v) | last // empty
+    | "\(.v | map(tostring) | join(".")) \(.tv[0].udid)"')
+  [ -n "$PICK" ] || infra "no Apple TV simulator on a runtime <= tvOS SDK $SDK_VERSION"
+  RUNTIME=${PICK% *}; UDID=${PICK#* }
+  [ "$RUNTIME" = "$SDK_VERSION" ] \
+    || echo "::warning::no tvOS $SDK_VERSION runtime (the SDK's); using tvOS $RUNTIME"
 fi
-[ -n "$UDID" ] || infra "no available Apple TV simulator"
 echo "Apple TV simulator: $UDID"
 
 echo "Building DemoAppTvOS…"
@@ -80,27 +93,43 @@ for _ in $(seq 1 60); do
   sleep 1
 done
 [ -n "$SESSION_ID" ] || { tail -20 "$APP_LOG" >&2; infra "app never reported a session id"; }
+grep -q "CX_SMOKE_ACTIONS_SENT" "$APP_LOG" \
+  || { tail -20 "$APP_LOG" >&2; infra "app never finished the smoke actions"; }
 echo "Session: $SESSION_ID"
 
-# Poll until every required type has reached the validator, then judge the whole session.
+# Poll until every required type has arrived AND the log count has held for two more
+# polls: batches keep flushing after the first ones, and the whole session is judged.
+REQ_JSON=$(printf '%s\n' "${REQUIRED_TYPES[@]}" | jq -R . | jq -s .)
 DEADLINE=$(( $(date +%s) + WAIT_SECONDS ))
+LAST_COUNT=-1
+STABLE_POLLS=0
 while :; do
-  if curl -sf --max-time 30 "$PROXY_URL/validate/$SESSION_ID" -o "$RESULT_JSON" \
-     && jq -e 'type == "array"' "$RESULT_JSON" >/dev/null 2>&1; then
-    MISSING=$(jq -r --argjson req "$(printf '%s\n' "${REQUIRED_TYPES[@]}" | jq -R . | jq -s .)" '
+  if curl -sf --max-time 30 "$PROXY_URL/validate/$SESSION_ID" -o "$RESULT_JSON.tmp" \
+     && jq -e 'type == "array"' "$RESULT_JSON.tmp" >/dev/null 2>&1; then
+    mv "$RESULT_JSON.tmp" "$RESULT_JSON"
+    MISSING=$(jq -r --argjson req "$REQ_JSON" '
       [.[].logs[]?.text.cx_rum.event_context.type] as $seen
       | $req - $seen | join(" ")' "$RESULT_JSON")
-    [ -z "$MISSING" ] && break
+    COUNT=$(jq '[.[].logs[]?] | length' "$RESULT_JSON")
+    if [ -z "$MISSING" ] && [ "$COUNT" -eq "$LAST_COUNT" ]; then
+      STABLE_POLLS=$((STABLE_POLLS + 1))
+    else
+      STABLE_POLLS=0
+    fi
+    LAST_COUNT=$COUNT
+    [ "$STABLE_POLLS" -ge 2 ] && break
   fi
   [ "$(date +%s)" -ge "$DEADLINE" ] && break
   sleep 5
 done
 
-[ -s "$RESULT_JSON" ] && jq -e 'type == "array"' "$RESULT_JSON" >/dev/null 2>&1 \
-  || infra "validator returned nothing usable for $PROXY_URL/validate/$SESSION_ID"
+[ -s "$RESULT_JSON" ] || infra "validator returned nothing usable for $PROXY_URL/validate/$SESSION_ID"
 
 BATCHES=$(jq 'length' "$RESULT_JSON")
 LOGS=$(jq '[.[].logs[]?] | length' "$RESULT_JSON")
+# Zero logs means nothing reached the validator at all (down, cold start, network) —
+# infrastructure, not a schema verdict. A partial session still gets judged below.
+[ "$LOGS" -gt 0 ] || infra "validator holds no logs for session $SESSION_ID"
 echo "Validator holds $LOGS logs in $BATCHES batches; types: $(jq -r '[.[].logs[]?.text.cx_rum.event_context.type] | group_by(.) | map("\(.[0])=\(length)") | join(" ")' "$RESULT_JSON")"
 
 FAILED=0
