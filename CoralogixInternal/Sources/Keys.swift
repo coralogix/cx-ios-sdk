@@ -137,6 +137,7 @@ public enum Keys: String {
     case platform
     case mobile
     case mobileSdk = "mobile_sdk"
+    case tvSdk = "tv_sdk"
     case framework
     case swift
     case ios
@@ -209,7 +210,7 @@ public enum Keys: String {
     case virt = "virt"
     case obfuscated = "obfuscated"
     case tvos
-    case television
+    case tv
     case mobileVitalsContext = "mobile_vitals_context"
     case lifeCycleContext = "life_cycle_context"
     case mobileVitalsType

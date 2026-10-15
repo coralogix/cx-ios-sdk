@@ -289,6 +289,7 @@ public class CxSpan {
         Keys.snapshotContext.rawValue,
         Keys.isSnapshotEvent.rawValue,
         Keys.mobileSdk.rawValue,
+        Keys.tvSdk.rawValue,
         Keys.timestamp.rawValue,
         Keys.traceId.rawValue,
         Keys.spanId.rawValue,

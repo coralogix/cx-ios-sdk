@@ -40,6 +40,8 @@ jobs:
 
   tvos-build:
     uses: ./.github/workflows/ci-tvos-build.yml
+    secrets:
+      demoapp_api_key: ${{ secrets.DEMOAPP_API_KEY }}
 
   ci-passed:
     name: ci-passed

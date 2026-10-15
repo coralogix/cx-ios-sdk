@@ -559,6 +559,51 @@ class CxRumBuilderTests: XCTestCase {
                      "isNavigationEvent must not be nested under event_context")
     }
 
+    // The `tv` schema rejects the whole batch if any mobile-only field is present, so these
+    // pin the literal wire values a tvOS payload must carry.
+    func test_payload_onTvOS_followsTvSchema() throws {
+        let cxRum = try XCTUnwrap(makeSUT(currentTime: Date(), eventType: "log")?.build())
+        var builder = CxRumPayloadBuilder(rum: cxRum, viewManager: mockViewManager, os: "tvos")
+        let payload = builder.build()
+
+        XCTAssertEqual(payload[Keys.platform.rawValue] as? String, "tv")
+        let tvSdk = try XCTUnwrap(payload["tv_sdk"] as? [String: String])
+        XCTAssertEqual(tvSdk, ["sdk_version": cxRum.mobileSDK.sdkFramework.version])
+        XCTAssertNil(payload["mobile_sdk"])
+        XCTAssertNil(payload[Keys.isNavigationEvent.rawValue])
+    }
+
+    func test_payload_errorContext_dropsNSErrorFieldsOnlyOnTvOS() throws {
+        let nsError: [String: AttributeValue] = [Keys.domain.rawValue: AttributeValue("NSURLErrorDomain"),
+                                                 Keys.code.rawValue: AttributeValue("-1009"),
+                                                 Keys.userInfo.rawValue: AttributeValue("{\"k\":\"v\"}")]
+        let cxRum = try XCTUnwrap(makeSUT(currentTime: Date(), eventType: "error",
+                                          extraAttributes: nsError)?.build())
+
+        var tvBuilder = CxRumPayloadBuilder(rum: cxRum, viewManager: mockViewManager, os: "tvos")
+        let tvError = try XCTUnwrap(tvBuilder.build()[Keys.errorContext.rawValue] as? [String: Any])
+        XCTAssertEqual(tvError[Keys.code.rawValue] as? String, "-1009")
+        XCTAssertNil(tvError["domain"])
+        XCTAssertNil(tvError["user_info"])
+
+        var iosBuilder = CxRumPayloadBuilder(rum: cxRum, viewManager: mockViewManager, os: "ios")
+        let iosError = try XCTUnwrap(iosBuilder.build()[Keys.errorContext.rawValue] as? [String: Any])
+        XCTAssertEqual(iosError["domain"] as? String, "NSURLErrorDomain")
+        XCTAssertEqual(iosError["user_info"] as? [String: String], ["k": "v"])
+    }
+
+    func test_payload_onIOS_keepsMobileSchema() throws {
+        let cxRum = try XCTUnwrap(makeSUT(currentTime: Date(), eventType: "log")?.build())
+        var builder = CxRumPayloadBuilder(rum: cxRum, viewManager: mockViewManager, os: "ios")
+        let payload = builder.build()
+
+        XCTAssertEqual(payload[Keys.platform.rawValue] as? String, "mobile")
+        let mobileSdk = try XCTUnwrap(payload["mobile_sdk"] as? [String: Any])
+        XCTAssertEqual(mobileSdk[Keys.sdkVersion.rawValue] as? String, cxRum.mobileSDK.sdkFramework.version)
+        XCTAssertEqual(payload[Keys.isNavigationEvent.rawValue] as? Bool, false)
+        XCTAssertNil(payload["tv_sdk"])
+    }
+
     func test_payload_emitsViewNumberAtTopLevelWhenPresent() {
         mockViewManager = MockViewManager(keyChain: MockKeyChain())
         mockViewManager.set(cxView: CXView(state: .notifyOnAppear, name: "Home"))
@@ -764,7 +809,8 @@ class CxRumBuilderTests: XCTestCase {
 
     // Convenience overload that lets the new tests vary event type without touching the
     // original makeSUT() / its existing callers (which pin a "log" event for snapshot tests).
-    private func makeSUT(currentTime: Date, eventType: String) -> CxRumBuilder? {
+    private func makeSUT(currentTime: Date, eventType: String,
+                         extraAttributes: [String: AttributeValue] = [:]) -> CxRumBuilder? {
         let endTime = Date()
         self.mockOtel = MockSpanData(attributes: [Keys.severity.rawValue: AttributeValue("3"),
                                                   Keys.eventType.rawValue: AttributeValue(eventType),
@@ -774,7 +820,8 @@ class CxRumBuilderTests: XCTestCase {
                                                   Keys.userName.rawValue: AttributeValue("John Doe"),
                                                   Keys.userEmail.rawValue: AttributeValue("john.doe@example.com"),
                                                   Keys.sessionId.rawValue: AttributeValue("session_001"),
-                                                  Keys.sessionCreationDate.rawValue: AttributeValue(1609459200)],
+                                                  Keys.sessionCreationDate.rawValue: AttributeValue(1609459200)]
+                                        .merging(extraAttributes) { _, extra in extra },
                                      startTime: currentTime,
                                      endTime: endTime,
                                      spanId: "20",

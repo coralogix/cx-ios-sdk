@@ -13,6 +13,8 @@ struct CxRumPayloadBuilder {
     let rum: CxRum
     // Dependencies needed only for serialization
     let viewManager: ViewManager?
+    // Injectable so tests on iOS can build the tvOS payload.
+    var os: String = Global.getOs()
     
     // MARK: - Public Methods
     
@@ -24,6 +26,7 @@ struct CxRumPayloadBuilder {
         addConditionalContexts(to: &result)
         addViewManagerContext(to: &result)
         addLabels(to: &result)
+        applyTvSchema(to: &result)
         
         return result
     }
@@ -80,6 +83,28 @@ struct CxRumPayloadBuilder {
         }
     }
     
+    /// Top-level fields the `tv` platform schema rejects outright.
+    private static let mobileOnlyKeys = [Keys.mobileSdk.rawValue,
+                                         Keys.isNavigationEvent.rawValue,
+                                         Keys.mobileVitalsContext.rawValue]
+
+    /// Fields the `tv` schema rejects inside a context the rest of which it accepts.
+    private static let mobileOnlyNestedKeys = [Keys.errorContext.rawValue: [Keys.domain.rawValue,
+                                                                             Keys.userInfo.rawValue]]
+
+    /// The `tv` platform has its own schema: `tv_sdk` carries only the SDK version, and the
+    /// mobile-only fields are not allowed.
+    private func applyTvSchema(to result: inout [String: Any]) {
+        guard result[Keys.platform.rawValue] as? String == Keys.tv.rawValue else { return }
+        Self.mobileOnlyKeys.forEach { result.removeValue(forKey: $0) }
+        for (context, keys) in Self.mobileOnlyNestedKeys {
+            guard var nested = result[context] as? [String: Any] else { continue }
+            keys.forEach { nested.removeValue(forKey: $0) }
+            result[context] = nested
+        }
+        result[Keys.tvSdk.rawValue] = [Keys.sdkVersion.rawValue: rum.mobileSDK.sdkFramework.version]
+    }
+
     // MARK: - Basic Detail Helpers
 
     // Each function below has a single, clear responsibility.
@@ -117,8 +142,7 @@ struct CxRumPayloadBuilder {
     }
 
     private func addPlatform(to result: inout [String: Any]) {
-        let platform = (Global.getOs() == Keys.tvos.rawValue) ? Keys.television.rawValue : Keys.mobile.rawValue
-        result[Keys.platform.rawValue] = platform
+        result[Keys.platform.rawValue] = os == Keys.tvos.rawValue ? Keys.tv.rawValue : Keys.mobile.rawValue
     }
 
     private func addDeviceContext(to result: inout [String: Any]) {

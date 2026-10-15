@@ -9,7 +9,8 @@ ci.yml ─┬─ ci-component-unit.yml   SPM unit tests
         ├─ ci-ui-tests.yml         XCUITest, tiers: component + smoke + soak
         │                          (a `quarantine` tier exists and never runs)
         ├─ ci-podspec-lint.yml     the three podspecs, in parallel
-        ├─ ci-tvos-build.yml       every library target, tvOS device + simulator
+        ├─ ci-tvos-build.yml       tvOS: library build (device + simulator) and
+        │                          DemoAppTvOS smoke against the schema-validator
         └─ ci-passed               the required status check
 ```
 

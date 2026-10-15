@@ -1,6 +1,6 @@
 name: tvOS Build
 
-# Reusable. Compiles every library target for tvOS — nothing else in CI does, so
+# Reusable. Two jobs. `build` compiles every library target for tvOS — nothing else in CI does, so
 # an iOS-only API reaching shared code otherwise breaks tvOS customers silently.
 #
 # Builds for the device AND the simulator: the tvOS Simulator SDK carries
@@ -8,6 +8,11 @@ name: tvOS Build
 # targetEnvironment(simulator)` hides different code in each, so one passing
 # never proves the other. `swift build` with an explicit --triple needs no
 # simulator runtime, so nothing is booted.
+#
+# `smoke` runs DemoAppTvOS on an Apple TV simulator and has the schema-validator check
+# the whole session (tool/run_tvos_smoke.sh) — the tvOS counterpart of the iOS smoke
+# shards. tvOS sends `platform: tv`, whose schema differs from mobile, so a mobile-only
+# field reaching a tvOS payload fails here rather than in a customer's data.
 
 on:
   workflow_call:
@@ -18,6 +23,9 @@ on:
       xcode-version:
         type: string
         default: '16.4'
+    secrets:
+      demoapp_api_key:
+        required: false
 
 permissions:
   contents: read
@@ -47,3 +55,25 @@ jobs:
           swift build \
             --sdk "$(xcrun --sdk ${{ matrix.target.sdk }} --show-sdk-path)" \
             --triple ${{ matrix.target.triple }}
+
+  smoke:
+    name: smoke · tvOS schema validation
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-xcode
+        with:
+          xcode-version: ${{ inputs.xcode-version }}
+          install-xcpretty: 'false'
+
+      - uses: ./.github/actions/setup-demo-app
+        with:
+          api-key: ${{ secrets.demoapp_api_key }}
+          cache-prefix: pods-tvos
+
+      # Exit 1 is a real schema failure; 2 is infrastructure (no simulator, build,
+      # validator unreachable) — the script prints which.
+      - name: Run tvOS smoke
+        run: tool/run_tvos_smoke.sh
