@@ -13,6 +13,11 @@ struct CxRumPayloadBuilder {
     let rum: CxRum
     // Dependencies needed only for serialization
     let viewManager: ViewManager?
+    // Injectable so tests on iOS can build the tvOS payload.
+    var os: String = Global.getOs()
+
+    /// The `tv` platform carries the mobile objects under `tv_*` keys.
+    private var isTv: Bool { Self.isTv(os: os) }
     
     // MARK: - Public Methods
     
@@ -31,7 +36,7 @@ struct CxRumPayloadBuilder {
     private func addBasicDetails(to result: inout [String: Any]) {
         addFingerprint(to: &result)
         addTimestamp(to: &result)
-        addMobileSdk(to: &result)
+        addSdk(to: &result)
         addVersionMetadata(to: &result)
         addSessionContext(to: &result)
         addEventContext(to: &result)
@@ -80,6 +85,17 @@ struct CxRumPayloadBuilder {
         }
     }
     
+
+    /// Whether an OS name, as `Global.getOs()` reports it, sends under the `tv` platform.
+    static func isTv(os: String) -> Bool {
+        return os == Keys.tvos.rawValue
+    }
+
+    /// The `platform` wire value for an OS name as `Global.getOs()` reports it.
+    static func platform(for os: String) -> String {
+        return isTv(os: os) ? Keys.tv.rawValue : Keys.mobile.rawValue
+    }
+
     // MARK: - Basic Detail Helpers
 
     // Each function below has a single, clear responsibility.
@@ -91,8 +107,9 @@ struct CxRumPayloadBuilder {
         result[Keys.timestamp.rawValue] = rum.timeStamp.milliseconds
     }
 
-    private func addMobileSdk(to result: inout [String: Any]) {
-        result[Keys.mobileSdk.rawValue] = rum.mobileSDK.getDictionary()
+    private func addSdk(to result: inout [String: Any]) {
+        let key = isTv ? Keys.tvSdk : Keys.mobileSdk
+        result[key.rawValue] = rum.mobileSDK.getDictionary()
     }
 
     private func addVersionMetadata(to result: inout [String: Any]) {
@@ -117,8 +134,7 @@ struct CxRumPayloadBuilder {
     }
 
     private func addPlatform(to result: inout [String: Any]) {
-        let platform = (Global.getOs() == Keys.tvos.rawValue) ? Keys.television.rawValue : Keys.mobile.rawValue
-        result[Keys.platform.rawValue] = platform
+        result[Keys.platform.rawValue] = Self.platform(for: os)
     }
 
     private func addDeviceContext(to result: inout [String: Any]) {
@@ -154,7 +170,8 @@ struct CxRumPayloadBuilder {
     
     private func addMobileVitalsContext(to result: inout [String: Any]) {
         if rum.eventContext.type == .mobileVitals, let mobileVitalsContext = rum.mobileVitalsContext {
-            result[Keys.mobileVitalsContext.rawValue] = mobileVitalsContext.getMobileVitalsDictionary()
+            let key = isTv ? Keys.tvVitalsContext : Keys.mobileVitalsContext
+            result[key.rawValue] = mobileVitalsContext.getMobileVitalsDictionary()
         }
     }
     

@@ -161,6 +161,21 @@ final class InstrumentationDataTests: XCTestCase {
         XCTAssertEqual(attrs["cx_rum.version_metadata.app_version"] as? String, "3.1.0")
     }
 
+    // The trace copy must name the SDK the way `text.cx_rum` does: `tv_sdk` on tvOS.
+    func testBuildRumContextAttributes_sdkVersionKeyFollowsPlatform() {
+        let tv = OtelSpan.buildRumContextAttributes(fromCxRumDict: [:], viewManager: nil,
+                                                    sdkVersion: "2.20.1", os: "tvos")
+        XCTAssertEqual(tv["cx_rum.tv_sdk.version"] as? String, "2.20.1")
+        XCTAssertEqual(tv["cx_rum.platform"] as? String, "tv")
+        XCTAssertNil(tv["cx_rum.mobile_sdk.version"])
+
+        let ios = OtelSpan.buildRumContextAttributes(fromCxRumDict: [:], viewManager: nil,
+                                                     sdkVersion: "2.20.1", os: "ios")
+        XCTAssertEqual(ios["cx_rum.mobile_sdk.version"] as? String, "2.20.1")
+        XCTAssertEqual(ios["cx_rum.platform"] as? String, "mobile")
+        XCTAssertNil(ios["cx_rum.tv_sdk.version"])
+    }
+
     func testBuildRumContextAttributes_emptyEnvironment_isOmitted() {
         let cxRum = makeCxRum(environment: "")
         let attrs = OtelSpan(otel: mockSpan, cxRum: cxRum, viewManager: nil).attributes

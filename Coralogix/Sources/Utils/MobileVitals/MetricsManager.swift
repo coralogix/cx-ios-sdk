@@ -9,7 +9,9 @@ import Foundation
 #if canImport(UIKit)
 import UIKit
 #endif
+#if os(iOS)
 import MetricKit
+#endif
 import CoralogixInternal
 
 public class MetricsManager {
@@ -57,6 +59,8 @@ public class MetricsManager {
     private var schedulingActive = false
                 
     public func addMetricKitObservers() {
+        // MetricKit is unavailable on tvOS; every other vital is collected by our own detectors.
+        #if os(iOS)
         MyMetricSubscriber.shared.metricKitClosure = { [weak self] dict in
             self?.emitMetricKitPayload(dict)
         }
@@ -65,6 +69,7 @@ public class MetricsManager {
             self.reportANR(message: message, errorType: errorType, source: "MetricKit hang")
         }
         MXMetricManager.shared.add(MyMetricSubscriber.shared)
+        #endif
     }
 
     /// Emits a category-keyed dict (`{ "<category>": <payload> }`) — used
@@ -97,7 +102,9 @@ public class MetricsManager {
     }
     
     public func removeObservers() {
+        #if os(iOS)
         MXMetricManager.shared.remove(MyMetricSubscriber.shared)
+        #endif
         self.stopAllDetectors()
         self.stopSendScheduler()
     }
@@ -290,6 +297,7 @@ protocol HangDiagnosticProviding {
     var hangDurationMs: Double { get }
 }
 
+#if os(iOS)
 @available(iOS 14.0, *)
 extension MXHangDiagnostic: HangDiagnosticProviding {
     var hangDurationMs: Double {
@@ -335,3 +343,4 @@ class MyMetricSubscriber: NSObject, MXMetricManagerSubscriber {
         hangDiagnosticClosure?(message, "MXHangDiagnostic")
     }
 }
+#endif

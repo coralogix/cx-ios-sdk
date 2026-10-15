@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Release-mechanics commits (version bumps, podspec/script tweaks, README edits) are
 omitted; the focus here is user-facing behavior changes.
 
+## [2.20.1] - 2026-10-15
+
+### Fixed
+- The SDK builds for tvOS 14 and higher again when installed with Swift Package Manager.
+
+### Changed
+- tvOS events now report `platform` as `tv`, with the SDK details in `tv_sdk` and mobile vitals in `tv_vitals_context` (previously `television`, `mobile_sdk` and `mobile_vitals_context`). Update any tvOS queries or dashboards that filter on the old fields.
+
 ## [2.20.0] - 2026-10-14
 
 ### Added

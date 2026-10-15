@@ -109,7 +109,7 @@ final class CoralogixRumManager {
     }
     private init() {}
 
-    func initialize() {
+    func initialize(application: String = "DemoApp-iOS-swift") {
         let userContext = UserContext(userId: "ww",
                                       userName: "?",
                                       userEmail: "a@a.com",
@@ -129,7 +129,7 @@ final class CoralogixRumManager {
         let options = CoralogixExporterOptions(coralogixDomain: domain,
                                                userContext: userContext,
                                                environment: "PROD",
-                                               application: "DemoApp-iOS-swift",
+                                               application: application,
                                                version: "1",
                                                publicKey: publicKey,
                                                instrumentations: [

@@ -130,7 +130,7 @@ public class TextScanner {
         let supportedSet = Set(supported)
         request.recognitionLanguages = desired.filter { supportedSet.contains($0) }
 
-        if #available(iOS 16.0, *) {
+        if #available(iOS 16.0, tvOS 16.0, *) {
             request.automaticallyDetectsLanguage = true
         }
     }

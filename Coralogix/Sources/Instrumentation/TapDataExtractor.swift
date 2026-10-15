@@ -148,8 +148,7 @@ final class ScrollTracker {
             return nil
         }
         guard let state = touchStates.removeValue(forKey: ObjectIdentifier(touch)) else { return nil }
-        let nearestScroll = Self.nearestScrollAncestor(state.view)
-        let isPaged = nearestScroll?.isPagingEnabled == true
+        let isPaged = Self.isInsidePagedScrollView(state.view)
         let threshold: CGFloat = isPaged ? Self.pagedThreshold : Self.threshold
         let endLocation = touch.location(in: nil)
         guard let dir = Self.direction(from: state.start, to: endLocation, threshold: threshold) else {
@@ -190,7 +189,7 @@ final class ScrollTracker {
             // Return the stored view and tap location so the caller can emit a click event.
             return .tap(view: state.view, location: endPoint)
         }
-        let isPaged = Self.nearestScrollAncestor(state.view)?.isPagingEnabled == true
+        let isPaged = Self.isInsidePagedScrollView(state.view)
         let eventType: InteractionEventName = isPaged ? .swipe : .scroll
         return .scroll(GestureResult(view: state.view, direction: dir, eventType: eventType))
     }
@@ -211,6 +210,15 @@ final class ScrollTracker {
             current = v.superview
         }
         return nil
+    }
+
+    /// `isPagingEnabled` does not exist on tvOS, so nothing there counts as paged.
+    private static func isInsidePagedScrollView(_ view: UIView) -> Bool {
+        #if os(iOS)
+        return nearestScrollAncestor(view)?.isPagingEnabled == true
+        #else
+        return false
+        #endif
     }
 
     /// Pure direction resolver — separated for testability.

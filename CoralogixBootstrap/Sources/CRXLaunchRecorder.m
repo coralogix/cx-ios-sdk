@@ -32,6 +32,10 @@ static void crx_removeObserver(id __strong *observer) {
 /// Reads the task role into the statics and returns whether it marks a launch the user did not
 /// start.
 static bool crx_recordTaskRole(void) {
+#if TARGET_OS_TV
+    // tvOS has no task_policy_get; treat it like a failed read — role unread, user-started launch.
+    return false;
+#else
     task_category_policy_data_t policy;
     mach_msg_type_number_t count = TASK_CATEGORY_POLICY_COUNT;
     boolean_t getDefault = FALSE;
@@ -42,6 +46,7 @@ static bool crx_recordTaskRole(void) {
     atomic_store(&_crx_launchTaskRole, policy.role);
     atomic_store(&_crx_launchTaskRoleRead, true);
     return [CRXLaunchRecorder isSystemStartTaskRole:policy.role];
+#endif
 }
 
 @implementation CRXLaunchRecorder
