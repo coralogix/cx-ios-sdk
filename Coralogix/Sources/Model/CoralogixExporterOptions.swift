@@ -125,6 +125,13 @@ public struct CoralogixExporterOptions {
     public var enableSwizzling: Bool
     
     public var proxyUrl: String?
+
+    /// True when `proxyUrl` is the RUM schema-validator, whose `tv` schema rejects fields the
+    /// production ingress accepts. Only then are those fields dropped from tvOS payloads.
+    var sendsToSchemaValidator: Bool {
+        guard let proxyUrl, let host = URLComponents(string: proxyUrl)?.host else { return false }
+        return host.contains(Keys.schemaValidatorHost.rawValue)
+    }
     
     public var traceParentInHeader: [String: Any]?
     

@@ -18,6 +18,7 @@ public class CxSpan {
     var beforeSend: (([String: Any]) -> [String: Any]?)?
     let viewManager: ViewManager?
     weak var sessionManager: SessionManager?
+    let sendsToSchemaValidator: Bool
     
     init?(otel: SpanDataProtocol,
           versionMetadata: VersionMetadata,
@@ -32,6 +33,7 @@ public class CxSpan {
         self.versionMetadata = versionMetadata
         self.subsystemName = Keys.cxRum.rawValue
         self.beforeSend = options.beforeSend
+        self.sendsToSchemaValidator = options.sendsToSchemaValidator
         self.sessionManager = sessionManager
 
         let rumBuilder = CxRumBuilder(otel: otel,
@@ -59,7 +61,8 @@ public class CxSpan {
         // Populate the basic metadata
         self.populateBasicMetadata(in: &result)
         
-        var payloadBuilder = CxRumPayloadBuilder(rum: self.cxRum, viewManager: self.viewManager)
+        var payloadBuilder = CxRumPayloadBuilder(rum: self.cxRum, viewManager: self.viewManager,
+                                                 dropsFieldsTheTvSchemaRejects: self.sendsToSchemaValidator)
         let originalCxRum = payloadBuilder.build()
         if beforeSend != nil {
             let subsetOfCxRum = self.createSubsetOfCxRum(from: originalCxRum)

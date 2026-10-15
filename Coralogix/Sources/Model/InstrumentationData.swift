@@ -148,8 +148,7 @@ struct OtelSpan {
         if let env = cxRumDict[Keys.environment.rawValue] as? String, !env.isEmpty {
             attrs[AttrKey.environment] = env
         }
-        let platform = (Global.getOs() == Keys.tvos.rawValue) ? Keys.tv.rawValue : Keys.mobile.rawValue
-        attrs[AttrKey.platform] = platform
+        attrs[AttrKey.platform] = CxRumPayloadBuilder.platform(for: Global.getOs())
 
         if let vm = cxRumDict[Keys.versionMetaData.rawValue] as? [String: Any] {
             attrs[AttrKey.versionMetadataAppName]    = vm[Keys.appName.rawValue]
@@ -253,8 +252,7 @@ struct OtelSpan {
         if !cxRum.environment.isEmpty {
             attrs[AttrKey.environment] = cxRum.environment
         }
-        let platform = (Global.getOs() == Keys.tvos.rawValue) ? Keys.tv.rawValue : Keys.mobile.rawValue
-        attrs[AttrKey.platform] = platform
+        attrs[AttrKey.platform] = CxRumPayloadBuilder.platform(for: Global.getOs())
 
         // Version metadata
         attrs[AttrKey.versionMetadataAppName]    = cxRum.versionMetadata.appName

@@ -326,6 +326,7 @@ public enum Keys: String {
     case traceParentInHeader
     case debug
     case proxyUrl
+    case schemaValidatorHost = "schema-validator"
     case enableSwizzling
     case beforeSend
     case exists

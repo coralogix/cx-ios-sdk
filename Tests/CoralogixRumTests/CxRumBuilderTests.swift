@@ -559,37 +559,69 @@ class CxRumBuilderTests: XCTestCase {
                      "isNavigationEvent must not be nested under event_context")
     }
 
-    // The `tv` schema rejects the whole batch if any mobile-only field is present, so these
-    // pin the literal wire values a tvOS payload must carry.
-    func test_payload_onTvOS_followsTvSchema() throws {
+    // These pin literal wire values: production ingress takes the full payload under `tv`,
+    // while the schema-validator's `tv` schema rejects the whole batch on any mobile-only field.
+    func test_payload_onTvOS_keepsFullPayloadAndAddsTvSdk() throws {
         let cxRum = try XCTUnwrap(makeSUT(currentTime: Date(), eventType: "log")?.build())
         var builder = CxRumPayloadBuilder(rum: cxRum, viewManager: mockViewManager, os: "tvos")
         let payload = builder.build()
 
+        let version = cxRum.mobileSDK.sdkFramework.version
         XCTAssertEqual(payload[Keys.platform.rawValue] as? String, "tv")
-        let tvSdk = try XCTUnwrap(payload["tv_sdk"] as? [String: String])
-        XCTAssertEqual(tvSdk, ["sdk_version": cxRum.mobileSDK.sdkFramework.version])
+        XCTAssertEqual(payload["tv_sdk"] as? [String: String], ["sdk_version": version])
+        let mobileSdk = try XCTUnwrap(payload["mobile_sdk"] as? [String: Any])
+        XCTAssertEqual(mobileSdk[Keys.sdkVersion.rawValue] as? String, version)
+        XCTAssertEqual(payload[Keys.isNavigationEvent.rawValue] as? Bool, false)
+    }
+
+    func test_payload_onTvOS_againstSchemaValidator_dropsFieldsTheTvSchemaRejects() throws {
+        let cxRum = try XCTUnwrap(makeSUT(currentTime: Date(), eventType: "log")?.build())
+        var builder = CxRumPayloadBuilder(rum: cxRum, viewManager: mockViewManager, os: "tvos",
+                                          dropsFieldsTheTvSchemaRejects: true)
+        let payload = builder.build()
+
+        XCTAssertEqual(payload[Keys.platform.rawValue] as? String, "tv")
+        XCTAssertEqual(payload["tv_sdk"] as? [String: String],
+                       ["sdk_version": cxRum.mobileSDK.sdkFramework.version])
         XCTAssertNil(payload["mobile_sdk"])
         XCTAssertNil(payload[Keys.isNavigationEvent.rawValue])
     }
 
-    func test_payload_errorContext_dropsNSErrorFieldsOnlyOnTvOS() throws {
+    func test_payload_errorContext_dropsNSErrorFieldsOnlyForTvAgainstSchemaValidator() throws {
         let nsError: [String: AttributeValue] = [Keys.domain.rawValue: AttributeValue("NSURLErrorDomain"),
                                                  Keys.code.rawValue: AttributeValue("-1009"),
                                                  Keys.userInfo.rawValue: AttributeValue("{\"k\":\"v\"}")]
         let cxRum = try XCTUnwrap(makeSUT(currentTime: Date(), eventType: "error",
                                           extraAttributes: nsError)?.build())
 
-        var tvBuilder = CxRumPayloadBuilder(rum: cxRum, viewManager: mockViewManager, os: "tvos")
-        let tvError = try XCTUnwrap(tvBuilder.build()[Keys.errorContext.rawValue] as? [String: Any])
-        XCTAssertEqual(tvError[Keys.code.rawValue] as? String, "-1009")
-        XCTAssertNil(tvError["domain"])
-        XCTAssertNil(tvError["user_info"])
+        func errorContext(os: String, validator: Bool) throws -> [String: Any] {
+            var builder = CxRumPayloadBuilder(rum: cxRum, viewManager: mockViewManager, os: os,
+                                              dropsFieldsTheTvSchemaRejects: validator)
+            return try XCTUnwrap(builder.build()[Keys.errorContext.rawValue] as? [String: Any])
+        }
 
-        var iosBuilder = CxRumPayloadBuilder(rum: cxRum, viewManager: mockViewManager, os: "ios")
-        let iosError = try XCTUnwrap(iosBuilder.build()[Keys.errorContext.rawValue] as? [String: Any])
-        XCTAssertEqual(iosError["domain"] as? String, "NSURLErrorDomain")
-        XCTAssertEqual(iosError["user_info"] as? [String: String], ["k": "v"])
+        let tvValidator = try errorContext(os: "tvos", validator: true)
+        XCTAssertEqual(tvValidator[Keys.code.rawValue] as? String, "-1009")
+        XCTAssertNil(tvValidator["domain"])
+        XCTAssertNil(tvValidator["user_info"])
+
+        for (os, validator) in [("tvos", false), ("ios", true), ("ios", false)] {
+            let context = try errorContext(os: os, validator: validator)
+            XCTAssertEqual(context["domain"] as? String, "NSURLErrorDomain", "\(os), validator: \(validator)")
+            XCTAssertEqual(context["user_info"] as? [String: String], ["k": "v"], "\(os), validator: \(validator)")
+        }
+    }
+
+    func test_sendsToSchemaValidator_matchesOnlyTheValidatorHost() {
+        func options(proxyUrl: String?) -> CoralogixExporterOptions {
+            CoralogixExporterOptions(coralogixDomain: .EU2, userContext: nil, environment: "PROD",
+                                     application: "App", version: "1", publicKey: "token",
+                                     proxyUrl: proxyUrl)
+        }
+        XCTAssertTrue(options(proxyUrl: "https://schema-validator-latest.onrender.com/logs").sendsToSchemaValidator)
+        XCTAssertFalse(options(proxyUrl: nil).sendsToSchemaValidator)
+        XCTAssertFalse(options(proxyUrl: "http://127.0.0.1:8888").sendsToSchemaValidator)
+        XCTAssertFalse(options(proxyUrl: "https://proxy.example.com/?cxforward=schema-validator").sendsToSchemaValidator)
     }
 
     func test_payload_onIOS_keepsMobileSchema() throws {
