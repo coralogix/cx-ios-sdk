@@ -214,7 +214,7 @@ public class CxSpan {
             otelSpanDict[Keys.attributes.rawValue] = OtelSpan.buildRumContextAttributes(
                 fromCxRumDict: finalCxRumDict,
                 viewManager: self.viewManager,
-                mobileSdkVersion: self.cxRum.mobileSDK.sdkFramework.version
+                sdkVersion: self.cxRum.mobileSDK.sdkFramework.version
             )
             instrumentationData[Keys.otelSpan.rawValue] = otelSpanDict
         }

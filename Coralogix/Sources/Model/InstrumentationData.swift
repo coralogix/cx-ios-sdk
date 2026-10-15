@@ -140,12 +140,12 @@ struct OtelSpan {
     internal static func buildRumContextAttributes(
         fromCxRumDict cxRumDict: [String: Any],
         viewManager: ViewManager?,
-        mobileSdkVersion: String,
+        sdkVersion: String,
         os: String = Global.getOs()
     ) -> [String: Any] {
         var attrs = [String: Any]()
 
-        addSdkVersionAndPlatform(to: &attrs, sdkVersion: mobileSdkVersion, os: os)
+        addSdkVersionAndPlatform(to: &attrs, sdkVersion: sdkVersion, os: os)
 
         if let env = cxRumDict[Keys.environment.rawValue] as? String, !env.isEmpty {
             attrs[AttrKey.environment] = env
@@ -230,10 +230,10 @@ struct OtelSpan {
     /// disagree on the page.
     internal static func rebuiltAttributes(fromCxRumDict cxRumDict: [String: Any],
                                            preservingPageFrom previousAttributes: [String: Any],
-                                           mobileSdkVersion: String) -> [String: Any] {
+                                           sdkVersion: String) -> [String: Any] {
         var attrs = buildRumContextAttributes(fromCxRumDict: cxRumDict,
                                               viewManager: nil,
-                                              mobileSdkVersion: mobileSdkVersion)
+                                              sdkVersion: sdkVersion)
         if let pageUrl = previousAttributes[AttrKey.pageUrl] {
             attrs[AttrKey.pageUrl] = pageUrl
         }
