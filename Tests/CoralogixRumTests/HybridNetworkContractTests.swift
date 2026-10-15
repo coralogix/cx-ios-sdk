@@ -83,10 +83,11 @@ final class HybridNetworkContractTests: XCTestCase {
     /// added here — this test is the contract.
     func testCompleteHybridDictionarySurvivesToExportedContext() throws {
         startSDK()
-        let url = "https://example.com/contract/full"
+        let url = "https://api.example.com:8443/contract/full"
         let dictionary: [String: Any] = [
             Keys.url.rawValue: url,
-            Keys.host.rawValue: "example.com",
+            // What Flutter's `Uri.host` sends: no port. The URL must win.
+            Keys.host.rawValue: "api.example.com",
             Keys.method.rawValue: "POST",
             Keys.statusCode.rawValue: 404,
             Keys.statusText.rawValue: "Not Found",
@@ -112,13 +113,16 @@ final class HybridNetworkContractTests: XCTestCase {
         let context = NetworkRequestContext(otel: span)
 
         XCTAssertEqual(context.url, url)
-        XCTAssertEqual(context.host, "example.com")
+        XCTAssertEqual(context.host, "api.example.com:8443")
         XCTAssertEqual(context.method, "POST")
         XCTAssertEqual(context.statusCode, 404)
         XCTAssertEqual(context.statusText, "Not Found",
                        "status_text must survive the bridge — it shipped empty for years")
         XCTAssertEqual(context.fragments, "/contract/full")
         XCTAssertEqual(context.schema, "https")
+        // Not a bridge key: derived natively from `url`, so hybrid apps get it without a plugin change.
+        XCTAssertEqual(context.subdomain, "api")
+        XCTAssertEqual(context.domain, "example.com")
         XCTAssertEqual(context.responseContentLength, 2387)
         XCTAssertGreaterThanOrEqual(context.duration, 350)
         XCTAssertLessThan(context.duration, 850)

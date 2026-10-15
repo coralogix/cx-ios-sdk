@@ -177,4 +177,162 @@ final class NetworkRequestContextTests: XCTestCase {
         XCTAssertEqual(dict[Keys.requestPayload.rawValue]  as? String, "req-body")
         XCTAssertEqual(dict[Keys.responsePayload.rawValue] as? String, "res-body")
     }
+
+    // MARK: - URL parts
+
+    private func makeContext(url: String) -> NetworkRequestContext {
+        NetworkRequestContext(otel: MockSpanData(attributes: [
+            SemanticAttributes.httpUrl.rawValue: AttributeValue(url)
+        ], status: "OK", endTime: Date()))
+    }
+
+    func testUrlParts_subdomainAndDomainSplitFromHostname_portPathQueryAndHashIgnored() {
+        let dict = makeContext(url: "https://blog.example.com:8080/articles/news?id=5&lang=en#top").getDictionary()
+
+        XCTAssertEqual(dict[Keys.subdomain.rawValue] as? String, "blog")
+        XCTAssertEqual(dict[Keys.domain.rawValue] as? String, "example.com")
+    }
+
+    func testUrlParts_multiLabelSubdomain_keepsEverythingLeftOfDomain() {
+        let context = makeContext(url: "https://a.b.c.example.com/path")
+
+        XCTAssertEqual(context.subdomain, "a.b.c")
+        XCTAssertEqual(context.domain, "example.com")
+    }
+
+    func testUrlParts_bareDomain_emptySubdomain() {
+        let context = makeContext(url: "https://example.com")
+
+        XCTAssertEqual(context.subdomain, "")
+        XCTAssertEqual(context.domain, "example.com")
+    }
+
+    func testUrlParts_singleLabelHost_isTheDomain() {
+        let context = makeContext(url: "http://localhost:3001/api")
+
+        XCTAssertEqual(context.subdomain, "")
+        XCTAssertEqual(context.domain, "localhost")
+    }
+
+    func testUrlParts_hostnameIsLowercased() {
+        let context = makeContext(url: "https://API.Example.COM/v1")
+
+        XCTAssertEqual(context.subdomain, "api")
+        XCTAssertEqual(context.domain, "example.com")
+    }
+
+    func testUrlParts_nonDefaultPort_keptInHostLikeTheBrowser() {
+        let context = makeContext(url: "https://blog.example.com:8080/a?b=1")
+
+        XCTAssertEqual(context.host, "blog.example.com:8080")
+        XCTAssertEqual(context.schema, "https")
+    }
+
+    func testUrlParts_defaultPort_droppedFromHost() {
+        let context = makeContext(url: "https://api.example.com:443/v1")
+
+        XCTAssertEqual(context.host, "api.example.com")
+    }
+
+    func testUrlParts_ipv6Host_bracketedLikeTheBrowser() {
+        let context = makeContext(url: "http://[::1]:8080/health")
+
+        XCTAssertEqual(context.host, "[::1]:8080")
+    }
+
+    func testUrlParts_ipv6Host_subdomainAndDomainSplitFromBracketedHostLikeTheBrowser() {
+        let context = makeContext(url: "http://[::1]:8080/health")
+
+        XCTAssertEqual(context.subdomain, "")
+        XCTAssertEqual(context.domain, "[::1]")
+    }
+
+    func testUrlParts_ipv4Host_splitNaivelyLikeTheBrowser() {
+        let context = makeContext(url: "http://192.168.1.1:8080/")
+
+        XCTAssertEqual(context.host, "192.168.1.1:8080")
+        XCTAssertEqual(context.subdomain, "192.168")
+        XCTAssertEqual(context.domain, "1.1")
+    }
+
+    func testUrlParts_httpPortOnHttps_keptInHost() {
+        let context = makeContext(url: "https://api.example.com:80/v1")
+
+        XCTAssertEqual(context.host, "api.example.com:80")
+    }
+
+    func testUrlParts_websocketDefaultPorts_droppedFromHost() {
+        XCTAssertEqual(makeContext(url: "ws://api.example.com:80/socket").host, "api.example.com")
+        XCTAssertEqual(makeContext(url: "wss://api.example.com:443/socket").host, "api.example.com")
+    }
+
+    func testUrlParts_schemeIsLowercased() {
+        let context = makeContext(url: "HTTPS://api.example.com/v1")
+
+        XCTAssertEqual(context.schema, "https")
+    }
+
+    func testUrlParts_userinfo_notPartOfHost() {
+        let context = makeContext(url: "https://user:pass@api.example.com/v1")
+
+        XCTAssertEqual(context.host, "api.example.com")
+        XCTAssertEqual(context.subdomain, "api")
+        XCTAssertEqual(context.domain, "example.com")
+    }
+
+    func testUrlParts_trailingDot_splitNaivelyLikeTheBrowser() {
+        let context = makeContext(url: "https://api.example.com./v1")
+
+        XCTAssertEqual(context.host, "api.example.com.")
+        XCTAssertEqual(context.subdomain, "api.example")
+        XCTAssertEqual(context.domain, "com.")
+    }
+
+    func testUrlParts_percentEncodedHost_decoded() {
+        let context = makeContext(url: "https://ex%41mple.com/v1")
+
+        XCTAssertEqual(context.host, "example.com")
+    }
+
+    func testUrlParts_unencodedCharacters_parsedLikeTheBrowser() {
+        let context = makeContext(url: "https://api.example.com:8443/search?q=hello world|x")
+
+        XCTAssertEqual(context.host, "api.example.com:8443")
+        XCTAssertEqual(context.subdomain, "api")
+        XCTAssertEqual(context.domain, "example.com")
+    }
+
+    func testUrlParts_urlWinsOverHostAndSchemeAttributes() {
+        let context = NetworkRequestContext(otel: MockSpanData(attributes: [
+            SemanticAttributes.httpUrl.rawValue: AttributeValue("http://localhost:3001/health"),
+            SemanticAttributes.netPeerName.rawValue: AttributeValue("localhost"),
+            SemanticAttributes.httpScheme.rawValue: AttributeValue("https")
+        ], status: "OK", endTime: Date()))
+
+        XCTAssertEqual(context.host, "localhost:3001")
+        XCTAssertEqual(context.schema, "http")
+    }
+
+    func testUrlParts_urlWithoutHost_fallsBackToHostAndSchemeAttributes() {
+        let context = NetworkRequestContext(otel: MockSpanData(attributes: [
+            SemanticAttributes.httpUrl.rawValue: AttributeValue("not a url"),
+            SemanticAttributes.netPeerName.rawValue: AttributeValue("reported.host"),
+            SemanticAttributes.httpScheme.rawValue: AttributeValue("https")
+        ], status: "OK", endTime: Date()))
+
+        XCTAssertEqual(context.host, "reported.host")
+        XCTAssertEqual(context.schema, "https")
+    }
+
+    func testUrlParts_urlWithoutHost_partsOmittedFromDictionary() {
+        let context = makeContext(url: "not a url")
+        let dict = context.getDictionary()
+
+        XCTAssertNil(context.subdomain)
+        XCTAssertNil(context.domain)
+        XCTAssertFalse(dict.keys.contains(Keys.subdomain.rawValue))
+        XCTAssertFalse(dict.keys.contains(Keys.domain.rawValue))
+        // Existing fields are still serialised.
+        XCTAssertEqual(dict[Keys.url.rawValue] as? String, "not a url")
+    }
 }

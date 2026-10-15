@@ -14,6 +14,11 @@ struct NetworkRequestContext {
     let fragments: String
     let host: String
     var schema: String
+    /// Hostname labels left of `domain` (e.g. "blog" for blog.example.com); empty when the
+    /// hostname has no more than two labels. `nil` when `url` has no parseable host.
+    let subdomain: String?
+    /// Last two hostname labels (e.g. "example.com"). `nil` when `url` has no parseable host.
+    let domain: String?
     let duration: UInt64
     var responseContentLength: Int = 0
     let statusText: String
@@ -65,9 +70,19 @@ struct NetworkRequestContext {
         
         self.fragments = otel.getAttribute(forKey: SemanticAttributes.httpTarget.rawValue) as? String ?? Keys.undefined.rawValue
         
-        self.host = otel.getAttribute(forKey: SemanticAttributes.netPeerName.rawValue) as? String ?? Keys.undefined.rawValue
+        // Taken from the URL when it parses, so native and hybrid requests agree with the browser
+        // SDK; the span attributes are the fallback.
+        let urlParts = Self.urlParts(url)
+        self.host = urlParts?.host
+            ?? otel.getAttribute(forKey: SemanticAttributes.netPeerName.rawValue) as? String
+            ?? Keys.undefined.rawValue
         
-        self.schema = otel.getAttribute(forKey: SemanticAttributes.httpScheme.rawValue) as? String ?? Keys.undefined.rawValue
+        self.schema = urlParts?.schema
+            ?? otel.getAttribute(forKey: SemanticAttributes.httpScheme.rawValue) as? String
+            ?? Keys.undefined.rawValue
+
+        self.subdomain = urlParts?.subdomain
+        self.domain = urlParts?.domain
         
         if let startTime = otel.getStartTime(),
            let endTime = otel.getEndTime() {
@@ -107,6 +122,68 @@ struct NetworkRequestContext {
         self.responsePayload = Self.capResponsePayload(otel.getAttribute(forKey: Keys.responsePayload.rawValue) as? String)
     }
     
+    /// Labels that make up the registrable domain (e.g. "example.com"); everything to the left is
+    /// the subdomain. Naive last-two-labels split matching the browser SDK — multi-part TLDs
+    /// (e.g. "co.uk") are a known limitation.
+    private static let registrableDomainLabelCount = 2
+
+    /// Ports the browser's `URL.host` omits for their scheme.
+    private static let defaultPorts = ["http": 80, "https": 443, "ws": 80, "wss": 443]
+
+    /// Characters left as-is when re-encoding a URL that failed to parse: everything valid in a
+    /// query, plus the delimiters and escapes a URL may already contain.
+    private static let urlRetryAllowedCharacters = CharacterSet.urlQueryAllowed.union(CharacterSet(charactersIn: "#[]%"))
+
+    /// Extracts the URL parts the browser SDK reports, with the same meaning:
+    /// - `schema`: the lowercased scheme, e.g. "https".
+    /// - `host`: the hostname plus `:port` when the URL names a non-default port, like the
+    ///   browser's `URL.host` ("api.example.com:8443", but "api.example.com" for "https://...:443").
+    /// - `subdomain` / `domain`: see `splitHostname`.
+    /// `nil` when `url` has no parseable host.
+    ///
+    /// Known differences from the browser: long-form IPv6 hosts are not shortened, and
+    /// internationalised hosts are reported as Unicode rather than punycode.
+    static func urlParts(_ url: String) -> (schema: String, host: String, subdomain: String, domain: String)? {
+        guard let parsed = parseURL(url),
+              let scheme = parsed.scheme?.lowercased(),
+              let hostname = parsed.host?.lowercased(),
+              !hostname.isEmpty else { return nil }
+        // Foundation strips the brackets from IPv6 literals; the browser keeps them in both
+        // `host` and `hostname`, so the subdomain/domain split runs on the bracketed form too.
+        let bracketedHost = hostname.contains(":") ? "[\(hostname)]" : hostname
+        let hostnameParts = splitHostname(bracketedHost)
+        let host: String
+        if let port = parsed.port, port != defaultPorts[scheme] {
+            host = "\(bracketedHost):\(port)"
+        } else {
+            host = bracketedHost
+        }
+        return (schema: scheme, host: host, subdomain: hostnameParts.subdomain, domain: hostnameParts.domain)
+    }
+
+    /// Before iOS 17, `URL(string:)` rejects URLs with unencoded characters (a space in the query,
+    /// `|`, ...) that the browser accepts, so retry once with those characters percent-encoded.
+    /// The first attempt is strict on every OS version so all versions take the same path.
+    private static func parseURL(_ url: String) -> URL? {
+        let strict: URL?
+        if #available(iOS 17.0, tvOS 17.0, macOS 14.0, *) {
+            strict = URL(string: url, encodingInvalidCharacters: false)
+        } else {
+            strict = URL(string: url)
+        }
+        if let strict { return strict }
+        return url.addingPercentEncoding(withAllowedCharacters: urlRetryAllowedCharacters).flatMap(URL.init(string:))
+    }
+
+    /// Naive last-two-labels split of an already-lowercased hostname, matching the browser SDK.
+    private static func splitHostname(_ hostname: String) -> (subdomain: String, domain: String) {
+        let labels = hostname.split(separator: ".", omittingEmptySubsequences: false)
+        return (
+            subdomain: labels.dropLast(registrableDomainLabelCount).joined(separator: "."),
+            domain: labels.suffix(registrableDomainLabelCount).joined(separator: ".")
+        )
+    }
+
     func getDictionary() -> [String: Any] {
         var dict = [String: Any]()
         dict[Keys.method.rawValue]                = method
@@ -116,6 +193,8 @@ struct NetworkRequestContext {
         dict[Keys.fragments.rawValue]             = fragments
         dict[Keys.host.rawValue]                  = host
         dict[Keys.schema.rawValue]                = schema
+        if let v = subdomain { dict[Keys.subdomain.rawValue] = v }
+        if let v = domain    { dict[Keys.domain.rawValue]    = v }
         dict[Keys.duration.rawValue]              = duration
         dict[Keys.responseContentLength.rawValue] = responseContentLength
         // Capture-rule fields: included only when set, never serialised as null.
