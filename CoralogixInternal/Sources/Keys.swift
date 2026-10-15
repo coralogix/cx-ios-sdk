@@ -212,6 +212,7 @@ public enum Keys: String {
     case tvos
     case tv
     case mobileVitalsContext = "mobile_vitals_context"
+    case tvVitalsContext = "tv_vitals_context"
     case lifeCycleContext = "life_cycle_context"
     case mobileVitalsType
     case mobileVitalsValue
@@ -326,7 +327,6 @@ public enum Keys: String {
     case traceParentInHeader
     case debug
     case proxyUrl
-    case schemaValidatorHost = "schema-validator"
     case enableSwizzling
     case beforeSend
     case exists

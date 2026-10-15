@@ -15,8 +15,9 @@ struct CxRumPayloadBuilder {
     let viewManager: ViewManager?
     // Injectable so tests on iOS can build the tvOS payload.
     var os: String = Global.getOs()
-    // Set when sending to the schema-validator (see `CoralogixExporterOptions.sendsToSchemaValidator`).
-    var dropsFieldsTheTvSchemaRejects = false
+
+    /// The `tv` platform carries the mobile objects under `tv_*` keys.
+    private var isTv: Bool { os == Keys.tvos.rawValue }
     
     // MARK: - Public Methods
     
@@ -28,7 +29,6 @@ struct CxRumPayloadBuilder {
         addConditionalContexts(to: &result)
         addViewManagerContext(to: &result)
         addLabels(to: &result)
-        addTvFields(to: &result)
         
         return result
     }
@@ -36,7 +36,7 @@ struct CxRumPayloadBuilder {
     private func addBasicDetails(to result: inout [String: Any]) {
         addFingerprint(to: &result)
         addTimestamp(to: &result)
-        addMobileSdk(to: &result)
+        addSdk(to: &result)
         addVersionMetadata(to: &result)
         addSessionContext(to: &result)
         addEventContext(to: &result)
@@ -85,28 +85,6 @@ struct CxRumPayloadBuilder {
         }
     }
     
-    /// Top-level fields the schema-validator's `tv` schema rejects; production ingress accepts them.
-    private static let mobileOnlyKeys = [Keys.mobileSdk.rawValue,
-                                         Keys.isNavigationEvent.rawValue,
-                                         Keys.mobileVitalsContext.rawValue]
-
-    /// Fields that schema rejects inside a context the rest of which it accepts.
-    private static let mobileOnlyNestedKeys = [Keys.errorContext.rawValue: [Keys.domain.rawValue,
-                                                                             Keys.userInfo.rawValue]]
-
-    /// tvOS adds `tv_sdk` alongside the mobile payload. Only against the schema-validator are the
-    /// fields its `tv` schema rejects dropped, so production keeps the full payload.
-    private func addTvFields(to result: inout [String: Any]) {
-        guard os == Keys.tvos.rawValue else { return }
-        result[Keys.tvSdk.rawValue] = [Keys.sdkVersion.rawValue: rum.mobileSDK.sdkFramework.version]
-        guard dropsFieldsTheTvSchemaRejects else { return }
-        Self.mobileOnlyKeys.forEach { result.removeValue(forKey: $0) }
-        for (context, keys) in Self.mobileOnlyNestedKeys {
-            guard var nested = result[context] as? [String: Any] else { continue }
-            keys.forEach { nested.removeValue(forKey: $0) }
-            result[context] = nested
-        }
-    }
 
     /// The `platform` wire value for an OS name as `Global.getOs()` reports it.
     static func platform(for os: String) -> String {
@@ -124,8 +102,9 @@ struct CxRumPayloadBuilder {
         result[Keys.timestamp.rawValue] = rum.timeStamp.milliseconds
     }
 
-    private func addMobileSdk(to result: inout [String: Any]) {
-        result[Keys.mobileSdk.rawValue] = rum.mobileSDK.getDictionary()
+    private func addSdk(to result: inout [String: Any]) {
+        let key = isTv ? Keys.tvSdk : Keys.mobileSdk
+        result[key.rawValue] = rum.mobileSDK.getDictionary()
     }
 
     private func addVersionMetadata(to result: inout [String: Any]) {
@@ -186,7 +165,8 @@ struct CxRumPayloadBuilder {
     
     private func addMobileVitalsContext(to result: inout [String: Any]) {
         if rum.eventContext.type == .mobileVitals, let mobileVitalsContext = rum.mobileVitalsContext {
-            result[Keys.mobileVitalsContext.rawValue] = mobileVitalsContext.getMobileVitalsDictionary()
+            let key = isTv ? Keys.tvVitalsContext : Keys.mobileVitalsContext
+            result[key.rawValue] = mobileVitalsContext.getMobileVitalsDictionary()
         }
     }
     
