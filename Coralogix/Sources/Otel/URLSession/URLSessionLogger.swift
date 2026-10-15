@@ -151,9 +151,13 @@ class URLSessionLogger {
         runningSpansQueue.sync {
             span = runningSpans.removeValue(forKey: sessionTaskId)
         }
-        guard span != nil,
-              let httpResponse = response as? HTTPURLResponse
-        else {
+        guard span != nil else {
+            return
+        }
+        // Taken as soon as the span is claimed, so every claim frees the buffered body, HTTP or not. A
+        // caller-supplied body (completion handler) wins and skips the captureQueue round-trip.
+        let effectiveData = dataOrFile ?? instrumentation.takeResponseBody(forTaskId: sessionTaskId) as Any?
+        guard let httpResponse = response as? HTTPURLResponse else {
             return
         }
 
@@ -168,9 +172,6 @@ class URLSessionLogger {
                               value: AttributeValue.int(contentLength))
         }
 
-        // Use caller-supplied body when present; otherwise take from rule-based store (e.g. delegate-only path).
-        // Prefer dataOrFile first to avoid redundant captureQueue.sync when completion-handler or delegate already passed body.
-        let effectiveData = dataOrFile ?? instrumentation.takeResponseBody(forTaskId: sessionTaskId)
         // Re-index native headers under the final URL when a redirect changed it, so the hybrid
         // path (RN/Flutter) can find them by the URL the JS bridge reports.
         instrumentation.indexNativeHeadersForRedirectIfNeeded(
@@ -193,8 +194,9 @@ class URLSessionLogger {
         }
         span.setAttribute(key: SemanticAttributes.httpStatusCode.rawValue, value: AttributeValue.int(statusCode))
         span.status = URLSessionLogger.statusForStatusCode(code: statusCode)
+        let effectiveData = dataOrFile ?? instrumentation.takeResponseBody(forTaskId: sessionTaskId) as Any?
         let effectiveConfig = (URLSessionInstrumentation.shared ?? instrumentation).configuration
-        effectiveConfig.receivedError?(error, dataOrFile, statusCode, span)
+        effectiveConfig.receivedError?(error, effectiveData, statusCode, span)
 
         span.end()
     }

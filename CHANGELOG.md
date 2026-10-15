@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Release-mechanics commits (version bumps, podspec/script tweaks, README edits) are
 omitted; the focus here is user-facing behavior changes.
 
+## [2.20.1] - 2026-10-15
+
+### Fixed
+- Network events from requests that use a `URLSession` delegate, which includes every React Native request, no longer occasionally miss the `response_payload` that a `collectResPayload` capture rule asks for.
+
 ## [2.20.0] - 2026-10-14
 
 ### Added
