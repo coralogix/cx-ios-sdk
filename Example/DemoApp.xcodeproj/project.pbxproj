@@ -45,7 +45,6 @@
 		E669384F2C747E860002335F /* CustomView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E669384E2C747E860002335F /* CustomView.swift */; };
 		E66938512C74842D0002335F /* ErrorViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E66938502C74842D0002335F /* ErrorViewController.swift */; };
 		E66938532C7489050002335F /* SdkViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E66938522C7489050002335F /* SdkViewController.swift */; };
-		E66938552C74A8010002335F /* PageController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E603F6CD2C56792D007C55DA /* PageController.swift */; };
 		E66938572C74A8830002335F /* UserActionsViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E66938562C74A8830002335F /* UserActionsViewController.swift */; };
 		E66E3B682DA7F76C00FBC86B /* Coralogix in Frameworks */ = {isa = PBXBuildFile; productRef = E66E3B672DA7F76C00FBC86B /* Coralogix */; };
 		E66E3B6A2DA7FAE900FBC86B /* Coralogix in Frameworks */ = {isa = PBXBuildFile; productRef = E66E3B692DA7FAE900FBC86B /* Coralogix */; };
@@ -855,7 +854,6 @@
 			files = (
 				E669382C2C722EE60002335F /* MainViewController.swift in Sources */,
 				E669383C2C723B9E0002335F /* Keys.swift in Sources */,
-				E66938552C74A8010002335F /* PageController.swift in Sources */,
 				E669383D2C723D210002335F /* NetworkSim.swift in Sources */,
 				E6FDDA2F2DF176DC0005F274 /* ClockViewController.swift in Sources */,
 				E6525B622E38C548006DB4AA /* envs.swift in Sources */,
