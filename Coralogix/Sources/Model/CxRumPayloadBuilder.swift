@@ -137,12 +137,18 @@ struct CxRumPayloadBuilder {
         result[Keys.platform.rawValue] = Self.platform(for: os)
     }
 
+    // tvOS has no WebKit and no battery, so these would only ever carry placeholders
+    // ("undefined", "-1.0") that read as real values; the `tv` schema says to omit them.
     private func addDeviceContext(to result: inout [String: Any]) {
-        result[Keys.deviceContext.rawValue] = rum.deviceContext.getDictionary()
+        var deviceContext = rum.deviceContext.getDictionary()
+        if isTv { deviceContext[Keys.userAgent.rawValue] = nil }
+        result[Keys.deviceContext.rawValue] = deviceContext
     }
 
     private func addDeviceState(to result: inout [String: Any]) {
-        result[Keys.deviceState.rawValue] = rum.deviceState.getDictionary()
+        var deviceState = rum.deviceState.getDictionary()
+        if isTv { deviceState[Keys.battery.rawValue] = nil }
+        result[Keys.deviceState.rawValue] = deviceState
     }
 
     // CX-44687: product-analytics fields at cx_rum top level.
@@ -188,11 +194,20 @@ struct CxRumPayloadBuilder {
     }
     
     private func addInteractionContext(to result: inout [String: Any]) {
-        if rum.eventContext.type == CoralogixEventType.userInteraction,
-           let interactionContext = rum.interactionContext {
-            result[Keys.interactionContext.rawValue] = interactionContext.getDictionary()
-        }
+        guard rum.eventContext.type == CoralogixEventType.userInteraction,
+              let interactionContext = rum.interactionContext else { return }
+        let dictionary = interactionContext.getDictionary()
+        // The `tv` schema rejects undeclared fields, so tvOS keeps only the ones it declares
+        // rather than dropping today's mobile-only extras by name.
+        result[Keys.interactionContext.rawValue] = isTv
+            ? dictionary.filter { Self.tvInteractionKeys.contains($0.key) }
+            : dictionary
     }
+
+    private static let tvInteractionKeys: Set<String> = [
+        Keys.eventName.rawValue, Keys.targetElement.rawValue, Keys.elementId.rawValue,
+        Keys.targetElementInnerText.rawValue, Keys.attributes.rawValue
+    ]
     
     private func addInternalContext(to result: inout [String: Any]) {
         if rum.eventContext.type == CoralogixEventType.internalKey,

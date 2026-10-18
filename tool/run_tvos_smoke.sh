@@ -35,7 +35,7 @@ APP_LOG="${TMPDIR:-/tmp}/cx-tvos-smoke-app.log"
 RESULT_JSON="${TMPDIR:-/tmp}/cx-tvos-smoke-validate.json"
 BUNDLE_ID="com.coralogix.DemoAppTvOS"
 # mobile-vitals carries tv_vitals_context; the demo's cold-start detector emits one per launch.
-REQUIRED_TYPES=(network-request error log mobile-vitals)
+REQUIRED_TYPES=(network-request error log mobile-vitals user-interaction)
 
 infra() { echo "::error::tvOS smoke infra failure: $*" >&2; exit 2; }
 

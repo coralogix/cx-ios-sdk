@@ -38,6 +38,10 @@ enum SmokeRun {
         ErrorSim.sendMessageDataError()
         ErrorSim.sendErrorLog()
         CoralogixRumManager.shared.sdk.set(labels: ["item3": "playstation 4", "itemPrice": 400])
+        // The simulator has no Siri Remote, so the interaction goes through the public API,
+        // which builds the same interaction_context a native capture would.
+        CoralogixRumManager.shared.sdk.setUserInteraction(["event_name": "click",
+                                                           "target_element": "SmokeButton"])
         print("CX_SMOKE_ACTIONS_SENT")
     }
 }

@@ -576,6 +576,52 @@ class CxRumBuilderTests: XCTestCase {
         XCTAssertNil(payload["mobile_sdk"])
     }
 
+    func test_payload_onTvOS_omitsBatteryAndUserAgentPlaceholders() throws {
+        let cxRum = try XCTUnwrap(makeSUT(currentTime: Date(), eventType: "log")?.build())
+
+        var tvBuilder = CxRumPayloadBuilder(rum: cxRum, viewManager: mockViewManager, os: "tvos")
+        let tv = tvBuilder.build()
+        let tvState = try XCTUnwrap(tv[Keys.deviceState.rawValue] as? [String: Any])
+        let tvDevice = try XCTUnwrap(tv[Keys.deviceContext.rawValue] as? [String: Any])
+        XCTAssertEqual(Set(tvState.keys), [Keys.networkType.rawValue])
+        XCTAssertEqual(Set(tvDevice.keys),
+                       Set(cxRum.deviceContext.getDictionary().keys).subtracting([Keys.userAgent.rawValue]))
+
+        var iosBuilder = CxRumPayloadBuilder(rum: cxRum, viewManager: mockViewManager, os: "ios")
+        let ios = iosBuilder.build()
+        let iosState = try XCTUnwrap(ios[Keys.deviceState.rawValue] as? [String: Any])
+        let iosDevice = try XCTUnwrap(ios[Keys.deviceContext.rawValue] as? [String: Any])
+        XCTAssertEqual(iosState[Keys.battery.rawValue] as? String, cxRum.deviceState.battery)
+        XCTAssertEqual(iosDevice[Keys.userAgent.rawValue] as? String, cxRum.deviceContext.userAgent)
+    }
+
+    func test_payload_interaction_onTvOS_keepsOnlyTvSchemaFields() throws {
+        let tapObject: [String: Any] = [
+            Keys.eventName.rawValue: "scroll",
+            Keys.targetElement.rawValue: "UICollectionView",
+            Keys.elementId.rawValue: "rail",
+            Keys.elementClasses.rawValue: "UICollectionView",
+            Keys.scrollDirection.rawValue: "down",
+            Keys.isMaskedElement.rawValue: true
+        ]
+        let attrs = [Keys.tapObject.rawValue: AttributeValue(Helper.convertDictionaryToJsonString(dict: tapObject))]
+        let cxRum = try XCTUnwrap(makeSUT(currentTime: Date(), eventType: "user-interaction",
+                                          extraAttributes: attrs)?.build())
+
+        var tvBuilder = CxRumPayloadBuilder(rum: cxRum, viewManager: mockViewManager, os: "tvos")
+        let tv = try XCTUnwrap(tvBuilder.build()[Keys.interactionContext.rawValue] as? [String: Any])
+        XCTAssertEqual(Set(tv.keys), [Keys.eventName.rawValue, Keys.targetElement.rawValue,
+                                      Keys.elementId.rawValue])
+        XCTAssertEqual(tv[Keys.eventName.rawValue] as? String, "scroll")
+        XCTAssertEqual(tv[Keys.elementId.rawValue] as? String, "rail")
+
+        var iosBuilder = CxRumPayloadBuilder(rum: cxRum, viewManager: mockViewManager, os: "ios")
+        let ios = try XCTUnwrap(iosBuilder.build()[Keys.interactionContext.rawValue] as? [String: Any])
+        XCTAssertEqual(ios[Keys.isMaskedElement.rawValue] as? Bool, true)
+        XCTAssertEqual(ios[Keys.scrollDirection.rawValue] as? String, "down")
+        XCTAssertEqual(ios[Keys.elementClasses.rawValue] as? String, "UICollectionView")
+    }
+
     func test_payload_vitals_goUnderTvVitalsContextOnlyOnTvOS() throws {
         let vitals: [String: AttributeValue] = [Keys.mobileVitalsType.rawValue: AttributeValue("{\"cpu\":12}")]
         let cxRum = try XCTUnwrap(makeSUT(currentTime: Date(), eventType: "mobile-vitals",
