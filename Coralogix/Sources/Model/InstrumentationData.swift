@@ -86,7 +86,7 @@ struct OtelSpan {
     // be silently ignored by the backend with no compile-time warning.
     private enum AttrKey {
         static let mobileSdkVersion          = "cx_rum.mobile_sdk.version"
-        static let tvSdkVersion              = "cx_rum.tv_sdk.version"
+        static let tvSdkVersion              = "cx_rum.tv_sdk.sdk_version"
         static let environment               = "cx_rum.environment"
         static let platform                  = "cx_rum.platform"
         static let versionMetadataAppName    = "cx_rum.version_metadata.app_name"
@@ -243,7 +243,8 @@ struct OtelSpan {
         return attrs
     }
 
-    /// Mirrors `text.cx_rum`: tvOS carries the SDK under `tv_sdk`, so its version does too.
+    /// Mirrors `text.cx_rum`: tvOS carries the SDK under `tv_sdk`. Its version key follows the
+    /// field path (`tv_sdk.sdk_version`) so it matches the other `platform: tv` SDK.
     private static func addSdkVersionAndPlatform(to attrs: inout [String: Any], sdkVersion: String, os: String) {
         let isTv = CxRumPayloadBuilder.isTv(os: os)
         attrs[isTv ? AttrKey.tvSdkVersion : AttrKey.mobileSdkVersion] = sdkVersion

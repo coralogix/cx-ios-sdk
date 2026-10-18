@@ -165,7 +165,7 @@ final class InstrumentationDataTests: XCTestCase {
     func testBuildRumContextAttributes_sdkVersionKeyFollowsPlatform() {
         let tv = OtelSpan.buildRumContextAttributes(fromCxRumDict: [:], viewManager: nil,
                                                     sdkVersion: "2.20.1", os: "tvos")
-        XCTAssertEqual(tv["cx_rum.tv_sdk.version"] as? String, "2.20.1")
+        XCTAssertEqual(tv["cx_rum.tv_sdk.sdk_version"] as? String, "2.20.1")
         XCTAssertEqual(tv["cx_rum.platform"] as? String, "tv")
         XCTAssertNil(tv["cx_rum.mobile_sdk.version"])
 
@@ -173,7 +173,7 @@ final class InstrumentationDataTests: XCTestCase {
                                                      sdkVersion: "2.20.1", os: "ios")
         XCTAssertEqual(ios["cx_rum.mobile_sdk.version"] as? String, "2.20.1")
         XCTAssertEqual(ios["cx_rum.platform"] as? String, "mobile")
-        XCTAssertNil(ios["cx_rum.tv_sdk.version"])
+        XCTAssertNil(ios["cx_rum.tv_sdk.sdk_version"])
     }
 
     func testBuildRumContextAttributes_emptyEnvironment_isOmitted() {
