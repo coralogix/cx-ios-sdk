@@ -378,18 +378,14 @@ class SessionManagerTests: XCTestCase {
     //
     // A crash is captured on the *next* launch, after a fresh session has already
     // been created. `lastLaunchSessionSpanAttributes` surfaces the session that was
-    // live in the previous launch (recovered from the keychain into
-    // `sessionMetadata.old*` at init) so crash instrumentation can burn the crash
-    // under the session that actually crashed.
+    // live when the previous launch ended (captured once at init into
+    // `lastLaunchSession`) so crash instrumentation can burn the crash under the
+    // session that actually crashed.
 
     func testLastLaunchSessionSpanAttributes_returnsPreviousLaunchSession() {
-        guard var metadata = sessionManager.sessionMetadata else {
-            XCTFail("Session metadata should not be nil")
-            return
-        }
-        metadata.oldSessionId = "crashed-session-abc"
-        metadata.oldSessionTimeInterval = TimeInterval(1_600_000_000)
-        sessionManager.sessionMetadata = metadata
+        sessionManager.lastLaunchSession = LastLaunchSession(sessionId: "crashed-session-abc",
+                                                             creationDate: 1_600_000_000,
+                                                             sampledIn: true)
 
         let attrs = Dictionary(uniqueKeysWithValues: sessionManager.lastLaunchSessionSpanAttributes())
         XCTAssertEqual(attrs[Keys.sessionId.rawValue], "crashed-session-abc",
@@ -398,16 +394,45 @@ class SessionManagerTests: XCTestCase {
             "Crash span must carry the crashed session's creation date")
     }
 
-    func testLastLaunchSessionSpanAttributes_emptyWhenNoPreviousLaunch() {
-        guard var metadata = sessionManager.sessionMetadata else {
-            XCTFail("Session metadata should not be nil")
-            return
-        }
-        metadata.oldSessionId = nil
-        metadata.oldSessionTimeInterval = nil
-        sessionManager.sessionMetadata = metadata
+    /// A crash with no previous-launch record (a locked-keychain read, or a crash before the SDK
+    /// ever initialized) must not inherit a sampled-out relaunch's stamp, or it is dropped and
+    /// purged as resolved.
+    func testLastLaunchSessionSpanAttributes_noPreviousLaunch_stampsSampledInOnly() {
+        sessionManager.lastLaunchSession = nil
 
-        XCTAssertTrue(sessionManager.lastLaunchSessionSpanAttributes().isEmpty,
-            "With no previous-launch session on record, no override attributes should be produced")
+        let attrs = Dictionary(uniqueKeysWithValues: sessionManager.lastLaunchSessionSpanAttributes())
+        XCTAssertEqual(attrs, [Keys.spanSessionSampledIn.rawValue: "true"],
+            "With no record, only the sampling stamp is overridden; the session identity stays the relaunch's")
+    }
+
+    /// Every rotation rebuilds `SessionMetadata`, which re-reads `old*` from a keychain that by then
+    /// holds this launch's sessions. A crash recovered after a rotation must still carry the crashed
+    /// launch's identity and decision.
+    func testLastLaunchSessionSpanAttributes_unchangedByRotation() {
+        sessionManager.lastLaunchSession = LastLaunchSession(sessionId: "crashed-session-abc",
+                                                             creationDate: 1_600_000_000,
+                                                             sampledIn: true)
+        sessionManager.samplingRoller = { false }
+
+        sessionManager.setupSessionMetadata()
+        sessionManager.setupSessionMetadata()
+
+        let after = Dictionary(uniqueKeysWithValues: sessionManager.lastLaunchSessionSpanAttributes())
+        XCTAssertEqual(after[Keys.sessionId.rawValue], "crashed-session-abc")
+        XCTAssertEqual(after[Keys.sessionCreationDate.rawValue], "1600000000")
+        XCTAssertEqual(after[Keys.spanSessionSampledIn.rawValue], "true",
+            "A rotation that rolled sampled-out must not relabel the crashed session as sampled out")
+    }
+
+    func testLastLaunchSession_readsPreviousLaunchFieldsOfFirstMetadata() {
+        let keychain = MockKeyschainManager()
+        _ = SessionMetadata(sessionId: "crashed-session", sessionCreationDate: 1_600_000_000, using: keychain)
+        keychain.writeStringToKeychain(service: Keys.service.rawValue,
+                                       key: Keys.keySessionSampledIn.rawValue,
+                                       value: "true")
+        let relaunch = SessionMetadata(sessionId: "fresh-session", sessionCreationDate: 1_700_000_000, using: keychain)
+
+        XCTAssertEqual(LastLaunchSession(previousOf: relaunch),
+                       LastLaunchSession(sessionId: "crashed-session", creationDate: 1_600_000_000, sampledIn: true))
     }
 }

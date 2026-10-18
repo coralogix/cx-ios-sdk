@@ -103,11 +103,9 @@ final class SessionSamplingFlagTests: XCTestCase {
 
     func testLastLaunchAttributes_carryCrashedSessionSamplingDecision() throws {
         let sessionManager = SessionManager()
-        var metadata = try XCTUnwrap(sessionManager.sessionMetadata)
-        metadata.oldSessionId = "crashed-session-abc"
-        metadata.oldSessionTimeInterval = TimeInterval(1_600_000_000)
-        metadata.oldSessionSampledIn = false
-        sessionManager.sessionMetadata = metadata
+        sessionManager.lastLaunchSession = LastLaunchSession(sessionId: "crashed-session-abc",
+                                                             creationDate: 1_600_000_000,
+                                                             sampledIn: false)
 
         let attrs = Dictionary(uniqueKeysWithValues: sessionManager.lastLaunchSessionSpanAttributes())
         XCTAssertEqual(attrs[Keys.spanSessionSampledIn.rawValue], "false",
@@ -118,11 +116,9 @@ final class SessionSamplingFlagTests: XCTestCase {
     func testLastLaunchAttributes_missingPersistedDecision_defaultsToSampledIn() throws {
         // Prior launch recorded by an SDK version that predates the persisted decision.
         let sessionManager = SessionManager()
-        var metadata = try XCTUnwrap(sessionManager.sessionMetadata)
-        metadata.oldSessionId = "crashed-session-abc"
-        metadata.oldSessionTimeInterval = TimeInterval(1_600_000_000)
-        metadata.oldSessionSampledIn = nil
-        sessionManager.sessionMetadata = metadata
+        sessionManager.lastLaunchSession = LastLaunchSession(sessionId: "crashed-session-abc",
+                                                             creationDate: 1_600_000_000,
+                                                             sampledIn: nil)
 
         let attrs = Dictionary(uniqueKeysWithValues: sessionManager.lastLaunchSessionSpanAttributes())
         XCTAssertEqual(attrs[Keys.spanSessionSampledIn.rawValue], "true",

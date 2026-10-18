@@ -19,7 +19,7 @@ public class CoralogixRum {
     /// Disk store for hybrid crash events (see `CrashEventStore`).
     internal lazy var crashEventStore = CrashEventStore()
     /// Deferred purge of the pending PLCrashReporter report. Set by
-    /// `initializeCrashInstrumentation`, executed by `completeCrashRecovery()`
+    /// `recoverPendingCrashes`, executed by `completeCrashRecovery()`
     /// after init finishes — the uploader rejects requests while
     /// `isInitialized` is false, so upload confirmation is only possible then.
     internal var pendingCrashPurge: (() -> Void)?
@@ -161,6 +161,9 @@ public class CoralogixRum {
 
         self.setupTracer(applicationName: options.application)
         self.swizzle()
+        if Self.shouldRecoverCrashes(options: options) {
+            self.recoverPendingCrashes()
+        }
         self.installEligibleInstrumentations(using: options, sampledIn: initialSampledIn)
         self.createInitSpan()
 
@@ -192,28 +195,16 @@ public class CoralogixRum {
             return
         }
 
-        let installed = self.installEligibleInstrumentations(using: options, sampledIn: sampledIn)
-
-        // `startup` finishes crash recovery for the init path, deliberately after `isInitialized`
-        // flips so the uploader will accept the confirmation. When a rotation is what installs crash
-        // instrumentation for the first time, it has to finish it too:
-        // `initializeCrashInstrumentation` defers both the report purge and the store cleanup to
-        // `completeCrashRecovery`, so skipping it leaves the crash on disk to be re-emitted, and
-        // never removed, on every later launch.
-        if installed.contains(.errors) {
-            self.completeCrashRecovery()
-        }
+        self.installEligibleInstrumentations(using: options, sampledIn: sampledIn)
     }
 
-    /// Installs every instrumentation that is eligible now and not already installed, returning the
-    /// ones it installed.
+    /// Installs every instrumentation that is eligible now and not already installed.
     ///
     /// Safe to call repeatedly: `claimInstallation(of:)` hands out each type exactly once, which is
     /// what makes the rotation top-up possible at all — the initializers register observers and
     /// install swizzles, so calling one twice would double every event it produces.
-    @discardableResult
     private func installEligibleInstrumentations(using options: CoralogixExporterOptions,
-                                                 sampledIn: Bool) -> Set<CoralogixExporterOptions.InstrumentationType> {
+                                                 sampledIn: Bool) {
         let instrumentationMap: [(CoralogixExporterOptions.InstrumentationType, () -> Void)] = [
             (.lifeCycle, self.initializeLifeCycleInstrumentation),
             (.userActions, self.initializeUserActionsInstrumentation),
@@ -223,14 +214,11 @@ public class CoralogixRum {
             (.anr, self.initializeANRInstrumentation)
         ]
         
-        var installed: Set<CoralogixExporterOptions.InstrumentationType> = []
         for (type, initializer) in instrumentationMap
         where Self.shouldInstall(type, options: options, sampledIn: sampledIn) {
             guard self.claimInstallation(of: type) else { continue }
             initializer()
-            installed.insert(type)
         }
-        return installed
     }
 
     /// Whether `type` has been installed for this SDK lifecycle.
@@ -245,6 +233,12 @@ public class CoralogixRum {
         self.installedInstrumentationsLock.lock()
         defer { self.installedInstrumentationsLock.unlock() }
         return self.installedInstrumentations.insert(type).inserted
+    }
+
+    /// Whether crashes left behind by earlier launches are recovered at init. Follows only the
+    /// `.errors` switch, never this launch's sampling roll — see `recoverPendingCrashes`.
+    internal static func shouldRecoverCrashes(options: CoralogixExporterOptions) -> Bool {
+        options.shouldInitInstrumentation(instrumentation: .errors)
     }
 
     /// Resolves whether `type` is installed for this session.
