@@ -69,14 +69,24 @@ final class LogSamplingDemoModel: ObservableObject {
         return "[" + set.map { ".\($0.rawValue)" }.sorted().joined(separator: ", ") + "]"
     }
 
+    /// Status line under the config controls; shared so both demo apps describe the same rules.
+    static func statusText(sampleRate: Int, exclude: Set<ExcludableInstrumentation>) -> String {
+        switch (sampleRate, exclude.isEmpty) {
+        case (100, _):
+            return "ℹ️ Sampled in: every event passes regardless of excludeFromSampling."
+        case (0, true):
+            return "ℹ️ Sampled out (rate=0), nothing excluded: nothing is exported, not even the SDK's init. traceparent still propagates."
+        case (0, false):
+            return "ℹ️ Sampled out (rate=0): event_types in excludeFromSampling are exported, plus the SDK's own internal events."
+        default:
+            return "ℹ️ ~\(sampleRate)% of fresh sessions roll sampled-in. Reinit (or relaunch) to roll a new session."
+        }
+    }
+
     /// Reinitializes the SDK with the current sampleRate + exclude.
     /// Returns a user-facing status message suitable for a toast.
     @discardableResult
     func apply() -> String {
-        if sampleRate == 0 && exclude.isEmpty {
-            return "sampleRate=0 + exclude=[] would skip init. Pick a rate or an exclude."
-        }
-
         // Snapshot the values being attempted so toast strings and the success-side
         // state-write all use the same numbers, even if the user mutates the editable
         // fields later (the closure below is captured by reference into the SDK).

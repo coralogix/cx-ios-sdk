@@ -157,10 +157,10 @@ public class URLSessionInstrumentation {
     }
 
     /// Returns and removes accumulated response body for the task (rule-based capture). Returns nil if none.
-    /// Called by delegate/setState paths (didCompleteWithError, setState, didFinishCollecting) so the body
-    /// is passed to logResponse/logError and delivered on both success and error. URLSessionLogger.logResponse
-    /// also calls this only when dataOrFile is nil (e.g. delegate-only path that didn't pre-drain), to avoid
-    /// redundant sync when the caller already passed the body.
+    /// A delegate-driven task is completed by the setState: fallback and the delegate callbacks, which can run
+    /// at the same time, so those paths leave the body to URLSessionLogger, which takes it in the same step as
+    /// the span. CFNetwork delivers every didReceive(data:) before such a task completes, so the body is whole
+    /// by then. A completion-handler task has a single logging path and takes it directly.
     internal func takeResponseBody(forTaskId taskId: String) -> Data? {
         var data: Data?
         captureQueue.sync {
@@ -976,7 +976,7 @@ public class URLSessionInstrumentation {
     }
     
     /// Called when task state changes to .completed - provides fallback logging for third-party libraries
-    private func urlSessionTaskDidChangeState(_ task: URLSessionTask, newState: URLSessionTask.State) {
+    internal func urlSessionTaskDidChangeState(_ task: URLSessionTask, newState: URLSessionTask.State) {
         guard newState == .completed else { return }
         
         // Check if already logged by completion handler or delegate
@@ -1007,7 +1007,8 @@ public class URLSessionInstrumentation {
             // Do not remove from map yet — logResponse calls getRequest(forTaskId:) so request headers can be captured in receivedResponse
         }
         
-        let responseData = takeResponseBody(forTaskId: taskId) ?? requestState?.dataProcessed
+        // The rule-based body stays in the store for whichever path claims the span (see takeResponseBody).
+        let responseData = requestState?.dataProcessed
         // Log with basic data available from task
         if let error = task.error {
             let status = (task.response as? HTTPURLResponse)?.statusCode ?? 0
@@ -1191,7 +1192,7 @@ public class URLSessionInstrumentation {
     }
     
     // URLSessionTask methods
-    private func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+    internal func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
         guard let taskId = objc_getAssociatedObject(dataTask, &idKey) as? String else {
             return
         }
@@ -1278,7 +1279,8 @@ public class URLSessionInstrumentation {
             requestState = requestMap[taskId]
             // Do not remove from map yet — logResponse/logError need getRequest(forTaskId:) for request header capture
         }
-        let responseData = takeResponseBody(forTaskId: taskId) ?? requestState?.dataProcessed
+        // The rule-based body stays in the store for whichever path claims the span (see takeResponseBody).
+        let responseData = requestState?.dataProcessed
         if let error = error {
             let status = (task.response as? HTTPURLResponse)?.statusCode ?? 0
             #if DEBUG
@@ -1324,7 +1326,8 @@ public class URLSessionInstrumentation {
         if objc_getAssociatedObject(task, &Self.hasCompletionHandlerKey) != nil {
             return
         }
-        let responseData = takeResponseBody(forTaskId: taskId) ?? requestState?.dataProcessed
+        // The rule-based body stays in the store for whichever path claims the span (see takeResponseBody).
+        let responseData = requestState?.dataProcessed
         /// Code for instrumenting collection should be written here
         if let error = task.error {
             let status = (task.response as? HTTPURLResponse)?.statusCode ?? 0
@@ -1489,7 +1492,7 @@ public class URLSessionInstrumentation {
         return id!
     }
     
-    private func setIdKey(value: String, for task: URLSessionTask) {
+    internal func setIdKey(value: String, for task: URLSessionTask) {
         objc_setAssociatedObject(task, &idKey, value, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
     }
     

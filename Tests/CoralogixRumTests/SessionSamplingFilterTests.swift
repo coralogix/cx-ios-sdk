@@ -6,10 +6,10 @@
 //  NOT the exporter's live flag — so a span keeps the decision of the session it was born in
 //  even after a rotation flips the live flag:
 //    - Stamped sampled-in: every span passes regardless of event_type.
-//    - Stamped sampled-out: only `internal` events and spans whose event_type is in
-//      options.excludeFromSampling pass.
+//    - Stamped sampled-out: spans whose event_type is in options.excludeFromSampling pass,
+//      plus `internal` events when that list is non-empty.
 //    - Stamped sampled-out + missing event_type: dropped (failsafe).
-//    - Stamped sampled-out + empty excludes: only `internal` passes.
+//    - Stamped sampled-out + empty excludes: nothing passes, `internal` included (browser parity).
 //
 
 import XCTest
@@ -83,32 +83,31 @@ final class SessionSamplingFilterTests: XCTestCase {
                        "An event_type outside ExcludableInstrumentation must be dropped when sampled out.")
     }
 
-    func testPassesSessionSampling_sampledOut_internalEventType_alwaysPasses() {
-        // The SDK's own lifecycle events are not opt-in-able and must survive regardless, matching
-        // Android. Otherwise a sampled-out session looks identical to an SDK that never started and
-        // there is no way to confirm from the backend that sampling is behaving.
-        let excluded = makeExporter(sampleRate: 0, exclude: [.errors])
-        let noExcludes = makeExporter(sampleRate: 0, exclude: [])
-
-        XCTAssertTrue(excluded.passesSessionSampling(span(eventType: "internal")))
-        XCTAssertTrue(noExcludes.passesSessionSampling(span(eventType: "internal")),
-                      "`internal` survives even with an empty exclude list.")
+    func testPassesSessionSampling_sampledOut_withExclusion_internalPasses() {
+        // Once anything is excluded the session is reporting, so the SDK's own events go with it,
+        // whichever category was excluded.
+        for excludeCase in ExcludableInstrumentation.allCases {
+            let exporter = makeExporter(sampleRate: 0, exclude: [excludeCase])
+            XCTAssertTrue(exporter.passesSessionSampling(span(eventType: "internal")),
+                          "exclude=[.\(excludeCase)] must let `internal` through on a sampled-out span.")
+        }
     }
 
-    // MARK: - Sampled out + empty excludes (manually flipped)
+    // MARK: - Sampled out + empty excludes
 
-    func testPassesSessionSampling_sampledOutEmptyExcludes_dropsEverythingButInternal() {
-        // Sampled-out stamp with no opt-ins: every reportable span drops. This is now a routine
-        // production state, not a synthetic one — init no longer short-circuits for a sampled-out
-        // session with an empty exclude list, because network instrumentation has to stay alive to
-        // propagate trace context.
-        let exporter = makeExporter(sampleRate: 100, exclude: [])
+    func testPassesSessionSampling_sampledOutEmptyExcludes_dropsEverythingIncludingInternal() {
+        // Browser parity: with nothing excluded a sampled-out session exports nothing at all —
+        // not even the SDK's own init / session_replay_init, which would otherwise arrive as
+        // snapshot events and surface the session in session lists.
+        let exporter = makeExporter(sampleRate: 0, exclude: [])
 
+        XCTAssertFalse(exporter.passesSessionSampling(span(eventType: "internal")))
         XCTAssertFalse(exporter.passesSessionSampling(span(eventType: "error")))
         XCTAssertFalse(exporter.passesSessionSampling(span(eventType: "log")))
         XCTAssertFalse(exporter.passesSessionSampling(span(eventType: "network-request")))
         XCTAssertFalse(exporter.passesSessionSampling(span(eventType: nil)))
-        XCTAssertTrue(exporter.passesSessionSampling(span(eventType: "internal")))
+        XCTAssertTrue(exporter.passesSessionSampling(span(eventType: "internal", sampledIn: true)),
+                      "The same exporter must still pass a sampled-in `internal` span — the drop is the stamp's doing.")
     }
 
     // MARK: - Propagate-only network: installed for the header, must not report

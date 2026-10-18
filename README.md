@@ -237,8 +237,8 @@ Accepted `ExcludableInstrumentation` cases:
 - `.customSpan`
 - `.customMeasurement`
 
-The default is an empty set: a sampled-out session then reports nothing except the SDK's own
-initialization event, while still propagating trace context.
+The default is an empty set: a sampled-out session then reports nothing, while still propagating
+trace context. Once you list any category, the SDK's own initialization events are reported alongside it.
 
 Parity note: the Coralogix Browser SDK exposes the same option with matching semantics.
 
