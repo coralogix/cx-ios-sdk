@@ -118,16 +118,15 @@ final class CapturingSpanUploader: SpanUploading {
         return .success
     }
 
-    func firstInternalContext() -> [String: Any]? {
+    /// The `text.cx_rum` dict of every uploaded span, in upload order.
+    func cxRumPayloads() -> [[String: Any]] {
         lock.lock(); defer { lock.unlock() }
-        for span in uploaded {
-            guard let text = span[Keys.text.rawValue] as? [String: Any],
-                  let cxRum = text[Keys.cxRum.rawValue] as? [String: Any],
-                  let internalContext = cxRum[Keys.internalContext.rawValue] as? [String: Any] else {
-                continue
-            }
-            return internalContext
+        return uploaded.compactMap { span in
+            (span[Keys.text.rawValue] as? [String: Any])?[Keys.cxRum.rawValue] as? [String: Any]
         }
-        return nil
+    }
+
+    func firstInternalContext() -> [String: Any]? {
+        cxRumPayloads().lazy.compactMap { $0[Keys.internalContext.rawValue] as? [String: Any] }.first
     }
 }

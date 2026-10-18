@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Release-mechanics commits (version bumps, podspec/script tweaks, README edits) are
 omitted; the focus here is user-facing behavior changes.
 
+## [2.20.1] - 2026-10-18
+
+### Changed
+- A sampled-out session no longer sends any event unless `excludeFromSampling` is set, matching the browser SDK. With exclusions, the SDK's own initialization events are sent alongside the excluded categories. Trace context still propagates on outgoing requests.
+
 ## [2.20.0] - 2026-10-14
 
 ### Added
