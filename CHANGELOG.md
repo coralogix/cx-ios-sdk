@@ -10,7 +10,7 @@ omitted; the focus here is user-facing behavior changes.
 
 ## [2.20.1] - 2026-10-18
 
-### Changed
+### Fixed
 - A sampled-out session no longer sends any event unless `excludeFromSampling` lists at least one category, matching the browser SDK. When it does, the SDK's own initialization events are sent alongside the listed categories. Trace context still propagates on outgoing requests.
 
 ## [2.20.0] - 2026-10-14

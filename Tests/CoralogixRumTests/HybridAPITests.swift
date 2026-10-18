@@ -444,8 +444,9 @@ final class HybridAPITests: XCTestCase {
             makeSamplingSpan(eventType: .networkRequest, sampledIn: false)
         ], explicitTimeout: nil)
 
-        // `internal` is filtered out: the SDK's own init event bypasses the sampling filter and arrives
-        // asynchronously through the batch processor, so including it would make this a race.
+        // `internal` is filtered out: the SDK's own init event also passes the filter here (the session
+        // is sampled in or excludes something) and arrives asynchronously through the batch
+        // processor, so including it would make this a race.
         XCTAssertEqual(Set(capture.eventTypes).subtracting([CoralogixEventType.internalKey.rawValue]),
                        Set(["log"]),
                        "Hybrid callback must only receive spans whose event_type matches excludeFromSampling.")
