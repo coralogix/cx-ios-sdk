@@ -69,9 +69,6 @@ final class LogSamplingDemoModel: ObservableObject {
         return "[" + set.map { ".\($0.rawValue)" }.sorted().joined(separator: ", ") + "]"
     }
 
-    /// Reinitializes the SDK with the current sampleRate + exclude.
-    /// Returns a user-facing status message suitable for a toast.
-    @discardableResult
     /// Status line under the config controls; shared so both demo apps describe the same rules.
     static func statusText(sampleRate: Int, exclude: Set<ExcludableInstrumentation>) -> String {
         switch (sampleRate, exclude.isEmpty) {
@@ -86,6 +83,9 @@ final class LogSamplingDemoModel: ObservableObject {
         }
     }
 
+    /// Reinitializes the SDK with the current sampleRate + exclude.
+    /// Returns a user-facing status message suitable for a toast.
+    @discardableResult
     func apply() -> String {
         // Snapshot the values being attempted so toast strings and the success-side
         // state-write all use the same numbers, even if the user mutates the editable
