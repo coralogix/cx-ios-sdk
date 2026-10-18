@@ -158,9 +158,9 @@ public class URLSessionInstrumentation {
 
     /// Returns and removes accumulated response body for the task (rule-based capture). Returns nil if none.
     /// A delegate-driven task is completed by the setState: fallback and the delegate callbacks, which can run
-    /// at the same time, so those paths take the body only in URLSessionLogger.logResponse/logError, after
-    /// claiming the span. CFNetwork delivers every didReceive(data:) before such a task completes, so the body
-    /// is whole by then. A completion-handler task has a single logging path and takes it directly.
+    /// at the same time, so those paths leave the body to URLSessionLogger, which takes it in the same step as
+    /// the span. CFNetwork delivers every didReceive(data:) before such a task completes, so the body is whole
+    /// by then. A completion-handler task has a single logging path and takes it directly.
     internal func takeResponseBody(forTaskId taskId: String) -> Data? {
         var data: Data?
         captureQueue.sync {
@@ -1274,9 +1274,6 @@ public class URLSessionInstrumentation {
         if objc_getAssociatedObject(task, &Self.hasCompletionHandlerKey) != nil {
             return
         }
-        // loggedKey is set only after a path has finished with the body, so anything still buffered then is
-        // no path's to take.
-        let completedByAnotherPath = objc_getAssociatedObject(task, &Self.loggedKey) != nil
         var requestState: NetworkRequestState?
         queue.sync(flags: .barrier) {
             requestState = requestMap[taskId]
@@ -1301,10 +1298,6 @@ public class URLSessionInstrumentation {
         // Clean up after logging so receivedResponse had a chance to read the request for header capture
         queue.sync(flags: .barrier) {
             requestMap[taskId] = nil
-        }
-        if completedByAnotherPath {
-            // This is the task's last delegate callback: free a body no path will take.
-            _ = takeResponseBody(forTaskId: taskId)
         }
         // Mark as logged to prevent duplicate in setState: fallback
         objc_setAssociatedObject(task, &Self.loggedKey, true, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)

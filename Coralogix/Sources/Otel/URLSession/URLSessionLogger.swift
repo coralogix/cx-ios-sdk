@@ -147,17 +147,10 @@ class URLSessionLogger {
         // early, but before our getRequest call inside logResponse executes.
         let request = instrumentation.getRequest(forTaskId: sessionTaskId)
 
-        var span: (any Span)!
-        runningSpansQueue.sync {
-            span = runningSpans.removeValue(forKey: sessionTaskId)
-        }
-        guard span != nil else {
-            return
-        }
-        // Taken as soon as the span is claimed, so every claim frees the buffered body, HTTP or not. A
-        // caller-supplied body (completion handler) wins and skips the captureQueue round-trip.
-        let effectiveData = dataOrFile ?? instrumentation.takeResponseBody(forTaskId: sessionTaskId) as Any?
-        guard let httpResponse = response as? HTTPURLResponse else {
+        let claim = claimSpanAndBody(forTaskId: sessionTaskId, instrumentation: instrumentation)
+        guard let span = claim.span,
+              let httpResponse = response as? HTTPURLResponse
+        else {
             return
         }
 
@@ -172,6 +165,9 @@ class URLSessionLogger {
                               value: AttributeValue.int(contentLength))
         }
 
+        // A body buffered by the delegate path (rule-based capture) comes first; otherwise the caller's
+        // (completion handler, or legacy payload recording).
+        let effectiveData = (claim.body as Any?) ?? dataOrFile
         // Re-index native headers under the final URL when a redirect changed it, so the hybrid
         // path (RN/Flutter) can find them by the URL the JS bridge reports.
         instrumentation.indexNativeHeadersForRedirectIfNeeded(
@@ -185,20 +181,32 @@ class URLSessionLogger {
 
     /// This methods ends a Span when a error arrives
     static func logError(_ error: Error, dataOrFile: Any?, statusCode: Int, instrumentation: URLSessionInstrumentation, sessionTaskId: String) {
-        var span: (any Span)!
-        runningSpansQueue.sync {
-            span = runningSpans.removeValue(forKey: sessionTaskId)
-        }
-        guard span != nil else {
+        let claim = claimSpanAndBody(forTaskId: sessionTaskId, instrumentation: instrumentation)
+        guard let span = claim.span else {
             return
         }
         span.setAttribute(key: SemanticAttributes.httpStatusCode.rawValue, value: AttributeValue.int(statusCode))
         span.status = URLSessionLogger.statusForStatusCode(code: statusCode)
-        let effectiveData = dataOrFile ?? instrumentation.takeResponseBody(forTaskId: sessionTaskId) as Any?
         let effectiveConfig = (URLSessionInstrumentation.shared ?? instrumentation).configuration
-        effectiveConfig.receivedError?(error, effectiveData, statusCode, span)
+        effectiveConfig.receivedError?(error, (claim.body as Any?) ?? dataOrFile, statusCode, span)
 
         span.end()
+    }
+
+    /// Removes the task's span and takes its buffered response body as one step. Several completion paths
+    /// can run for one task at the same time (the setState: fallback and the delegate callbacks): the first
+    /// to get here receives both and every later one receives neither, so the span always ends with the
+    /// body. A body buffered for a task that has no span is freed here as well.
+    private static func claimSpanAndBody(forTaskId sessionTaskId: String,
+                                         instrumentation: URLSessionInstrumentation) -> (span: (any Span)?, body: Data?) {
+        var claim: (span: (any Span)?, body: Data?) = (nil, nil)
+        // Nests captureQueue (in takeResponseBody) inside runningSpansQueue; no captureQueue block touches
+        // runningSpansQueue, so the two can't deadlock.
+        runningSpansQueue.sync {
+            claim = (runningSpans.removeValue(forKey: sessionTaskId),
+                     instrumentation.takeResponseBody(forTaskId: sessionTaskId))
+        }
+        return claim
     }
 
     private static func statusForStatusCode(code: Int) -> Status {

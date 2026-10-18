@@ -135,7 +135,7 @@ final class NetworkResponseBodyCompletionRaceTests: XCTestCase {
 
     func test_failedRequest_errorSpanCarriesBody() throws {
         let failure = URLError(.networkConnectionLost)
-        let (task, _) = try makeTaskWithBufferedBody(statusCode: 500, error: failure)
+        let (task, _) = try makeTaskWithBufferedBody(response: makeHTTPResponse(statusCode: 500), error: failure)
 
         instrumentation.urlSession(session, task: task, didCompleteWithError: failure)
 
@@ -157,7 +157,7 @@ final class NetworkResponseBodyCompletionRaceTests: XCTestCase {
                      "the body buffered for a non-HTTP response must not outlive its task")
     }
 
-    func test_bodyBufferedAfterAnotherPathCompleted_isFreedByDidComplete() throws {
+    func test_bodyBufferedAfterTheSpanEnded_isFreedByTheNextCompletionPath() throws {
         let (task, taskId) = try makeTaskWithBufferedBody()
         instrumentation.urlSessionTaskDidChangeState(task, newState: .completed)
         instrumentation.urlSession(session, dataTask: task, didReceive: Data("late".utf8))
@@ -166,35 +166,50 @@ final class NetworkResponseBodyCompletionRaceTests: XCTestCase {
 
         assertSpanEndedOnceWithBody()
         XCTAssertNil(instrumentation.takeResponseBody(forTaskId: taskId),
-                     "a body buffered after another path ended the span must not outlive its task")
+                     "a body buffered after the span ended must not outlive its task")
+    }
+
+    /// A task can be tracked without a span (`shouldInstrument` declined it) and still match a
+    /// `collectResPayload` rule, so its body is buffered with no span to end.
+    func test_bodyBufferedWithoutASpan_isFreedOnCompletion() throws {
+        let (task, taskId) = try makeTaskWithBufferedBodyAndNoSpan(response: makeHTTPResponse(), error: nil)
+
+        instrumentation.urlSession(session, task: task, didCompleteWithError: nil)
+
+        XCTAssertNil(instrumentation.takeResponseBody(forTaskId: taskId),
+                     "a body buffered for a task without a span must not outlive its task")
     }
 
     // MARK: - Helpers
 
     /// A running task with its response body buffered: the state every completion path finds once
     /// CFNetwork has delivered the body to the session delegate.
-    private func makeTaskWithBufferedBody(statusCode: Int = 200,
+    private func makeTaskWithBufferedBody(response: URLResponse? = nil,
                                           error: Error? = nil) throws -> (InterleavingDataTask, String) {
-        let response = try XCTUnwrap(HTTPURLResponse(url: Self.url,
-                                                     statusCode: statusCode,
-                                                     httpVersion: nil,
-                                                     headerFields: ["Content-Type": "application/json"]))
-        return try makeTaskWithBufferedBody(response: response, error: error)
-    }
-
-    private func makeTaskWithBufferedBody(response: URLResponse,
-                                          error: Error? = nil) throws -> (InterleavingDataTask, String) {
-        let request = URLRequest(url: Self.url)
-        let task = try XCTUnwrap(InterleavingDataTask.make(response: response, error: error))
-        let taskId = UUID().uuidString
-        instrumentation.setIdKey(value: taskId, for: task)
-        instrumentation.storeRequest(request, forTaskId: taskId)
-        URLSessionLogger.processAndLogRequest(request,
+        let (task, taskId) = try makeTaskWithBufferedBodyAndNoSpan(response: response ?? makeHTTPResponse(),
+                                                                   error: error)
+        URLSessionLogger.processAndLogRequest(URLRequest(url: Self.url),
                                               sessionTaskId: taskId,
                                               instrumentation: instrumentation,
                                               shouldInjectHeaders: false)
+        return (task, taskId)
+    }
+
+    private func makeTaskWithBufferedBodyAndNoSpan(response: URLResponse,
+                                                   error: Error?) throws -> (InterleavingDataTask, String) {
+        let task = try XCTUnwrap(InterleavingDataTask.make(response: response, error: error))
+        let taskId = UUID().uuidString
+        instrumentation.setIdKey(value: taskId, for: task)
+        instrumentation.storeRequest(URLRequest(url: Self.url), forTaskId: taskId)
         instrumentation.urlSession(session, dataTask: task, didReceive: Self.body)
         return (task, taskId)
+    }
+
+    private func makeHTTPResponse(statusCode: Int = 200) throws -> HTTPURLResponse {
+        try XCTUnwrap(HTTPURLResponse(url: Self.url,
+                                      statusCode: statusCode,
+                                      httpVersion: nil,
+                                      headerFields: ["Content-Type": "application/json"]))
     }
 
     private func record(_ body: Data?, in bodies: ReferenceWritableKeyPath<NetworkResponseBodyCompletionRaceTests, [Data?]>) {
