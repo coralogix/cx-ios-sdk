@@ -570,7 +570,9 @@ class CxRumBuilderTests: XCTestCase {
         let tvSdk = try XCTUnwrap(payload["tv_sdk"] as? [String: Any])
         XCTAssertEqual(tvSdk["sdk_version"] as? String, cxRum.mobileSDK.sdkFramework.version)
         XCTAssertEqual(tvSdk["framework"] as? String, "swift")
-        XCTAssertEqual(tvSdk["os"] as? String, Global.getOs())
+        // The injected `os` only picks the key names; the os value comes from MobileSDK,
+        // which reads the real host. tool/run_tvos_smoke.sh checks `tvos` end to end.
+        XCTAssertEqual(tvSdk["os"] as? String, cxRum.mobileSDK.getDictionary()[Keys.operatingSystem.rawValue] as? String)
         XCTAssertNil(payload["mobile_sdk"])
     }
 
