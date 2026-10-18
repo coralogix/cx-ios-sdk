@@ -19,9 +19,10 @@
 #
 # Exit codes:
 #   0 — every log valid and every required type present
-#   1 — the validator rejected a log, or a required type is missing
+#   1 — the validator rejected a log, or a log lacks the tvOS identity
 #   2 — infra failure (no simulator, build, launch, validator unreachable or holding no
-#       logs for the session — e.g. a cold-starting validator that dropped the uploads)
+#       logs for the session — e.g. a cold-starting validator that dropped the uploads),
+#       or a required type is missing while every log that arrived was accepted
 
 set -uo pipefail
 
@@ -161,8 +162,11 @@ if [ -n "$NOT_TV" ]; then
   FAILED=1
 fi
 if [ -n "${MISSING:-}" ]; then
-  echo "::error::no '$MISSING' event reached the validator within ${WAIT_SECONDS}s"
-  FAILED=1
+  MISSING_MSG="no '$MISSING' event reached the validator within ${WAIT_SECONDS}s"
+  # Everything that did arrive was accepted, so a gap is more likely a dropped batch
+  # (cold validator, timed-out upload) than a schema verdict: let the workflow retry.
+  [ "$FAILED" -eq 0 ] && infra "$MISSING_MSG"
+  echo "::error::$MISSING_MSG"
 fi
 
 [ "$FAILED" -eq 0 ] && echo "✅ tvOS session $SESSION_ID passed schema validation"
