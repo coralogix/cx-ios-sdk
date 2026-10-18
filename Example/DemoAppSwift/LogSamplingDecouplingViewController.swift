@@ -188,21 +188,8 @@ final class LogSamplingDecouplingViewController: UIViewController {
     // MARK: - View state derived from model
 
     private func updateStatusLabel() {
-        let rate = model.sampleRate
-        let empty = model.exclude.isEmpty
-        if rate == 0 && empty {
-            statusLabel.text = "⚠️ rate=0 + exclude=[] would short-circuit init (legacy contract). Apply will refuse this combination."
-            statusLabel.textColor = .systemOrange
-        } else if rate == 100 {
-            statusLabel.text = "ℹ️ Sampled in: every event passes regardless of excludeFromSampling."
-            statusLabel.textColor = .secondaryLabel
-        } else if rate == 0 {
-            statusLabel.text = "ℹ️ Sampled out (rate=0): only event_types in excludeFromSampling will be exported."
-            statusLabel.textColor = .secondaryLabel
-        } else {
-            statusLabel.text = "ℹ️ ~\(rate)% of fresh sessions roll sampled-in. Reinit (or relaunch) to roll a new session."
-            statusLabel.textColor = .secondaryLabel
-        }
+        statusLabel.text = LogSamplingDemoModel.statusText(sampleRate: model.sampleRate, exclude: model.exclude)
+        statusLabel.textColor = .secondaryLabel
     }
 
     private func updateAppliedConfigLabel() {

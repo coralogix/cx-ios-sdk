@@ -102,24 +102,10 @@ struct LogSamplingDecouplingView: View {
         .toast(message: $toastMessage)
     }
 
-    @SwiftUI.ViewBuilder
     private var statusText: some View {
-        Group {
-            if model.sampleRate == 0 && model.exclude.isEmpty {
-                Text("⚠️ rate=0 + exclude=[] would short-circuit init (legacy contract). Apply will refuse this combination.")
-                    .foregroundColor(.orange)
-            } else if model.sampleRate == 100 {
-                Text("ℹ️ Sampled in: every event passes regardless of excludeFromSampling.")
-                    .foregroundColor(.secondary)
-            } else if model.sampleRate == 0 {
-                Text("ℹ️ Sampled out (rate=0): only event_types in excludeFromSampling will be exported.")
-                    .foregroundColor(.secondary)
-            } else {
-                Text("ℹ️ ~\(model.sampleRate)% of fresh sessions roll sampled-in. Reinit (or relaunch) to roll a new session.")
-                    .foregroundColor(.secondary)
-            }
-        }
-        .font(.footnote)
+        Text(LogSamplingDemoModel.statusText(sampleRate: model.sampleRate, exclude: model.exclude))
+            .foregroundColor(.secondary)
+            .font(.footnote)
     }
 
     private func bindingForExclude(_ excludable: ExcludableInstrumentation) -> Binding<Bool> {

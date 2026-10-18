@@ -130,8 +130,10 @@ let traceParentEnabled: [String: Any] = [Keys.enable.rawValue: true]
 /// Carries the per-span `is_session_sampled_in` stamp SessionManager burns at creation, since
 /// the export sampling filter reads that stamp (not the exporter's live flag). Defaults to
 /// `sampledIn: true` — the sampled-in / filter-no-op case; sampled-out sessions pass `false`.
-func makeSamplingSpan(eventType: CoralogixEventType, sampledIn: Bool = true) -> SpanData {
-    let attributes: [String: AttributeValue] = [
+func makeSamplingSpan(eventType: CoralogixEventType,
+                      sampledIn: Bool = true,
+                      extraAttributes: [String: AttributeValue] = [:]) -> SpanData {
+    let baseAttributes: [String: AttributeValue] = [
         Keys.eventType.rawValue: AttributeValue(eventType.rawValue),
         Keys.spanSessionSampledIn.rawValue: AttributeValue(sampledIn ? "true" : "false"),
         Keys.severity.rawValue: AttributeValue("3"),
@@ -143,6 +145,7 @@ func makeSamplingSpan(eventType: CoralogixEventType, sampledIn: Bool = true) -> 
         Keys.sessionId.rawValue: AttributeValue("session_001"),
         Keys.sessionCreationDate.rawValue: AttributeValue("1609459200")
     ]
+    let attributes = baseAttributes.merging(extraAttributes) { _, extra in extra }
     return SpanData(traceId: TraceId.random(),
                     spanId: SpanId.random(),
                     name: "testSpan_\(eventType.rawValue)",

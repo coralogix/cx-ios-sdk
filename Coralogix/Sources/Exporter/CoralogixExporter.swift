@@ -227,8 +227,9 @@ public class CoralogixExporter: SpanExporter {
             return .success
         }
 
-        // Per-session sampling: when the current session is sampled out, only spans whose
-        // event_type is opted into options.excludeFromSampling proceed. Paired with the
+        // Per-session sampling: a span stamped sampled-out proceeds only if its event_type is
+        // opted into options.excludeFromSampling, or it is `internal` and that list is
+        // non-empty (see `passesSessionSampling`). Paired with the
         // propagate-only network check, which catches the case sampling cannot. Placed above
         // URL/error filters and the tracesExporter callback so hybrid + external OTLP consumers
         // inherit the same behavior.
@@ -407,9 +408,9 @@ public class CoralogixExporter: SpanExporter {
 
     /// Returns `true` if the span should proceed past the per-session sampling filter.
     /// When the span's own `is_session_sampled_in` stamp is true, every span passes. When it is
-    /// false, only the SDK's own `internal` events and spans whose `event_type` matches an opt-in
-    /// entry in `options.excludeFromSampling` pass. Spans missing an `event_type` attribute are
-    /// dropped when stamped sampled-out.
+    /// false, only spans whose `event_type` matches an opt-in entry in `options.excludeFromSampling`
+    /// pass, plus the SDK's own `internal` events when that list is non-empty. Spans missing an
+    /// `event_type` attribute are dropped when stamped sampled-out.
     /// Internal (rather than private per the ticket) so unit tests can exercise it directly.
     internal func passesSessionSampling(_ span: SpanDataProtocol) -> Bool {
         // The sampling decision belongs to the session the span was created in, not the live one.
@@ -424,9 +425,12 @@ public class CoralogixExporter: SpanExporter {
             return false
         }
 
-        // The SDK's own lifecycle events always survive, matching Android. Without this a
-        // sampled-out session is indistinguishable from an SDK that never started, which makes
-        // sampling impossible to verify from the backend side.
+        let excludeFromSampling = getOptions().excludeFromSampling
+
+        // Matches the browser SDK: with nothing excluded a sampled-out session exports nothing at
+        // all, its own init and session_replay_init included — otherwise those arrive as snapshot
+        // events and the session shows up in session lists. Once anything is excluded the session
+        // is reporting anyway, so the SDK's own events go with it.
         //
         // This keys on the event type alone and is deliberately not defended against forgery:
         // `CoralogixCustomSpan.setAttribute` accepts any key, so a caller can stamp `internal` on
@@ -434,9 +438,9 @@ public class CoralogixExporter: SpanExporter {
         // position that semantic fields are the caller's responsibility while identity and counters
         // are defended — the only cost here is the caller's own sampling savings, on their own data.
         // Requiring an SDK-private marker alongside the type would close it if that ever changes.
-        if eventType == CoralogixEventType.internalKey.rawValue { return true }
+        if eventType == CoralogixEventType.internalKey.rawValue { return !excludeFromSampling.isEmpty }
 
-        return getOptions().excludeFromSampling.contains { $0.eventType.rawValue == eventType }
+        return excludeFromSampling.contains { $0.eventType.rawValue == eventType }
     }
 
     /// Returns `false` for a `network-request` span reported while network instrumentation is off.
