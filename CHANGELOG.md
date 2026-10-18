@@ -14,7 +14,7 @@ omitted; the focus here is user-facing behavior changes.
 - The SDK builds for tvOS 14 and higher again when installed with Swift Package Manager.
 
 ### Changed
-- tvOS events now report `platform` as `tv`, with the SDK details in `tv_sdk` and mobile vitals in `tv_vitals_context` (previously `television`, `mobile_sdk` and `mobile_vitals_context`). Update any tvOS queries or dashboards that filter on the old fields.
+- tvOS events now report `platform` as `tv`, with the SDK details in `tv_sdk` and mobile vitals in `tv_vitals_context` (previously `television`, `mobile_sdk` and `mobile_vitals_context`), and no longer include `battery` or `user_agent`, which Apple TV can't report. Update any tvOS queries or dashboards that filter on the old fields.
 
 ## [2.20.2] - 2026-10-18
 
