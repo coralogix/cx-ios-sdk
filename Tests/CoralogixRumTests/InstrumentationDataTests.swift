@@ -176,6 +176,19 @@ final class InstrumentationDataTests: XCTestCase {
         XCTAssertNil(ios["cx_rum.tv_sdk.sdk_version"])
     }
 
+    // Matches text.cx_rum.device_context: tvOS has no WebKit, so no user agent is mirrored.
+    func testBuildRumContextAttributes_userAgentOnlyOffTvOS() {
+        let tv = OtelSpan.buildRumContextAttributes(fromCxRumDict: [:], viewManager: nil,
+                                                    sdkVersion: "2.20.3", os: "tvos")
+        XCTAssertEqual(tv["cx_rum.session_context.device"] as? String, Global.getDeviceModel())
+        XCTAssertFalse(tv.keys.contains("cx_rum.session_context.user_agent"))
+
+        let ios = OtelSpan.buildRumContextAttributes(fromCxRumDict: [:], viewManager: nil,
+                                                     sdkVersion: "2.20.3", os: "ios")
+        XCTAssertEqual(ios["cx_rum.session_context.user_agent"] as? String,
+                       UserAgentManager.shared.getUserAgent())
+    }
+
     func testBuildRumContextAttributes_emptyEnvironment_isOmitted() {
         let cxRum = makeCxRum(environment: "")
         let attrs = OtelSpan(otel: mockSpan, cxRum: cxRum, viewManager: nil).attributes

@@ -171,10 +171,7 @@ struct OtelSpan {
             if let v = session[Keys.userName.rawValue] as? String, !v.isEmpty { attrs[AttrKey.userName] = v }
             if let v = session[Keys.userEmail.rawValue] as? String, !v.isEmpty { attrs[AttrKey.userEmail] = v }
         }
-        attrs[AttrKey.os]        = Global.getOs()
-        attrs[AttrKey.osVersion] = Global.osVersionInfo()
-        attrs[AttrKey.device]    = Global.getDeviceModel()
-        attrs[AttrKey.userAgent] = UserAgentManager.shared.getUserAgent()
+        addDeviceAttributes(to: &attrs, os: os)
 
         if let event = cxRumDict[Keys.eventContext.rawValue] as? [String: Any] {
             if let v = event[Keys.type.rawValue]     { attrs[AttrKey.eventType]     = v }
@@ -251,6 +248,17 @@ struct OtelSpan {
         attrs[AttrKey.platform] = CxRumPayloadBuilder.platform(for: os)
     }
 
+    /// tvOS has no WebKit, so like `text.cx_rum.device_context` it carries no user agent
+    /// rather than an "undefined" placeholder.
+    private static func addDeviceAttributes(to attrs: inout [String: Any], os: String) {
+        attrs[AttrKey.os]        = Global.getOs()
+        attrs[AttrKey.osVersion] = Global.osVersionInfo()
+        attrs[AttrKey.device]    = Global.getDeviceModel()
+        if !CxRumPayloadBuilder.isTv(os: os) {
+            attrs[AttrKey.userAgent] = UserAgentManager.shared.getUserAgent()
+        }
+    }
+
     private static func buildRumContextAttributes(cxRum: CxRum, viewManager: ViewManager?) -> [String: Any] {
         var attrs = [String: Any]()
 
@@ -280,10 +288,7 @@ struct OtelSpan {
             if !session.userName.isEmpty  { attrs[AttrKey.userName]  = session.userName }
             if !session.userEmail.isEmpty { attrs[AttrKey.userEmail] = session.userEmail }
         }
-        attrs[AttrKey.os]        = Global.getOs()
-        attrs[AttrKey.osVersion] = Global.osVersionInfo()
-        attrs[AttrKey.device]    = Global.getDeviceModel()
-        attrs[AttrKey.userAgent] = UserAgentManager.shared.getUserAgent()
+        addDeviceAttributes(to: &attrs, os: Global.getOs())
 
         // Event context
         attrs[AttrKey.eventType]     = cxRum.eventContext.type.rawValue
