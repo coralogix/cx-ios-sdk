@@ -21,11 +21,46 @@ class MainViewController: UITableViewController {
                                  .sendCrash,
                                  .shutDownCoralogixRum]
 
+    private let sessionIdLabel = UILabel()
+
     override func viewDidLoad() {
         super.viewDidLoad()
         tableView.register(UITableViewCell.self, forCellReuseIdentifier: "cell")
         tableView.backgroundColor = .clear
         tableView.rowHeight = 80
+        tableView.tableHeaderView = makeSessionHeader()
+    }
+
+    // The session rotates (idle timeout, shutdown), so re-read it whenever the menu returns.
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        sessionIdLabel.text = CoralogixRumManager.shared.getSessionId()?.lowercased() ?? "No session"
+    }
+
+    // tvOS has no pasteboard, so unlike the iOS demos this only displays the id.
+    private func makeSessionHeader() -> UIView {
+        let header = UIView(frame: CGRect(x: 0, y: 0, width: tableView.bounds.width, height: 150))
+
+        let titleLabel = UILabel()
+        titleLabel.text = "Session ID"
+        titleLabel.font = UIFont.systemFont(ofSize: 28, weight: .semibold)
+        titleLabel.textColor = .lightGray
+
+        sessionIdLabel.font = UIFont.monospacedSystemFont(ofSize: 40, weight: .medium)
+        sessionIdLabel.textColor = .white
+        sessionIdLabel.adjustsFontSizeToFitWidth = true
+
+        let stack = UIStackView(arrangedSubviews: [titleLabel, sessionIdLabel])
+        stack.axis = .vertical
+        stack.spacing = 8
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        header.addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.leadingAnchor.constraint(equalTo: header.leadingAnchor, constant: 20),
+            stack.trailingAnchor.constraint(equalTo: header.trailingAnchor, constant: -20),
+            stack.centerYAnchor.constraint(equalTo: header.centerYAnchor)
+        ])
+        return header
     }
 
     override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
