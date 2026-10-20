@@ -205,7 +205,7 @@ public class CoralogixExporter: SpanExporter {
         otelSpan[Keys.attributes.rawValue] = OtelSpan.rebuiltAttributes(
             fromCxRumDict: cxRum,
             preservingPageFrom: previousAttributes,
-            mobileSdkVersion: CoralogixRum.mobileSDK.sdkFramework.version
+            sdkVersion: CoralogixRum.mobileSDK.sdkFramework.version
         )
         instrumentationData[Keys.otelSpan.rawValue] = otelSpan
         var result = event

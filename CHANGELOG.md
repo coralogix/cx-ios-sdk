@@ -8,6 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Release-mechanics commits (version bumps, podspec/script tweaks, README edits) are
 omitted; the focus here is user-facing behavior changes.
 
+## [2.20.3] - 2026-10-20
+
+### Fixed
+- The SDK builds for tvOS 14 and higher again when installed with Swift Package Manager.
+- tvOS apps that use the scene lifecycle, which tvOS 26 requires, now report their first screen as a navigation event.
+
+### Changed
+- tvOS events now report `platform` as `tv`, with the SDK details in `tv_sdk` and mobile vitals in `tv_vitals_context` (previously `television`, `mobile_sdk` and `mobile_vitals_context`), and no longer include `battery` or `user_agent`, which Apple TV can't report. Update any tvOS queries or dashboards that filter on the old fields.
+
 ## [2.20.2] - 2026-10-18
 
 ### Fixed

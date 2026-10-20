@@ -15,7 +15,7 @@ The Coralogix RUM Mobile SDK is a library for iOS, distributed through Swift Pac
 
 ## Requirements
 
-Coralogix RUM agent for iOS supports iOS 13 and higher.
+Coralogix RUM agent for iOS supports iOS 13 and higher, and tvOS 14 and higher when installed with Swift Package Manager.
 
 ## Installation
 

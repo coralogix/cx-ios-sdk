@@ -86,6 +86,7 @@ struct OtelSpan {
     // be silently ignored by the backend with no compile-time warning.
     private enum AttrKey {
         static let mobileSdkVersion          = "cx_rum.mobile_sdk.version"
+        static let tvSdkVersion              = "cx_rum.tv_sdk.sdk_version"
         static let environment               = "cx_rum.environment"
         static let platform                  = "cx_rum.platform"
         static let versionMetadataAppName    = "cx_rum.version_metadata.app_name"
@@ -139,17 +140,16 @@ struct OtelSpan {
     internal static func buildRumContextAttributes(
         fromCxRumDict cxRumDict: [String: Any],
         viewManager: ViewManager?,
-        mobileSdkVersion: String
+        sdkVersion: String,
+        os: String = Global.getOs()
     ) -> [String: Any] {
         var attrs = [String: Any]()
 
-        attrs[AttrKey.mobileSdkVersion] = mobileSdkVersion
+        addSdkVersionAndPlatform(to: &attrs, sdkVersion: sdkVersion, os: os)
 
         if let env = cxRumDict[Keys.environment.rawValue] as? String, !env.isEmpty {
             attrs[AttrKey.environment] = env
         }
-        let platform = (Global.getOs() == Keys.tvos.rawValue) ? Keys.television.rawValue : Keys.mobile.rawValue
-        attrs[AttrKey.platform] = platform
 
         if let vm = cxRumDict[Keys.versionMetaData.rawValue] as? [String: Any] {
             attrs[AttrKey.versionMetadataAppName]    = vm[Keys.appName.rawValue]
@@ -171,10 +171,7 @@ struct OtelSpan {
             if let v = session[Keys.userName.rawValue] as? String, !v.isEmpty { attrs[AttrKey.userName] = v }
             if let v = session[Keys.userEmail.rawValue] as? String, !v.isEmpty { attrs[AttrKey.userEmail] = v }
         }
-        attrs[AttrKey.os]        = Global.getOs()
-        attrs[AttrKey.osVersion] = Global.osVersionInfo()
-        attrs[AttrKey.device]    = Global.getDeviceModel()
-        attrs[AttrKey.userAgent] = UserAgentManager.shared.getUserAgent()
+        addDeviceAttributes(to: &attrs, os: os)
 
         if let event = cxRumDict[Keys.eventContext.rawValue] as? [String: Any] {
             if let v = event[Keys.type.rawValue]     { attrs[AttrKey.eventType]     = v }
@@ -230,10 +227,10 @@ struct OtelSpan {
     /// disagree on the page.
     internal static func rebuiltAttributes(fromCxRumDict cxRumDict: [String: Any],
                                            preservingPageFrom previousAttributes: [String: Any],
-                                           mobileSdkVersion: String) -> [String: Any] {
+                                           sdkVersion: String) -> [String: Any] {
         var attrs = buildRumContextAttributes(fromCxRumDict: cxRumDict,
                                               viewManager: nil,
-                                              mobileSdkVersion: mobileSdkVersion)
+                                              sdkVersion: sdkVersion)
         if let pageUrl = previousAttributes[AttrKey.pageUrl] {
             attrs[AttrKey.pageUrl] = pageUrl
         }
@@ -243,18 +240,34 @@ struct OtelSpan {
         return attrs
     }
 
+    /// Mirrors `text.cx_rum`: tvOS carries the SDK under `tv_sdk`. Its version key follows the
+    /// field path (`tv_sdk.sdk_version`) so it matches the other `platform: tv` SDK.
+    private static func addSdkVersionAndPlatform(to attrs: inout [String: Any], sdkVersion: String, os: String) {
+        let isTv = CxRumPayloadBuilder.isTv(os: os)
+        attrs[isTv ? AttrKey.tvSdkVersion : AttrKey.mobileSdkVersion] = sdkVersion
+        attrs[AttrKey.platform] = CxRumPayloadBuilder.platform(for: os)
+    }
+
+    /// tvOS has no WebKit, so like `text.cx_rum.device_context` it carries no user agent
+    /// rather than an "undefined" placeholder.
+    private static func addDeviceAttributes(to attrs: inout [String: Any], os: String) {
+        attrs[AttrKey.os]        = Global.getOs()
+        attrs[AttrKey.osVersion] = Global.osVersionInfo()
+        attrs[AttrKey.device]    = Global.getDeviceModel()
+        if !CxRumPayloadBuilder.isTv(os: os) {
+            attrs[AttrKey.userAgent] = UserAgentManager.shared.getUserAgent()
+        }
+    }
+
     private static func buildRumContextAttributes(cxRum: CxRum, viewManager: ViewManager?) -> [String: Any] {
         var attrs = [String: Any]()
 
-        // Mobile SDK version (browser SDK equivalent: cx_rum.browser_sdk.version)
-        attrs[AttrKey.mobileSdkVersion] = cxRum.mobileSDK.sdkFramework.version
+        // SDK version (browser SDK equivalent: cx_rum.browser_sdk.version) & platform
+        addSdkVersionAndPlatform(to: &attrs, sdkVersion: cxRum.mobileSDK.sdkFramework.version, os: Global.getOs())
 
-        // Environment & platform
         if !cxRum.environment.isEmpty {
             attrs[AttrKey.environment] = cxRum.environment
         }
-        let platform = (Global.getOs() == Keys.tvos.rawValue) ? Keys.television.rawValue : Keys.mobile.rawValue
-        attrs[AttrKey.platform] = platform
 
         // Version metadata
         attrs[AttrKey.versionMetadataAppName]    = cxRum.versionMetadata.appName
@@ -275,10 +288,7 @@ struct OtelSpan {
             if !session.userName.isEmpty  { attrs[AttrKey.userName]  = session.userName }
             if !session.userEmail.isEmpty { attrs[AttrKey.userEmail] = session.userEmail }
         }
-        attrs[AttrKey.os]        = Global.getOs()
-        attrs[AttrKey.osVersion] = Global.osVersionInfo()
-        attrs[AttrKey.device]    = Global.getDeviceModel()
-        attrs[AttrKey.userAgent] = UserAgentManager.shared.getUserAgent()
+        addDeviceAttributes(to: &attrs, os: Global.getOs())
 
         // Event context
         attrs[AttrKey.eventType]     = cxRum.eventContext.type.rawValue

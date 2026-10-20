@@ -235,7 +235,9 @@ class ColdDetectorTests: XCTestCase {
     private func drainMainQueue() {
         let drained = expectation(description: "main queue drained")
         DispatchQueue.main.async { drained.fulfill() }
-        wait(for: [drained], timeout: 1)
+        // Returns as soon as the queue drains; the limit only has to outlast a loaded CI
+        // runner, where 1s timed out with earlier tests' main-queue work still pending.
+        wait(for: [drained], timeout: 10)
     }
 
     /// Captures each reported cold duration.

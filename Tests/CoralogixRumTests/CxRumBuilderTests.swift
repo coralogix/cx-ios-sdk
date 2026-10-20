@@ -559,6 +559,97 @@ class CxRumBuilderTests: XCTestCase {
                      "isNavigationEvent must not be nested under event_context")
     }
 
+    // Pins the literal wire values: tvOS reports `platform: tv` and carries the SDK object
+    // under `tv_sdk` instead of `mobile_sdk`.
+    func test_payload_onTvOS_carriesSdkUnderTvSdk() throws {
+        let cxRum = try XCTUnwrap(makeSUT(currentTime: Date(), eventType: "log")?.build())
+        var builder = CxRumPayloadBuilder(rum: cxRum, viewManager: mockViewManager, os: "tvos")
+        let payload = builder.build()
+
+        XCTAssertEqual(payload[Keys.platform.rawValue] as? String, "tv")
+        let tvSdk = try XCTUnwrap(payload["tv_sdk"] as? [String: Any])
+        XCTAssertEqual(tvSdk["sdk_version"] as? String, cxRum.mobileSDK.sdkFramework.version)
+        XCTAssertEqual(tvSdk["framework"] as? String, "swift")
+        // The injected `os` only picks the key names; the os value comes from MobileSDK,
+        // which reads the real host. tool/run_tvos_smoke.sh checks `tvos` end to end.
+        XCTAssertEqual(tvSdk["os"] as? String, cxRum.mobileSDK.getDictionary()[Keys.operatingSystem.rawValue] as? String)
+        XCTAssertNil(payload["mobile_sdk"])
+    }
+
+    func test_payload_onTvOS_omitsBatteryAndUserAgentPlaceholders() throws {
+        let cxRum = try XCTUnwrap(makeSUT(currentTime: Date(), eventType: "log")?.build())
+
+        var tvBuilder = CxRumPayloadBuilder(rum: cxRum, viewManager: mockViewManager, os: "tvos")
+        let tv = tvBuilder.build()
+        let tvState = try XCTUnwrap(tv[Keys.deviceState.rawValue] as? [String: Any])
+        let tvDevice = try XCTUnwrap(tv[Keys.deviceContext.rawValue] as? [String: Any])
+        XCTAssertEqual(Set(tvState.keys), [Keys.networkType.rawValue])
+        XCTAssertEqual(Set(tvDevice.keys),
+                       Set(cxRum.deviceContext.getDictionary().keys).subtracting([Keys.userAgent.rawValue]))
+
+        var iosBuilder = CxRumPayloadBuilder(rum: cxRum, viewManager: mockViewManager, os: "ios")
+        let ios = iosBuilder.build()
+        let iosState = try XCTUnwrap(ios[Keys.deviceState.rawValue] as? [String: Any])
+        let iosDevice = try XCTUnwrap(ios[Keys.deviceContext.rawValue] as? [String: Any])
+        XCTAssertEqual(iosState[Keys.battery.rawValue] as? String, cxRum.deviceState.battery)
+        XCTAssertEqual(iosDevice[Keys.userAgent.rawValue] as? String, cxRum.deviceContext.userAgent)
+    }
+
+    func test_payload_interaction_onTvOS_keepsOnlyTvSchemaFields() throws {
+        let tapObject: [String: Any] = [
+            Keys.eventName.rawValue: "scroll",
+            Keys.targetElement.rawValue: "UICollectionView",
+            Keys.elementId.rawValue: "rail",
+            Keys.elementClasses.rawValue: "UICollectionView",
+            Keys.scrollDirection.rawValue: "down",
+            Keys.isMaskedElement.rawValue: true
+        ]
+        let attrs = [Keys.tapObject.rawValue: AttributeValue(Helper.convertDictionaryToJsonString(dict: tapObject))]
+        let cxRum = try XCTUnwrap(makeSUT(currentTime: Date(), eventType: "user-interaction",
+                                          extraAttributes: attrs)?.build())
+
+        var tvBuilder = CxRumPayloadBuilder(rum: cxRum, viewManager: mockViewManager, os: "tvos")
+        let tv = try XCTUnwrap(tvBuilder.build()[Keys.interactionContext.rawValue] as? [String: Any])
+        XCTAssertEqual(Set(tv.keys), [Keys.eventName.rawValue, Keys.targetElement.rawValue,
+                                      Keys.elementId.rawValue])
+        XCTAssertEqual(tv[Keys.eventName.rawValue] as? String, "scroll")
+        XCTAssertEqual(tv[Keys.elementId.rawValue] as? String, "rail")
+
+        var iosBuilder = CxRumPayloadBuilder(rum: cxRum, viewManager: mockViewManager, os: "ios")
+        let ios = try XCTUnwrap(iosBuilder.build()[Keys.interactionContext.rawValue] as? [String: Any])
+        XCTAssertEqual(ios[Keys.isMaskedElement.rawValue] as? Bool, true)
+        XCTAssertEqual(ios[Keys.scrollDirection.rawValue] as? String, "down")
+        XCTAssertEqual(ios[Keys.elementClasses.rawValue] as? String, "UICollectionView")
+    }
+
+    func test_payload_vitals_goUnderTvVitalsContextOnlyOnTvOS() throws {
+        let vitals: [String: AttributeValue] = [Keys.mobileVitalsType.rawValue: AttributeValue("{\"cpu\":12}")]
+        let cxRum = try XCTUnwrap(makeSUT(currentTime: Date(), eventType: "mobile-vitals",
+                                          extraAttributes: vitals)?.build())
+
+        var tvBuilder = CxRumPayloadBuilder(rum: cxRum, viewManager: mockViewManager, os: "tvos")
+        let tvPayload = tvBuilder.build()
+        XCTAssertEqual(tvPayload["tv_vitals_context"] as? [String: Int], ["cpu": 12])
+        XCTAssertNil(tvPayload["mobile_vitals_context"])
+
+        var iosBuilder = CxRumPayloadBuilder(rum: cxRum, viewManager: mockViewManager, os: "ios")
+        let iosPayload = iosBuilder.build()
+        XCTAssertEqual(iosPayload["mobile_vitals_context"] as? [String: Int], ["cpu": 12])
+        XCTAssertNil(iosPayload["tv_vitals_context"])
+    }
+
+    func test_payload_onIOS_keepsMobileSchema() throws {
+        let cxRum = try XCTUnwrap(makeSUT(currentTime: Date(), eventType: "log")?.build())
+        var builder = CxRumPayloadBuilder(rum: cxRum, viewManager: mockViewManager, os: "ios")
+        let payload = builder.build()
+
+        XCTAssertEqual(payload[Keys.platform.rawValue] as? String, "mobile")
+        let mobileSdk = try XCTUnwrap(payload["mobile_sdk"] as? [String: Any])
+        XCTAssertEqual(mobileSdk[Keys.sdkVersion.rawValue] as? String, cxRum.mobileSDK.sdkFramework.version)
+        XCTAssertEqual(payload[Keys.isNavigationEvent.rawValue] as? Bool, false)
+        XCTAssertNil(payload["tv_sdk"])
+    }
+
     func test_payload_emitsViewNumberAtTopLevelWhenPresent() {
         mockViewManager = MockViewManager(keyChain: MockKeyChain())
         mockViewManager.set(cxView: CXView(state: .notifyOnAppear, name: "Home"))
@@ -764,7 +855,8 @@ class CxRumBuilderTests: XCTestCase {
 
     // Convenience overload that lets the new tests vary event type without touching the
     // original makeSUT() / its existing callers (which pin a "log" event for snapshot tests).
-    private func makeSUT(currentTime: Date, eventType: String) -> CxRumBuilder? {
+    private func makeSUT(currentTime: Date, eventType: String,
+                         extraAttributes: [String: AttributeValue] = [:]) -> CxRumBuilder? {
         let endTime = Date()
         self.mockOtel = MockSpanData(attributes: [Keys.severity.rawValue: AttributeValue("3"),
                                                   Keys.eventType.rawValue: AttributeValue(eventType),
@@ -774,7 +866,8 @@ class CxRumBuilderTests: XCTestCase {
                                                   Keys.userName.rawValue: AttributeValue("John Doe"),
                                                   Keys.userEmail.rawValue: AttributeValue("john.doe@example.com"),
                                                   Keys.sessionId.rawValue: AttributeValue("session_001"),
-                                                  Keys.sessionCreationDate.rawValue: AttributeValue(1609459200)],
+                                                  Keys.sessionCreationDate.rawValue: AttributeValue(1609459200)]
+                                        .merging(extraAttributes) { _, extra in extra },
                                      startTime: currentTime,
                                      endTime: endTime,
                                      spanId: "20",

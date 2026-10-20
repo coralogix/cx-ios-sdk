@@ -161,6 +161,34 @@ final class InstrumentationDataTests: XCTestCase {
         XCTAssertEqual(attrs["cx_rum.version_metadata.app_version"] as? String, "3.1.0")
     }
 
+    // The trace copy must name the SDK the way `text.cx_rum` does: `tv_sdk` on tvOS.
+    func testBuildRumContextAttributes_sdkVersionKeyFollowsPlatform() {
+        let tv = OtelSpan.buildRumContextAttributes(fromCxRumDict: [:], viewManager: nil,
+                                                    sdkVersion: "2.20.1", os: "tvos")
+        XCTAssertEqual(tv["cx_rum.tv_sdk.sdk_version"] as? String, "2.20.1")
+        XCTAssertEqual(tv["cx_rum.platform"] as? String, "tv")
+        XCTAssertNil(tv["cx_rum.mobile_sdk.version"])
+
+        let ios = OtelSpan.buildRumContextAttributes(fromCxRumDict: [:], viewManager: nil,
+                                                     sdkVersion: "2.20.1", os: "ios")
+        XCTAssertEqual(ios["cx_rum.mobile_sdk.version"] as? String, "2.20.1")
+        XCTAssertEqual(ios["cx_rum.platform"] as? String, "mobile")
+        XCTAssertNil(ios["cx_rum.tv_sdk.sdk_version"])
+    }
+
+    // Matches text.cx_rum.device_context: tvOS has no WebKit, so no user agent is mirrored.
+    func testBuildRumContextAttributes_userAgentOnlyOffTvOS() {
+        let tv = OtelSpan.buildRumContextAttributes(fromCxRumDict: [:], viewManager: nil,
+                                                    sdkVersion: "2.20.3", os: "tvos")
+        XCTAssertEqual(tv["cx_rum.session_context.device"] as? String, Global.getDeviceModel())
+        XCTAssertFalse(tv.keys.contains("cx_rum.session_context.user_agent"))
+
+        let ios = OtelSpan.buildRumContextAttributes(fromCxRumDict: [:], viewManager: nil,
+                                                     sdkVersion: "2.20.3", os: "ios")
+        XCTAssertEqual(ios["cx_rum.session_context.user_agent"] as? String,
+                       UserAgentManager.shared.getUserAgent())
+    }
+
     func testBuildRumContextAttributes_emptyEnvironment_isOmitted() {
         let cxRum = makeCxRum(environment: "")
         let attrs = OtelSpan(otel: mockSpan, cxRum: cxRum, viewManager: nil).attributes

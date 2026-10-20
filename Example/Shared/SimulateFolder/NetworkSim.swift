@@ -8,11 +8,15 @@
 import Foundation
 import UIKit
 import Coralogix
+#if canImport(Alamofire)
 import Alamofire
+#endif
 #if canImport(AFNetworking)
 import AFNetworking
 #endif
+#if canImport(SDWebImage)
 import SDWebImage
+#endif
 
 //https://github.com/AFNetworking/AFNetworking.git
 //https://github.com/Alamofire/Alamofire.git
@@ -195,6 +199,7 @@ class NetworkSim {
     }
     
     static func succesfullAlamofire() {
+        #if canImport(Alamofire)
         AF.request(url, method: .get).validate().responseData { response in
             switch response.result {
             case .success(let data):
@@ -205,9 +210,13 @@ class NetworkSim {
                 print("Request failed with error: \(error)")
             }
         }
+        #else
+        print("[NetworkSim] Alamofire not linked in this build — succesfullAlamofire is a no-op.")
+        #endif
     }
 
     static func failureAlamofire() {
+        #if canImport(Alamofire)
         AF.request(errorUrl, method: .get).validate().responseData { response in
             switch response.result {
             case .success(let data):
@@ -218,6 +227,9 @@ class NetworkSim {
                 print("Request failed with error: \(error)")
             }
         }
+        #else
+        print("[NetworkSim] Alamofire not linked in this build — failureAlamofire is a no-op.")
+        #endif
     }
     
     static func createSampleFile() -> URL? {
@@ -260,6 +272,7 @@ class NetworkSim {
             return
         }
         
+        #if canImport(Alamofire)
         AF.upload(multipartFormData: { multipartFormData in
             multipartFormData.append(fileURL, withName: "file", fileName: "sample.txt", mimeType: "text/plain")
         }, to: url)
@@ -277,11 +290,15 @@ class NetworkSim {
                 print("Upload failed: \(error)")
             }
         }
+        #else
+        print("[NetworkSim] Alamofire not linked in this build — uploadFile is a no-op.")
+        #endif
     }
     
     static func downloadImage() {
         let urlString = "https://www.google.com/url?sa=i&url=https%3A%2F%2Funikal.az%2Fnews%2F490204%2Ftramp-meshur-aparicinin-verilisini-baglatdirir&psig=AOvVaw1NJs_lRnGqkjnhDu8j3AOd&ust=1753266023938000&source=images&cd=vfe&opi=89978449&ved=2ahUKEwjIstmFn9COAxX0UqQEHfprJpkQjRx6BAgAEBo"
         guard let url = URL(string: urlString) else { return }
+        #if canImport(SDWebImage)
         DispatchQueue.global(qos: .background).async {
             SDWebImageDownloader.shared.downloadImage(with: url, options: [], progress: nil) { image, _, _, finished in
                 guard let image = image, finished else { return }
@@ -291,6 +308,9 @@ class NetworkSim {
                 }
             }
         }
+        #else
+        print("[NetworkSim] SDWebImage not linked in this build — downloadImage is a no-op.")
+        #endif
     }
     
     static func callAsyncAwait() {

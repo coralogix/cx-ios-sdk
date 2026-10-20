@@ -6,7 +6,6 @@
 
 import Foundation
 import CoralogixInternal
-import WebKit
 
 struct NetworkRequestContext {
     let method: String

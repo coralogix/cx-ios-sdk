@@ -578,6 +578,20 @@ final class BeforeSendInstrumentationDataTests: XCTestCase {
                        "mobileSdk must be restored from the original cx_rum, not the callback's injected value")
     }
 
+    // tv_sdk is SDK-owned like mobile_sdk. On iOS the original payload has none, so a forged
+    // tv_sdk must be dropped by the read-only restore — it survives only if tv_sdk is editable.
+    func test_tvSdk_injectionIsIgnored() throws {
+        let result = try runSpan(sessionManager: SessionManager()) { cxRum in
+            var edit = cxRum
+            edit[Keys.tvSdk.rawValue] = ["sdk_version": "9.9.9-forged"]
+            return edit
+        }
+        XCTAssertNotNil(result.text[Keys.mobileSdk.rawValue] as? [String: Any],
+                        "the platform's own SDK object must still be present")
+        XCTAssertNil(result.text[Keys.tvSdk.rawValue],
+                     "a tv_sdk injected through beforeSend must not reach the payload")
+    }
+
     // CX-44687: view_number is an SDK-owned navigation-step counter. A customer
     // callback injecting a value (e.g. `view_number: 999` on every span) would
     // silently corrupt downstream funnel analysis — protect like other counters.

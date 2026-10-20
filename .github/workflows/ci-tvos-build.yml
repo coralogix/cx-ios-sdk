@@ -1,0 +1,89 @@
+name: tvOS Build
+
+# Reusable. Two jobs. `build` compiles every library target for tvOS — nothing else in CI does, so
+# an iOS-only API reaching shared code otherwise breaks tvOS customers silently.
+#
+# Builds for the device AND the simulator: `#if targetEnvironment(simulator)` hides
+# different code in each (a CoreTelephony call once broke only the device build), so
+# one passing never proves the other. `swift build` with an explicit --triple needs
+# no simulator runtime, so nothing is booted.
+#
+# `smoke` runs DemoAppTvOS on an Apple TV simulator and has the schema-validator check
+# the whole session (tool/run_tvos_smoke.sh) — the tvOS counterpart of the iOS smoke
+# shards. tvOS sends `platform: tv`, whose schema names the SDK and vitals objects
+# `tv_sdk` / `tv_vitals_context`, so a mobile key reaching a tvOS payload fails here
+# rather than in a customer's data.
+
+on:
+  workflow_call:
+    inputs:
+      runner:
+        type: string
+        default: macos-15
+      xcode-version:
+        type: string
+        default: '16.4'
+    secrets:
+      demoapp_api_key:
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build · tvOS ${{ matrix.target.name }}
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - { name: device,    sdk: appletvos,        triple: arm64-apple-tvos14.0 }
+          - { name: simulator, sdk: appletvsimulator, triple: arm64-apple-tvos14.0-simulator }
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-xcode
+        with:
+          xcode-version: ${{ inputs.xcode-version }}
+          install-xcpretty: 'false'
+
+      - name: Build for tvOS ${{ matrix.target.name }}
+        run: |
+          set -euo pipefail
+          swift build \
+            --sdk "$(xcrun --sdk ${{ matrix.target.sdk }} --show-sdk-path)" \
+            --triple ${{ matrix.target.triple }}
+
+  smoke:
+    name: smoke · tvOS schema validation
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-xcode
+        with:
+          xcode-version: ${{ inputs.xcode-version }}
+          install-xcpretty: 'false'
+
+      - uses: ./.github/actions/setup-demo-app
+        with:
+          api-key: ${{ secrets.demoapp_api_key }}
+          cache-prefix: pods-tvos
+
+      # Exit 1 is a real schema failure and fails at once. Exit 2 is infrastructure (no
+      # simulator, build, validator unreachable) and is retried once — the validator is
+      # a free-tier host, and one flake should not block a PR.
+      - name: Run tvOS smoke
+        run: |
+          set +e
+          tool/run_tvos_smoke.sh
+          EXIT=$?
+          if [ "$EXIT" -eq 2 ]; then
+            echo "::warning::tvOS smoke hit an infrastructure failure; retrying once"
+            tool/run_tvos_smoke.sh
+            EXIT=$?
+          fi
+          exit "$EXIT"
