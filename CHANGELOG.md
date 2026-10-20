@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Release-mechanics commits (version bumps, podspec/script tweaks, README edits) are
 omitted; the focus here is user-facing behavior changes.
 
-## [2.20.3] - 2026-10-18
+## [2.20.3] - 2026-10-20
 
 ### Fixed
 - The SDK builds for tvOS 14 and higher again when installed with Swift Package Manager.
