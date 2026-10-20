@@ -9,8 +9,6 @@ import UIKit
 
 @main
 class AppDelegate: UIResponder, UIApplicationDelegate {
-    var window: UIWindow?
-
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         CoralogixRumManager.shared.initialize(application: "DemoApp-tvOS")
         if CommandLine.arguments.contains(SmokeRun.launchArgument) {
@@ -18,6 +16,13 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         }
         return true
     }
+}
+
+/// tvOS 26 and later terminate an app at launch unless it adopts the scene lifecycle.
+/// `Main.storyboard` is loaded through the scene manifest in Info.plist, which also
+/// creates the window, so the delegate only has to hold it.
+class SceneDelegate: UIResponder, UIWindowSceneDelegate {
+    var window: UIWindow?
 }
 
 /// Fires every non-destructive menu action without the remote, so CI can check the whole
