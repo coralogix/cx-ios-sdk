@@ -321,7 +321,14 @@ extension UIViewController {
                 .first(where: { $0.isKeyWindow }) {
                 return window
             }
-            
+
+            // A scene-based app shows its first screen while its scene is still
+            // foregroundInactive, and has no AppDelegate window, so the controller's own
+            // window is the only answer for that first appearance.
+            if let window = viewIfLoaded?.window {
+                return window
+            }
+
             // Fallback to AppDelegate's window reference if all else fails
             if let appDelegate = UIApplication.shared.delegate {
                 return appDelegate.window ?? nil
