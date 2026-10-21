@@ -4,9 +4,9 @@
 //  End-to-end coverage of what a sampled-out session puts on the wire, matching the browser
 //  SDK: with `excludeFromSampling` empty it uploads nothing — not its init, not
 //  `session_replay_init` — and with any exclusion the excluded categories and the SDK's own
-//  `internal` events are uploaded, under the normal snapshot rules; a session that later rotates
-//  sampled in gets its first snapshot. Drives spans through
-//  `CoralogixExporter.export()` and asserts on the encoded `text.cx_rum` payloads a capturing
+//  `internal` events are uploaded (except `session_replay_init`, since nothing is recorded), under
+//  the normal snapshot rules; a session that later rotates sampled in gets its first snapshot.
+//  Drives spans through `CoralogixExporter.export()` and asserts on the encoded `text.cx_rum` payloads a capturing
 //  uploader receives, so the snapshot marking is checked as well as the filter.
 //
 
@@ -59,8 +59,14 @@ final class SampledOutExportTests: XCTestCase {
         let types = payloads.compactMap(eventType)
         XCTAssertTrue(types.contains(CoralogixEventType.error.rawValue), "The excluded category must upload.")
         XCTAssertFalse(types.contains(CoralogixEventType.log.rawValue), "A category not excluded must still drop.")
-        XCTAssertTrue(payloads.contains { internalEventName($0) == Keys.sessionReplayInit.rawValue },
-                      "With an exclusion, session_replay_init must upload.")
+        XCTAssertFalse(payloads.contains { internalEventName($0) == Keys.sessionReplayInit.rawValue },
+                       "Session Replay records nothing in a sampled-out session, so its init must not upload even with an exclusion.")
+
+        // Control: the same span stamped sampled in must upload through this exporter, so the drop
+        // above is the filter's doing and not a payload that never encodes the event name.
+        _ = exporter.export(spans: [makeSessionReplayInitSpan(sampledIn: true)], explicitTimeout: nil)
+        XCTAssertTrue(uploader.cxRumPayloads().contains { internalEventName($0) == Keys.sessionReplayInit.rawValue },
+                      "A sampled-in session_replay_init must upload.")
     }
 
     func testRotationFromSampledOutToSampledIn_firstEventIsSnapshot() throws {

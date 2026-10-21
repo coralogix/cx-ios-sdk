@@ -409,8 +409,8 @@ public class CoralogixExporter: SpanExporter {
     /// Returns `true` if the span should proceed past the per-session sampling filter.
     /// When the span's own `is_session_sampled_in` stamp is true, every span passes. When it is
     /// false, only spans whose `event_type` matches an opt-in entry in `options.excludeFromSampling`
-    /// pass, plus the SDK's own `internal` events when that list is non-empty. Spans missing an
-    /// `event_type` attribute are dropped when stamped sampled-out.
+    /// pass, plus the SDK's own `internal` events (except `session_replay_init`) when that list is
+    /// non-empty. Spans missing an `event_type` attribute are dropped when stamped sampled-out.
     /// Internal (rather than private per the ticket) so unit tests can exercise it directly.
     internal func passesSessionSampling(_ span: SpanDataProtocol) -> Bool {
         // The sampling decision belongs to the session the span was created in, not the live one.
@@ -438,7 +438,13 @@ public class CoralogixExporter: SpanExporter {
         // position that semantic fields are the caller's responsibility while identity and counters
         // are defended — the only cost here is the caller's own sampling savings, on their own data.
         // Requiring an SDK-private marker alongside the type would close it if that ever changes.
-        if eventType == CoralogixEventType.internalKey.rawValue { return !excludeFromSampling.isEmpty }
+        //
+        // session_replay_init is the exception: Session Replay records nothing in a sampled-out
+        // session, so announcing a recording there is wrong whatever is excluded.
+        if eventType == CoralogixEventType.internalKey.rawValue {
+            return !excludeFromSampling.isEmpty
+                && attributeStringValue(forKey: Keys.internalEventType.rawValue, span: span) != Keys.sessionReplayInit.rawValue
+        }
 
         return excludeFromSampling.contains { $0.eventType.rawValue == eventType }
     }
