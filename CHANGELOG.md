@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Release-mechanics commits (version bumps, podspec/script tweaks, README edits) are
 omitted; the focus here is user-facing behavior changes.
 
+## [2.20.4] - 2026-10-21
+
+### Fixed
+- A sampled-out session no longer sends the session replay initialization event when `excludeFromSampling` lists a category, since session replay records nothing for that session.
+
 ## [2.20.3] - 2026-10-20
 
 ### Fixed

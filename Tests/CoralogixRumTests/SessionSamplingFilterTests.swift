@@ -93,6 +93,18 @@ final class SessionSamplingFilterTests: XCTestCase {
         }
     }
 
+    func testPassesSessionSampling_sampledOut_withExclusion_dropsSessionReplayInit() {
+        // Session Replay records nothing in a sampled-out session, so its init must not go out even
+        // though the session is reporting the excluded categories and the SDK's own init.
+        for excludeCase in ExcludableInstrumentation.allCases {
+            let exporter = makeExporter(sampleRate: 0, exclude: [excludeCase])
+            XCTAssertFalse(exporter.passesSessionSampling(sessionReplayInitSpan(sampledIn: false)),
+                           "exclude=[.\(excludeCase)] must not let session_replay_init through on a sampled-out span.")
+            XCTAssertTrue(exporter.passesSessionSampling(sessionReplayInitSpan(sampledIn: true)),
+                          "A sampled-in session_replay_init must still pass — the drop is the stamp's doing.")
+        }
+    }
+
     // MARK: - Sampled out + empty excludes
 
     func testPassesSessionSampling_sampledOutEmptyExcludes_dropsEverythingIncludingInternal() {
@@ -223,13 +235,21 @@ final class SessionSamplingFilterTests: XCTestCase {
     /// Builds a span carrying the per-span sampling stamp the filter now reads. Defaults to
     /// `sampledIn: false` since most cases here exercise the sampled-out branch; the sampled-in
     /// case passes `true` explicitly.
-    private func span(eventType: String?, sampledIn: Bool = false) -> MockSpanData {
+    private func span(eventType: String?, sampledIn: Bool = false,
+                      extraAttributes: [String: Any] = [:]) -> MockSpanData {
         var attrs: [String: Any] = [
             Keys.spanSessionSampledIn.rawValue: AttributeValue(sampledIn ? "true" : "false")
         ]
         if let eventType = eventType {
             attrs[Keys.eventType.rawValue] = AttributeValue(eventType)
         }
+        attrs.merge(extraAttributes) { _, extra in extra }
         return MockSpanData(attributes: attrs, statusCode: nil, resources: nil)
+    }
+
+    private func sessionReplayInitSpan(sampledIn: Bool) -> MockSpanData {
+        span(eventType: CoralogixEventType.internalKey.rawValue, sampledIn: sampledIn, extraAttributes: [
+            Keys.internalEventType.rawValue: AttributeValue(Keys.sessionReplayInit.rawValue)
+        ])
     }
 }
