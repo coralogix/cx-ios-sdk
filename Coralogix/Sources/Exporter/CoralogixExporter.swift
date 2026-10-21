@@ -228,8 +228,8 @@ public class CoralogixExporter: SpanExporter {
         }
 
         // Per-session sampling: a span stamped sampled-out proceeds only if its event_type is
-        // opted into options.excludeFromSampling, or it is `internal` and that list is
-        // non-empty (see `passesSessionSampling`). Paired with the
+        // opted into options.excludeFromSampling, or it is `internal` (other than
+        // session_replay_init) and that list is non-empty (see `passesSessionSampling`). Paired with the
         // propagate-only network check, which catches the case sampling cannot. Placed above
         // URL/error filters and the tracesExporter callback so hybrid + external OTLP consumers
         // inherit the same behavior.
