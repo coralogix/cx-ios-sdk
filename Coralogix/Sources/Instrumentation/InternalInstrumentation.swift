@@ -42,7 +42,7 @@ extension CoralogixRum {
         guard eligible else { return }
 
         let span = makeSpan(event: .internalKey, source: .console, severity: .info)
-        let stamp = (span as? ReadableSpan)?.toSpanData().attributes[Keys.spanSessionSampledIn.rawValue]
+        let stamp = (span as? any ReadableSpan)?.toSpanData().attributes[Keys.spanSessionSampledIn.rawValue]
         let sampledIn = stamp.map { $0.description == String(true) } ?? true
         guard sampledIn || !onlyIfSampledIn else { return }
 
