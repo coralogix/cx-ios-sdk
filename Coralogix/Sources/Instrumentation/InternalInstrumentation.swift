@@ -13,33 +13,40 @@ extension CoralogixRum {
     /// earlier in startup cannot send one — its span would reach no exporter — so the state stays
     /// `pending` until here and this call reports whatever that rotation left.
     internal func emitStartupInitSpan() {
-        let sampledIn = self.sessionManager?.isSessionSampledIn ?? true
-        guard self.advanceInitSpanState(from: [.pending],
-                                        to: sampledIn ? .sentSampledIn : .sentSampledOut) else { return }
-        self.createInitSpan()
+        self.emitInitSpan(from: .pending, onlyIfSampledIn: false)
     }
 
     /// Sends `init` again on the first rotation into a sampled-in session when only a sampled-out
     /// session has had one, so the sampled-in session reports its own whether or not the first one
-    /// was exported.
+    /// was exported. A rotation captured just before `shutdown()` cleared the callback can still
+    /// fire, so this checks the SDK is live, like `topUpInstrumentations`.
     internal func emitInitSpanOnRotation(sampledIn: Bool) {
-        guard sampledIn, self.advanceInitSpanState(from: [.sentSampledOut], to: .sentSampledIn) else { return }
-        self.createInitSpan()
+        guard sampledIn, CoralogixRum.isInitialized else { return }
+        self.emitInitSpan(from: .sentSampledOut, onlyIfSampledIn: true)
     }
 
-    /// The span is created only after the lock is released: building it reads session metadata,
+    /// The state follows the session the span was actually stamped with, never a flag read earlier
+    /// or the rotation's own decision: another rotation can land in between, and recording the wrong
+    /// one either loses the sampled-in `init` for good or sends it twice. A span that is not sent is
+    /// never ended, so it never reaches the exporter.
+    ///
+    /// The span is built before `initSpanLock` is taken because building it reads session metadata,
     /// which can rotate the session and fire the rotation callback synchronously on this thread —
-    /// re-entering `emitInitSpanOnRotation` while `initSpanLock` was still held would deadlock.
-    private func advanceInitSpanState(from allowed: Set<InitSpanState>, to next: InitSpanState) -> Bool {
-        self.initSpanLock.lock()
-        defer { self.initSpanLock.unlock() }
-        guard allowed.contains(self.initSpanState) else { return false }
-        self.initSpanState = next
-        return true
-    }
-
-    internal func createInitSpan() {
+    /// re-entering here with the lock held would deadlock.
+    private func emitInitSpan(from expected: InitSpanState, onlyIfSampledIn: Bool) {
         let span = makeSpan(event: .internalKey, source: .console, severity: .info)
+        let stamp = (span as? ReadableSpan)?.toSpanData().attributes[Keys.spanSessionSampledIn.rawValue]
+        let sampledIn = stamp.map { $0.description == String(true) } ?? true
+        guard sampledIn || !onlyIfSampledIn else { return }
+
+        self.initSpanLock.lock()
+        let send = self.initSpanState == expected
+        if send {
+            self.initSpanState = sampledIn ? .sentSampledIn : .sentSampledOut
+        }
+        self.initSpanLock.unlock()
+
+        guard send else { return }
         span.end()
     }
 
