@@ -250,22 +250,22 @@ public class CxSpan {
         return parsed.flatMap { validSeverityRange.contains($0) ? $0 : nil } ?? fallback
     }
 
-    /// Moves this event's error count by one on the session it was counted on at build: the
-    /// live counters, or — for a session no longer live — the counts that session last
-    /// persisted. Returns the resulting count, or nil when a retired session has no record,
-    /// in which case its event carries no snapshot to patch.
+    /// Moves this event's error count by one on the session it was counted on at build: that
+    /// session's persisted record, and for the live session its counters as well. Returns the
+    /// resulting count, or nil when a retired session has no record, in which case its event
+    /// carries no snapshot to patch.
     @discardableResult
     private func adjustErrorCount(incrementing: Bool, sessionManager: SessionManager) -> Int? {
-        if cxRum.isLiveSession {
-            if incrementing {
-                sessionManager.incrementErrorCounter()
-            } else {
-                sessionManager.decrementErrorCounter()
-            }
-            return sessionManager.getErrorCount()
+        let record = cxRum.sessionContext.flatMap {
+            sessionManager.snapshotStore.adjustErrorCount(of: $0.sessionId, by: incrementing ? 1 : -1)
         }
-        guard let sessionId = cxRum.sessionContext?.sessionId else { return nil }
-        return sessionManager.snapshotStore.adjustErrorCount(of: sessionId, by: incrementing ? 1 : -1)?.errorCount
+        guard cxRum.isLiveSession else { return record?.errorCount }
+        if incrementing {
+            sessionManager.incrementErrorCounter()
+        } else {
+            sessionManager.decrementErrorCounter()
+        }
+        return sessionManager.getErrorCount()
     }
 
     private func updateSnapshotErrorCount(in result: inout [String: Any], errorCount: Int) {

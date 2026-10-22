@@ -892,9 +892,12 @@ class CxRumBuilderTests: XCTestCase {
     func test_build_spanExportedAfterRotation_usesItsSessionsLastRecord() throws {
         mockSessionManager = makeSessionManager(liveSessionId: "rotated-out-session")
         _ = build(makeSpan(sessionId: "rotated-out-session"))
-        // Rotation: a new live session with fresh counters.
+        // Rotation: a new live session with fresh counters and snapshot throttle.
         mockSessionManager.makeLive()
         mockSessionManager.errorCount = 0
+        mockSessionManager.lastSnapshotTime = nil
+        _ = try XCTUnwrap(build(makeSpan(sessionId: "session_001", severity: .info, eventType: "log"))?.snapshotContext,
+                          "Precondition: the new session's first snapshot is persisted before the late span")
 
         let lateSpan = try XCTUnwrap(build(makeSpan(sessionId: "rotated-out-session")))
 

@@ -31,6 +31,18 @@ final class SessionSnapshotStoreTests: XCTestCase {
                        "The keychain slot now holds this launch's record, for the launch after it")
     }
 
+    func test_rotatedOutSessionsRecord_survivesTheNewSessionsFirstSnapshot() {
+        let store = SessionSnapshotStore(keychain: MockKeyChain())
+        let rotatedOutRecord = SessionSnapshotRecord(sessionId: "rotated-out-session", errorCount: 1,
+                                                     viewCount: 2, actionCount: 3, hasRecording: false)
+        store.persist(rotatedOutRecord)
+
+        store.persist(SessionSnapshotRecord(sessionId: "new-session", errorCount: 0,
+                                            viewCount: 1, actionCount: 0, hasRecording: false))
+
+        XCTAssertEqual(store.record(for: "rotated-out-session"), rotatedOutRecord)
+    }
+
     func test_adjustErrorCount_neverGoesBelowZero() {
         let store = SessionSnapshotStore.relaunched(after: SessionSnapshotRecord(sessionId: "crashed-session",
                                                                                  errorCount: 0,

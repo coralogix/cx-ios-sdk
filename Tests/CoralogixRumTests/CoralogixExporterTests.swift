@@ -1042,7 +1042,8 @@ final class CoralogixExporterTests: XCTestCase {
                                                              hasRecording: false)
 
     /// A launch whose previous launch persisted `crashedSessionRecord`, with one error of its own.
-    private func makeRumRecoveringCrashedSession(beforeSend: @escaping ([String: Any]) -> [String: Any]?) -> CoralogixRum {
+    private func makeRumRecoveringCrashedSession(keychain: MockKeyChain = MockKeyChain(),
+                                                 beforeSend: @escaping ([String: Any]) -> [String: Any]?) -> CoralogixRum {
         var opts = CoralogixExporterOptions(coralogixDomain: .US2,
                                             userContext: nil,
                                             environment: "PROD",
@@ -1054,9 +1055,22 @@ final class CoralogixExporterTests: XCTestCase {
                                             labels: [:],
                                             debug: true)
         opts.beforeSend = beforeSend
-        let sessionManager = SessionManager(snapshotStore: .relaunched(after: crashedSessionRecord))
+        let sessionManager = SessionManager(snapshotStore: .relaunched(after: crashedSessionRecord, keychain: keychain))
         sessionManager.incrementErrorCounter()
         return CoralogixRum(options: opts, sessionManager: sessionManager)
+    }
+
+    func test_beforeSend_dropsLiveError_uncountsItFromThePersistedRecordToo() {
+        let keychain = MockKeyChain()
+        let rum = makeRumRecoveringCrashedSession(keychain: keychain, beforeSend: { _ in nil })
+        guard let exporter = rum.coralogixExporter else { return XCTFail("Exporter nil") }
+        exporter.getSessionManager().makeLive()
+
+        let encoded = exporter.encodeSpans(spans: [makeErrorSpanData()])
+
+        XCTAssertTrue(encoded.isEmpty, "Precondition: beforeSend dropped the error")
+        XCTAssertEqual(SessionSnapshotStore(keychain: keychain).record(for: "session_001")?.errorCount, 1,
+                       "A crash before the next snapshot must recover the session's own error, not the dropped one")
     }
 
     func test_beforeSend_dropsErrorOfAnotherSession_uncountsItFromThatSessionOnly() {
