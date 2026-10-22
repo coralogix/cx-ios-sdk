@@ -107,12 +107,24 @@ final class SampledOutExportTests: XCTestCase {
         XCTAssertTrue(uploader.cxRumPayloads().isEmpty, "Precondition: the sampled-out session's init is dropped.")
 
         sessionManager.samplingRoller = { true }
+        let rotatedAt = Date().timeIntervalSince1970.milliseconds
         rum.createNewSession()
-        let sampledInSessionId = try XCTUnwrap(sessionManager.sessionMetadata?.sessionId)
+        let sampledIn = try XCTUnwrap(sessionManager.sessionMetadata)
         flush()
 
-        XCTAssertEqual(initSessionIds(uploader), [sampledInSessionId],
+        XCTAssertEqual(initSessionIds(uploader), [sampledIn.sessionId],
                        "The first sampled-in session must report exactly one init, under its own id.")
+
+        let initPayload = try XCTUnwrap(uploader.cxRumPayloads().first { internalEventName($0) == Keys.initKey.rawValue })
+        let session = try XCTUnwrap(initPayload[Keys.sessionContext.rawValue] as? [String: Any])
+        // The span stamps the creation date in whole seconds.
+        XCTAssertEqual(session[Keys.sessionCreationDate.rawValue] as? Int,
+                       Int(sampledIn.sessionCreationDate) * 1000,
+                       "The init must carry the new session's creation date.")
+        XCTAssertEqual(session[Keys.isSessionSampledIn.rawValue] as? Bool, true)
+        let timestamp = try XCTUnwrap(initPayload[Keys.timestamp.rawValue] as? Int)
+        XCTAssertGreaterThanOrEqual(timestamp, rotatedAt,
+                                    "The init must be timed at the rotation, not at SDK startup.")
     }
 
     func testRotationFromSampledOutToSampledIn_withExclusion_uploadsInitForEachSession() throws {
