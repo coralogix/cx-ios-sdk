@@ -80,7 +80,8 @@ public class CoralogixRum {
     /// at export unless something is excluded from sampling, and sampling is re-rolled on every
     /// rotation — so without a second `init` on the first rotation into a sampled-in session, a
     /// process whose first session was sampled out would never report one. See `emitInitSpanOnRotation`.
-    internal enum InitSpanState { case pending, sentSampledOut, sentSampledIn }
+    /// `retired` is set by `shutdown()`, so a rotation callback already in flight can't send one.
+    internal enum InitSpanState { case pending, sentSampledOut, sentSampledIn, retired }
     internal let initSpanLock = NSLock()
     internal var initSpanState: InitSpanState = .pending
 
@@ -537,6 +538,9 @@ public class CoralogixRum {
         CoralogixRum.customTracerIssued = false
         CoralogixRum.isInitialized = false
         Self.customTracerIssuanceLock.unlock()
+        self.initSpanLock.lock()
+        self.initSpanState = .retired
+        self.initSpanLock.unlock()
         self.coralogixExporter?.shutdown(explicitTimeout: nil)
         self.removeNotification()
         self.metricsManager.removeObservers()

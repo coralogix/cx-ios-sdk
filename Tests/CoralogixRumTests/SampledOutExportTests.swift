@@ -165,6 +165,36 @@ final class SampledOutExportTests: XCTestCase {
                        "A process whose first session was sampled in already reported init; rotations must not resend it.")
     }
 
+    func testRotationWhileIdle_leavesInitForTheRotationThatEndsTheIdle() throws {
+        let (rum, _, uploader) = try makeSampledOutExporter(exclude: [])
+        defer { rum.shutdown() }
+        let sessionManager = try XCTUnwrap(rum.sessionManager)
+
+        sessionManager.samplingRoller = { true }
+        sessionManager.lastActivity = Date().addingTimeInterval(-20 * 60)
+        XCTAssertTrue(sessionManager.isIdle, "Precondition: the session is idle.")
+        rum.createNewSession()
+
+        sessionManager.updateActivityTime()
+        let activeSessionId = try XCTUnwrap(sessionManager.sessionMetadata?.sessionId)
+        flush()
+
+        XCTAssertEqual(initSessionIds(uploader), [activeSessionId],
+                       "An idle rotation's init would never export, so it must go to the rotation that ends the idle.")
+    }
+
+    func testRotationAfterShutdown_doesNotSendInit() throws {
+        let (rum, _, _) = try makeSampledOutExporter(exclude: [])
+        XCTAssertEqual(rum.initSpanState, .sentSampledOut, "Precondition: only a sampled-out init was sent.")
+
+        rum.shutdown()
+        // A rotation callback captured before shutdown cleared it.
+        rum.emitInitSpanOnRotation(sampledIn: true)
+
+        XCTAssertEqual(rum.initSpanState, .retired,
+                       "After shutdown no rotation may claim the init.")
+    }
+
     // MARK: - Helpers
 
     private func initSessionIds(_ uploader: CapturingSpanUploader) -> [String?] {

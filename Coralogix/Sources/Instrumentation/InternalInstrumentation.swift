@@ -18,10 +18,11 @@ extension CoralogixRum {
 
     /// Sends `init` again on the first rotation into a sampled-in session when only a sampled-out
     /// session has had one, so the sampled-in session reports its own whether or not the first one
-    /// was exported. A rotation captured just before `shutdown()` cleared the callback can still
-    /// fire, so this checks the SDK is live, like `topUpInstrumentations`.
+    /// was exported. Skipped while the session is idle: the exporter discards everything until
+    /// activity resumes, and that activity rotates the session again, so the `init` is left for
+    /// that rotation instead of being spent on a span that never uploads.
     internal func emitInitSpanOnRotation(sampledIn: Bool) {
-        guard sampledIn, CoralogixRum.isInitialized else { return }
+        guard sampledIn, self.sessionManager?.isIdle == false else { return }
         self.emitInitSpan(from: .sentSampledOut, onlyIfSampledIn: true)
     }
 
@@ -34,6 +35,12 @@ extension CoralogixRum {
     /// which can rotate the session and fire the rotation callback synchronously on this thread —
     /// re-entering here with the lock held would deadlock.
     private func emitInitSpan(from expected: InitSpanState, onlyIfSampledIn: Bool) {
+        // Cheap early out so a sampled-in rotation after `init` was already sent builds no span.
+        self.initSpanLock.lock()
+        let eligible = self.initSpanState == expected
+        self.initSpanLock.unlock()
+        guard eligible else { return }
+
         let span = makeSpan(event: .internalKey, source: .console, severity: .info)
         let stamp = (span as? ReadableSpan)?.toSpanData().attributes[Keys.spanSessionSampledIn.rawValue]
         let sampledIn = stamp.map { $0.description == String(true) } ?? true
