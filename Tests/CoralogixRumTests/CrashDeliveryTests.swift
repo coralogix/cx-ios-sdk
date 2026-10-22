@@ -753,6 +753,43 @@ final class CrashDeliveryTests: XCTestCase {
                        "re-sent crash span must start at the original crash time")
     }
 
+    func test_resendStoredCrashEvents_carriesTheCrashedSessionsCounters_notTheRelaunchSessions() throws {
+        let crashedSessionRecord = SessionSnapshotRecord(sessionId: "crashed-session", errorCount: 2,
+                                                         viewCount: 3, actionCount: 4, hasRecording: true)
+        let sessionManager = SessionManager(snapshotStore: .relaunched(after: crashedSessionRecord))
+        coralogixRum = CoralogixRum(options: makeSamplingOptions(sampleRate: 100, exclude: []),
+                                    sessionManager: sessionManager)
+        let uploader = StubUploader()
+        coralogixRum.coralogixExporter?.spanUploader = uploader
+        let store = makeTempStore()
+        coralogixRum.crashEventStore = store
+        store.append([
+            Keys.errorMessage.rawValue: "crash-from-previous-launch",
+            Keys.errorType.rawValue: "Error",
+            Keys.crashTimestamp.rawValue: "1700000000000"
+        ])
+        sessionManager.lastLaunchSession = LastLaunchSession(sessionId: "crashed-session",
+                                                             creationDate: 1_699_999_000,
+                                                             sampledIn: true)
+        let liveErrorsBefore = sessionManager.getErrorCount()
+
+        coralogixRum.resendPendingStoredCrashEvents()
+        coralogixRum.completeCrashRecovery()
+
+        XCTAssertTrue(waitUntil { store.loadAll().isEmpty })
+        let crash = try XCTUnwrap(uploader.uploadedEvents.first(where: { isCrashEvent($0) }))
+        XCTAssertEqual(sessionContext(of: crash)?[Keys.sessionId.rawValue] as? String, "crashed-session")
+        let cxRum = (crash[Keys.text.rawValue] as? [String: Any])?[Keys.cxRum.rawValue] as? [String: Any]
+        let snapshot = try XCTUnwrap(cxRum?[Keys.snapshotContext.rawValue] as? [String: Any])
+        XCTAssertEqual(snapshot[Keys.errorCount.rawValue] as? Int, 3,
+                       "The crashed session's persisted errors plus the crash itself")
+        XCTAssertEqual(snapshot[Keys.viewCount.rawValue] as? Int, 3)
+        XCTAssertEqual(snapshot[Keys.actionCount.rawValue] as? Int, 4)
+        XCTAssertEqual(snapshot[Keys.hasRecording.rawValue] as? Bool, true)
+        XCTAssertEqual(sessionManager.getErrorCount(), liveErrorsBefore,
+                       "The relaunch session must not count the recovered crash")
+    }
+
     func test_resendStoredCrashEvents_keepsStore_whenUploadFails() {
         coralogixRum = CoralogixRum(options: makeSamplingOptions(sampleRate: 100, exclude: []))
         let uploader = StubUploader()

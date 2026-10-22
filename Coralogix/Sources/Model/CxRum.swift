@@ -28,6 +28,9 @@ struct CxRum {
     // any — the beforeSend drop path in CxSpan.getDictionary() hands it back (re-arms)
     // so the next accepted event still carries the promotion.
     var consumedSnapshotTrigger: PendingSnapshotTrigger? = nil
+    // Where build() counted the event: the live counters, or an earlier session's record.
+    // A beforeSend drop or severity change undoes the count in the same place.
+    var isLiveSession: Bool = true
     let interactionContext: InteractionContext?
     let mobileVitalsContext: MobileVitalsContext?
     let lifeCycleContext: LifeCycleContext?

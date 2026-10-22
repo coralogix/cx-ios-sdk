@@ -150,24 +150,21 @@ public class CxSpan {
                 // BUGV2-5379: adjust errorCount when beforeSend changes severity across the Error boundary.
                 // Runs unconditionally so the counter stays correct even when beforeSend removes
                 // eventContext and expresses the severity change at the top level instead.
-                // Capture sessionManager once so the counter mutation and the getErrorCount()
-                // read inside updateSnapshotErrorCount see the same object (closes the TOCTOU
+                // Capture sessionManager once so the counter mutation and the error-count
+                // read inside adjustErrorCount see the same object (closes the TOCTOU
                 // window that the weak var would otherwise leave open).
                 let errorSeverity = CoralogixLogSeverity.error.rawValue
                 let wasError = self.cxRum.eventContext.severity == errorSeverity
                 let isNowError = newSeverity == errorSeverity
-                if wasError != isNowError, let sm = sessionManager {
-                    if wasError {
-                        sm.decrementErrorCounter()
-                    } else {
-                        sm.incrementErrorCounter()
-                    }
-                    updateSnapshotErrorCount(in: &result, sessionManager: sm)
+                if wasError != isNowError, let sm = sessionManager,
+                   let errorCount = adjustErrorCount(incrementing: isNowError, sessionManager: sm) {
+                    updateSnapshotErrorCount(in: &result, errorCount: errorCount)
                 }
             } else {
                 // BUGV2-5379: span dropped by beforeSend — undo error increment if it was an Error
-                if self.cxRum.eventContext.severity == CoralogixLogSeverity.error.rawValue {
-                    sessionManager?.decrementErrorCounter()
+                if self.cxRum.eventContext.severity == CoralogixLogSeverity.error.rawValue,
+                   let sm = sessionManager {
+                    adjustErrorCount(incrementing: false, sessionManager: sm)
                 }
                 // Same compensation for the setUserContext promotion: this span consumed
                 // the one-shot token, so hand it back and let the next accepted event
@@ -253,7 +250,25 @@ public class CxSpan {
         return parsed.flatMap { validSeverityRange.contains($0) ? $0 : nil } ?? fallback
     }
 
-    private func updateSnapshotErrorCount(in result: inout [String: Any], sessionManager: SessionManager) {
+    /// Moves this event's error count by one on the session it was counted on at build: that
+    /// session's persisted record, and for the live session its counters as well. Returns the
+    /// resulting count, or nil when a retired session has no record, in which case its event
+    /// carries no snapshot to patch.
+    @discardableResult
+    private func adjustErrorCount(incrementing: Bool, sessionManager: SessionManager) -> Int? {
+        let record = cxRum.sessionContext.flatMap {
+            sessionManager.snapshotStore.adjustErrorCount(of: $0.sessionId, by: incrementing ? 1 : -1)
+        }
+        guard cxRum.isLiveSession else { return record?.errorCount }
+        if incrementing {
+            sessionManager.incrementErrorCounter()
+        } else {
+            sessionManager.decrementErrorCounter()
+        }
+        return sessionManager.getErrorCount()
+    }
+
+    private func updateSnapshotErrorCount(in result: inout [String: Any], errorCount: Int) {
         guard var textDict = result[Keys.text.rawValue] as? [String: Any],
               var cxRumDict = textDict[Keys.cxRum.rawValue] as? [String: Any] else {
             return
@@ -261,7 +276,7 @@ public class CxSpan {
         // Fall back to an empty dict if snapshotContext is absent, NSNull, or a non-dict type,
         // so errorCount is always written after beforeSend runs.
         var snapshotDict = (cxRumDict[Keys.snapshotContext.rawValue] as? [String: Any]) ?? [:]
-        snapshotDict[Keys.errorCount.rawValue] = sessionManager.getErrorCount()
+        snapshotDict[Keys.errorCount.rawValue] = errorCount
         cxRumDict[Keys.snapshotContext.rawValue] = snapshotDict
         textDict[Keys.cxRum.rawValue] = cxRumDict
         result[Keys.text.rawValue] = textDict

@@ -620,7 +620,7 @@ final class CoralogixExporterTests: XCTestCase {
         XCTAssertEqual(final.version, "v-final")
     }
 
-    private func makeErrorSpanData() -> SpanData {
+    private func makeErrorSpanData(sessionId: String = "session_001") -> SpanData {
         let attributes: [String: AttributeValue] = [
             Keys.severity.rawValue: AttributeValue("5"),
             Keys.eventType.rawValue: AttributeValue("error"),
@@ -629,7 +629,7 @@ final class CoralogixExporterTests: XCTestCase {
             Keys.userId.rawValue: AttributeValue("12345"),
             Keys.userName.rawValue: AttributeValue("John Doe"),
             Keys.userEmail.rawValue: AttributeValue("john.doe@example.com"),
-            Keys.sessionId.rawValue: AttributeValue("session_001"),
+            Keys.sessionId.rawValue: AttributeValue(sessionId),
             Keys.sessionCreationDate.rawValue: AttributeValue("1609459200"),
             SemanticAttributes.httpUrl.rawValue: AttributeValue("https://example.com/api/data")
         ]
@@ -664,6 +664,7 @@ final class CoralogixExporterTests: XCTestCase {
         }
         let rum = CoralogixRum(options: opts)
         guard let exporter = rum.coralogixExporter else { return XCTFail("Exporter nil") }
+        exporter.getSessionManager().makeLive()
 
         let encoded = exporter.encodeSpans(spans: [makeErrorSpanData()])
 
@@ -693,6 +694,7 @@ final class CoralogixExporterTests: XCTestCase {
         }
         let rum = CoralogixRum(options: opts)
         guard let exporter = rum.coralogixExporter else { return XCTFail("Exporter nil") }
+        exporter.getSessionManager().makeLive()
 
         let encoded = exporter.encodeSpans(spans: [makeErrorSpanData()])
 
@@ -721,6 +723,7 @@ final class CoralogixExporterTests: XCTestCase {
         opts.beforeSend = { _ in return nil }
         let rum = CoralogixRum(options: opts)
         guard let exporter = rum.coralogixExporter else { return XCTFail("Exporter nil") }
+        exporter.getSessionManager().makeLive()
 
         let encoded = exporter.encodeSpans(spans: [makeErrorSpanData()])
 
@@ -753,6 +756,7 @@ final class CoralogixExporterTests: XCTestCase {
         }
         let rum = CoralogixRum(options: opts)
         guard let exporter = rum.coralogixExporter else { return XCTFail("Exporter nil") }
+        exporter.getSessionManager().makeLive()
 
         // Seed lastSnapshotEventTime so the 1-minute condition is false — ensures no snapshot
         // is produced during build, giving us a span without snapshotContext in originalCxRum.
@@ -792,6 +796,7 @@ final class CoralogixExporterTests: XCTestCase {
         }
         let rum = CoralogixRum(options: opts)
         guard let exporter = rum.coralogixExporter else { return XCTFail("Exporter nil") }
+        exporter.getSessionManager().makeLive()
 
         let encoded = exporter.encodeSpans(spans: [makeValidSpanData()])
 
@@ -822,6 +827,7 @@ final class CoralogixExporterTests: XCTestCase {
         }
         let rum = CoralogixRum(options: opts)
         guard let exporter = rum.coralogixExporter else { return XCTFail("Exporter nil") }
+        exporter.getSessionManager().makeLive()
 
         let encoded = exporter.encodeSpans(spans: [makeErrorSpanData()])
 
@@ -859,6 +865,7 @@ final class CoralogixExporterTests: XCTestCase {
         }
         let rum = CoralogixRum(options: opts)
         guard let exporter = rum.coralogixExporter else { return XCTFail("Exporter nil") }
+        exporter.getSessionManager().makeLive()
 
         let encoded = exporter.encodeSpans(spans: [makeErrorSpanData()])
 
@@ -896,6 +903,7 @@ final class CoralogixExporterTests: XCTestCase {
         }
         let rum = CoralogixRum(options: opts)
         guard let exporter = rum.coralogixExporter else { return XCTFail("Exporter nil") }
+        exporter.getSessionManager().makeLive()
 
         let encoded = exporter.encodeSpans(spans: [makeErrorSpanData()])
 
@@ -941,6 +949,7 @@ final class CoralogixExporterTests: XCTestCase {
         }
         let rum = CoralogixRum(options: opts)
         guard let exporter = rum.coralogixExporter else { return XCTFail("Exporter nil") }
+        exporter.getSessionManager().makeLive()
 
         let encoded = exporter.encodeSpans(spans: [makeErrorSpanData()])
 
@@ -976,6 +985,7 @@ final class CoralogixExporterTests: XCTestCase {
         }
         let rum = CoralogixRum(options: opts)
         guard let exporter = rum.coralogixExporter else { return XCTFail("Exporter nil") }
+        exporter.getSessionManager().makeLive()
 
         let encoded = exporter.encodeSpans(spans: [makeErrorSpanData()])
 
@@ -1010,6 +1020,7 @@ final class CoralogixExporterTests: XCTestCase {
         }
         let rum = CoralogixRum(options: opts)
         guard let exporter = rum.coralogixExporter else { return XCTFail("Exporter nil") }
+        exporter.getSessionManager().makeLive()
 
         let encoded = exporter.encodeSpans(spans: [makeErrorSpanData()])
 
@@ -1017,6 +1028,84 @@ final class CoralogixExporterTests: XCTestCase {
         // Original was Error(5); no change → counter stays at 1
         XCTAssertEqual(exporter.getSessionManager().getErrorCount(), 1,
                        "errorCount must be unchanged when eventContext and severity are both absent")
+    }
+
+    // MARK: - beforeSend compensation for an error of a session that is no longer live
+    //
+    // A recovered crash is counted on its own session's persisted record, never on the live
+    // counter, so the beforeSend compensation has to undo it on that record too.
+
+    private let crashedSessionRecord = SessionSnapshotRecord(sessionId: "crashed-session",
+                                                             errorCount: 2,
+                                                             viewCount: 3,
+                                                             actionCount: 4,
+                                                             hasRecording: false)
+
+    /// A launch whose previous launch persisted `crashedSessionRecord`, with one error of its own.
+    private func makeRumRecoveringCrashedSession(keychain: MockKeyChain = MockKeyChain(),
+                                                 beforeSend: @escaping ([String: Any]) -> [String: Any]?) -> CoralogixRum {
+        var opts = CoralogixExporterOptions(coralogixDomain: .US2,
+                                            userContext: nil,
+                                            environment: "PROD",
+                                            application: "TestApp-iOS",
+                                            version: "1.0",
+                                            publicKey: "token",
+                                            ignoreUrls: [],
+                                            ignoreErrors: [],
+                                            labels: [:],
+                                            debug: true)
+        opts.beforeSend = beforeSend
+        let sessionManager = SessionManager(snapshotStore: .relaunched(after: crashedSessionRecord, keychain: keychain))
+        sessionManager.incrementErrorCounter()
+        return CoralogixRum(options: opts, sessionManager: sessionManager)
+    }
+
+    func test_beforeSend_dropsLiveError_uncountsItFromThePersistedRecordToo() {
+        let keychain = MockKeyChain()
+        let rum = makeRumRecoveringCrashedSession(keychain: keychain, beforeSend: { _ in nil })
+        guard let exporter = rum.coralogixExporter else { return XCTFail("Exporter nil") }
+        exporter.getSessionManager().makeLive()
+
+        let encoded = exporter.encodeSpans(spans: [makeErrorSpanData()])
+
+        XCTAssertTrue(encoded.isEmpty, "Precondition: beforeSend dropped the error")
+        XCTAssertEqual(SessionSnapshotStore(keychain: keychain).record(for: "session_001")?.errorCount, 1,
+                       "A crash before the next snapshot must recover the session's own error, not the dropped one")
+    }
+
+    func test_beforeSend_dropsErrorOfAnotherSession_uncountsItFromThatSessionOnly() {
+        let rum = makeRumRecoveringCrashedSession(beforeSend: { _ in nil })
+        guard let exporter = rum.coralogixExporter else { return XCTFail("Exporter nil") }
+        let sessionManager = exporter.getSessionManager()
+
+        let encoded = exporter.encodeSpans(spans: [makeErrorSpanData(sessionId: "crashed-session")])
+
+        XCTAssertTrue(encoded.isEmpty, "Precondition: beforeSend dropped the error")
+        XCTAssertEqual(sessionManager.getErrorCount(), 1,
+                       "Dropping another session's error must not uncount the live session's own error")
+        XCTAssertEqual(sessionManager.snapshotStore.record(for: "crashed-session")?.errorCount, 2,
+                       "The dropped error is uncounted from the session it was counted on")
+    }
+
+    func test_beforeSend_downgradesErrorOfAnotherSession_snapshotKeepsThatSessionsCount() throws {
+        let rum = makeRumRecoveringCrashedSession(beforeSend: { cxRum in
+            var modified = cxRum
+            if var eventContext = modified[Keys.eventContext.rawValue] as? [String: Any] {
+                eventContext[Keys.severity.rawValue] = CoralogixLogSeverity.info.rawValue
+                modified[Keys.eventContext.rawValue] = eventContext
+            }
+            return modified
+        })
+        guard let exporter = rum.coralogixExporter else { return XCTFail("Exporter nil") }
+
+        let encoded = exporter.encodeSpans(spans: [makeErrorSpanData(sessionId: "crashed-session")])
+
+        let cxRumDict = try XCTUnwrap((encoded.first?[Keys.text.rawValue] as? [String: Any])?[Keys.cxRum.rawValue] as? [String: Any])
+        let snapshot = try XCTUnwrap(cxRumDict[Keys.snapshotContext.rawValue] as? [String: Any])
+        XCTAssertEqual(snapshot[Keys.errorCount.rawValue] as? Int, 2,
+                       "A downgraded error leaves its session's persisted count as it was")
+        XCTAssertEqual(snapshot[Keys.viewCount.rawValue] as? Int, 3)
+        XCTAssertEqual(exporter.getSessionManager().getErrorCount(), 1)
     }
 
     // MARK: - tracesExporter tests (CX-35959)

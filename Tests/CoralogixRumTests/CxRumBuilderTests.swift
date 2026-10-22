@@ -18,6 +18,12 @@ class MockSessionManager: SessionManager {
     var incrementErrorCounterCallCount = 0
     var decrementErrorCounterCallCount = 0
 
+    // An in-memory keychain by default, so a record persisted by one test never surfaces
+    // as another test's previous-launch record.
+    convenience init() {
+        self.init(snapshotStore: SessionSnapshotStore(keychain: MockKeyChain()))
+    }
+
     override func getErrorCount() -> Int { return errorCount }
     override var lastSnapshotEventTime: Date? {
         get { return lastSnapshotTime }
@@ -751,6 +757,168 @@ class CxRumBuilderTests: XCTestCase {
                             viewManager: mockViewManager,
                             networkManager: NetworkManager(),
                             options: options)
+    }
+
+    // MARK: - A span reported under a session that is no longer live
+    //
+    // The live counters and snapshot throttle describe the live session ("session_001" here).
+    // A span reported under another session — a crash recovered on the next launch, a span
+    // restored to the previous session by pid, a span exported after a rotation — must leave
+    // them alone and carry the counts its own session last persisted, or no snapshot at all.
+
+    private let crashedSessionRecord = SessionSnapshotRecord(sessionId: "crashed-session",
+                                                             errorCount: 2,
+                                                             viewCount: 4,
+                                                             actionCount: 7,
+                                                             hasRecording: true)
+
+    /// "session_001" live, over a keychain holding what the previous launch persisted.
+    private func makeSessionManager(keychain: MockKeyChain = MockKeyChain(),
+                                    previousLaunchRecord: SessionSnapshotRecord? = nil,
+                                    liveSessionId: String = "session_001") -> MockSessionManager {
+        MockSessionManager(snapshotStore: .relaunched(after: previousLaunchRecord, keychain: keychain))
+            .makeLive(sessionId: liveSessionId)
+    }
+
+    private func makeSpan(sessionId: String,
+                          severity: CoralogixLogSeverity = .error,
+                          eventType: String = "error",
+                          extraAttributes: [String: AttributeValue] = [:]) -> MockSpanData {
+        let attributes: [String: AttributeValue] = [
+            Keys.severity.rawValue: AttributeValue("\(severity.rawValue)"),
+            Keys.eventType.rawValue: AttributeValue(eventType),
+            Keys.source.rawValue: AttributeValue("console"),
+            Keys.sessionId.rawValue: AttributeValue(sessionId),
+            Keys.sessionCreationDate.rawValue: AttributeValue("1609459200")
+        ]
+        return MockSpanData(attributes: attributes.merging(extraAttributes) { _, extra in extra },
+                            startTime: Date(), endTime: Date(),
+                            spanId: "20", traceId: "30", name: "testSpan", kind: 1)
+    }
+
+    private func build(_ otel: MockSpanData) -> CxRum? {
+        let options = CoralogixExporterOptions(coralogixDomain: CoralogixDomain.US2,
+                                               userContext: nil,
+                                               environment: "PROD",
+                                               application: "TestApp-iOS",
+                                               version: "1.0",
+                                               publicKey: "token",
+                                               debug: true)
+        return CxRumBuilder(otel: otel,
+                            versionMetadata: VersionMetadata(appName: "Test", appVersion: "1.0"),
+                            sessionManager: mockSessionManager,
+                            viewManager: mockViewManager,
+                            networkManager: NetworkManager(),
+                            options: options).build()
+    }
+
+    func test_build_crashOfAnotherSession_snapshotIsThatSessionsRecordPlusTheCrash() throws {
+        mockSessionManager = makeSessionManager(previousLaunchRecord: crashedSessionRecord)
+        mockSessionManager.errorCount = 5
+        let liveSnapshotTime = Date(timeIntervalSince1970: 1_700_000_000)
+        mockSessionManager.lastSnapshotTime = liveSnapshotTime
+
+        let cxRum = try XCTUnwrap(build(makeSpan(sessionId: "crashed-session")))
+
+        XCTAssertEqual(cxRum.sessionContext?.sessionId, "crashed-session")
+        let snapshot = try XCTUnwrap(cxRum.snapshotContext)
+        XCTAssertEqual(snapshot.errorCount, 3, "The crashed session's persisted errors plus the crash itself")
+        XCTAssertEqual(snapshot.viewCount, 4)
+        XCTAssertEqual(snapshot.actionCount, 7)
+        XCTAssertTrue(snapshot.hasRecording)
+        XCTAssertEqual(mockSessionManager.errorCount, 5, "The live session must not count the crash")
+        XCTAssertEqual(mockSessionManager.lastSnapshotTime, liveSnapshotTime,
+                       "The live session's snapshot throttle must not be reset by another session's span")
+    }
+
+    func test_build_crashOfAnotherSession_withNoRecord_carriesNoSnapshot() throws {
+        mockSessionManager = makeSessionManager(previousLaunchRecord: nil)
+
+        let cxRum = try XCTUnwrap(build(makeSpan(sessionId: "crashed-session")))
+
+        XCTAssertEqual(cxRum.sessionContext?.sessionId, "crashed-session")
+        XCTAssertNil(cxRum.snapshotContext,
+                     "With no record of the crashed session, the live session's counters must not stand in")
+        XCTAssertEqual(mockSessionManager.incrementErrorCounterCallCount, 0)
+    }
+
+    func test_build_crashOfAnotherSession_withRecordOfADifferentSession_carriesNoSnapshot() throws {
+        let olderRecord = SessionSnapshotRecord(sessionId: "older-session", errorCount: 9,
+                                                viewCount: 9, actionCount: 9, hasRecording: false)
+        mockSessionManager = makeSessionManager(previousLaunchRecord: olderRecord)
+
+        let cxRum = try XCTUnwrap(build(makeSpan(sessionId: "crashed-session")))
+
+        XCTAssertNil(cxRum.snapshotContext, "A record of another session must not describe the crashed one")
+    }
+
+    func test_build_afterARecoveredCrash_newSessionsFirstSnapshotCountsNoErrors() throws {
+        mockSessionManager = makeSessionManager(previousLaunchRecord: crashedSessionRecord)
+        _ = build(makeSpan(sessionId: "crashed-session"))
+
+        let firstLiveEvent = try XCTUnwrap(build(makeSpan(sessionId: "session_001", severity: .info, eventType: "log")))
+
+        let snapshot = try XCTUnwrap(firstLiveEvent.snapshotContext,
+                                     "The new session's first event still gets its first snapshot")
+        XCTAssertEqual(snapshot.errorCount, 0)
+    }
+
+    func test_build_secondErrorOfARetiredSession_countsOnFromTheFirst() throws {
+        mockSessionManager = makeSessionManager(previousLaunchRecord: crashedSessionRecord)
+
+        let first = try XCTUnwrap(build(makeSpan(sessionId: "crashed-session"))?.snapshotContext)
+        let second = try XCTUnwrap(build(makeSpan(sessionId: "crashed-session"))?.snapshotContext)
+
+        XCTAssertEqual([first.errorCount, second.errorCount], [3, 4])
+    }
+
+    func test_build_spanRestoredToPreviousSessionByPid_usesThatSessionsRecord() throws {
+        mockSessionManager = makeSessionManager(previousLaunchRecord: crashedSessionRecord)
+        let restored = makeSpan(sessionId: "session_001", extraAttributes: [
+            Keys.pid.rawValue: AttributeValue("4242"),
+            Keys.prevPid.rawValue: AttributeValue("4242"),
+            Keys.prevSessionId.rawValue: AttributeValue("crashed-session"),
+            Keys.prevSessionCreationDate.rawValue: AttributeValue("1609459100")
+        ])
+
+        let cxRum = try XCTUnwrap(build(restored))
+
+        XCTAssertEqual(cxRum.sessionContext?.sessionId, "crashed-session",
+                       "Precondition: pid == prev_pid reports the previous session")
+        XCTAssertEqual(cxRum.snapshotContext?.errorCount, 3)
+        XCTAssertEqual(mockSessionManager.incrementErrorCounterCallCount, 0)
+    }
+
+    func test_build_spanExportedAfterRotation_usesItsSessionsLastRecord() throws {
+        mockSessionManager = makeSessionManager(liveSessionId: "rotated-out-session")
+        _ = build(makeSpan(sessionId: "rotated-out-session"))
+        // Rotation: a new live session with fresh counters and snapshot throttle.
+        mockSessionManager.makeLive()
+        mockSessionManager.errorCount = 0
+        mockSessionManager.lastSnapshotTime = nil
+        _ = try XCTUnwrap(build(makeSpan(sessionId: "session_001", severity: .info, eventType: "log"))?.snapshotContext,
+                          "Precondition: the new session's first snapshot is persisted before the late span")
+
+        let lateSpan = try XCTUnwrap(build(makeSpan(sessionId: "rotated-out-session")))
+
+        XCTAssertEqual(lateSpan.snapshotContext?.errorCount, 2,
+                       "The rotated-out session's own error count, plus this error")
+        XCTAssertEqual(mockSessionManager.errorCount, 0, "The new session must not count the late error")
+    }
+
+    func test_build_liveSnapshot_persistsItsCountersForTheNextLaunch() {
+        let keychain = MockKeyChain()
+        mockSessionManager = makeSessionManager(keychain: keychain)
+        mockSessionManager.incrementClickCounter()
+        mockSessionManager.incrementClickCounter()
+        mockSessionManager.hasRecording = true
+        mockViewManager.uniqueViewCount = 3
+
+        _ = build(makeSpan(sessionId: "session_001"))
+
+        XCTAssertEqual(SessionSnapshotStore(keychain: keychain).record(for: "session_001"),
+                       SessionSnapshotRecord(sessionId: "session_001", errorCount: 1, viewCount: 3,
+                                             actionCount: 2, hasRecording: true))
     }
 
     // MARK: - View frozen at creation wins over the live ViewManager at export
