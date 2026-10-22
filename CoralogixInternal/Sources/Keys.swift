@@ -153,6 +153,10 @@ public enum Keys: String {
     // recovered on the next launch can be stamped with the crashed session's decision
     // instead of inheriting the relaunch session's roll.
     case keySessionSampledIn = "sessionSampledIn"
+    // Keychain slot (NOT a wire key): the counters of the live session's latest snapshot,
+    // as JSON tagged with the session id, so a crash recovered on the next launch reports
+    // the crashed session's counts instead of the relaunch session's.
+    case keySessionSnapshot = "sessionSnapshot"
     case snapshotContext = "snapshot_context"
     case errorCount
     case viewCount

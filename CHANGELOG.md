@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Release-mechanics commits (version bumps, podspec/script tweaks, README edits) are
 omitted; the focus here is user-facing behavior changes.
 
+## [2.20.5] - 2026-10-22
+
+### Fixed
+- A crash reported on the next launch now carries the error, view and action counts of the session that crashed, and no longer counts as an error in the new session.
+
 ## [2.20.4] - 2026-10-21
 
 ### Fixed

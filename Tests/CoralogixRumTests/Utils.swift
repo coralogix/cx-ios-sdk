@@ -153,3 +153,25 @@ class MockNetworkManager: NetworkProtocol {
         return "5G"
     }
 }
+
+extension SessionManager {
+    /// Makes `sessionId` the live session — the one every span the SDK stamps itself carries.
+    @discardableResult
+    func makeLive(sessionId: String = "session_001") -> Self {
+        sessionMetadata = SessionMetadata(sessionId: sessionId,
+                                          sessionCreationDate: Date().timeIntervalSince1970,
+                                          using: MockKeyChain())
+        return self
+    }
+}
+
+extension SessionSnapshotStore {
+    /// The store as the launch after one that persisted `record` sees it.
+    static func relaunched(after record: SessionSnapshotRecord?,
+                           keychain: MockKeyChain = MockKeyChain()) -> SessionSnapshotStore {
+        if let record {
+            SessionSnapshotStore(keychain: keychain).persist(record)
+        }
+        return SessionSnapshotStore(keychain: keychain)
+    }
+}

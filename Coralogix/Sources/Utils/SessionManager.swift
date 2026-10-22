@@ -95,6 +95,8 @@ public class SessionManager {
     /// then the keychain holds this launch's sessions. Guarded by `sessionLock`; written only at init
     /// and by tests.
     private var _lastLaunchSession: LastLaunchSession?
+    /// Counters of sessions that are no longer live — see `SessionSnapshotStore`.
+    internal let snapshotStore: SessionSnapshotStore
 
     internal var lastActivity = Date()
     private let idleInterval: TimeInterval = 15 * 60  // 15 minutes in seconds
@@ -217,7 +219,12 @@ public class SessionManager {
         return timeSinceLastActivity > idleInterval
     }
     
-    public init() {
+    public convenience init() {
+        self.init(snapshotStore: SessionSnapshotStore())
+    }
+
+    internal init(snapshotStore: SessionSnapshotStore) {
+        self.snapshotStore = snapshotStore
         self.setupSessionMetadata()
         self.lastLaunchSession = self.sessionMetadata.flatMap(LastLaunchSession.init(previousOf:))
         NotificationCenter.default.addObserver(self,
@@ -254,6 +261,15 @@ public class SessionManager {
         clickCount += 1
     }
     
+    /// Whether `sessionId` is the session the counters and snapshot throttle currently describe.
+    /// A plain read, without `getSessionMetadata()`'s rotation check: asking which session an
+    /// exported span belongs to must not itself rotate the session.
+    func isLiveSession(_ sessionId: String) -> Bool {
+        sessionLock.lock()
+        defer { sessionLock.unlock() }
+        return sessionMetadata?.sessionId == sessionId
+    }
+
     public func getPrevSessionMetadata() -> SessionMetadata? {
         sessionLock.lock()
         defer { sessionLock.unlock() }
