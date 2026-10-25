@@ -455,14 +455,14 @@ final class BeforeSendInstrumentationDataTests: XCTestCase {
         // 1) Probe run: read the SDK's emitted isSnapshotEvent from the FINAL
         //    payload (text.cx_rum), not from inside the callback — the callback
         //    sees the subset, which has isSnapshotEvent stripped.
-        let probe = try runSpan(sessionManager: SessionManager()) { $0 }
+        let probe = try runSpan(sessionManager: SessionManager().makeLive()) { $0 }
         let sdkValue = probe.text[Keys.isSnapshotEvent.rawValue] as? Bool
         XCTAssertEqual(sdkValue, true,
                        "Fresh SessionManager + network event should emit a snapshot — guard against regressions in CxRumBuilder")
 
         // 2) Forgery run: inject the OPPOSITE of what the SDK produced and
         //    assert the SDK's value still wins after restore.
-        let result = try runSpan(sessionManager: SessionManager()) { cxRum in
+        let result = try runSpan(sessionManager: SessionManager().makeLive()) { cxRum in
             var edit = cxRum
             edit[Keys.isSnapshotEvent.rawValue] = !(sdkValue ?? false)
             return edit

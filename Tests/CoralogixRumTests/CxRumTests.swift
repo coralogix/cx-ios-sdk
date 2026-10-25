@@ -40,7 +40,7 @@ final class CxRumTests: XCTestCase {
                                                  Keys.sessionCreationDate.rawValue: AttributeValue(1609459200)],
                                     startTime: Date(), spanId: "20", traceId: "30")
         mockVersionMetadata = VersionMetadata(appName: "ExampleApp", appVersion: "1.1.1")
-        mockSessionManager = SessionManager()
+        mockSessionManager = SessionManager().makeLive()
         mockNetworkManager = NetworkManager()
         mockViewerManager = ViewManager(keyChain: KeychainManager())
         mockSessionManager.lastSnapshotEventTime = Date()

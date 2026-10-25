@@ -12,6 +12,7 @@ omitted; the focus here is user-facing behavior changes.
 
 ### Fixed
 - When an app's first session is sampled out and a later session is sampled in, the sampled-in session now sends the SDK initialization event.
+- A crash reported on the next launch now carries the error, view and action counts of the session that crashed, and no longer counts as an error in the new session.
 
 ## [2.20.4] - 2026-10-21
 

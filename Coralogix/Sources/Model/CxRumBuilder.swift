@@ -34,8 +34,6 @@ class CxRumBuilder {
     
     func build() -> CxRum? {
         let eventContext = EventContext(otel: otel)
-        
-        updateSessionCounters(for: eventContext)
 
         let internalContext = buildInternalContext(for: eventContext)
         
@@ -56,6 +54,9 @@ class CxRumBuilder {
             Log.w("[CxRumBuilder] Dropping span due to missing session attributes")
             return nil
         }
+
+        // SessionManager's counters and snapshot throttle describe the live session only.
+        let isLiveSession = sessionManager.isLiveSession(sessionContext.sessionId)
 
         // Consumed only after the drop-guard above: a span that never exports must not
         // swallow the one-shot promotion armed by setUserContext. Taken unconditionally
@@ -81,8 +82,11 @@ class CxRumBuilder {
             pendingSnapshotTrigger = nil
         }
 
-        let snapshotContext = buildSnapshotContextIfNeeded(for: eventContext,
-                                                           pendingTrigger: pendingSnapshotTrigger)
+        let snapshotContext = isLiveSession
+            ? buildLiveSessionSnapshotContext(for: eventContext,
+                                              sessionId: sessionContext.sessionId,
+                                              pendingTrigger: pendingSnapshotTrigger)
+            : buildRetiredSessionSnapshotContext(for: eventContext, sessionId: sessionContext.sessionId)
 
         // The promoted event reports the identity the token was armed with — the
         // carrier span's own identity can predate the setUserContext call (attributes
@@ -132,6 +136,7 @@ class CxRumBuilder {
                      labels: Helper.getLabels(otel: otel, labels: options.labels),
                      snapshotContext: snapshotContext,
                      consumedSnapshotTrigger: pendingSnapshotTrigger,
+                     isLiveSession: isLiveSession,
                      interactionContext: InteractionContext(otel: otel),
                      mobileVitalsContext: MobileVitalsContext(otel: otel),
                      lifeCycleContext: LifeCycleContext(otel: otel),
@@ -214,6 +219,37 @@ class CxRumBuilder {
             )
         }
         return nil
+    }
+
+    /// Counts the event on the live session and decides its snapshot. An emitted snapshot is
+    /// also persisted: it is what `buildRetiredSessionSnapshotContext` reads once this session
+    /// is no longer live.
+    private func buildLiveSessionSnapshotContext(for eventContext: EventContext,
+                                                 sessionId: String,
+                                                 pendingTrigger: PendingSnapshotTrigger?) -> SnapshotContext? {
+        updateSessionCounters(for: eventContext)
+        let snapshot = buildSnapshotContextIfNeeded(for: eventContext, pendingTrigger: pendingTrigger)
+        if let snapshot {
+            sessionManager.snapshotStore.persist(SessionSnapshotRecord(sessionId: sessionId, snapshot: snapshot))
+        }
+        return snapshot
+    }
+
+    /// Snapshot for a span reported under a session that is no longer live. Only the events
+    /// that always carry a snapshot (error, navigation) get one — the one-minute throttle
+    /// tracks the live session. The counts are the ones that session last persisted, plus
+    /// this event's error; with no record of the session the snapshot is omitted rather
+    /// than borrowed from the live session.
+    private func buildRetiredSessionSnapshotContext(for eventContext: EventContext,
+                                                    sessionId: String) -> SnapshotContext? {
+        let isErrorSeverity = eventContext.severity == CoralogixLogSeverity.error.rawValue
+        guard isErrorSeverity || eventContext.type == .navigation else { return nil }
+
+        let store = sessionManager.snapshotStore
+        let record = isErrorSeverity
+            ? store.adjustErrorCount(of: sessionId, by: 1)
+            : store.record(for: sessionId)
+        return record?.snapshotContext()
     }
 }
 
