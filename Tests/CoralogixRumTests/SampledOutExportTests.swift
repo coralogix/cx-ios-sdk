@@ -98,7 +98,120 @@ final class SampledOutExportTests: XCTestCase {
                       "The log sent after the rotation must upload under the new session.")
     }
 
+    func testRotationFromSampledOutToSampledIn_nothingExcluded_uploadsOneInitUnderNewSession() throws {
+        let (rum, _, uploader) = try makeSampledOutExporter(exclude: [])
+        defer { rum.shutdown() }
+        let sessionManager = try XCTUnwrap(rum.sessionManager)
+
+        flush()
+        XCTAssertTrue(uploader.cxRumPayloads().isEmpty, "Precondition: the sampled-out session's init is dropped.")
+
+        sessionManager.samplingRoller = { true }
+        let rotatedAt = Date().timeIntervalSince1970.milliseconds
+        rum.createNewSession()
+        let sampledIn = try XCTUnwrap(sessionManager.sessionMetadata)
+        flush()
+
+        XCTAssertEqual(initSessionIds(uploader), [sampledIn.sessionId],
+                       "The first sampled-in session must report exactly one init, under its own id.")
+
+        let initPayload = try XCTUnwrap(uploader.cxRumPayloads().first { internalEventName($0) == Keys.initKey.rawValue })
+        let session = try XCTUnwrap(initPayload[Keys.sessionContext.rawValue] as? [String: Any])
+        // The span stamps the creation date in whole seconds.
+        XCTAssertEqual(session[Keys.sessionCreationDate.rawValue] as? Int,
+                       Int(sampledIn.sessionCreationDate) * 1000,
+                       "The init must carry the new session's creation date.")
+        XCTAssertEqual(session[Keys.isSessionSampledIn.rawValue] as? Bool, true)
+        let timestamp = try XCTUnwrap(initPayload[Keys.timestamp.rawValue] as? Int)
+        XCTAssertGreaterThanOrEqual(timestamp, rotatedAt,
+                                    "The init must be timed at the rotation, not at SDK startup.")
+    }
+
+    func testRotationFromSampledOutToSampledIn_withExclusion_uploadsInitForEachSession() throws {
+        let (rum, _, uploader) = try makeSampledOutExporter(exclude: [.errors])
+        defer { rum.shutdown() }
+        let sessionManager = try XCTUnwrap(rum.sessionManager)
+        let sampledOutSessionId = try XCTUnwrap(sessionManager.sessionMetadata?.sessionId)
+
+        sessionManager.samplingRoller = { true }
+        rum.createNewSession()
+        let sampledInSessionId = try XCTUnwrap(sessionManager.sessionMetadata?.sessionId)
+        flush()
+
+        XCTAssertEqual(Set(initSessionIds(uploader)), [sampledOutSessionId, sampledInSessionId],
+                       "The sampled-out session's init still uploads, and the sampled-in session gets its own.")
+    }
+
+    func testRepeatedRotations_afterSampledOutStart_uploadOnlyOneSampledInInit() throws {
+        let (rum, _, uploader) = try makeSampledOutExporter(exclude: [])
+        defer { rum.shutdown() }
+        let sessionManager = try XCTUnwrap(rum.sessionManager)
+
+        sessionManager.samplingRoller = { true }
+        rum.createNewSession()
+        let firstSampledInSessionId = try XCTUnwrap(sessionManager.sessionMetadata?.sessionId)
+        sessionManager.samplingRoller = { false }
+        rum.createNewSession()
+        sessionManager.samplingRoller = { true }
+        rum.createNewSession()
+        flush()
+
+        XCTAssertEqual(initSessionIds(uploader), [firstSampledInSessionId],
+                       "Only the first sampled-in session sends init; later ones must not repeat it.")
+    }
+
+    func testSampledInStart_rotationsDoNotUploadAnotherInit() throws {
+        let rum = CoralogixRum(options: makeSamplingOptions(sampleRate: 100, exclude: []))
+        defer { rum.shutdown() }
+        let exporter = try XCTUnwrap(rum.coralogixExporter)
+        let uploader = CapturingSpanUploader()
+        exporter.spanUploader = uploader
+        let sessionManager = try XCTUnwrap(rum.sessionManager)
+        let firstSessionId = try XCTUnwrap(sessionManager.sessionMetadata?.sessionId)
+
+        rum.createNewSession()
+        rum.createNewSession()
+        flush()
+
+        XCTAssertEqual(initSessionIds(uploader), [firstSessionId],
+                       "A process whose first session was sampled in already reported init; rotations must not resend it.")
+    }
+
+    func testRotationWhileIdle_leavesInitForTheRotationThatEndsTheIdle() throws {
+        let (rum, _, uploader) = try makeSampledOutExporter(exclude: [])
+        defer { rum.shutdown() }
+        let sessionManager = try XCTUnwrap(rum.sessionManager)
+
+        sessionManager.samplingRoller = { true }
+        sessionManager.lastActivity = Date().addingTimeInterval(-20 * 60)
+        XCTAssertTrue(sessionManager.isIdle, "Precondition: the session is idle.")
+        rum.createNewSession()
+
+        sessionManager.updateActivityTime()
+        let activeSessionId = try XCTUnwrap(sessionManager.sessionMetadata?.sessionId)
+        flush()
+
+        XCTAssertEqual(initSessionIds(uploader), [activeSessionId],
+                       "An idle rotation's init would never export, so it must go to the rotation that ends the idle.")
+    }
+
+    func testRotationAfterShutdown_doesNotSendInit() throws {
+        let (rum, _, _) = try makeSampledOutExporter(exclude: [])
+        XCTAssertEqual(rum.initSpanState, .sentSampledOut, "Precondition: only a sampled-out init was sent.")
+
+        rum.shutdown()
+        // A rotation callback captured before shutdown cleared it.
+        rum.emitInitSpanOnRotation(sampledIn: true)
+
+        XCTAssertEqual(rum.initSpanState, .retired,
+                       "After shutdown no rotation may claim the init.")
+    }
+
     // MARK: - Helpers
+
+    private func initSessionIds(_ uploader: CapturingSpanUploader) -> [String?] {
+        uploader.cxRumPayloads().filter { internalEventName($0) == Keys.initKey.rawValue }.map(sessionId)
+    }
 
     private func makeSampledOutExporter(exclude: Set<ExcludableInstrumentation>) throws
         -> (CoralogixRum, CoralogixExporter, CapturingSpanUploader) {

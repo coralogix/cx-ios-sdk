@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Release-mechanics commits (version bumps, podspec/script tweaks, README edits) are
 omitted; the focus here is user-facing behavior changes.
 
+## [2.20.5] - 2026-10-22
+
+### Fixed
+- When an app's first session is sampled out and a later session is sampled in, the sampled-in session now sends the SDK initialization event.
+
 ## [2.20.4] - 2026-10-21
 
 ### Fixed

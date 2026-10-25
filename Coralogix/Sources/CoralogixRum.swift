@@ -76,6 +76,15 @@ public class CoralogixRum {
     private let installedInstrumentationsLock = NSLock()
     private var installedInstrumentations: Set<CoralogixExporterOptions.InstrumentationType> = []
 
+    /// Which kind of session the SDK's `init` has reached. A sampled-out session's `init` is dropped
+    /// at export unless something is excluded from sampling, and sampling is re-rolled on every
+    /// rotation — so without a second `init` on the first rotation into a sampled-in session, a
+    /// process whose first session was sampled out would never report one. See `emitInitSpanOnRotation`.
+    /// `retired` is set by `shutdown()`, so a rotation callback already in flight can't send one.
+    internal enum InitSpanState { case pending, sentSampledOut, sentSampledIn, retired }
+    internal let initSpanLock = NSLock()
+    internal var initSpanState: InitSpanState = .pending
+
     /// Resets CX-35956 singleton state when tests reinitialize the SDK in-process without calling `shutdown()`.
     internal static func resetCustomTracerIssuanceForTesting() {
         customTracerIssuanceLock.lock()
@@ -146,6 +155,7 @@ public class CoralogixRum {
         sessionManager.samplingReevaluationCallback = { [weak self] _, sampledIn in
             guard let self else { return }
             self.coralogixExporter?.updateSessionSampling(sampledIn: sampledIn)
+            self.emitInitSpanOnRotation(sampledIn: sampledIn)
 
             // Eligibility is re-resolved, not just reported. A session that rolled sampled-out
             // installed almost nothing; when a rotation rolls it sampled-in those instrumentations
@@ -165,7 +175,7 @@ public class CoralogixRum {
             self.recoverPendingCrashes()
         }
         self.installEligibleInstrumentations(using: options, sampledIn: initialSampledIn)
-        self.createInitSpan()
+        self.emitStartupInitSpan()
 
         CoralogixRum.isInitialized = true
 
@@ -528,6 +538,9 @@ public class CoralogixRum {
         CoralogixRum.customTracerIssued = false
         CoralogixRum.isInitialized = false
         Self.customTracerIssuanceLock.unlock()
+        self.initSpanLock.lock()
+        self.initSpanState = .retired
+        self.initSpanLock.unlock()
         self.coralogixExporter?.shutdown(explicitTimeout: nil)
         self.removeNotification()
         self.metricsManager.removeObservers()
