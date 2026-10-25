@@ -1,7 +1,7 @@
 Pod::Spec.new do |spec|
 
   spec.name         = "CoralogixInternal"
-  spec.version      = "2.20.6"
+  spec.version      = "2.20.5"
   spec.summary      = "Coralogix Internal Package. This module is not for public use."
 
   spec.description  = <<-DESC
