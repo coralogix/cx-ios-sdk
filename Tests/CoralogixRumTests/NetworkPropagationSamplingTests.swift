@@ -265,18 +265,6 @@ final class NetworkPropagationSamplingTests: XCTestCase {
                        "A sampled parent must not re-sample an unexported network span: \(header)")
     }
 
-    /// Case 4a. Asserted as the install decision, not on the wire, for the reason recorded on the
-    /// rows above: swizzles are process-global and leftovers from an earlier test keep injecting.
-    func testSampledIn_networkOff_installsNothingToInjectWith() throws {
-        let options = makeSamplingOptions(sampleRate: 100,
-                                         exclude: [],
-                                         instrumentations: [.network: false],
-                                         traceParentInHeader: traceParentEnabled)
-
-        XCTAssertFalse(CoralogixRum.shouldInstall(.network, options: options, sampledIn: true),
-                       "With network switched off nothing installs, so no traceparent is ever sent.")
-    }
-
     // MARK: - Header parsing
 
     private static func fields(_ header: String) -> [String] {

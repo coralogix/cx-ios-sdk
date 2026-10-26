@@ -11,7 +11,7 @@ omitted; the focus here is user-facing behavior changes.
 ## [2.21.0] - 2026-10-26
 
 ### Added
-- `excludeFromSampling` accepts two more categories, `navigation` and `lifecycle`, so a sampled-out session can keep reporting screen changes and app life-cycle events. This matches the categories the Android SDK already accepts.
+- `excludeFromSampling` accepts two more categories, `navigation` and `lifecycle`, so a sampled-out session can keep reporting screen changes and app life-cycle events. This matches the categories the Android SDK already accepts. If your code switches exhaustively over `ExcludableInstrumentation`, add the two new cases.
 
 ### Changed
 - A sampled-out session now sends `traceparent` with the sampled flag cleared (`00`) on requests whose network event it does not report, where previously every request carried `01`. Requests instrumented by React Native or Flutter are unchanged, since the hybrid layer injects its own header.

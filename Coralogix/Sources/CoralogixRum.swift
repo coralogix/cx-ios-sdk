@@ -301,9 +301,7 @@ public class CoralogixRum {
         // Installed directly, not wrapped in `parentBased`: a parent-based sampler would inherit the
         // parent's decision and so could never clear the flag on a network span whose parent is a
         // sampled global custom span, which is exactly the case the flags byte has to report.
-        let sampler = CxCustomSampler { [weak exporter] in
-            exporter?.getOptions().excludeFromSampling ?? []
-        }
+        let sampler = CxCustomSampler(excludeFromSampling: exporter.getOptions().excludeFromSampling)
 
         let tracerProvider = TracerProviderBuilder()
             .with(resource: resource)

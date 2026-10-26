@@ -50,9 +50,8 @@ final class LogSamplingDemoModel: ObservableObject {
 
     private init() {}
 
-    static let allExcludable: [ExcludableInstrumentation] =
-        [.logs, .errors, .network, .userInteractions, .mobileVitals, .customSpan, .customMeasurement,
-         .navigation, .lifecycle]
+    /// Derived, so a new category cannot reach the SDK without reaching both demo apps' toggles.
+    static let allExcludable: [ExcludableInstrumentation] = ExcludableInstrumentation.allCases
 
     var formattedAppliedExclude: String { Self.formatExclude(appliedExclude) }
 
