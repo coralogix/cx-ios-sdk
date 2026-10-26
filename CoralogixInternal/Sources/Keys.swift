@@ -395,6 +395,8 @@ public enum ExcludableInstrumentation: String, CaseIterable, Sendable {
     case mobileVitals
     case customSpan
     case customMeasurement
+    case navigation
+    case lifecycle
 
     /// Internal `CoralogixEventType` this public case maps to.
     public var eventType: CoralogixEventType {
@@ -406,6 +408,8 @@ public enum ExcludableInstrumentation: String, CaseIterable, Sendable {
         case .mobileVitals: return .mobileVitals
         case .customSpan: return .customSpan
         case .customMeasurement: return .customMeasurement
+        case .navigation: return .navigation
+        case .lifecycle: return .lifeCycle
         }
     }
 }

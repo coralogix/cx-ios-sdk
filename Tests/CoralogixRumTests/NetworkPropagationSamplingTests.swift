@@ -134,6 +134,8 @@ final class NetworkPropagationSamplingTests: XCTestCase {
         let header = try XCTUnwrap(PropagationTestURLProtocol.lastTraceparent,
                                    "A sampled-out session must still inject traceparent — that is the whole point of keeping network instrumentation installed.")
         XCTAssertEqual(header.split(separator: "-").count, 4, "Header must stay W3C-shaped: \(header)")
+        XCTAssertEqual(Self.flagsByte(header), "00",
+                       "Propagate-only means the event is not exported, so the flag must say so: \(header)")
 
         XCTAssertFalse(capture.eventTypes.contains(CoralogixEventType.networkRequest.rawValue),
                        "Propagate-only: the request must not surface as a network-request event. Saw \(capture.eventTypes).")
@@ -213,9 +215,81 @@ final class NetworkPropagationSamplingTests: XCTestCase {
         performRequest(path: "excluded")
         forceFlush()
 
-        XCTAssertNotNil(PropagationTestURLProtocol.lastTraceparent,
-                        "Excluding network from sampling must not stop header injection.")
+        let header = try XCTUnwrap(PropagationTestURLProtocol.lastTraceparent,
+                                   "Excluding network from sampling must not stop header injection.")
+        XCTAssertEqual(Self.flagsByte(header), "01",
+                       "The event is exported on this row, so the flag must say so: \(header)")
         XCTAssertTrue(capture.eventTypes.contains(CoralogixEventType.networkRequest.rawValue),
                       "With .network excluded from sampling the event must reach the exporter. Saw \(capture.eventTypes).")
+    }
+
+    // MARK: - The traceparent sampled flag
+    //
+    // The flag tracks whether the network event will actually be exported, not whether the session
+    // was sampled: `exportsNetworkEvent = sampledIn OR excludes(network)`. The two rows above pin
+    // `00` and `01` for the sampled-out cases; these cover the sampled-in row and the parent case.
+
+    func testSampledIn_flagsByteIsSampled() throws {
+        try startRUM(sampleRate: 100, exclude: [])
+
+        performRequest(path: "sampled-in")
+        forceFlush()
+
+        let header = try XCTUnwrap(PropagationTestURLProtocol.lastTraceparent)
+        XCTAssertEqual(Self.flagsByte(header), "01",
+                       "A sampled-in session exports its network events, so the flag must be set: \(header)")
+        XCTAssertTrue(capture.eventTypes.contains(CoralogixEventType.networkRequest.rawValue),
+                      "Sanity: the event must also be exported. Saw \(capture.eventTypes).")
+    }
+
+    /// The sampler is installed directly rather than wrapped in `parentBased`, so a sampled parent
+    /// must not drag an unexported network span back to `01`. The trace id still has to be the
+    /// parent's, or the two sides of the request cannot be correlated at all.
+    func testSampledOut_underSampledGlobalSpan_keepsParentTraceIdAndClearsTheFlag() throws {
+        try startRUM(exclude: [])
+        let sdk = try XCTUnwrap(rum)
+        let tracer = try XCTUnwrap(sdk.getCustomTracer(), "Expected a custom tracer")
+        let global = try XCTUnwrap(tracer.startGlobalSpan(name: "traceparent.flag"), "Expected a global span")
+        defer { global.endSpan() }
+
+        let globalReadable = try XCTUnwrap(global.span as? any ReadableSpan, "Expected a ReadableSpan")
+        let parentTraceId = globalReadable.toSpanData().traceId.hexString
+
+        performRequest(path: "under-global")
+        forceFlush()
+
+        let header = try XCTUnwrap(PropagationTestURLProtocol.lastTraceparent)
+        XCTAssertEqual(Self.traceId(header), parentTraceId,
+                       "The header must stay on the parent's trace: \(header)")
+        XCTAssertEqual(Self.flagsByte(header), "00",
+                       "A sampled parent must not re-sample an unexported network span: \(header)")
+    }
+
+    /// Case 4a. Asserted as the install decision, not on the wire, for the reason recorded on the
+    /// rows above: swizzles are process-global and leftovers from an earlier test keep injecting.
+    func testSampledIn_networkOff_installsNothingToInjectWith() throws {
+        let options = makeSamplingOptions(sampleRate: 100,
+                                         exclude: [],
+                                         instrumentations: [.network: false],
+                                         traceParentInHeader: traceParentEnabled)
+
+        XCTAssertFalse(CoralogixRum.shouldInstall(.network, options: options, sampledIn: true),
+                       "With network switched off nothing installs, so no traceparent is ever sent.")
+    }
+
+    // MARK: - Header parsing
+
+    private static func fields(_ header: String) -> [String] {
+        header.split(separator: "-", omittingEmptySubsequences: false).map(String.init)
+    }
+
+    private static func flagsByte(_ header: String) -> String? {
+        let parts = fields(header)
+        return parts.count == 4 ? parts[3] : nil
+    }
+
+    private static func traceId(_ header: String) -> String? {
+        let parts = fields(header)
+        return parts.count == 4 ? parts[1] : nil
     }
 }

@@ -131,7 +131,13 @@ class SpanBuilderSdk: SpanBuilder {
                                              traceState: traceState)
 
         if !samplingDecision.isSampled {
-            return DefaultTracer.instance.spanBuilder(spanName: spanName).startSpan()
+            // Upstream returns a span from DefaultTracer here, which discards `spanContext` and
+            // falls back to the active span's context or an invalid one. A propagate-only span has
+            // to keep the context computed above: the trace id its parent established, its own new
+            // span id, and the sampled flag cleared — that is what the W3C propagator reads when it
+            // writes `traceparent`, so without it the header carries the wrong trace id and the
+            // backend cannot correlate the two sides of the request.
+            return PropagatedSpan(name: spanName, context: spanContext, kind: spanKind)
         }
 
         attributes.updateValues(attributes: samplingDecision.attributes)

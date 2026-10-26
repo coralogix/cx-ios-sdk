@@ -42,8 +42,8 @@ extension CoralogixRum {
     ///
     /// Delivery is not telemetry. Buffered spans have to reach the exporter before the app suspends
     /// whatever the sampling roll decided — otherwise a sampled-out session drops exactly the events
-    /// `excludeFromSampling` exists to guarantee, and iOS offers no `lifecycle` category to opt back
-    /// into. Emitting the life-cycle *event* stays gated; getting the batch out does not.
+    /// `excludeFromSampling` exists to guarantee, whether or not `lifecycle` is among them. Emitting
+    /// the life-cycle *event* stays gated; getting the batch out does not.
     ///
     /// One observer does both, in that order, so the background event is itself included in the
     /// flush it triggers. Two observers on the same notification would fire in an unspecified order

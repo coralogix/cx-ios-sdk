@@ -124,7 +124,7 @@ The fields accepted by `CoralogixExporterOptions`. Each one is described in deta
 | traceParentInHeader | \[String: Any\]? | Configures W3C `traceparent` header propagation for distributed tracing. | No |
 | collectIPData | Bool | Sends the client IP for region detection. Defaults to `true`. | No |
 | sessionSampleRate | Int | Percentage of overall sessions tracked, 0–100. Defaults to `100`. | No |
-| excludeFromSampling | `Set<ExcludableInstrumentation>` | Instrumentations that bypass the `sessionSampleRate` gate, so their events are sent even from sessions that are not sampled in. Accepts `errors`, `logs`, `network`, `userInteractions`, `mobileVitals`, `customSpan` and `customMeasurement`. Defaults to empty. | No |
+| excludeFromSampling | `Set<ExcludableInstrumentation>` | Instrumentations that bypass the `sessionSampleRate` gate, so their events are sent even from sessions that are not sampled in. Accepts `errors`, `logs`, `network`, `userInteractions`, `mobileVitals`, `customSpan`, `customMeasurement`, `navigation` and `lifecycle`. Defaults to empty. | No |
 | enableSwizzling | Bool | Method swizzling for `URLSession` instrumentation. Defaults to `true`. | No |
 | instrumentations | `[InstrumentationType: Bool]?` | Switches individual instrumentations off. All are active by default. Read once while the SDK initializes, so a later change takes effect only after `shutdown()` and a fresh `CoralogixRum(options:)`. | No |
 | mobileVitals | `[MobileVitalsType: Bool]?` | Switches individual mobile vitals detectors off. All are active by default. Read at initialization only, the same as `instrumentations`. | No |
@@ -236,6 +236,8 @@ Accepted `ExcludableInstrumentation` cases:
 - `.mobileVitals`
 - `.customSpan`
 - `.customMeasurement`
+- `.navigation` (2.21.0 and later)
+- `.lifecycle` (2.21.0 and later)
 
 The default is an empty set: a sampled-out session then reports nothing, while still propagating
 trace context. Once you list any category, the SDK's own initialization events are reported alongside it.
@@ -249,11 +251,16 @@ can silence the event without silencing the header:
 
 | Configuration | Header | `network-request` event |
 | --- | --- | --- |
-| Session sampled in, network enabled | injected | reported |
+| Session sampled in, network enabled | injected, flags `01` | reported |
 | `instrumentations: [.network: false]` — any session | **not injected** | not reported |
-| Session sampled out, `.network` not excluded | injected | not reported |
-| Session sampled out, `excludeFromSampling: [.network]`, `traceParentInHeader` enabled | injected | reported |
+| Session sampled out, `.network` not excluded | injected, flags `00` | not reported |
+| Session sampled out, `excludeFromSampling: [.network]`, `traceParentInHeader` enabled | injected, flags `01` | reported |
 | Session sampled out, `excludeFromSampling: [.network]`, `traceParentInHeader` disabled | not injected | reported |
+
+The last byte of the `traceparent` header is the W3C sampled flag, and from 2.21.0 it reports whether
+the matching RUM event is sent: `01` when it is, `00` when the request is only propagating trace
+context. A backend that honours the flag will not keep its own spans for a `00` request, so a sampled-out
+session no longer produces one-sided traces. Before 2.21.0 every request carried `01`.
 
 `instrumentations[.network]` is the outer gate: switching it off removes network instrumentation
 entirely, header included, and neither `traceParentInHeader` nor `excludeFromSampling` brings any of

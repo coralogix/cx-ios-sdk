@@ -51,7 +51,8 @@ final class LogSamplingDemoModel: ObservableObject {
     private init() {}
 
     static let allExcludable: [ExcludableInstrumentation] =
-        [.logs, .errors, .network, .userInteractions, .mobileVitals, .customSpan, .customMeasurement]
+        [.logs, .errors, .network, .userInteractions, .mobileVitals, .customSpan, .customMeasurement,
+         .navigation, .lifecycle]
 
     var formattedAppliedExclude: String { Self.formatExclude(appliedExclude) }
 
