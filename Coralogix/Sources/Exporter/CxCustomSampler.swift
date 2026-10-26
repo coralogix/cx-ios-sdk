@@ -16,20 +16,18 @@ import CoralogixInternal
 ///     flagsByte           = reportsNetworkEvent ? "01" : "00"
 ///
 /// A not-sampled decision clears the flag on the span context, which is what `W3CTraceContextPropagator`
-/// writes as `00`, and keeps the span out of the exporter. The request still carries a `traceparent`:
-/// propagation and reporting are separate concerns, and a sampled-out session still has to let the
-/// backend stitch the trace together. Mirrors the browser SDK's sampler of the same name.
+/// writes as `00`, and keeps the span out of the exporter. Mirrors the browser SDK's sampler of the same
+/// name.
 ///
-/// **`01` is not a promise that the event arrives.** This decision is taken at span creation, and three
-/// things drop a reported event later, after the header is already on the wire: a URL matched by
-/// `ignoreUrls` (`CoralogixExporter.shouldRemoveSpan`), a `beforeSend` callback returning nil, and an
-/// idle session short-circuiting `export()`. Widening the flag to cover them would mean duplicating the
-/// URL filter here, and `beforeSend` is unknowable at creation time in any case. Keep the README's
-/// description of the flag in step with this list.
+/// Two things this decision does *not* settle:
 ///
-/// Hybrid requests never reach this at all: React Native and Flutter inject their own `traceparent`, and
-/// `URLSessionLogger.instrumentedRequest` lets an existing header win, so whatever this sampler decided
-/// is discarded before the request goes out.
+/// - **Whether a `traceparent` is sent at all.** `shouldAddTraceParentStatic` gates propagation per
+///   request, separately and later: a Coralogix-domain URL, `traceParentInHeader` off, or a URL outside
+///   `allowedTracingUrls` means no header whatever was decided here. In hybrid the wrapper injects its
+///   own header and an existing one wins, so the decision is discarded.
+/// - **Whether the event arrives.** The flag is fixed at span creation, while `ignoreUrls`, a `beforeSend`
+///   returning nil, and an idle session each drop a reported event afterwards. Covering the first would
+///   mean duplicating the URL filter here, and `beforeSend` is unknowable this early.
 ///
 /// **This sampler decides network spans only.** Every other span is always sampled and
 /// `CoralogixExporter.passesSessionSampling` keeps deciding whether it is exported. That is not a

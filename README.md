@@ -267,6 +267,7 @@ reported event after the header has gone out, and all of them leave the flag at 
 
 - a URL matched by `ignoreUrls`
 - an event your `beforeSend` callback returns `nil` for
+- a session that has gone idle, after 15 minutes without activity, which background traffic can run into
 
 > [!NOTE]
 > On React Native and Flutter the `traceparent` header is injected by the hybrid layer, not by this SDK,
