@@ -9,16 +9,27 @@ import CoralogixInternal
 
 /// Decides the `traceparent` sampled flag for outgoing requests.
 ///
-/// The flag has to say whether the network RUM event will actually be exported, so the backend knows
-/// whether to keep its side of the trace:
+/// The flag carries the session's sampling decision for that request, so the backend can tell a
+/// propagate-only request from a reported one:
 ///
-///     exportsNetworkEvent = sampledIn OR excludes(network)
-///     flagsByte           = exportsNetworkEvent ? "01" : "00"
+///     reportsNetworkEvent = sampledIn OR excludes(network)
+///     flagsByte           = reportsNetworkEvent ? "01" : "00"
 ///
 /// A not-sampled decision clears the flag on the span context, which is what `W3CTraceContextPropagator`
 /// writes as `00`, and keeps the span out of the exporter. The request still carries a `traceparent`:
 /// propagation and reporting are separate concerns, and a sampled-out session still has to let the
 /// backend stitch the trace together. Mirrors the browser SDK's sampler of the same name.
+///
+/// **`01` is not a promise that the event arrives.** This decision is taken at span creation, and three
+/// things drop a reported event later, after the header is already on the wire: a URL matched by
+/// `ignoreUrls` (`CoralogixExporter.shouldRemoveSpan`), a `beforeSend` callback returning nil, and an
+/// idle session short-circuiting `export()`. Widening the flag to cover them would mean duplicating the
+/// URL filter here, and `beforeSend` is unknowable at creation time in any case. Keep the README's
+/// description of the flag in step with this list.
+///
+/// Hybrid requests never reach this at all: React Native and Flutter inject their own `traceparent`, and
+/// `URLSessionLogger.instrumentedRequest` lets an existing header win, so whatever this sampler decided
+/// is discarded before the request goes out.
 ///
 /// **This sampler decides network spans only.** Every other span is always sampled and
 /// `CoralogixExporter.passesSessionSampling` keeps deciding whether it is exported. That is not a

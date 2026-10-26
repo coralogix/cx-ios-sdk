@@ -257,10 +257,21 @@ can silence the event without silencing the header:
 | Session sampled out, `excludeFromSampling: [.network]`, `traceParentInHeader` enabled | injected, flags `01` | reported |
 | Session sampled out, `excludeFromSampling: [.network]`, `traceParentInHeader` disabled | not injected | reported |
 
-The last byte of the `traceparent` header is the W3C sampled flag, and from 2.21.0 it reports whether
-the matching RUM event is sent: `01` when it is, `00` when the request is only propagating trace
-context. A backend that honours the flag will not keep its own spans for a `00` request, so a sampled-out
-session no longer produces one-sided traces. Before 2.21.0 every request carried `01`.
+The last byte of the `traceparent` header is the W3C sampled flag. From 2.21.0 it carries the session's
+sampling decision for that request: `00` when the session is sampled out and the request is only
+propagating trace context, `01` otherwise. Before 2.21.0 every request carried `01`, so a backend that
+honours the flag had no way to tell a propagate-only request apart from a reported one.
+
+The flag reflects sampling alone, so `01` is not a guarantee that the event arrives. These still drop a
+reported event after the header has gone out, and all of them leave the flag at `01`:
+
+- a URL matched by `ignoreUrls`
+- an event your `beforeSend` callback returns `nil` for
+
+> [!NOTE]
+> On React Native and Flutter the `traceparent` header is injected by the hybrid layer, not by this SDK,
+> and it currently always carries `01`. The flag described here applies to requests the native SDK
+> instruments itself.
 
 `instrumentations[.network]` is the outer gate: switching it off removes network instrumentation
 entirely, header included, and neither `traceParentInHeader` nor `excludeFromSampling` brings any of
