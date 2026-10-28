@@ -22,12 +22,12 @@ import CoralogixInternal
 /// Two things this decision does *not* settle:
 ///
 /// - **Whether a `traceparent` is sent at all.** `shouldAddTraceParentStatic` gates propagation per
-///   request, separately and later: a Coralogix-domain URL, `traceParentInHeader` off, or a URL outside
-///   `allowedTracingUrls` means no header whatever was decided here. In hybrid the wrapper injects its
-///   own header and an existing one wins, so the decision is discarded.
-/// - **Whether the event arrives.** The flag is fixed at span creation, while `ignoreUrls`, a `beforeSend`
-///   returning nil, and an idle session each drop a reported event afterwards. Covering the first would
-///   mean duplicating the URL filter here, and `beforeSend` is unknowable this early.
+///   request, separately and later: a Coralogix-domain URL, a URL matched by `ignoreUrls`,
+///   `traceParentInHeader` off, or a URL outside `allowedTracingUrls` means no header whatever was
+///   decided here. Flutter injects its own header from Dart and an existing one wins, so this decision
+///   is discarded there; React Native on iOS does not instrument fetch itself, so it is not.
+/// - **Whether the event arrives.** The flag is fixed at span creation, while a `beforeSend` returning
+///   nil and an idle session each drop a reported event afterwards. Neither is knowable this early.
 ///
 /// **This sampler decides network spans only.** Every other span is always sampled and
 /// `CoralogixExporter.passesSessionSampling` keeps deciding whether it is exported. That is not a

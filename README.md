@@ -269,9 +269,9 @@ reported event after the header has gone out, and all of them leave the flag at 
 - a request your app sends while the session is idle, which it becomes after 15 minutes without activity
 
 > [!NOTE]
-> On React Native and Flutter the `traceparent` header is injected by the hybrid layer, not by this SDK,
-> and it currently always carries `01`. The flag described here applies to requests the native SDK
-> instruments itself.
+> On Flutter the `traceparent` header is injected from Dart rather than by this SDK, and an existing
+> header wins, so it currently always carries `01`. React Native on iOS does not inject its own header —
+> this SDK instruments the request, so the flag behaves as described above.
 
 `instrumentations[.network]` is the outer gate: switching it off removes network instrumentation
 entirely, header included, and neither `traceParentInHeader` nor `excludeFromSampling` brings any of
