@@ -395,6 +395,12 @@ public enum ExcludableInstrumentation: String, CaseIterable, Sendable {
     case mobileVitals
     case customSpan
     case customMeasurement
+    case navigation
+    /// Deliberately `lifecycle`, not `lifeCycle` as in `CoralogixExporterOptions.InstrumentationType`.
+    /// The raw value is the cross-platform wire string the hybrid bridges send and Android's own
+    /// `Lifecycle` case spells, so matching the sibling SDKs wins over matching the neighbouring iOS
+    /// enum. Renaming it would break every bridge that passes `"lifecycle"`.
+    case lifecycle
 
     /// Internal `CoralogixEventType` this public case maps to.
     public var eventType: CoralogixEventType {
@@ -406,6 +412,8 @@ public enum ExcludableInstrumentation: String, CaseIterable, Sendable {
         case .mobileVitals: return .mobileVitals
         case .customSpan: return .customSpan
         case .customMeasurement: return .customMeasurement
+        case .navigation: return .navigation
+        case .lifecycle: return .lifeCycle
         }
     }
 }

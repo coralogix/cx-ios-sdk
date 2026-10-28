@@ -16,7 +16,7 @@ public enum ImageFormat {
 }
 
 public enum Global: String {
-    case sdk = "2.20.5"
+    case sdk = "2.21.0"
     case swiftVersion = "5.9"
     case coralogixPath = "/browser/v1beta/logs"
     case sessionReplayPath = "/browser/alpha/sessionrecording"
@@ -186,6 +186,17 @@ public enum Global: String {
         }
         
         return results
+    }
+
+    /// Whether the caller asked the SDK to leave `url` alone through `ignoreUrls`.
+    ///
+    /// Shared by the export filter and the `traceparent` injection gate: an ignored URL must get
+    /// neither a network event nor a header, and two copies of this rule would eventually disagree
+    /// about which of the two a given URL gets.
+    public static func isURLIgnored(_ url: String, ignoreUrls: [String]?) -> Bool {
+        guard let ignoreUrls, !ignoreUrls.isEmpty else { return false }
+        if ignoreUrls.contains(url) { return true }
+        return isURLMatchesRegexPattern(string: url, regexs: ignoreUrls)
     }
 
     public static func isURLMatchesRegexPattern(string: String, regexs: [String]) -> Bool {

@@ -243,17 +243,39 @@ final class InstrumentationGatingTests: XCTestCase {
 
     func testEveryExcludableMapsToInstrumentationTypes() {
         // Fails loudly if a case is added to ExcludableInstrumentation without deciding which
-        // installers it implies. The three API-only categories map to nothing by design.
-        let apiOnly: Set<ExcludableInstrumentation> = [.logs, .customSpan, .customMeasurement]
+        // installers it implies. Two kinds of category map to nothing, for opposite reasons, and a
+        // new case has to be placed in one group or the other:
+        //
+        //  - API-only (logs, custom spans, custom measurements) reach the tracer through public API
+        //    calls gated on `isInitialized`, so there is no installer to switch back on.
+        //  - Never gated (navigation) is installed unconditionally, because
+        //    `initializeNavigationInstrumentation` also advances the current view that every other
+        //    span is attributed to. Android maps its equivalent to a real key, because there the
+        //    installer is gated.
+        let noInstaller: Set<ExcludableInstrumentation> = [.logs, .customSpan, .customMeasurement, .navigation]
 
         for excludable in ExcludableInstrumentation.allCases {
-            if apiOnly.contains(excludable) {
+            if noInstaller.contains(excludable) {
                 XCTAssertTrue(excludable.instrumentationTypes.isEmpty,
-                              "\(excludable) reaches the tracer through public API, so it needs no installer.")
+                              "\(excludable) has no installer of its own, so it must map to no instrumentation.")
             } else {
                 XCTAssertFalse(excludable.instrumentationTypes.isEmpty,
                                "\(excludable) has no instrumentationTypes mapping.")
             }
         }
+    }
+
+    /// `.lifecycle` has to keep the life-cycle instrumentation installed on a sampled-out session,
+    /// or the export filter would admit an event type nothing is left to produce.
+    func testExcludingLifecycle_keepsLifeCycleInstrumentationInstalledWhenSampledOut() {
+        let options = makeSamplingOptions(sampleRate: 0, exclude: [.lifecycle])
+
+        XCTAssertEqual(ExcludableInstrumentation.lifecycle.instrumentationTypes, [.lifeCycle])
+        XCTAssertTrue(options.shouldInstallInstrumentation(.lifeCycle, sampledIn: false),
+                      "exclude=[.lifecycle] must keep life-cycle instrumentation installed on a sampled-out session.")
+
+        let notExcluded = makeSamplingOptions(sampleRate: 0, exclude: [])
+        XCTAssertFalse(notExcluded.shouldInstallInstrumentation(.lifeCycle, sampledIn: false),
+                       "Without the exclusion, a sampled-out session must not install it.")
     }
 }

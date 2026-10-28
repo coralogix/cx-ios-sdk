@@ -285,13 +285,21 @@ extension ExcludableInstrumentation {
     /// Empty for the three categories with no installer of their own — logs, custom spans and custom
     /// measurements all reach the tracer through public API calls gated on `isInitialized`, so there
     /// is nothing to install on their behalf.
+    ///
+    /// Empty for `.navigation` too, for the opposite reason: its instrumentation is never gated.
+    /// `initializeNavigationInstrumentation` also advances the current view through
+    /// `CoralogixExporter.set(cxView:)`, which is what gives every other span its `view` attribution,
+    /// so it has to run whatever the sampling roll decided. Only whether the navigation *event* is
+    /// exported follows the filter. Android maps this case to its own `InstrumentationKey.Navigation`
+    /// because there the installer is gated; here there is nothing to switch back on.
     internal var instrumentationTypes: Set<CoralogixExporterOptions.InstrumentationType> {
         switch self {
         case .errors: return [.errors, .anr]
         case .network: return [.network]
         case .userInteractions: return [.userActions]
         case .mobileVitals: return [.mobileVitals]
-        case .logs, .customSpan, .customMeasurement: return []
+        case .lifecycle: return [.lifeCycle]
+        case .logs, .customSpan, .customMeasurement, .navigation: return []
         }
     }
 }

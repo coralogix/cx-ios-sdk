@@ -244,6 +244,28 @@ final class LogSamplingDecouplingTests: XCTestCase {
                       "No non-log event_types should pass the filter; saw: \(nonLog.sorted())")
     }
 
+    // MARK: - The effective exclude set is observable in the init data
+
+    /// Without this, the only way to tell which categories a session actually honoured is to infer
+    /// it from what did and did not arrive.
+    func testInitData_carriesTheEffectiveExcludeSet() throws {
+        let options = makeSamplingOptions(sampleRate: 0, exclude: [.navigation, .lifecycle, .errors])
+
+        let reported = try XCTUnwrap(options.getInitData()[Keys.excludeFromSampling.rawValue] as? [String],
+                                     "The init data must report excludeFromSampling.")
+
+        XCTAssertEqual(reported, ["errors", "lifecycle", "navigation"],
+                       "The effective exclude set must be reported as sorted raw values.")
+    }
+
+    func testInitData_emptyExcludeSet_isReportedAsEmpty() throws {
+        let options = makeSamplingOptions(sampleRate: 0, exclude: [])
+
+        let reported = try XCTUnwrap(options.getInitData()[Keys.excludeFromSampling.rawValue] as? [String])
+
+        XCTAssertEqual(reported, [], "An empty exclude set must be reported, not omitted.")
+    }
+
     // MARK: - Helpers
 
     private func requireExporter(_ rum: CoralogixRum) throws -> CoralogixExporter {

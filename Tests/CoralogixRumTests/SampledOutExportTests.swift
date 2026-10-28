@@ -207,6 +207,29 @@ final class SampledOutExportTests: XCTestCase {
                        "After shutdown no rotation may claim the init.")
     }
 
+    // MARK: - Navigation and life-cycle categories
+
+    /// The two categories iOS gained for Android parity. Before them, a sampled-out iOS session had
+    /// no way to keep navigation or life-cycle events flowing while an Android one did.
+    func testSampledOut_excludingNavigationOrLifecycle_uploadsThatCategory() throws {
+        for (excluded, eventType) in [(ExcludableInstrumentation.navigation, CoralogixEventType.navigation),
+                                      (ExcludableInstrumentation.lifecycle, CoralogixEventType.lifeCycle)] {
+            CoralogixRum.isInitialized = false
+            let (rum, exporter, uploader) = try makeSampledOutExporter(exclude: [excluded])
+            defer { rum.shutdown() }
+
+            _ = exporter.export(spans: [makeSamplingSpan(eventType: eventType, sampledIn: false),
+                                        makeSamplingSpan(eventType: .log, sampledIn: false)],
+                                explicitTimeout: nil)
+
+            let types = uploader.cxRumPayloads().compactMap(self.eventType)
+            XCTAssertTrue(types.contains(eventType.rawValue),
+                          "exclude=[.\(excluded.rawValue)] must upload \(eventType.rawValue) on a sampled-out session.")
+            XCTAssertFalse(types.contains(CoralogixEventType.log.rawValue),
+                           "exclude=[.\(excluded.rawValue)] must not let an unexcluded category through.")
+        }
+    }
+
     // MARK: - Helpers
 
     private func initSessionIds(_ uploader: CapturingSpanUploader) -> [String?] {
