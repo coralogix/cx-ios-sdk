@@ -143,7 +143,15 @@ extension CoralogixRum {
         if requestURLString.contains(options.coralogixDomain.rawValue) {
             return false
         }
-        
+
+        // A URL the caller put in `ignoreUrls` is left alone entirely — no event and no header.
+        // Injecting here would trace a request the option promises is not traced, and would put a
+        // `traceparent` the backend can never correlate on the wire, since the export filter drops
+        // the matching span. Android makes the same decision in its interceptor.
+        if Global.isURLIgnored(requestURLString, ignoreUrls: options.ignoreUrls) {
+            return false
+        }
+
         guard let traceParentDict = options.traceParentInHeader else {
             return false
         }

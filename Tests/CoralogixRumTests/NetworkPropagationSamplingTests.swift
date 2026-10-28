@@ -93,11 +93,13 @@ final class NetworkPropagationSamplingTests: XCTestCase {
     private func startRUM(sampleRate: Int = 0,
                           exclude: Set<ExcludableInstrumentation>,
                           instrumentations: [CoralogixExporterOptions.InstrumentationType: Bool]? = nil,
-                          propagation: Bool = true) throws {
+                          propagation: Bool = true,
+                          ignoreUrls: [String] = []) throws {
         let options = makeSamplingOptions(sampleRate: sampleRate,
                                          exclude: exclude,
                                          instrumentations: instrumentations,
                                          traceParentInHeader: propagation ? traceParentEnabled : nil,
+                                         ignoreUrls: ignoreUrls,
                                          tracesExporter: capture.tracesExporterCallback())
         let rum = CoralogixRum(options: options)
         self.rum = rum
@@ -263,6 +265,26 @@ final class NetworkPropagationSamplingTests: XCTestCase {
                        "The header must stay on the parent's trace: \(header)")
         XCTAssertEqual(Self.flagsByte(header), "00",
                        "A sampled parent must not re-sample an unexported network span: \(header)")
+    }
+
+    // MARK: - ignoreUrls silences the header as well as the event
+
+    /// `ignoreUrls` documents the request as not traced, so it must carry no `traceparent` either.
+    /// Injecting one would put a header on the wire that can never be correlated, since the export
+    /// filter drops the matching span — the one-sided trace this feature exists to prevent.
+    ///
+    /// The second request is the control: it shares the same swizzles, options and session, so a
+    /// header missing from both fails here instead of reading as a pass.
+    func testIgnoredUrl_sendsNoTraceparent_whileAnotherUrlStillDoes() throws {
+        try startRUM(sampleRate: 100, exclude: [], ignoreUrls: [".*ignored.*"])
+
+        performRequest(path: "ignored/health")
+        XCTAssertNil(PropagationTestURLProtocol.lastTraceparent,
+                     "A URL matched by ignoreUrls must not carry traceparent.")
+
+        performRequest(path: "reported")
+        XCTAssertNotNil(PropagationTestURLProtocol.lastTraceparent,
+                        "A URL outside ignoreUrls must still carry traceparent.")
     }
 
     // MARK: - Header parsing

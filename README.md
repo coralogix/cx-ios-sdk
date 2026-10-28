@@ -265,7 +265,6 @@ honours the flag had no way to tell a propagate-only request apart from a report
 The flag reflects sampling alone, so `01` is not a guarantee that the event arrives. These still drop a
 reported event after the header has gone out, and all of them leave the flag at `01`:
 
-- a URL matched by `ignoreUrls`
 - an event your `beforeSend` callback returns `nil` for
 - a request your app sends while the session is idle, which it becomes after 15 minutes without activity
 

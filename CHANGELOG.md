@@ -16,6 +16,9 @@ omitted; the focus here is user-facing behavior changes.
 ### Changed
 - A sampled-out session now sends `traceparent` with the sampled flag cleared (`00`) on requests whose network event it does not report, where previously every request carried `01`. Requests instrumented by React Native or Flutter are unchanged, since the hybrid layer injects its own header.
 
+### Fixed
+- A URL matched by `ignoreUrls` no longer receives a `traceparent` header. These requests are documented as not traced, and the matching network event was already dropped, so the header could never be correlated. This matches the Android SDK.
+
 ## [2.20.5] - 2026-10-22
 
 ### Fixed

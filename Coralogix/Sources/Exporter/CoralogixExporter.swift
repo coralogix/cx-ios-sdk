@@ -468,9 +468,7 @@ public class CoralogixExporter: SpanExporter {
         }
 
         if !Global.containsMonitoredPath(url) {
-            guard let ignoreUrls = getOptions().ignoreUrls, !ignoreUrls.isEmpty else { return true }
-            if ignoreUrls.contains(url) { return false }
-            return !Global.isURLMatchesRegexPattern(string: url, regexs: ignoreUrls)
+            return !Global.isURLIgnored(url, ignoreUrls: getOptions().ignoreUrls)
         }
         return false
     }
