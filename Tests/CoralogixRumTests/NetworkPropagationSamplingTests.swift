@@ -229,7 +229,8 @@ final class NetworkPropagationSamplingTests: XCTestCase {
     //
     // The flag tracks whether the network event will actually be exported, not whether the session
     // was sampled: `exportsNetworkEvent = sampledIn OR excludes(network)`. The two rows above pin
-    // `00` and `01` for the sampled-out cases; these cover the sampled-in row and the parent case.
+    // `00` and `01` for the sampled-out cases; these cover the sampled-in row and the two global-span
+    // cases.
 
     func testSampledIn_flagsByteIsSampled() throws {
         try startRUM(sampleRate: 100, exclude: [])
@@ -265,6 +266,30 @@ final class NetworkPropagationSamplingTests: XCTestCase {
                        "The header must stay on the parent's trace: \(header)")
         XCTAssertEqual(Self.flagsByte(header), "00",
                        "A sampled parent must not re-sample an unexported network span: \(header)")
+    }
+
+    /// The other side of the row above: a tracer that lists `.networkRequests` in `ignoredInstruments`
+    /// starts the request on a trace of its own, and that root span is decided by the session alone.
+    func testSampledOut_networkIgnoredByGlobalSpan_startsNewTraceAndClearsTheFlag() throws {
+        try startRUM(exclude: [])
+        let sdk = try XCTUnwrap(rum)
+        let tracer = try XCTUnwrap(sdk.getCustomTracer(ignoredInstruments: [.networkRequests]),
+                                   "Expected a custom tracer")
+        let global = try XCTUnwrap(tracer.startGlobalSpan(name: "traceparent.ignored"), "Expected a global span")
+        defer { global.endSpan() }
+
+        let globalReadable = try XCTUnwrap(global.span as? any ReadableSpan, "Expected a ReadableSpan")
+        let globalTraceId = globalReadable.toSpanData().traceId.hexString
+
+        performRequest(path: "ignored-by-global")
+        forceFlush()
+
+        let header = try XCTUnwrap(PropagationTestURLProtocol.lastTraceparent)
+        let traceId = try XCTUnwrap(Self.traceId(header), "Header must stay W3C-shaped: \(header)")
+        XCTAssertNotEqual(traceId, globalTraceId,
+                          "An ignored instrument must not inherit the global span's trace: \(header)")
+        XCTAssertEqual(Self.flagsByte(header), "00",
+                       "A sampled-out session exports no network event, so the flag must say so: \(header)")
     }
 
     // MARK: - ignoreUrls silences the header as well as the event
