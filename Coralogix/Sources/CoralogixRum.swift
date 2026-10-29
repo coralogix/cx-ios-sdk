@@ -589,7 +589,14 @@ public class CoralogixRum {
     /// Call this from the hybrid bridge when the hybrid side completes an HTTP request.
     /// The dictionary should contain: `url`, `host`, `method`, `status_code`, `fragments`,
     /// `schema`, `http_response_body_size`; optional `status_text`, `custom_span_id`,
-    /// `custom_trace_id`, `duration`.
+    /// `custom_trace_id`, `duration`, `traceparentSampled`.
+    ///
+    /// `traceparentSampled` is the flag the wrapper sent in this request's `traceparent` (`Bool`, or
+    /// `"true"`/`"false"`), from `isNetworkRequestSampled()`. When present, the event follows it rather
+    /// than the session at completion, so the event and the flag on the wire agree even if the session
+    /// rotated while the request was in flight: `false` drops the event, `true` reports it as the
+    /// session the request started in decided. Leave it out when the header was not built from that
+    /// answer.
     ///
     /// `status_text` is the HTTP reason phrase (e.g. `"OK"`, `"Not Found"`) and is emitted as
     /// `network_request_context.status_text`. An `error_message` entry, if present, is
@@ -606,6 +613,29 @@ public class CoralogixRum {
     public func setNetworkRequestContext(dictionary: [String: Any]) {
         guard CoralogixRum.isInitialized else { return }
         reportHybridNetworkRequest(dictionary)
+    }
+
+    /// Whether a network request starting now would be reported: the `traceparent` sampled flag a
+    /// hybrid wrapper must send when it builds the header itself (`true` → `01`, `false` → `00`).
+    ///
+    /// Ask once per request, when the header is built. The session can rotate at any time, so a
+    /// cached answer goes stale. Pass the answer back as `traceparentSampled` in
+    /// `setNetworkRequestContext(dictionary:)`.
+    ///
+    /// Returns `false` while network instrumentation is off and before the SDK is initialized —
+    /// there is no session to decide for yet, so a wrapper should keep its own default until its
+    /// initialization completes rather than treat that answer as a decision. Safe to call from any
+    /// thread.
+    public func isNetworkRequestSampled() -> Bool {
+        guard CoralogixRum.isInitialized,
+              let sessionManager = self.sessionManager,
+              let options = self.options,
+              options.shouldInitInstrumentation(instrumentation: .network) else { return false }
+        // Read the session the way a native network span does (`sessionSpanAttributes`), so a rotation
+        // that is due happens first and the answer belongs to the session the request starts in.
+        _ = sessionManager.getSessionMetadata()
+        return CxCustomSampler.exportsNetworkEvent(sampledIn: sessionManager.isSessionSampledIn,
+                                                   excludeFromSampling: options.excludeFromSampling)
     }
 
     /// Reports a user interaction event from a hybrid platform (Flutter / React Native).

@@ -298,6 +298,12 @@ extension CoralogixRum {
     internal func reportHybridNetworkRequest(_ dictionary: [String: Any]) {
         guard validateHybridNetworkRequest(dictionary) else { return }
 
+        // The wrapper sent `00` for this request, so no event may exist for it, whatever the session
+        // says now: that covers a session that rotated in mid-request, a request started before
+        // initialization finished, and network being excluded.
+        let traceparentSampled = Self.coerceToBool(dictionary[Keys.traceparentSampled.rawValue])
+        if traceparentSampled == false { return }
+
         // Back-date the span start: the emitted duration is derived from span timing,
         // so this is how the hybrid layer's own measurement becomes the reported duration.
         let durationMs = Self.coerceToDurationMs(dictionary[Keys.duration.rawValue])
@@ -333,6 +339,17 @@ extension CoralogixRum {
         let requestUrl = dictionary[Keys.url.rawValue] as? String ?? ""
         var options: CoralogixExporterOptions?
         CoralogixRum.exporterQueue.sync { options = self.options }
+
+        // The wrapper sent `01`, built from `isNetworkRequestSampled()` when the request started; this span
+        // is made at completion and stamped with the live session, which may since have rotated out.
+        // Native requests decide and stamp in one read, so they never disagree with their header.
+        //
+        // Only while network is not excluded: the decision then *is* the start-time `sampledIn`, so it can
+        // stand in for the stamp. With network excluded it says nothing about the session, the event passes
+        // the sampling filter on the exclusion anyway, and the payload keeps the session's real stamp.
+        if traceparentSampled == true, let options, !CxCustomSampler.excludesNetwork(options.excludeFromSampling) {
+            span.setAttribute(key: Keys.spanSessionSampledIn.rawValue, value: String(true))
+        }
         let configs = options?.networkExtraConfig
         let rule = configs.flatMap { resolveConfigForUrl(requestUrl, configs: $0) }
 
@@ -405,6 +422,14 @@ extension CoralogixRum {
     /// Larger values are bridge bugs, and back-dating a span start that far would overflow the
     /// UInt64 nanosecond conversion in the export pipeline — so they are treated as absent.
     internal static let maxHybridDurationMs: Double = 86_400_000
+
+    /// Normalizes a hybrid boolean. Platform channels deliver `Bool` (bridged through `NSNumber`) and
+    /// some bridges stringify, so `"true"`/`"false"` are accepted too; anything else reads as absent.
+    private static func coerceToBool(_ value: Any?) -> Bool? {
+        if let bool = value as? Bool { return bool }
+        if let string = value as? String { return Bool(string) }
+        return nil
+    }
 
     /// Normalizes a hybrid payload value to a raw Double. Platform channels deliver numbers as
     /// Int, Int64, Double, or NSNumber depending on the bridge and value size; some bridges
