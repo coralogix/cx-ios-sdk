@@ -111,9 +111,14 @@ public class ViewManager {
 
     /// Active view name, or nil when none — unlike `getDictionary()`'s `""` sentinel.
     var currentViewName: String? {
+        return currentView.name
+    }
+
+    /// Active view name and number, read in one step so both describe the same navigation.
+    var currentView: (name: String?, number: Int?) {
         return syncSafe {
-            guard let name = self.visibleView?.name, !name.isEmpty else { return nil }
-            return name
+            guard let name = self.visibleView?.name, !name.isEmpty else { return (nil, self.viewNumber) }
+            return (name, self.viewNumber)
         }
     }
 

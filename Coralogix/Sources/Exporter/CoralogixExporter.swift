@@ -97,6 +97,9 @@ public class CoralogixExporter: SpanExporter {
         self.viewManager = viewManager
         self.metricsManager = metricsManager
         
+        self.sessionManager.viewProvider = { [weak self] in
+            self?.viewManager.currentView ?? (nil, nil)
+        }
         self.sessionManager.sessionEndedCallback = { [weak self] in
             self?.viewManager.reset()
             self?.sessionManager.reset()

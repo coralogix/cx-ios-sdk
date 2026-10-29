@@ -68,10 +68,17 @@ internal final class CxCustomSampler: Sampler {
         // so they do not match above and stay sampled.
         let stamp = attributes[Keys.spanSessionSampledIn.rawValue]?.description
         let sampledIn = stamp.map { $0 == String(true) } ?? true
-        // Keyed on the event type, exactly as `passesSessionSampling` resolves it, so a future case that
-        // also maps to `network-request` cannot make the flag and the export decision disagree.
-        let exportsEvent = sampledIn || self.excludeFromSampling.contains { $0.eventType == .networkRequest }
+        let exportsEvent = Self.exportsNetworkEvent(sampledIn: sampledIn, excludeFromSampling: self.excludeFromSampling)
         return exportsEvent ? Samplers.alwaysOnDecision : Samplers.alwaysOffDecision
+    }
+
+    /// `sampledIn OR excludes(network)`: the one rule behind the flag. `CoralogixRum.networkRequestSampling()`
+    /// answers hybrid wrappers with it, so a header they build carries the byte this sampler would have set.
+    ///
+    /// Keyed on the event type, exactly as `passesSessionSampling` resolves it, so a future case that also
+    /// maps to `network-request` cannot make the flag and the export decision disagree.
+    internal static func exportsNetworkEvent(sampledIn: Bool, excludeFromSampling: Set<ExcludableInstrumentation>) -> Bool {
+        sampledIn || excludeFromSampling.contains { $0.eventType == .networkRequest }
     }
 
     internal var description: String { "CxCustomSampler" }
