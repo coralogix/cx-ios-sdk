@@ -106,6 +106,7 @@ public enum Keys: String {
     case traceId
     case spanId
     case traceparentSampled
+    case traceparentSessionId
     case callStackSymbols = "call_stack_symbols"
     case console
     case code

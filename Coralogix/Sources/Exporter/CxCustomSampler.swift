@@ -72,16 +72,13 @@ internal final class CxCustomSampler: Sampler {
         return exportsEvent ? Samplers.alwaysOnDecision : Samplers.alwaysOffDecision
     }
 
-    /// `sampledIn OR excludes(network)`: the one rule behind the flag. `CoralogixRum.isNetworkRequestSampled()`
+    /// `sampledIn OR excludes(network)`: the one rule behind the flag. `CoralogixRum.networkRequestSampling()`
     /// answers hybrid wrappers with it, so a header they build carries the byte this sampler would have set.
-    internal static func exportsNetworkEvent(sampledIn: Bool, excludeFromSampling: Set<ExcludableInstrumentation>) -> Bool {
-        sampledIn || excludesNetwork(excludeFromSampling)
-    }
-
+    ///
     /// Keyed on the event type, exactly as `passesSessionSampling` resolves it, so a future case that also
     /// maps to `network-request` cannot make the flag and the export decision disagree.
-    internal static func excludesNetwork(_ excludeFromSampling: Set<ExcludableInstrumentation>) -> Bool {
-        excludeFromSampling.contains { $0.eventType == .networkRequest }
+    internal static func exportsNetworkEvent(sampledIn: Bool, excludeFromSampling: Set<ExcludableInstrumentation>) -> Bool {
+        sampledIn || excludeFromSampling.contains { $0.eventType == .networkRequest }
     }
 
     internal var description: String { "CxCustomSampler" }

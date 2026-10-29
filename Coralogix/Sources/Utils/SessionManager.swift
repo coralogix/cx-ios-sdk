@@ -89,6 +89,11 @@ struct PendingSnapshotTrigger {
 public class SessionManager {
     internal var sessionMetadata: SessionMetadata?
     private var prevSessionMetadata: SessionMetadata?
+    /// The last few sessions this process ended, oldest first, each with the sampling decision it had.
+    /// A hybrid request is reported at completion, so one that started in an ended session is reported
+    /// in it from here — even if more than one rotation happened while it was in flight.
+    private var endedSessions: [(sessionId: String, creationDate: TimeInterval, sampledIn: Bool)] = []
+    private static let endedSessionsKept = 8
     /// The session that was live when the previous launch ended, captured once at init.
     ///
     /// `sessionMetadata.old*` cannot serve: it is re-read from the keychain on every rotation, and by
@@ -360,6 +365,38 @@ public class SessionManager {
         ]
     }
 
+    /// The live session's id and sampling decision, read together after any rotation that is due, so the
+    /// two always describe one session. nil when there is no session.
+    func liveSessionSampling() -> (sessionId: String, sampledIn: Bool)? {
+        _ = getSessionMetadata()
+        sessionLock.lock()
+        defer { sessionLock.unlock() }
+        guard let current = self.sessionMetadata else { return nil }
+        return (current.sessionId, self._isSessionSampledIn)
+    }
+
+    /// The identity and sampling stamp of session `sessionId` — the live one or one of the last few that
+    /// ended — for a request that started in it, read in one locked step after any rotation that is due.
+    /// nil when it is neither: the request's session is gone, and it must not be reported in another one.
+    func startSessionSpanAttributes(_ sessionId: String) -> [(key: String, value: String)]? {
+        _ = getSessionMetadata()
+        sessionLock.lock()
+        defer { sessionLock.unlock() }
+        let session: (sessionId: String, creationDate: TimeInterval, sampledIn: Bool)
+        if let current = self.sessionMetadata, current.sessionId == sessionId {
+            session = (current.sessionId, current.sessionCreationDate, self._isSessionSampledIn)
+        } else if let ended = self.endedSessions.last(where: { $0.sessionId == sessionId }) {
+            session = ended
+        } else {
+            return nil
+        }
+        return [
+            (Keys.sessionId.rawValue, session.sessionId),
+            (Keys.sessionCreationDate.rawValue, String(Int(session.creationDate))),
+            (Keys.spanSessionSampledIn.rawValue, String(session.sampledIn))
+        ]
+    }
+
     public func getErrorCount() -> Int {
         countersLock.lock()
         defer { countersLock.unlock() }
@@ -468,6 +505,12 @@ public class SessionManager {
         let priorExisted = (self.sessionMetadata != nil)
         let endedCb = self.sessionEndedCallback
 
+        if let ending = self.sessionMetadata {
+            self.endedSessions.append((ending.sessionId, ending.sessionCreationDate, self._isSessionSampledIn))
+            if self.endedSessions.count > Self.endedSessionsKept {
+                self.endedSessions.removeFirst(self.endedSessions.count - Self.endedSessionsKept)
+            }
+        }
         self.prevSessionMetadata = self.sessionMetadata
         self.sessionMetadata = SessionMetadata(sessionId: UUID().uuidString.lowercased(),
                                                sessionCreationDate: Date().timeIntervalSince1970,

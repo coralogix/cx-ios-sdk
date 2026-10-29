@@ -11,7 +11,7 @@ omitted; the focus here is user-facing behavior changes.
 ## [2.22.0] - 2026-10-29
 
 ### Added
-- Support for an upcoming Flutter plugin release to send the `traceparent` sampled flag by the same rule as requests this SDK instruments. Native iOS apps see no change.
+- Support for an upcoming Flutter plugin release to send the `traceparent` sampled flag, and to report each request in the session it started in, the same way as requests this SDK instruments. Native iOS apps see no change.
 
 ## [2.21.0] - 2026-10-26
 

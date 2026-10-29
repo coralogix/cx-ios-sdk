@@ -589,14 +589,15 @@ public class CoralogixRum {
     /// Call this from the hybrid bridge when the hybrid side completes an HTTP request.
     /// The dictionary should contain: `url`, `host`, `method`, `status_code`, `fragments`,
     /// `schema`, `http_response_body_size`; optional `status_text`, `custom_span_id`,
-    /// `custom_trace_id`, `duration`, `traceparentSampled`.
+    /// `custom_trace_id`, `duration`, `traceparentSampled`, `traceparentSessionId`.
     ///
-    /// `traceparentSampled` is the flag the wrapper sent in this request's `traceparent` (`Bool`, or
-    /// `"true"`/`"false"`), from `isNetworkRequestSampled()`. When present, the event follows it rather
-    /// than the session at completion, so the event and the flag on the wire agree even if the session
-    /// rotated while the request was in flight: `false` drops the event, `true` reports it as the
-    /// session the request started in decided. Leave it out when the header was not built from that
-    /// answer.
+    /// `traceparentSampled` and `traceparentSessionId` are the `networkRequestSampling()` answer the
+    /// wrapper took when the request started: the flag (`Bool`, or `"true"`/`"false"`) and the session it
+    /// was for. Pass both for every request you report, whether or not a `traceparent` was sent. With them
+    /// the event belongs to the session the request started in, as a native request's does, rather than the
+    /// one live when it completed — so the event and the flag on the wire agree even if the session rotated
+    /// while the request was in flight. `false` drops the event, and so does a session that is no longer
+    /// known. Without them the event is reported in the session live at completion.
     ///
     /// `status_text` is the HTTP reason phrase (e.g. `"OK"`, `"Not Found"`) and is emitted as
     /// `network_request_context.status_text`. An `error_message` entry, if present, is
@@ -615,27 +616,29 @@ public class CoralogixRum {
         reportHybridNetworkRequest(dictionary)
     }
 
-    /// Whether a network request starting now would be reported: the `traceparent` sampled flag a
-    /// hybrid wrapper must send when it builds the header itself (`true` → `01`, `false` → `00`).
+    /// Whether a network request starting now would be reported — the `traceparent` sampled flag a
+    /// hybrid wrapper must send when it builds the header itself — and the session that decision is for.
     ///
-    /// Ask once per request, when the header is built. The session can rotate at any time, so a
-    /// cached answer goes stale. Pass the answer back as `traceparentSampled` in
-    /// `setNetworkRequestContext(dictionary:)`.
+    /// Ask once per request, when it starts. The session can rotate at any time, so a cached answer goes
+    /// stale. Pass both values back as `traceparentSampled` and `traceparentSessionId` in
+    /// `setNetworkRequestContext(dictionary:)`. One call rather than two so the flag and the session can
+    /// never straddle a rotation.
     ///
-    /// Returns `false` while network instrumentation is off and before the SDK is initialized —
-    /// there is no session to decide for yet, so a wrapper should keep its own default until its
-    /// initialization completes rather than treat that answer as a decision. Safe to call from any
-    /// thread.
-    public func isNetworkRequestSampled() -> Bool {
-        guard CoralogixRum.isInitialized,
-              let sessionManager = self.sessionManager,
-              let options = self.options,
-              options.shouldInitInstrumentation(instrumentation: .network) else { return false }
-        // Read the session the way a native network span does (`sessionSpanAttributes`), so a rotation
+    /// `isSampled` is `false` while network instrumentation is off, and before the SDK is initialized,
+    /// when `sessionId` is `nil` as well: there is no session to decide for yet, so a wrapper should keep
+    /// its own default until its initialization completes rather than treat that answer as a decision.
+    /// Safe to call from any thread.
+    public func networkRequestSampling() -> NetworkRequestSampling {
+        // Reads the session the way a native network span does (`sessionSpanAttributes`), so a rotation
         // that is due happens first and the answer belongs to the session the request starts in.
-        _ = sessionManager.getSessionMetadata()
-        return CxCustomSampler.exportsNetworkEvent(sampledIn: sessionManager.isSessionSampledIn,
-                                                   excludeFromSampling: options.excludeFromSampling)
+        guard CoralogixRum.isInitialized,
+              let options = self.options,
+              let live = self.sessionManager?.liveSessionSampling() else {
+            return NetworkRequestSampling(isSampled: false, sessionId: nil)
+        }
+        let isSampled = options.shouldInitInstrumentation(instrumentation: .network)
+            && CxCustomSampler.exportsNetworkEvent(sampledIn: live.sampledIn, excludeFromSampling: options.excludeFromSampling)
+        return NetworkRequestSampling(isSampled: isSampled, sessionId: live.sessionId)
     }
 
     /// Reports a user interaction event from a hybrid platform (Flutter / React Native).

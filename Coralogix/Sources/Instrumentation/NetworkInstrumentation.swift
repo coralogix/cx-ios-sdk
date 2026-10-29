@@ -301,8 +301,19 @@ extension CoralogixRum {
         // The wrapper sent `00` for this request, so no event may exist for it, whatever the session
         // says now: that covers a session that rotated in mid-request, a request started before
         // initialization finished, and network being excluded.
-        let traceparentSampled = Self.coerceToBool(dictionary[Keys.traceparentSampled.rawValue])
-        if traceparentSampled == false { return }
+        if Self.coerceToBool(dictionary[Keys.traceparentSampled.rawValue]) == false { return }
+
+        // The wrapper echoes the session its `networkRequestSampling()` answer was for, so the request is
+        // reported in the session it started in, as a native request is — this span is made at completion.
+        // Resolved before the span exists, and stamped explicitly below, so a rotation in between cannot
+        // move it: one whose session is gone is dropped rather than reported in a session it never belonged to.
+        var startSession: [(key: String, value: String)]?
+        if let startSessionId = dictionary[Keys.traceparentSessionId.rawValue] as? String, !startSessionId.isEmpty {
+            guard let attributes = self.coralogixExporter?.getSessionManager().startSessionSpanAttributes(startSessionId) else {
+                return
+            }
+            startSession = attributes
+        }
 
         // Back-date the span start: the emitted duration is derived from span timing,
         // so this is how the hybrid layer's own measurement becomes the reported duration.
@@ -340,15 +351,8 @@ extension CoralogixRum {
         var options: CoralogixExporterOptions?
         CoralogixRum.exporterQueue.sync { options = self.options }
 
-        // The wrapper sent `01`, built from `isNetworkRequestSampled()` when the request started; this span
-        // is made at completion and stamped with the live session, which may since have rotated out.
-        // Native requests decide and stamp in one read, so they never disagree with their header.
-        //
-        // Only while network is not excluded: the decision then *is* the start-time `sampledIn`, so it can
-        // stand in for the stamp. With network excluded it says nothing about the session, the event passes
-        // the sampling filter on the exclusion anyway, and the payload keeps the session's real stamp.
-        if traceparentSampled == true, let options, !CxCustomSampler.excludesNetwork(options.excludeFromSampling) {
-            span.setAttribute(key: Keys.spanSessionSampledIn.rawValue, value: String(true))
+        for attribute in startSession ?? [] {
+            span.setAttribute(key: attribute.key, value: attribute.value)
         }
         let configs = options?.networkExtraConfig
         let rule = configs.flatMap { resolveConfigForUrl(requestUrl, configs: $0) }
