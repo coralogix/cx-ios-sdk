@@ -97,6 +97,9 @@ public class CoralogixExporter: SpanExporter {
         self.viewManager = viewManager
         self.metricsManager = metricsManager
         
+        self.sessionManager.endingViewProvider = { [weak self] in
+            (self?.viewManager.currentViewName, self?.viewManager.getViewNumber())
+        }
         self.sessionManager.sessionEndedCallback = { [weak self] in
             self?.viewManager.reset()
             self?.sessionManager.reset()

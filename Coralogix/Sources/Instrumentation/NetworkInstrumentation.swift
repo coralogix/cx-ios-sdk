@@ -307,7 +307,7 @@ extension CoralogixRum {
         // reported in the session it started in, as a native request is — this span is made at completion.
         // Resolved before the span exists, and stamped explicitly below, so a rotation in between cannot
         // move it: one whose session is gone is dropped rather than reported in a session it never belonged to.
-        var startSession: [(key: String, value: String)]?
+        var startSession: [(key: String, value: AttributeValue?)]?
         if let startSessionId = dictionary[Keys.traceparentSessionId.rawValue] as? String, !startSessionId.isEmpty {
             guard let attributes = self.coralogixExporter?.getSessionManager().startSessionSpanAttributes(startSessionId) else {
                 return

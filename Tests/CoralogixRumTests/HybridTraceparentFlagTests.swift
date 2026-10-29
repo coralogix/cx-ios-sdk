@@ -15,11 +15,13 @@ import XCTest
 import CoralogixInternal
 @testable import Coralogix
 
-/// One exported `network-request` event: its URL and the session it was exported under.
+/// One exported `network-request` event: its URL, the session it was exported under and its view.
 private struct ReportedRequest: Equatable {
     let url: String
     let sessionId: String?
     let isSessionSampledIn: Bool?
+    let viewName: String?
+    let viewNumber: Int?
 }
 
 private final class NetworkEventCapture {
@@ -51,9 +53,12 @@ private final class NetworkEventCapture {
             return nil
         }
         let session = cxRum[Keys.sessionContext.rawValue] as? [String: Any]
+        let view = cxRum[Keys.viewContext.rawValue] as? [String: Any]
         return ReportedRequest(url: url,
                                sessionId: session?[Keys.sessionId.rawValue] as? String,
-                               isSessionSampledIn: session?[Keys.isSessionSampledIn.rawValue] as? Bool)
+                               isSessionSampledIn: session?[Keys.isSessionSampledIn.rawValue] as? Bool,
+                               viewName: view?[Keys.view.rawValue] as? String,
+                               viewNumber: cxRum[Keys.viewNumber.rawValue] as? Int)
     }
 }
 
@@ -222,6 +227,30 @@ final class HybridTraceparentFlagTests: XCTestCase {
         XCTAssertNil(reported("no-echo"), "Without the echo the completion-time session decides. Saw \(capture.urls).")
         XCTAssertNil(reported("flag-without-session"),
                      "A flag alone must not surface a sampled-out session. Saw \(capture.urls).")
+    }
+
+    /// The new session navigated on; the request still reports the view its own session ended on, never
+    /// the live session's view — whose number restarted with it.
+    func testRotatedMidRequest_carriesTheViewItsStartSessionEndedOn() throws {
+        let rum = try startRUM(sampleRate: 100)
+        let viewManager = try XCTUnwrap(rum.coralogixExporter?.getViewManager())
+        for name in ["first", "second", "third"] {
+            viewManager.set(cxView: CXView(state: .notifyOnAppear, name: name))
+        }
+        XCTAssertEqual(viewManager.getViewNumber(), 2, "Precondition: the start session ends on its own view 2")
+        let atStart = rum.networkRequestSampling()
+        try rotateSession(of: rum, sampledIn: true)
+        viewManager.set(cxView: CXView(state: .notifyOnAppear, name: "fourth"))
+        XCTAssertEqual(viewManager.getViewNumber(), 1, "Precondition: the live session is on its own view 1")
+
+        report(rum, path: "echoed", echo: atStart)
+        report(rum, path: "no-echo")
+        flush()
+
+        let request = try XCTUnwrap(reported("echoed"), "Saw \(capture.urls).")
+        XCTAssertEqual(request.viewName, "third")
+        XCTAssertEqual(request.viewNumber, 2)
+        XCTAssertEqual(reported("no-echo")?.viewName, "fourth", "Control: a live-session event has the live view.")
     }
 
     /// Started in a sampled-out session (header `00`), completed after a rotation into a sampled-in one.

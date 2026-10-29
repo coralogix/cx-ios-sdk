@@ -89,11 +89,25 @@ struct PendingSnapshotTrigger {
 public class SessionManager {
     internal var sessionMetadata: SessionMetadata?
     private var prevSessionMetadata: SessionMetadata?
-    /// The last few sessions this process ended, oldest first, each with the sampling decision it had.
-    /// A hybrid request is reported at completion, so one that started in an ended session is reported
-    /// in it from here — even if more than one rotation happened while it was in flight.
-    private var endedSessions: [(sessionId: String, creationDate: TimeInterval, sampledIn: Bool)] = []
+    /// The last few sessions this process ended, oldest first, each with the sampling decision it had and
+    /// the view it ended on. A hybrid request is reported at completion, so one that started in an ended
+    /// session is reported in it from here — even if more than one rotation happened while it was in flight.
+    private var endedSessions: [EndedSession] = []
     private static let endedSessionsKept = 8
+
+    private struct EndedSession {
+        let sessionId: String
+        let creationDate: TimeInterval
+        let sampledIn: Bool
+        /// nil when no view source was wired (`endingViewProvider`), so the live view is left in place.
+        let view: (name: String?, number: Int?)?
+    }
+
+    /// The live view's name and number, read under `sessionLock` at rotation so an ended session keeps the
+    /// view it ended on — the new session's view number restarts, and pairing one session's id with
+    /// another's view would misplace the event. Set by the exporter, which owns the `ViewManager`; that
+    /// queue never calls back into this class, so the read cannot deadlock.
+    var endingViewProvider: (() -> (name: String?, number: Int?))?
     /// The session that was live when the previous launch ended, captured once at init.
     ///
     /// `sessionMetadata.old*` cannot serve: it is re-read from the keychain on every rotation, and by
@@ -377,23 +391,32 @@ public class SessionManager {
 
     /// The identity and sampling stamp of session `sessionId` — the live one or one of the last few that
     /// ended — for a request that started in it, read in one locked step after any rotation that is due.
+    /// An ended session also brings the view it ended on; the live one keeps the view the span is made with.
     /// nil when it is neither: the request's session is gone, and it must not be reported in another one.
-    func startSessionSpanAttributes(_ sessionId: String) -> [(key: String, value: String)]? {
+    /// A nil value removes the attribute (an ended session that had no view yet).
+    func startSessionSpanAttributes(_ sessionId: String) -> [(key: String, value: AttributeValue?)]? {
         _ = getSessionMetadata()
         sessionLock.lock()
         defer { sessionLock.unlock() }
-        let session: (sessionId: String, creationDate: TimeInterval, sampledIn: Bool)
         if let current = self.sessionMetadata, current.sessionId == sessionId {
-            session = (current.sessionId, current.sessionCreationDate, self._isSessionSampledIn)
-        } else if let ended = self.endedSessions.last(where: { $0.sessionId == sessionId }) {
-            session = ended
-        } else {
-            return nil
+            return Self.sessionAttributes(current.sessionId, current.sessionCreationDate, self._isSessionSampledIn)
         }
-        return [
-            (Keys.sessionId.rawValue, session.sessionId),
-            (Keys.sessionCreationDate.rawValue, String(Int(session.creationDate))),
-            (Keys.spanSessionSampledIn.rawValue, String(session.sampledIn))
+        guard let ended = self.endedSessions.last(where: { $0.sessionId == sessionId }) else { return nil }
+        var attributes = Self.sessionAttributes(ended.sessionId, ended.creationDate, ended.sampledIn)
+        if let view = ended.view {
+            attributes.append((Keys.spanViewName.rawValue, .string(view.name ?? Keys.undefined.rawValue)))
+            attributes.append((Keys.spanViewNumber.rawValue, view.number.map { .int($0) }))
+        }
+        return attributes
+    }
+
+    private static func sessionAttributes(_ sessionId: String,
+                                          _ creationDate: TimeInterval,
+                                          _ sampledIn: Bool) -> [(key: String, value: AttributeValue?)] {
+        [
+            (Keys.sessionId.rawValue, .string(sessionId)),
+            (Keys.sessionCreationDate.rawValue, .string(String(Int(creationDate)))),
+            (Keys.spanSessionSampledIn.rawValue, .string(String(sampledIn)))
         ]
     }
 
@@ -506,7 +529,10 @@ public class SessionManager {
         let endedCb = self.sessionEndedCallback
 
         if let ending = self.sessionMetadata {
-            self.endedSessions.append((ending.sessionId, ending.sessionCreationDate, self._isSessionSampledIn))
+            self.endedSessions.append(EndedSession(sessionId: ending.sessionId,
+                                                   creationDate: ending.sessionCreationDate,
+                                                   sampledIn: self._isSessionSampledIn,
+                                                   view: self.endingViewProvider?()))
             if self.endedSessions.count > Self.endedSessionsKept {
                 self.endedSessions.removeFirst(self.endedSessions.count - Self.endedSessionsKept)
             }
