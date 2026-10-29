@@ -435,4 +435,47 @@ class SessionManagerTests: XCTestCase {
         XCTAssertEqual(LastLaunchSession(previousOf: relaunch),
                        LastLaunchSession(sessionId: "crashed-session", creationDate: 1_600_000_000, sampledIn: true))
     }
+
+    // MARK: - startSessionSpanAttributes: a hybrid request's start session, as its spans recorded it
+
+    private func values(_ attributes: [(key: String, value: AttributeValue?)]) -> [String: AttributeValue] {
+        Dictionary(uniqueKeysWithValues: attributes.compactMap { attribute in attribute.value.map { (attribute.key, $0) } })
+    }
+
+    /// A request reported after its session ended carries the `prev_*` breadcrumbs a span made in that
+    /// session recorded, not the ones of the session live when it completes.
+    func testStartSessionSpanAttributes_endedSession_carriesItsOwnPrevSessionBreadcrumbs() throws {
+        // The test host's keychain keeps nothing, so the breadcrumbs are seeded through a mock one.
+        let keychain = MockKeyschainManager()
+        _ = SessionMetadata(sessionId: "before-start", sessionCreationDate: 1_600_000_000, using: keychain)
+        sessionManager.sessionMetadata = SessionMetadata(sessionId: "seeded",
+                                                         sessionCreationDate: Date().timeIntervalSince1970,
+                                                         using: keychain)
+        sessionManager.setupSessionMetadata()
+        let startSessionId = try XCTUnwrap(sessionManager.getSessionMetadata()?.sessionId)
+        let madeInIt = Dictionary(uniqueKeysWithValues: sessionManager.sessionSpanAttributes())
+        XCTAssertEqual(madeInIt[Keys.prevSessionId.rawValue], "before-start", "Precondition: the start session has breadcrumbs")
+
+        sessionManager.setupSessionMetadata()
+        let live = Dictionary(uniqueKeysWithValues: sessionManager.sessionSpanAttributes())
+        XCTAssertNotEqual(live[Keys.prevSessionId.rawValue], "before-start", "Precondition: the live session's breadcrumbs differ")
+
+        let stamped = values(try XCTUnwrap(sessionManager.startSessionSpanAttributes(startSessionId)))
+        XCTAssertEqual(stamped[Keys.sessionId.rawValue], .string(startSessionId))
+        for key in [Keys.prevPid.rawValue, Keys.prevSessionId.rawValue, Keys.prevSessionCreationDate.rawValue] {
+            XCTAssertNotNil(madeInIt[key], key)
+            XCTAssertEqual(stamped[key], madeInIt[key].map(AttributeValue.string), key)
+        }
+    }
+
+    /// The live session's stamp brings the view read with it, so a rotation between resolving the session
+    /// and making the span cannot pair this session's id with the next session's view.
+    func testStartSessionSpanAttributes_liveSession_carriesTheViewReadWithIt() throws {
+        sessionManager.viewProvider = { (name: "checkout", number: 3) }
+        let sessionId = try XCTUnwrap(sessionManager.getSessionMetadata()?.sessionId)
+
+        let stamped = values(try XCTUnwrap(sessionManager.startSessionSpanAttributes(sessionId)))
+        XCTAssertEqual(stamped[Keys.spanViewName.rawValue], .string("checkout"))
+        XCTAssertEqual(stamped[Keys.spanViewNumber.rawValue], .int(3))
+    }
 }

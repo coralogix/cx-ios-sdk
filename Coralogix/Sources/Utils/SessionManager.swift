@@ -89,25 +89,44 @@ struct PendingSnapshotTrigger {
 public class SessionManager {
     internal var sessionMetadata: SessionMetadata?
     private var prevSessionMetadata: SessionMetadata?
-    /// The last few sessions this process ended, oldest first, each with the sampling decision it had and
-    /// the view it ended on. A hybrid request is reported at completion, so one that started in an ended
-    /// session is reported in it from here — even if more than one rotation happened while it was in flight.
-    private var endedSessions: [EndedSession] = []
+    /// The last few sessions this process ended, oldest first, each with the stamp its spans last carried.
+    /// A hybrid request is reported at completion, so one that started in an ended session is reported in it
+    /// from here — even if more than one rotation happened while it was in flight.
+    private var endedSessions: [SessionStamp] = []
     private static let endedSessionsKept = 8
 
-    private struct EndedSession {
+    /// What a span made in one session records about it: identity, sampling decision, the session before
+    /// it (`prev_*`) and the view. Taken under `sessionLock` in one step, so no part of it can come from
+    /// another session.
+    private struct SessionStamp {
         let sessionId: String
         let creationDate: TimeInterval
         let sampledIn: Bool
-        /// nil when no view source was wired (`endingViewProvider`), so the live view is left in place.
+        let prevSession: SessionMetadata?
+        /// nil when no view source was wired (`viewProvider`), so the span's own view is left in place.
         let view: (name: String?, number: Int?)?
+
+        /// A nil value removes the attribute: the span is made later, possibly in the next session, and
+        /// must keep none of that session's breadcrumbs or view number.
+        var spanAttributes: [(key: String, value: AttributeValue?)] {
+            var attributes: [(key: String, value: AttributeValue?)] = [
+                (Keys.sessionId.rawValue, .string(sessionId)),
+                (Keys.sessionCreationDate.rawValue, .string(String(Int(creationDate)))),
+                (Keys.spanSessionSampledIn.rawValue, .string(String(sampledIn)))
+            ]
+            attributes += SessionManager.prevSessionAttributes(prevSession).map { ($0.key, $0.value.map(AttributeValue.string)) }
+            if let view {
+                attributes.append((Keys.spanViewName.rawValue, .string(view.name ?? Keys.undefined.rawValue)))
+                attributes.append((Keys.spanViewNumber.rawValue, view.number.map(AttributeValue.int)))
+            }
+            return attributes
+        }
     }
 
-    /// The live view's name and number, read under `sessionLock` at rotation so an ended session keeps the
-    /// view it ended on — the new session's view number restarts, and pairing one session's id with
-    /// another's view would misplace the event. Set by the exporter, which owns the `ViewManager`; that
-    /// queue never calls back into this class, so the read cannot deadlock.
-    var endingViewProvider: (() -> (name: String?, number: Int?))?
+    /// The live view's name and number, read under `sessionLock` into every `SessionStamp` so the view
+    /// belongs to the stamped session — view numbers restart with each session. Set by the exporter, which
+    /// owns the `ViewManager`; that queue never calls back into this class, so the read cannot deadlock.
+    var viewProvider: (() -> (name: String?, number: Int?))?
     /// The session that was live when the previous launch ended, captured once at init.
     ///
     /// `sessionMetadata.old*` cannot serve: it is re-read from the keychain on every rotation, and by
@@ -328,18 +347,17 @@ public class SessionManager {
             attrs.append((Keys.sessionCreationDate.rawValue, String(Int(current.sessionCreationDate))))
             attrs.append((Keys.spanSessionSampledIn.rawValue, String(sampledIn)))
         }
-        if let prev {
-            if let prevPid = prev.oldPid {
-                attrs.append((Keys.prevPid.rawValue, prevPid))
-            }
-            if let prevSessionId = prev.oldSessionId {
-                attrs.append((Keys.prevSessionId.rawValue, prevSessionId))
-            }
-            if let prevCreation = prev.oldSessionTimeInterval {
-                attrs.append((Keys.prevSessionCreationDate.rawValue, String(Int(prevCreation))))
-            }
-        }
+        attrs += Self.prevSessionAttributes(prev).compactMap { attr in attr.value.map { (attr.key, $0) } }
         return attrs
+    }
+
+    /// The `prev_*` breadcrumbs a span records for `prev`, every key present; a nil value is one it has none of.
+    private static func prevSessionAttributes(_ prev: SessionMetadata?) -> [(key: String, value: String?)] {
+        [
+            (Keys.prevPid.rawValue, prev?.oldPid),
+            (Keys.prevSessionId.rawValue, prev?.oldSessionId),
+            (Keys.prevSessionCreationDate.rawValue, prev?.oldSessionTimeInterval.map { String(Int($0)) })
+        ]
     }
 
     internal var lastLaunchSession: LastLaunchSession? {
@@ -389,35 +407,28 @@ public class SessionManager {
         return (current.sessionId, self._isSessionSampledIn)
     }
 
-    /// The identity and sampling stamp of session `sessionId` — the live one or one of the last few that
-    /// ended — for a request that started in it, read in one locked step after any rotation that is due.
-    /// An ended session also brings the view it ended on; the live one keeps the view the span is made with.
+    /// Everything a span made in session `sessionId` records about it — the live session or one of the last
+    /// few that ended — for a request that started in it, read in one locked step after any rotation that is
+    /// due. The span is made afterwards, so this stamp overrides whatever session it was made in.
     /// nil when it is neither: the request's session is gone, and it must not be reported in another one.
-    /// A nil value removes the attribute (an ended session that had no view yet).
     func startSessionSpanAttributes(_ sessionId: String) -> [(key: String, value: AttributeValue?)]? {
         _ = getSessionMetadata()
         sessionLock.lock()
         defer { sessionLock.unlock() }
-        if let current = self.sessionMetadata, current.sessionId == sessionId {
-            return Self.sessionAttributes(current.sessionId, current.sessionCreationDate, self._isSessionSampledIn)
-        }
-        guard let ended = self.endedSessions.last(where: { $0.sessionId == sessionId }) else { return nil }
-        var attributes = Self.sessionAttributes(ended.sessionId, ended.creationDate, ended.sampledIn)
-        if let view = ended.view {
-            attributes.append((Keys.spanViewName.rawValue, .string(view.name ?? Keys.undefined.rawValue)))
-            attributes.append((Keys.spanViewNumber.rawValue, view.number.map { .int($0) }))
-        }
-        return attributes
+        let stamp = self.sessionMetadata?.sessionId == sessionId
+            ? liveSessionStampLocked()
+            : self.endedSessions.last { $0.sessionId == sessionId }
+        return stamp?.spanAttributes
     }
 
-    private static func sessionAttributes(_ sessionId: String,
-                                          _ creationDate: TimeInterval,
-                                          _ sampledIn: Bool) -> [(key: String, value: AttributeValue?)] {
-        [
-            (Keys.sessionId.rawValue, .string(sessionId)),
-            (Keys.sessionCreationDate.rawValue, .string(String(Int(creationDate)))),
-            (Keys.spanSessionSampledIn.rawValue, .string(String(sampledIn)))
-        ]
+    /// PRECONDITION: caller holds `sessionLock`.
+    private func liveSessionStampLocked() -> SessionStamp? {
+        guard let current = self.sessionMetadata else { return nil }
+        return SessionStamp(sessionId: current.sessionId,
+                            creationDate: current.sessionCreationDate,
+                            sampledIn: self._isSessionSampledIn,
+                            prevSession: self.prevSessionMetadata,
+                            view: self.viewProvider?())
     }
 
     public func getErrorCount() -> Int {
@@ -528,11 +539,8 @@ public class SessionManager {
         let priorExisted = (self.sessionMetadata != nil)
         let endedCb = self.sessionEndedCallback
 
-        if let ending = self.sessionMetadata {
-            self.endedSessions.append(EndedSession(sessionId: ending.sessionId,
-                                                   creationDate: ending.sessionCreationDate,
-                                                   sampledIn: self._isSessionSampledIn,
-                                                   view: self.endingViewProvider?()))
+        if let ending = liveSessionStampLocked() {
+            self.endedSessions.append(ending)
             if self.endedSessions.count > Self.endedSessionsKept {
                 self.endedSessions.removeFirst(self.endedSessions.count - Self.endedSessionsKept)
             }
