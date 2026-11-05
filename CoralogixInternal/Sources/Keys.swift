@@ -29,6 +29,11 @@ public enum Keys: String {
     case crashContextSessionCreationTime = "session_creation_time"
     case crashContextCxx = "cxx"
     case crashContextCxxWhat = "what"
+    // Span attributes a recovered crash carries: the app and OS it crashed under, which the
+    // exporter reports instead of the relaunch's. Read by the exporter, not sent as such.
+    case crashedAppName = "crashed_app_name"
+    case crashedAppVersion = "crashed_app_version"
+    case crashedOsVersion = "crashed_os_version"
     // Span attribute stamped at creation alongside session_id: the sampling decision
     // belongs to the session the span was created in, and reading the live flag at
     // export time would mis-attribute spans buffered across a session rotation
@@ -272,6 +277,7 @@ public enum Keys: String {
     case queueMediaInput = "com.coralogix.mediainput"
     case queueSpanProcessingQueue = "com.coralogix.spanProcessingQueue"
     case queueViewManagerQueue = "com.coralogix.viewManagerQueue"
+    case queueSessionRecordQueue = "com.coralogix.sessionRecordQueue"
     case queueSlowFrozenReporterQueue = "com.coralogix.vitals.slowfrozen.reporter"
     case queueUserAgentQueue = "com.coralogix.userAgentQueue"
     case undefined = ""

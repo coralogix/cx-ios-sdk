@@ -7,6 +7,9 @@
 
 import Foundation
 import CoralogixInternal
+#if canImport(CoralogixBootstrap)
+import CoralogixBootstrap
+#endif
 
 #if canImport(UIKit)
 import UIKit
@@ -168,6 +171,30 @@ public class SessionManager {
     internal var samplingRoller: (() -> Bool)?
     private var _isSessionSampledIn: Bool = true
 
+    /// Identity of the live session, in the form crash context records it.
+    struct CrashStamp: Equatable {
+        let sessionId: String
+        let creationDate: TimeInterval
+        let sampledIn: Bool
+    }
+
+    /// Told the live session's identity on every rotation and sampling decision, *under*
+    /// `sessionLock`, so a crash can never be written with an identity that is already gone. The
+    /// one exception to running callbacks outside the lock: it must stay cheap and never block.
+    /// Guarded by `sessionLock`; passed to `init` so it sees the first session too.
+    private var _crashStampObserver: ((CrashStamp) -> Void)?
+
+    /// Detaches the observer, so a manager the SDK has shut down — whose foreground and tap
+    /// observers keep rotating sessions — cannot write its sessions over a newer instance's.
+    func detachCrashStampObserver() {
+        sessionLock.lock()
+        defer { sessionLock.unlock() }
+        _crashStampObserver = nil
+    }
+
+    /// The seed the first session adopts instead of minting its own id. Consumed by that rotation.
+    private var pendingLaunchSessionId: String?
+
     /// Whether the current session was sampled in. Per-session: re-rolled on every
     /// rotation. Defaults to `true` until the SDK seeds it (sessions created before the
     /// roller is installed inherit the init-time roll via `setSessionSampledIn`).
@@ -184,6 +211,16 @@ public class SessionManager {
         defer { sessionLock.unlock() }
         _isSessionSampledIn = sampledIn
         persistSessionSampledInLocked(sampledIn)
+        notifyCrashStampLocked()
+    }
+
+    /// PRECONDITION: caller holds `sessionLock`.
+    private func notifyCrashStampLocked() {
+        guard let observer = _crashStampObserver,
+              let current = sessionMetadata, !current.sessionId.isEmpty else { return }
+        observer(CrashStamp(sessionId: current.sessionId,
+                            creationDate: current.sessionCreationDate,
+                            sampledIn: _isSessionSampledIn))
     }
 
     /// Mirrors the live decision into the keychain next to the session identity, so a
@@ -197,7 +234,30 @@ public class SessionManager {
                                                 value: String(sampledIn))
     }
 
-    public var hasRecording: Bool = false
+    public var hasRecording: Bool = false {
+        didSet {
+            if hasRecording != oldValue { notifyCountersChanged() }
+        }
+    }
+
+    /// Fired after any session counter changes, outside `countersLock`.
+    private var _countersChanged: (() -> Void)?
+    var countersChanged: (() -> Void)? {
+        get {
+            countersLock.lock()
+            defer { countersLock.unlock() }
+            return _countersChanged
+        }
+        set {
+            countersLock.lock()
+            defer { countersLock.unlock() }
+            _countersChanged = newValue
+        }
+    }
+
+    private func notifyCountersChanged() {
+        countersChanged?()
+    }
 
     public var lastSnapshotEventTime: Date?
 
@@ -261,8 +321,21 @@ public class SessionManager {
         self.init(snapshotStore: SessionSnapshotStore())
     }
 
-    internal init(snapshotStore: SessionSnapshotStore) {
+    /// The manager the SDK starts with: its first session adopts the id minted at image load, and
+    /// every session it starts is written into the crash context.
+    @usableFromInline
+    static func forLaunch() -> SessionManager {
+        SessionManager(snapshotStore: SessionSnapshotStore(),
+                       launchSessionId: CRXCrashBootstrap.claimLaunchSession(),
+                       crashStampObserver: CrashContextSession.write)
+    }
+
+    internal init(snapshotStore: SessionSnapshotStore,
+                  launchSessionId: String? = nil,
+                  crashStampObserver: ((CrashStamp) -> Void)? = nil) {
         self.snapshotStore = snapshotStore
+        self.pendingLaunchSessionId = launchSessionId
+        self._crashStampObserver = crashStampObserver
         self.setupSessionMetadata()
         self.lastLaunchSession = self.sessionMetadata.flatMap(LastLaunchSession.init(previousOf:))
         NotificationCenter.default.addObserver(self,
@@ -281,22 +354,35 @@ public class SessionManager {
     
     public func incrementErrorCounter() {
         countersLock.lock()
-        defer { countersLock.unlock() }
         errorCount += 1
+        countersLock.unlock()
+        notifyCountersChanged()
     }
 
     public func decrementErrorCounter() {
         countersLock.lock()
-        defer { countersLock.unlock() }
-        if errorCount > 0 {
+        let changed = errorCount > 0
+        if changed {
             errorCount -= 1
         }
+        countersLock.unlock()
+        if changed { notifyCountersChanged() }
     }
     
     public func incrementClickCounter() {
         countersLock.lock()
-        defer { countersLock.unlock() }
         clickCount += 1
+        countersLock.unlock()
+        notifyCountersChanged()
+    }
+
+    /// The live session id as it stands, without the rotation check `getSessionMetadata` runs.
+    /// nil when there is none, or after shutdown.
+    var currentSessionId: String? {
+        sessionLock.lock()
+        defer { sessionLock.unlock() }
+        guard let id = sessionMetadata?.sessionId, !id.isEmpty else { return nil }
+        return id
     }
     
     /// Whether `sessionId` is the session the counters and snapshot throttle currently describe.
@@ -489,6 +575,7 @@ public class SessionManager {
         self.clickCount = 0
         countersLock.unlock()
         self.hasRecording = false
+        notifyCountersChanged()
     }
     
     @objc private func appDidBecomeActiveNotification(notification: Notification) {
@@ -546,7 +633,9 @@ public class SessionManager {
             }
         }
         self.prevSessionMetadata = self.sessionMetadata
-        self.sessionMetadata = SessionMetadata(sessionId: UUID().uuidString.lowercased(),
+        let newSessionId = self.pendingLaunchSessionId ?? UUID().uuidString.lowercased()
+        self.pendingLaunchSessionId = nil
+        self.sessionMetadata = SessionMetadata(sessionId: newSessionId,
                                                sessionCreationDate: Date().timeIntervalSince1970,
                                                using: KeychainManager())
         // Roll the new session's sampling decision under the same lock acquisition that
@@ -576,6 +665,7 @@ public class SessionManager {
         // nil throttle above already guarantees the new session's first qualifying
         // event emits a snapshot carrying the current user context.
         self._pendingSnapshotTrigger = nil
+        notifyCrashStampLocked()
 
         return RotationPendingCallbacks(
             endedCallback: endedCb,

@@ -95,7 +95,7 @@ public class CoralogixRum {
     public init(
         options: CoralogixExporterOptions,
         sdkFramework: SdkFramework = .swift,
-        sessionManager: SessionManager? = SessionManager()
+        sessionManager: SessionManager? = SessionManager.forLaunch()
     ){
         CoralogixRum.mobileSDK = MobileSDK(sdkFramework: sdkFramework)
         Log.isDebug = options.debug
@@ -150,6 +150,9 @@ public class CoralogixRum {
         // re-reading the live flag would let a concurrent rotation hide a sampled-in transition
         // from the callback meant to act on it.
         sessionManager.setSessionSampledIn(initialSampledIn)
+        // The first record of this launch: written at adoption, whatever the sampling decision,
+        // so a crash in a sampled-out session that still reports errors finds its session.
+        self.coralogixExporter?.recordLiveSession()
         sessionManager.samplingRoller = { options.sdkSampler.shouldInitialized() }
         self.coralogixExporter?.updateSessionSampling(sampledIn: initialSampledIn)
         sessionManager.samplingReevaluationCallback = { [weak self] _, sampledIn in
@@ -562,6 +565,7 @@ public class CoralogixRum {
         // make it visible. Re-arming a crash handler after an explicit shutdown is the case that
         // matters: shutdown is what a host calls when consent is withdrawn.
         self.sessionManager?.samplingReevaluationCallback = nil
+        self.sessionManager?.detachCrashStampObserver()
     }
     
     public var isInitialized: Bool { return CoralogixRum.isInitialized }

@@ -230,7 +230,7 @@ class CxRumBuilder {
         updateSessionCounters(for: eventContext)
         let snapshot = buildSnapshotContextIfNeeded(for: eventContext, pendingTrigger: pendingTrigger)
         if let snapshot {
-            sessionManager.snapshotStore.persist(SessionSnapshotRecord(sessionId: sessionId, snapshot: snapshot))
+            sessionManager.snapshotStore.persistCounters(SessionSnapshotRecord(sessionId: sessionId, snapshot: snapshot))
         }
         return snapshot
     }

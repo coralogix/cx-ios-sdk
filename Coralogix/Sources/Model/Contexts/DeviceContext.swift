@@ -26,7 +26,8 @@ struct DeviceContext {
         self.networkConnectionSubtype = otel.getAttribute(forKey: SemanticAttributes.networkConnectionSubtype.rawValue) as? String ?? ""
         self.deviceModel = Global.getDeviceModel()
         self.operatingSystem = Global.getOs()
-        self.osVersion = Global.osVersionInfo()
+        // A recovered crash reports the OS version it crashed under.
+        self.osVersion = otel.getAttribute(forKey: Keys.crashedOsVersion.rawValue) as? String ?? Global.osVersionInfo()
         self.emulator = Global.isEmulator()
         self.deviceName = Global.getDeviceName()
         self.userAgent = UserAgentManager.shared.getUserAgent()

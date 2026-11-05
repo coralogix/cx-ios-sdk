@@ -39,9 +39,17 @@ final class CrashContextTests: XCTestCase {
     }
 
     private func liveReportContext() throws -> CrashContextEnvelope? {
-        let reporter = try XCTUnwrap(CRXCrashContext.activeReporter)
-        let report = try PLCrashReport(data: reporter.generateLiveReportAndReturnError())
-        return CrashContextEnvelope(data: report.customData)
+        CrashContextEnvelope(data: try CrashContextTests.liveReport().customData)
+    }
+
+    /// A live report carrying the custom data our reporter holds. Generated on a reporter that
+    /// does not symbolicate: the active one symbolicates every thread, which takes ~30 s per report.
+    static func liveReport() throws -> PLCrashReport {
+        let active = try XCTUnwrap(CRXCrashContext.activeReporter)
+        let reporter = try XCTUnwrap(PLCrashReporter(configuration: PLCrashReporterConfig(signalHandlerType: .BSD,
+                                                                                         symbolicationStrategy: [])))
+        reporter.customData = active.customData
+        return try PLCrashReport(data: reporter.generateLiveReportAndReturnError())
     }
 
     private let session: [String: Any] = [
@@ -63,8 +71,7 @@ final class CrashContextTests: XCTestCase {
 
     func test_reachesTheMapper_throughARealReport() throws {
         CRXCrashContext.setSection(Keys.crashContextSession.rawValue, value: session)
-        let reporter = try XCTUnwrap(CRXCrashContext.activeReporter)
-        let report = try PLCrashReport(data: reporter.generateLiveReportAndReturnError())
+        let report = try Self.liveReport()
 
         let mapped = CrashReportMapper.map(PLCrashReportReader(report: report))
 

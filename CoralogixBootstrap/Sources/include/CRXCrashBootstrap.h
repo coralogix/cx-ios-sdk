@@ -47,6 +47,16 @@ NS_ASSUME_NONNULL_BEGIN
 /// failure this target exists to prevent.
 @property (class, nonatomic, readonly) BOOL disabledByHostApp;
 
+/// Returns the session id minted at image load, exactly once per process; `nil` afterwards, or
+/// when `+load` never ran. The first session the SDK starts adopts it, so a crash report written
+/// from load onwards already names that session. Minted even when the host app opted out, since
+/// it costs nothing and crash context is still written once the fallback reporter is enabled.
++ (nullable NSString *)claimLaunchSession;
+
+/// Makes the launch session claimable again. Tests only: the first test to build the SDK would
+/// otherwise consume it for the whole test process.
++ (void)resetLaunchSessionClaimForTesting;
+
 @end
 
 NS_ASSUME_NONNULL_END

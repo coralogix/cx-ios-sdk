@@ -200,8 +200,7 @@ extension CoralogixRum {
     internal func emitRecoveredCrash(_ crash: MappedCrash) -> String {
         let span = makeSpan(event: .error, source: .console, severity: .error,
                             startTime: crash.crashTime, startsNewTrace: true)
-        self.overrideSessionForCrashedSession(on: span)
-        self.overrideViewForCrashedSession(on: span)
+        self.attribute(span, to: self.crashedSession(of: crash))
 
         span.setAttribute(key: Keys.crashEventId.rawValue, value: crash.crashId)
         span.setAttribute(key: Keys.isCrash.rawValue, value: true)
@@ -247,18 +246,64 @@ extension CoralogixRum {
         }
     }
 
-    /// Replaces the view `makeSpan` froze onto the crash span — the relaunch process's
-    /// live view, which is empty this early in init — with the view that was on-screen
-    /// when the crash happened, recovered from the keychain into `ViewManager.prevViewName`.
-    /// No-op when the crashed session never showed a view, so the span keeps the empty
-    /// frozen view rather than inventing one.
-    /// Internal (rather than private) so unit tests can exercise it directly.
-    internal func overrideViewForCrashedSession(on span: any Span) {
-        guard let prevView = self.coralogixExporter?.getViewManager().getPrevDictionary()[Keys.view.rawValue] as? String,
-              !prevView.isEmpty else { return }
-        span.setAttribute(key: Keys.spanViewName.rawValue, value: prevView)
+    /// The session a recovered crash happened in, and what that session last recorded.
+    struct CrashedSession: Equatable {
+        let sessionId: String
+        /// nil for a session seeded at image load that the SDK never adopted.
+        let creationDate: TimeInterval?
+        let sampledIn: Bool?
+        let record: SessionSnapshotRecord?
     }
-    
+
+    /// The session named in the report's own crash context. Only a report without one — written
+    /// by an SDK version that did not record it — falls back to the session the keychain says
+    /// was live when the previous launch ended: for a report that names its session, the keychain
+    /// may hold a different one.
+    internal func crashedSession(of crash: MappedCrash) -> CrashedSession? {
+        guard let sessionManager = self.coralogixExporter?.getSessionManager() else { return nil }
+        let store = sessionManager.snapshotStore
+        if let session = crash.context?.session {
+            return CrashedSession(sessionId: session.id,
+                                  creationDate: session.creationTimeMillis.map { TimeInterval($0) / 1000 },
+                                  sampledIn: session.sampledIn,
+                                  record: store.record(for: session.id))
+        }
+        guard let last = sessionManager.lastLaunchSession else { return nil }
+        return CrashedSession(sessionId: last.sessionId,
+                              creationDate: last.creationDate,
+                              sampledIn: last.sampledIn,
+                              record: store.record(for: last.sessionId))
+    }
+
+    /// Replaces what `makeSpan` stamped from the relaunch — session, view, app and OS version —
+    /// with the crashed session's. The view and versions come from that session's own record; with
+    /// none the view is left empty rather than borrowed from another session.
+    ///
+    /// An unknown sampling decision is stamped sampled-in: a crash misclassified as sampled-out
+    /// would be dropped and purged as resolved.
+    internal func attribute(_ span: any Span, to crashed: CrashedSession?) {
+        guard let crashed else {
+            span.setAttribute(key: Keys.spanSessionSampledIn.rawValue, value: String(true))
+            return
+        }
+        span.setAttribute(key: Keys.sessionId.rawValue, value: crashed.sessionId)
+        if let creationDate = crashed.creationDate {
+            span.setAttribute(key: Keys.sessionCreationDate.rawValue, value: String(Int(creationDate)))
+        }
+        span.setAttribute(key: Keys.spanSessionSampledIn.rawValue, value: String(crashed.sampledIn ?? true))
+
+        let record = crashed.record
+        span.setAttribute(key: Keys.spanViewName.rawValue,
+                          value: AttributeValue.string(record?.viewName ?? Keys.undefined.rawValue))
+        span.setAttribute(key: Keys.spanViewNumber.rawValue, value: record?.viewNumber.map(AttributeValue.int))
+        let versions: [(Keys, String?)] = [(.crashedAppName, record?.appName),
+                                           (.crashedAppVersion, record?.appVersion),
+                                           (.crashedOsVersion, record?.osVersion)]
+        for case let (key, value?) in versions {
+            span.setAttribute(key: key.rawValue, value: value)
+        }
+    }
+
     func isDebuggerAttached() -> Bool {
         var info = kinfo_proc()
         var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, getpid()]

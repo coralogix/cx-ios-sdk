@@ -33,37 +33,35 @@ final class CrashInstrumentationTests: XCTestCase {
 
     // A crash is recorded on the *next* launch, where the live view is empty this early in
     // init — so makeSpan freezes the empty sentinel onto the crash span. The span must be
-    // corrected to the screen the app was on when it crashed (recovered from the keychain
-    // into prevViewName), otherwise the crash reports an empty view_context.
-    func test_overrideViewForCrashedSession_stampsCrashTimeView_overBlankRelaunchView() throws {
+    // corrected to the screen the crashed session's record holds, otherwise the crash reports an
+    // empty view_context.
+    func test_attributeCrashedSession_stampsTheRecordedView_overBlankRelaunchView() throws {
         let rum = CoralogixRum(options: options)
-        let viewManager = try XCTUnwrap(rum.coralogixExporter?.getViewManager())
 
         let span = rum.makeSpan(event: .error, source: .console, severity: .error)
         XCTAssertEqual(frozenViewName(of: span), Keys.undefined.rawValue,
                        "precondition: a relaunch crash span starts with the empty frozen view")
 
-        // The crashed session's last screen, recovered from the keychain at ViewManager init.
-        viewManager.prevViewName = "CheckoutBeforeCrash"
-
-        rum.overrideViewForCrashedSession(on: span)
+        let record = SessionSnapshotRecord(sessionId: "crashed", errorCount: 0, viewCount: 1, actionCount: 0,
+                                           hasRecording: false, viewName: "CheckoutBeforeCrash", viewNumber: 0)
+        rum.attribute(span, to: .init(sessionId: "crashed", creationDate: nil, sampledIn: true, record: record))
 
         XCTAssertEqual(frozenViewName(of: span), "CheckoutBeforeCrash",
                        "crash span must report the crash-time view, not the blank relaunch view")
     }
 
     // No screen was ever shown in the crashed session (crash before first appear): there is
-    // nothing to recover, so the empty frozen view is left untouched rather than invented.
-    func test_overrideViewForCrashedSession_noPrevView_keepsEmptyFrozenView() throws {
+    // nothing to recover, so the view stays empty rather than borrowed from the keychain's
+    // last screen, which can belong to another session.
+    func test_attributeCrashedSession_noRecordedView_keepsEmptyView() throws {
         let rum = CoralogixRum(options: options)
-        let viewManager = try XCTUnwrap(rum.coralogixExporter?.getViewManager())
-        viewManager.prevViewName = nil
+        rum.coralogixExporter?.getViewManager().prevViewName = "ScreenOfAnotherSession"
 
         let span = rum.makeSpan(event: .error, source: .console, severity: .error)
-        rum.overrideViewForCrashedSession(on: span)
+        rum.attribute(span, to: .init(sessionId: "crashed", creationDate: nil, sampledIn: true, record: nil))
 
         XCTAssertEqual(frozenViewName(of: span), Keys.undefined.rawValue,
-                       "with no crash-time view on record, the empty frozen view is left untouched")
+                       "with no crash-time view on record, the view is left empty")
     }
 
     private func frozenViewName(of span: any Span) -> String? {

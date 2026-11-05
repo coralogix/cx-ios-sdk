@@ -127,17 +127,61 @@ public class CoralogixExporter: SpanExporter {
         self.networkManager = networkManager
         self.viewManager = viewManager
         self.metricsManager = metricsManager
-        
+        self.sessionRecorder = LiveSessionRecorder(store: sessionManager.snapshotStore)
+
         self.sessionManager.viewProvider = { [weak self] in
             self?.viewManager.currentView ?? (nil, nil)
         }
         self.sessionManager.sessionEndedCallback = { [weak self] in
+            // Before the resets: they clear what the ended session's record must keep.
+            self?.recordEndedSession()
             self?.viewManager.reset()
             self?.sessionManager.reset()
             self?.screenshotManager.reset()
         }
+        self.sessionManager.countersChanged = { [weak self] in
+            self?.recordLiveSession()
+        }
     }
-    
+
+    /// Writes the live session's record; called whenever what a crash would report changes.
+    let sessionRecorder: LiveSessionRecorder
+
+    /// Records the live session as it stands when the write runs. A write that runs after the
+    /// session it was scheduled for has ended writes nothing: the ended session got its final
+    /// record from `recordEndedSession`, and the live one gets its own write from the rotation.
+    func recordLiveSession() {
+        guard let sessionId = sessionManager.currentSessionId else { return }
+        sessionRecorder.record { [weak self] in
+            guard let self, self.sessionManager.currentSessionId == sessionId else { return nil }
+            return self.sessionRecord(sessionId)
+        }
+    }
+
+    /// The final record of the session a rotation just ended, taken before its counters reset.
+    private func recordEndedSession() {
+        guard let ended = sessionManager.getPrevSessionMetadata()?.sessionId, !ended.isEmpty else { return }
+        let record = sessionRecord(ended)
+        sessionRecorder.record { record }
+    }
+
+    /// What a crash right now would report about `sessionId`. View reads go through
+    /// `ViewManager`'s queue after any change already submitted to it, so they see that change.
+    private func sessionRecord(_ sessionId: String) -> SessionSnapshotRecord {
+        let options = getOptions()
+        let view = viewManager.currentView
+        return SessionSnapshotRecord(sessionId: sessionId,
+                                     errorCount: sessionManager.getErrorCount(),
+                                     viewCount: viewManager.getUniqueViewCount(),
+                                     actionCount: sessionManager.getClickCount(),
+                                     hasRecording: sessionManager.doesSessionHasRecording(),
+                                     viewName: view.name,
+                                     viewNumber: view.name == nil ? nil : view.number,
+                                     appName: options.application,
+                                     appVersion: options.version,
+                                     osVersion: Global.osVersionInfo())
+    }
+
     var pendingSpans: [SpanData] = []
     var endPoint: String {
       return "\(getOptions().coralogixDomain.rawValue)\(Global.coralogixPath.rawValue)"
@@ -167,6 +211,7 @@ public class CoralogixExporter: SpanExporter {
         } else if cxView.state == .notifyOnDisappear {
             self.viewManager.set(cxView: nil)
         }
+        self.recordLiveSession()
     }
     
     public func update(userContext: UserContext?) {
@@ -186,6 +231,7 @@ public class CoralogixExporter: SpanExporter {
             $0.version = version
             $0.application = application
         }
+        self.recordLiveSession()
     }
 
     /// Updates the per-session sampling decision. Called once at init and again on every session
@@ -415,8 +461,10 @@ public class CoralogixExporter: SpanExporter {
         }
         
         let options = getOptions()
-        let metadata = VersionMetadata(appName: options.application,
-                                         appVersion: options.version)
+        // A recovered crash reports the app version it crashed under, not this launch's.
+        let crashedApp = { (key: Keys) in otelSpan.attributes[key.rawValue]?.description }
+        let metadata = VersionMetadata(appName: crashedApp(.crashedAppName) ?? options.application,
+                                       appVersion: crashedApp(.crashedAppVersion) ?? options.version)
         
         // CxSpan init can fail if session attributes are missing
         guard let cxSpan = CxSpan(otel: otelSpan,

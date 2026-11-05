@@ -6,13 +6,20 @@
 import Foundation
 import CoralogixInternal
 
-/// The counters one session's snapshot carried, tagged with that session's id.
+/// One session as a crash in it must report it: its counters, the view it was on, and the app
+/// and OS it ran under. The context fields are optional so records written by earlier versions,
+/// which had counters only, still decode.
 struct SessionSnapshotRecord: Codable, Equatable {
     let sessionId: String
     var errorCount: Int
     let viewCount: Int
     let actionCount: Int
     let hasRecording: Bool
+    var viewName: String? = nil
+    var viewNumber: Int? = nil
+    var appName: String? = nil
+    var appVersion: String? = nil
+    var osVersion: String? = nil
 }
 
 extension SessionSnapshotRecord {
@@ -22,6 +29,17 @@ extension SessionSnapshotRecord {
                   viewCount: snapshot.viewCount,
                   actionCount: snapshot.actionCount,
                   hasRecording: snapshot.hasRecording)
+    }
+
+    /// These counters with `other`'s view and versions.
+    func withContext(of other: SessionSnapshotRecord) -> SessionSnapshotRecord {
+        var record = self
+        record.viewName = other.viewName
+        record.viewNumber = other.viewNumber
+        record.appName = other.appName
+        record.appVersion = other.appVersion
+        record.osVersion = other.osVersion
+        return record
     }
 
     func snapshotContext() -> SnapshotContext {
@@ -77,6 +95,19 @@ final class SessionSnapshotStore {
     func persist(_ record: SessionSnapshotRecord) {
         lock.lock()
         defer { lock.unlock() }
+        persistLocked(record)
+    }
+
+    /// Persists counters taken from an emitted snapshot, keeping the view and versions the live
+    /// record already holds for that session: a snapshot does not know them.
+    func persistCounters(_ record: SessionSnapshotRecord) {
+        lock.lock()
+        defer { lock.unlock() }
+        let current = latestRecord?.sessionId == record.sessionId ? latestRecord : nil
+        persistLocked(current.map { record.withContext(of: $0) } ?? record)
+    }
+
+    private func persistLocked(_ record: SessionSnapshotRecord) {
         guard record != latestRecord else { return }
         if let latestRecord, latestRecord.sessionId != record.sessionId {
             previousRecord = latestRecord
