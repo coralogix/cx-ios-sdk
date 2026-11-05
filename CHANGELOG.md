@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Release-mechanics commits (version bumps, podspec/script tweaks, README edits) are
 omitted; the focus here is user-facing behavior changes.
 
+## [2.22.1] - 2026-11-05
+
+### Fixed
+- A network request that returns HTTP 400 is now reported with error severity, like every other 4xx and 5xx response.
+
 ## [2.22.0] - 2026-10-29
 
 ### Added
