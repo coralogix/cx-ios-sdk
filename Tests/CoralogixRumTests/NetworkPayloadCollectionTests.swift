@@ -718,4 +718,31 @@ final class NetworkPayloadCollectionTests: XCTestCase {
         XCTAssertTrue(payload == nil || payload == "",
                       "Empty response body should be handled gracefully (nil or empty)")
     }
+
+    // MARK: - Severity
+
+    func test_severity_http400_isError() throws {
+        let url = try XCTUnwrap(URL(string: "\(Self.baseURL)/severity-400"))
+        PayloadTestURLProtocol.stub = (400, [:], Data())
+
+        startRUM(rules: [])
+        performRequest(url: url)
+
+        let span = try XCTUnwrap(waitForNetworkSpan(urlContains: "/severity-400"), "Network span must be exported")
+        XCTAssertEqual(span.attributes[Keys.severity.rawValue]?.description,
+                       String(CoralogixLogSeverity.error.rawValue),
+                       "A 400 response must be reported with error severity")
+    }
+
+    func test_severity_http399_isInfo() throws {
+        let url = try XCTUnwrap(URL(string: "\(Self.baseURL)/severity-399"))
+        PayloadTestURLProtocol.stub = (399, [:], Data())
+
+        startRUM(rules: [])
+        performRequest(url: url)
+
+        let span = try XCTUnwrap(waitForNetworkSpan(urlContains: "/severity-399"), "Network span must be exported")
+        XCTAssertEqual(span.attributes[Keys.severity.rawValue]?.description,
+                       String(CoralogixLogSeverity.info.rawValue))
+    }
 }

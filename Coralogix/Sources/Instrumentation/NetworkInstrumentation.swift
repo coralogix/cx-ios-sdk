@@ -209,8 +209,7 @@ extension CoralogixRum {
     /// Static handler so `URLSessionInstrumentationConfiguration` does not strongly retain a `CoralogixRum` instance across SDK reinitializations (CX-37986).
     private static func handleReceivedResponse(response: URLResponse, data: DataOrFile?, span: any Span, request: URLRequest?) {
         if let httpResponse = response as? HTTPURLResponse {
-            let statusCode = httpResponse.statusCode
-            let logSeverity = statusCode > 400 ?  CoralogixLogSeverity.error : CoralogixLogSeverity.info
+            let logSeverity = severity(forHttpStatusCode: httpResponse.statusCode)
             span.setAttribute(key: Keys.severity.rawValue, value: AttributeValue.int(logSeverity.rawValue))
         }
         
@@ -322,7 +321,7 @@ extension CoralogixRum {
 
         let statusCodeInt = coerceToInt(dictionary[Keys.statusCode.rawValue])
         if let status = statusCodeInt {
-            let logSeverity: CoralogixLogSeverity = status >= 400 ? .error : .info
+            let logSeverity = Self.severity(forHttpStatusCode: status)
             span.setAttribute(key: Keys.severity.rawValue, value: AttributeValue.int(logSeverity.rawValue))
         }
 
@@ -456,6 +455,12 @@ extension CoralogixRum {
     internal static func coerceToDurationMs(_ value: Any?) -> Double? {
         guard let raw = coerceToRawDouble(value), raw.isFinite else { return nil }
         return (0...maxHybridDurationMs).contains(raw) ? raw : nil
+    }
+
+    /// Severity of a network event: 4xx and 5xx responses are errors, everything else is info.
+    /// Shared by the native and hybrid paths so both classify a status code the same way.
+    internal static func severity(forHttpStatusCode statusCode: Int) -> CoralogixLogSeverity {
+        return statusCode >= 400 ? .error : .info
     }
 
     /// Coerces hybrid payload value (Int, Double, NSNumber, String) to Int for status_code.
