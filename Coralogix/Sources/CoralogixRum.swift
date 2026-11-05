@@ -321,6 +321,7 @@ public class CoralogixRum {
             viewManager: self.viewManager,
             metricsManager: self.metricsManager
         )
+        exporter.reachability = self.networkManager
         self.coralogixExporter = exporter
     }
     

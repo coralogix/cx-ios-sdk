@@ -160,7 +160,7 @@ func makeSamplingSpan(eventType: CoralogixEventType,
 /// Test-only `SpanUploading` that returns `.success` without network I/O. Shared by all
 /// sampling-decoupling tests so we don't keep duplicating per-file mocks.
 final class SamplingMockSpanUploader: SpanUploading {
-    func upload(_ spans: [[String: Any]], endPoint: String) -> SpanExporterResultCode {
-        return .success
+    func upload(_ spans: [[String: Any]], endPoint: String, kind: SpanUploadKind) -> SpanUploadResult {
+        return .delivered
     }
 }

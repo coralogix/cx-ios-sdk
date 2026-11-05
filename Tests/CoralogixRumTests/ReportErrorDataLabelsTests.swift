@@ -25,9 +25,9 @@ final class ReportErrorDataLabelsTests: XCTestCase {
 
     private final class StubUploader: SpanUploading {
         private(set) var uploadedBatches: [[[String: Any]]] = []
-        func upload(_ spans: [[String: Any]], endPoint: String) -> SpanExporterResultCode {
+        func upload(_ spans: [[String: Any]], endPoint: String, kind: SpanUploadKind) -> SpanUploadResult {
             uploadedBatches.append(spans)
-            return .success
+            return .delivered
         }
         var uploadedEvents: [[String: Any]] { uploadedBatches.flatMap { $0 } }
     }

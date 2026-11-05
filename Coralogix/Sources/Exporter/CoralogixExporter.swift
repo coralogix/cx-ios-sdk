@@ -26,7 +26,16 @@ public class CoralogixExporter: SpanExporter {
     private var networkManager: NetworkProtocol
     private var metricsManager: MetricsManager
     private var screenshotManager = ScreenshotManager()
-    lazy var spanUploader: SpanUploading = SpanUploader(options: self.getOptions())
+    /// Set by `CoralogixRum` to its `NetworkManager`; read from the upload thread. Nil means
+    /// unknown, treated as online, so a failed upload still counts — today's behaviour.
+    private weak var _reachability: NetworkReachability?
+    private let reachabilityLock = NSLock()
+    internal var reachability: NetworkReachability? {
+        get { reachabilityLock.lock(); defer { reachabilityLock.unlock() }; return _reachability }
+        set { reachabilityLock.lock(); defer { reachabilityLock.unlock() }; _reachability = newValue }
+    }
+    lazy var spanUploader: SpanUploading = SpanUploader(options: self.getOptions(),
+                                                        isOnline: { [weak self] in self?.reachability?.isOnline ?? true })
 
     private let spanProcessingQueue = DispatchQueue(label: Keys.queueSpanProcessingQueue.rawValue)
 
@@ -301,7 +310,7 @@ public class CoralogixExporter: SpanExporter {
 
                 var result: SpanExporterResultCode = .success
                 if !crashSpans.isEmpty {
-                    result = spanUploader.upload(crashSpans, endPoint: self.endPoint)
+                    result = spanUploader.upload(crashSpans, endPoint: self.endPoint).resultCode
                     recordCrashUpload(ids: crashIds, succeeded: result == .success)
                 }
                 if !editableSpans.isEmpty {
@@ -310,7 +319,7 @@ public class CoralogixExporter: SpanExporter {
                 }
                 return result
             }
-            let result = spanUploader.upload(cxSpansDictionary, endPoint: self.endPoint)
+            let result = spanUploader.upload(cxSpansDictionary, endPoint: self.endPoint).resultCode
             if !crashIds.isEmpty {
                 recordCrashUpload(ids: crashIds, succeeded: result == .success)
             }

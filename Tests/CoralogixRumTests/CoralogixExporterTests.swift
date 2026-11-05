@@ -1359,9 +1359,9 @@ private class MockSpanUploader: SpanUploading {
     var uploadCalled = false
     var uploadedSpans: [[String: Any]] = []
 
-    func upload(_ spans: [[String: Any]], endPoint: String) -> SpanExporterResultCode {
+    func upload(_ spans: [[String: Any]], endPoint: String, kind: SpanUploadKind) -> SpanUploadResult {
         uploadCalled = true
         uploadedSpans = spans
-        return .success
+        return .delivered
     }
 }

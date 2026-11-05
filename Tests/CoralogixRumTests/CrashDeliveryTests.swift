@@ -31,9 +31,10 @@ final class CrashDeliveryTests: XCTestCase {
     private final class StubUploader: SpanUploading {
         var result: SpanExporterResultCode = .success
         private(set) var uploadedBatches: [[[String: Any]]] = []
-        func upload(_ spans: [[String: Any]], endPoint: String) -> SpanExporterResultCode {
+        private static let serverError = SpanUploadResult(disposition: .retryable, httpStatus: 500, retryAfter: nil, countsAsFailedUpload: true)
+        func upload(_ spans: [[String: Any]], endPoint: String, kind: SpanUploadKind) -> SpanUploadResult {
             uploadedBatches.append(spans)
-            return result
+            return result == .success ? .delivered : Self.serverError
         }
         var uploadedEvents: [[String: Any]] { uploadedBatches.flatMap { $0 } }
     }

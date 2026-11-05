@@ -15,7 +15,14 @@ public protocol NetworkProtocol {
     func getNetworkType() -> String
 }
 
-public class NetworkManager: NetworkProtocol {
+/// Whether the device has a usable network path right now. Internal on purpose: crash delivery
+/// needs it to decide whether a failed upload counts, but `NetworkProtocol` is public and may
+/// have conformers outside the SDK.
+protocol NetworkReachability: AnyObject {
+    var isOnline: Bool { get }
+}
+
+public class NetworkManager: NetworkProtocol, NetworkReachability {
     let monitor = NWPathMonitor()
     var networkType = "No connection or unknown type"
     
@@ -26,6 +33,11 @@ public class NetworkManager: NetworkProtocol {
     
     public func getNetworkType() -> String {
         return self.networkType
+    }
+
+    /// `currentPath` is safe to read from any thread once the monitor has started.
+    var isOnline: Bool {
+        monitor.currentPath.status == .satisfied
     }
     
     private func checkConnectionType() {

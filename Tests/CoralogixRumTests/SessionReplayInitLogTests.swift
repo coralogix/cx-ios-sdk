@@ -112,10 +112,10 @@ final class CapturingSpanUploader: SpanUploading {
     private let lock = NSLock()
     private var uploaded: [[String: Any]] = []
 
-    func upload(_ spans: [[String: Any]], endPoint: String) -> SpanExporterResultCode {
+    func upload(_ spans: [[String: Any]], endPoint: String, kind: SpanUploadKind) -> SpanUploadResult {
         lock.lock(); defer { lock.unlock() }
         uploaded.append(contentsOf: spans)
-        return .success
+        return .delivered
     }
 
     /// The `text.cx_rum` dict of every uploaded span, in upload order.
