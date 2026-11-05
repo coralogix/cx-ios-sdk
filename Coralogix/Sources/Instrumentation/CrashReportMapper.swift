@@ -41,6 +41,8 @@ protocol CrashReportReading {
     var threads: [CrashThread] { get }
     /// The main binary's load address and architecture, as the report's text gives them.
     var mainBinaryImage: (baseAddress: String, arch: String)? { get }
+    /// The custom data `CRXCrashContext` wrote, as the report carries it.
+    var customData: Data? { get }
 }
 
 /// A crash report reduced to the values the crash span carries.
@@ -67,6 +69,8 @@ struct MappedCrash: Equatable {
     let triggeredByThread: Int?
     let baseAddress: String?
     let arch: String?
+    /// The session and C++ context written into the report, when it has a readable one.
+    let context: CrashContextEnvelope?
 }
 
 enum CrashReportMapper {
@@ -94,7 +98,8 @@ enum CrashReportMapper {
                            threadsJSON: Helper.convertArrayOfStringToJsonString(array: threadStrings),
                            triggeredByThread: threads.isEmpty ? nil : 0,
                            baseAddress: report.mainBinaryImage?.baseAddress,
-                           arch: report.mainBinaryImage?.arch)
+                           arch: report.mainBinaryImage?.arch,
+                           context: CrashContextEnvelope(data: report.customData))
     }
 
     static func kind(of report: CrashReportReading) -> MappedCrash.Kind {
@@ -215,6 +220,7 @@ struct PLCrashReportReader: CrashReportReading {
     var processName: String? { report.processInfo.processName }
     var processID: UInt { report.processInfo.processID }
     var applicationIdentifier: String? { report.applicationInfo.applicationIdentifier }
+    var customData: Data? { report.customData }
 
     var threads: [CrashThread] {
         report.threads.compactMap { $0 as? PLCrashReportThreadInfo }.map { thread in

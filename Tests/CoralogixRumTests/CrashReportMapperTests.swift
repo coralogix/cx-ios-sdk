@@ -35,6 +35,7 @@ final class CrashReportMapperTests: XCTestCase {
             ])
         ]
         var mainBinaryImage: (baseAddress: String, arch: String)? = ("0x100000000", "arm64")
+    var customData: Data?
     }
 
     // MARK: - Mapping

@@ -23,6 +23,12 @@ public enum Keys: String {
     case nativeVersion = "native_version"
     case sessionId = "session_id"
     case sessionCreationDate = "session_creation_date"
+    // Crash context written into each PLCrashReporter report; mirrors CRXCrashContext.h.
+    case crashContextVersion = "v"
+    case crashContextSession = "session"
+    case crashContextSessionCreationTime = "session_creation_time"
+    case crashContextCxx = "cxx"
+    case crashContextCxxWhat = "what"
     // Span attribute stamped at creation alongside session_id: the sampling decision
     // belongs to the session the span was created in, and reading the live flag at
     // export time would mis-attribute spans buffered across a session rotation

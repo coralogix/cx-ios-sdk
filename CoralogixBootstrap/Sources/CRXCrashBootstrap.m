@@ -4,6 +4,7 @@
 //
 
 #import "CRXCrashBootstrap.h"
+#import "CRXCrashContext.h"
 
 #if __has_include(<CrashReporter/CrashReporter.h>)
 #import <CrashReporter/CrashReporter.h>
@@ -18,7 +19,9 @@
 static NSString *const kCRXDisableEarlyCrashHandlerKey = @"CoralogixDisableEarlyCrashHandler";
 
 /// Written once from `+load`, before any other code of ours can run, and read-only afterwards.
-/// That ordering is the synchronization — no lock is needed.
+/// That ordering is the synchronization — no lock is needed. The reporter crash context is
+/// written through is `CRXCrashContext.activeReporter`, which the init-time fallback can set
+/// later and so is lock-guarded there.
 static PLCrashReporter *_crx_reporter;
 static NSError *_crx_enableError;
 static BOOL _crx_disabledByHostApp;
@@ -56,6 +59,7 @@ static BOOL _crx_disabledByHostApp;
         NSError *error = nil;
         if ([reporter enableCrashReporterAndReturnError:&error]) {
             _crx_reporter = reporter;
+            CRXCrashContext.activeReporter = reporter;
         } else {
             _crx_enableError = error;
         }

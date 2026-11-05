@@ -27,6 +27,7 @@ private struct FakeReport: CrashReportReading {
         CrashThread(number: 2, crashed: true, frames: frames(250, binary: "HostApp"))
     ]
     var mainBinaryImage: (baseAddress: String, arch: String)? = ("0x100000000", "arm64")
+    var customData: Data?
 
     static func frames(_ count: Int, binary: String) -> [CrashStackFrame] {
         (0..<count).map {

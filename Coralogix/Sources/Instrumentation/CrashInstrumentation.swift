@@ -101,6 +101,9 @@ extension CoralogixRum {
         // PLCrashReporterErrorResourceBusy and ours captures nothing.
         do {
             try crashReporter.enable()
+            // Held here so the reporter outlives this call, and so crash context is written only
+            // through a reporter this SDK enabled.
+            CRXCrashContext.activeReporter = crashReporter
         } catch {
             Log.e("[CrashInstrumentation] PLCrashReporter could not be enabled — another instance already owns the process-wide slot, so crashes from this launch will not be captured: \(error)")
         }
