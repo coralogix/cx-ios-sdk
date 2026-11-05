@@ -866,9 +866,20 @@ public class CoralogixRum {
         }
     }
 
-    internal func makeSpan(event: CoralogixEventType, source: Keys, severity: CoralogixLogSeverity, startTime: Date? = nil) -> any Span {
+    /// - Parameter startsNewTrace: the span starts a trace of its own instead of following the
+    ///   parent policy. Used for an event reported on a later launch than the one it happened in,
+    ///   which the current launch's spans have nothing to do with.
+    internal func makeSpan(event: CoralogixEventType,
+                           source: Keys,
+                           severity: CoralogixLogSeverity,
+                           startTime: Date? = nil,
+                           startsNewTrace: Bool = false) -> any Span {
         let builder = tracerProvider().spanBuilder(spanName: Keys.iosSdk.rawValue)
-        Self.applyAutoInstrumentationParentPolicy(builder: builder, event: event)
+        if startsNewTrace {
+            _ = builder.setNoParent()
+        } else {
+            Self.applyAutoInstrumentationParentPolicy(builder: builder, event: event)
+        }
         if let startTime {
             _ = builder.setStartTime(time: startTime)
         }

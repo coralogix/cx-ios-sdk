@@ -41,10 +41,8 @@ extension CoralogixRum {
     /// crashed, so whether it is sent follows that session's decision, not this launch's.
     internal func recoverPendingCrashes() {
         if let crashReporter = Self.crashReportReader(), crashReporter.hasPendingCrashReport() {
-            // Correlation id tying the emitted crash span to its upload confirmation,
-            // so the purge is gated on THIS report's own delivery.
-            let reportId = UUID().uuidString
-            if self.processPendingCrashReport(using: crashReporter, crashEventId: reportId) {
+            switch self.processPendingCrashReport(using: crashReporter) {
+            case .emitted(let reportId):
                 // Purge is deferred to completeCrashRecovery(): it must only happen
                 // after the upload is confirmed, and the uploader rejects requests
                 // until init finishes. Previously the purge was unconditional and ran
@@ -54,7 +52,7 @@ extension CoralogixRum {
                 self.pendingCrashPurge = { crashReporter.purgePendingCrashReport() }
                 self.pendingCrashReportId = reportId
                 crashRecoveryLock.unlock()
-            } else {
+            case .unreadable:
                 // Nothing recoverable was emitted — drop the corrupt report so it
                 // isn't reprocessed (and re-fails) on every launch.
                 crashReporter.purgePendingCrashReport()
@@ -171,63 +169,64 @@ extension CoralogixRum {
         }
     }
 
-    /// Returns `true` when the report was parsed and emitted as a crash span,
-    /// `false` when the report could not be loaded or parsed. `crashEventId`
-    /// correlates the emitted span with its upload confirmation.
-    private func processPendingCrashReport(using crashReporter: PLCrashReporter, crashEventId: String) -> Bool {
+    enum RecoveryOutcome: Equatable {
+        /// The report was emitted as a crash span carrying this `crash_event_id`.
+        case emitted(String)
+        /// The report could not be loaded or parsed.
+        case unreadable
+    }
+
+    private func processPendingCrashReport(using crashReporter: PLCrashReporter) -> RecoveryOutcome {
         do {
             let data = try crashReporter.loadPendingCrashReportDataAndReturnError()
-            
-            // Retrieving crash reporter data.
             let report = try PLCrashReport(data: data)
-
-            // A crash is captured on the *next* launch, after a fresh session has
-            // already been created. Anchor the span to the crash time (not relaunch
-            // time) and burn it under the session that was live when it crashed —
-            // recovered from the keychain into SessionManager at init.
-            let crashTimestamp = report.systemInfo.timestamp
-            let span = makeSpan(event: .error, source: .console, severity: .error, startTime: crashTimestamp)
-            self.overrideSessionForCrashedSession(on: span)
-            self.overrideViewForCrashedSession(on: span)
-
-            span.setAttribute(key: Keys.crashEventId.rawValue, value: crashEventId)
-            span.setAttribute(key: Keys.exceptionType.rawValue, value: report.signalInfo.name)
-            if let crashTimestamp {
-                span.setAttribute(key: Keys.crashTimestamp.rawValue, value: "\(crashTimestamp.timeIntervalSince1970.milliseconds)")
-            }
-            span.setAttribute(key: Keys.processName.rawValue, value: report.processInfo.processName)
-            span.setAttribute(key: Keys.applicationIdentifier.rawValue, value: report.applicationInfo.applicationIdentifier)
-            span.setAttribute(key: Keys.pid.rawValue, value: "\(report.processInfo.processID)")
-            
-            self.createStackTrace(report: report, span: span)
-            
-            if let text = PLCrashReportTextFormatter.stringValue(for: report, with: PLCrashReportTextFormatiOS) {
-                let substrings = text.components(separatedBy: "\n")
-                for value in substrings {
-                    if let processName = report.processInfo.processName,
-                       value.contains("+\(processName)") {
-                        let details = extractMemoryAddressAndArchitecture(input: value)
-                        if details.count == 7 {
-                            let baseAddress = details[0]  // Extracting the base memory address
-                            span.setAttribute(key: Keys.baseAddress.rawValue, value: "\(baseAddress)")
-                            let arch = details[4]     // Extracting the architecture
-                            span.setAttribute(key: Keys.arch.rawValue, value: "\(arch)")
-                        }
-                    }
-                }
-            } else {
-                Log.e("CrashReporter: can't convert report to text")
-            }
-            if let crashTimestamp {
-                span.end(time: crashTimestamp)
-            } else {
-                span.end()
-            }
-            return true
+            return .emitted(self.emitRecoveredCrash(CrashReportMapper.map(PLCrashReportReader(report: report))))
         } catch let error {
             Log.e("CrashReporter failed to load and parse with error: \(error)")
-            return false
+            return .unreadable
         }
+    }
+
+    /// Emits a recovered crash as an error span and returns its `crash_event_id`.
+    ///
+    /// A crash is captured on the *next* launch, after a fresh session has already been created.
+    /// The span is anchored to the crash time (not relaunch time), burnt under the session that
+    /// was live when it crashed, and starts a trace of its own: whatever span is current in this
+    /// launch had nothing to do with it.
+    @discardableResult
+    internal func emitRecoveredCrash(_ crash: MappedCrash) -> String {
+        let span = makeSpan(event: .error, source: .console, severity: .error,
+                            startTime: crash.crashTime, startsNewTrace: true)
+        self.overrideSessionForCrashedSession(on: span)
+        self.overrideViewForCrashedSession(on: span)
+
+        span.setAttribute(key: Keys.crashEventId.rawValue, value: crash.crashId)
+        span.setAttribute(key: Keys.exceptionType.rawValue, value: crash.exceptionType)
+        if let crashTime = crash.crashTime {
+            span.setAttribute(key: Keys.crashTimestamp.rawValue, value: "\(crashTime.timeIntervalSince1970.milliseconds)")
+        }
+        if let processName = crash.processName {
+            span.setAttribute(key: Keys.processName.rawValue, value: processName)
+        }
+        if let applicationIdentifier = crash.applicationIdentifier {
+            span.setAttribute(key: Keys.applicationIdentifier.rawValue, value: applicationIdentifier)
+        }
+        span.setAttribute(key: Keys.pid.rawValue, value: "\(crash.pid)")
+        if let triggeredByThread = crash.triggeredByThread {
+            span.setAttribute(key: Keys.triggeredByThread.rawValue, value: triggeredByThread)
+        }
+        span.setAttribute(key: Keys.threads.rawValue, value: crash.threadsJSON)
+        if let baseAddress = crash.baseAddress, let arch = crash.arch {
+            span.setAttribute(key: Keys.baseAddress.rawValue, value: baseAddress)
+            span.setAttribute(key: Keys.arch.rawValue, value: arch)
+        }
+
+        if let crashTime = crash.crashTime {
+            span.end(time: crashTime)
+        } else {
+            span.end()
+        }
+        return crash.crashId
     }
 
     /// Replaces the current-session attributes `makeSpan` stamped on the crash span
@@ -254,34 +253,6 @@ extension CoralogixRum {
         span.setAttribute(key: Keys.spanViewName.rawValue, value: prevView)
     }
     
-    private func createStackTrace(report: PLCrashReport, span: any Span) {
-        var threads = [String]()
-        for case let thread as PLCrashReportThreadInfo in report.threads {
-            if thread.crashed {
-                span.setAttribute(key: Keys.triggeredByThread.rawValue, value: thread.threadNumber)
-            }
-            
-            let crashedThreadFrames = crashedThread(report: report, thread: thread)
-            let data = self.parseFrameArray(crashedThreadFrameArray: crashedThreadFrames)
-            threads.append(Helper.convertArrayToJsonString(array: data))
-        }
-        span.setAttribute(key: Keys.threads.rawValue, value: Helper.convertArrayOfStringToJsonString(array: threads))
-    }
-    
-    func parseFrameArray(crashedThreadFrameArray: [StackFrame]) -> [[String: Any]] {
-        var result = [[String: Any]]()
-        for frame in crashedThreadFrameArray {
-            var frameObj = [String: Any]()
-            frameObj[Keys.frameNumber.rawValue] = frame.frameNumber
-            frameObj[Keys.binary.rawValue] = frame.binary
-            frameObj[Keys.functionAddressCalled.rawValue] = frame.functionAdresseCalled
-            frameObj[Keys.base.rawValue] = frame.base
-            frameObj[Keys.offset.rawValue] = frame.offset
-            result.append(frameObj)
-        }
-        return result
-    }
-    
     func isDebuggerAttached() -> Bool {
         var info = kinfo_proc()
         var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, getpid()]
@@ -292,72 +263,6 @@ extension CoralogixRum {
             return false
         }
         return (info.kp_proc.p_flag & P_TRACED) != 0
-    }
-    
-    struct StackFrame {
-        let frameNumber: String
-        let binary: String
-        let functionAdresseCalled: String
-        let base: String
-        let offset: String
-        let description: String
-    }
-    
-    private func crashedThread(report: PLCrashReport, thread: PLCrashReportThreadInfo) -> [StackFrame] {
-        var stackFrames = [StackFrame]()
-        // stack.append("Thread \(thread.threadNumber) Crashed:")
-        var frameNum = 0
-        while frameNum < thread.stackFrames.count {
-            if let frame = thread.stackFrames[frameNum] as? PLCrashReportStackFrameInfo {
-                let stackFrame = formatStackFrame(frame: frame, frameNum: frameNum, report: report)
-                stackFrames.append(stackFrame)
-            }
-            frameNum += 1
-        }
-        return stackFrames
-    }
-    
-    private func formatStackFrame(frame: PLCrashReportStackFrameInfo, frameNum: Int, report: PLCrashReport) -> StackFrame {
-        var baseAddress: UInt64 = 0
-        var pcOffset: UInt64 = 0
-        var imageName = "???"
-        var symbolString = ""
-        
-        if let imageInfo = report.image(forAddress: frame.instructionPointer) {
-            imageName = imageInfo.imageName
-            imageName = URL(fileURLWithPath: imageName).lastPathComponent
-            baseAddress = imageInfo.imageBaseAddress
-            pcOffset = frame.instructionPointer - imageInfo.imageBaseAddress
-        }
-        
-        var offset: String = ""
-        var base: String = ""
-        if let symbolInfo = frame.symbolInfo,
-           let symbolName = symbolInfo.symbolName {
-            let symOffset = frame.instructionPointer - frame.symbolInfo.startAddress
-            offset = String(format: "%ld", symOffset)
-            base = symbolName
-            symbolString = String(format: "%@ + %ld", symbolName, symOffset)
-        } else {
-            offset = String(format: "%ld", pcOffset)
-            base = String(format: "0x%lx", baseAddress)
-            symbolString = String(format: "0x%lx + %ld", baseAddress, pcOffset)
-        }
-        let description = String(format: "%-4ld%-35@ 0x%016lx %@", frameNum, imageName, frame.instructionPointer, symbolString)
-        let stackFrame = StackFrame(frameNumber: "\(frameNum)",
-                                    binary: imageName,
-                                    functionAdresseCalled: String(format: "0x%016lx", frame.instructionPointer),
-                                    base: base,
-                                    offset: offset,
-                                    description: description)
-        
-        return stackFrame
-    }
-    
-    private func extractMemoryAddressAndArchitecture(input: String) -> [String] {
-        let pattern = #"[^\s]+"#
-        let matches = input.matches(for: pattern)
-        return matches
     }
 }
 
