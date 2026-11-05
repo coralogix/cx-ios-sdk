@@ -201,7 +201,10 @@ extension CoralogixRum {
         self.overrideViewForCrashedSession(on: span)
 
         span.setAttribute(key: Keys.crashEventId.rawValue, value: crash.crashId)
+        span.setAttribute(key: Keys.isCrash.rawValue, value: true)
         span.setAttribute(key: Keys.exceptionType.rawValue, value: crash.exceptionType)
+        span.setAttribute(key: Keys.errorType.rawValue, value: crash.errorType)
+        span.setAttribute(key: Keys.errorMessage.rawValue, value: crash.errorMessage)
         if let crashTime = crash.crashTime {
             span.setAttribute(key: Keys.crashTimestamp.rawValue, value: "\(crashTime.timeIntervalSince1970.milliseconds)")
         }

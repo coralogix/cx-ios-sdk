@@ -18,6 +18,9 @@ final class CrashReportMapperTests: XCTestCase {
         var reportId: String? = "8F7E6D5C-4B3A-4291-8070-6F5E4D3C2B1A"
         var timestamp: Date? = Date(timeIntervalSince1970: 1_700_000_000)
         var signalName = "SIGSEGV"
+        var signalCode: String? = "SEGV_MAPERR"
+        var exceptionName: String?
+        var exceptionReason: String?
         var processName: String? = "HostApp"
         var processID: UInt = 4242
         var applicationIdentifier: String? = "com.example.host"
@@ -45,17 +48,17 @@ final class CrashReportMapperTests: XCTestCase {
         XCTAssertEqual(mapped.processName, "HostApp")
         XCTAssertEqual(mapped.applicationIdentifier, "com.example.host")
         XCTAssertEqual(mapped.pid, 4242)
-        XCTAssertEqual(mapped.triggeredByThread, 3, "the crashed thread's own number")
+        XCTAssertEqual(mapped.triggeredByThread, 0, "the crashed thread is sent first")
         XCTAssertEqual(mapped.baseAddress, "0x100000000")
         XCTAssertEqual(mapped.arch, "arm64")
     }
 
-    func test_map_encodesEveryThreadInOrder_withItsFrames() throws {
+    func test_map_signalCrash_encodesOnlyTheCrashedThread_withItsFrames() throws {
         let mapped = CrashReportMapper.map(FakeReport())
 
         let threads = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(mapped.threadsJSON.utf8)) as? [String])
-        XCTAssertEqual(threads.count, 2)
-        let crashedFrames = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(threads[1].utf8)) as? [[String: String]])
+        XCTAssertEqual(threads.count, 1)
+        let crashedFrames = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(threads[0].utf8)) as? [[String: String]])
         XCTAssertEqual(crashedFrames.first?[Keys.binary.rawValue], "HostApp")
         XCTAssertEqual(crashedFrames.first?[Keys.functionAddressCalled.rawValue], "0x0000000100004000")
         XCTAssertEqual(crashedFrames.first?[Keys.offset.rawValue], "16384")

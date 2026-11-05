@@ -433,20 +433,17 @@ public class CoralogixExporter: SpanExporter {
     }
     
     private func isMatchesRegexPattern(string: String, regexs: [String]) -> Bool {
-        // Iterate over the regex patterns
-        for regex in regexs {
+        let range = NSRange(string.startIndex..., in: string)
+        for pattern in regexs {
             do {
-                let regex = try NSRegularExpression(pattern: regex, options: [.caseInsensitive])
-                let range = NSRange(string.startIndex..., in: string)
-                let matchFound = regex.firstMatch(in: string, options: [], range: range) != nil
-                return matchFound
+                let regex = try NSRegularExpression(pattern: pattern, options: [.caseInsensitive])
+                if regex.firstMatch(in: string, options: [], range: range) != nil {
+                    return true
+                }
             } catch {
-                Log.w("Invalid regex pattern: \(regex) — Error: \(error)")
-                continue // Skip invalid regex instead of crashing
+                Log.w("Invalid regex pattern: \(pattern) — Error: \(error)")
             }
         }
-        
-        // Return false if no regex matches the host
         return false
     }
     
@@ -537,7 +534,12 @@ public class CoralogixExporter: SpanExporter {
         }
         
         guard let ignoreErrors = getOptions().ignoreErrors, !ignoreErrors.isEmpty else { return true }
-        if ignoreErrors.contains(message) { return false }
-        return !self.isMatchesRegexPattern(string: message, regexs: ignoreErrors)
+        // The type is tried as well as the message, so a pattern naming the error type (or a
+        // crash's signal) drops it.
+        let errorType = attributeStringValue(forKey: Keys.errorType.rawValue, span: span)
+        let candidates = [message] + [errorType].compactMap { $0 }.filter { !$0.isEmpty }
+        return !candidates.contains { candidate in
+            ignoreErrors.contains(candidate) || self.isMatchesRegexPattern(string: candidate, regexs: ignoreErrors)
+        }
     }
 }

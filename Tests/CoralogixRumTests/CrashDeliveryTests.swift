@@ -85,6 +85,7 @@ final class CrashDeliveryTests: XCTestCase {
             Keys.environment.rawValue: AttributeValue("test"),
             Keys.sessionId.rawValue: AttributeValue("session_001"),
             Keys.sessionCreationDate.rawValue: AttributeValue("1609459200"),
+            Keys.isCrash.rawValue: AttributeValue.bool(true),
             Keys.exceptionType.rawValue: AttributeValue("SIGSEGV"),
             Keys.threads.rawValue: AttributeValue(threads),
             Keys.crashEventId.rawValue: AttributeValue(crashEventId)
