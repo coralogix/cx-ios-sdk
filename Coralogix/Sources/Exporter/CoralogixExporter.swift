@@ -45,25 +45,51 @@ public class CoralogixExporter: SpanExporter {
     private var currentSessionSampledIn: Bool = true
     private let samplingStateLock = NSLock()
 
-    /// Correlation ids (`crash_event_id`) of crash events whose upload was confirmed
-    /// in this process. Confirmation is per-event, not a process-wide flag: a crash
-    /// is only removed from disk / its PLCrashReporter report purged once THAT crash's
-    /// own upload succeeded, so a later failed crash can't be dropped just because an
-    /// earlier one delivered.
-    private var confirmedCrashEventIds: Set<String> = []
+    /// What became of each crash event (`crash_event_id`) this process tried to send. A crash
+    /// is only removed from disk / its PLCrashReporter report purged once THAT crash is finished
+    /// with, so a later failed crash can't be dropped just because an earlier one delivered.
+    private var crashUploadOutcomes: [String: CrashUploadOutcome] = [:]
+    /// Crash ids already handed to `tracesExporter`, oldest first, so a crash sent again (a
+    /// retry, or a later launch in the same process) reaches it once.
+    private var forwardedCrashIds: [String] = []
+    private static let maxForwardedCrashIds = 256
     private let crashUploadLock = NSLock()
 
+    /// Whether the crash is finished with — delivered, refused for good, or dropped by policy —
+    /// so its stored copy can be deleted.
     func didConfirmCrashUpload(id: String) -> Bool {
-        crashUploadLock.lock()
-        defer { crashUploadLock.unlock() }
-        return confirmedCrashEventIds.contains(id)
+        crashUploadOutcome(id: id)?.isFinished ?? false
     }
 
-    private func recordCrashUpload(ids: Set<String>, succeeded: Bool) {
-        guard succeeded, !ids.isEmpty else { return }
+    func crashUploadOutcome(id: String) -> CrashUploadOutcome? {
         crashUploadLock.lock()
-        confirmedCrashEventIds.formUnion(ids)
-        crashUploadLock.unlock()
+        defer { crashUploadLock.unlock() }
+        return crashUploadOutcomes[id]
+    }
+
+    private func recordCrashOutcome(_ outcome: CrashUploadOutcome, ids: Set<String>) {
+        guard !ids.isEmpty else { return }
+        crashUploadLock.lock()
+        defer { crashUploadLock.unlock() }
+        for id in ids where crashUploadOutcomes[id]?.isFinished != true {
+            crashUploadOutcomes[id] = outcome
+        }
+    }
+
+    /// The spans `tracesExporter` should see: every non-crash span, and each crash only the
+    /// first time this process forwards it.
+    private func spansToForward(_ spans: [SpanData]) -> [SpanData] {
+        crashUploadLock.lock()
+        defer { crashUploadLock.unlock() }
+        return spans.filter { span in
+            guard let id = crashEventId(of: span) else { return true }
+            guard !forwardedCrashIds.contains(id) else { return false }
+            forwardedCrashIds.append(id)
+            if forwardedCrashIds.count > Self.maxForwardedCrashIds {
+                forwardedCrashIds.removeFirst()
+            }
+            return true
+        }
     }
 
     /// Resolves the crash spans this exporter itself declined to send — dropped by session
@@ -71,28 +97,24 @@ public class CoralogixExporter: SpanExporter {
     /// means the report is finished with, whether by delivery or by policy: `completeCrashRecovery`
     /// gates the purge of a pending PLCrashReporter report, and `CrashEventStore` its removal, on
     /// that flag alone. Without this a crash from a sampled-out session is re-parsed, re-emitted
-    /// and re-dropped on every launch until another crash overwrites the file. The idle-session
-    /// early return is deliberately not routed here: that is a deferral, and retrying it on the
-    /// next launch is the right outcome.
+    /// and re-dropped on every launch until another crash overwrites the file. The native
+    /// `beforeSend` dropping a crash during encoding is resolved the same way, in `uploadCrash`.
     private func resolveCrashSpansDroppedByPolicy(incoming: Set<String>, surviving spans: [SpanData]) {
         let dropped = incoming.subtracting(crashEventIds(in: spans))
-        recordCrashUpload(ids: dropped, succeeded: true)
+        recordCrashOutcome(.policyDropped, ids: dropped)
     }
 
     /// Correlation ids of the crash events in this batch, read from the raw span
     /// attribute. The attribute is not mapped into cx_rum, so it stays off the wire.
     private func crashEventIds(in spans: [SpanData]) -> Set<String> {
-        var ids: Set<String> = []
-        for span in spans {
-            // Keyed on the correlation id alone: it is stamped only on crash spans, by both
-            // paths, and only where a confirmation is awaited. Gating on is_crash as well
-            // would miss the PLCrashReporter path, which never sets that attribute.
-            guard let id = span.getAttribute(forKey: Keys.crashEventId.rawValue) as? String else {
-                continue
-            }
-            ids.insert(id)
-        }
-        return ids
+        Set(spans.compactMap { crashEventId(of: $0) })
+    }
+
+    /// Keyed on the correlation id alone: it is stamped only on crash spans, by both paths, and
+    /// only where a confirmation is awaited. Gating on is_crash as well would miss the
+    /// PLCrashReporter path, which never sets that attribute.
+    private func crashEventId(of span: SpanData) -> String? {
+        span.getAttribute(forKey: Keys.crashEventId.rawValue) as? String
     }
 
     public init(options: CoralogixExporterOptions,
@@ -234,8 +256,14 @@ public class CoralogixExporter: SpanExporter {
         #if DEBUG
         Self.testExportCallback?(spans)
         #endif
-        if self.sessionManager.isIdle {
-            Log.d("[SDK] Skipping export, session is idle")
+        // An idle session drops its live spans, but a stored crash belongs to the session it
+        // happened in and still goes out.
+        let isIdle = self.sessionManager.isIdle
+        let spans = isIdle ? spans.filter { crashEventId(of: $0) != nil } : spans
+        if isIdle {
+            Log.d("[SDK] Session is idle, exporting only stored crashes (\(spans.count))")
+        }
+        if spans.isEmpty {
             return .success
         }
 
@@ -274,58 +302,75 @@ public class CoralogixExporter: SpanExporter {
 
         resolveCrashSpansDroppedByPolicy(incoming: incomingCrashIds, surviving: uniqueSpans)
 
-        if !uniqueSpans.isEmpty {
-            let options = getOptions()
-            // Invoke tracesExporter callback if configured (additive OTLP export path).
-            // This provides raw SpanData for external OTLP consumers and does NOT affect
-            // the CX log pipeline — instrumentation_data is always preserved.
-            if let tracesExporter = options.tracesExporter {
-                let exporterData = CoralogixTraceExporterData(spans: uniqueSpans)
+        guard !uniqueSpans.isEmpty else { return .failure }
+
+        let options = getOptions()
+        // Invoke tracesExporter callback if configured (additive OTLP export path).
+        // This provides raw SpanData for external OTLP consumers and does NOT affect
+        // the CX log pipeline — instrumentation_data is always preserved.
+        if let tracesExporter = options.tracesExporter {
+            let forwarded = spansToForward(uniqueSpans)
+            if !forwarded.isEmpty {
                 do {
-                    try tracesExporter(exporterData)
+                    try tracesExporter(CoralogixTraceExporterData(spans: forwarded))
                 } catch {
                     Log.e("[CoralogixExporter] tracesExporter callback threw: \(error)")
                 }
             }
-            
-            let cxSpansDictionary = autoreleasepool {
-                encodeSpans(spans: uniqueSpans)
-            }
-            Log.d("[CoralogixExporter] encodeSpans: \(uniqueSpans.count) in, \(cxSpansDictionary.count) encoded")
-            if cxSpansDictionary.isEmpty {
-                return .success
-            }
-            
-            // Crash correlation ids present in this batch, read from the raw spans.
-            let crashIds = self.crashEventIds(in: uniqueSpans)
-
-            let sdk = CoralogixRum.mobileSDK.sdkFramework
-            if !sdk.isNative, let callback = options.beforeSendCallBack {
-                // Crash events skip the hybrid JS round trip: when a crash is exported the
-                // process is usually about to terminate, and the extra native→JS→native hop
-                // loses the race. The hybrid beforeSend callback cannot edit or drop them;
-                // the native beforeSend option (applied during encoding) still can.
-                let crashSpans = cxSpansDictionary.filter { self.isCrashEvent($0) }
-                let editableSpans = cxSpansDictionary.filter { !self.isCrashEvent($0) }
-
-                var result: SpanExporterResultCode = .success
-                if !crashSpans.isEmpty {
-                    result = spanUploader.upload(crashSpans, endPoint: self.endPoint).resultCode
-                    recordCrashUpload(ids: crashIds, succeeded: result == .success)
-                }
-                if !editableSpans.isEmpty {
-                    let clonedSpans = editableSpans.deepCopy()
-                    callback(clonedSpans)
-                }
-                return result
-            }
-            let result = spanUploader.upload(cxSpansDictionary, endPoint: self.endPoint).resultCode
-            if !crashIds.isEmpty {
-                recordCrashUpload(ids: crashIds, succeeded: result == .success)
-            }
-            return result
         }
-        return .failure
+
+        // Each stored crash goes in a request of its own, so a reject of the live batch (a
+        // 413, say) or of another crash cannot take it down with it.
+        let crashSpans = uniqueSpans.filter { crashEventId(of: $0) != nil }
+        let liveSpans = uniqueSpans.filter { crashEventId(of: $0) == nil }
+        var results = crashSpans.map { uploadCrash($0) }
+        if !liveSpans.isEmpty {
+            results.append(exportLive(liveSpans, options: options))
+        }
+        return results.allSatisfy { $0 == .success } ? .success : .failure
+    }
+
+    private func uploadCrash(_ span: SpanData) -> SpanExporterResultCode {
+        guard let id = crashEventId(of: span) else { return .failure }
+        let encoded = autoreleasepool { encodeSpans(spans: [span]) }
+        // Empty means the native beforeSend dropped it: finished with, by the customer's choice.
+        guard !encoded.isEmpty else {
+            recordCrashOutcome(.policyDropped, ids: [id])
+            return .success
+        }
+        let result = spanUploader.upload(encoded, endPoint: self.endPoint, kind: .storedCrash)
+        recordCrashOutcome(CrashUploadOutcome(result), ids: [id])
+        return result.resultCode
+    }
+
+    private func exportLive(_ spans: [SpanData], options: CoralogixExporterOptions) -> SpanExporterResultCode {
+        let cxSpansDictionary = autoreleasepool {
+            encodeSpans(spans: spans)
+        }
+        Log.d("[CoralogixExporter] encodeSpans: \(spans.count) in, \(cxSpansDictionary.count) encoded")
+        if cxSpansDictionary.isEmpty {
+            return .success
+        }
+
+        let sdk = CoralogixRum.mobileSDK.sdkFramework
+        guard !sdk.isNative, let callback = options.beforeSendCallBack else {
+            return spanUploader.upload(cxSpansDictionary, endPoint: self.endPoint).resultCode
+        }
+        // Crash events skip the hybrid JS round trip: when a crash is exported the
+        // process is usually about to terminate, and the extra native→JS→native hop
+        // loses the race. The hybrid beforeSend callback cannot edit or drop them;
+        // the native beforeSend option (applied during encoding) still can.
+        let crashEvents = cxSpansDictionary.filter { self.isCrashEvent($0) }
+        let editableSpans = cxSpansDictionary.filter { !self.isCrashEvent($0) }
+
+        var result: SpanExporterResultCode = .success
+        if !crashEvents.isEmpty {
+            result = spanUploader.upload(crashEvents, endPoint: self.endPoint).resultCode
+        }
+        if !editableSpans.isEmpty {
+            callback(editableSpans.deepCopy())
+        }
+        return result
     }
 
     /// Whether an encoded span carries `error_context.is_crash == true` — a crash reported

@@ -47,6 +47,35 @@ struct SpanUploadResult: Equatable {
     static let permanentReject = SpanUploadResult(disposition: .permanentReject, httpStatus: nil, retryAfter: nil, countsAsFailedUpload: false)
 }
 
+/// What became of one stored crash this process tried to send.
+enum CrashUploadOutcome: Equatable {
+    case delivered
+    /// Refused for good by the backend (a 4xx other than 408/429, or an unencodable payload).
+    case rejected
+    /// Dropped before sending by sampling, `ignoreErrors` or the native `beforeSend`.
+    case policyDropped
+    /// Worth sending again; `counted` says whether it uses up one of the crash's attempts.
+    case failed(counted: Bool)
+    case notAttempted
+
+    init(_ result: SpanUploadResult) {
+        switch result.disposition {
+        case .delivered: self = .delivered
+        case .permanentReject: self = .rejected
+        case .retryable: self = .failed(counted: result.countsAsFailedUpload)
+        case .notAttempted: self = .notAttempted
+        }
+    }
+
+    /// Whether the stored copy can be deleted: nothing more will come of sending it again.
+    var isFinished: Bool {
+        switch self {
+        case .delivered, .rejected, .policyDropped: return true
+        case .failed, .notAttempted: return false
+        }
+    }
+}
+
 protocol SpanUploading {
     @discardableResult
     func upload(_ spans: [[String: Any]], endPoint: String, kind: SpanUploadKind) -> SpanUploadResult
