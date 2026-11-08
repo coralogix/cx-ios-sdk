@@ -53,6 +53,7 @@ public class CoralogixExporter: SpanExporter {
     /// retry, or a later launch in the same process) reaches it once.
     private var forwardedCrashIds: [String] = []
     private static let maxForwardedCrashIds = 256
+    private var crashUploadWaiters: [String: (CrashUploadAnswer) -> Void] = [:]
     private let crashUploadLock = NSLock()
 
     /// Whether the crash is finished with — delivered, refused for good, or dropped by policy —
@@ -67,13 +68,23 @@ public class CoralogixExporter: SpanExporter {
         return crashUploadOutcomes[id]
     }
 
-    private func recordCrashOutcome(_ outcome: CrashUploadOutcome, ids: Set<String>) {
-        guard !ids.isEmpty else { return }
+    /// Calls `handler` once with the answer to the next send of crash `id`. Replaces a handler
+    /// still waiting on an earlier send of it.
+    func awaitCrashUpload(id: String, _ handler: @escaping (CrashUploadAnswer) -> Void) {
         crashUploadLock.lock()
         defer { crashUploadLock.unlock() }
+        crashUploadWaiters[id] = handler
+    }
+
+    private func recordCrashOutcome(_ answer: CrashUploadAnswer, ids: Set<String>) {
+        guard !ids.isEmpty else { return }
+        crashUploadLock.lock()
         for id in ids where crashUploadOutcomes[id]?.isFinished != true {
-            crashUploadOutcomes[id] = outcome
+            crashUploadOutcomes[id] = answer.outcome
         }
+        let waiters = ids.compactMap { crashUploadWaiters.removeValue(forKey: $0) }
+        crashUploadLock.unlock()
+        waiters.forEach { $0(answer) }
     }
 
     /// The spans `tracesExporter` should see: every non-crash span, and each crash only the
@@ -100,7 +111,7 @@ public class CoralogixExporter: SpanExporter {
     /// `beforeSend` dropping a crash during encoding is resolved the same way, in `uploadCrash`.
     private func resolveCrashSpansDroppedByPolicy(incoming: Set<String>, surviving spans: [SpanData]) {
         let dropped = incoming.subtracting(crashEventIds(in: spans))
-        recordCrashOutcome(.policyDropped, ids: dropped)
+        recordCrashOutcome(CrashUploadAnswer(outcome: .policyDropped), ids: dropped)
     }
 
     /// Correlation ids of the crash events in this batch, read from the raw span
@@ -381,11 +392,11 @@ public class CoralogixExporter: SpanExporter {
         let encoded = autoreleasepool { encodeSpans(spans: [span]) }
         // Empty means the native beforeSend dropped it: finished with, by the customer's choice.
         guard !encoded.isEmpty else {
-            recordCrashOutcome(.policyDropped, ids: [id])
+            recordCrashOutcome(CrashUploadAnswer(outcome: .policyDropped), ids: [id])
             return .success
         }
         let result = spanUploader.upload(encoded, endPoint: self.endPoint, kind: .storedCrash)
-        recordCrashOutcome(CrashUploadOutcome(result), ids: [id])
+        recordCrashOutcome(CrashUploadAnswer(result), ids: [id])
         return result.resultCode
     }
 

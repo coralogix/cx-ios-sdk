@@ -181,11 +181,13 @@ extension StoredCrashRecord {
     static func fixture(crashId: String = "crash-id",
                         sessionId: String = "crashed",
                         sampledIn: Bool? = true,
+                        crashTime: Date = Date(timeIntervalSince1970: 1_700_000_000),
+                        failedUploads: Int = 0,
                         counters: SessionSnapshotRecord? = nil) -> StoredCrashRecord {
         StoredCrashRecord(crashId: crashId,
                           kind: .native,
-                          crashTime: Date(timeIntervalSince1970: 1_700_000_000),
-                          failedUploads: 0,
+                          crashTime: crashTime,
+                          failedUploads: failedUploads,
                           session: .init(id: sessionId, creationDate: 1_699_999_000, sampledIn: sampledIn),
                           counters: counters ?? SessionSnapshotRecord(sessionId: sessionId, errorCount: 0, viewCount: 0,
                                                                       actionCount: 0, hasRecording: false))
@@ -197,5 +199,80 @@ extension CrashDeliveryStore {
     static func temporary() -> CrashDeliveryStore {
         CrashDeliveryStore(directory: FileManager.default.temporaryDirectory
             .appendingPathComponent("CrashDeliveryStore-\(UUID().uuidString)", isDirectory: true))
+    }
+}
+
+/// A clock that moves only when a test moves it.
+final class ManualDeliveryClock: DeliveryClock {
+    private let lock = NSLock()
+    private var current: Date
+    private var pending: [(date: Date, timer: DeliveryTimer, work: () -> Void)] = []
+
+    init(start: Date = Date()) {
+        self.current = start
+    }
+
+    func now() -> Date {
+        lock.lock(); defer { lock.unlock() }
+        return current
+    }
+
+    func schedule(at date: Date, _ work: @escaping () -> Void) -> DeliveryTimer {
+        let timer = DeliveryTimer()
+        lock.lock(); defer { lock.unlock() }
+        pending.append((date, timer, work))
+        return timer
+    }
+
+    /// When the next timer still armed fires.
+    var nextDate: Date? {
+        lock.lock(); defer { lock.unlock() }
+        return pending.filter { !$0.timer.isCancelled }.map(\.date).min()
+    }
+
+    /// Fires, in order, every timer due by `date`.
+    func advance(to date: Date) {
+        while true {
+            lock.lock()
+            pending.removeAll { $0.timer.isCancelled }
+            guard let index = pending.indices.filter({ pending[$0].date <= date })
+                .min(by: { pending[$0].date < pending[$1].date }) else {
+                current = max(current, date)
+                lock.unlock()
+                return
+            }
+            let due = pending.remove(at: index)
+            current = max(current, due.date)
+            lock.unlock()
+            due.work()
+        }
+    }
+}
+
+/// Background tasks that never expire on their own; a test expires them.
+final class FakeBackgroundTasks: BackgroundTaskRunning {
+    private let lock = NSLock()
+    private var expirations: [() -> Void] = []
+    private(set) var begun = 0
+    private(set) var ended = 0
+
+    func begin(name: String, expiration: @escaping () -> Void) -> BackgroundTask {
+        lock.lock(); defer { lock.unlock() }
+        begun += 1
+        let task = BackgroundTask { [weak self] in
+            guard let self = self else { return }
+            self.lock.lock(); self.ended += 1; self.lock.unlock()
+        }
+        expirations.append { expiration(); task.end() }
+        return task
+    }
+
+    /// The system taking the background time back.
+    func expireAll() {
+        lock.lock()
+        let all = expirations
+        expirations = []
+        lock.unlock()
+        all.forEach { $0() }
     }
 }

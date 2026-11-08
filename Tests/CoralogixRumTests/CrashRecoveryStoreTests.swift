@@ -43,6 +43,13 @@ private final class SwitchableUploader: SpanUploading {
     }
 }
 
+private final class Counter {
+    private let lock = NSLock()
+    private var count = 0
+    var value: Int { lock.lock(); defer { lock.unlock() }; return count }
+    func increment() -> Int { lock.lock(); defer { lock.unlock() }; count += 1; return count }
+}
+
 private func crashContext(sessionId: String?) -> Data? {
     sessionId.map {
         Data(#"{"v":1,"session":{"session_id":"\#($0)","session_creation_time":1700000000000,"is_session_sampled_in":true}}"#.utf8)
@@ -89,19 +96,32 @@ final class CrashRecoveryAcrossLaunchesTests: XCTestCase {
     /// A launch whose snapshot store holds `lastSession` from the launch before, recovering from
     /// `store`, sending through `uploader`.
     private func launch(store: CrashDeliveryStore, lastSession: SessionSnapshotRecord?,
-                        uploader: SwitchableUploader, version: String = "9.9") throws -> CoralogixRum {
+                        uploader: SwitchableUploader, version: String = "9.9",
+                        beforeSend: (([String: Any]) -> [String: Any]?)? = nil) throws -> CoralogixRum {
         let manager = SessionManager(snapshotStore: .relaunched(after: lastSession))
         manager.lastLaunchSession = nil
         var options = makeSamplingOptions(sampleRate: 100, exclude: [])
         options.version = version
+        options.beforeSend = beforeSend
         let sdk = CoralogixRum(options: options, sessionManager: manager)
         launches.append(sdk)
         sdk.crashDeliveryStore = store
         try XCTUnwrap(sdk.coralogixExporter).spanUploader = uploader
 
+        let clock = ManualDeliveryClock()
+        let scheduler = CrashDeliveryScheduler(store: store, sender: sdk, clock: clock,
+                                               backgroundTasks: FakeBackgroundTasks(), isOnline: { true })
+        sdk.crashDeliveryScheduler = scheduler
+
         sdk.recoverPendingCrashes()
         let recovered = expectation(description: "recovery complete")
         sdk.completeCrashRecovery { recovered.fulfill() }
+        // Every retry slot passes at once: what this launch cannot deliver is left for the next.
+        scheduler.waitUntilAnswered()
+        while let next = clock.nextDate {
+            clock.advance(to: next)
+            scheduler.waitUntilAnswered()
+        }
         wait(for: [recovered], timeout: 10)
         return sdk
     }
@@ -119,7 +139,7 @@ final class CrashRecoveryAcrossLaunchesTests: XCTestCase {
         let failing = SwitchableUploader()
         failing.result = SwitchableUploader.serverError
         try launch(store: store, lastSession: sessionRecord(of: "S1"), uploader: failing)
-        XCTAssertEqual(failing.crashes.count, 1, "launch 2 tried")
+        XCTAssertEqual(failing.crashes.count, 3, "launch 2 tried at 0 s, +30 s and +2 min")
         XCTAssertEqual(store.copies().count, 1, "an undelivered crash is kept")
         XCTAssertNotNil(store.record(for: crash.crashId))
 
@@ -140,7 +160,8 @@ final class CrashRecoveryAcrossLaunchesTests: XCTestCase {
         var crashes: [MappedCrash] = []
         for session in ["S1", "S2", "S3"] {
             let crash = try leaveCrash(in: store, sessionId: session)
-            store.save(.fixture(crashId: crash.crashId, sessionId: session, counters: sessionRecord(of: session)))
+            store.save(.fixture(crashId: crash.crashId, sessionId: session, crashTime: crash.crashTime ?? Date(),
+                                counters: sessionRecord(of: session)))
             crashes.append(crash)
         }
 
@@ -163,8 +184,29 @@ final class CrashRecoveryAcrossLaunchesTests: XCTestCase {
         }
 
         let counts = failing.crashes.map { value($0, .snapshotContext, .errorCount) as? Int }
-        XCTAssertEqual(counts, [3, 3, 3], "the session's two errors plus this crash, every time")
+        XCTAssertEqual(counts, Array(repeating: 3, count: 9),
+                       "the session's two errors plus this crash, on each of 3 sends in each of 3 launches")
         XCTAssertEqual(store.record(for: crash.crashId)?.counters.errorCount, 2, "never written back")
+    }
+
+    /// The crash is rebuilt for every send, so a `beforeSend` that drops it on the retry is
+    /// heard, and the crash is finished with.
+    func test_everySend_runsBeforeSendAgain() throws {
+        let store = CrashDeliveryStore.temporary()
+        try leaveCrash(in: store, sessionId: "S1")
+        let failing = SwitchableUploader()
+        failing.result = SwitchableUploader.serverError
+        let crashesSeen = Counter()
+
+        try launch(store: store, lastSession: sessionRecord(of: "S1"), uploader: failing, beforeSend: { event in
+            let errorContext = event[Keys.errorContext.rawValue] as? [String: Any]
+            guard errorContext?[Keys.isCrash.rawValue] as? Bool == true else { return event }
+            return crashesSeen.increment() == 1 ? event : nil
+        })
+
+        XCTAssertEqual(crashesSeen.value, 2, "the first send and the +30 s retry")
+        XCTAssertEqual(failing.crashes.count, 1)
+        XCTAssertTrue(store.copies().isEmpty, "dropped by beforeSend on the retry: finished with")
     }
 
     func test_aCrashWhoseSessionLeftNoRecord_isDropped_andItsCopyDeleted() throws {

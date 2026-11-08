@@ -76,9 +76,27 @@ enum CrashUploadOutcome: Equatable {
     }
 }
 
+/// One answer to one send of a stored crash: what became of it, and how long the backend asked
+/// us to wait before the next stored-crash send.
+struct CrashUploadAnswer: Equatable {
+    let outcome: CrashUploadOutcome
+    let retryAfter: TimeInterval?
+
+    init(outcome: CrashUploadOutcome, retryAfter: TimeInterval? = nil) {
+        self.outcome = outcome
+        self.retryAfter = retryAfter
+    }
+
+    init(_ result: SpanUploadResult) {
+        self.init(outcome: CrashUploadOutcome(result), retryAfter: result.retryAfter)
+    }
+}
+
 protocol SpanUploading {
     @discardableResult
     func upload(_ spans: [[String: Any]], endPoint: String, kind: SpanUploadKind) -> SpanUploadResult
+    /// Cancels the stored-crash requests in flight; each answers `notAttempted`.
+    func cancelStoredCrashUploads()
 }
 
 extension SpanUploading {
@@ -86,6 +104,8 @@ extension SpanUploading {
     func upload(_ spans: [[String: Any]], endPoint: String) -> SpanUploadResult {
         upload(spans, endPoint: endPoint, kind: .live)
     }
+
+    func cancelStoredCrashUploads() {}
 }
 
 final class SpanUploader: SpanUploading {
@@ -104,6 +124,8 @@ final class SpanUploader: SpanUploading {
         return URLSession(configuration: configuration)
     }()
     private let sessionLock = NSLock()
+    /// Guarded by `sessionLock`.
+    private var storedCrashTasks: [Int: URLSessionTask] = [:]
 
     init(options: CoralogixExporterOptions, isOnline: @escaping () -> Bool = { true }) {
         self.options = options
@@ -147,9 +169,30 @@ final class SpanUploader: SpanUploading {
             self?.logOutcome(result, error: error, responseBody: data, requestJSON: requestJsonData)
         }
 
+        if kind == .storedCrash { track(task) }
         task.resume()
         semaphore.wait()
+        if kind == .storedCrash { untrack(task) }
         return result
+    }
+
+    func cancelStoredCrashUploads() {
+        sessionLock.lock()
+        let tasks = Array(storedCrashTasks.values)
+        sessionLock.unlock()
+        tasks.forEach { $0.cancel() }
+    }
+
+    private func track(_ task: URLSessionTask) {
+        sessionLock.lock()
+        defer { sessionLock.unlock() }
+        storedCrashTasks[task.taskIdentifier] = task
+    }
+
+    private func untrack(_ task: URLSessionTask) {
+        sessionLock.lock()
+        defer { sessionLock.unlock() }
+        storedCrashTasks.removeValue(forKey: task.taskIdentifier)
     }
 
     private func logOutcome(_ result: SpanUploadResult, error: Error?, responseBody: Data?, requestJSON: Data) {

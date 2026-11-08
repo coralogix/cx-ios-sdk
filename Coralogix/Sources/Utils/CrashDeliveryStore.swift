@@ -94,6 +94,10 @@ final class CrashDeliveryStore {
         mutate { $0[record.crashId] = record }
     }
 
+    func countFailedUpload(of crashId: String) {
+        mutate { $0[crashId]?.failedUploads += 1 }
+    }
+
     func removeRecord(for crashId: String) {
         mutate { $0.removeValue(forKey: crashId) }
     }

@@ -13,7 +13,7 @@ import CoralogixInternal
 import CoralogixBootstrap
 #endif
 
-extension CoralogixRum {
+extension CoralogixRum: StoredCrashSending {
     /// Installs crash capture for this launch. Recovering the crashes earlier launches left behind
     /// is a separate step, `recoverPendingCrashes`, which does not depend on this one.
     public func initializeCrashInstrumentation() {
@@ -35,7 +35,8 @@ extension CoralogixRum {
         }
     }
 
-    /// Re-emits the crashes earlier launches left behind, newest first.
+    /// Lines up the crashes earlier launches left behind, newest first, for `completeCrashRecovery`
+    /// to send.
     ///
     /// Runs at init whatever this launch's sampling roll: the crash belongs to the session that
     /// crashed, so whether it is sent follows that session's decision, not this launch's.
@@ -68,19 +69,18 @@ extension CoralogixRum {
             store.removeRecord(for: crash.crash.crashId)
         }
 
-        var emitted: [String: URL] = [:]
+        var lined: [CrashDeliveryScheduler.Item] = []
         for (copy, crash) in kept {
-            guard let record = store.record(for: crash.crashId) ?? self.firstRecord(of: crash) else {
+            guard store.record(for: crash.crashId) != nil || self.firstRecord(of: crash) != nil else {
                 Log.d("[CrashInstrumentation] no record of the crashed session — dropping crash \(crash.crashId)")
                 store.removeCopy(copy)
                 continue
             }
-            self.emitRecoveredCrash(crash, as: record)
-            emitted[crash.crashId] = copy
+            lined.append(.init(crashId: crash.crashId, copy: copy))
         }
 
         crashRecoveryLock.lock()
-        self.pendingRecoveredCrashes = emitted
+        self.pendingRecoveredCrashes = lined
         crashRecoveryLock.unlock()
     }
 
@@ -171,33 +171,15 @@ extension CoralogixRum {
         return crashReporter
     }
 
-    /// Final step of crash recovery, run right after init completes: force-flushes the crash spans
-    /// `recoverPendingCrashes` emitted, then deletes the copy and record of each crash whose own
-    /// upload is finished with — delivered, refused for good, or dropped by policy. Anything else is
-    /// kept and sent again on a later launch. `completion` runs once that is done.
+    /// Final step of crash recovery, run right after init completes: hands the crashes
+    /// `recoverPendingCrashes` lined up to the delivery scheduler, which sends each one and deletes
+    /// its copy and record once that crash is finished with. `completion` runs when that pass ends.
     internal func completeCrashRecovery(completion: (() -> Void)? = nil) {
         crashRecoveryLock.lock()
         let pending = self.pendingRecoveredCrashes
-        self.pendingRecoveredCrashes = [:]
+        self.pendingRecoveredCrashes = []
         crashRecoveryLock.unlock()
-        guard !pending.isEmpty else {
-            completion?()
-            return
-        }
-
-        let store = self.crashDeliveryStore
-        self.flush { [weak self] in
-            defer { completion?() }
-            guard let exporter = self?.coralogixExporter else { return }
-            for (crashId, copy) in pending {
-                guard exporter.didConfirmCrashUpload(id: crashId) else {
-                    Log.w("[CrashInstrumentation] crash \(crashId) not delivered — kept for a later launch")
-                    continue
-                }
-                store.removeCopy(copy)
-                store.removeRecord(for: crashId)
-            }
-        }
+        self.crashDeliveryScheduler.start(pending, onEnd: completion)
     }
 
     /// Emits a recovered crash as an error span and returns its `crash_event_id`.
@@ -302,6 +284,30 @@ extension CoralogixRum {
         for case let (key, value?) in versions {
             span.setAttribute(key: key.rawValue, value: value)
         }
+    }
+
+    func sendStoredCrash(_ item: CrashDeliveryScheduler.Item,
+                         as record: StoredCrashRecord,
+                         completion: @escaping (CrashUploadAnswer) -> Void) {
+        guard let exporter = self.coralogixExporter else {
+            completion(CrashUploadAnswer(outcome: .notAttempted))
+            return
+        }
+        switch Self.readCopy(item.copy) {
+        case .readable(let crash):
+            exporter.awaitCrashUpload(id: crash.crashId, completion)
+            self.emitRecoveredCrash(crash, as: record)
+            self.flush()
+        case .notReadableYet:
+            completion(CrashUploadAnswer(outcome: .notAttempted))
+        case .corrupt:
+            // Can never be sent: finished with, like a report the backend refused.
+            completion(CrashUploadAnswer(outcome: .rejected))
+        }
+    }
+
+    func cancelStoredCrashSend() {
+        self.coralogixExporter?.spanUploader.cancelStoredCrashUploads()
     }
 
     func isDebuggerAttached() -> Bool {

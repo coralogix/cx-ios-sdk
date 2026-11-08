@@ -279,6 +279,7 @@ public enum Keys: String {
     case queueSpanProcessingQueue = "com.coralogix.spanProcessingQueue"
     case queueViewManagerQueue = "com.coralogix.viewManagerQueue"
     case queueSessionRecordQueue = "com.coralogix.sessionRecordQueue"
+    case queueCrashDeliveryQueue = "com.coralogix.crashDeliveryQueue"
     case queueSlowFrozenReporterQueue = "com.coralogix.vitals.slowfrozen.reporter"
     case queueUserAgentQueue = "com.coralogix.userAgentQueue"
     case undefined = ""

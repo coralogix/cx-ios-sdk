@@ -18,9 +18,16 @@ public class CoralogixRum {
     internal var tracerProviderSdk: TracerProviderSdk?
     /// The SDK's copies of crash reports and their delivery records.
     internal lazy var crashDeliveryStore = CrashDeliveryStore()
-    /// The crashes `recoverPendingCrashes` emitted, by `crash_event_id`, with the copy each was
-    /// read from: deleted by `completeCrashRecovery` once that crash's own upload is finished with.
-    internal var pendingRecoveredCrashes: [String: URL] = [:]
+    /// Background time for work that has to finish after the app leaves the foreground.
+    internal lazy var backgroundTasks: BackgroundTaskRunning = ApplicationBackgroundTaskRunner()
+    /// Sends the crashes earlier launches left behind; started by `completeCrashRecovery`.
+    internal lazy var crashDeliveryScheduler = CrashDeliveryScheduler(
+        store: self.crashDeliveryStore,
+        sender: self,
+        backgroundTasks: self.backgroundTasks,
+        isOnline: { [weak self] in self?.coralogixExporter?.reachability?.isOnline ?? true })
+    /// The crashes `recoverPendingCrashes` lined up, newest first, for `completeCrashRecovery`.
+    internal var pendingRecoveredCrashes: [CrashDeliveryScheduler.Item] = []
     /// Guards `pendingRecoveredCrashes`: written during init and read-and-cleared after it.
     internal let crashRecoveryLock = NSLock()
     internal var networkManager = NetworkManager()
@@ -540,6 +547,7 @@ public class CoralogixRum {
         self.initSpanLock.lock()
         self.initSpanState = .retired
         self.initSpanLock.unlock()
+        self.crashDeliveryScheduler.stop()
         self.coralogixExporter?.shutdown(explicitTimeout: nil)
         self.removeNotification()
         self.metricsManager.removeObservers()
