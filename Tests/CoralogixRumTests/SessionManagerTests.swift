@@ -376,52 +376,22 @@ class SessionManagerTests: XCTestCase {
 
     // MARK: - Crash attribution to the previous-launch session
     //
-    // A crash is captured on the *next* launch, after a fresh session has already
-    // been created. `lastLaunchSessionSpanAttributes` surfaces the session that was
-    // live when the previous launch ended (captured once at init into
-    // `lastLaunchSession`) so crash instrumentation can burn the crash under the
-    // session that actually crashed.
-
-    func testLastLaunchSessionSpanAttributes_returnsPreviousLaunchSession() {
-        sessionManager.lastLaunchSession = LastLaunchSession(sessionId: "crashed-session-abc",
-                                                             creationDate: 1_600_000_000,
-                                                             sampledIn: true)
-
-        let attrs = Dictionary(uniqueKeysWithValues: sessionManager.lastLaunchSessionSpanAttributes())
-        XCTAssertEqual(attrs[Keys.sessionId.rawValue], "crashed-session-abc",
-            "Crash span must carry the crashed session id, not the session created on relaunch")
-        XCTAssertEqual(attrs[Keys.sessionCreationDate.rawValue], "1600000000",
-            "Crash span must carry the crashed session's creation date")
-    }
-
-    /// A crash with no previous-launch record (a locked-keychain read, or a crash before the SDK
-    /// ever initialized) must not inherit a sampled-out relaunch's stamp, or it is dropped and
-    /// purged as resolved.
-    func testLastLaunchSessionSpanAttributes_noPreviousLaunch_stampsSampledInOnly() {
-        sessionManager.lastLaunchSession = nil
-
-        let attrs = Dictionary(uniqueKeysWithValues: sessionManager.lastLaunchSessionSpanAttributes())
-        XCTAssertEqual(attrs, [Keys.spanSessionSampledIn.rawValue: "true"],
-            "With no record, only the sampling stamp is overridden; the session identity stays the relaunch's")
-    }
+    // A crash report written by an SDK version that did not name its session is filed under
+    // `lastLaunchSession`: the session live when the previous launch ended, captured once at init.
 
     /// Every rotation rebuilds `SessionMetadata`, which re-reads `old*` from a keychain that by then
     /// holds this launch's sessions. A crash recovered after a rotation must still carry the crashed
     /// launch's identity and decision.
-    func testLastLaunchSessionSpanAttributes_unchangedByRotation() {
-        sessionManager.lastLaunchSession = LastLaunchSession(sessionId: "crashed-session-abc",
-                                                             creationDate: 1_600_000_000,
-                                                             sampledIn: true)
+    func testLastLaunchSession_unchangedByRotation() {
+        let crashed = LastLaunchSession(sessionId: "crashed-session-abc", creationDate: 1_600_000_000, sampledIn: true)
+        sessionManager.lastLaunchSession = crashed
         sessionManager.samplingRoller = { false }
 
         sessionManager.setupSessionMetadata()
         sessionManager.setupSessionMetadata()
 
-        let after = Dictionary(uniqueKeysWithValues: sessionManager.lastLaunchSessionSpanAttributes())
-        XCTAssertEqual(after[Keys.sessionId.rawValue], "crashed-session-abc")
-        XCTAssertEqual(after[Keys.sessionCreationDate.rawValue], "1600000000")
-        XCTAssertEqual(after[Keys.spanSessionSampledIn.rawValue], "true",
-            "A rotation that rolled sampled-out must not relabel the crashed session as sampled out")
+        XCTAssertEqual(sessionManager.lastLaunchSession, crashed,
+            "A rotation must not replace the crashed launch's identity or decision")
     }
 
     func testLastLaunchSession_readsPreviousLaunchFieldsOfFirstMetadata() {

@@ -53,6 +53,17 @@ NS_ASSUME_NONNULL_BEGIN
 /// it costs nothing and crash context is still written once the fallback reporter is enabled.
 + (nullable NSString *)claimLaunchSession;
 
+/// Where the SDK keeps its own copy of each crash report, one file per crash
+/// (`<report uuid>.plcrash`). PLCrashReporter has a single pending-report slot, so a crash the
+/// next launch could not deliver would be overwritten by the one after it; the copies are not.
+@property (class, nonatomic, readonly, nullable) NSURL *crashCopiesDirectory;
+
+/// Moves `reporter`'s pending report into `directory` and empties PLCrashReporter's slot.
+/// The slot is emptied only once the copy is written, so a copy that fails — the file system is
+/// still locked by data protection during prewarm, say — leaves the report for a later attempt.
+/// Returns whether a report was moved.
++ (BOOL)movePendingReportOf:(PLCrashReporter *)reporter toDirectory:(NSURL *)directory;
+
 /// Makes the launch session claimable again. Tests only: the first test to build the SDK would
 /// otherwise consume it for the whole test process.
 + (void)resetLaunchSessionClaimForTesting;

@@ -175,3 +175,27 @@ extension SessionSnapshotStore {
         return SessionSnapshotStore(keychain: keychain)
     }
 }
+
+extension StoredCrashRecord {
+    /// A stored crash of session `sessionId` whose counters are `counters`.
+    static func fixture(crashId: String = "crash-id",
+                        sessionId: String = "crashed",
+                        sampledIn: Bool? = true,
+                        counters: SessionSnapshotRecord? = nil) -> StoredCrashRecord {
+        StoredCrashRecord(crashId: crashId,
+                          kind: .native,
+                          crashTime: Date(timeIntervalSince1970: 1_700_000_000),
+                          failedUploads: 0,
+                          session: .init(id: sessionId, creationDate: 1_699_999_000, sampledIn: sampledIn),
+                          counters: counters ?? SessionSnapshotRecord(sessionId: sessionId, errorCount: 0, viewCount: 0,
+                                                                      actionCount: 0, hasRecording: false))
+    }
+}
+
+extension CrashDeliveryStore {
+    /// A store in a directory of its own, so a test never touches the app's real crash files.
+    static func temporary() -> CrashDeliveryStore {
+        CrashDeliveryStore(directory: FileManager.default.temporaryDirectory
+            .appendingPathComponent("CrashDeliveryStore-\(UUID().uuidString)", isDirectory: true))
+    }
+}

@@ -82,11 +82,15 @@ class CxRumBuilder {
             pendingSnapshotTrigger = nil
         }
 
-        let snapshotContext = isLiveSession
+        // A recovered crash carries the counters its session had, already counting the crash.
+        let crashedSnapshot = (otel.getAttribute(forKey: Keys.crashedSnapshot.rawValue) as? String)
+            .flatMap(SessionSnapshotRecord.init(json:))?
+            .snapshotContext()
+        let snapshotContext = crashedSnapshot ?? (isLiveSession
             ? buildLiveSessionSnapshotContext(for: eventContext,
                                               sessionId: sessionContext.sessionId,
                                               pendingTrigger: pendingSnapshotTrigger)
-            : buildRetiredSessionSnapshotContext(for: eventContext, sessionId: sessionContext.sessionId)
+            : buildRetiredSessionSnapshotContext(for: eventContext, sessionId: sessionContext.sessionId))
 
         // The promoted event reports the identity the token was armed with — the
         // carrier span's own identity can predate the setUserContext call (attributes

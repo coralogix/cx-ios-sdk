@@ -225,7 +225,7 @@ public class SessionManager {
 
     /// Mirrors the live decision into the keychain next to the session identity, so a
     /// crash captured on the next launch can be attributed with the crashed session's
-    /// decision (`lastLaunchSessionSpanAttributes`) instead of the relaunch's fresh roll.
+    /// decision (`lastLaunchSession`, for a report that names no session) instead of the relaunch's fresh roll.
     /// PRECONDITION: caller holds `sessionLock` (same discipline as the identity writes
     /// in `SessionMetadata.loadPrevSession`, which also run under the lock).
     private func persistSessionSampledInLocked(_ sampledIn: Bool) {
@@ -457,30 +457,6 @@ public class SessionManager {
             defer { sessionLock.unlock() }
             _lastLaunchSession = newValue
         }
-    }
-
-    /// Session attributes for the session that was live when the previous launch ended
-    /// (`lastLaunchSession`).
-    ///
-    /// Crash instrumentation overrides the crash span's `session_id` /
-    /// `session_creation_date` / sampling stamp with these: a crash captured on relaunch
-    /// belongs to the session that actually crashed, not the freshly-created one, and the
-    /// result is the same however many times this launch has rotated since.
-    ///
-    /// An unknown decision — no prior launch on record, or one that predates the persisted
-    /// decision — is stamped sampled-in. Leaving the relaunch's own stamp would let a
-    /// sampled-out relaunch drop the crash and purge it as resolved, and a crash
-    /// misclassified as sampled-out could also be dropped by a customer's beforeSend filter.
-    /// With no record the session identity is left as the relaunch's: there is none to restore.
-    func lastLaunchSessionSpanAttributes() -> [(key: String, value: String)] {
-        guard let last = self.lastLaunchSession else {
-            return [(Keys.spanSessionSampledIn.rawValue, String(true))]
-        }
-        return [
-            (Keys.sessionId.rawValue, last.sessionId),
-            (Keys.sessionCreationDate.rawValue, String(Int(last.creationDate))),
-            (Keys.spanSessionSampledIn.rawValue, String(last.sampledIn ?? true))
-        ]
     }
 
     /// The live session's id and sampling decision, read together after any rotation that is due, so the

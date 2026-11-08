@@ -66,6 +66,12 @@ static atomic_flag _crx_launchSessionClaimed = ATOMIC_FLAG_INIT;
             return;
         }
 
+        // Before enabling: a crash this launch has would otherwise overwrite the slot first.
+        NSURL *copies = CRXCrashBootstrap.crashCopiesDirectory;
+        if (copies != nil) {
+            [CRXCrashBootstrap movePendingReportOf:reporter toDirectory:copies];
+        }
+
         NSError *error = nil;
         if ([reporter enableCrashReporterAndReturnError:&error]) {
             _crx_reporter = reporter;
@@ -86,6 +92,42 @@ static atomic_flag _crx_launchSessionClaimed = ATOMIC_FLAG_INIT;
 
 + (BOOL)disabledByHostApp {
     return _crx_disabledByHostApp;
+}
+
++ (NSURL *)crashCopiesDirectory {
+    NSURL *support = [[NSFileManager defaultManager] URLsForDirectory:NSApplicationSupportDirectory
+                                                            inDomains:NSUserDomainMask].firstObject;
+    return [[support URLByAppendingPathComponent:@"CoralogixRum" isDirectory:YES]
+            URLByAppendingPathComponent:@"crashes" isDirectory:YES];
+}
+
+/// The report's own UUID, so the copy keeps the name the crash is known by on every launch. A
+/// report that cannot be parsed still gets a unique name: recovery reads it, finds it unreadable
+/// and deletes it.
+static NSString *crx_reportFileName(NSData *data) {
+    PLCrashReport *report = [[PLCrashReport alloc] initWithData:data error:NULL];
+    NSString *uuid = nil;
+    if (report.uuidRef != NULL) {
+        uuid = CFBridgingRelease(CFUUIDCreateString(NULL, report.uuidRef));
+    }
+    return [(uuid ?: [NSUUID UUID].UUIDString) stringByAppendingPathExtension:@"plcrash"];
+}
+
++ (BOOL)movePendingReportOf:(PLCrashReporter *)reporter toDirectory:(NSURL *)directory {
+    if (![reporter hasPendingCrashReport]) return NO;
+    NSData *data = [reporter loadPendingCrashReportDataAndReturnError:NULL];
+    if (data == nil) return NO;
+
+    if (![[NSFileManager defaultManager] createDirectoryAtURL:directory
+                                  withIntermediateDirectories:YES
+                                                   attributes:nil
+                                                        error:NULL]) {
+        return NO;
+    }
+    NSURL *file = [directory URLByAppendingPathComponent:crx_reportFileName(data)];
+    if (![data writeToURL:file options:NSDataWritingAtomic error:NULL]) return NO;
+    [reporter purgePendingCrashReport];
+    return YES;
 }
 
 + (NSString *)claimLaunchSession {

@@ -143,12 +143,6 @@ struct ErrorContext {
                 errorContext[Keys.errorCustomData.rawValue] = data
             }
 
-            // Set for crash events re-sent from a previous process (CrashEventStore):
-            // preserves the real crash time, since the span itself is stamped at resend.
-            if !self.crashTimestamp.isEmpty {
-                errorContext[Keys.crashTimestamp.rawValue] = self.crashTimestamp
-            }
-
             errorContext[Keys.isCrash.rawValue] = self.isCrash
         }
         return errorContext

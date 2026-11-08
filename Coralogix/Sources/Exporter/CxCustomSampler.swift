@@ -32,7 +32,7 @@ import CoralogixInternal
 /// **This sampler decides network spans only.** Every other span is always sampled and
 /// `CoralogixExporter.passesSessionSampling` keeps deciding whether it is exported. That is not a
 /// simplification — a crash recovered on relaunch is built through `makeSpan` and only then re-stamped
-/// with the crashed session's decision (`SessionManager.lastLaunchSessionSpanAttributes`). A sampler
+/// with the crashed session's decision (`CoralogixRum.attribute(_:to:)`). A sampler
 /// reading the relaunch's own roll would drop that span before the stamp was applied, and the recovery
 /// path would then treat the crash as delivered and purge it — losing it for good.
 internal final class CxCustomSampler: Sampler {

@@ -95,9 +95,8 @@ public class CoralogixExporter: SpanExporter {
     /// Resolves the crash spans this exporter itself declined to send — dropped by session
     /// sampling or by `ignoreErrors` — by recording their ids as confirmed. "Confirmed" here
     /// means the report is finished with, whether by delivery or by policy: `completeCrashRecovery`
-    /// gates the purge of a pending PLCrashReporter report, and `CrashEventStore` its removal, on
-    /// that flag alone. Without this a crash from a sampled-out session is re-parsed, re-emitted
-    /// and re-dropped on every launch until another crash overwrites the file. The native
+    /// deletes a stored crash on that flag alone. Without this a crash from a sampled-out session
+    /// is re-read, re-emitted and re-dropped on every launch. The native
     /// `beforeSend` dropping a crash during encoding is resolved the same way, in `uploadCrash`.
     private func resolveCrashSpansDroppedByPolicy(incoming: Set<String>, surviving spans: [SpanData]) {
         let dropped = incoming.subtracting(crashEventIds(in: spans))
@@ -342,9 +341,10 @@ public class CoralogixExporter: SpanExporter {
         // ignore Error
         filterSpans = filterSpans.filter { self.shouldFilterIgnoreError(span: $0) }
         
-        // Deduplicate using spanId as key
-        let uniqueSpansDict = Dictionary(grouping: filterSpans, by: { $0.spanId })
-        let uniqueSpans = uniqueSpansDict.compactMap { $0.value.first }
+        // Deduplicated by span id in batch order, so stored crashes go out newest first, as
+        // recovery emitted them.
+        var seenSpanIds = Set<SpanId>()
+        let uniqueSpans = filterSpans.filter { seenSpanIds.insert($0.spanId).inserted }
 
         resolveCrashSpansDroppedByPolicy(incoming: incomingCrashIds, surviving: uniqueSpans)
 

@@ -34,6 +34,7 @@ public enum Keys: String {
     case crashedAppName = "crashed_app_name"
     case crashedAppVersion = "crashed_app_version"
     case crashedOsVersion = "crashed_os_version"
+    case crashedSnapshot = "crashed_snapshot"
     // Span attribute stamped at creation alongside session_id: the sampling decision
     // belongs to the session the span was created in, and reading the live flag at
     // export time would mis-attribute spans buffered across a session rotation

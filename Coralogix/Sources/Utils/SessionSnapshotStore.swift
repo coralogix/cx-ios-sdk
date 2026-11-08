@@ -51,7 +51,7 @@ extension SessionSnapshotRecord {
     }
 }
 
-private extension SessionSnapshotRecord {
+extension SessionSnapshotRecord {
     init?(json: String) {
         guard let data = json.data(using: .utf8),
               let record = try? JSONDecoder().decode(SessionSnapshotRecord.self, from: data) else { return nil }

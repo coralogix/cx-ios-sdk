@@ -341,7 +341,7 @@ final class RecoveredCrashWireTests: XCTestCase {
         let uploader = RecordingUploader()
         exporter.spanUploader = uploader
 
-        sdk.emitRecoveredCrash(crash)
+        sdk.emitRecoveredCrash(crash, as: .fixture(crashId: crash.crashId))
         let flushed = expectation(description: "flushed")
         sdk.flush { flushed.fulfill() }
         wait(for: [flushed], timeout: 10)

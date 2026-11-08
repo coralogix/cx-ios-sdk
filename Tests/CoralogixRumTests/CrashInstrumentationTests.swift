@@ -44,7 +44,7 @@ final class CrashInstrumentationTests: XCTestCase {
 
         let record = SessionSnapshotRecord(sessionId: "crashed", errorCount: 0, viewCount: 1, actionCount: 0,
                                            hasRecording: false, viewName: "CheckoutBeforeCrash", viewNumber: 0)
-        rum.attribute(span, to: .init(sessionId: "crashed", creationDate: nil, sampledIn: true, record: record))
+        rum.attribute(span, to: .fixture(counters: record))
 
         XCTAssertEqual(frozenViewName(of: span), "CheckoutBeforeCrash",
                        "crash span must report the crash-time view, not the blank relaunch view")
@@ -58,7 +58,7 @@ final class CrashInstrumentationTests: XCTestCase {
         rum.coralogixExporter?.getViewManager().prevViewName = "ScreenOfAnotherSession"
 
         let span = rum.makeSpan(event: .error, source: .console, severity: .error)
-        rum.attribute(span, to: .init(sessionId: "crashed", creationDate: nil, sampledIn: true, record: nil))
+        rum.attribute(span, to: .fixture())
 
         XCTAssertEqual(frozenViewName(of: span), Keys.undefined.rawValue,
                        "with no crash-time view on record, the view is left empty")

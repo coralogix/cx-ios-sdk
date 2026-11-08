@@ -16,23 +16,12 @@ public class CoralogixRum {
     /// reaching through the global `OpenTelemetry.instance` (which another OTel
     /// consumer in the host app may have re-registered).
     internal var tracerProviderSdk: TracerProviderSdk?
-    /// Disk store for hybrid crash events (see `CrashEventStore`).
-    internal lazy var crashEventStore = CrashEventStore()
-    /// Deferred purge of the pending PLCrashReporter report. Set by
-    /// `recoverPendingCrashes`, executed by `completeCrashRecovery()`
-    /// after init finishes — the uploader rejects requests while
-    /// `isInitialized` is false, so upload confirmation is only possible then.
-    internal var pendingCrashPurge: (() -> Void)?
-    /// Correlation id of the pending PLCrashReporter report's span, so its purge
-    /// is gated on that report's own upload rather than any crash upload.
-    internal var pendingCrashReportId: String?
-    /// Store identities of the crash events re-emitted during this init, awaiting
-    /// upload confirmation. Only these are removed on confirm — an event persisted
-    /// after the resend (e.g. a fresh runtime crash) keeps its own lifecycle.
-    internal var pendingRecoveryCrashEventIds: Set<String> = []
-    /// Guards `pendingCrashPurge`, `pendingCrashReportId`, and
-    /// `pendingRecoveryCrashEventIds`: written during init and read-and-cleared on
-    /// `flush`'s background completion.
+    /// The SDK's copies of crash reports and their delivery records.
+    internal lazy var crashDeliveryStore = CrashDeliveryStore()
+    /// The crashes `recoverPendingCrashes` emitted, by `crash_event_id`, with the copy each was
+    /// read from: deleted by `completeCrashRecovery` once that crash's own upload is finished with.
+    internal var pendingRecoveredCrashes: [String: URL] = [:]
+    /// Guards `pendingRecoveredCrashes`: written during init and read-and-cleared after it.
     internal let crashRecoveryLock = NSLock()
     internal var networkManager = NetworkManager()
     internal var viewManager = ViewManager(keyChain: KeychainManager())

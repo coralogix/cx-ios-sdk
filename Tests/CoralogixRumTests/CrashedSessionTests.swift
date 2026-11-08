@@ -265,14 +265,16 @@ final class CrashedSessionRecoveryTests: XCTestCase {
         var options = makeSamplingOptions(sampleRate: 100, exclude: [], tracesExporter: tracesExporter)
         options.version = "2.0-relaunch"
         let sdk = CoralogixRum(options: options, sessionManager: manager)
+        sdk.crashDeliveryStore = .temporary()
         rum = sdk
         return sdk
     }
 
     private func attributes(of crash: MappedCrash, in sdk: CoralogixRum) throws -> [String: AttributeValue] {
+        let record = try XCTUnwrap(sdk.firstRecord(of: crash))
         let span = sdk.makeSpan(event: .error, source: .console, severity: .error, startsNewTrace: true)
         defer { span.end() }
-        sdk.attribute(span, to: sdk.crashedSession(of: crash))
+        sdk.attribute(span, to: record)
         return try XCTUnwrap((span as? any ReadableSpan)?.toSpanData()).attributes
     }
 
@@ -292,14 +294,12 @@ final class CrashedSessionRecoveryTests: XCTestCase {
     }
 
     func test_aReportNamingASessionWithNoRecord_neverFallsBackToTheKeychain() throws {
-        let sdk = try relaunch(after: nil, keychainSession: "S2")
+        let keychainRecord = SessionSnapshotRecord(sessionId: "S2", errorCount: 1, viewCount: 1, actionCount: 1,
+                                                   hasRecording: false)
+        let sdk = try relaunch(after: keychainRecord, keychainSession: "S2")
 
-        let attributes = try attributes(of: CrashReportMapper.map(Report.naming("S1")), in: sdk)
-
-        XCTAssertEqual(attributes[Keys.sessionId.rawValue]?.description, "S1")
-        XCTAssertEqual(attributes[Keys.spanViewName.rawValue]?.description, Keys.undefined.rawValue)
-        XCTAssertNil(attributes[Keys.spanViewNumber.rawValue])
-        XCTAssertNil(attributes[Keys.crashedAppVersion.rawValue])
+        XCTAssertNil(sdk.firstRecord(of: CrashReportMapper.map(Report.naming("S1"))),
+                     "S1 left no record; the crash must not be filed under the keychain's S2")
     }
 
     func test_anOldReport_withoutContext_usesTheKeychainSession() throws {
@@ -308,7 +308,7 @@ final class CrashedSessionRecoveryTests: XCTestCase {
         let sdk = try relaunch(after: keychainRecord, keychainSession: "S2")
 
         let crash = CrashReportMapper.map(Report.naming(nil))
-        XCTAssertEqual(sdk.crashedSession(of: crash)?.record, keychainRecord)
+        XCTAssertEqual(sdk.firstRecord(of: crash)?.counters, keychainRecord)
         let attributes = try attributes(of: crash, in: sdk)
 
         XCTAssertEqual(attributes[Keys.sessionId.rawValue]?.description, "S2")
@@ -347,7 +347,8 @@ final class CrashedSessionRecoveryTests: XCTestCase {
         let uploader = RecordingUploader()
         exporter.spanUploader = uploader
 
-        sdk.emitRecoveredCrash(CrashReportMapper.map(Report.naming("S1")))
+        let crash = CrashReportMapper.map(Report.naming("S1"))
+        sdk.emitRecoveredCrash(crash, as: try XCTUnwrap(sdk.firstRecord(of: crash)))
         let flushed = expectation(description: "flushed")
         sdk.flush { flushed.fulfill() }
         wait(for: [flushed], timeout: 10)
