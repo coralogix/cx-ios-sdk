@@ -57,17 +57,37 @@ private func crashContext(sessionId: String?) -> Data? {
 }
 
 /// A real report naming `sessionId` in its crash context, the way a crash in that session leaves one.
-private func liveReportData(sessionId: String?) throws -> Data {
+private func liveReportData(sessionId: String?, exception: NSException? = nil) throws -> Data {
     let reporter = try XCTUnwrap(PLCrashReporter(configuration: PLCrashReporterConfig(signalHandlerType: .BSD,
                                                                                      symbolicationStrategy: [])))
     reporter.customData = crashContext(sessionId: sessionId)
-    return try reporter.generateLiveReportAndReturnError()
+    guard let exception else { return try reporter.generateLiveReportAndReturnError() }
+    return try reporter.generateLiveReport(with: exception)
+}
+
+/// The report React Native's fatal-error handler leaves. RN raises `RCTFatalException: <description>`
+/// with the description as its reason; PLCrashReporter records the exception, then the process
+/// aborts, so the report says SIGABRT. A live report says SIGTRAP instead, and is relabelled: both
+/// names are seven bytes, so the protobuf stays valid.
+private func reactNativeFatalReportData(sessionId: String, description: String) throws -> Data {
+    let exception = NSException(name: NSExceptionName("RCTFatalException: \(description)"), reason: description)
+    var data = try liveReportData(sessionId: sessionId, exception: exception)
+    // The signal message's `name` field: tag 1, length-delimited, 7 bytes.
+    let liveSignal = Data([0x0A, 0x07]) + Data("SIGTRAP".utf8)
+    let range = try XCTUnwrap(data.range(of: liveSignal), "a live report records SIGTRAP")
+    XCTAssertNil(data.range(of: liveSignal, in: range.upperBound..<data.endIndex), "only the signal names it")
+    data.replaceSubrange(range, with: Data([0x0A, 0x07]) + Data("SIGABRT".utf8))
+    return data
 }
 
 /// Leaves a crash in `store` as the load-time copy does, and returns it as recovery will read it.
 @discardableResult
 private func leaveCrash(in store: CrashDeliveryStore, sessionId: String?) throws -> MappedCrash {
-    let data = try liveReportData(sessionId: sessionId)
+    try leaveCrash(in: store, data: try liveReportData(sessionId: sessionId))
+}
+
+@discardableResult
+private func leaveCrash(in store: CrashDeliveryStore, data: Data) throws -> MappedCrash {
     let crash = CrashReportMapper.map(PLCrashReportReader(report: try PLCrashReport(data: data)))
     try FileManager.default.createDirectory(at: store.copiesDirectory, withIntermediateDirectories: true)
     try data.write(to: store.copiesDirectory.appendingPathComponent("\(crash.crashId).plcrash"))
@@ -154,7 +174,9 @@ final class CrashRecoveryAcrossLaunchesTests: XCTestCase {
         XCTAssertNil(store.record(for: crash.crashId))
     }
 
-    /// PLCrashReporter's single slot would have kept only the last of these.
+    /// PLCrashReporter's single slot would have kept only the last of these. A report's time has
+    /// one-second resolution, so these three usually tie: the order among equal times is not
+    /// asserted here (`test_onlyTheNewestTenCopies_areKept` pins newest-first on distinct times).
     func test_threeUndeliveredCrashes_areAllSent_newestFirst() throws {
         let store = CrashDeliveryStore.temporary()
         var crashes: [MappedCrash] = []
@@ -168,8 +190,11 @@ final class CrashRecoveryAcrossLaunchesTests: XCTestCase {
         let uploader = SwitchableUploader()
         try launch(store: store, lastSession: nil, uploader: uploader)
 
-        let sessions = uploader.crashes.map { value($0, .sessionContext, .sessionId) as? String }
-        XCTAssertEqual(sessions, ["S3", "S2", "S1"])
+        let sessions = uploader.crashes.compactMap { value($0, .sessionContext, .sessionId) as? String }
+        XCTAssertEqual(sessions.sorted(), ["S1", "S2", "S3"])
+        let timeOf = Dictionary(uniqueKeysWithValues: zip(["S1", "S2", "S3"], crashes.map { $0.crashTime ?? .distantPast }))
+        let sentTimes = sessions.compactMap { timeOf[$0] }
+        XCTAssertEqual(sentTimes, sentTimes.sorted(by: >), "newest first")
         XCTAssertTrue(store.copies().isEmpty)
     }
 
@@ -207,6 +232,31 @@ final class CrashRecoveryAcrossLaunchesTests: XCTestCase {
         XCTAssertEqual(crashesSeen.value, 2, "the first send and the +30 s retry")
         XCTAssertEqual(failing.crashes.count, 1)
         XCTAssertTrue(store.copies().isEmpty, "dropped by beforeSend on the retry: finished with")
+    }
+
+    /// A JS fatal in React Native reaches the next launch as the native report it left: one crash,
+    /// shaped like every other aborted exception, with RN's repeated description cut from the name.
+    func test_aReactNativeFatal_isSentAsOneCrash_signalShaped() throws {
+        let store = CrashDeliveryStore.temporary()
+        let description = "Unhandled JS Exception: TypeError: undefined is not a function"
+        let data = try reactNativeFatalReportData(sessionId: "S1", description: description)
+        let report = try PLCrashReport(data: data)
+        let crash = try leaveCrash(in: store, data: data)
+
+        let uploader = SwitchableUploader()
+        try launch(store: store, lastSession: sessionRecord(of: "S1"), uploader: uploader)
+
+        XCTAssertEqual(uploader.crashes.count, 1)
+        let sent = try XCTUnwrap(uploader.crashes.first)
+        XCTAssertEqual(value(sent, .errorContext, .exceptionType) as? String, "SIGABRT")
+        XCTAssertEqual(value(sent, .errorContext, .errorType) as? String, "SIGABRT")
+        XCTAssertEqual(value(sent, .errorContext, .errorMessage) as? String, "RCTFatalException: \(description)")
+        let threads = try XCTUnwrap(value(sent, .errorContext, .threads) as? [Any])
+        XCTAssertEqual(threads.count, report.threads.count, "an exception crash sends every thread")
+        XCTAssertGreaterThan(threads.count, 1)
+        XCTAssertEqual(value(sent, .sessionContext, .sessionId) as? String, "S1")
+        XCTAssertNil(store.record(for: crash.crashId))
+        XCTAssertTrue(store.copies().isEmpty)
     }
 
     func test_aCrashWhoseSessionLeftNoRecord_isDropped_andItsCopyDeleted() throws {
