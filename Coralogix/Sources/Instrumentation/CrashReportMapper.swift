@@ -40,6 +40,8 @@ protocol CrashReportReading {
     var exceptionReason: String? { get }
     var processName: String? { get }
     var processID: UInt { get }
+    /// When the crashed process started, to the second; nil when the report does not say.
+    var processStartTime: Date? { get }
     var applicationIdentifier: String? { get }
     var threads: [CrashThread] { get }
     /// The main binary's load address and architecture, as the report's text gives them.
@@ -67,6 +69,7 @@ struct MappedCrash: Equatable {
     let processName: String?
     let applicationIdentifier: String?
     let pid: UInt
+    var processStartTime: Date? = nil
     /// JSON array of threads, each a JSON array of frame objects.
     let threadsJSON: String
     let triggeredByThread: Int?
@@ -101,6 +104,7 @@ enum CrashReportMapper {
                            processName: report.processName,
                            applicationIdentifier: report.applicationIdentifier,
                            pid: report.processID,
+                           processStartTime: report.processStartTime,
                            threadsJSON: Helper.convertArrayOfStringToJsonString(array: threadStrings),
                            triggeredByThread: threads.isEmpty ? nil : 0,
                            baseAddress: report.mainBinaryImage?.baseAddress,
@@ -247,6 +251,7 @@ struct PLCrashReportReader: CrashReportReading {
     var exceptionReason: String? { report.hasExceptionInfo ? report.exceptionInfo.exceptionReason : nil }
     var processName: String? { report.processInfo.processName }
     var processID: UInt { report.processInfo.processID }
+    var processStartTime: Date? { report.processInfo.processStartTime }
     var applicationIdentifier: String? { report.applicationInfo.applicationIdentifier }
     var customData: Data? { report.customData }
 

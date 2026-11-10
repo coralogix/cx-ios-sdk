@@ -235,6 +235,7 @@ final class CrashedSessionRecoveryTests: XCTestCase {
         var exceptionReason: String?
         var processName: String? = "HostApp"
         var processID: UInt = 7
+        var processStartTime: Date?
         var applicationIdentifier: String? = "com.example.host"
         var threads: [CrashThread] = [CrashThread(number: 0, crashed: true, frames: [])]
         var mainBinaryImage: (baseAddress: String, arch: String)? = ("0x100000000", "arm64")

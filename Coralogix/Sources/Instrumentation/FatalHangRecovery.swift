@@ -13,8 +13,11 @@ import CoralogixInternal
 /// the next launch if the process never answers again.
 struct HangMarker: Codable, Equatable {
     let detectedAt: Date
-    /// Tells this process's own crash report apart from an earlier launch's.
+    /// With `processStartTime`, tells this process's own crash report apart from another
+    /// launch's: a pid alone can be reused.
     let pid: Int32
+    /// nil when the system would not say.
+    var processStartTime: Date? = nil
     /// The session the hang happened in; nil when there was none yet.
     let session: StoredCrashRecord.Session?
     /// Every thread at detection, main first, in the crash threads' wire shape.
@@ -24,6 +27,15 @@ struct HangMarker: Codable, Equatable {
 
     var crashId: String {
         "anr-\(Int64((detectedAt.timeIntervalSince1970 * 1000).rounded()))-\(pid)"
+    }
+
+    /// Whether `crash` ended the launch this hang happened in. A crash report keeps its times to
+    /// the second, hence the slack.
+    func endedInCrash(_ crash: MappedCrash, slack: TimeInterval) -> Bool {
+        guard crash.pid == UInt(pid),
+              (crash.crashTime ?? .distantPast) >= detectedAt.addingTimeInterval(-slack) else { return false }
+        guard let processStartTime, let crashStart = crash.processStartTime else { return true }
+        return abs(crashStart.timeIntervalSince(processStartTime)) <= slack
     }
 }
 
@@ -41,14 +53,17 @@ final class FatalHangWatch: HangObserving {
     private let lock = NSLock()
     private var currentHangId: String?
 
+    private static let processStartTime = ColdDetector.processStartTime().map(Date.init(timeIntervalSinceReferenceDate:))
+
     init(store: CrashDeliveryStore, session: @escaping () -> StoredCrashRecord.Session?) {
         self.store = store
         self.session = session
     }
 
     func hangDetected(at date: Date, threads: String?) {
-        let marker = HangMarker(detectedAt: date, pid: getpid(), session: session(),
-                                threads: threads, liveDelivered: false)
+        let marker = HangMarker(detectedAt: date, pid: getpid(),
+                                processStartTime: Self.processStartTime,
+                                session: session(), threads: threads, liveDelivered: false)
         store.writeHangMarker(marker)
         lock.lock()
         currentHangId = marker.crashId
@@ -88,18 +103,17 @@ extension CoralogixRum {
     internal func recordFatalHang(reportsHangs: Bool, crashes: [MappedCrash]) {
         let store = self.crashDeliveryStore
         guard let marker = store.hangMarker() else { return }
-        defer { store.clearHangMarker() }
+        var keepMarker = false
+        defer {
+            if !keepMarker { store.clearHangMarker() }
+        }
 
         guard reportsHangs else { return }
         if marker.liveDelivered {
             Log.d("[FatalHang] the hang's own event was delivered — not reported again")
             return
         }
-        let crashedLater = crashes.contains { crash in
-            crash.pid == UInt(marker.pid)
-                && (crash.crashTime ?? .distantPast) >= marker.detectedAt.addingTimeInterval(-Self.hangCrashSlack)
-        }
-        if crashedLater {
+        if crashes.contains(where: { marker.endedInCrash($0, slack: Self.hangCrashSlack) }) {
             Log.d("[FatalHang] the launch ended in a crash during the hang — the crash is reported instead")
             return
         }
@@ -109,9 +123,18 @@ extension CoralogixRum {
             Log.d("[FatalHang] no record of the hung session — dropping the hang")
             return
         }
-        guard store.storeHang(marker) != nil else { return }
-        store.save(StoredCrashRecord(crashId: marker.crashId, kind: .anr, crashTime: marker.detectedAt,
-                                     failedUploads: 0, session: session, counters: counters))
+        // The record first: a hang file without one is deleted as orphaned. Neither written, the
+        // marker stays for the next launch to try again.
+        let record = StoredCrashRecord(crashId: marker.crashId, kind: .anr, crashTime: marker.detectedAt,
+                                       failedUploads: 0, session: session, counters: counters)
+        guard store.save(record) else {
+            keepMarker = true
+            return
+        }
+        if store.storeHang(marker) == nil {
+            store.removeRecord(for: marker.crashId)
+            keepMarker = true
+        }
     }
 
     /// The stored fatal hangs to send, newest first, capped like crashes. A file that cannot be
@@ -122,11 +145,14 @@ extension CoralogixRum {
         for file in store.hangs() {
             switch Self.readHang(file) {
             case .readable(let marker):
-                guard store.record(for: marker.crashId) != nil else {
+                switch store.lookUpRecord(for: marker.crashId) {
+                case .found:
+                    hangs.append((file, marker))
+                case .missing:
                     store.removeCopy(file)
+                case .unreadable:
                     continue
                 }
-                hangs.append((file, marker))
             case .notReadableYet:
                 continue
             case .corrupt:

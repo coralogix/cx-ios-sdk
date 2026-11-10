@@ -23,6 +23,7 @@ final class CrashReportMapperTests: XCTestCase {
         var exceptionReason: String?
         var processName: String? = "HostApp"
         var processID: UInt = 4242
+        var processStartTime: Date?
         var applicationIdentifier: String? = "com.example.host"
         var threads: [CrashThread] = [
             CrashThread(number: 0, crashed: false, frames: [

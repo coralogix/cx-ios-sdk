@@ -211,6 +211,23 @@ final class ANRDetectorTests: XCTestCase {
         XCTAssertEqual(log.events.count, 1)
     }
 
+    /// A watchdog seeded as paused at launch sees no willEnterForeground, only didBecomeActive.
+    func test_inTheBackground_watchingResumesOnBecomingActive() {
+        detector.startMonitoring()
+        idle(for: 0.2)
+
+        center.post(name: UIApplication.didEnterBackgroundNotification, object: nil)
+        hang(for: 0.9)
+        idle(for: 0.2)
+        XCTAssertTrue(log.events.isEmpty)
+
+        center.post(name: UIApplication.didBecomeActiveNotification, object: nil)
+        idle(for: 0.2)
+        hang(for: 0.9)
+        idle(for: 0.2)
+        XCTAssertEqual(log.events.count, 1)
+    }
+
     /// Inactive is not background: a system alert or Control Center over a hung app is still an ANR.
     func test_whileInactive_aHangIsStillAnANR() {
         detector.startMonitoring()

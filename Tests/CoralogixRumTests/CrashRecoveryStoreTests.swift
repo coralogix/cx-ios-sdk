@@ -455,6 +455,8 @@ final class CrashDeliveryStoreTests: XCTestCase {
 
 // MARK: - Fatal hangs
 
+private let thisProcessStart = ColdDetector.processStartTime().map(Date.init(timeIntervalSinceReferenceDate:))
+
 /// The threads a hang marker carries: main first, as the watchdog captured them.
 private let hangThreads = CrashReportMapper.watchdogThreadsJSON([
     CrashThread(number: 0, crashed: false, frames: [CrashStackFrame(frameNumber: "0", binary: "HostApp",
@@ -464,9 +466,10 @@ private let hangThreads = CrashReportMapper.watchdogThreadsJSON([
 ])
 
 private func hangMarker(session: String?, sampledIn: Bool = true, pid: Int32 = 4242,
+                        processStartTime: Date? = nil,
                         detectedAt: Date = Date(timeIntervalSinceNow: -60),
                         liveDelivered: Bool = false) -> HangMarker {
-    HangMarker(detectedAt: detectedAt, pid: pid,
+    HangMarker(detectedAt: detectedAt, pid: pid, processStartTime: processStartTime,
                session: session.map { .init(id: $0, creationDate: 1_700_000_000, sampledIn: sampledIn) },
                threads: hangThreads, liveDelivered: liveDelivered)
 }
@@ -527,7 +530,8 @@ extension CrashRecoveryAcrossLaunchesTests {
         let store = CrashDeliveryStore.temporary()
         // The hang is detected first, then the same process crashes; a live report can take a
         // few seconds to write on a slow machine, so the crash time is taken after the marker.
-        store.writeHangMarker(hangMarker(session: "S1", pid: getpid(), detectedAt: Date()))
+        store.writeHangMarker(hangMarker(session: "S1", pid: getpid(), processStartTime: thisProcessStart,
+                                         detectedAt: Date()))
         try leaveCrash(in: store, sessionId: "S1")
 
         let uploader = SwitchableUploader()
@@ -536,6 +540,42 @@ extension CrashRecoveryAcrossLaunchesTests {
         XCTAssertEqual(uploader.crashes.count, 1)
         XCTAssertNotEqual(errorType(try XCTUnwrap(uploader.crashes.first)), "ANR")
         XCTAssertNil(store.hangMarker())
+    }
+
+    /// A pid can be reused: a later launch that happens to get the hung one's pid and crashes is
+    /// told apart by when its process started.
+    func test_aCrashOfAnotherLaunchWithTheSamePid_doesNotSuppressTheHang() throws {
+        let store = CrashDeliveryStore.temporary()
+        store.writeHangMarker(hangMarker(session: "S1", pid: getpid(),
+                                         processStartTime: Date(timeIntervalSinceNow: -3600), detectedAt: Date()))
+        try leaveCrash(in: store, sessionId: "S1")
+
+        let uploader = SwitchableUploader()
+        try launch(store: store, lastSession: sessionRecord(of: "S1"), uploader: uploader)
+
+        XCTAssertEqual(Set(uploader.crashes.map(errorType)), ["SIGTRAP", "ANR"])
+    }
+
+    /// A records file that cannot be read yet leaves the hang for a later launch, rather than
+    /// storing a hang without its record or deleting one as orphaned.
+    func test_anUnreadableRecordsFile_keepsTheHangForALaterLaunch() throws {
+        let store = CrashDeliveryStore.temporary()
+        let records = store.hangsDirectory.deletingLastPathComponent().appendingPathComponent("crash_delivery.json")
+        try FileManager.default.createDirectory(at: records.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("{}".utf8).write(to: records)
+        store.writeHangMarker(hangMarker(session: "S1"))
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: records.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: records.path) }
+
+        let locked = SwitchableUploader()
+        try launch(store: store, lastSession: sessionRecord(of: "S1"), uploader: locked)
+        XCTAssertTrue(locked.crashes.isEmpty)
+        XCTAssertNotNil(store.hangMarker(), "the marker stays to be recorded later")
+
+        try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: records.path)
+        let unlocked = SwitchableUploader()
+        try launch(store: store, lastSession: sessionRecord(of: "S1"), uploader: unlocked)
+        XCTAssertEqual(unlocked.crashes.map(errorType), ["ANR"])
     }
 
     /// Native crashes go first, then hangs, as Android sends them.

@@ -179,8 +179,25 @@ final class CrashDeliveryStore {
         return readLocked()?[crashId]
     }
 
-    func save(_ record: StoredCrashRecord) {
+    /// Returns whether the record reached disk.
+    @discardableResult
+    func save(_ record: StoredCrashRecord) -> Bool {
         mutate { $0[record.crashId] = record }
+    }
+
+    /// The record of `crashId`; `.unreadable` when the records file exists but cannot be read yet,
+    /// which says nothing about whether the record is there.
+    func lookUpRecord(for crashId: String) -> RecordLookup {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let records = readLocked() else { return .unreadable }
+        return records[crashId].map(RecordLookup.found) ?? .missing
+    }
+
+    enum RecordLookup {
+        case found(StoredCrashRecord)
+        case missing
+        case unreadable
     }
 
     func countFailedUpload(of crashId: String) {
@@ -194,12 +211,13 @@ final class CrashDeliveryStore {
     /// Reads, changes and writes the records under one lock. A file that exists but cannot be read
     /// — data protection before the first unlock, typically — is left alone rather than replaced:
     /// it is not corrupt, and writing over it would lose every other crash's record.
-    private func mutate(_ change: (inout [String: StoredCrashRecord]) -> Void) {
+    @discardableResult
+    private func mutate(_ change: (inout [String: StoredCrashRecord]) -> Void) -> Bool {
         lock.lock()
         defer { lock.unlock() }
-        guard var records = readLocked() else { return }
+        guard var records = readLocked() else { return false }
         change(&records)
-        writeLocked(records)
+        return writeLocked(records)
     }
 
     /// nil when the file exists but could not be read; empty when there is none, or it is corrupt.
@@ -209,11 +227,13 @@ final class CrashDeliveryStore {
         return (try? JSONDecoder().decode([String: StoredCrashRecord].self, from: data)) ?? [:]
     }
 
-    private func writeLocked(_ records: [String: StoredCrashRecord]) {
+    private func writeLocked(_ records: [String: StoredCrashRecord]) -> Bool {
         do {
             try Self.writeJSON(records, to: recordsFile)
+            return true
         } catch {
             Log.e("[CrashDeliveryStore] Failed to write crash delivery records: \(error)")
+            return false
         }
     }
 
