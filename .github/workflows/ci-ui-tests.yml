@@ -245,6 +245,13 @@ jobs:
           for SCHEME in $(echo "$SCHEMES" | jq -r '.[]'); do
             echo "::group::build-for-testing $SCHEME"
             START=$(date +%s)
+            # An unsigned app has no keychain on the simulator, and the crash suite asserts
+            # what the SDK keeps there across launches, so that scheme is signed ad hoc. The
+            # demo apps stay unsigned, as their tests were written against.
+            SIGNING=(CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY="")
+            if [ "$SCHEME" = "CrashE2E" ]; then
+              SIGNING=(CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY="-")
+            fi
             set +e
             xcodebuild build-for-testing \
               -workspace DemoApp.xcworkspace \
@@ -253,8 +260,7 @@ jobs:
               -destination "generic/platform=iOS Simulator" \
               -derivedDataPath ../DerivedData \
               -jobs "$(sysctl -n hw.ncpu)" \
-              CODE_SIGNING_ALLOWED=NO \
-              CODE_SIGN_IDENTITY="" \
+              "${SIGNING[@]}" \
               CODE_SIGN_ENTITLEMENTS="" \
               DEVELOPMENT_TEAM="" \
               COMPILER_INDEX_STORE_ENABLE=NO \
