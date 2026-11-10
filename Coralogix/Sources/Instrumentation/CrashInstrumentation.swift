@@ -238,8 +238,11 @@ extension CoralogixRum: StoredCrashSending {
             span.setAttribute(key: Keys.triggeredByThread.rawValue, value: triggeredByThread)
         }
         span.setAttribute(key: Keys.threads.rawValue, value: crash.threadsJSON)
-        if let baseAddress = crash.baseAddress, let arch = crash.arch {
+        if let baseAddress = crash.baseAddress {
             span.setAttribute(key: Keys.baseAddress.rawValue, value: baseAddress)
+        }
+        // The backend refuses an error carrying arch unless the app is React Native or Flutter.
+        if let arch = crash.arch, !CoralogixRum.mobileSDK.sdkFramework.isNative {
             span.setAttribute(key: Keys.arch.rawValue, value: arch)
         }
 

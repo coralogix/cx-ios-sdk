@@ -125,14 +125,15 @@ final class CrashRecoveryAcrossLaunchesTests: XCTestCase {
                         uploader: SwitchableUploader, version: String = "9.9",
                         ignoreErrors: [String] = [],
                         instrumentations: [CoralogixExporterOptions.InstrumentationType: Bool]? = nil,
-                        beforeSend: (([String: Any]) -> [String: Any]?)? = nil) throws -> CoralogixRum {
+                        beforeSend: (([String: Any]) -> [String: Any]?)? = nil,
+                        framework: SdkFramework = .swift) throws -> CoralogixRum {
         let manager = SessionManager(snapshotStore: .relaunched(after: lastSession))
         manager.lastLaunchSession = nil
         var options = makeSamplingOptions(sampleRate: 100, exclude: [], instrumentations: instrumentations,
                                           ignoreErrors: ignoreErrors)
         options.version = version
         options.beforeSend = beforeSend
-        let sdk = CoralogixRum(options: options, sessionManager: manager)
+        let sdk = CoralogixRum(options: options, sdkFramework: framework, sessionManager: manager)
         launches.append(sdk)
         sdk.crashDeliveryStore = store
         try XCTUnwrap(sdk.coralogixExporter).spanUploader = uploader
@@ -321,6 +322,21 @@ final class CrashRecoveryAcrossLaunchesTests: XCTestCase {
 
         XCTAssertFalse(FileManager.default.fileExists(atPath: corrupt.path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: locked.path), "a file that cannot be read yet is not corrupt")
+    }
+
+    /// The backend refuses `arch` in an error unless the app is React Native or Flutter.
+    func test_aNativeCrash_carriesArch_onlyInAHybridApp() throws {
+        for (framework, expected) in [(SdkFramework.swift, nil), (.reactNative(version: "0.16.0"), "arm64")] {
+            let store = CrashDeliveryStore.temporary()
+            try leaveCrash(in: store, sessionId: "S1")
+            let uploader = SwitchableUploader()
+            try launch(store: store, lastSession: sessionRecord(of: "S1"), uploader: uploader, framework: framework)
+
+            let crash = try XCTUnwrap(uploader.crashes.first, "\(framework)")
+            let errorContext = try XCTUnwrap(crash[Keys.errorContext.rawValue] as? [String: Any])
+            XCTAssertNotNil(errorContext[Keys.baseAddress.rawValue], "\(framework)")
+            XCTAssertEqual(errorContext[Keys.arch.rawValue] as? String, expected, "\(framework)")
+        }
     }
 
     func test_aHybridCrash_isSentOnce_andNothingIsKeptOnDisk() throws {

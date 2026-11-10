@@ -91,7 +91,9 @@ struct ErrorContext {
             errorContext[Keys.applicationIdentifier.rawValue] = self.applicationIdentifier
             errorContext[Keys.triggeredByThread.rawValue] = self.triggeredByThread
             errorContext[Keys.baseAddress.rawValue] = self.baseAddress
-            errorContext[Keys.arch.rawValue] = self.arch
+            if !self.arch.isEmpty {
+                errorContext[Keys.arch.rawValue] = self.arch
+            }
             if let threads = self.threads {
                 errorContext[Keys.threads.rawValue] = threads
             }
