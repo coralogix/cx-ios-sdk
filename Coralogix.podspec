@@ -25,11 +25,13 @@ Pod::Spec.new do |spec|
   spec.ios.deployment_target = "13.0"
 
   spec.source_files  = ['Coralogix/Sources/**/*.swift',
-                        'CoralogixBootstrap/Sources/**/*.{h,m}']
+                        'CoralogixBootstrap/Sources/**/*.{h,m,mm}']
   spec.public_header_files = 'CoralogixBootstrap/Sources/include/*.h'
   spec.exclude_files = 'Coralogix/Sources/Exclude'
 
   spec.static_framework = true
+  # The C++ terminate handler (CoralogixBootstrap) needs libc++; not left to PLCrashReporter's pod.
+  spec.libraries = 'c++'
   spec.dependency 'PLCrashReporter', '~> 1.12'
   spec.dependency 'CoralogixInternal', '2.22.0'
 

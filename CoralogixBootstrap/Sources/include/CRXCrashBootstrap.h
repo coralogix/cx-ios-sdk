@@ -27,7 +27,9 @@ NS_ASSUME_NONNULL_BEGIN
 /// because SPM targets are single-language.
 ///
 /// A host app that needs to opt out can set `CoralogixDisableEarlyCrashHandler` to `YES` in its
-/// Info.plist; see `disabledByHostApp`.
+/// Info.plist; see `disabledByHostApp`. The key covers PLCrashReporter's signal handlers only:
+/// the C++ terminate handler (`CRXTerminateHandler`) is installed from `+load` either way, and
+/// records nothing until a reporter of ours is enabled.
 @interface CRXCrashBootstrap : NSObject
 
 /// The reporter enabled during `+load`, or `nil` if enabling failed (see `enableError`).

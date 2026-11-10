@@ -6,6 +6,9 @@
 import Foundation
 import CrashReporter
 import CoralogixInternal
+#if canImport(CoralogixBootstrap)
+import CoralogixBootstrap
+#endif
 
 /// One frame of a crash report thread, already formatted the way the wire carries it.
 struct CrashStackFrame: Equatable {
@@ -51,6 +54,8 @@ struct MappedCrash: Equatable {
         case signal
         case objcException
         case rnFatal
+        /// An uncaught C++ exception, recorded by the terminate handler.
+        case cxx
     }
 
     let crashId: String
@@ -81,7 +86,8 @@ enum CrashReportMapper {
     static let rnFatalPrefix = "RCTFatalException"
 
     static func map(_ report: CrashReportReading) -> MappedCrash {
-        let crashKind = kind(of: report)
+        let context = CrashContextEnvelope(data: report.customData)
+        let crashKind = kind(of: report, context: context)
         let threads = orderedThreads(report.threads, kind: crashKind)
         let threadStrings = threads.map { thread in
             Helper.convertArrayToJsonString(array: thread.frames.map(frameDictionary))
@@ -91,7 +97,7 @@ enum CrashReportMapper {
                            kind: crashKind,
                            exceptionType: report.signalName,
                            errorType: report.signalName,
-                           errorMessage: capped(message(for: report, kind: crashKind)),
+                           errorMessage: capped(message(for: report, kind: crashKind, context: context)),
                            processName: report.processName,
                            applicationIdentifier: report.applicationIdentifier,
                            pid: report.processID,
@@ -99,15 +105,17 @@ enum CrashReportMapper {
                            triggeredByThread: threads.isEmpty ? nil : 0,
                            baseAddress: report.mainBinaryImage?.baseAddress,
                            arch: report.mainBinaryImage?.arch,
-                           context: CrashContextEnvelope(data: report.customData))
+                           context: context)
     }
 
-    static func kind(of report: CrashReportReading) -> MappedCrash.Kind {
-        guard let name = report.exceptionName, !name.isEmpty else { return .signal }
+    static func kind(of report: CrashReportReading, context: CrashContextEnvelope?) -> MappedCrash.Kind {
+        guard let name = report.exceptionName, !name.isEmpty else {
+            return context?.cxx == nil ? .signal : .cxx
+        }
         return name.hasPrefix(rnFatalPrefix) ? .rnFatal : .objcException
     }
 
-    static func message(for report: CrashReportReading, kind: MappedCrash.Kind) -> String {
+    static func message(for report: CrashReportReading, kind: MappedCrash.Kind, context: CrashContextEnvelope?) -> String {
         let reason = report.exceptionReason.flatMap { $0.isEmpty ? nil : $0 }
         switch kind {
         case .signal:
@@ -119,7 +127,17 @@ enum CrashReportMapper {
         case .rnFatal:
             // RN's exception name repeats the description the reason already carries.
             return reason.map { "\(rnFatalPrefix): \($0)" } ?? rnFatalPrefix
+        case .cxx:
+            guard let cxx = context?.cxx else { return report.signalName }
+            let type = demangledTypeName(cxx.type)
+            return cxx.what.flatMap { $0.isEmpty ? nil : "\(type): \($0)" } ?? type
         }
+    }
+
+    /// The terminate handler records the type mangled; it is spelled as in source here, on the
+    /// next launch. A name that does not demangle is sent as it is.
+    static func demangledTypeName(_ mangled: String) -> String {
+        CRXTerminateHandler.demangle(mangled) ?? mangled
     }
 
     /// The code's name when Android has the same one, so a crash reads the same on both
@@ -154,7 +172,7 @@ enum CrashReportMapper {
         }
         let crashed = threads[crashedIndex]
         switch kind {
-        case .signal:
+        case .signal, .cxx:
             return [crashed]
         case .objcException, .rnFatal:
             var ordered = threads

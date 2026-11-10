@@ -5,6 +5,7 @@
 
 #import "CRXCrashBootstrap.h"
 #import "CRXCrashContext.h"
+#import "CRXTerminateHandler.h"
 #import <stdatomic.h>
 
 #if __has_include(<CrashReporter/CrashReporter.h>)
@@ -34,6 +35,10 @@ static atomic_flag _crx_launchSessionClaimed = ATOMIC_FLAG_INIT;
 
 + (void)load {
     @autoreleasepool {
+        // Before the opt-out: the key covers PLCrashReporter's signal handlers only. The handler
+        // writes nothing until a reporter of ours is active.
+        [CRXTerminateHandler install];
+
         // Only an id: on iOS 15+ prewarming runs +load long before the app is opened, so a
         // creation time taken here would date the session from before the user launched it.
         _crx_launchSessionId = [[NSUUID UUID].UUIDString lowercaseString];

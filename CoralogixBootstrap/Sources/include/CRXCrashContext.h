@@ -49,6 +49,10 @@ FOUNDATION_EXPORT const NSInteger CRXCrashContextVersion;
 /// The sections held now, as they would be encoded. For tests and diagnostics.
 @property (class, nonatomic, readonly) NSDictionary<NSString *, id> *sections;
 
+/// The envelope as the terminate handler would write it for an uncaught C++ exception of
+/// `type` (mangled) with `what`: the envelope last written plus a `cxx` section. For tests.
++ (nullable NSData *)envelopeWithCxxType:(NSString *)type what:(nullable NSString *)what;
+
 /// Every key the envelope can carry, for the parity test with `Keys.swift`.
 @property (class, nonatomic, readonly) NSSet<NSString *> *allKeys;
 
