@@ -61,10 +61,13 @@ final class CrashAttributionUITests: CrashE2ETestCase {
         var sessions: [String] = []
         endpoint.answerCrashes([], then: .noAnswer)
         for index in 0..<3 {
-            crash("exception", before: ["error:launch \(index)"], fresh: index == 0)
-            if let crashed = endpoint.events.first(where: { message($0) == "launch \(index)" }).flatMap(session) {
-                sessions.append(crashed)
-            }
+            // The session is read off the screen: while a stored crash's send gets no answer,
+            // this launch's own events do not leave before it crashes.
+            launch(["hooks": index == 0 ? ["reset"] : [], "actions": ["wait:3000", "crash:exception"]],
+                   waitForActions: false)
+            XCTAssertTrue(waitFor { self.sessionId() != "none" && !self.sessionId().isEmpty })
+            sessions.append(sessionId())
+            XCTAssertTrue(app.wait(for: .notRunning, timeout: 30), "the app did not crash")
             settle(1.5)  // a report's time is kept to the second
         }
         endpoint.answerCrashes([], then: .ok)
