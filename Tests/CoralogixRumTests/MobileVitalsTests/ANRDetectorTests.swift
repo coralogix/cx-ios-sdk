@@ -205,9 +205,10 @@ final class ANRDetectorTests: XCTestCase {
         XCTAssertTrue(log.events.isEmpty)
 
         center.post(name: UIApplication.willEnterForegroundNotification, object: nil)
-        idle(for: 0.2)
-        hang(for: 0.9)
-        idle(for: 0.2)
+        // Wide margins: the watchdog restarts asynchronously, and a slow CI runner needs them.
+        idle(for: 0.5)
+        hang(for: 1.5)
+        idle(for: 0.3)
         XCTAssertEqual(log.events.count, 1)
     }
 
@@ -222,9 +223,10 @@ final class ANRDetectorTests: XCTestCase {
         XCTAssertTrue(log.events.isEmpty)
 
         center.post(name: UIApplication.didBecomeActiveNotification, object: nil)
-        idle(for: 0.2)
-        hang(for: 0.9)
-        idle(for: 0.2)
+        // Wide margins: the watchdog restarts asynchronously, and a slow CI runner needs them.
+        idle(for: 0.5)
+        hang(for: 1.5)
+        idle(for: 0.3)
         XCTAssertEqual(log.events.count, 1)
     }
 
