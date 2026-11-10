@@ -175,9 +175,9 @@ public class MetricsManager {
         self.warmDetector = detector
     }
     
-    func startANRMonitoring() {
+    func startANRMonitoring(hangObserver: HangObserving? = nil) {
         guard anrDetector == nil else { return }
-        let detector = ANRDetector(eventReporter: self.eventReporter)
+        let detector = ANRDetector(eventReporter: self.eventReporter, hangObserver: hangObserver)
         detector.startMonitoring()
         self.anrDetector = detector
     }

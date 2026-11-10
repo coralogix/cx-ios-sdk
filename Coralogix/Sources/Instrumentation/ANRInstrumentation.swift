@@ -19,7 +19,12 @@ extension CoralogixRum {
     public func initializeANRInstrumentation() {
         self.metricsManager.eventReporter = SpanEventReporter(
             createErrorSpan: { [weak self] in
-                self?.makeSpan(event: .error, source: .code, severity: .error)
+                guard let self = self else { return nil }
+                let span = self.makeSpan(event: .error, source: .code, severity: .error)
+                if let exporter = self.coralogixExporter {
+                    self.fatalHangWatch.awaitDelivery(ofSpan: span.context.spanId.hexString, through: exporter)
+                }
+                return span
             },
             recordScreenshot: { [weak self] span, finish in
                 guard let self = self else {
@@ -29,6 +34,6 @@ extension CoralogixRum {
                 self.recordScreenshotForSpan(on: span) { _ in finish() }
             }
         )
-        self.metricsManager.startANRMonitoring()
+        self.metricsManager.startANRMonitoring(hangObserver: self.fatalHangWatch)
     }
 }

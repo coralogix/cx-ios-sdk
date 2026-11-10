@@ -119,10 +119,13 @@ final class CrashRecoveryAcrossLaunchesTests: XCTestCase {
     /// `store`, sending through `uploader`.
     private func launch(store: CrashDeliveryStore, lastSession: SessionSnapshotRecord?,
                         uploader: SwitchableUploader, version: String = "9.9",
+                        ignoreErrors: [String] = [],
+                        instrumentations: [CoralogixExporterOptions.InstrumentationType: Bool]? = nil,
                         beforeSend: (([String: Any]) -> [String: Any]?)? = nil) throws -> CoralogixRum {
         let manager = SessionManager(snapshotStore: .relaunched(after: lastSession))
         manager.lastLaunchSession = nil
-        var options = makeSamplingOptions(sampleRate: 100, exclude: [])
+        var options = makeSamplingOptions(sampleRate: 100, exclude: [], instrumentations: instrumentations,
+                                          ignoreErrors: ignoreErrors)
         options.version = version
         options.beforeSend = beforeSend
         let sdk = CoralogixRum(options: options, sessionManager: manager)
@@ -416,4 +419,253 @@ final class CrashDeliveryStoreTests: XCTestCase {
                     errorMessage: "SIGSEGV", processName: nil, applicationIdentifier: nil, pid: 1, threadsJSON: "[]",
                     triggeredByThread: nil, baseAddress: nil, arch: nil, context: nil)
     }
+}
+
+// MARK: - Fatal hangs
+
+/// The threads a hang marker carries: main first, as the watchdog captured them.
+private let hangThreads = CrashReportMapper.watchdogThreadsJSON([
+    CrashThread(number: 0, crashed: false, frames: [CrashStackFrame(frameNumber: "0", binary: "HostApp",
+                                                                     functionAddressCalled: "0x100000010",
+                                                                     base: "0x100000000", offset: "16")]),
+    CrashThread(number: 1, crashed: true, frames: [])
+])
+
+private func hangMarker(session: String?, sampledIn: Bool = true, pid: Int32 = 4242,
+                        detectedAt: Date = Date(timeIntervalSinceNow: -60),
+                        liveDelivered: Bool = false) -> HangMarker {
+    HangMarker(detectedAt: detectedAt, pid: pid,
+               session: session.map { .init(id: $0, creationDate: 1_700_000_000, sampledIn: sampledIn) },
+               threads: hangThreads, liveDelivered: liveDelivered)
+}
+
+extension CrashRecoveryAcrossLaunchesTests {
+
+    private func errorType(_ crash: [String: Any]) -> String? {
+        value(crash, .errorContext, .errorType) as? String
+    }
+
+    /// The process ended during the hang, before its own event left: the next launch reports it,
+    /// once, in the session, on the screen and at the time it was detected.
+    func test_aHangTheLaunchEndedDuring_isSentOnceByTheNextLaunch_asItHappened() throws {
+        let store = CrashDeliveryStore.temporary()
+        let marker = hangMarker(session: "S1")
+        store.writeHangMarker(marker)
+
+        let uploader = SwitchableUploader()
+        try launch(store: store, lastSession: sessionRecord(of: "S1"), uploader: uploader)
+
+        XCTAssertEqual(uploader.crashes.count, 1)
+        let anr = try XCTUnwrap(uploader.crashes.first)
+        XCTAssertEqual(errorType(anr), "ANR")
+        XCTAssertEqual(value(anr, .errorContext, .errorMessage) as? String, "Application Not Responding")
+        XCTAssertEqual(value(anr, .errorContext, .isCrash) as? Bool, true)
+        XCTAssertEqual((value(anr, .errorContext, .threads) as? [Any])?.count, 2)
+        XCTAssertEqual(value(anr, .sessionContext, .sessionId) as? String, "S1")
+        XCTAssertEqual(value(anr, .viewContext, .view) as? String, "Checkout")
+        XCTAssertEqual(value(anr, .snapshotContext, .errorCount) as? Int, 3, "the session's two errors and this hang")
+        let timestamp = try XCTUnwrap((anr[Keys.timestamp.rawValue] as? NSNumber)?.doubleValue)
+        XCTAssertEqual(timestamp, marker.detectedAt.timeIntervalSince1970 * 1000, accuracy: 1)
+        XCTAssertNil(store.hangMarker())
+        XCTAssertTrue(store.hangs().isEmpty, "a delivered hang's file is deleted")
+
+        let again = SwitchableUploader()
+        try launch(store: store, lastSession: sessionRecord(of: "S2"), uploader: again)
+        XCTAssertTrue(again.crashes.isEmpty)
+    }
+
+    /// Stored hangs share the crashes' schedule: one that cannot be delivered is kept and sent later.
+    func test_anUndeliveredHang_isKept_andSentByALaterLaunch() throws {
+        let store = CrashDeliveryStore.temporary()
+        store.writeHangMarker(hangMarker(session: "S1"))
+
+        let failing = SwitchableUploader()
+        failing.result = SwitchableUploader.serverError
+        try launch(store: store, lastSession: sessionRecord(of: "S1"), uploader: failing)
+        XCTAssertEqual(failing.crashes.count, 3, "0 s, +30 s and +2 min")
+        XCTAssertEqual(store.hangs().count, 1)
+
+        let delivering = SwitchableUploader()
+        try launch(store: store, lastSession: sessionRecord(of: "S2"), uploader: delivering)
+        XCTAssertEqual(delivering.crashes.map(errorType), ["ANR"])
+        XCTAssertEqual(value(try XCTUnwrap(delivering.crashes.first), .sessionContext, .sessionId) as? String, "S1")
+    }
+
+    func test_aHangWhoseLaunchThenCrashed_isReportedAsTheCrashAlone() throws {
+        let store = CrashDeliveryStore.temporary()
+        try leaveCrash(in: store, sessionId: "S1")  // this process: same pid, crashed now
+        store.writeHangMarker(hangMarker(session: "S1", pid: getpid(), detectedAt: Date(timeIntervalSinceNow: -2)))
+
+        let uploader = SwitchableUploader()
+        try launch(store: store, lastSession: sessionRecord(of: "S1"), uploader: uploader)
+
+        XCTAssertEqual(uploader.crashes.count, 1)
+        XCTAssertNotEqual(errorType(try XCTUnwrap(uploader.crashes.first)), "ANR")
+        XCTAssertNil(store.hangMarker())
+    }
+
+    /// Native crashes go first, then hangs, as Android sends them.
+    func test_aCrashAndAHangOfDifferentLaunches_areBothSent_theCrashFirst() throws {
+        let store = CrashDeliveryStore.temporary()
+        try leaveCrash(in: store, sessionId: "S1")
+        store.writeHangMarker(hangMarker(session: "S1", pid: 1, detectedAt: Date(timeIntervalSinceNow: 30)))
+
+        let uploader = SwitchableUploader()
+        try launch(store: store, lastSession: sessionRecord(of: "S1"), uploader: uploader)
+
+        XCTAssertEqual(uploader.crashes.map(errorType), ["SIGTRAP", "ANR"],
+                       "the hang is the newer, and still goes after the crash")
+    }
+
+    func test_aHangItsOwnEventReported_isNotReportedAgain() throws {
+        let store = CrashDeliveryStore.temporary()
+        store.writeHangMarker(hangMarker(session: "S1", liveDelivered: true))
+
+        let uploader = SwitchableUploader()
+        try launch(store: store, lastSession: sessionRecord(of: "S1"), uploader: uploader)
+
+        XCTAssertTrue(uploader.crashes.isEmpty)
+        XCTAssertNil(store.hangMarker())
+        XCTAssertTrue(store.hangs().isEmpty)
+    }
+
+    func test_aHangInASampledOutSession_isNeitherSentNorKept() throws {
+        let store = CrashDeliveryStore.temporary()
+        store.writeHangMarker(hangMarker(session: "S1", sampledIn: false))
+
+        let uploader = SwitchableUploader()
+        try launch(store: store, lastSession: sessionRecord(of: "S1"), uploader: uploader)
+
+        XCTAssertTrue(uploader.crashes.isEmpty)
+        XCTAssertTrue(store.hangs().isEmpty)
+    }
+
+    func test_ignoreErrorsNamingANR_dropsTheHang() throws {
+        let store = CrashDeliveryStore.temporary()
+        store.writeHangMarker(hangMarker(session: "S1"))
+
+        let uploader = SwitchableUploader()
+        try launch(store: store, lastSession: sessionRecord(of: "S1"), uploader: uploader, ignoreErrors: ["ANR"])
+
+        XCTAssertTrue(uploader.crashes.isEmpty)
+        XCTAssertTrue(store.hangs().isEmpty)
+    }
+
+    func test_aHangWhoseSessionLeftNoRecord_isDropped() throws {
+        let store = CrashDeliveryStore.temporary()
+        store.writeHangMarker(hangMarker(session: "never-recorded"))
+
+        let uploader = SwitchableUploader()
+        try launch(store: store, lastSession: sessionRecord(of: "S2"), uploader: uploader)
+
+        XCTAssertTrue(uploader.crashes.isEmpty)
+        XCTAssertNil(store.hangMarker())
+        XCTAssertTrue(store.hangs().isEmpty)
+    }
+
+    func test_withANRsSwitchedOff_aHangIsNotSent() throws {
+        let store = CrashDeliveryStore.temporary()
+        store.writeHangMarker(hangMarker(session: "S1"))
+
+        let uploader = SwitchableUploader()
+        try launch(store: store, lastSession: sessionRecord(of: "S1"), uploader: uploader, instrumentations: [.anr: false])
+
+        XCTAssertTrue(uploader.crashes.isEmpty)
+        XCTAssertNil(store.hangMarker())
+    }
+}
+
+// MARK: - The hang marker while the app runs
+
+final class FatalHangWatchTests: XCTestCase {
+
+    private final class Observer: HangObserving {
+        private let lock = NSLock()
+        private var _calls: [String] = []
+        var calls: [String] { lock.lock(); defer { lock.unlock() }; return _calls }
+        func hangDetected(at date: Date, threads: String?) { lock.lock(); _calls.append("detected"); lock.unlock() }
+        func hangEnded() { lock.lock(); _calls.append("ended"); lock.unlock() }
+    }
+
+    func test_theMarker_isWrittenAtDetection_andClearedWhenMainAnswers() throws {
+        let store = CrashDeliveryStore.temporary()
+        let watch = FatalHangWatch(store: store) { .init(id: "S1", creationDate: 1, sampledIn: true) }
+
+        watch.hangDetected(at: Date(timeIntervalSince1970: 1_700_000_000), threads: "[]")
+
+        let marker = try XCTUnwrap(store.hangMarker())
+        XCTAssertEqual(marker.session?.id, "S1")
+        XCTAssertEqual(marker.pid, getpid())
+        XCTAssertEqual(marker.threads, "[]")
+        XCTAssertFalse(marker.liveDelivered)
+
+        watch.hangEnded()
+        XCTAssertNil(store.hangMarker())
+    }
+
+    func test_theWatchdog_tellsTheObserverOfAReportedHang_andOfItsEnd() {
+        let main = DispatchQueue(label: "hang-watch.main")
+        let observer = Observer()
+        let detector = ANRDetector(threshold: 0.5, pollInterval: 0.05, mainQueue: main, isDebuggerAttached: { false },
+                                   captureThreads: { nil }, notificationCenter: NotificationCenter(),
+                                   hangObserver: observer)
+        detector.startMonitoring()
+        defer { detector.stopMonitoring() }
+        Thread.sleep(forTimeInterval: 0.2)
+
+        main.async { Thread.sleep(forTimeInterval: 1.0) }
+        main.sync {}
+        Thread.sleep(forTimeInterval: 0.2)
+
+        XCTAssertEqual(observer.calls, ["detected", "ended"])
+    }
+
+    func test_aHangUnderADebugger_leavesNoMarker() {
+        let main = DispatchQueue(label: "hang-watch.main")
+        let observer = Observer()
+        let detector = ANRDetector(threshold: 0.5, pollInterval: 0.05, mainQueue: main, isDebuggerAttached: { true },
+                                   captureThreads: { nil }, notificationCenter: NotificationCenter(),
+                                   hangObserver: observer)
+        detector.startMonitoring()
+        defer { detector.stopMonitoring() }
+        Thread.sleep(forTimeInterval: 0.2)
+
+        main.async { Thread.sleep(forTimeInterval: 1.0) }
+        main.sync {}
+        Thread.sleep(forTimeInterval: 0.2)
+
+        XCTAssertTrue(observer.calls.isEmpty)
+    }
+
+    /// The hang's own event is matched to its delivery by span id, so a delivered ANR is not
+    /// reported a second time if the process then ends during the hang.
+    func test_theHangsOwnEvent_delivered_marksTheMarker_andRefused_doesNot() throws {
+        for (result, delivered) in [(SpanUploadResult.delivered, true), (SpanUploadResult.permanentReject, false)] {
+            let store = CrashDeliveryStore.temporary()
+            let sdk = CoralogixRum(options: makeSamplingOptions(sampleRate: 100, exclude: []))
+            defer { sdk.shutdown() }
+            let exporter = try XCTUnwrap(sdk.coralogixExporter)
+            exporter.spanUploader = FixedUploader(result: result)
+            let watch = FatalHangWatch(store: store) { .init(id: "S1", creationDate: 1, sampledIn: true) }
+            watch.hangDetected(at: Date(), threads: nil)
+
+            let span = sdk.makeSpan(event: .error, source: .code, severity: .error)
+            span.setAttribute(key: Keys.errorType.rawValue, value: "ANR")
+            span.setAttribute(key: Keys.errorMessage.rawValue, value: "Application Not Responding for at least 1000 ms.")
+            let answered = expectation(description: "answered")
+            watch.awaitDelivery(ofSpan: span.context.spanId.hexString, through: exporter)
+            exporter.awaitLiveDelivery(spanId: "unrelated") { _ in }
+            span.end()
+            sdk.flush { answered.fulfill() }
+            wait(for: [answered], timeout: 10)
+
+            XCTAssertEqual(store.hangMarker()?.liveDelivered, delivered, "upload \(result.disposition)")
+        }
+    }
+}
+
+private final class FixedUploader: SpanUploading {
+    let result: SpanUploadResult
+    init(result: SpanUploadResult) { self.result = result }
+    func upload(_ spans: [[String: Any]], endPoint: String, kind: SpanUploadKind) -> SpanUploadResult { result }
 }

@@ -214,6 +214,16 @@ public class SessionManager {
         notifyCrashStampLocked()
     }
 
+    /// The live session's identity, as a crash in it would be filed under.
+    var currentCrashStamp: CrashStamp? {
+        sessionLock.lock()
+        defer { sessionLock.unlock() }
+        guard let current = sessionMetadata, !current.sessionId.isEmpty else { return nil }
+        return CrashStamp(sessionId: current.sessionId,
+                          creationDate: current.sessionCreationDate,
+                          sampledIn: _isSessionSampledIn)
+    }
+
     /// PRECONDITION: caller holds `sessionLock`.
     private func notifyCrashStampLocked() {
         guard let observer = _crashStampObserver,

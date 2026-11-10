@@ -54,6 +54,9 @@ public class CoralogixExporter: SpanExporter {
     private var forwardedCrashIds: [String] = []
     private static let maxForwardedCrashIds = 256
     private var crashUploadWaiters: [String: (CrashUploadAnswer) -> Void] = [:]
+    /// Handlers waiting on a live event's delivery, by its `span_id`: read-only in `beforeSend`,
+    /// so it is the one id an event keeps through a hybrid round trip.
+    private var liveDeliveryWaiters: [String: (Bool) -> Void] = [:]
     private let crashUploadLock = NSLock()
 
     /// Whether the crash is finished with — delivered, refused for good, or dropped by policy —
@@ -74,6 +77,38 @@ public class CoralogixExporter: SpanExporter {
         crashUploadLock.lock()
         defer { crashUploadLock.unlock() }
         crashUploadWaiters[id] = handler
+    }
+
+    /// Calls `handler` once the live event whose span id is `spanId` has been uploaded, with whether
+    /// it was delivered. An event dropped before upload (sampling, `ignoreErrors`, `beforeSend`)
+    /// never answers.
+    func awaitLiveDelivery(spanId: String, _ handler: @escaping (Bool) -> Void) {
+        crashUploadLock.lock()
+        defer { crashUploadLock.unlock() }
+        liveDeliveryWaiters[spanId] = handler
+    }
+
+    private func resolveLiveDeliveries(of events: [[String: Any]], result: SpanUploadResult) {
+        let spanIds = events.compactMap {
+            (($0[Keys.text.rawValue] as? [String: Any])?[Keys.cxRum.rawValue] as? [String: Any])?[Keys.spanId.rawValue] as? String
+        }
+        crashUploadLock.lock()
+        guard !liveDeliveryWaiters.isEmpty else {
+            crashUploadLock.unlock()
+            return
+        }
+        let waiters = spanIds.compactMap { liveDeliveryWaiters.removeValue(forKey: $0) }
+        crashUploadLock.unlock()
+        let delivered = result.disposition == .delivered
+        waiters.forEach { $0(delivered) }
+    }
+
+    /// Uploads live events and answers whoever waits on their delivery.
+    @discardableResult
+    private func uploadLive(_ events: [[String: Any]]) -> SpanUploadResult {
+        let result = spanUploader.upload(events, endPoint: self.endPoint)
+        resolveLiveDeliveries(of: events, result: result)
+        return result
     }
 
     private func recordCrashOutcome(_ answer: CrashUploadAnswer, ids: Set<String>) {
@@ -265,7 +300,7 @@ public class CoralogixExporter: SpanExporter {
     
     internal func sendBeforeSendData(data: [[String: Any]]) {
         let rebuilt = data.map { self.rebuildOtelSpanAttributes(in: $0) }
-        self.spanUploader.upload(rebuilt, endPoint: self.endPoint)
+        self.uploadLive(rebuilt)
     }
 
     /// Hybrid (`beforeSendCallBack`) path: spans are encoded *before* the JS edit and the
@@ -411,7 +446,7 @@ public class CoralogixExporter: SpanExporter {
 
         let sdk = CoralogixRum.mobileSDK.sdkFramework
         guard !sdk.isNative, let callback = options.beforeSendCallBack else {
-            return spanUploader.upload(cxSpansDictionary, endPoint: self.endPoint).resultCode
+            return uploadLive(cxSpansDictionary).resultCode
         }
         // Crash events skip the hybrid JS round trip: when a crash is exported the
         // process is usually about to terminate, and the extra native→JS→native hop
@@ -422,7 +457,7 @@ public class CoralogixExporter: SpanExporter {
 
         var result: SpanExporterResultCode = .success
         if !crashEvents.isEmpty {
-            result = spanUploader.upload(crashEvents, endPoint: self.endPoint).resultCode
+            result = uploadLive(crashEvents).resultCode
         }
         if !editableSpans.isEmpty {
             callback(editableSpans.deepCopy())

@@ -34,6 +34,7 @@ final class ANRDetector {
     private let captureThreads: () -> String?
     private let notificationCenter: NotificationCenter
     let eventReporter: EventReporter?
+    private let hangObserver: HangObserving?
 
     private let queue = DispatchQueue(label: Keys.queueANRDetectorQueue.rawValue)
 
@@ -54,6 +55,8 @@ final class ANRDetector {
     private var awaitingAnswer = false
     /// The hang under way has been reported, or seen under a debugger.
     private var hangHandled = false
+    /// The hang under way was reported, and `hangObserver` told of it.
+    private var hangReported = false
 
     init(threshold: TimeInterval = ANRDetector.defaultThreshold,
          pollInterval: TimeInterval = ANRDetector.defaultPollInterval,
@@ -62,7 +65,8 @@ final class ANRDetector {
          isDebuggerAttached: @escaping () -> Bool = ANRDetector.isDebuggerAttached,
          captureThreads: @escaping () -> String? = ANRThreads.capture,
          notificationCenter: NotificationCenter = .default,
-         eventReporter: EventReporter? = nil) {
+         eventReporter: EventReporter? = nil,
+         hangObserver: HangObserving? = nil) {
         let poll = max(pollInterval, 0.01)
         if threshold < 2 * poll {
             Log.w("[ANR] threshold \(threshold) s is below twice the \(poll) s poll; using \(2 * poll) s")
@@ -75,6 +79,7 @@ final class ANRDetector {
         self.captureThreads = captureThreads
         self.notificationCenter = notificationCenter
         self.eventReporter = eventReporter
+        self.hangObserver = hangObserver
     }
 
     deinit {
@@ -127,14 +132,17 @@ final class ANRDetector {
         timer?.cancel()
     }
 
-    /// Reports the hang detected at `detectedAt`, with the threads as they are now.
+    /// Reports the hang detected at `detectedAt`, with the threads as they are now. The observer
+    /// hears of it first, so a process that ends before the event leaves still has it on record.
     func handleANR(detectedAt: Date = Date()) {
         Log.d("[ANR] main thread unresponsive for at least \(threshold) s")
+        let threads = captureThreads()
+        hangObserver?.hangDetected(at: detectedAt, threads: threads)
         guard let eventReporter = eventReporter else {
             Log.d("[ANR] no event reporter; ANR not reported")
             return
         }
-        eventReporter.report(ANRErrorEvent(timestamp: detectedAt, threads: captureThreads()))
+        eventReporter.report(ANRErrorEvent(timestamp: detectedAt, threads: threads))
     }
 
     // MARK: - Watching
@@ -159,6 +167,7 @@ final class ANRDetector {
             Log.d("[ANR] main thread hung while a debugger is attached; not reported")
             return
         }
+        hangReported = true
         handleANR()
     }
 
@@ -170,6 +179,10 @@ final class ANRDetector {
             self.lastAnswer = at
             self.awaitingAnswer = false
             self.hangHandled = false
+            if self.hangReported {
+                self.hangReported = false
+                self.hangObserver?.hangEnded()
+            }
         }
     }
 

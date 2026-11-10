@@ -369,6 +369,9 @@ public enum WireValues: String {
     /// ANRs group the same way on both platforms. It does not describe the iOS threshold, as
     /// Android's does not describe its own gate.
     case anrErrorMessage = "Application Not Responding for at least 1000 ms."
+    /// `error_message` of a hang the process ended during, reported by the next launch: Android's
+    /// fatal-ANR text, without the system description iOS has no source for.
+    case fatalAnrErrorMessage = "Application Not Responding"
     /// `error_type` discriminator emitted for ANR-derived error events.
     case anrErrorType = "ANR"
 }

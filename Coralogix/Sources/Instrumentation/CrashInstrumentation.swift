@@ -35,8 +35,8 @@ extension CoralogixRum: StoredCrashSending {
         }
     }
 
-    /// Lines up the crashes earlier launches left behind, newest first, for `completeCrashRecovery`
-    /// to send.
+    /// Lines up the crashes earlier launches left behind for `completeCrashRecovery` to send: native
+    /// crashes, then fatal hangs, newest first within each kind, as Android sends them.
     ///
     /// Runs at init whatever this launch's sampling roll: the crash belongs to the session that
     /// crashed, so whether it is sent follows that session's decision, not this launch's.
@@ -45,7 +45,13 @@ extension CoralogixRum: StoredCrashSending {
     /// PLCrashReporter's slot — the load-time copy could not be written, or never ran — is moved
     /// first. Each crash is reported as its delivery record says; a crash read for the first time
     /// gets one, or, when its session left no record to build one from, is dropped.
+    ///
+    /// Native crashes follow the `.errors` switch and fatal hangs the `.anr` one, both read from
+    /// this launch's options.
     internal func recoverPendingCrashes() {
+        let options = self.coralogixExporter?.getOptions()
+        let reportsCrashes = options.map { Self.shouldRecoverCrashes(options: $0) } ?? false
+        let reportsHangs = options?.shouldInitInstrumentation(instrumentation: .anr) ?? false
         let store = self.crashDeliveryStore
         store.deleteLegacyHybridStore()
         if let reader = Self.crashReportReader() {
@@ -63,6 +69,25 @@ extension CoralogixRum: StoredCrashSending {
                 store.removeCopy(copy)
             }
         }
+        // Read before the native rules below delete anything: a crash during the hang wins.
+        self.recordFatalHang(reportsHangs: reportsHangs, crashes: readable.map(\.crash))
+
+        var lined: [CrashDeliveryScheduler.Item] = []
+        if reportsCrashes {
+            lined += self.lineUpNativeCrashes(readable)
+        }
+        if reportsHangs {
+            lined += self.pendingFatalHangs()
+        }
+
+        crashRecoveryLock.lock()
+        self.pendingRecoveredCrashes = lined
+        crashRecoveryLock.unlock()
+    }
+
+    /// The native crashes to send, newest first, capped; each with its delivery record.
+    private func lineUpNativeCrashes(_ readable: [(copy: URL, crash: MappedCrash)]) -> [CrashDeliveryScheduler.Item] {
+        let store = self.crashDeliveryStore
         let (kept, dropped) = Self.newest(readable, limit: CrashDeliveryStore.maxPerKind)
         for crash in dropped {
             store.removeCopy(crash.copy)
@@ -78,10 +103,7 @@ extension CoralogixRum: StoredCrashSending {
             }
             lined.append(.init(crashId: crash.crashId, copy: copy))
         }
-
-        crashRecoveryLock.lock()
-        self.pendingRecoveredCrashes = lined
-        crashRecoveryLock.unlock()
+        return lined
     }
 
     /// The `limit` newest crashes, newest first, and the rest. A crash with no time sorts oldest.
@@ -293,6 +315,10 @@ extension CoralogixRum: StoredCrashSending {
             completion(CrashUploadAnswer(outcome: .notAttempted))
             return
         }
+        if record.kind == .anr {
+            sendStoredHang(item, as: record, through: exporter, completion: completion)
+            return
+        }
         switch Self.readCopy(item.copy) {
         case .readable(let crash):
             exporter.awaitCrashUpload(id: crash.crashId, completion)
@@ -302,6 +328,22 @@ extension CoralogixRum: StoredCrashSending {
             completion(CrashUploadAnswer(outcome: .notAttempted))
         case .corrupt:
             // Can never be sent: finished with, like a report the backend refused.
+            completion(CrashUploadAnswer(outcome: .rejected))
+        }
+    }
+
+    private func sendStoredHang(_ item: CrashDeliveryScheduler.Item,
+                                as record: StoredCrashRecord,
+                                through exporter: CoralogixExporter,
+                                completion: @escaping (CrashUploadAnswer) -> Void) {
+        switch Self.readHang(item.copy) {
+        case .readable(let marker):
+            exporter.awaitCrashUpload(id: record.crashId, completion)
+            self.emitRecoveredHang(marker, as: record)
+            self.flush()
+        case .notReadableYet:
+            completion(CrashUploadAnswer(outcome: .notAttempted))
+        case .corrupt:
             completion(CrashUploadAnswer(outcome: .rejected))
         }
     }

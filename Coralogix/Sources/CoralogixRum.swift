@@ -20,6 +20,12 @@ public class CoralogixRum {
     internal lazy var crashDeliveryStore = CrashDeliveryStore()
     /// Background time for work that has to finish after the app leaves the foreground.
     internal lazy var backgroundTasks: BackgroundTaskRunning = ApplicationBackgroundTaskRunner()
+    /// Keeps the marker of a hang the watchdog reports, for the next launch to find if this one ends during it.
+    internal lazy var fatalHangWatch = FatalHangWatch(store: self.crashDeliveryStore) { [weak self] in
+        self?.sessionManager?.currentCrashStamp.map {
+            StoredCrashRecord.Session(id: $0.sessionId, creationDate: $0.creationDate, sampledIn: $0.sampledIn)
+        }
+    }
     /// Sends the crashes earlier launches left behind; started by `completeCrashRecovery`.
     internal lazy var crashDeliveryScheduler = CrashDeliveryScheduler(
         store: self.crashDeliveryStore,
@@ -170,7 +176,7 @@ public class CoralogixRum {
 
         self.setupTracer(applicationName: options.application)
         self.swizzle()
-        if Self.shouldRecoverCrashes(options: options) {
+        if Self.shouldRecoverCrashes(options: options) || options.shouldInitInstrumentation(instrumentation: .anr) {
             self.recoverPendingCrashes()
         }
         self.installEligibleInstrumentations(using: options, sampledIn: initialSampledIn)
