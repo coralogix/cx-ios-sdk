@@ -117,6 +117,17 @@ enum CrashLabTriggers {
         // Past the 5 s threshold, then the main thread answers again.
         "A3": { Thread.sleep(forTimeInterval: 8); return "Hung for 8 s and recovered" },
 
+        // Two errors first, so the crash has a count of its own launch's to carry. This overload,
+        // since `reportError(message:)` alone is sent as a log.
+        "T3": {
+            let sdk = CoralogixRumManager.shared.sdk
+            for which in ["first", "second"] {
+                sdk.reportError(message: "crash lab: \(which) error before the crash", stackTrace: [], errorType: "Error")
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { writeThroughNull() }
+            return "Reported two errors; crashing in 2 s"
+        },
+
         "X2": { exit(0) },
     ]
 

@@ -1286,6 +1286,22 @@
   "trigger": "N1"
  },
  {
+  "id": "T3",
+  "section": "attribution",
+  "title": "Crash after two reported errors",
+  "expect": [
+   "The crash arrives on the relaunch, in the session it happened in",
+   "Its error count is 3: the two errors and the crash itself",
+   "The relaunch's own events start counting from 0 in their own session"
+  ],
+  "steps": [
+   "Tap T3 (crashes 2 s later)",
+   "Relaunch the app",
+   "Wait 30 s"
+  ],
+  "trigger": "T3"
+ },
+ {
   "id": "X1",
   "section": "negative",
   "title": "App killed in the background",
