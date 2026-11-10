@@ -243,7 +243,7 @@ final class CrashLabSettings {
             DispatchQueue.main.async { SessionReplay.shared?.startRecording() }
         }
         if flag(.globalSpan) {
-            _ = sdk.getCustomTracer()?.startGlobalSpan(name: "crash-lab-global-span")
+            CrashLabTriggers.keep(sdk.getCustomTracer()?.startGlobalSpan(name: "crash-lab-global-span"))
         }
         guard let action = string(.launchAction) else { return }
         if case .int(let count) = self[.launchActionCount], count > 1 {

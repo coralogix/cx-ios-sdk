@@ -22,6 +22,10 @@ enum CrashLabTriggers {
 
     static var ids: Set<String> { Set(triggers.keys) }
 
+    /// A global span is ended once nothing holds it: the lab keeps the one it starts.
+    private static var globalSpan: CoralogixGlobalSpan?
+    static func keep(_ span: CoralogixGlobalSpan?) { globalSpan = span ?? globalSpan }
+
     /// The crash a launch setting asks for: an NSException, a signal or a C++ exception.
     static func crash(kind: String, message: String) {
         switch kind {
@@ -82,9 +86,10 @@ enum CrashLabTriggers {
             return raise("crash lab: crash with 100 deep threads")
         },
         "J13": {
-            guard CoralogixRumManager.shared.sdk.getCustomTracer()?.startGlobalSpan(name: "crash-lab-global-span") != nil else {
+            guard let span = CoralogixRumManager.shared.sdk.getCustomTracer()?.startGlobalSpan(name: "crash-lab-global-span") else {
                 return "No global span: the tracer is unavailable or one is already active"
             }
+            keep(span)
             return raise("crash lab: crash inside a global span")
         },
 

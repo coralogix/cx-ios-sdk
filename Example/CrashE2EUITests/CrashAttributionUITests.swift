@@ -1,0 +1,77 @@
+//
+//  CrashAttributionUITests.swift
+//  CrashE2EUITests
+//
+//  Smoke: crash, session, view and export together. A crash is reported as it happened: its
+//  session (rotations included), its screen, its counters and its order among other crashes.
+//
+
+import XCTest
+
+final class CrashAttributionUITests: CrashE2ETestCase {
+
+    func testCrashAfterARotation_isSentInTheRotatedSession_onTheScreenItHappenedOn() {
+        crash("exception", before: ["rotate", "error:after the rotation", "view:Second"])
+        let rotated = endpoint.events.first { message($0) == "after the rotation" }.flatMap(session)
+        relaunch()
+        let crash = awaitCrashes(1)[0]
+        XCTAssertNotNil(rotated)
+        XCTAssertEqual(session(crash), rotated)
+        XCTAssertEqual(view(crash), "SecondViewController")
+    }
+
+    func testCrash_carriesTheErrorCountItHappenedWith() {
+        crash("exception", before: ["error:one", "error:two"])
+        relaunch()
+        XCTAssertEqual(errorCount(awaitCrashes(1)[0]), 3, "two errors and this crash")
+    }
+
+    func testCrashResentOnThreeLaunches_carriesTheSameErrorCount() {
+        crash("exception", before: ["error:one"])
+        endpoint.answerCrashes([], then: .noAnswer)
+        for _ in 0..<3 {
+            let before = endpoint.crashRequests.count
+            launch(waitForActions: false)
+            XCTAssertTrue(waitFor(timeout: 30) { self.endpoint.crashRequests.count > before })
+            kill()
+        }
+        let counts = endpoint.crashes.map(errorCount)
+        XCTAssertEqual(counts.count, 3)
+        XCTAssertEqual(Set(counts.map { $0 ?? -1 }), [2])
+    }
+
+    func testCrashBeforeAnyScreen_isNotFiledUnderAScreen() {
+        launch(["hooks": ["reset"], "appStart": "crashAfterInit:exception"], waitForActions: false)
+        XCTAssertTrue(app.wait(for: .notRunning, timeout: 30))
+        relaunch()
+        let crash = awaitCrashes(1)[0]
+        XCTAssertNotEqual(view(crash), "HomeViewController")
+    }
+
+    func testCrashBeforeInit_isNeverSent_andTheNextLaunchsOwnEventsAreUnaffected() {
+        launch(["hooks": ["reset"], "appStart": "crashBeforeInit:exception"], waitForActions: false)
+        XCTAssertTrue(app.wait(for: .notRunning, timeout: 30))
+        relaunch(["actions": ["error:after the pre-init crash"]])
+        XCTAssertTrue(waitFor(timeout: 15) { self.endpoint.events.contains { self.message($0) == "after the pre-init crash" } })
+        settle()
+        XCTAssertTrue(endpoint.crashes.isEmpty)
+    }
+
+    func testThreeLaunchesThatCrashBeforeDelivery_areAllSent_newestFirst() {
+        var sessions: [String] = []
+        endpoint.answerCrashes([], then: .noAnswer)
+        for index in 0..<3 {
+            crash("exception", before: ["error:launch \(index)"], fresh: index == 0)
+            if let crashed = endpoint.events.first(where: { message($0) == "launch \(index)" }).flatMap(session) {
+                sessions.append(crashed)
+            }
+            settle(1.5)  // a report's time is kept to the second
+        }
+        endpoint.answerCrashes([], then: .ok)
+        let before = endpoint.crashRequests.count
+        relaunch()
+        XCTAssertTrue(waitFor(timeout: 40) { self.endpoint.crashRequests.count - before >= 3 })
+        let sent = endpoint.crashRequests.dropFirst(before).flatMap(\.crashes).compactMap(session)
+        XCTAssertEqual(sent, Array(sessions.reversed()))
+    }
+}
