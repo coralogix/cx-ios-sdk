@@ -26,6 +26,11 @@ omitted; the focus here is user-facing behavior changes.
 - Crashes from several launches that could not send them are all kept and sent, up to 10, instead of only the latest. Sending is retried during the launch, honours `Retry-After`, continues briefly in the background, and stops after 16 failed attempts or 7 days.
 - `beforeSend`, `ignoreErrors` and sampling apply each time a crash is sent, and a crash they drop is not sent again.
 
+## [2.22.1] - 2026-11-05
+
+### Fixed
+- A network request that returns HTTP 400 is now reported with error severity, like every other 4xx and 5xx response.
+
 ## [2.22.0] - 2026-10-29
 
 ### Added
