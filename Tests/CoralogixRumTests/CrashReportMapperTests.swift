@@ -95,7 +95,7 @@ final class CrashReportMapperTests: XCTestCase {
     func test_liveReport_isReadThroughTheAdapter_withAStableId() throws {
         let config = PLCrashReporterConfig(signalHandlerType: .BSD, symbolicationStrategy: [])
         let reporter = try XCTUnwrap(PLCrashReporter(configuration: config))
-        let data = try reporter.generateLiveReportAndReturnError()
+        let data = try ANRThreads.withLiveReportLock { try reporter.generateLiveReportAndReturnError() }
         let report = try PLCrashReport(data: data)
 
         let first = CrashReportMapper.map(PLCrashReportReader(report: report))

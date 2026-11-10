@@ -280,6 +280,7 @@ public enum Keys: String {
     case queueViewManagerQueue = "com.coralogix.viewManagerQueue"
     case queueSessionRecordQueue = "com.coralogix.sessionRecordQueue"
     case queueCrashDeliveryQueue = "com.coralogix.crashDeliveryQueue"
+    case queueANRDetectorQueue = "com.coralogix.anrDetectorQueue"
     case queueSlowFrozenReporterQueue = "com.coralogix.vitals.slowfrozen.reporter"
     case queueUserAgentQueue = "com.coralogix.userAgentQueue"
     case undefined = ""
@@ -364,8 +365,10 @@ public enum Keys: String {
 /// attribute names — see the CLAUDE.md rule that all attribute keys live
 /// in `Keys.swift`. Values that flow into attribute slots live here.
 public enum WireValues: String {
-    /// `error_message` value emitted for ANR-derived error events.
-    case anrErrorMessage = "Application Not Responding"
+    /// `error_message` of an ANR the watchdog detects: the Android SDK's text, byte for byte, so
+    /// ANRs group the same way on both platforms. It does not describe the iOS threshold, as
+    /// Android's does not describe its own gate.
+    case anrErrorMessage = "Application Not Responding for at least 1000 ms."
     /// `error_type` discriminator emitted for ANR-derived error events.
     case anrErrorType = "ANR"
 }

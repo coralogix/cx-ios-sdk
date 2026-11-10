@@ -40,6 +40,9 @@ final class SpanEventReporter: EventReporter {
             guard let span = createErrorSpan() else { return }
             span.setAttribute(key: Keys.errorMessage.rawValue, value: anr.errorMessage)
             span.setAttribute(key: Keys.errorType.rawValue,    value: anr.errorType)
+            if let threads = anr.threads {
+                span.setAttribute(key: Keys.threads.rawValue, value: threads)
+            }
             // The span closes when the capture resolves — see recordScreenshotForSpan.
             recordScreenshot(span) { span.end() }
 

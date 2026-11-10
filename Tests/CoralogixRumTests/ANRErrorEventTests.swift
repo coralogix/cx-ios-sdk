@@ -19,7 +19,7 @@ final class ANRErrorEventTests: XCTestCase {
 
     func testDefaultsMatchExistingANRPath() {
         let event = ANRErrorEvent()
-        XCTAssertEqual(event.errorMessage, "Application Not Responding")
+        XCTAssertEqual(event.errorMessage, "Application Not Responding for at least 1000 ms.")
         XCTAssertEqual(event.errorType, "ANR")
     }
 
@@ -28,7 +28,7 @@ final class ANRErrorEventTests: XCTestCase {
         let attrs = event.toOTelAttributes()
 
         XCTAssertEqual(attrs[Keys.eventType.rawValue],    .string("error"))
-        XCTAssertEqual(attrs[Keys.errorMessage.rawValue], .string("Application Not Responding"))
+        XCTAssertEqual(attrs[Keys.errorMessage.rawValue], .string("Application Not Responding for at least 1000 ms."))
         XCTAssertEqual(attrs[Keys.errorType.rawValue],    .string("ANR"))
         XCTAssertEqual(attrs.count, 3)
     }
@@ -43,7 +43,7 @@ final class ANRErrorEventTests: XCTestCase {
         let context = ErrorContext(otel: mockSpan)
         let dict = context.getDictionary()
 
-        XCTAssertEqual(dict[Keys.errorMessage.rawValue] as? String, "Application Not Responding")
+        XCTAssertEqual(dict[Keys.errorMessage.rawValue] as? String, "Application Not Responding for at least 1000 ms.")
         XCTAssertEqual(dict[Keys.errorType.rawValue]    as? String, "ANR")
         XCTAssertEqual(dict[Keys.isCrash.rawValue]      as? Bool,   false)
         // Optional/empty fields should NOT appear on the wire.
@@ -54,6 +54,20 @@ final class ANRErrorEventTests: XCTestCase {
         XCTAssertNil(dict[Keys.arch.rawValue])
         XCTAssertNil(dict[Keys.buildId.rawValue])
         XCTAssertNil(dict[Keys.stackTraceType.rawValue])
+    }
+
+    /// The threads go on the wire as a crash's do, and the ANR stays a non-crash error.
+    func testThreads_reachTheWire_withIsCrashFalse() throws {
+        let threads = #"["[{\"frameNumber\":\"0\"}]","[{\"frameNumber\":\"0\"},{\"frameNumber\":\"1\"}]"]"#
+        let event = ANRErrorEvent(threads: threads)
+        XCTAssertEqual(event.toOTelAttributes()[Keys.threads.rawValue], .string(threads))
+
+        let dict = ErrorContext(otel: MockSpanData(attributes: event.toOTelAttributes())).getDictionary()
+
+        let sent = try XCTUnwrap(dict[Keys.threads.rawValue] as? [[[String: Any]]])
+        XCTAssertEqual(sent.map(\.count), [1, 2])
+        XCTAssertEqual(dict[Keys.isCrash.rawValue] as? Bool, false)
+        XCTAssertEqual(dict[Keys.errorType.rawValue] as? String, "ANR")
     }
 
     func testCodableRoundTrip() throws {

@@ -185,6 +185,16 @@ enum CrashReportMapper {
         }
     }
 
+    /// The threads an ANR carries, as Android's watchdog ANR does: the main thread first, then
+    /// every other thread in order, each capped like an exception crash's.
+    static func watchdogThreadsJSON(_ threads: [CrashThread]) -> String {
+        let ordered = threads.sorted { $0.number < $1.number }
+        let threadStrings = ordered.map { thread in
+            Helper.convertArrayToJsonString(array: thread.frames.prefix(maxFramesPerThread).map(frameDictionary))
+        }
+        return Helper.convertArrayOfStringToJsonString(array: threadStrings)
+    }
+
     // Android's si_code names for a fault, per signal. A name outside these is not sent.
     private static let androidCodeNames: [String: Set<String>] = [
         "SIGILL": ["ILL_ILLOPC", "ILL_ILLOPN", "ILL_ILLADR", "ILL_ILLTRP", "ILL_PRVOPC", "ILL_PRVREG", "ILL_COPROC", "ILL_BADSTK"],

@@ -49,7 +49,7 @@ final class CrashContextTests: XCTestCase {
         let reporter = try XCTUnwrap(PLCrashReporter(configuration: PLCrashReporterConfig(signalHandlerType: .BSD,
                                                                                          symbolicationStrategy: [])))
         reporter.customData = active.customData
-        return try PLCrashReport(data: reporter.generateLiveReportAndReturnError())
+        return try PLCrashReport(data: ANRThreads.withLiveReportLock { try reporter.generateLiveReportAndReturnError() })
     }
 
     private let session: [String: Any] = [

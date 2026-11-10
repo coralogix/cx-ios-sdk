@@ -61,8 +61,10 @@ private func liveReportData(sessionId: String?, exception: NSException? = nil) t
     let reporter = try XCTUnwrap(PLCrashReporter(configuration: PLCrashReporterConfig(signalHandlerType: .BSD,
                                                                                      symbolicationStrategy: [])))
     reporter.customData = crashContext(sessionId: sessionId)
-    guard let exception else { return try reporter.generateLiveReportAndReturnError() }
-    return try reporter.generateLiveReport(with: exception)
+    return try ANRThreads.withLiveReportLock {
+        guard let exception else { return try reporter.generateLiveReportAndReturnError() }
+        return try reporter.generateLiveReport(with: exception)
+    }
 }
 
 /// The report React Native's fatal-error handler leaves. RN raises `RCTFatalException: <description>`
