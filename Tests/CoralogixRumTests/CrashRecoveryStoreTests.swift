@@ -524,8 +524,10 @@ extension CrashRecoveryAcrossLaunchesTests {
 
     func test_aHangWhoseLaunchThenCrashed_isReportedAsTheCrashAlone() throws {
         let store = CrashDeliveryStore.temporary()
-        try leaveCrash(in: store, sessionId: "S1")  // this process: same pid, crashed now
-        store.writeHangMarker(hangMarker(session: "S1", pid: getpid(), detectedAt: Date(timeIntervalSinceNow: -2)))
+        // The hang is detected first, then the same process crashes; a live report can take a
+        // few seconds to write on a slow machine, so the crash time is taken after the marker.
+        store.writeHangMarker(hangMarker(session: "S1", pid: getpid(), detectedAt: Date()))
+        try leaveCrash(in: store, sessionId: "S1")
 
         let uploader = SwitchableUploader()
         try launch(store: store, lastSession: sessionRecord(of: "S1"), uploader: uploader)

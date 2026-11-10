@@ -112,9 +112,10 @@ final class ANRDetector {
         }
 
         lock.lock()
-        defer { lock.unlock() }
-        guard timer == nil else { return }
-
+        guard timer == nil else {
+            lock.unlock()
+            return
+        }
         let timer = DispatchSource.makeTimerSource(queue: queue)
         timer.schedule(deadline: .now() + pollInterval, repeating: pollInterval, leeway: .milliseconds(20))
         timer.setEventHandler { [weak self] in self?.tick() }
@@ -122,9 +123,12 @@ final class ANRDetector {
         observers = observeBackground()
         isPaused = false
         queue.async { [weak self] in self?.restart() }
-        seedPausedFromAppState()
         // Never suspended: cancelling a suspended source traps.
         timer.resume()
+        lock.unlock()
+
+        // Outside the lock: pausing takes it.
+        seedPausedFromAppState()
     }
 
     /// Stops watching. Works from any thread, paused or not. A hang reported and still going is
@@ -235,10 +239,20 @@ final class ANRDetector {
                                                         object: nil, queue: nil) { [weak self] _ in
             self?.setPaused(false)
         }
-        return [background, foreground]
+        // A launch into the foreground posts no willEnterForeground: becoming active resumes a
+        // watchdog that started paused.
+        let active = notificationCenter.addObserver(forName: UIApplication.didBecomeActiveNotification,
+                                                    object: nil, queue: nil) { [weak self] _ in
+            self?.resumeIfPaused()
+        }
+        return [background, foreground, active]
         #else
         return []
         #endif
+    }
+
+    private func resumeIfPaused() {
+        if paused { setPaused(false) }
     }
 
     private func setPaused(_ paused: Bool) {

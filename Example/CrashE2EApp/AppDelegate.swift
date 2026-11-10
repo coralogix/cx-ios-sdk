@@ -76,7 +76,7 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
             // A hybrid wrapper's round trip: every event it is given comes back, edited or not.
             let edits = scenario.hybridEdit
             options.beforeSendCallBack = { events in
-                sdk?.sendBeforeSendData(edits ? events.map(hybridEdited) : events)
+                AppDelegate.sdk?.sendBeforeSendData(edits ? events.map(hybridEdited) : events)
             }
         }
         let sdk = CoralogixRum(options: options,
