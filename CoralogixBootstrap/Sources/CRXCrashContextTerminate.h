@@ -24,7 +24,12 @@ size_t crx_envelopeWithCxxSection(const uint8_t *_Nullable envelope, size_t enve
                                   const char *type, const char *_Nullable what,
                                   uint8_t *buffer, size_t capacity);
 
-/// Adds the `cxx` section to the envelope last written and hands it to PLCR. Never blocks:
+/// Set by the test hooks, which record an exception the process survives: the envelope is then
+/// left writable afterwards.
+extern BOOL crx_terminateWriteIsTest;
+
+/// Adds the `cxx` section to the envelope last written and hands it to PLCR, then keeps the
+/// envelope as it is for the rest of the process. Never blocks:
 /// returns `NO` when the lock is held elsewhere, no reporter of ours is active, or it does not fit.
 BOOL crx_writeCxxSection(const char *type, const char *_Nullable what);
 

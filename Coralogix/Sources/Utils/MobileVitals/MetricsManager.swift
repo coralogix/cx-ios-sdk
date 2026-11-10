@@ -24,13 +24,11 @@ public class MetricsManager {
     var fpsDetector: FPSDetector?
     var launchRecording: LaunchRecording = RecorderLaunchRecording()
 
-    // MARK: - Reporting dependencies (CX-40573)
+    // MARK: - Reporting dependencies
     //
     // Production wires `SpanMetricsCollector` / `SpanEventReporter`. When
-    // unwired, calls into `emitMetricKitPayload` /
-    // `flushAll` drop with a `Log.d`. The wire format is pinned by
-    // `WireFormatTests`. (Deprecated closure fallbacks removed in
-    // CX-43341.)
+    // unwired, `emitMetricKitPayload` and `flushAll` drop with a `Log.d`.
+    // The wire format is pinned by `WireFormatTests`.
     //
     // Threading: expected to be set once during init on the main thread.
     // Subsequent reads from background callbacks (MetricKit, ANR timer)
@@ -266,7 +264,6 @@ public class MetricsManager {
         )
     }
 }
-  
 
 #if os(iOS)
 class MyMetricSubscriber: NSObject, MXMetricManagerSubscriber {

@@ -151,6 +151,7 @@ public class CoralogixRum {
         // argument — rolling again here would let the filter and the stamp disagree, and
         // re-reading the live flag would let a concurrent rotation hide a sampled-in transition
         // from the callback meant to act on it.
+        sessionManager.attachCrashStampObserverIfNeeded(CrashContextSession.write)
         sessionManager.setSessionSampledIn(initialSampledIn)
         // The first record of this launch: written at adoption, whatever the sampling decision,
         // so a crash in a sampled-out session that still reports errors finds its session.
@@ -176,9 +177,8 @@ public class CoralogixRum {
 
         self.setupTracer(applicationName: options.application)
         self.swizzle()
-        if Self.shouldRecoverCrashes(options: options) || options.shouldInitInstrumentation(instrumentation: .anr) {
-            self.recoverPendingCrashes()
-        }
+        // Whatever the options: the copies made at image load are cleaned up even when nothing is sent.
+        self.recoverPendingCrashes()
         self.installEligibleInstrumentations(using: options, sampledIn: initialSampledIn)
         self.emitStartupInitSpan()
 

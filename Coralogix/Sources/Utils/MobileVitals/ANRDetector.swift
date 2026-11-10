@@ -56,7 +56,15 @@ final class ANRDetector {
     /// The hang under way has been reported, or seen under a debugger.
     private var hangHandled = false
     /// The hang under way was reported, and `hangObserver` told of it.
-    private var hangReported = false
+    private var hangReported = false {
+        didSet {
+            lock.lock()
+            hangReportedGuarded = hangReported
+            lock.unlock()
+        }
+    }
+    /// `hangReported`, for `stopMonitoring` from any thread. Guarded by `lock`.
+    private var hangReportedGuarded = false
 
     init(threshold: TimeInterval = ANRDetector.defaultThreshold,
          pollInterval: TimeInterval = ANRDetector.defaultPollInterval,
@@ -114,11 +122,13 @@ final class ANRDetector {
         observers = observeBackground()
         isPaused = false
         queue.async { [weak self] in self?.restart() }
+        seedPausedFromAppState()
         // Never suspended: cancelling a suspended source traps.
         timer.resume()
     }
 
-    /// Stops watching. Works from any thread, paused or not.
+    /// Stops watching. Works from any thread, paused or not. A hang reported and still going is
+    /// ended once the main thread answers, as it would have been, so its marker does not outlive it.
     func stopMonitoring() {
         lock.lock()
         let timer = self.timer
@@ -126,10 +136,26 @@ final class ANRDetector {
         self.timer = nil
         self.observers = []
         isPaused = false
+        let hangUnderWay = hangReportedGuarded
+        hangReportedGuarded = false
         lock.unlock()
 
         observers.forEach(notificationCenter.removeObserver)
         timer?.cancel()
+        if hangUnderWay, let observer = hangObserver {
+            mainQueue.async { observer.hangEnded() }
+        }
+    }
+
+    /// A start while the app is already in the background — a background launch — starts paused.
+    private func seedPausedFromAppState() {
+        #if canImport(UIKit)
+        let seed = { [weak self] in
+            guard let self = self, UIApplication.shared.applicationState == .background else { return }
+            self.setPaused(true)
+        }
+        Thread.isMainThread ? seed() : DispatchQueue.main.async(execute: seed)
+        #endif
     }
 
     /// Reports the hang detected at `detectedAt`, with the threads as they are now. The observer

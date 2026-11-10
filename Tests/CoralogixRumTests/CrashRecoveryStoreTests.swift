@@ -50,17 +50,21 @@ private final class Counter {
     func increment() -> Int { lock.lock(); defer { lock.unlock() }; count += 1; return count }
 }
 
-private func crashContext(sessionId: String?) -> Data? {
+/// `adopted: false` is the id minted at image load for a session the SDK never adopted: no
+/// creation time, as a crash before init leaves it.
+private func crashContext(sessionId: String?, adopted: Bool = true) -> Data? {
     sessionId.map {
-        Data(#"{"v":1,"session":{"session_id":"\#($0)","session_creation_time":1700000000000,"is_session_sampled_in":true}}"#.utf8)
+        adopted
+            ? Data(#"{"v":1,"session":{"session_id":"\#($0)","session_creation_time":1700000000000,"is_session_sampled_in":true}}"#.utf8)
+            : Data(#"{"v":1,"session":{"session_id":"\#($0)"}}"#.utf8)
     }
 }
 
 /// A real report naming `sessionId` in its crash context, the way a crash in that session leaves one.
-private func liveReportData(sessionId: String?, exception: NSException? = nil) throws -> Data {
+private func liveReportData(sessionId: String?, adopted: Bool = true, exception: NSException? = nil) throws -> Data {
     let reporter = try XCTUnwrap(PLCrashReporter(configuration: PLCrashReporterConfig(signalHandlerType: .BSD,
                                                                                      symbolicationStrategy: [])))
-    reporter.customData = crashContext(sessionId: sessionId)
+    reporter.customData = crashContext(sessionId: sessionId, adopted: adopted)
     return try ANRThreads.withLiveReportLock {
         guard let exception else { return try reporter.generateLiveReportAndReturnError() }
         return try reporter.generateLiveReport(with: exception)
@@ -84,8 +88,8 @@ private func reactNativeFatalReportData(sessionId: String, description: String) 
 
 /// Leaves a crash in `store` as the load-time copy does, and returns it as recovery will read it.
 @discardableResult
-private func leaveCrash(in store: CrashDeliveryStore, sessionId: String?) throws -> MappedCrash {
-    try leaveCrash(in: store, data: try liveReportData(sessionId: sessionId))
+private func leaveCrash(in store: CrashDeliveryStore, sessionId: String?, adopted: Bool = true) throws -> MappedCrash {
+    try leaveCrash(in: store, data: try liveReportData(sessionId: sessionId, adopted: adopted))
 }
 
 @discardableResult
@@ -264,12 +268,39 @@ final class CrashRecoveryAcrossLaunchesTests: XCTestCase {
         XCTAssertTrue(store.copies().isEmpty)
     }
 
-    func test_aCrashWhoseSessionLeftNoRecord_isDropped_andItsCopyDeleted() throws {
+    /// A crash before init names the id minted at image load, which the SDK never adopted.
+    func test_aCrashInASessionNeverAdopted_isDropped_andItsCopyDeleted() throws {
         let store = CrashDeliveryStore.temporary()
-        try leaveCrash(in: store, sessionId: "never-adopted")
+        try leaveCrash(in: store, sessionId: "never-adopted", adopted: false)
 
         let uploader = SwitchableUploader()
         try launch(store: store, lastSession: sessionRecord(of: "some-other-session"), uploader: uploader)
+
+        XCTAssertTrue(uploader.crashes.isEmpty)
+        XCTAssertTrue(store.copies().isEmpty)
+    }
+
+    /// The record of an adopted session is written just after it starts: a crash in between
+    /// is still that session's, with nothing counted yet.
+    func test_aCrashInAnAdoptedSessionNotYetRecorded_isSent_withNothingCounted() throws {
+        let store = CrashDeliveryStore.temporary()
+        try leaveCrash(in: store, sessionId: "just-rotated")
+
+        let uploader = SwitchableUploader()
+        try launch(store: store, lastSession: sessionRecord(of: "some-other-session"), uploader: uploader)
+
+        let crash = try XCTUnwrap(uploader.crashes.first)
+        XCTAssertEqual(value(crash, .sessionContext, .sessionId) as? String, "just-rotated")
+        XCTAssertEqual(value(crash, .snapshotContext, .errorCount) as? Int, 1, "only this crash")
+    }
+
+    /// With error reporting off, the copies made at image load are not sent, so not kept either.
+    func test_withErrorsSwitchedOff_aCrashIsNeitherSentNorKept() throws {
+        let store = CrashDeliveryStore.temporary()
+        try leaveCrash(in: store, sessionId: "S1")
+
+        let uploader = SwitchableUploader()
+        try launch(store: store, lastSession: sessionRecord(of: "S1"), uploader: uploader, instrumentations: [.errors: false])
 
         XCTAssertTrue(uploader.crashes.isEmpty)
         XCTAssertTrue(store.copies().isEmpty)
@@ -415,7 +446,7 @@ final class CrashDeliveryStoreTests: XCTestCase {
     }
 
     private func makeCrash(id: String, time: Date) -> MappedCrash {
-        MappedCrash(crashId: id, crashTime: time, kind: .signal, exceptionType: "SIGSEGV", errorType: "SIGSEGV",
+        MappedCrash(crashId: id, crashTime: time, kind: .signal, exceptionType: "SIGSEGV",
                     errorMessage: "SIGSEGV", processName: nil, applicationIdentifier: nil, pid: 1, threadsJSON: "[]",
                     triggeredByThread: nil, baseAddress: nil, arch: nil, context: nil)
     }
@@ -551,9 +582,11 @@ extension CrashRecoveryAcrossLaunchesTests {
         XCTAssertTrue(store.hangs().isEmpty)
     }
 
-    func test_aHangWhoseSessionLeftNoRecord_isDropped() throws {
+    func test_aHangInASessionNeverAdopted_isDropped() throws {
         let store = CrashDeliveryStore.temporary()
-        store.writeHangMarker(hangMarker(session: "never-recorded"))
+        store.writeHangMarker(HangMarker(detectedAt: Date(timeIntervalSinceNow: -60), pid: 4242,
+                                         session: .init(id: "never-adopted", creationDate: nil, sampledIn: nil),
+                                         threads: nil, liveDelivered: false))
 
         let uploader = SwitchableUploader()
         try launch(store: store, lastSession: sessionRecord(of: "S2"), uploader: uploader)
@@ -620,6 +653,28 @@ final class FatalHangWatchTests: XCTestCase {
         XCTAssertEqual(observer.calls, ["detected", "ended"])
     }
 
+    /// Stopped (shutdown, re-init) during a hang it reported, the watchdog still ends that hang
+    /// once the main thread answers, so the next launch does not take it for a fatal one.
+    func test_stoppedDuringAReportedHang_theHangStillEndsWhenMainAnswers() {
+        let main = DispatchQueue(label: "hang-watch.main")
+        let observer = Observer()
+        let detector = ANRDetector(threshold: 0.5, pollInterval: 0.05, mainQueue: main, isDebuggerAttached: { false },
+                                   captureThreads: { nil }, notificationCenter: NotificationCenter(),
+                                   hangObserver: observer)
+        detector.startMonitoring()
+        Thread.sleep(forTimeInterval: 0.2)
+
+        main.async { Thread.sleep(forTimeInterval: 1.0) }
+        Thread.sleep(forTimeInterval: 0.8)
+        detector.stopMonitoring()
+        XCTAssertEqual(observer.calls, ["detected"])
+        main.sync {}
+        Thread.sleep(forTimeInterval: 0.1)
+
+        XCTAssertEqual(observer.calls.first, "detected")
+        XCTAssertEqual(observer.calls.last, "ended")
+    }
+
     func test_aHangUnderADebugger_leavesNoMarker() {
         let main = DispatchQueue(label: "hang-watch.main")
         let observer = Observer()
@@ -661,6 +716,22 @@ final class FatalHangWatchTests: XCTestCase {
 
             XCTAssertEqual(store.hangMarker()?.liveDelivered, delivered, "upload \(result.disposition)")
         }
+    }
+}
+
+final class CustomSessionManagerCrashContextTests: XCTestCase {
+    /// A SessionManager the host app passes in still names its session in every crash report.
+    func test_aSessionManagerPassedIn_writesItsSessionIntoTheCrashContext() throws {
+        let saved = CRXCrashContext.sections
+        defer {
+            for (name, value) in saved { CRXCrashContext.setSection(name, value: value as? [String: Any]) }
+        }
+        let manager = SessionManager()
+        let sdk = CoralogixRum(options: makeSamplingOptions(sampleRate: 100, exclude: []), sessionManager: manager)
+        defer { sdk.shutdown() }
+
+        let session = try XCTUnwrap(CRXCrashContext.sections[Keys.crashContextSession.rawValue] as? [String: Any])
+        XCTAssertEqual(session[Keys.sessionId.rawValue] as? String, manager.sessionMetadata?.sessionId)
     }
 }
 

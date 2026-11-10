@@ -35,13 +35,25 @@ public class NetworkManager: NetworkProtocol, NetworkReachability {
         return self.networkType
     }
 
-    /// `currentPath` is safe to read from any thread once the monitor has started.
+    private let pathLock = NSLock()
+    /// Whether the monitor has evaluated a path yet. Until it has, `currentPath` reads
+    /// unsatisfied whatever the network is.
+    private var hasPath = false
+
+    /// `currentPath` is safe to read from any thread once the monitor has started. Before its
+    /// first evaluation the network is unknown, which counts as online, as when there is no monitor.
     var isOnline: Bool {
-        monitor.currentPath.status == .satisfied
+        pathLock.lock()
+        let known = hasPath
+        pathLock.unlock()
+        return !known || monitor.currentPath.status == .satisfied
     }
     
     private func checkConnectionType() {
         self.monitor.pathUpdateHandler = { path in
+            self.pathLock.lock()
+            self.hasPath = true
+            self.pathLock.unlock()
             if path.usesInterfaceType(.wifi) {
                 self.networkType = "WiFi"
             } else if path.usesInterfaceType(.cellular) {

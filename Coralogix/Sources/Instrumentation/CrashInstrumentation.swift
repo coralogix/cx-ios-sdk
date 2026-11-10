@@ -54,7 +54,7 @@ extension CoralogixRum: StoredCrashSending {
         let reportsHangs = options?.shouldInitInstrumentation(instrumentation: .anr) ?? false
         let store = self.crashDeliveryStore
         store.deleteLegacyHybridStore()
-        if let reader = Self.crashReportReader() {
+        if reportsCrashes, let reader = Self.crashReportReader() {
             CRXCrashBootstrap.movePendingReport(of: reader, toDirectory: store.copiesDirectory)
         }
 
@@ -75,6 +75,11 @@ extension CoralogixRum: StoredCrashSending {
         var lined: [CrashDeliveryScheduler.Item] = []
         if reportsCrashes {
             lined += self.lineUpNativeCrashes(readable)
+        } else {
+            // Copied at image load whatever the options say: not sent, so not kept either.
+            for (copy, crash) in readable {
+                store.forget(copy: copy, crashId: crash.crashId)
+            }
         }
         if reportsHangs {
             lined += self.pendingFatalHangs()
@@ -90,8 +95,7 @@ extension CoralogixRum: StoredCrashSending {
         let store = self.crashDeliveryStore
         let (kept, dropped) = Self.newest(readable, limit: CrashDeliveryStore.maxPerKind)
         for crash in dropped {
-            store.removeCopy(crash.copy)
-            store.removeRecord(for: crash.crash.crashId)
+            store.forget(copy: crash.copy, crashId: crash.crash.crashId)
         }
 
         var lined: [CrashDeliveryScheduler.Item] = []
@@ -204,14 +208,13 @@ extension CoralogixRum: StoredCrashSending {
         self.crashDeliveryScheduler.start(pending, onEnd: completion)
     }
 
-    /// Emits a recovered crash as an error span and returns its `crash_event_id`.
+    /// Emits a recovered crash as an error span, under its `crash_event_id`.
     ///
     /// A crash is captured on a later launch, after a fresh session has already been created. The
     /// span is anchored to the crash time, reported under the session it happened in as `record`
     /// describes it, and starts a trace of its own: whatever span is current in this launch had
     /// nothing to do with it.
-    @discardableResult
-    internal func emitRecoveredCrash(_ crash: MappedCrash, as record: StoredCrashRecord) -> String {
+    internal func emitRecoveredCrash(_ crash: MappedCrash, as record: StoredCrashRecord) {
         let span = makeSpan(event: .error, source: .console, severity: .error,
                             startTime: crash.crashTime, startsNewTrace: true)
         self.attribute(span, to: record)
@@ -240,12 +243,7 @@ extension CoralogixRum: StoredCrashSending {
             span.setAttribute(key: Keys.arch.rawValue, value: arch)
         }
 
-        if let crashTime = crash.crashTime {
-            span.end(time: crashTime)
-        } else {
-            span.end()
-        }
-        return crash.crashId
+        span.end(time: crash.crashTime ?? Date())
     }
 
     /// The delivery record of a crash read for the first time, saved before it is returned: the
@@ -270,7 +268,7 @@ extension CoralogixRum: StoredCrashSending {
         } else {
             return nil
         }
-        guard let counters = sessionManager.snapshotStore.record(for: session.id) else { return nil }
+        guard let counters = Self.counters(of: session, in: sessionManager.snapshotStore) else { return nil }
 
         let record = StoredCrashRecord(crashId: crash.crashId,
                                        kind: .native,
@@ -282,6 +280,14 @@ extension CoralogixRum: StoredCrashSending {
         return record
     }
 
+    /// The crashed session's counters. A session the SDK had adopted (it has a creation time) but
+    /// not recorded yet — a crash right after a rotation — counted nothing; a session that was
+    /// never adopted is a crash before init, which has none.
+    static func counters(of session: StoredCrashRecord.Session, in store: SessionSnapshotStore) -> SessionSnapshotRecord? {
+        if let record = store.record(for: session.id) { return record }
+        return session.creationDate == nil ? nil : .empty(sessionId: session.id)
+    }
+
     /// Replaces what `makeSpan` stamped from the relaunch — session, view, counters, app and OS
     /// version — with the crashed session's, as `record` holds them. The counters are reported with
     /// this crash's error added, and neither store is changed: every send reports the same counts.
@@ -290,6 +296,11 @@ extension CoralogixRum: StoredCrashSending {
     /// would be dropped and purged as resolved.
     internal func attribute(_ span: any Span, to record: StoredCrashRecord) {
         span.setAttribute(key: Keys.sessionId.rawValue, value: record.session.id)
+        // The relaunch's previous-session breadcrumbs would override the session set here when
+        // the previous launch's pid is the crashed one.
+        for key in [Keys.prevPid, .prevSessionId, .prevSessionCreationDate] {
+            span.setAttribute(key: key.rawValue, value: nil as AttributeValue?)
+        }
         if let creationDate = record.session.creationDate {
             span.setAttribute(key: Keys.sessionCreationDate.rawValue, value: String(Int(creationDate)))
         }
@@ -350,18 +361,6 @@ extension CoralogixRum: StoredCrashSending {
 
     func cancelStoredCrashSend() {
         self.coralogixExporter?.spanUploader.cancelStoredCrashUploads()
-    }
-
-    func isDebuggerAttached() -> Bool {
-        var info = kinfo_proc()
-        var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, getpid()]
-        var size = MemoryLayout<kinfo_proc>.stride
-        let junk = sysctl(&mib, UInt32(mib.count), &info, &size, nil, 0)
-        guard junk == 0 else {
-            Log.w("sysctl failed with error \(junk)")
-            return false
-        }
-        return (info.kp_proc.p_flag & P_TRACED) != 0
     }
 }
 

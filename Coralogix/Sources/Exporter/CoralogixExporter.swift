@@ -27,7 +27,7 @@ public class CoralogixExporter: SpanExporter {
     private var metricsManager: MetricsManager
     private var screenshotManager = ScreenshotManager()
     /// Set by `CoralogixRum` to its `NetworkManager`; read from the upload thread. Nil means
-    /// unknown, treated as online, so a failed upload still counts — today's behaviour.
+    /// unknown, treated as online, so a failed upload still counts.
     private weak var _reachability: NetworkReachability?
     private let reachabilityLock = NSLock()
     internal var reachability: NetworkReachability? {
@@ -45,9 +45,8 @@ public class CoralogixExporter: SpanExporter {
     private var currentSessionSampledIn: Bool = true
     private let samplingStateLock = NSLock()
 
-    /// What became of each crash event (`crash_event_id`) this process tried to send. A crash
-    /// is only removed from disk / its PLCrashReporter report purged once THAT crash is finished
-    /// with, so a later failed crash can't be dropped just because an earlier one delivered.
+    /// What became of each crash event (`crash_event_id`) this process tried to send, per crash,
+    /// so a later failed crash is never taken for finished because an earlier one was delivered.
     private var crashUploadOutcomes: [String: CrashUploadOutcome] = [:]
     /// Crash ids already handed to `tracesExporter`, oldest first, so a crash sent again (a
     /// retry, or a later launch in the same process) reaches it once.
@@ -89,14 +88,12 @@ public class CoralogixExporter: SpanExporter {
     }
 
     private func resolveLiveDeliveries(of events: [[String: Any]], result: SpanUploadResult) {
-        let spanIds = events.compactMap {
-            (($0[Keys.text.rawValue] as? [String: Any])?[Keys.cxRum.rawValue] as? [String: Any])?[Keys.spanId.rawValue] as? String
-        }
         crashUploadLock.lock()
         guard !liveDeliveryWaiters.isEmpty else {
             crashUploadLock.unlock()
             return
         }
+        let spanIds = events.compactMap { Self.cxRum(of: $0)?[Keys.spanId.rawValue] as? String }
         let waiters = spanIds.compactMap { liveDeliveryWaiters.removeValue(forKey: $0) }
         crashUploadLock.unlock()
         let delivered = result.disposition == .delivered
@@ -155,9 +152,8 @@ public class CoralogixExporter: SpanExporter {
         Set(spans.compactMap { crashEventId(of: $0) })
     }
 
-    /// Keyed on the correlation id alone: it is stamped only on crash spans, by both paths, and
-    /// only where a confirmation is awaited. Gating on is_crash as well would miss the
-    /// PLCrashReporter path, which never sets that attribute.
+    /// Keyed on the correlation id alone: it is stamped only on stored crashes, where an answer is
+    /// awaited. A live hybrid crash also sets is_crash, but is sent once and awaits nothing.
     private func crashEventId(of span: SpanData) -> String? {
         span.getAttribute(forKey: Keys.crashEventId.rawValue) as? String
     }
@@ -323,7 +319,7 @@ public class CoralogixExporter: SpanExporter {
     private func rebuildOtelSpanAttributes(in event: [String: Any]) -> [String: Any] {
         guard var instrumentationData = event[Keys.instrumentationData.rawValue] as? [String: Any],
               var otelSpan = instrumentationData[Keys.otelSpan.rawValue] as? [String: Any],
-              let cxRum = (event[Keys.text.rawValue] as? [String: Any])?[Keys.cxRum.rawValue] as? [String: Any] else {
+              let cxRum = Self.cxRum(of: event) else {
             return event
         }
         let previousAttributes = otelSpan[Keys.attributes.rawValue] as? [String: Any] ?? [:]
@@ -465,12 +461,15 @@ public class CoralogixExporter: SpanExporter {
         return result
     }
 
+    /// The `cx_rum` of an encoded event.
+    private static func cxRum(of event: [String: Any]) -> [String: Any]? {
+        (event[Keys.text.rawValue] as? [String: Any])?[Keys.cxRum.rawValue] as? [String: Any]
+    }
+
     /// Whether an encoded span carries `error_context.is_crash == true` — a crash reported
     /// through the hybrid bridge or rebuilt from a pending PLCrashReporter report.
     private func isCrashEvent(_ encodedSpan: [String: Any]) -> Bool {
-        guard let text = encodedSpan[Keys.text.rawValue] as? [String: Any],
-              let cxRum = text[Keys.cxRum.rawValue] as? [String: Any],
-              let errorContext = cxRum[Keys.errorContext.rawValue] as? [String: Any] else {
+        guard let errorContext = Self.cxRum(of: encodedSpan)?[Keys.errorContext.rawValue] as? [String: Any] else {
             return false
         }
         return errorContext[Keys.isCrash.rawValue] as? Bool ?? false

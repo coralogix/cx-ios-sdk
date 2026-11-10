@@ -104,7 +104,8 @@ extension CoralogixRum {
             return
         }
         guard let session = marker.session,
-              let counters = self.coralogixExporter?.getSessionManager().snapshotStore.record(for: session.id) else {
+              let snapshots = self.coralogixExporter?.getSessionManager().snapshotStore,
+              let counters = Self.counters(of: session, in: snapshots) else {
             Log.d("[FatalHang] no record of the hung session — dropping the hang")
             return
         }
@@ -134,8 +135,7 @@ extension CoralogixRum {
         }
         let sorted = hangs.sorted { $0.marker.detectedAt > $1.marker.detectedAt }
         for dropped in sorted.dropFirst(CrashDeliveryStore.maxPerKind) {
-            store.removeCopy(dropped.copy)
-            store.removeRecord(for: dropped.marker.crashId)
+            store.forget(copy: dropped.copy, crashId: dropped.marker.crashId)
         }
         return sorted.prefix(CrashDeliveryStore.maxPerKind).map { .init(crashId: $0.marker.crashId, copy: $0.copy) }
     }

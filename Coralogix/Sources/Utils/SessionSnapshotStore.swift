@@ -23,6 +23,11 @@ struct SessionSnapshotRecord: Codable, Equatable {
 }
 
 extension SessionSnapshotRecord {
+    /// A session the SDK adopted but had not recorded yet: nothing counted, no view.
+    static func empty(sessionId: String) -> SessionSnapshotRecord {
+        SessionSnapshotRecord(sessionId: sessionId, errorCount: 0, viewCount: 0, actionCount: 0, hasRecording: false)
+    }
+
     init(sessionId: String, snapshot: SnapshotContext) {
         self.init(sessionId: sessionId,
                   errorCount: snapshot.errorCount,

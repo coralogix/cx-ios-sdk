@@ -298,8 +298,9 @@ final class CrashedSessionRecoveryTests: XCTestCase {
                                                    hasRecording: false)
         let sdk = try relaunch(after: keychainRecord, keychainSession: "S2")
 
-        XCTAssertNil(sdk.firstRecord(of: CrashReportMapper.map(Report.naming("S1"))),
-                     "S1 left no record; the crash must not be filed under the keychain's S2")
+        let record = try XCTUnwrap(sdk.firstRecord(of: CrashReportMapper.map(Report.naming("S1"))))
+        XCTAssertEqual(record.session.id, "S1", "S1 left no record; the crash must not be filed under the keychain's S2")
+        XCTAssertEqual(record.counters, .empty(sessionId: "S1"), "adopted but not recorded yet: nothing counted")
     }
 
     func test_anOldReport_withoutContext_usesTheKeychainSession() throws {

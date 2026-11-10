@@ -71,10 +71,12 @@ static atomic_flag _crx_launchSessionClaimed = ATOMIC_FLAG_INIT;
             return;
         }
 
-        // Before enabling: a crash this launch has would otherwise overwrite the slot first.
+        // Before enabling: a crash this launch has would otherwise overwrite the slot first. Only
+        // copied: the slot is emptied by recovery, once the options say crashes are reported, so a
+        // host app reading the same slot keeps its report otherwise.
         NSURL *copies = CRXCrashBootstrap.crashCopiesDirectory;
         if (copies != nil) {
-            [CRXCrashBootstrap movePendingReportOf:reporter toDirectory:copies];
+            [CRXCrashBootstrap copyPendingReportOf:reporter toDirectory:copies];
         }
 
         NSError *error = nil;
@@ -100,7 +102,13 @@ static atomic_flag _crx_launchSessionClaimed = ATOMIC_FLAG_INIT;
 }
 
 + (NSURL *)crashCopiesDirectory {
-    NSURL *support = [[NSFileManager defaultManager] URLsForDirectory:NSApplicationSupportDirectory
+#if TARGET_OS_TV
+    // tvOS gives apps no persistent storage beyond caches.
+    NSSearchPathDirectory base = NSCachesDirectory;
+#else
+    NSSearchPathDirectory base = NSApplicationSupportDirectory;
+#endif
+    NSURL *support = [[NSFileManager defaultManager] URLsForDirectory:base
                                                             inDomains:NSUserDomainMask].firstObject;
     return [[support URLByAppendingPathComponent:@"CoralogixRum" isDirectory:YES]
             URLByAppendingPathComponent:@"crashes" isDirectory:YES];
@@ -118,11 +126,15 @@ static NSString *crx_reportFileName(NSData *data) {
     return [(uuid ?: [NSUUID UUID].UUIDString) stringByAppendingPathExtension:@"plcrash"];
 }
 
-+ (BOOL)movePendingReportOf:(PLCrashReporter *)reporter toDirectory:(NSURL *)directory {
++ (BOOL)copyPendingReportOf:(PLCrashReporter *)reporter toDirectory:(NSURL *)directory {
     if (![reporter hasPendingCrashReport]) return NO;
     NSData *data = [reporter loadPendingCrashReportDataAndReturnError:NULL];
     if (data == nil) return NO;
+    return crx_writeCopy(data, directory);
+}
 
+/// Writes `data` as its own copy in `directory`; an existing copy of the same report is replaced.
+static BOOL crx_writeCopy(NSData *data, NSURL *directory) {
     if (![[NSFileManager defaultManager] createDirectoryAtURL:directory
                                   withIntermediateDirectories:YES
                                                    attributes:nil
@@ -130,7 +142,11 @@ static NSString *crx_reportFileName(NSData *data) {
         return NO;
     }
     NSURL *file = [directory URLByAppendingPathComponent:crx_reportFileName(data)];
-    if (![data writeToURL:file options:NSDataWritingAtomic error:NULL]) return NO;
+    return [data writeToURL:file options:NSDataWritingAtomic error:NULL];
+}
+
++ (BOOL)movePendingReportOf:(PLCrashReporter *)reporter toDirectory:(NSURL *)directory {
+    if (![CRXCrashBootstrap copyPendingReportOf:reporter toDirectory:directory]) return NO;
     [reporter purgePendingCrashReport];
     return YES;
 }

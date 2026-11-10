@@ -317,7 +317,6 @@ final class CrashDeliveryScheduler {
     }
 
     private func purge(_ item: Item) {
-        store.removeCopy(item.copy)
-        store.removeRecord(for: item.crashId)
+        store.forget(copy: item.copy, crashId: item.crashId)
     }
 }

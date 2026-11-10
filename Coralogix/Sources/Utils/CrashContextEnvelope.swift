@@ -60,7 +60,7 @@ enum CrashContextSession {
     static func write(_ stamp: SessionManager.CrashStamp) {
         CRXCrashContext.setSection(Keys.crashContextSession.rawValue, value: [
             Keys.sessionId.rawValue: stamp.sessionId,
-            Keys.crashContextSessionCreationTime.rawValue: Int64(stamp.creationDate * 1000),
+            Keys.crashContextSessionCreationTime.rawValue: Int64(stamp.creationDate.milliseconds),
             Keys.spanSessionSampledIn.rawValue: stamp.sampledIn
         ])
     }

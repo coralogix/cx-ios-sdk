@@ -198,7 +198,8 @@ final class SpanUploader: SpanUploading {
     private func logOutcome(_ result: SpanUploadResult, error: Error?, responseBody: Data?, requestJSON: Data) {
         switch result.disposition {
         case .delivered:
-            logJSON(from: requestJSON, prettyPrint: true)
+            // Formatting the whole request costs a parse and a print: only when it is logged.
+            if Log.isDebug { logJSON(from: requestJSON, prettyPrint: true) }
         case .permanentReject, .retryable:
             if let error = error {
                 Log.e("[SpanUploader] Network error: \(error.localizedDescription)")

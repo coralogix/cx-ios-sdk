@@ -192,6 +192,17 @@ public class SessionManager {
         _crashStampObserver = nil
     }
 
+    /// Attaches `observer` when none is attached and tells it the live session at once. For a
+    /// manager not built by `forLaunch()` — one a host app passes in — so its sessions still
+    /// reach the crash context.
+    func attachCrashStampObserverIfNeeded(_ observer: @escaping (CrashStamp) -> Void) {
+        sessionLock.lock()
+        defer { sessionLock.unlock() }
+        guard _crashStampObserver == nil else { return }
+        _crashStampObserver = observer
+        notifyCrashStampLocked()
+    }
+
     /// The seed the first session adopts instead of minting its own id. Consumed by that rotation.
     private var pendingLaunchSessionId: String?
 
@@ -218,6 +229,11 @@ public class SessionManager {
     var currentCrashStamp: CrashStamp? {
         sessionLock.lock()
         defer { sessionLock.unlock() }
+        return crashStampLocked()
+    }
+
+    /// PRECONDITION: caller holds `sessionLock`.
+    private func crashStampLocked() -> CrashStamp? {
         guard let current = sessionMetadata, !current.sessionId.isEmpty else { return nil }
         return CrashStamp(sessionId: current.sessionId,
                           creationDate: current.sessionCreationDate,
@@ -226,11 +242,8 @@ public class SessionManager {
 
     /// PRECONDITION: caller holds `sessionLock`.
     private func notifyCrashStampLocked() {
-        guard let observer = _crashStampObserver,
-              let current = sessionMetadata, !current.sessionId.isEmpty else { return }
-        observer(CrashStamp(sessionId: current.sessionId,
-                            creationDate: current.sessionCreationDate,
-                            sampledIn: _isSessionSampledIn))
+        guard let observer = _crashStampObserver, let stamp = crashStampLocked() else { return }
+        observer(stamp)
     }
 
     /// Mirrors the live decision into the keychain next to the session identity, so a

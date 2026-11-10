@@ -84,6 +84,7 @@ static void crx_terminate(void) {
 }
 
 + (BOOL)recordRuntimeErrorForTesting:(NSString *)what {
+    crx_terminateWriteIsTest = YES;
     try {
         throw std::runtime_error(what.UTF8String);
     } catch (...) {
@@ -92,6 +93,7 @@ static void crx_terminate(void) {
 }
 
 + (BOOL)recordObjCExceptionForTesting {
+    crx_terminateWriteIsTest = YES;
     @try {
         @throw [NSException exceptionWithName:NSInvalidArgumentException reason:@"test" userInfo:nil];
     } @catch (NSException *exception) {

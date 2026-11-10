@@ -37,12 +37,15 @@ static NSData *_crx_lastEnvelope;
 /// Where the terminate-time envelope is built: preallocated, so terminate allocates only the one
 /// `NSData` PLCR's API takes.
 static uint8_t _crx_terminateBuffer[8192];
+/// Set once the terminate handler has written its section: the process is going down, and a
+/// session write on another thread must not replace the envelope that carries it.
+static BOOL _crx_frozen;
 
 @implementation CRXCrashContext
 
 /// Must be called with the lock held. Returns whether the envelope reached PLCR.
 static BOOL crx_writeLocked(void) {
-    if (_crx_activeReporter == nil) return NO;
+    if (_crx_activeReporter == nil || _crx_frozen) return NO;
 
     NSData *data = nil;
     if (_crx_sections.count > 0) {
@@ -153,6 +156,8 @@ size_t crx_envelopeWithCxxSection(const uint8_t *envelope, size_t envelopeLength
     return crx_appendBytes(buffer, capacity, pos, "}}", 2);
 }
 
+BOOL crx_terminateWriteIsTest = NO;
+
 BOOL crx_writeCxxSection(const char *type, const char *what) {
     // Never wait: the thread going down may be the one holding the lock.
     if (!os_unfair_lock_trylock(&_crx_contextLock)) return NO;
@@ -163,6 +168,7 @@ BOOL crx_writeCxxSection(const char *type, const char *what) {
         if (length > 0) {
             _crx_activeReporter.customData = [NSData dataWithBytes:_crx_terminateBuffer length:length];
             written = YES;
+            _crx_frozen = !crx_terminateWriteIsTest;
         }
     }
     os_unfair_lock_unlock(&_crx_contextLock);

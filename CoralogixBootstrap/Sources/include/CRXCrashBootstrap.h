@@ -60,6 +60,10 @@ NS_ASSUME_NONNULL_BEGIN
 /// next launch could not deliver would be overwritten by the one after it; the copies are not.
 @property (class, nonatomic, readonly, nullable) NSURL *crashCopiesDirectory;
 
+/// Copies `reporter`'s pending report into `directory`, leaving PLCrashReporter's slot as it is.
+/// Copying the same report again replaces its copy. Returns whether a report was copied.
++ (BOOL)copyPendingReportOf:(PLCrashReporter *)reporter toDirectory:(NSURL *)directory;
+
 /// Moves `reporter`'s pending report into `directory` and empties PLCrashReporter's slot.
 /// The slot is emptied only once the copy is written, so a copy that fails — the file system is
 /// still locked by data protection during prewarm, say — leaves the report for a later attempt.

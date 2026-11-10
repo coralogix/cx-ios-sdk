@@ -63,8 +63,6 @@ struct MappedCrash: Equatable {
     let kind: Kind
     /// Always the signal: PLCrashReporter records an uncaught exception as a SIGABRT report.
     let exceptionType: String
-    /// Equal to `exceptionType`, as Android's native crash sets it.
-    let errorType: String
     let errorMessage: String
     let processName: String?
     let applicationIdentifier: String?
@@ -76,6 +74,9 @@ struct MappedCrash: Equatable {
     let arch: String?
     /// The session and C++ context written into the report, when it has a readable one.
     let context: CrashContextEnvelope?
+
+    /// Equal to `exceptionType`, as Android's native crash sets it.
+    var errorType: String { exceptionType }
 }
 
 enum CrashReportMapper {
@@ -96,7 +97,6 @@ enum CrashReportMapper {
                            crashTime: report.timestamp,
                            kind: crashKind,
                            exceptionType: report.signalName,
-                           errorType: report.signalName,
                            errorMessage: capped(message(for: report, kind: crashKind, context: context)),
                            processName: report.processName,
                            applicationIdentifier: report.applicationIdentifier,
@@ -216,7 +216,7 @@ enum CrashReportMapper {
         if let reportId = report.reportId, !reportId.isEmpty {
             return reportId
         }
-        let millis = report.timestamp.map { Int64($0.timeIntervalSince1970 * 1000) } ?? 0
+        let millis = report.timestamp.map { $0.timeIntervalSince1970.milliseconds } ?? 0
         return "plcr-\(millis)-\(report.processID)-\(report.signalName)"
     }
 

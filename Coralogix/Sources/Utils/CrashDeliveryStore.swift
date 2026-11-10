@@ -48,12 +48,20 @@ extension StoredCrashRecord {
 
 /// The SDK's own copies of crash reports, and the delivery record of each.
 ///
-/// PLCrashReporter keeps one pending report; `CRXCrashBootstrap` moves it into `copiesDirectory`
-/// at image load, so a crash a launch could not deliver is not lost to the next one. Recovery
-/// reads only the copies.
+/// PLCrashReporter keeps one pending report; `CRXCrashBootstrap` copies it into `copiesDirectory`
+/// at image load, and recovery empties the slot once it reports crashes, so a crash a launch could
+/// not deliver is not lost to the next one. Recovery reads only the copies.
 final class CrashDeliveryStore {
     /// At most this many crashes of a kind are kept, the newest.
     static let maxPerKind = 10
+
+    /// Where the SDK keeps its files, as `CRXCrashBootstrap.crashCopiesDirectory` does: tvOS gives
+    /// apps no persistent storage beyond caches.
+    #if os(tvOS)
+    static let baseDirectory = FileManager.SearchPathDirectory.cachesDirectory
+    #else
+    static let baseDirectory = FileManager.SearchPathDirectory.applicationSupportDirectory
+    #endif
 
     let copiesDirectory: URL
     /// One file per stored fatal hang (`<crash id>.json`), as `copiesDirectory` holds crashes.
@@ -66,7 +74,7 @@ final class CrashDeliveryStore {
 
     init(directory: URL? = nil) {
         let base = directory
-            ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? FileManager.default.urls(for: Self.baseDirectory, in: .userDomainMask).first
             ?? FileManager.default.temporaryDirectory
         let folder = base.appendingPathComponent("CoralogixRum", isDirectory: true)
         let ownCopies = folder.appendingPathComponent("crashes", isDirectory: true)
@@ -82,30 +90,41 @@ final class CrashDeliveryStore {
 
     /// The stored report files. A directory that does not exist yet holds none.
     func copies() -> [URL] {
-        let files = (try? FileManager.default.contentsOfDirectory(at: copiesDirectory,
-                                                                   includingPropertiesForKeys: nil)) ?? []
-        return files.filter { $0.pathExtension == "plcrash" }
+        Self.files(in: copiesDirectory, withExtension: "plcrash")
     }
 
     func removeCopy(_ url: URL) {
         try? FileManager.default.removeItem(at: url)
     }
 
+    /// Finished with a crash: its file and its delivery record both go.
+    func forget(copy url: URL, crashId: String) {
+        removeCopy(url)
+        removeRecord(for: crashId)
+    }
+
+    private static func files(in directory: URL, withExtension pathExtension: String) -> [URL] {
+        let files = (try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? []
+        return files.filter { $0.pathExtension == pathExtension }
+    }
+
+    private static func writeJSON<Value: Encodable>(_ value: Value, to url: URL) throws {
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try JSONEncoder().encode(value).write(to: url, options: .atomic)
+    }
+
     // MARK: - Fatal hangs
 
     /// The stored fatal hang files.
     func hangs() -> [URL] {
-        let files = (try? FileManager.default.contentsOfDirectory(at: hangsDirectory,
-                                                                   includingPropertiesForKeys: nil)) ?? []
-        return files.filter { $0.pathExtension == "json" }
+        Self.files(in: hangsDirectory, withExtension: "json")
     }
 
     /// Keeps `marker` as a hang to send, under its crash id. Returns where, or nil if it could not be written.
     func storeHang(_ marker: HangMarker) -> URL? {
         let url = hangsDirectory.appendingPathComponent("\(marker.crashId).json")
         do {
-            try FileManager.default.createDirectory(at: hangsDirectory, withIntermediateDirectories: true)
-            try JSONEncoder().encode(marker).write(to: url, options: .atomic)
+            try Self.writeJSON(marker, to: url)
             return url
         } catch {
             Log.e("[CrashDeliveryStore] Failed to store a fatal hang: \(error)")
@@ -117,9 +136,7 @@ final class CrashDeliveryStore {
         lock.lock()
         defer { lock.unlock() }
         do {
-            try FileManager.default.createDirectory(at: hangMarkerFile.deletingLastPathComponent(),
-                                                    withIntermediateDirectories: true)
-            try JSONEncoder().encode(marker).write(to: hangMarkerFile, options: .atomic)
+            try Self.writeJSON(marker, to: hangMarkerFile)
         } catch {
             Log.e("[CrashDeliveryStore] Failed to write the hang marker: \(error)")
         }
@@ -194,9 +211,7 @@ final class CrashDeliveryStore {
 
     private func writeLocked(_ records: [String: StoredCrashRecord]) {
         do {
-            try FileManager.default.createDirectory(at: recordsFile.deletingLastPathComponent(),
-                                                    withIntermediateDirectories: true)
-            try JSONEncoder().encode(records).write(to: recordsFile, options: .atomic)
+            try Self.writeJSON(records, to: recordsFile)
         } catch {
             Log.e("[CrashDeliveryStore] Failed to write crash delivery records: \(error)")
         }
