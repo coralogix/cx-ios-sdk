@@ -8,6 +8,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Release-mechanics commits (version bumps, podspec/script tweaks, README edits) are
 omitted; the focus here is user-facing behavior changes.
 
+## [2.23.0] - 2026-11-10
+
+### Added
+- An uncaught C++ exception is reported with its type and message (for example `std::runtime_error: boom`) instead of `SIGABRT` alone.
+- A hang the app does not survive is reported on the next launch as an ANR with `is_crash` set and the message `Application Not Responding`, unless its own ANR event was already sent.
+- ANR events carry every thread, main thread first.
+
+### Changed
+- Crash messages now name what crashed: the exception and its reason (`NSInvalidArgumentException: <reason>`) or the signal and its code (`SIGSEGV (SEGV_MAPERR)`), cut to 102 characters, with `exception_type` and `error_type` set to the signal. Update queries that match the previous crash messages.
+- An ANR is reported once the main thread has been blocked for 5 seconds, never while a debugger is attached, with the message `Application Not Responding for at least 1000 ms.`, as on Android. MetricKit hang reports are no longer sent as errors.
+- `ignoreErrors` tries every pattern and also matches the error type, so a pattern such as `SIGSEGV` or `ANR` filters those events.
+- A crash reported on a later launch keeps the session, screen and app version it happened in. Crashes that happen before the SDK is initialized are no longer reported.
+- Hybrid crashes reported through `reportError(isCrash:)` are sent once, when they happen, and no longer re-sent by the next launch.
+
+### Fixed
+- Crashes from several launches that could not send them are all kept and sent, up to 10, instead of only the latest. Sending is retried during the launch, honours `Retry-After`, continues briefly in the background, and stops after 16 failed attempts or 7 days.
+- `beforeSend`, `ignoreErrors` and sampling apply each time a crash is sent, and a crash they drop is not sent again.
+
 ## [2.22.0] - 2026-10-29
 
 ### Added
