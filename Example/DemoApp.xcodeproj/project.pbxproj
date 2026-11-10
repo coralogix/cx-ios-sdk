@@ -7,9 +7,24 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		34BD376BC2EDE354CAD79BCA /* cases.json in Resources */ = {isa = PBXBuildFile; fileRef = 13EC1CBAC753EAFC620421F1 /* cases.json */; };
+		34C3ED29582D14BF4B2E70FB /* cases.json in Resources */ = {isa = PBXBuildFile; fileRef = 13EC1CBAC753EAFC620421F1 /* cases.json */; };
+		36405487D7C24A9C35D8821A /* CrashLabSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74026802F5B3B50F33ADF76D /* CrashLabSettings.swift */; };
 		4BEB95B04D839630370E524D /* Pods_DemoAppSwift.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1E90A340190C0B87337E4053 /* Pods_DemoAppSwift.framework */; };
 		4EB7D437E99BC71414A82D40 /* Pods_DemoAppSwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7569CF6A4A46DF39A56A0F67 /* Pods_DemoAppSwiftUI.framework */; };
+		5582E655D554C2916D523A9C /* CrashLabNative.mm in Sources */ = {isa = PBXBuildFile; fileRef = C432F39ADCF19B6FC496E781 /* CrashLabNative.mm */; };
+		727A72BEB437D4BECB72F173 /* CrashLabSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74026802F5B3B50F33ADF76D /* CrashLabSettings.swift */; };
+		7C11D7DFC5D8CA6C2891EB06 /* CrashLabTriggers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 894995E478A9D9D6A758C81E /* CrashLabTriggers.swift */; };
+		7ECFCD094D57B9D5A4438225 /* CrashLabCases.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05ECF7826CD692EBCC8CDFAA /* CrashLabCases.swift */; };
+		8D45E9599C3F3D5158923C93 /* CrashLabCases.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05ECF7826CD692EBCC8CDFAA /* CrashLabCases.swift */; };
+		90E8DDB5E3324D031427782F /* CrashLabTriggers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 894995E478A9D9D6A758C81E /* CrashLabTriggers.swift */; };
+		993F772272755F1E80FA1868 /* CrashLabCases.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05ECF7826CD692EBCC8CDFAA /* CrashLabCases.swift */; };
 		B5C673F8D50B58A18306FA83 /* LeakHarnessViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BFFDB5C0CEBD0009FE0ADC1 /* LeakHarnessViewController.swift */; };
+		B9DC693970CC1C1EBB31EF36 /* CrashLabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDFA777B7C4B051DC402FB35 /* CrashLabView.swift */; };
+		D51FD29463453CD7C2800A57 /* cases.json in Resources */ = {isa = PBXBuildFile; fileRef = 13EC1CBAC753EAFC620421F1 /* cases.json */; };
+		D8A11B544C20AD1C85E36173 /* CrashLabViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD160F433BA53B704BA26587 /* CrashLabViewController.swift */; };
+		DEA75D34C40628FC9F931961 /* CrashLabNative.mm in Sources */ = {isa = PBXBuildFile; fileRef = C432F39ADCF19B6FC496E781 /* CrashLabNative.mm */; };
+		DFE631727F25C64F79C82984 /* CrashLabTriggers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 894995E478A9D9D6A758C81E /* CrashLabTriggers.swift */; };
 		E603F6CC2C5631CF007C55DA /* CollectionViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E603F6CB2C5631CF007C55DA /* CollectionViewController.swift */; };
 		E603F6CE2C56792D007C55DA /* PageController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E603F6CD2C56792D007C55DA /* PageController.swift */; };
 		E622115B2BFDEB8B00052682 /* DemoAppSwiftUIApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = E622115A2BFDEB8B00052682 /* DemoAppSwiftUIApp.swift */; };
@@ -104,6 +119,8 @@
 		E79419E82FC84F2000BC47CD /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = E79419E62FC84F2000BC47CD /* GoogleService-Info.plist */; };
 		E79419E92FC84F2000BC47CD /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = E79419E62FC84F2000BC47CD /* GoogleService-Info.plist */; };
 		E79419EA2FC84F2000BC47CD /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = E79419E62FC84F2000BC47CD /* GoogleService-Info.plist */; };
+		EB41DEF25F8FBA4D17EFD24B /* CrashLabSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74026802F5B3B50F33ADF76D /* CrashLabSettings.swift */; };
+		EFAAB3000FFF82542E72F06F /* CrashLabNative.mm in Sources */ = {isa = PBXBuildFile; fileRef = C432F39ADCF19B6FC496E781 /* CrashLabNative.mm */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -157,15 +174,22 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		05ECF7826CD692EBCC8CDFAA /* CrashLabCases.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CrashLabCases.swift; sourceTree = "<group>"; };
+		13EC1CBAC753EAFC620421F1 /* cases.json */ = {isa = PBXFileReference; includeInIndex = 1; path = cases.json; sourceTree = "<group>"; };
 		1E8D067F2E27BBC8002C4FCE /* DemoAppUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DemoAppUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		1E8D068F2E27BC82002C4FCE /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		1E90A340190C0B87337E4053 /* Pods_DemoAppSwift.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_DemoAppSwift.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		2A8D067F2E27BBC8002C4FCE /* DemoAppSwiftUIUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DemoAppSwiftUIUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		2BFFDB5C0CEBD0009FE0ADC1 /* LeakHarnessViewController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LeakHarnessViewController.swift; sourceTree = "<group>"; };
 		2E11204B152575C210B226A4 /* Pods-DemoAppSwiftUI.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-DemoAppSwiftUI.release.xcconfig"; path = "Target Support Files/Pods-DemoAppSwiftUI/Pods-DemoAppSwiftUI.release.xcconfig"; sourceTree = "<group>"; };
+		37A875F486C4630BE56CE51C /* CrashLabNative.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; path = CrashLabNative.h; sourceTree = "<group>"; };
+		74026802F5B3B50F33ADF76D /* CrashLabSettings.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CrashLabSettings.swift; sourceTree = "<group>"; };
 		7569CF6A4A46DF39A56A0F67 /* Pods_DemoAppSwiftUI.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_DemoAppSwiftUI.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		7FC387C1751325704ADEFC63 /* Pods-DemoAppSwiftUI.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-DemoAppSwiftUI.debug.xcconfig"; path = "Target Support Files/Pods-DemoAppSwiftUI/Pods-DemoAppSwiftUI.debug.xcconfig"; sourceTree = "<group>"; };
+		831542143DDAF57F14253A0A /* CrashLab-Bridging-Header.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; path = "CrashLab-Bridging-Header.h"; sourceTree = "<group>"; };
+		894995E478A9D9D6A758C81E /* CrashLabTriggers.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CrashLabTriggers.swift; sourceTree = "<group>"; };
 		B5FC1933698D86B79CBCB096 /* Pods-DemoAppSwift.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-DemoAppSwift.debug.xcconfig"; path = "Target Support Files/Pods-DemoAppSwift/Pods-DemoAppSwift.debug.xcconfig"; sourceTree = "<group>"; };
+		C432F39ADCF19B6FC496E781 /* CrashLabNative.mm */ = {isa = PBXFileReference; includeInIndex = 1; path = CrashLabNative.mm; sourceTree = "<group>"; };
 		E5307C7815D96D3A969561E7 /* Pods-DemoAppSwift.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-DemoAppSwift.release.xcconfig"; path = "Target Support Files/Pods-DemoAppSwift/Pods-DemoAppSwift.release.xcconfig"; sourceTree = "<group>"; };
 		E603F6CB2C5631CF007C55DA /* CollectionViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollectionViewController.swift; sourceTree = "<group>"; };
 		E603F6CD2C56792D007C55DA /* PageController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PageController.swift; sourceTree = "<group>"; };
@@ -232,11 +256,33 @@
 		E6TMVW002F0C000010035952 /* TimeMeasurementView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeMeasurementView.swift; sourceTree = "<group>"; };
 		E6TRACES002F0C000010035951 /* TracesExporterViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TracesExporterViewController.swift; sourceTree = "<group>"; };
 		E79419E62FC84F2000BC47CD /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
+		EDFA777B7C4B051DC402FB35 /* CrashLabView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CrashLabView.swift; sourceTree = "<group>"; };
+		FD160F433BA53B704BA26587 /* CrashLabViewController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CrashLabViewController.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		1E8D06802E27BBC8002C4FCE /* DemoAppUITests */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = DemoAppUITests; sourceTree = "<group>"; };
-		2A8D06802E27BBC8002C4FCE /* DemoAppSwiftUIUITests */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = DemoAppSwiftUIUITests; sourceTree = "<group>"; };
+		1E8D06802E27BBC8002C4FCE /* DemoAppUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
+			explicitFileTypes = {
+			};
+			explicitFolders = (
+			);
+			path = DemoAppUITests;
+			sourceTree = "<group>";
+		};
+		2A8D06802E27BBC8002C4FCE /* DemoAppSwiftUIUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
+			explicitFileTypes = {
+			};
+			explicitFolders = (
+			);
+			path = DemoAppSwiftUIUITests;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -293,6 +339,15 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		6359EBC8838B1F9CCD7479DD /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				F6D203BC5E9E35CEA6E4552E /* crash-lab */,
+			);
+			name = Resources;
+			path = Resources;
+			sourceTree = "<group>";
+		};
 		95910C67001CE799C2D484DA /* Pods */ = {
 			isa = PBXGroup;
 			children = (
@@ -302,6 +357,20 @@
 				2E11204B152575C210B226A4 /* Pods-DemoAppSwiftUI.release.xcconfig */,
 			);
 			path = Pods;
+			sourceTree = "<group>";
+		};
+		D182536B322C980FC192F07A /* CrashLab */ = {
+			isa = PBXGroup;
+			children = (
+				74026802F5B3B50F33ADF76D /* CrashLabSettings.swift */,
+				894995E478A9D9D6A758C81E /* CrashLabTriggers.swift */,
+				05ECF7826CD692EBCC8CDFAA /* CrashLabCases.swift */,
+				C432F39ADCF19B6FC496E781 /* CrashLabNative.mm */,
+				37A875F486C4630BE56CE51C /* CrashLabNative.h */,
+				831542143DDAF57F14253A0A /* CrashLab-Bridging-Header.h */,
+			);
+			name = CrashLab;
+			path = CrashLab;
 			sourceTree = "<group>";
 		};
 		E62211592BFDEB8B00052682 /* DemoAppSwiftUI */ = {
@@ -327,6 +396,7 @@
 				E6TMVW002F0C000010035952 /* TimeMeasurementView.swift */,
 				E622115E2BFDEB8C00052682 /* Assets.xcassets */,
 				E62211602BFDEB8C00052682 /* Preview Content */,
+				EDFA777B7C4B051DC402FB35 /* CrashLabView.swift */,
 			);
 			path = DemoAppSwiftUI;
 			sourceTree = "<group>";
@@ -428,6 +498,7 @@
 				E68681AF2BFA279600B127E7 /* LaunchScreen.storyboard */,
 				E68681B22BFA279600B127E7 /* Info.plist */,
 				2BFFDB5C0CEBD0009FE0ADC1 /* LeakHarnessViewController.swift */,
+				FD160F433BA53B704BA26587 /* CrashLabViewController.swift */,
 			);
 			path = DemoAppSwift;
 			sourceTree = "<group>";
@@ -452,8 +523,19 @@
 				E6OTLP002F0C000010035951 /* OtlpSpan+EventType.swift */,
 				E6LSDM002F0C000010035951 /* LogSamplingDemoModel.swift */,
 				E6TMDM002F0C000010035951 /* TimeMeasurementDemoModel.swift */,
+				D182536B322C980FC192F07A /* CrashLab */,
+				6359EBC8838B1F9CCD7479DD /* Resources */,
 			);
 			path = Shared;
+			sourceTree = "<group>";
+		};
+		F6D203BC5E9E35CEA6E4552E /* crash-lab */ = {
+			isa = PBXGroup;
+			children = (
+				13EC1CBAC753EAFC620421F1 /* cases.json */,
+			);
+			name = "crash-lab";
+			path = "crash-lab";
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -659,6 +741,7 @@
 				E62211622BFDEB8C00052682 /* Preview Assets.xcassets in Resources */,
 				E79419EA2FC84F2000BC47CD /* GoogleService-Info.plist in Resources */,
 				E622115F2BFDEB8C00052682 /* Assets.xcassets in Resources */,
+				34C3ED29582D14BF4B2E70FB /* cases.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -670,6 +753,7 @@
 				E79419E82FC84F2000BC47CD /* GoogleService-Info.plist in Resources */,
 				E66938342C722EE60002335F /* Base in Resources */,
 				E669382F2C722EE60002335F /* Base in Resources */,
+				34BD376BC2EDE354CAD79BCA /* cases.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -681,6 +765,7 @@
 				E79419E72FC84F2000BC47CD /* GoogleService-Info.plist in Resources */,
 				E6B60A062DB4EAAC003AD35D /* Assets.xcassets in Resources */,
 				E68681AC2BFA279500B127E7 /* Base in Resources */,
+				D51FD29463453CD7C2800A57 /* cases.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -845,6 +930,11 @@
 				E6LSDM012F0C000010035952 /* LogSamplingDemoModel.swift in Sources */,
 				E6TMVW012F0C000010035952 /* TimeMeasurementView.swift in Sources */,
 				E6TMDM012F0C000010035952 /* TimeMeasurementDemoModel.swift in Sources */,
+				727A72BEB437D4BECB72F173 /* CrashLabSettings.swift in Sources */,
+				DFE631727F25C64F79C82984 /* CrashLabTriggers.swift in Sources */,
+				8D45E9599C3F3D5158923C93 /* CrashLabCases.swift in Sources */,
+				DEA75D34C40628FC9F931961 /* CrashLabNative.mm in Sources */,
+				B9DC693970CC1C1EBB31EF36 /* CrashLabView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -863,6 +953,10 @@
 				E66938442C73760F0002335F /* ModalViewController.swift in Sources */,
 				E669383E2C723D250002335F /* ErrorSim.swift in Sources */,
 				E6D4BBF82DE336310096B46D /* CoralogixRumManager.swift in Sources */,
+				EB41DEF25F8FBA4D17EFD24B /* CrashLabSettings.swift in Sources */,
+				7C11D7DFC5D8CA6C2891EB06 /* CrashLabTriggers.swift in Sources */,
+				7ECFCD094D57B9D5A4438225 /* CrashLabCases.swift in Sources */,
+				EFAAB3000FFF82542E72F06F /* CrashLabNative.mm in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -901,6 +995,11 @@
 				E68681D82BFA300C00B127E7 /* NetworkSim.swift in Sources */,
 				E68681D72BFA300800B127E7 /* ErrorSim.swift in Sources */,
 				B5C673F8D50B58A18306FA83 /* LeakHarnessViewController.swift in Sources */,
+				36405487D7C24A9C35D8821A /* CrashLabSettings.swift in Sources */,
+				90E8DDB5E3324D031427782F /* CrashLabTriggers.swift in Sources */,
+				993F772272755F1E80FA1868 /* CrashLabCases.swift in Sources */,
+				5582E655D554C2916D523A9C /* CrashLabNative.mm in Sources */,
+				D8A11B544C20AD1C85E36173 /* CrashLabViewController.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1058,6 +1157,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.coralogix.DemoAppSwiftUI;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "Shared/CrashLab/CrashLab-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
@@ -1089,6 +1189,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.coralogix.DemoAppSwiftUI;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "Shared/CrashLab/CrashLab-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
@@ -1222,8 +1323,8 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = KB76G8PF7B;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
 				INFOPLIST_FILE = DemoAppTvOS/Info.plist;
+				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
 				INFOPLIST_KEY_UIUserInterfaceStyle = Automatic;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -1234,6 +1335,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = appletvos;
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "Shared/CrashLab/CrashLab-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 3;
 				TVOS_DEPLOYMENT_TARGET = 17.4;
@@ -1249,8 +1351,8 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = KB76G8PF7B;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
 				INFOPLIST_FILE = DemoAppTvOS/Info.plist;
+				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
 				INFOPLIST_KEY_UIUserInterfaceStyle = Automatic;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -1261,6 +1363,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = appletvos;
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "Shared/CrashLab/CrashLab-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 3;
 				TVOS_DEPLOYMENT_TARGET = 17.4;
@@ -1295,6 +1398,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "Shared/CrashLab/CrashLab-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
@@ -1327,6 +1431,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "Shared/CrashLab/CrashLab-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
