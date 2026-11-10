@@ -77,11 +77,13 @@ class CrashE2ETestCase: XCTestCase {
 
     /// Leaves a crash on disk with its delivery record written: crashes, then a launch whose send
     /// gets no answer is ended mid-upload.
+    /// Every crash request goes unanswered meanwhile, so crashes stored before are kept too.
     func storeCrash(_ kind: String = "exception", _ fields: [String: Any] = [:], fresh: Bool = true) {
+        endpoint.answerCrashes([], then: .noAnswer)
         crash(kind, fields, fresh: fresh)
-        endpoint.answerCrashes([.noAnswer])
+        let before = endpoint.crashRequests.count
         launch(fields, waitForActions: false)
-        XCTAssertTrue(waitFor(timeout: 30) { self.endpoint.crashRequests.count >= 1 }, "the stored crash was not sent")
+        XCTAssertTrue(waitFor(timeout: 30) { self.endpoint.crashRequests.count > before }, "the stored crash was not sent")
         kill()
         endpoint.answerCrashes([])
     }

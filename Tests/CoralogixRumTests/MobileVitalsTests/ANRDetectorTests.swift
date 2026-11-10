@@ -141,14 +141,15 @@ final class ANRDetectorTests: XCTestCase {
         XCTAssertTrue(log.events.isEmpty)
     }
 
+    /// Margins are wide: a slow CI runner delays the timer and the queues by hundreds of ms.
     func test_twoSeparateHangs_areTwoANRs() {
         detector.startMonitoring()
-        idle(for: 0.2)
+        idle(for: 0.3)
 
-        hang(for: 0.9)
-        idle(for: 0.2)
-        hang(for: 0.9)
-        idle(for: 0.2)
+        hang(for: 1.5)
+        idle(for: 0.6)
+        hang(for: 1.5)
+        idle(for: 0.4)
 
         XCTAssertEqual(log.events.count, 2)
     }
