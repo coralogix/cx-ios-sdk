@@ -331,9 +331,10 @@ final class CrashRecoveryAcrossLaunchesTests: XCTestCase {
 
         sdk.reportError(message: "TypeError: undefined is not a function", stackTrace: [], errorType: "TypeError",
                         isCrash: true)
-        let flushed = expectation(description: "flushed")
-        sdk.flush { flushed.fulfill() }
-        wait(for: [flushed], timeout: 10)
+        // The crash's span ends asynchronously and the SDK flushes it itself, so a flush from here
+        // can run before it: wait for the upload instead.
+        let sent = expectation(for: NSPredicate { _, _ in !failing.crashes.isEmpty }, evaluatedWith: nil)
+        wait(for: [sent], timeout: 10)
         XCTAssertEqual(failing.crashes.count, 1)
 
         let relaunch = SwitchableUploader()
