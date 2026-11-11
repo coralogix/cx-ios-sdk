@@ -228,9 +228,8 @@ final class CrashRecoveryAcrossLaunchesTests: XCTestCase {
     func test_earlierLaunchesAreSpent_onlyWhenNothingCanStillNeedTheirSnapshots() {
         func spent(read: Bool = true, leftInReporter: Bool = false, hang: Bool = false,
                    recorded: Set<String>? = ["a"], lined: [String] = ["a"]) -> Bool {
-            CoralogixRum.earlierLaunchesAreSpent(allCopiesRead: read, reportLeftInReporter: leftInReporter,
-                                                 hangMarkerLeft: hang, recordedCrashIds: recorded,
-                                                 linedUpCrashIds: lined)
+            RecoveryOutcome(allCopiesRead: read, reportLeftInReporter: leftInReporter, hangMarkerLeft: hang,
+                            recordedCrashIds: recorded, linedUpCrashIds: lined).earlierLaunchesAreSpent
         }
         XCTAssertTrue(spent())
         XCTAssertFalse(spent(leftInReporter: true), "a report is still in PLCrashReporter's slot")

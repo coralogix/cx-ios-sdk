@@ -90,11 +90,12 @@ extension CoralogixRum: StoredCrashSending {
             lined += self.pendingFatalHangs()
         }
 
-        if Self.earlierLaunchesAreSpent(allCopiesRead: allCopiesRead,
-                                        reportLeftInReporter: reportLeftInReporter,
-                                        hangMarkerLeft: store.hasHangMarker,
-                                        recordedCrashIds: store.recordedCrashIds(),
-                                        linedUpCrashIds: lined.map(\.crashId)) {
+        let outcome = RecoveryOutcome(allCopiesRead: allCopiesRead,
+                                      reportLeftInReporter: reportLeftInReporter,
+                                      hangMarkerLeft: store.hasHangMarker,
+                                      recordedCrashIds: store.recordedCrashIds(),
+                                      linedUpCrashIds: lined.map(\.crashId))
+        if outcome.earlierLaunchesAreSpent {
             // Every crash and hang earlier launches left now has a delivery record holding its
             // session's counters, or is gone: nothing reads their launches' records again.
             let launchId = self.coralogixExporter?.getSessionManager().snapshotStore.launchId
@@ -105,18 +106,6 @@ extension CoralogixRum: StoredCrashSending {
         crashRecoveryLock.lock()
         self.pendingRecoveredCrashes = lined
         crashRecoveryLock.unlock()
-    }
-
-    /// Whether no crash or hang an earlier launch left can still need that launch's snapshot: every
-    /// copy was read, none is left in PLCrashReporter's slot, no hang marker waits, and every crash
-    /// lined up has a delivery record holding its session's counters. `recordedCrashIds` is nil
-    /// when the records cannot be read.
-    static func earlierLaunchesAreSpent(allCopiesRead: Bool, reportLeftInReporter: Bool,
-                                        hangMarkerLeft: Bool, recordedCrashIds: Set<String>?,
-                                        linedUpCrashIds: [String]) -> Bool {
-        guard allCopiesRead, !reportLeftInReporter, !hangMarkerLeft,
-              let recorded = recordedCrashIds else { return false }
-        return linedUpCrashIds.allSatisfy(recorded.contains)
     }
 
     /// The native crashes to send, newest first, capped; each with its delivery record.
@@ -448,5 +437,24 @@ public struct FirebaseRuntimeDetector {
     /// Convenience
     public static func isConfigured() -> Bool {
         presence() == .configured
+    }
+}
+
+/// What a recovery pass left behind, for deciding whether earlier launches' snapshots can go.
+struct RecoveryOutcome {
+    var allCopiesRead: Bool
+    var reportLeftInReporter: Bool
+    var hangMarkerLeft: Bool
+    /// Nil when the delivery records cannot be read.
+    var recordedCrashIds: Set<String>?
+    var linedUpCrashIds: [String]
+
+    /// No crash or hang an earlier launch left can still need that launch's snapshot: every copy
+    /// was read, none is left in PLCrashReporter's slot, no hang marker waits, and every crash
+    /// lined up has a delivery record holding its session's counters.
+    var earlierLaunchesAreSpent: Bool {
+        guard allCopiesRead, !reportLeftInReporter, !hangMarkerLeft,
+              let recorded = recordedCrashIds else { return false }
+        return linedUpCrashIds.allSatisfy(recorded.contains)
     }
 }
