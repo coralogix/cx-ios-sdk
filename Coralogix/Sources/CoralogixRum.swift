@@ -22,7 +22,7 @@ public class CoralogixRum {
     internal lazy var backgroundTasks: BackgroundTaskRunning = ApplicationBackgroundTaskRunner()
     /// Keeps the marker of a hang the watchdog reports, for the next launch to find if this one ends during it.
     internal lazy var fatalHangWatch = FatalHangWatch(store: self.crashDeliveryStore) { [weak self] in
-        self?.sessionManager?.currentCrashStamp.map {
+        self?.sessionManager?.lastPublishedCrashStamp.map {
             StoredCrashRecord.Session(id: $0.sessionId, creationDate: $0.creationDate, sampledIn: $0.sampledIn)
         }
     }

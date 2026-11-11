@@ -448,4 +448,53 @@ class SessionManagerTests: XCTestCase {
         XCTAssertEqual(stamped[Keys.spanViewName.rawValue], .string("checkout"))
         XCTAssertEqual(stamped[Keys.spanViewNumber.rawValue], .int(3))
     }
+
+    /// The hang watchdog reads the crash stamp while another thread may hold `sessionLock`, stalled in
+    /// the very I/O that hang is about; the read must not wait for that lock.
+    func testLastPublishedCrashStamp_isReadableWhileARotationHoldsTheSessionLock() throws {
+        let rotationBlocked = DispatchSemaphore(value: 0)
+        let releaseRotation = DispatchSemaphore(value: 0)
+        let stampLock = NSLock()
+        var observed: [SessionManager.CrashStamp] = []
+        let manager = SessionManager(snapshotStore: SessionSnapshotStore(keychain: MockKeyChain()),
+                                     crashStampObserver: { stamp in
+            stampLock.lock()
+            observed.append(stamp)
+            let isRotation = observed.count > 1
+            stampLock.unlock()
+            guard isRotation else { return }
+            rotationBlocked.signal()
+            releaseRotation.wait()
+        })
+        let rotationDone = expectation(description: "rotation finished")
+        DispatchQueue.global().async {
+            manager.setupSessionMetadata()
+            rotationDone.fulfill()
+        }
+        XCTAssertEqual(rotationBlocked.wait(timeout: .now() + 5), .success, "rotation reached the observer")
+
+        let read = expectation(description: "stamp read while sessionLock is held")
+        var stamp: SessionManager.CrashStamp?
+        DispatchQueue.global().async {
+            stamp = manager.lastPublishedCrashStamp
+            read.fulfill()
+        }
+        wait(for: [read], timeout: 1)
+        releaseRotation.signal()
+        wait(for: [rotationDone], timeout: 5)
+
+        stampLock.lock()
+        let handedToObserver = observed.last
+        stampLock.unlock()
+        XCTAssertEqual(try XCTUnwrap(stamp), handedToObserver)
+    }
+
+    func testLastPublishedCrashStamp_isClearedOnShutdown() throws {
+        let manager = SessionManager(snapshotStore: SessionSnapshotStore(keychain: MockKeyChain()))
+        XCTAssertEqual(try XCTUnwrap(manager.lastPublishedCrashStamp).sessionId, manager.getSessionMetadata()?.sessionId)
+
+        manager.shutdown()
+
+        XCTAssertNil(manager.lastPublishedCrashStamp)
+    }
 }

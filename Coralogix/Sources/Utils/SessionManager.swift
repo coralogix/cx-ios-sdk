@@ -225,13 +225,6 @@ public class SessionManager {
         notifyCrashStampLocked()
     }
 
-    /// The live session's identity, as a crash in it would be filed under.
-    var currentCrashStamp: CrashStamp? {
-        sessionLock.lock()
-        defer { sessionLock.unlock() }
-        return crashStampLocked()
-    }
-
     /// PRECONDITION: caller holds `sessionLock`.
     private func crashStampLocked() -> CrashStamp? {
         guard let current = sessionMetadata, !current.sessionId.isEmpty else { return nil }
@@ -240,9 +233,26 @@ public class SessionManager {
                           sampledIn: _isSessionSampledIn)
     }
 
+    /// The crash stamp as last published, readable without `sessionLock`. The hang watchdog reads
+    /// this: a thread stalled in keychain or crash-context I/O while holding `sessionLock` is
+    /// exactly the hang it must record, so it cannot wait on that lock to learn the session.
+    var lastPublishedCrashStamp: CrashStamp? {
+        crashStampSnapshotLock.lock()
+        defer { crashStampSnapshotLock.unlock() }
+        return _crashStampSnapshot
+    }
+
+    /// A leaf lock: taken alone or inside `sessionLock`, never the other way round.
+    private let crashStampSnapshotLock = NSLock()
+    private var _crashStampSnapshot: CrashStamp?
+
     /// PRECONDITION: caller holds `sessionLock`.
     private func notifyCrashStampLocked() {
-        guard let observer = _crashStampObserver, let stamp = crashStampLocked() else { return }
+        let stamp = crashStampLocked()
+        crashStampSnapshotLock.lock()
+        _crashStampSnapshot = stamp
+        crashStampSnapshotLock.unlock()
+        guard let observer = _crashStampObserver, let stamp else { return }
         observer(stamp)
     }
 
@@ -564,6 +574,7 @@ public class SessionManager {
         // be consumed again, so it would otherwise outlive the teardown still holding
         // the user's identity.
         self._pendingSnapshotTrigger = nil
+        notifyCrashStampLocked()
         sessionLock.unlock()
         self.reset()
     }
