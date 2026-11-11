@@ -157,15 +157,16 @@ enum UrlMasker {
             var keyOwners: [String: String] = [:]
             return UrlMasker.replace(pattern, in: json) { groups in
                 let literal = groups[1]
-                guard let masked = UrlMasker.maskingJsonLiteral(literal, with: maskText) else { return groups[0] }
-                let isKey = !groups[2].isEmpty
-                guard isKey else { return masked }
-                // Two keys can mask to the same string; number the later ones so no member is lost
-                // when the JSON is parsed.
-                var key = masked
+                let masked = UrlMasker.maskingJsonLiteral(literal, with: maskText)
+                guard !groups[2].isEmpty else { return masked ?? groups[0] }
+                // Two keys can end up the same, a masked one and another masked or untouched one;
+                // number the later ones so no member is lost when the JSON is parsed. Every key is
+                // recorded, changed or not.
+                let final = masked ?? literal
+                var key = final
                 var suffix = 2
                 while let owner = keyOwners[key], owner != literal {
-                    key = String(masked.dropLast()) + " (\(suffix))\""
+                    key = String(final.dropLast()) + " (\(suffix))\""
                     suffix += 1
                 }
                 keyOwners[key] = literal

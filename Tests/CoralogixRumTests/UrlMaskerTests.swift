@@ -267,6 +267,15 @@ final class UrlMaskerTests: XCTestCase {
         XCTAssertNotNil(dict["https://x.com/cb?token=\(R)"])
     }
 
+    /// An untouched key that already reads like a masked one still keeps its member.
+    func test_maskUserInfo_untouchedKeyCollidingWithAMaskedOne_keepsBoth() throws {
+        let json = #"{"https://x.com/cb?token=[REDACTED]":1,"https://x.com/cb?token=b":2}"#
+        let masked = try XCTUnwrap(UrlMasker.Masker().maskUserInfo(json))
+        let dict = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(masked.utf8)) as? [String: Int])
+        XCTAssertEqual(dict.count, 2)
+        XCTAssertEqual(dict["https://x.com/cb?token=\(R)"], 1)
+    }
+
     /// A value that is wholly a route is masked as one, in text fields and userInfo alike; prose
     /// that only contains a route is still left alone.
     func test_wholeValueRoutes_areMaskedInTextAndUserInfo() {
