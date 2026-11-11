@@ -554,6 +554,11 @@ public class CoralogixRum {
         self.initSpanState = .retired
         self.initSpanLock.unlock()
         self.crashDeliveryScheduler.stop()
+        // Drain and stop the batch processor now, while uploads are gated off. Left running, it
+        // exports what it still holds once a later init reopens the gate — a stored crash then goes
+        // out from here and again from the new instance's own pass.
+        self.tracerProviderSdk?.shutdown()
+        self.tracerProviderSdk = nil
         self.coralogixExporter?.shutdown(explicitTimeout: nil)
         self.removeNotification()
         self.metricsManager.removeObservers()

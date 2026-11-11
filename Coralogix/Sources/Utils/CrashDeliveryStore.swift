@@ -70,7 +70,9 @@ final class CrashDeliveryStore {
     let hangMarkerFile: URL
     private let recordsFile: URL
     private let legacyHybridStoreFile: URL
-    private let lock = NSLock()
+    /// Shared by every instance: each `CoralogixRum` has its own store, and all of them read, change
+    /// and write the same records file.
+    private static let lock = NSLock()
 
     init(directory: URL? = nil) {
         let base = directory
@@ -133,8 +135,8 @@ final class CrashDeliveryStore {
     }
 
     func writeHangMarker(_ marker: HangMarker) {
-        lock.lock()
-        defer { lock.unlock() }
+        Self.lock.lock()
+        defer { Self.lock.unlock() }
         do {
             try Self.writeJSON(marker, to: hangMarkerFile)
         } catch {
@@ -144,8 +146,8 @@ final class CrashDeliveryStore {
 
     /// The marker a hang left, if any. nil too when it cannot be read yet; a corrupt one is deleted.
     func hangMarker() -> HangMarker? {
-        lock.lock()
-        defer { lock.unlock() }
+        Self.lock.lock()
+        defer { Self.lock.unlock() }
         guard let data = try? Data(contentsOf: hangMarkerFile) else { return nil }
         guard let marker = try? JSONDecoder().decode(HangMarker.self, from: data) else {
             try? FileManager.default.removeItem(at: hangMarkerFile)
@@ -155,15 +157,15 @@ final class CrashDeliveryStore {
     }
 
     func clearHangMarker() {
-        lock.lock()
-        defer { lock.unlock() }
+        Self.lock.lock()
+        defer { Self.lock.unlock() }
         try? FileManager.default.removeItem(at: hangMarkerFile)
     }
 
     /// Notes that the hang `crashId` was reported by its own event, if its marker is still there.
     func markHangDelivered(crashId: String) {
-        lock.lock()
-        defer { lock.unlock() }
+        Self.lock.lock()
+        defer { Self.lock.unlock() }
         guard let data = try? Data(contentsOf: hangMarkerFile),
               var marker = try? JSONDecoder().decode(HangMarker.self, from: data),
               marker.crashId == crashId, !marker.liveDelivered else { return }
@@ -174,8 +176,8 @@ final class CrashDeliveryStore {
     // MARK: - Delivery records
 
     func record(for crashId: String) -> StoredCrashRecord? {
-        lock.lock()
-        defer { lock.unlock() }
+        Self.lock.lock()
+        defer { Self.lock.unlock() }
         return readLocked()?[crashId]
     }
 
@@ -188,8 +190,8 @@ final class CrashDeliveryStore {
     /// The record of `crashId`; `.unreadable` when the records file exists but cannot be read yet,
     /// which says nothing about whether the record is there.
     func lookUpRecord(for crashId: String) -> RecordLookup {
-        lock.lock()
-        defer { lock.unlock() }
+        Self.lock.lock()
+        defer { Self.lock.unlock() }
         guard let records = readLocked() else { return .unreadable }
         return records[crashId].map(RecordLookup.found) ?? .missing
     }
@@ -213,8 +215,8 @@ final class CrashDeliveryStore {
     /// it is not corrupt, and writing over it would lose every other crash's record.
     @discardableResult
     private func mutate(_ change: (inout [String: StoredCrashRecord]) -> Void) -> Bool {
-        lock.lock()
-        defer { lock.unlock() }
+        Self.lock.lock()
+        defer { Self.lock.unlock() }
         guard var records = readLocked() else { return false }
         change(&records)
         return writeLocked(records)

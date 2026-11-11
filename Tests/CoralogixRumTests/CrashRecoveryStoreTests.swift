@@ -415,6 +415,21 @@ final class CrashDeliveryStoreTests: XCTestCase {
         XCTAssertNil(store.record(for: "second"), "nothing is written while the file cannot be read")
     }
 
+    /// Every `CoralogixRum` has its own store over the same records file, so two of them saving at
+    /// once must not lose each other's records.
+    func test_twoStoresOnTheSameFile_keepEveryRecordEitherSaves() {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CrashDeliveryStore-\(UUID().uuidString)", isDirectory: true)
+        let stores = [CrashDeliveryStore(directory: directory), CrashDeliveryStore(directory: directory)]
+
+        DispatchQueue.concurrentPerform(iterations: 200) { index in
+            stores[index % 2].save(.fixture(crashId: "crash-\(index)"))
+        }
+
+        let missing = (0..<200).filter { stores[0].record(for: "crash-\($0)") == nil }
+        XCTAssertEqual(missing, [], "records saved through one store were overwritten by the other")
+    }
+
     func test_aCorruptRecordsFile_isReplaced() throws {
         let store = CrashDeliveryStore.temporary()
         store.save(.fixture(crashId: "first"))

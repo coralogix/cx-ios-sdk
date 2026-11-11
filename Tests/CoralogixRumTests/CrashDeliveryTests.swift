@@ -325,6 +325,32 @@ final class CrashDeliveryTests: XCTestCase {
                        "flush must drive queued spans into export without waiting for the schedule delay")
     }
 
+    /// A span still queued when the SDK shuts down must not be exported by that instance after a
+    /// re-init reopens the upload gate: a stored crash would otherwise go out from the old batch
+    /// processor and again from the new instance's own pass.
+    func test_shutdownThenReinit_theOldInstanceExportsNothingItHeldAtShutdown() throws {
+        let first = CoralogixRum(options: makeSamplingOptions(sampleRate: 100, exclude: []))
+        try XCTUnwrap(first.coralogixExporter).spanUploader = StubUploader()
+        let oldProvider = try XCTUnwrap(first.tracerProviderSdk)
+        first.log(severity: .info, message: "queued-at-shutdown", data: nil, labels: nil)
+        first.shutdown()
+
+        var exportedAfterReinit: [SpanData] = []
+        CoralogixExporter.testExportCallback = { spans in exportedAfterReinit.append(contentsOf: spans) }
+        defer { CoralogixExporter.testExportCallback = nil }
+        coralogixRum = CoralogixRum(options: makeSamplingOptions(sampleRate: 100, exclude: []))
+        try XCTUnwrap(coralogixRum.coralogixExporter).spanUploader = StubUploader()
+        XCTAssertTrue(coralogixRum.isInitialized, "precondition: the re-init reopened the upload gate")
+
+        oldProvider.forceFlush()
+
+        let leaked = exportedAfterReinit.filter {
+            $0.attributes[Keys.message.rawValue]?.description == "queued-at-shutdown"
+        }
+        XCTAssertTrue(leaked.isEmpty, "the old batch processor exported a span it held at shutdown")
+        XCTAssertNil(first.tracerProviderSdk, "shutdown must release the stopped tracer provider")
+    }
+
     func test_flush_beforeInit_callsCompletionImmediately() {
         // A CoralogixRum that never completed startup (sampled out) must not hang callers.
         let rum = CoralogixRum(options: makeSamplingOptions(sampleRate: 0, exclude: []))
