@@ -2,7 +2,8 @@
 //  E2ECrashes.swift
 //  CrashE2EApp
 //
-//  The crashes and hangs a scenario can ask for, by name.
+//  The crashes and hangs a scenario can ask for, by name, and the normal exit (`exit`) they are
+//  told apart from.
 //
 
 import Foundation
@@ -42,6 +43,8 @@ enum E2ECrashes {
             Thread.sleep(forTimeInterval: 5)
         case "survivableSignal":
             CrashLabNative.faultAndRecover()
+        case "exit":
+            exit(0)
         default:
             writeThroughNull()
         }

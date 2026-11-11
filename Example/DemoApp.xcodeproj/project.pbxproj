@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		0474EB36711374491A6E7D1E /* CrashMappingUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F281837738DDB2CF0A799DAA /* CrashMappingUITests.swift */; };
+		C3E1A7D05B2F4E9A8C6D1F21 /* CrashEdgeCaseUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3E1A7D05B2F4E9A8C6D1F20 /* CrashEdgeCaseUITests.swift */; };
 		08725EBD1D0F6C160578E1C7 /* CrashCaptureUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AE3386E542832309ACD7672 /* CrashCaptureUITests.swift */; };
 		0B47E621BC8022549A73F979 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E747A2DD71CE473ADB86887E /* Foundation.framework */; };
 		1A2B68B8539617873D9A1CE8 /* CrashAttributionUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 176CAEC4C714D17469F3557A /* CrashAttributionUITests.swift */; };
@@ -304,6 +305,7 @@
 		E79419E62FC84F2000BC47CD /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
 		EDFA777B7C4B051DC402FB35 /* CrashLabView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CrashLabView.swift; sourceTree = "<group>"; };
 		F281837738DDB2CF0A799DAA /* CrashMappingUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CrashMappingUITests.swift; sourceTree = "<group>"; };
+		C3E1A7D05B2F4E9A8C6D1F20 /* CrashEdgeCaseUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CrashEdgeCaseUITests.swift; sourceTree = "<group>"; };
 		FD160F433BA53B704BA26587 /* CrashLabViewController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CrashLabViewController.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -447,6 +449,7 @@
 				176CAEC4C714D17469F3557A /* CrashAttributionUITests.swift */,
 				B471B0660388C2CC6E7A0832 /* CrashDeliveryLimitsUITests.swift */,
 				5F693B1B84E50ADA2AED88A5 /* CrashDeliveryUITests.swift */,
+				C3E1A7D05B2F4E9A8C6D1F20 /* CrashEdgeCaseUITests.swift */,
 				F281837738DDB2CF0A799DAA /* CrashMappingUITests.swift */,
 				008BC134AA77EA38E5EFA419 /* CrashOptionsUITests.swift */,
 				6D0CAAD940F989DFC4DA1459 /* CrashSendScheduleUITests.swift */,
@@ -1082,6 +1085,7 @@
 				D5F3CDECF26CDC316A5450B5 /* CrashDeliveryLimitsUITests.swift in Sources */,
 				DCCA7C4ADE433BA515E8AF1C /* CrashDeliveryUITests.swift in Sources */,
 				0474EB36711374491A6E7D1E /* CrashMappingUITests.swift in Sources */,
+				C3E1A7D05B2F4E9A8C6D1F21 /* CrashEdgeCaseUITests.swift in Sources */,
 				46F98EEE722B6BAAC0FD6082 /* CrashOptionsUITests.swift in Sources */,
 				F5AB6B40FEA9DB2309A133DA /* CrashSendScheduleUITests.swift in Sources */,
 				D696EA954A42075E03B91234 /* NativeCrashUITests.swift in Sources */,

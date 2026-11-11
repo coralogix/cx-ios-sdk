@@ -17,8 +17,9 @@ struct Scenario: Codable {
     /// `crashAfterInit:<kind>`, `crashBeforeInit:<kind>`, `hangAfterInit` (the main thread never
     /// answers again, from before the first screen is up) or `withoutSdk`.
     var appStart: String = "initialize"
-    /// Run in order once the first screen is up: a crash kind (`crash:<kind>`), `hang:<ms>`,
-    /// `hangForever`, `rotate`, `view:Second`, `clicks:<n>`, `hybridCrash`, `wait:<ms>`.
+    /// Run in order once the first screen is up: a crash kind (`crash:<kind>`, or `crash:exit` for
+    /// a normal exit), `hang:<ms>`, `hangForever`, `rotate`, `view:Second`, `clicks:<n>`,
+    /// `hybridCrash`, `wait:<ms>`.
     var actions: [String] = []
     var appVersion: String = "1.0"
     var sessionSampleRate: Int = 100
@@ -32,6 +33,7 @@ struct Scenario: Codable {
     /// The hybrid beforeSend replaces every error message it sees with `hybridEditedMessage`.
     var hybridEdit: Bool = false
     var globalSpan: Bool = false
+    /// Session replay is set up with the SDK and records from the first screen.
     var sessionReplay: Bool = false
     /// Applied to the SDK's files before init: `reset`, `setFailedUploads:<n>`,
     /// `ageCrashesBySeconds:<s>`, `seedLegacyHybridStore`.

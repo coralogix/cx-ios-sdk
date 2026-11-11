@@ -232,17 +232,23 @@
     },
     {
       "id": "smoke-crash-attribution",
-      "name": "smoke \u00b7 crash attribution",
+      "name": "smoke \u00b7 crash attribution & edge cases",
       "tier": "smoke",
       "scheme": "CrashE2E",
-      "seconds": 200,
+      "seconds": 385,
       "tests": [
         "CrashE2EUITests/CrashAttributionUITests/testCrashAfterARotation_isSentInTheRotatedSession_onTheScreenItHappenedOn",
         "CrashE2EUITests/CrashAttributionUITests/testCrashBeforeAnyScreen_isNotFiledUnderAScreen",
         "CrashE2EUITests/CrashAttributionUITests/testCrashBeforeInit_isNeverSent_andTheNextLaunchsOwnEventsAreUnaffected",
         "CrashE2EUITests/CrashAttributionUITests/testCrashResentOnThreeLaunches_carriesTheSameErrorCount",
         "CrashE2EUITests/CrashAttributionUITests/testCrash_carriesTheErrorCountItHappenedWith",
-        "CrashE2EUITests/CrashAttributionUITests/testThreeLaunchesThatCrashBeforeDelivery_areAllSent_newestFirst"
+        "CrashE2EUITests/CrashAttributionUITests/testThreeLaunchesThatCrashBeforeDelivery_areAllSent_newestFirst",
+        "CrashE2EUITests/CrashEdgeCaseUITests/testAppTerminatedWhileIdle_isNotReportedAsACrashOrAHang",
+        "CrashE2EUITests/CrashEdgeCaseUITests/testAppThatExitsNormally_isNotReportedAsACrashOrAHang",
+        "CrashE2EUITests/CrashEdgeCaseUITests/testCrashBeforeInit_thenOneAfterInitOnTheNextLaunch_onlyTheSecondIsSent",
+        "CrashE2EUITests/CrashEdgeCaseUITests/testCrashWhileSessionReplayRecords_isSentOnce_inTheSessionItHappenedIn",
+        "CrashE2EUITests/CrashEdgeCaseUITests/testHybridCrashThenRCTFatalException_inOneLaunch_areOneCrashEvent",
+        "CrashE2EUITests/CrashEdgeCaseUITests/testRecoveredCrash_isTimedWhenItHappened_notWhenTheAppRelaunched"
       ]
     }
   ]
