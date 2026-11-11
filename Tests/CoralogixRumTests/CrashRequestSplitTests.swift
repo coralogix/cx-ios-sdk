@@ -20,14 +20,58 @@ final class CrashRequestSplitTests: XCTestCase {
         coralogixRum = nil
     }
 
-    /// Records every request and answers each one through `respond`.
+    /// Records every request and answers each one through `respond`. Crashes upload on their own
+    /// queue, so the record is locked.
     private final class RoutingUploader: SpanUploading {
         var respond: ([[String: Any]]) -> SpanUploadResult = { _ in .delivered }
-        private(set) var requests: [(spans: [[String: Any]], kind: SpanUploadKind)] = []
+        private let lock = NSLock()
+        private var _requests: [(spans: [[String: Any]], kind: SpanUploadKind)] = []
+        var requests: [(spans: [[String: Any]], kind: SpanUploadKind)] {
+            lock.lock(); defer { lock.unlock() }
+            return _requests
+        }
 
         func upload(_ spans: [[String: Any]], endPoint: String, kind: SpanUploadKind) -> SpanUploadResult {
-            requests.append((spans, kind))
+            lock.lock()
+            _requests.append((spans, kind))
+            lock.unlock()
             return respond(spans)
+        }
+    }
+
+    /// Holds every stored-crash request open until `release`, and records how many were open at once.
+    private final class BlockingCrashUploader: SpanUploading {
+        private let gate = DispatchSemaphore(value: 0)
+        private let lock = NSLock()
+        private var open = 0
+        private var _maxOpen = 0
+        private var _crashMessages: [String] = []
+        private var _liveRequests = 0
+        var maxOpen: Int { lock.lock(); defer { lock.unlock() }; return _maxOpen }
+        var crashMessages: [String] { lock.lock(); defer { lock.unlock() }; return _crashMessages }
+        var liveRequests: Int { lock.lock(); defer { lock.unlock() }; return _liveRequests }
+
+        func upload(_ spans: [[String: Any]], endPoint: String, kind: SpanUploadKind) -> SpanUploadResult {
+            guard kind == .storedCrash else {
+                lock.lock(); _liveRequests += 1; lock.unlock()
+                return .delivered
+            }
+            let message = spans.compactMap { event -> String? in
+                let cxRum = (event[Keys.text.rawValue] as? [String: Any])?[Keys.cxRum.rawValue] as? [String: Any]
+                return (cxRum?[Keys.errorContext.rawValue] as? [String: Any])?[Keys.errorMessage.rawValue] as? String
+            }.first ?? ""
+            lock.lock()
+            open += 1
+            _maxOpen = max(_maxOpen, open)
+            _crashMessages.append(message)
+            lock.unlock()
+            gate.wait()
+            lock.lock(); open -= 1; lock.unlock()
+            return .delivered
+        }
+
+        func release(_ count: Int) {
+            (0..<count).forEach { _ in gate.signal() }
         }
     }
 
@@ -76,6 +120,7 @@ final class CrashRequestSplitTests: XCTestCase {
                                     makeSamplingSpan(eventType: .networkRequest),
                                     makeCrashSpan(id: "B")],
                             explicitTimeout: nil)
+        exporter.waitForStoredCrashUploads()
 
         let crashRequests = uploader.requests.filter { $0.spans.contains(where: isCrash) }
         XCTAssertEqual(crashRequests.count, 2, "one request per crash")
@@ -89,12 +134,51 @@ final class CrashRequestSplitTests: XCTestCase {
         XCTAssertEqual(exporter.crashUploadOutcome(id: "B"), .delivered)
     }
 
+    // MARK: - Off the export thread
+
+    func test_aStoredCrashStillUploading_doesNotHoldBackExportOrTheLiveBatch() throws {
+        let (exporter, _) = try makeExporter()
+        let uploader = BlockingCrashUploader()
+        exporter.spanUploader = uploader
+        let answered = expectation(description: "crash answered")
+        var answers: [CrashUploadOutcome] = []
+        exporter.awaitCrashUpload(id: "slow") { answers.append($0.outcome); answered.fulfill() }
+
+        let result = exporter.export(spans: [makeCrashSpan(id: "slow"), makeSamplingSpan(eventType: .networkRequest)],
+                                     explicitTimeout: nil)
+
+        XCTAssertEqual(result, .success)
+        XCTAssertEqual(uploader.liveRequests, 1, "the live batch went out while the crash request was still open")
+        XCTAssertNil(exporter.crashUploadOutcome(id: "slow"), "the crash request is still open")
+        XCTAssertTrue(answers.isEmpty)
+
+        uploader.release(1)
+        wait(for: [answered], timeout: 5)
+        XCTAssertEqual(answers, [.delivered])
+        XCTAssertEqual(exporter.crashUploadOutcome(id: "slow"), .delivered)
+    }
+
+    func test_storedCrashes_uploadOneAtATime_inBatchOrder() throws {
+        let (exporter, _) = try makeExporter()
+        let uploader = BlockingCrashUploader()
+        exporter.spanUploader = uploader
+
+        _ = exporter.export(spans: [makeCrashSpan(id: "newest"), makeCrashSpan(id: "middle"), makeCrashSpan(id: "oldest")],
+                            explicitTimeout: nil)
+        uploader.release(3)
+        exporter.waitForStoredCrashUploads()
+
+        XCTAssertEqual(uploader.maxOpen, 1, "one stored-crash request open at a time")
+        XCTAssertEqual(uploader.crashMessages, ["crash-newest", "crash-middle", "crash-oldest"])
+    }
+
     func test_413OnTheLiveBatch_doesNotRejectTheCrash() throws {
         let (exporter, uploader) = try makeExporter()
         uploader.respond = { [unowned self] spans in spans.contains(where: self.isCrash) ? .delivered : Self.rejected413 }
 
         let result = exporter.export(spans: [makeCrashSpan(id: "crash"), makeSamplingSpan(eventType: .networkRequest)],
                                      explicitTimeout: nil)
+        exporter.waitForStoredCrashUploads()
 
         XCTAssertEqual(result, .failure, "the live batch failed, so the export reports failure")
         XCTAssertEqual(exporter.crashUploadOutcome(id: "crash"), .delivered)
@@ -108,6 +192,7 @@ final class CrashRequestSplitTests: XCTestCase {
         uploader.respond = { _ in Self.rejected413 }
 
         _ = exporter.export(spans: [makeCrashSpan(id: "too-big")], explicitTimeout: nil)
+        exporter.waitForStoredCrashUploads()
 
         XCTAssertEqual(exporter.crashUploadOutcome(id: "too-big"), .rejected)
         XCTAssertTrue(exporter.didConfirmCrashUpload(id: "too-big"))
@@ -118,6 +203,7 @@ final class CrashRequestSplitTests: XCTestCase {
         uploader.respond = { _ in Self.serverError }
 
         _ = exporter.export(spans: [makeCrashSpan(id: "retry")], explicitTimeout: nil)
+        exporter.waitForStoredCrashUploads()
 
         XCTAssertEqual(exporter.crashUploadOutcome(id: "retry"), .failed(counted: true))
         XCTAssertFalse(exporter.didConfirmCrashUpload(id: "retry"))
@@ -128,8 +214,10 @@ final class CrashRequestSplitTests: XCTestCase {
         let span = makeCrashSpan(id: "once")
 
         _ = exporter.export(spans: [span], explicitTimeout: nil)
+        exporter.waitForStoredCrashUploads()
         uploader.respond = { _ in Self.serverError }
         _ = exporter.export(spans: [makeCrashSpan(id: "once")], explicitTimeout: nil)
+        exporter.waitForStoredCrashUploads()
 
         XCTAssertEqual(exporter.crashUploadOutcome(id: "once"), .delivered)
     }
@@ -149,7 +237,7 @@ final class CrashRequestSplitTests: XCTestCase {
         XCTAssertEqual(result, .success)
         XCTAssertFalse(uploader.requests.contains { $0.spans.contains(where: isCrash) }, "the crash is never sent")
         XCTAssertEqual(uploader.requests.count, 1, "the live span still goes out")
-        XCTAssertEqual(exporter.crashUploadOutcome(id: "dropped"), .policyDropped)
+        XCTAssertEqual(exporter.crashUploadOutcome(id: "dropped"), .policyDropped, "answered before export returns")
         XCTAssertTrue(exporter.didConfirmCrashUpload(id: "dropped"), "a crash the customer dropped is finished with")
     }
 
@@ -174,6 +262,7 @@ final class CrashRequestSplitTests: XCTestCase {
 
         let result = exporter.export(spans: [makeCrashSpan(id: "idle-crash"), makeSamplingSpan(eventType: .networkRequest)],
                                      explicitTimeout: nil)
+        exporter.waitForStoredCrashUploads()
 
         XCTAssertEqual(result, .success)
         XCTAssertEqual(uploader.requests.count, 1, "only the crash goes out")
@@ -187,6 +276,7 @@ final class CrashRequestSplitTests: XCTestCase {
         sessionManager.lastActivity = Date().addingTimeInterval(-20 * 60)
 
         let result = exporter.export(spans: [makeSamplingSpan(eventType: .networkRequest)], explicitTimeout: nil)
+        exporter.waitForStoredCrashUploads()
 
         XCTAssertEqual(result, .success)
         XCTAssertTrue(uploader.requests.isEmpty)
@@ -207,8 +297,10 @@ final class CrashRequestSplitTests: XCTestCase {
         uploader.respond = { _ in Self.serverError }
 
         _ = exporter.export(spans: [makeCrashSpan(id: "twice")], explicitTimeout: nil)
+        exporter.waitForStoredCrashUploads()
         uploader.respond = { _ in .delivered }
         _ = exporter.export(spans: [makeCrashSpan(id: "twice")], explicitTimeout: nil)
+        exporter.waitForStoredCrashUploads()
 
         XCTAssertEqual(uploader.requests.count, 2, "the crash is sent both times")
         XCTAssertEqual(forwardedNames.filter { $0 == "crash-twice" }.count, 1, "but forwarded once")

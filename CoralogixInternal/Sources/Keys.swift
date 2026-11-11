@@ -280,6 +280,7 @@ public enum Keys: String {
     case queueViewManagerQueue = "com.coralogix.viewManagerQueue"
     case queueSessionRecordQueue = "com.coralogix.sessionRecordQueue"
     case queueCrashDeliveryQueue = "com.coralogix.crashDeliveryQueue"
+    case queueStoredCrashUploadQueue = "com.coralogix.storedCrashUploadQueue"
     case queueANRDetectorQueue = "com.coralogix.anrDetectorQueue"
     case queueSlowFrozenReporterQueue = "com.coralogix.vitals.slowfrozen.reporter"
     case queueUserAgentQueue = "com.coralogix.userAgentQueue"

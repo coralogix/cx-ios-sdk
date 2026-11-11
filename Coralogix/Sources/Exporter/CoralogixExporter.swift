@@ -38,6 +38,10 @@ public class CoralogixExporter: SpanExporter {
                                                         isOnline: { [weak self] in self?.reachability?.isOnline ?? true })
 
     private let spanProcessingQueue = DispatchQueue(label: Keys.queueSpanProcessingQueue.rawValue)
+    // A stored crash's request can stay open for two minutes. Sending it here keeps the
+    // caller of `export` (the batch worker, and every flush queued behind it) free; serial so
+    // crashes still go out one at a time, in batch order.
+    private let storedCrashUploadQueue = DispatchQueue(label: Keys.queueStoredCrashUploadQueue.rawValue)
 
     /// Per-session sampling decision. `true` while the SDK should export the current session's
     /// non-excluded events; `false` while only events listed in `options.excludeFromSampling`
@@ -411,24 +415,35 @@ public class CoralogixExporter: SpanExporter {
         // 413, say) or of another crash cannot take it down with it.
         let crashSpans = uniqueSpans.filter { crashEventId(of: $0) != nil }
         let liveSpans = uniqueSpans.filter { crashEventId(of: $0) == nil }
-        var results = crashSpans.map { uploadCrash($0) }
-        if !liveSpans.isEmpty {
-            results.append(exportLive(liveSpans, options: options))
-        }
-        return results.allSatisfy { $0 == .success } ? .success : .failure
+        crashSpans.forEach { uploadCrash($0) }
+        // A crash's answer reaches its sender through `awaitCrashUpload`, not this result.
+        return liveSpans.isEmpty ? .success : exportLive(liveSpans, options: options)
     }
 
-    private func uploadCrash(_ span: SpanData) -> SpanExporterResultCode {
-        guard let id = crashEventId(of: span) else { return .failure }
+    /// Encodes the crash here, so beforeSend sees the same state as before, and sends it on
+    /// `storedCrashUploadQueue`.
+    private func uploadCrash(_ span: SpanData) {
+        guard let id = crashEventId(of: span) else { return }
         let encoded = autoreleasepool { encodeSpans(spans: [span]) }
         // Empty means the native beforeSend dropped it: finished with, by the customer's choice.
         guard !encoded.isEmpty else {
             recordCrashOutcome(CrashUploadAnswer(outcome: .policyDropped), ids: [id])
-            return .success
+            return
         }
-        let result = spanUploader.upload(encoded, endPoint: self.endPoint, kind: .storedCrash)
-        recordCrashOutcome(CrashUploadAnswer(result), ids: [id])
-        return result.resultCode
+        // Read on this thread: `spanUploader` is lazy, and the live path reads it here too.
+        let uploader = spanUploader
+        let endPoint = self.endPoint
+        // Strong self: a weak capture lost to a re-init would never answer the waiter, which
+        // would then sit out its whole timeout.
+        storedCrashUploadQueue.async {
+            let result = uploader.upload(encoded, endPoint: endPoint, kind: .storedCrash)
+            self.recordCrashOutcome(CrashUploadAnswer(result), ids: [id])
+        }
+    }
+
+    /// Blocks until every stored-crash upload queued so far has been answered.
+    func waitForStoredCrashUploads() {
+        storedCrashUploadQueue.sync {}
     }
 
     private func exportLive(_ spans: [SpanData], options: CoralogixExporterOptions) -> SpanExporterResultCode {

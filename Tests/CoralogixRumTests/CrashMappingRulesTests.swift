@@ -346,6 +346,7 @@ final class RecoveredCrashWireTests: XCTestCase {
         let flushed = expectation(description: "flushed")
         sdk.flush { flushed.fulfill() }
         wait(for: [flushed], timeout: 10)
+        exporter.waitForStoredCrashUploads()
         return (uploader, exporter)
     }
 

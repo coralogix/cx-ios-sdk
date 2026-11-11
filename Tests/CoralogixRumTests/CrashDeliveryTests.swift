@@ -126,6 +126,7 @@ final class CrashDeliveryTests: XCTestCase {
             spans: [makeErrorSpan(isCrash: true), makeSamplingSpan(eventType: .networkRequest)],
             explicitTimeout: nil
         )
+        exporter.waitForStoredCrashUploads()
 
         XCTAssertEqual(result, .success)
         XCTAssertEqual(uploader.uploadedEvents.count, 1,
@@ -162,16 +163,17 @@ final class CrashDeliveryTests: XCTestCase {
         XCTAssertFalse(exporter.didConfirmCrashUpload(id: "crash-id"))
     }
 
-    func test_hybridExport_failedCrashUpload_isNotConfirmed_andPropagatesFailure() throws {
+    func test_hybridExport_failedCrashUpload_isNotConfirmed() throws {
         coralogixRum = makeHybridRum { _ in }
         let exporter = try XCTUnwrap(coralogixRum.coralogixExporter)
         let uploader = StubUploader()
         uploader.result = .failure
         exporter.spanUploader = uploader
 
-        let result = exporter.export(spans: [makeErrorSpan(isCrash: true)], explicitTimeout: nil)
+        _ = exporter.export(spans: [makeErrorSpan(isCrash: true)], explicitTimeout: nil)
+        exporter.waitForStoredCrashUploads()
 
-        XCTAssertEqual(result, .failure)
+        XCTAssertEqual(uploader.uploadedEvents.count, 1, "the upload must have been attempted, or this proves nothing")
         XCTAssertFalse(exporter.didConfirmCrashUpload(id: "crash-id"),
                        "a failed upload must keep the purge gate closed so the pending report is retried")
     }
@@ -187,11 +189,13 @@ final class CrashDeliveryTests: XCTestCase {
         // Crash A uploads successfully.
         uploader.result = .success
         _ = exporter.export(spans: [makeErrorSpan(isCrash: true, crashEventId: "crash-A")], explicitTimeout: nil)
+        exporter.waitForStoredCrashUploads()
         XCTAssertTrue(exporter.didConfirmCrashUpload(id: "crash-A"))
 
         // Crash B's upload fails.
         uploader.result = .failure
         _ = exporter.export(spans: [makeErrorSpan(isCrash: true, crashEventId: "crash-B")], explicitTimeout: nil)
+        exporter.waitForStoredCrashUploads()
 
         XCTAssertFalse(exporter.didConfirmCrashUpload(id: "crash-B"),
                        "B's failed upload must not inherit A's confirmation")
@@ -208,6 +212,7 @@ final class CrashDeliveryTests: XCTestCase {
         exporter.spanUploader = uploader
 
         let result = exporter.export(spans: [makeErrorSpan(isCrash: true)], explicitTimeout: nil)
+        exporter.waitForStoredCrashUploads()
 
         XCTAssertEqual(result, .success)
         XCTAssertEqual(uploader.uploadedEvents.count, 1)
@@ -235,6 +240,7 @@ final class CrashDeliveryTests: XCTestCase {
         let result = exporter.export(spans: [makePendingReportSpan(crashEventId: "sampled-out-report",
                                                                    sessionSampledIn: false)],
                                      explicitTimeout: nil)
+        exporter.waitForStoredCrashUploads()
 
         XCTAssertEqual(result, .success)
         XCTAssertTrue(uploader.uploadedEvents.isEmpty,
@@ -254,6 +260,7 @@ final class CrashDeliveryTests: XCTestCase {
         let result = exporter.export(spans: [makePendingReportSpan(crashEventId: "excluded-report",
                                                                    sessionSampledIn: false)],
                                      explicitTimeout: nil)
+        exporter.waitForStoredCrashUploads()
 
         XCTAssertEqual(result, .success)
         XCTAssertEqual(uploader.uploadedEvents.count, 1)
@@ -267,6 +274,7 @@ final class CrashDeliveryTests: XCTestCase {
         exporter.spanUploader = uploader
 
         let result = exporter.export(spans: [makePendingReportSpan()], explicitTimeout: nil)
+        exporter.waitForStoredCrashUploads()
 
         XCTAssertEqual(result, .success)
         let uploaded = try XCTUnwrap(uploader.uploadedEvents.first)
@@ -286,6 +294,7 @@ final class CrashDeliveryTests: XCTestCase {
         exporter.spanUploader = uploader
 
         _ = exporter.export(spans: [makePendingReportSpan(crashEventId: "failed-report")], explicitTimeout: nil)
+        exporter.waitForStoredCrashUploads()
 
         XCTAssertEqual(uploader.uploadedEvents.count, 1,
                        "the upload must have been attempted, or this proves nothing")

@@ -354,6 +354,7 @@ final class CrashedSessionRecoveryTests: XCTestCase {
         let flushed = expectation(description: "flushed")
         sdk.flush { flushed.fulfill() }
         wait(for: [flushed], timeout: 10)
+        exporter.waitForStoredCrashUploads()
 
         let cxRum = try XCTUnwrap(uploader.events.lazy.compactMap { event -> [String: Any]? in
             let cxRum = (event[Keys.text.rawValue] as? [String: Any])?[Keys.cxRum.rawValue] as? [String: Any]
