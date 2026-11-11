@@ -4,6 +4,7 @@
 //
 
 #import "CRXCrashBootstrap.h"
+#import "CRXConcurrentCrashGuard.h"
 #import "CRXCrashContext.h"
 #import "CRXTerminateHandler.h"
 #import <stdatomic.h>
@@ -83,6 +84,7 @@ static atomic_flag _crx_launchSessionClaimed = ATOMIC_FLAG_INIT;
         if ([reporter enableCrashReporterAndReturnError:&error]) {
             _crx_reporter = reporter;
             CRXCrashContext.activeReporter = reporter;
+            [CRXConcurrentCrashGuard install];
         } else {
             _crx_enableError = error;
         }

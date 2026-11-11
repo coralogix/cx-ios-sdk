@@ -25,6 +25,10 @@ NS_ASSUME_NONNULL_BEGIN
 /// it found. The process lives on and nothing is reported.
 + (void)faultAndRecover;
 
+/// Starts two threads that wait for each other and then both write through a null pointer, so
+/// each faults while the other is faulting. Returns at once; the process dies shortly after.
++ (void)faultOnTwoThreadsAtOnce;
+
 @end
 
 NS_ASSUME_NONNULL_END

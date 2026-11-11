@@ -59,4 +59,20 @@ final class CrashBootstrapTests: XCTestCase {
     // installs signal handlers process-wide and cannot be undone in `tearDown`. Its behaviour —
     // enabling a reporter at init — is what the SDK did before this target existed and is covered
     // by the rest of the crash suite.
+
+    // MARK: - Concurrent crash guard
+
+    /// Installed with the reporter at load and still in front of every signal PLCrashReporter
+    /// handles. Fails if `+load` stops installing it, or installs it before the reporter, which
+    /// PLCrashReporter's registration would then replace.
+    func testConcurrentCrashGuardIsInstalledInFrontOfTheReporterAtLoad() {
+        XCTAssertTrue(CRXConcurrentCrashGuard.isHandlingEverySignal())
+    }
+
+    /// A second install would hand every signal back to the guard: a loop instead of a report.
+    func testASecondGuardInstall_changesNothing_andNeverHandsOverToItself() {
+        XCTAssertFalse(CRXConcurrentCrashGuard.install())
+        XCTAssertTrue(CRXConcurrentCrashGuard.isHandlingEverySignal())
+        XCTAssertFalse(CRXConcurrentCrashGuard.handsOverToItself())
+    }
 }

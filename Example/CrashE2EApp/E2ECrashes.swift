@@ -43,6 +43,9 @@ enum E2ECrashes {
             Thread.sleep(forTimeInterval: 5)
         case "survivableSignal":
             CrashLabNative.faultAndRecover()
+        case "twoThreads":
+            CrashLabNative.faultOnTwoThreadsAtOnce()
+            Thread.sleep(forTimeInterval: 5)
         case "exit":
             exit(0)
         default:

@@ -27,6 +27,7 @@ omitted; the focus here is user-facing behavior changes.
 - `beforeSend`, `ignoreErrors` and sampling apply each time a crash is sent, and a crash they drop is not sent again.
 - Native crashes from Swift apps are accepted and reported again; some were refused on upload and lost.
 - An ANR is no longer reported each time the app returns from the background.
+- A crash on two threads at once is reported; it was sometimes lost.
 
 ## [2.22.1] - 2026-11-05
 

@@ -52,6 +52,17 @@ final class CrashEdgeCaseUITests: CrashE2ETestCase {
         XCTAssertEqual(endpoint.crashes.count, 1, "the crash before init is not sent")
     }
 
+    func testTwoThreadsCrashingAtOnce_areOneCrashEvent() {
+        crash("twoThreads")
+        relaunch()
+
+        let crash = awaitCrashes(1)[0]
+        XCTAssertEqual(exceptionType(crash), "SIGSEGV")
+        XCTAssertTrue(Self.nullWriteMessages.contains(message(crash) ?? ""), message(crash) ?? "nil")
+        settle()
+        XCTAssertEqual(endpoint.crashes.count, 1)
+    }
+
     func testCrashWhileSessionReplayRecords_isSentOnce_inTheSessionItHappenedIn() throws {
         crash("exception", before: ["error:while recording"], ["sessionReplay": true])
         let live = try XCTUnwrap(endpoint.events.first { message($0) == "while recording" }, "the live error did not arrive")

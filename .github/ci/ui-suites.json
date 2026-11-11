@@ -235,7 +235,7 @@
       "name": "smoke \u00b7 crash attribution & edge cases",
       "tier": "smoke",
       "scheme": "CrashE2E",
-      "seconds": 385,
+      "seconds": 420,
       "tests": [
         "CrashE2EUITests/CrashAttributionUITests/testCrashAfterARotation_isSentInTheRotatedSession_onTheScreenItHappenedOn",
         "CrashE2EUITests/CrashAttributionUITests/testCrashBeforeAnyScreen_isNotFiledUnderAScreen",
@@ -249,7 +249,8 @@
         "CrashE2EUITests/CrashEdgeCaseUITests/testCrashBeforeInit_thenOneAfterInitOnTheNextLaunch_onlyTheSecondIsSent",
         "CrashE2EUITests/CrashEdgeCaseUITests/testCrashWhileSessionReplayRecords_isSentOnce_inTheSessionItHappenedIn",
         "CrashE2EUITests/CrashEdgeCaseUITests/testHybridCrashThenRCTFatalException_inOneLaunch_areOneCrashEvent",
-        "CrashE2EUITests/CrashEdgeCaseUITests/testRecoveredCrash_isTimedWhenItHappened_notWhenTheAppRelaunched"
+        "CrashE2EUITests/CrashEdgeCaseUITests/testRecoveredCrash_isTimedWhenItHappened_notWhenTheAppRelaunched",
+        "CrashE2EUITests/CrashEdgeCaseUITests/testTwoThreadsCrashingAtOnce_areOneCrashEvent"
       ]
     }
   ]
