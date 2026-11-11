@@ -239,6 +239,66 @@ final class UrlMaskingIntegrationTests: XCTestCase {
         XCTAssertEqual(urls, [Self.maskedUrl])
     }
 
+    // MARK: - Failed requests
+
+    /// Polls the uploader until an exported network event's URL contains `marker`, then returns the
+    /// whole uploaded event serialized, so a secret anywhere in it (not just in `url`) is visible.
+    private func uploadedEventJson(urlContaining marker: String, _ uploader: CapturingUploader) -> String? {
+        let deadline = Date().addingTimeInterval(10)
+        while Date() < deadline {
+            (OpenTelemetry.instance.tracerProvider as? TracerProviderSdk)?.forceFlush(timeout: 3)
+            for event in uploader.uploadedSpans {
+                let cxRum = (event[Keys.text.rawValue] as? [String: Any])?[Keys.cxRum.rawValue] as? [String: Any]
+                let url = (cxRum?[Keys.networkRequestContext.rawValue] as? [String: Any])?[Keys.url.rawValue] as? String
+                if url?.contains(marker) == true,
+                   let data = try? JSONSerialization.data(withJSONObject: event, options: [.withoutEscapingSlashes]) {
+                    return String(data: data, encoding: .utf8)
+                }
+            }
+            Thread.sleep(forTimeInterval: 0.1)
+        }
+        return nil
+    }
+
+    /// A Flutter `ClientException` repeats the request URL in its message, and older hybrid plugins
+    /// send it as `error_message`. iOS does not export `error_message` on network events, so the raw
+    /// value must not appear anywhere in the uploaded event while the URL itself arrives masked.
+    func test_failedHybridRequest_errorMessageWithUrl_doesNotLeakSecret() throws {
+        let (_, uploader) = try startSDK()
+        let rum = try XCTUnwrap(self.rum)
+        rum.setNetworkRequestContext(dictionary: [
+            Keys.url.rawValue: "https://api.example.com/hybrid-fail?code=leak1&page=2",
+            Keys.host.rawValue: "api.example.com",
+            Keys.method.rawValue: "GET",
+            Keys.statusCode.rawValue: 0,
+            Keys.statusText.rawValue: "",
+            Keys.duration.rawValue: 10,
+            Keys.httpResponseBodySize.rawValue: 0,
+            Keys.fragments.rawValue: "/hybrid-fail",
+            Keys.schema.rawValue: "https",
+            Keys.errorMessage.rawValue: "ClientException: Connection closed, uri=https://api.example.com/hybrid-fail?code=leak1&page=2"
+        ])
+        let json = try XCTUnwrap(uploadedEventJson(urlContaining: "hybrid-fail", uploader))
+        XCTAssertTrue(json.contains("hybrid-fail?code=[REDACTED]&page=2"), json)
+        XCTAssertFalse(json.contains("leak1"), "The raw secret must not reach the uploaded event: \(json)")
+    }
+
+    /// A URLSession request that fails at the transport layer (connection refused): the SDK records
+    /// no error description on the network span, so the failing URL's secret cannot ride along.
+    func test_failedUrlSessionRequest_doesNotLeakSecret() throws {
+        let (_, uploader) = try startSDK()
+        let url = try XCTUnwrap(URL(string: "http://127.0.0.1:1/native-fail?code=leak2&page=2"))
+        let done = expectation(description: "request failed")
+        URLSession.shared.dataTask(with: url) { _, _, error in
+            XCTAssertNotNil(error, "The request is expected to fail")
+            done.fulfill()
+        }.resume()
+        wait(for: [done], timeout: 10)
+        let json = try XCTUnwrap(uploadedEventJson(urlContaining: "native-fail", uploader))
+        XCTAssertTrue(json.contains("native-fail?code=[REDACTED]&page=2"), json)
+        XCTAssertFalse(json.contains("leak2"), "The raw secret must not reach the uploaded event: \(json)")
+    }
+
     // MARK: - Views
 
     func test_setView_masksUrlLikeViewName() throws {
