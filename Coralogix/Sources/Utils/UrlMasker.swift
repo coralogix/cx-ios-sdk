@@ -154,28 +154,37 @@ enum UrlMasker {
         /// `nil` when the JSON could not be scanned: the caller drops the field (fail closed).
         func maskUserInfo(_ json: String) -> String? {
             guard let pattern = UrlMasker.jsonStringPattern else { return nil }
-            var keyOwners: [String: String?] = [:]
-            return UrlMasker.replace(pattern, in: json) { groups in
+            // Keys that end up the same within one object, a masked one and another masked or
+            // untouched one, are numbered so no member is lost when the JSON is parsed. Each object
+            // has its own scope, tracked from the braces between string literals: every string is a
+            // match, so a brace seen between matches is always structural. Keys are compared decoded and
+            // by UTF-16 code units, as JSONSerialization compares them, so `https:\/\/…` equals
+            // `https://…` but a precomposed `é` does not equal `e` + U+0301. An unreadable key is
+            // redacted: fail closed.
+            var scopes: [[[UInt16]: [UInt16]?]] = [[:]]
+            return UrlMasker.replace(pattern, in: json, gap: { gap in
+                for unit in gap.utf16 {
+                    if unit == 123 { scopes.append([:]) }
+                    if unit == 125, scopes.count > 1 { scopes.removeLast() }
+                }
+            }, transform: { groups in
                 let literal = groups[1]
                 guard !groups[2].isEmpty else {
                     return UrlMasker.maskingJsonLiteral(literal, with: maskText) ?? groups[0]
                 }
-                // Two keys can end up the same, a masked one and another masked or untouched one;
-                // number the later ones so no member is lost when the JSON is parsed. Keys are
-                // compared decoded, so `https:\/\/…` and `https://…` are the same key, and every
-                // key is recorded, changed or not. An unreadable key is redacted: fail closed.
                 let original = UrlMasker.decodeJsonString(literal)
+                let originalUnits = original.map { Array($0.utf16) }
                 let masked = original.map(maskText) ?? UrlMasker.redacted
                 var key = masked
                 var suffix = 2
-                while let owner = keyOwners[key], owner != original {
+                while let owner = scopes[scopes.count - 1][Array(key.utf16)], owner != originalUnits {
                     key = "\(masked) (\(suffix))"
                     suffix += 1
                 }
-                keyOwners[key] = original
-                if key == original { return groups[0] }
+                scopes[scopes.count - 1][Array(key.utf16)] = originalUnits
+                if let originalUnits, Array(key.utf16) == originalUnits { return groups[0] }
                 return (UrlMasker.encodeJsonString(key) ?? "\"\(UrlMasker.redacted)\"") + groups[2]
-            }
+            })
         }
     }
 
@@ -577,7 +586,10 @@ enum UrlMasker {
     /// group that did not participate is "". `nil` when ICU stops early (it reports an internal
     /// error, such as its backtrack stack overflowing, rather than throwing), so the caller can
     /// fail closed instead of mistaking it for "nothing matched".
+    /// `gap`, when given, sees the text between matches (and after the last) before each match is
+    /// transformed.
     fileprivate static func replace(_ regex: NSRegularExpression, in string: String,
+                                    gap: ((String) -> Void)? = nil,
                                     transform: ([String]) -> String) -> String? {
         let ns = string as NSString
         var result = ""
@@ -591,7 +603,9 @@ enum UrlMasker {
                 return
             }
             guard let match else { return }
-            result += ns.substring(with: NSRange(location: cursor, length: match.range.location - cursor))
+            let between = ns.substring(with: NSRange(location: cursor, length: match.range.location - cursor))
+            gap?(between)
+            result += between
             let groups = (0..<match.numberOfRanges).map { index -> String in
                 let range = match.range(at: index)
                 return range.location == NSNotFound ? "" : ns.substring(with: range)

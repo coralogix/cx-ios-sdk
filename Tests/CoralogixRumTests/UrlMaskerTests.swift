@@ -279,6 +279,27 @@ final class UrlMaskerTests: XCTestCase {
         }
     }
 
+    /// Numbering is per object: a key alone in its own object is never renamed, and elements of an
+    /// array of objects keep the same key name.
+    func test_maskUserInfo_numbersKeysPerObject() {
+        let masker = UrlMasker.Masker()
+        let siblings = #"{"a":{"https://h/?token=1":1},"b":{"https://h/?token=[REDACTED]":2}}"#
+        XCTAssertEqual(masker.maskUserInfo(siblings),
+                       #"{"a":{"https://h/?token=[REDACTED]":1},"b":{"https://h/?token=[REDACTED]":2}}"#)
+        let array = #"[{"https://h/?token=1":1},{"https://h/?token=2":2}]"#
+        XCTAssertEqual(masker.maskUserInfo(array),
+                       #"[{"https://h/?token=[REDACTED]":1},{"https://h/?token=[REDACTED]":2}]"#)
+    }
+
+    /// Keys are compared by UTF-16 code units, as JSONSerialization compares them, so two
+    /// canonically equivalent but different keys stay two members.
+    func test_maskUserInfo_canonicallyEquivalentKeys_keepBothMembers() throws {
+        let json = "{\"https://h/?token=\u{00E9}\":1,\"https://h/?token=e\u{0301}\":2}"
+        let masked = try XCTUnwrap(UrlMasker.Masker().maskUserInfo(json))
+        let dict = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(masked.utf8)) as? [String: Int])
+        XCTAssertEqual(dict.count, 2, masked)
+    }
+
     /// A value that is wholly a route is masked as one, in text fields and userInfo alike; prose
     /// that only contains a route is still left alone.
     func test_wholeValueRoutes_areMaskedInTextAndUserInfo() {
