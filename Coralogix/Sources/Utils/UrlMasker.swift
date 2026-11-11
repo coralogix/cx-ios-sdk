@@ -103,11 +103,12 @@ enum UrlMasker {
         }
 
         /// For a value that may be a URL or plain text: a view name (a route only in hybrid apps) or a
-        /// userInfo string. `.dropQuery` applies to URLs and routes alone, so text such as `Step #2`
-        /// or `Order #123 failed` is not cut at its `#`; param masking applies to every value.
+        /// userInfo string. `.dropQuery` applies only when the whole value is a URL or route, so text
+        /// such as `Step #2` or `Order #123 failed: see https://…` is not cut at its `#`; param
+        /// masking applies to every value.
         func maskUrlOrText(_ value: String) -> String {
-            let isUrl = value.hasPrefix("/") || value.contains("://")
-            return UrlMasker.mask(value, shouldMask: shouldMask, dropQuery: isUrl && options.mode == .dropQuery, depth: 0)
+            UrlMasker.mask(value, shouldMask: shouldMask,
+                           dropQuery: UrlMasker.isUrlOrRoute(value) && options.mode == .dropQuery, depth: 0)
         }
 
         /// Masks only the `fileName` of each frame, the field that holds a script URL. Other frame
@@ -208,6 +209,15 @@ enum UrlMasker {
             !groups[3].isEmpty && shouldMask(groups[2]) ? "\(groups[1])\(groups[2])%3D\(redacted)" : groups[0]
         }
         return replace(jwtPattern, in: result) { _ in redacted }
+    }
+
+    /// Starts with `/`, or with a scheme (a letter, then letters, digits, `+`, `.` or `-`) and `://`.
+    static func isUrlOrRoute(_ value: String) -> Bool {
+        if value.hasPrefix("/") { return true }
+        guard let separator = value.range(of: "://") else { return false }
+        let scheme = value[..<separator.lowerBound].unicodeScalars
+        guard let first = scheme.first, first.isASCII, first.properties.isAlphabetic else { return false }
+        return scheme.allSatisfy { $0.isASCII && ($0.properties.isAlphabetic || ("0"..."9").contains($0) || "+.-".unicodeScalars.contains($0)) }
     }
 
     static func dropQueryAndFragment(_ url: String) -> String {

@@ -288,4 +288,20 @@ final class UrlMaskerTests: XCTestCase {
         XCTAssertEqual(dict["NSLocalizedDescription"], "Order #123 failed?")
         XCTAssertEqual(dict["NSErrorFailingURLStringKey"], "https://x.com/cb")
     }
+
+    func test_maskUrlOrText_dropQuery_keepsProseThatMentionsAUrl() {
+        let masker = UrlMasker.Masker(UrlMaskingOptions(mode: .dropQuery))
+        XCTAssertEqual(masker.maskUrlOrText("Order #123 failed: see https://help.example.com"),
+                       "Order #123 failed: see https://help.example.com")
+        XCTAssertEqual(masker.maskUrlOrText("https://x.com/cb?token=abc"), "https://x.com/cb")
+        XCTAssertEqual(masker.maskUrlOrText("my-app+v2://reset#token=abc"), "my-app+v2://reset")
+    }
+
+    func test_isUrlOrRoute() {
+        XCTAssertTrue(UrlMasker.isUrlOrRoute("/reset?x=1"))
+        XCTAssertTrue(UrlMasker.isUrlOrRoute("https://x.com"))
+        XCTAssertFalse(UrlMasker.isUrlOrRoute("see https://x.com"))
+        XCTAssertFalse(UrlMasker.isUrlOrRoute("://x.com"))
+        XCTAssertFalse(UrlMasker.isUrlOrRoute("1http://x.com"))
+    }
 }
