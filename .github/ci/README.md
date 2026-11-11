@@ -40,4 +40,4 @@ Three things are worth knowing without opening that file:
   run the wrong thing — `xcodebuild` reports "executed 0 tests" as success, so
   these guards are what stop a test quietly never running.
 - **Toolchains are pinned per workflow**, not shared: tests on macOS 15 /
-  Xcode 16.4, podspec lint on macOS 14 / Xcode 15.3.
+  Xcode 16.4, podspec lint too.

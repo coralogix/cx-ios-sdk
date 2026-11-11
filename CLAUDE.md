@@ -34,7 +34,7 @@ pod lib lint Coralogix.podspec --include-podspecs=CoralogixInternal.podspec
 ```
 
 Toolchains are pinned per workflow, not shared: tests and the demo-app build run
-on macOS 15 with Xcode 16.4, while podspec lint stays on macOS 14 with Xcode 15.3.
+on macOS 15 with Xcode 16.4, podspec lint included (GitHub retired the macOS 14 runners).
 Three SPM test targets: `CoralogixRumTests`, `CoralogixInternalTests`,
 `SessionReplayTests`.
 

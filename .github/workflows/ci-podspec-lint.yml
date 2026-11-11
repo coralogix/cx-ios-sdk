@@ -22,10 +22,10 @@ on:
     inputs:
       runner:
         type: string
-        default: macos-14
+        default: macos-15
       xcode-version:
         type: string
-        default: '15.3'
+        default: '16.4'
 
 permissions:
   contents: read
