@@ -26,6 +26,7 @@ omitted; the focus here is user-facing behavior changes.
 - Crashes from several launches that could not send them are all kept and sent, up to 10, instead of only the latest. Sending is retried during the launch, honours `Retry-After`, continues briefly in the background, and stops after 16 failed attempts or 7 days.
 - `beforeSend`, `ignoreErrors` and sampling apply each time a crash is sent, and a crash they drop is not sent again.
 - Native crashes from Swift apps are accepted and reported again; some were refused on upload and lost.
+- An ANR is no longer reported each time the app returns from the background.
 
 ## [2.22.1] - 2026-11-05
 
