@@ -154,23 +154,27 @@ enum UrlMasker {
         /// `nil` when the JSON could not be scanned: the caller drops the field (fail closed).
         func maskUserInfo(_ json: String) -> String? {
             guard let pattern = UrlMasker.jsonStringPattern else { return nil }
-            var keyOwners: [String: String] = [:]
+            var keyOwners: [String: String?] = [:]
             return UrlMasker.replace(pattern, in: json) { groups in
                 let literal = groups[1]
-                let masked = UrlMasker.maskingJsonLiteral(literal, with: maskText)
-                guard !groups[2].isEmpty else { return masked ?? groups[0] }
+                guard !groups[2].isEmpty else {
+                    return UrlMasker.maskingJsonLiteral(literal, with: maskText) ?? groups[0]
+                }
                 // Two keys can end up the same, a masked one and another masked or untouched one;
-                // number the later ones so no member is lost when the JSON is parsed. Every key is
-                // recorded, changed or not.
-                let final = masked ?? literal
-                var key = final
+                // number the later ones so no member is lost when the JSON is parsed. Keys are
+                // compared decoded, so `https:\/\/…` and `https://…` are the same key, and every
+                // key is recorded, changed or not. An unreadable key is redacted: fail closed.
+                let original = UrlMasker.decodeJsonString(literal)
+                let masked = original.map(maskText) ?? UrlMasker.redacted
+                var key = masked
                 var suffix = 2
-                while let owner = keyOwners[key], owner != literal {
-                    key = String(final.dropLast()) + " (\(suffix))\""
+                while let owner = keyOwners[key], owner != original {
+                    key = "\(masked) (\(suffix))"
                     suffix += 1
                 }
-                keyOwners[key] = literal
-                return key + groups[2]
+                keyOwners[key] = original
+                if key == original { return groups[0] }
+                return (UrlMasker.encodeJsonString(key) ?? "\"\(UrlMasker.redacted)\"") + groups[2]
             }
         }
     }
@@ -187,17 +191,22 @@ enum UrlMasker {
     /// reported redacted: fail closed.
     private static func maskingJsonLiteral(_ literal: String, with transform: (String) -> String) -> String? {
         let redactedLiteral = "\"\(redacted)\""
-        guard let data = literal.data(using: .utf8),
-              let value = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]) as? String else {
-            return redactedLiteral
-        }
+        guard let value = decodeJsonString(literal) else { return redactedLiteral }
         let masked = transform(value)
         guard masked != value else { return nil }
-        guard let out = try? JSONSerialization.data(withJSONObject: masked, options: [.fragmentsAllowed, .withoutEscapingSlashes]),
-              let encoded = String(data: out, encoding: .utf8) else {
-            return redactedLiteral
+        return encodeJsonString(masked) ?? redactedLiteral
+    }
+
+    private static func decodeJsonString(_ literal: String) -> String? {
+        guard let data = literal.data(using: .utf8) else { return nil }
+        return (try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])) as? String
+    }
+
+    private static func encodeJsonString(_ value: String) -> String? {
+        guard let data = try? JSONSerialization.data(withJSONObject: value, options: [.fragmentsAllowed, .withoutEscapingSlashes]) else {
+            return nil
         }
-        return encoded
+        return String(data: data, encoding: .utf8)
     }
 
     private static func mask(_ url: String, shouldMask: (String) -> Bool, dropQuery: Bool, depth: Int) -> String {
