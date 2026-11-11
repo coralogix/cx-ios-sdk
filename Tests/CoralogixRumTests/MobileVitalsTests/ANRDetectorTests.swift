@@ -111,6 +111,17 @@ final class ANRDetectorTests: XCTestCase {
         main.sync {}
     }
 
+    /// Blocks the stand-in main queue until `done` holds (or `timeout` passes), then returns once it
+    /// has answered again. For hangs that must last until the watchdog has acted, however slowly a
+    /// loaded runner schedules it.
+    private func hang(until done: @escaping () -> Bool, timeout: TimeInterval = 15) {
+        main.async {
+            let end = Date(timeIntervalSinceNow: timeout)
+            while !done() && Date() < end { Thread.sleep(forTimeInterval: 0.01) }
+        }
+        main.sync {}
+    }
+
     /// Lets the detector run for `seconds` with the main queue free.
     private func idle(for seconds: TimeInterval) {
         Thread.sleep(forTimeInterval: seconds)
@@ -147,9 +158,11 @@ final class ANRDetectorTests: XCTestCase {
         detector.startMonitoring()
         idle(for: 0.3)
 
-        hang(for: 1.5)
+        // Each hang lasts until its ANR is out, so a starved watchdog cannot shorten one below the
+        // threshold; the answer in between re-arms detection.
+        hang(until: { self.log.events.count == 1 })
         idle(for: 0.6)
-        hang(for: 1.5)
+        hang(until: { self.log.events.count == 2 })
         idle(for: 0.4)
 
         XCTAssertEqual(log.events.count, 2)
@@ -176,20 +189,31 @@ final class ANRDetectorTests: XCTestCase {
     // MARK: - Debugger
 
     func test_underADebugger_noANR_evenIfItDetachesDuringTheHang() {
+        // The watchdog asks about the debugger only once it has detected a hang.
+        let asked = Flag(false)
+        let debugger = self.debugger!
         debugger.value = true
+        detector = ANRDetector(threshold: threshold, pollInterval: poll, mainQueue: main,
+                               isDebuggerAttached: { asked.value = true; return debugger.value },
+                               captureThreads: { "threads-at-detection" },
+                               notificationCenter: center, eventReporter: log)
         detector.startMonitoring()
         idle(for: 0.2)
 
-        main.async { Thread.sleep(forTimeInterval: 1.4) }
-        idle(for: 0.8)  // detected under the debugger
-        debugger.value = false
+        // Detected under the debugger, which then detaches while the hang goes on.
+        main.async {
+            let end = Date(timeIntervalSinceNow: 15)
+            while !asked.value && Date() < end { Thread.sleep(forTimeInterval: 0.01) }
+            debugger.value = false
+            Thread.sleep(forTimeInterval: 0.3)
+        }
         main.sync {}
         idle(for: 0.2)
 
+        XCTAssertTrue(asked.value, "the hang was detected")
         XCTAssertTrue(log.events.isEmpty)
 
-        // Three times the threshold: a slow CI runner starves the watchdog queue.
-        hang(for: 1.5)
+        hang(until: { self.log.events.count == 1 })
         idle(for: 0.3)
         XCTAssertEqual(log.events.count, 1, "the next hang, with no debugger, is reported")
     }
