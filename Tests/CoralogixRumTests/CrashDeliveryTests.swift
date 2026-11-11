@@ -370,6 +370,30 @@ final class CrashDeliveryTests: XCTestCase {
         XCTAssertLessThan(elapsed, CoralogixRum.tracerProviderShutdownTimeout + 5)
         XCTAssertGreaterThanOrEqual(elapsed, CoralogixRum.tracerProviderShutdownTimeout - 0.5,
                                     "shutdown waited for the in-flight export, up to the bound")
+
+        let again = Date()
+        sdk.shutdown()
+        XCTAssertLessThan(Date().timeIntervalSince(again), 0.5, "a repeated shutdown returns at once")
+    }
+
+    /// A batch processor still stopping after shutdown's bound, or flushed after a re-init reopened
+    /// the process-wide upload gate, must not send anything through the retired exporter.
+    func test_aRetiredExporter_sendsNothing_afterAReinitReopensTheGate() throws {
+        let first = CoralogixRum(options: makeSamplingOptions(sampleRate: 100, exclude: []))
+        let oldExporter = try XCTUnwrap(first.coralogixExporter)
+        let oldUploader = CountingUploader()
+        oldExporter.spanUploader = oldUploader
+        let oldProvider = try XCTUnwrap(first.tracerProviderSdk)
+        first.shutdown()
+
+        coralogixRum = CoralogixRum(options: makeSamplingOptions(sampleRate: 100, exclude: []))
+        try XCTUnwrap(coralogixRum.coralogixExporter).spanUploader = StubUploader()
+        XCTAssertTrue(CoralogixRum.isInitialized, "precondition: the re-init reopened the upload gate")
+
+        let span = makeSamplingSpan(eventType: .log)
+        XCTAssertEqual(oldExporter.export(spans: [span], explicitTimeout: nil), .success)
+        oldProvider.forceFlush()
+        XCTAssertEqual(oldUploader.uploads, 0, "the retired exporter sent a request")
     }
 
     func test_flush_beforeInit_callsCompletionImmediately() {
@@ -439,5 +463,17 @@ private final class HangingLiveUploader: SpanUploading {
 
     func release() {
         for _ in 0..<10 { gate.signal() }
+    }
+}
+
+/// Counts every request, live or stored crash.
+private final class CountingUploader: SpanUploading {
+    private let lock = NSLock()
+    private var _uploads = 0
+    var uploads: Int { lock.lock(); defer { lock.unlock() }; return _uploads }
+
+    func upload(_ spans: [[String: Any]], endPoint: String, kind: SpanUploadKind) -> SpanUploadResult {
+        lock.lock(); _uploads += 1; lock.unlock()
+        return .delivered
     }
 }

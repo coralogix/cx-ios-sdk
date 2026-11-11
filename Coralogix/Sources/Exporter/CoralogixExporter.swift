@@ -62,6 +62,23 @@ public class CoralogixExporter: SpanExporter {
     private var liveDeliveryWaiters: [String: (Bool) -> Void] = [:]
     private let crashUploadLock = NSLock()
 
+    /// Set when the SDK instance that owns this exporter shuts down. The upload gate is the
+    /// process-wide `CoralogixRum.isInitialized`, which a later init reopens; a retired exporter
+    /// must still send nothing its batch processor exports after that.
+    private let retiredLock = NSLock()
+    private var _isRetired = false
+    var isRetired: Bool {
+        retiredLock.lock()
+        defer { retiredLock.unlock() }
+        return _isRetired
+    }
+
+    func retire() {
+        retiredLock.lock()
+        _isRetired = true
+        retiredLock.unlock()
+    }
+
     /// Whether the crash is finished with — delivered, refused for good, or dropped by policy —
     /// so its stored copy can be deleted.
     func didConfirmCrashUpload(id: String) -> Bool {
@@ -344,6 +361,10 @@ public class CoralogixExporter: SpanExporter {
     #endif
 
     public func export(spans: [SpanData], explicitTimeout: TimeInterval?) -> SpanExporterResultCode {
+        guard !isRetired else {
+            Log.d("[SDK] Exporter of a shut-down SDK instance — dropping \(spans.count) span(s)")
+            return .success
+        }
         #if DEBUG
         Self.testExportCallback?(spans)
         #endif

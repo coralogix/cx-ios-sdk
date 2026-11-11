@@ -565,7 +565,20 @@ public class CoralogixRum {
         }
     }
 
+    /// Shutdown runs once per instance: a repeat returns at once instead of waiting again on the
+    /// batch processor.
+    private let shutdownLock = NSLock()
+    private var hasShutDown = false
+
     public func shutdown() {
+        shutdownLock.lock()
+        let alreadyShutDown = hasShutDown
+        hasShutDown = true
+        shutdownLock.unlock()
+        guard !alreadyShutDown else { return }
+        // Before the batch processor is stopped: a stop that outlasts its bound, or a later init
+        // reopening the process-wide gate, must not let this instance's exporter send anything.
+        self.coralogixExporter?.retire()
         CoralogixCustomGlobalSpanRegistry.shared.teardownIfNeeded()
         Self.customTracerIssuanceLock.lock()
         CoralogixRum.customTracerIssued = false
