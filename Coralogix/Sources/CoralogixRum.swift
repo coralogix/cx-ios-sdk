@@ -314,6 +314,7 @@ public class CoralogixRum {
     }
     
     private func setupExporter(sessionManager: SessionManager, options: CoralogixExporterOptions) {
+        self.viewManager.applyUrlMasking(options.urlMasking)
         let exporter = CoralogixExporter(
             options: options,
             sessionManager: sessionManager,

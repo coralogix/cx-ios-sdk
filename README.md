@@ -115,6 +115,7 @@ The fields accepted by `CoralogixExporterOptions`. Each one is described in deta
 | userContext | UserContext? | Configuration for user context. | No |
 | debug | Bool | Turns internal debug logging on or off. | No |
 | ignoreUrls | \[String\]? | URLs that partially match any regex in `ignoreUrls` are not traced. | No |
+| urlMasking | UrlMaskingOptions | Adds to the built-in masking of sensitive URL parameters. Masking is always on. See "URL masking". | No |
 | ignoreErrors | \[String\]? | Patterns for error messages that should not be sent to Coralogix. | No |
 | labels | \[String: Any\]? | Labels added to every span. | No |
 | beforeSend | `(([String: Any]) -> [String: Any]?)?` | Callback to inspect, modify, or discard each event before it reaches Coralogix. Receives the event as a dictionary; return `nil` to drop it. | No |
@@ -170,6 +171,38 @@ let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
                                         publicKey: "API-KEY",
                                         ignoreUrls: []) //[".*\\.il$","https://www.coralogix.com/academy"])
 ```
+
+`ignoreUrls` matches the URL as your app sent it, before URL masking.
+
+### URL masking
+The SDK masks secrets in every URL it reports, including network request URLs, view names and URLs in error details. The value of a sensitive query or fragment parameter is replaced with `[REDACTED]` and the rest of the URL is kept, so `https://example.com/callback?code=abc&page=2#access_token=xyz` is reported as `https://example.com/callback?code=[REDACTED]&page=2#access_token=[REDACTED]`.
+
+A parameter is sensitive when its name contains `token`, `secret`, `password`, `passwd`, `passphrase`, `apikey`, `signature`, `credential`, `jwt`, `session`, `sessid`, `oauth`, `saml`, `privatekey`, `accesskey` or `nonce`, or when its whole name is `code`, `state`, `codeverifier`, `assertion`, `clientassertion`, `devicecode`, `usercode`, `bearer`, `auth`, `authorization`, `authcode`, `authkey`, `sig`, `hmac`, `key`, `pass`, `pwd`, `otp`, `oobcode`, `sid` or `ticket`. Names are compared ignoring case and any character that is not a letter or digit, so `api_key`, `apiKey` and `API-Key` all match. JWTs anywhere in the URL, credentials such as `https://user:password@host`, and session ids in the path such as `;jsessionid=` are masked too.
+
+Masking cannot be turned off and no built-in name can be removed. Use `urlMasking` to mask more:
+
+```swift
+var maskedParams: [UrlMaskingOptions.Param] = ["tenant_id"]
+if let customerPattern = try? NSRegularExpression(pattern: "^customer") {
+    maskedParams.append(.regex(customerPattern))
+}
+
+let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
+                                        environment: "ENVIRONMENT",
+                                        application: "APP-NAME",
+                                        version: "APP-VERSION",
+                                        publicKey: "API-KEY",
+                                        urlMasking: UrlMaskingOptions(
+                                            additionalParams: maskedParams,
+                                            mode: .mask))
+```
+
+| Field | Description |
+| --- | --- |
+| additionalParams | More parameter names to mask. A name such as `"tenant_id"` matches the whole name, compared the same way as the built-in names. `.regex(_:)` is tested against the decoded name. |
+| mode | `.mask` (default) masks sensitive values only. `.maskAll` masks the value of every query and fragment parameter and keeps the names. `.dropQuery` removes the query and the fragment. |
+
+`beforeSend` and `tracesExporter` receive the masked URL.
 
 ### Label Providers
 Provide labels based on url or event
@@ -475,9 +508,9 @@ let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
                                         version: "APP-VERSION",
                                         publicKey: "API-KEY",
                                         networkExtraConfig: [
-                                            // Capture Authorization header and response body for all /api/ requests
+                                            // Capture a request id header and the response body for all /api/ requests
                                             NetworkCaptureRule(url: "/api/",
-                                                               reqHeaders: ["Authorization", "X-Request-ID"],
+                                                               reqHeaders: ["X-Request-ID"],
                                                                resHeaders: ["Content-Type"],
                                                                collectResPayload: true),
                                             // Capture full request and response for URLs matching a regex
@@ -487,8 +520,8 @@ let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
                                         ])
 ```
 
-> [!NOTE]
-> Only allowlist URLs and header names you are comfortable logging. Avoid capturing `Authorization` or other sensitive headers unless intentional. Body and header capture should not be used for endpoints that return or send PII or secrets. Request and response bodies over 1024 characters are **dropped** (not truncated) and do not appear in RUM.
+> [!WARNING]
+> A header you list is captured exactly as sent, including `Authorization` and `Cookie`. Do not list headers that carry credentials. Only allowlist URLs and header names you are comfortable logging. Body and header capture should not be used for endpoints that return or send PII or secrets. Request and response bodies over 1024 characters are **dropped** (not truncated) and do not appear in RUM.
 
 ### User Action Text Redaction (`shouldSendText`)
 Called before `target_element_inner_text` is recorded for a tapped view. Return `false` to redact text for sensitive views (e.g. fields showing account numbers or personal data) without disabling text capture globally.

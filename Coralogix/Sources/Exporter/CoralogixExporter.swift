@@ -258,7 +258,12 @@ public class CoralogixExporter: SpanExporter {
 
         // ignore Error
         filterSpans = filterSpans.filter { self.shouldFilterIgnoreError(span: $0) }
-        
+
+        // After the ignoreUrls filter, which matches the URL as the app sent it, and before
+        // anything that reads or forwards the span: tracesExporter, encoding, beforeSend.
+        let urlMasking = getOptions().urlMasking
+        filterSpans = filterSpans.map { Self.maskingUrls(in: $0, options: urlMasking) }
+
         // Deduplicate using spanId as key
         let uniqueSpansDict = Dictionary(grouping: filterSpans, by: { $0.spanId })
         let uniqueSpans = uniqueSpansDict.compactMap { $0.value.first }
@@ -474,6 +479,35 @@ public class CoralogixExporter: SpanExporter {
             return !Global.isURLIgnored(url, ignoreUrls: getOptions().ignoreUrls)
         }
         return false
+    }
+
+    /// `http.target` is masked too: the hybrid bridge fills it from the reported fragments,
+    /// which can carry the query.
+    internal static func maskingUrls(in span: SpanData, options: UrlMaskingOptions) -> SpanData {
+        var attributes = span.attributes
+        var changed = false
+        for key in [SemanticAttributes.httpUrl.rawValue, SemanticAttributes.httpTarget.rawValue] {
+            guard case .string(let value)? = attributes[key] else { continue }
+            let masked = UrlMasker.mask(value, options: options)
+            if masked != value {
+                attributes[key] = .string(masked)
+                changed = true
+            }
+        }
+        // Stack frames carry script URLs in `fileName` (hybrid), and a URLSession error's
+        // userInfo carries the failing URL. Both are JSON, so every string inside is masked.
+        for key in [Keys.stackTrace.rawValue, Keys.userInfo.rawValue] {
+            guard case .string(let json)? = attributes[key] else { continue }
+            let masked = UrlMasker.maskStrings(inJson: json, options: options)
+            if masked != json {
+                attributes[key] = masked.map { .string($0) }
+                changed = true
+            }
+        }
+        guard changed else { return span }
+        var span = span
+        span.settingAttributes(attributes)
+        return span
     }
 
     internal func shouldFilterIgnoreError(span: SpanDataProtocol) -> Bool {

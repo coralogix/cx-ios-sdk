@@ -147,6 +147,15 @@ public class ViewManager {
         }
     }
     
+    /// The restored previous view may have been stored by an SDK from before URL masking, as a
+    /// route with its query. Masked here, once the customer's options are known.
+    func applyUrlMasking(_ options: UrlMaskingOptions) {
+        syncQueue.async(flags: .barrier) { [weak self] in
+            guard let self = self else { return }
+            self.prevViewName = self.prevViewName.map { UrlMasker.mask($0, options: options) }
+        }
+    }
+
     func getPrevDictionary() -> [String: Any] {
         return syncSafe {
             guard let prevViewName = self.prevViewName else {
