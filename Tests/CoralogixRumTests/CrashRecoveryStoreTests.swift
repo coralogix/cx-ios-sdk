@@ -223,6 +223,23 @@ final class CrashRecoveryAcrossLaunchesTests: XCTestCase {
         XCTAssertFalse(remaining.contains("locked.json"), "every crash was read: no earlier launch's record is needed")
     }
 
+    /// A report the move could not take out of PLCrashReporter's slot is read on a later launch,
+    /// which needs its launch's snapshot then; so are the other things that are still pending.
+    func test_earlierLaunchesAreSpent_onlyWhenNothingCanStillNeedTheirSnapshots() {
+        func spent(read: Bool = true, leftInReporter: Bool = false, hang: Bool = false,
+                   recorded: Set<String>? = ["a"], lined: [String] = ["a"]) -> Bool {
+            CoralogixRum.earlierLaunchesAreSpent(allCopiesRead: read, reportLeftInReporter: leftInReporter,
+                                                 hangMarkerLeft: hang, recordedCrashIds: recorded,
+                                                 linedUpCrashIds: lined)
+        }
+        XCTAssertTrue(spent())
+        XCTAssertFalse(spent(leftInReporter: true), "a report is still in PLCrashReporter's slot")
+        XCTAssertFalse(spent(read: false), "a copy could not be read")
+        XCTAssertFalse(spent(hang: true), "a hang marker waits")
+        XCTAssertFalse(spent(recorded: nil), "the records could not be read")
+        XCTAssertFalse(spent(recorded: [], lined: ["a"]), "a crash has no record yet")
+    }
+
     /// While a crash cannot be read, no earlier launch's record is pruned: it may be the crash's.
     func test_aLaunchWithACrashItCannotRead_prunesNoEarlierRecord() throws {
         let store = CrashDeliveryStore.temporary()

@@ -70,8 +70,6 @@ final class SessionSnapshotStore {
     /// Earlier launches whose records are kept; a crash is read on the first launch after the
     /// first unlock, so a crash waiting longer than this many launches is not expected.
     static let maxEarlierLaunches = 10
-    /// The age past which a crash is no longer sent, so nothing needs the record of its launch.
-    static let maxAge = CrashDeliveryScheduler.maxAge
     /// Names this process's file. Not the session id minted at image load: the SDK can be
     /// initialized again in the same process, and that instance must write over this launch's
     /// file, not leave a second one.
@@ -98,11 +96,10 @@ final class SessionSnapshotStore {
 
     init(keychain: KeyChainProtocol = KeychainManager(),
          directory: URL = SessionSnapshotStore.defaultDirectory,
-         launchId: String = SessionSnapshotStore.processLaunchId,
-         now: Date = Date()) {
+         launchId: String = SessionSnapshotStore.processLaunchId) {
         self.directory = directory
         self.launchId = launchId
-        self.earlierRecords = Self.readEarlierLaunches(in: directory, now: now)
+        self.earlierRecords = Self.readEarlierLaunches(in: directory)
         moveLegacyRecord(from: keychain)
     }
 
@@ -217,11 +214,13 @@ final class SessionSnapshotStore {
     /// Every launch's record still worth keeping, this process's own included for an SDK
     /// initialized again; the rest are deleted. A file that cannot be read yet is left for a
     /// later launch, and one that is corrupt is deleted.
-    private static func readEarlierLaunches(in directory: URL, now: Date) -> [String: SessionSnapshotRecord] {
+    /// Not pruned by age: a file's time is its launch's last write, which can be long before that
+    /// launch crashed. Records go when recovery no longer needs them, or past the count cap.
+    private static func readEarlierLaunches(in directory: URL) -> [String: SessionSnapshotRecord] {
         let newestFirst = launchFiles(in: directory).sorted { $0.modified > $1.modified }
         var records: [String: SessionSnapshotRecord] = [:]
         for (index, file) in newestFirst.enumerated() {
-            guard index < maxEarlierLaunches, now.timeIntervalSince(file.modified) <= maxAge else {
+            guard index < maxEarlierLaunches else {
                 try? FileManager.default.removeItem(at: file.url)
                 continue
             }

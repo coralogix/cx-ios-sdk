@@ -89,19 +89,17 @@ final class SessionSnapshotStoreTests: XCTestCase {
 
     // MARK: - Pruning
 
-    func test_aRecordOlderThanACrashMayBeSent_isDeletedAtInit() throws {
+    /// A launch's file dates from its last write, which can be long before that launch crashed:
+    /// age alone must not delete the record a late-read crash needs.
+    func test_aRecordLastWrittenLongAgo_isKeptAtInit() throws {
         let directory = SessionSnapshotStore.temporaryDirectory()
-        let now = Date()
-        SessionSnapshotStore.temporary(directory: directory, launchId: "expired").persist(record("old"))
-        SessionSnapshotStore.temporary(directory: directory, launchId: "recent").persist(record("new"))
-        try setModified(now.addingTimeInterval(-SessionSnapshotStore.maxAge - 60), launchId: "expired", in: directory)
-        try setModified(now.addingTimeInterval(-SessionSnapshotStore.maxAge + 60), launchId: "recent", in: directory)
+        SessionSnapshotStore.temporary(directory: directory, launchId: "idle-for-weeks").persist(record("old"))
+        try setModified(Date().addingTimeInterval(-30 * 24 * 60 * 60), launchId: "idle-for-weeks", in: directory)
 
-        let store = SessionSnapshotStore.temporary(directory: directory, launchId: "current", now: now)
+        let store = SessionSnapshotStore.temporary(directory: directory, launchId: "current")
 
-        XCTAssertNil(store.record(for: "old"))
-        XCTAssertNotNil(store.record(for: "new"))
-        XCTAssertEqual(files(in: directory), ["recent.json"])
+        XCTAssertNotNil(store.record(for: "old"))
+        XCTAssertEqual(files(in: directory), ["idle-for-weeks.json"])
     }
 
     func test_onlyTheNewestLaunchesRecords_areKept() throws {
@@ -113,7 +111,7 @@ final class SessionSnapshotStoreTests: XCTestCase {
             try setModified(now.addingTimeInterval(TimeInterval(index - launches)), launchId: "launch-\(index)", in: directory)
         }
 
-        let store = SessionSnapshotStore.temporary(directory: directory, launchId: "current", now: now)
+        let store = SessionSnapshotStore.temporary(directory: directory, launchId: "current")
 
         XCTAssertNil(store.record(for: "S0"))
         XCTAssertNil(store.record(for: "S1"))

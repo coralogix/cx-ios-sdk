@@ -174,9 +174,8 @@ extension SessionSnapshotStore {
     /// A store over records no other test sees, as launch `launchId` reads them.
     static func temporary(directory: URL = temporaryDirectory(),
                           launchId: String = "this-launch",
-                          keychain: MockKeyChain = MockKeyChain(),
-                          now: Date = Date()) -> SessionSnapshotStore {
-        SessionSnapshotStore(keychain: keychain, directory: directory, launchId: launchId, now: now)
+                          keychain: MockKeyChain = MockKeyChain()) -> SessionSnapshotStore {
+        SessionSnapshotStore(keychain: keychain, directory: directory, launchId: launchId)
     }
 
     /// The store as the launch after one that persisted `record` sees it.
