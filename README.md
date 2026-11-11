@@ -182,6 +182,9 @@ A parameter is sensitive when its name contains `token`, `secret`, `password`, `
 Masking cannot be turned off and no built-in name can be removed. Use `urlMasking` to mask more:
 
 ```swift
+import Coralogix
+import Foundation
+
 var maskedParams: [UrlMaskingOptions.Param] = ["tenant_id"]
 if let customerPattern = try? NSRegularExpression(pattern: "^customer") {
     maskedParams.append(.regex(customerPattern))

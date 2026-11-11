@@ -106,6 +106,12 @@ final class UrlMaskerTests: XCTestCase {
             ("a token inside an unencoded route between harmless params",
              "https://a.com/cb?a=1&next=/reset?token=abc&b=2",
              "https://a.com/cb?a=1&next=/reset?token=\(R)&b=2"),
+            ("a token whose encoded name is itself percent-escaped",
+             "https://sso.example.com/login?next=%2Freset%3F%74oken%3Dabc%26lang%3Den",
+             "https://sso.example.com/login?next=%2Freset%3F%74oken%3D\(R)%26lang%3Den"),
+            ("a JWT with an empty payload",
+             "https://a.com/cb?redirect=eyJhbGciOiJIUzI1NiJ9.e30.ZRrHA1JJJW8opsbCGfG_HACGpVUMN_a9IV7pAx_Zmeo",
+             "https://a.com/cb?redirect=\(R)"),
             ("the ticket's acceptance URL",
              "https://api.example.com/callback?code=abc&foo=1#access_token=xyz",
              "https://api.example.com/callback?code=\(R)&foo=1#access_token=\(R)"),
@@ -229,5 +235,23 @@ final class UrlMaskerTests: XCTestCase {
         viewManager.applyUrlMasking(UrlMaskingOptions(additionalParams: ["tenant_id"]))
         XCTAssertEqual(viewManager.getPrevDictionary()[Keys.view.rawValue] as? String,
                        "/home?tenant_id=\(R)&token=\(R)&tab=1")
+    }
+
+    /// Each nested redirect is unwrapped by one recursive pass; past the bound the value is
+    /// redacted whole instead, so a crafted URL cannot exhaust the stack.
+    func test_deeplyNestedRedirects_areBoundedAndRedacted() {
+        let deep = (0..<5000).reduce("https://x.com/a?token=abc") { url, _ in "https://x.com/r?next=\(url)" }
+        let masked = UrlMasker.mask(deep)
+        XCTAssertFalse(masked.contains("token=abc"))
+        XCTAssertTrue(masked.hasSuffix("next=\(R)"))
+    }
+
+    func test_maskStrings_masksUrlKeysAndKeepsCollidingKeys() throws {
+        let json = #"{"https://x.com/cb?token=a":1,"https://x.com/cb?token=b":2}"#
+        let masked = try XCTUnwrap(UrlMasker.maskStrings(inJson: json))
+        let dict = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(masked.utf8)) as? [String: Int])
+        XCTAssertEqual(dict.count, 2)
+        XCTAssertEqual(Set(dict.values), [1, 2])
+        XCTAssertNotNil(dict["https://x.com/cb?token=\(R)"])
     }
 }

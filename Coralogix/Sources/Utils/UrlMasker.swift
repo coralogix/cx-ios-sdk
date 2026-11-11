@@ -69,10 +69,11 @@ enum UrlMasker {
     /// The value runs to the next `&` or `#`, so a sensitive param holding an unencoded redirect URL
     /// is masked whole; a non-sensitive one holding such a URL has that URL masked in turn.
     private static let paramPattern = regex("([?&#])([^=&#?]+)=([^&#]*)")
-    /// The same, percent-encoded one level down: `?next=%2Freset%3Ftoken%3Dabc`.
-    private static let encodedParamPattern = regex("(%3F|%26|%23)([A-Za-z0-9_.-]+)%3D((?:(?!%26|%23)[^&#])*)", .caseInsensitive)
-    /// A JWT anywhere in the URL, the path included.
-    private static let jwtPattern = regex("eyJ[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,}(?:\\.[A-Za-z0-9_-]*){0,3}")
+    /// The same, percent-encoded one level down: `?next=%2Freset%3Ftoken%3Dabc`. The name may itself
+    /// hold percent-escapes (`%74oken`), other than the four delimiters, and is decoded before the check.
+    private static let encodedParamPattern = regex("(%3F|%26|%23)((?:[A-Za-z0-9_.-]|%(?!3D|3F|26|23)[0-9A-F]{2})+)%3D((?:(?!%26|%23)[^&#])*)", .caseInsensitive)
+    /// A JWT anywhere in the URL, the path included. The payload can be as short as `e30` (`{}`).
+    private static let jwtPattern = regex("eyJ[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{2,}(?:\\.[A-Za-z0-9_-]*){0,3}")
     /// Credentials written into the URL: `https://user:password@host`.
     private static let userInfoPattern = regex("^([a-z][a-z0-9+.-]*://)[^/?#@]*@", .caseInsensitive)
     /// Session ids rewritten into the path: `/cart;jsessionid=…`.
@@ -81,7 +82,14 @@ enum UrlMasker {
     private static let maybeSensitivePattern = regex("[?#;@]|eyJ")
     private static let inlineDataPattern = regex("^(data|blob):", .caseInsensitive)
 
+    /// How many redirect URLs nested inside one another are unwrapped; deeper values are redacted whole.
+    private static let maxNestingDepth = 4
+
     static func mask(_ url: String, options: UrlMaskingOptions = UrlMaskingOptions()) -> String {
+        mask(url, options: options, depth: 0)
+    }
+
+    private static func mask(_ url: String, options: UrlMaskingOptions, depth: Int) -> String {
         guard let maybeSensitivePattern, let inlineDataPattern, let userInfoPattern, let pathSessionIdPattern,
               let paramPattern, let encodedParamPattern, let jwtPattern else {
             // Fail closed: a URL we cannot mask is reported without the parts that hold secrets.
@@ -97,11 +105,12 @@ enum UrlMasker {
             guard !groups[3].isEmpty else { return groups[0] }
             if shouldMask(groups[2]) { return "\(groups[1])\(groups[2])=\(redacted)" }
             // `?redirect=https://b.com/cb?token=abc`: the inner `?token=` is part of this match, so
-            // matches never reach it on their own. Masking the value catches it; the value is
-            // strictly shorter than the URL, so this terminates.
+            // matches never reach it on their own. Masking the value catches it.
             // Deliberately stricter than the browser SDK, which leaves the inner param as is.
             guard groups[3].contains("?") || groups[3].contains("#") else { return groups[0] }
-            return "\(groups[1])\(groups[2])=\(mask(groups[3], options: options))"
+            // Bounded so a crafted URL cannot recurse deep enough to exhaust the stack: fail closed.
+            guard depth < maxNestingDepth else { return "\(groups[1])\(groups[2])=\(redacted)" }
+            return "\(groups[1])\(groups[2])=\(mask(groups[3], options: options, depth: depth + 1))"
         }
         result = replace(encodedParamPattern, in: result) { groups in
             !groups[3].isEmpty && shouldMask(groups[2]) ? "\(groups[1])\(groups[2])%3D\(redacted)" : groups[0]
@@ -126,7 +135,20 @@ enum UrlMasker {
             case let array as [Any]:
                 return array.map(walk)
             case let dict as [String: Any]:
-                return dict.mapValues(walk)
+                var out: [String: Any] = [:]
+                for (key, value) in dict {
+                    let maskedKey = mask(key, options: options)
+                    if maskedKey != key { changed = true }
+                    // Two keys can mask to the same string; keep both instead of dropping one.
+                    var uniqueKey = maskedKey
+                    var suffix = 2
+                    while out[uniqueKey] != nil {
+                        uniqueKey = "\(maskedKey) (\(suffix))"
+                        suffix += 1
+                    }
+                    out[uniqueKey] = walk(value)
+                }
+                return out
             default:
                 return value
             }
