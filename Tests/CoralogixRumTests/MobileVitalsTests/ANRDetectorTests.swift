@@ -354,11 +354,13 @@ final class ANRDetectorTests: XCTestCase {
 
         hang(for: 1.5)
         // Flushed until the ANR is out: on a slow runner its span can end after a first flush.
+        // The long timeout is for a cold CI runner, where the first SDK init of the class waits
+        // ~40 s on WebKit's helper processes launching.
         let anrSent = expectation(for: NSPredicate { _, _ in
             sdk.flush()
             return uploader.errorContexts.contains { $0[Keys.errorType.rawValue] as? String == "ANR" }
         }, evaluatedWith: nil)
-        wait(for: [anrSent], timeout: 10)
+        wait(for: [anrSent], timeout: 90)
 
         let anrs = uploader.errorContexts.filter { $0[Keys.errorType.rawValue] as? String == "ANR" }
         XCTAssertEqual(anrs.count, 1)
