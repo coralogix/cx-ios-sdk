@@ -139,6 +139,25 @@ final class CrashRequestSplitTests: XCTestCase {
 
     // MARK: - Off the export thread
 
+    /// Work already past the export's entry check when shutdown retires the exporter — a queued
+    /// stored crash, a live batch — must not upload, even once a later init reopens the gate.
+    func test_uploadsQueuedBeforeRetirement_areNotSent_andTheCrashStaysForLater() throws {
+        let (exporter, uploader) = try makeExporter()
+        let release = DispatchSemaphore(value: 0)
+        exporter.holdStoredCrashUploads(until: release)
+        let answered = expectation(description: "crash answered")
+        var outcome: CrashUploadOutcome?
+        exporter.awaitCrashUpload(id: "queued") { outcome = $0.outcome; answered.fulfill() }
+        _ = exporter.export(spans: [makeCrashSpan(id: "queued")], explicitTimeout: nil)
+
+        exporter.retire()
+        release.signal()
+        wait(for: [answered], timeout: 5)
+
+        XCTAssertTrue(uploader.requests.isEmpty, "a retired exporter sent a request")
+        XCTAssertEqual(outcome, .notAttempted, "the crash is left stored for a later pass")
+    }
+
     func test_aStoredCrashStillUploading_doesNotHoldBackExportOrTheLiveBatch() throws {
         let (exporter, _) = try makeExporter()
         let uploader = BlockingCrashUploader()

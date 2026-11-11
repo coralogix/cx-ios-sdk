@@ -124,7 +124,9 @@ public class CoralogixExporter: SpanExporter {
     /// Uploads live events and answers whoever waits on their delivery.
     @discardableResult
     private func uploadLive(_ events: [[String: Any]]) -> SpanUploadResult {
-        let result = spanUploader.upload(events, endPoint: self.endPoint)
+        // Re-checked here: an export can pass the entry check just before shutdown retires this
+        // exporter, and a later init reopens the process-wide gate the uploader checks.
+        let result = isRetired ? .notAttempted : spanUploader.upload(events, endPoint: self.endPoint)
         resolveLiveDeliveries(of: events, result: result)
         return result
     }
@@ -465,7 +467,10 @@ public class CoralogixExporter: SpanExporter {
         // Strong self: a weak capture lost to a re-init would never answer the waiter, which
         // would then sit out its whole timeout.
         storedCrashUploadQueue.async {
-            let result = uploader.upload(encoded, endPoint: endPoint, kind: .storedCrash)
+            // Queued uploads can run after shutdown retires this exporter; the crash stays stored.
+            let result = self.isRetired
+                ? .notAttempted
+                : uploader.upload(encoded, endPoint: endPoint, kind: .storedCrash)
             self.recordCrashOutcome(CrashUploadAnswer(result), ids: [id])
         }
     }
@@ -473,6 +478,11 @@ public class CoralogixExporter: SpanExporter {
     /// Blocks until every stored-crash upload queued so far has been answered.
     func waitForStoredCrashUploads() {
         storedCrashUploadQueue.sync {}
+    }
+
+    /// Holds stored-crash uploads queued after this call until `release` is signalled. Tests only.
+    func holdStoredCrashUploads(until release: DispatchSemaphore) {
+        storedCrashUploadQueue.async { release.wait() }
     }
 
     private func exportLive(_ spans: [SpanData], options: CoralogixExporterOptions) -> SpanExporterResultCode {
