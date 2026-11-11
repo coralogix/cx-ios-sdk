@@ -182,6 +182,7 @@ public enum Keys: String {
     case threads
     case httpResponseBodySize = "http_response_body_size"
     case stackTrace
+    case fileName
     case instrumentationData = "instrumentation_data"
     case otelResource
     case otelSpan

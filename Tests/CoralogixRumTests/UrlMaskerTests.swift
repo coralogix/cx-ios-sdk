@@ -254,4 +254,30 @@ final class UrlMaskerTests: XCTestCase {
         XCTAssertEqual(Set(dict.values), [1, 2])
         XCTAssertNotNil(dict["https://x.com/cb?token=\(R)"])
     }
+
+    // MARK: - Stack frames and view names
+
+    /// Only `fileName` is masked. Demangled Swift and Dart frames (`closure #1 in … == …`) look like
+    /// fragment params, and untouched values keep their exact bytes because nothing is re-serialized.
+    func test_maskStackTrace_masksOnlyFileNameAndKeepsOtherBytes() {
+        let json = #"[{"functionName":"closure #1 in static MyApp.SessionToken.== infix(MyApp.SessionToken, MyApp.SessionToken) -> Swift.Bool","fileName":"https:\/\/cdn.x.com\/app.js?token=abc&v=2","lineNumber":1.1}]"#
+        let masked = UrlMasker.Masker().maskStackTrace(json)
+        XCTAssertEqual(masked, #"[{"functionName":"closure #1 in static MyApp.SessionToken.== infix(MyApp.SessionToken, MyApp.SessionToken) -> Swift.Bool","fileName":"https://cdn.x.com/app.js?token=[REDACTED]&v=2","lineNumber":1.1}]"#)
+    }
+
+    func test_maskStackTrace_withNothingToMask_isUnchanged() {
+        let json = ##"[{"functionName":"#0 main (package:app/main.dart:10:3)","fileName":"package:app/main.dart"}]"##
+        XCTAssertEqual(UrlMasker.Masker(UrlMaskingOptions(mode: .maskAll)).maskStackTrace(json), json)
+    }
+
+    func test_maskViewName_dropQuery_cutsRoutesOnly() {
+        let masker = UrlMasker.Masker(UrlMaskingOptions(mode: .dropQuery))
+        XCTAssertEqual(masker.maskViewName("Step #2"), "Step #2")
+        XCTAssertEqual(masker.maskViewName("/reset?token=abc&tab=1"), "/reset")
+        XCTAssertEqual(masker.maskViewName("app://reset#token=abc"), "app://reset")
+    }
+
+    func test_maskViewName_defaultMode_stillMasksNonRouteNames() {
+        XCTAssertEqual(UrlMasker.Masker().maskViewName("Reset?token=abc"), "Reset?token=\(R)")
+    }
 }

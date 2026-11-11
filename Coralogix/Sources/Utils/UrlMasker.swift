@@ -4,6 +4,7 @@
 //
 
 import Foundation
+import CoralogixInternal
 
 /// How the SDK masks secrets in the URLs it reports. Masking is always on: these options can only
 /// add to the built-in rules, never remove one.
@@ -84,21 +85,111 @@ enum UrlMasker {
 
     /// How many redirect URLs nested inside one another are unwrapped; deeper values are redacted whole.
     private static let maxNestingDepth = 4
+    /// A `fileName` value inside a stack-trace JSON array, as a raw JSON string literal.
+    private static let fileNameValuePattern = regex("(\"\(Keys.fileName.rawValue)\"\\s*:\\s*)(\"(?:[^\"\\\\]|\\\\.)*\")")
 
-    static func mask(_ url: String, options: UrlMaskingOptions = UrlMaskingOptions()) -> String {
-        mask(url, options: options, depth: 0)
+    /// The customer's options with the parameter-name predicate built once, for masking many values.
+    struct Masker {
+        let options: UrlMaskingOptions
+        private let shouldMask: (String) -> Bool
+
+        init(_ options: UrlMaskingOptions = UrlMaskingOptions()) {
+            self.options = options
+            self.shouldMask = UrlMasker.paramPredicate(options)
+        }
+
+        func mask(_ url: String) -> String {
+            UrlMasker.mask(url, shouldMask: shouldMask, dropQuery: options.mode == .dropQuery, depth: 0)
+        }
+
+        /// A view name is a route only in hybrid apps. `.dropQuery` applies to routes alone, so a
+        /// native name such as `Step #2` is not cut at its `#`.
+        func maskViewName(_ name: String) -> String {
+            let isRoute = name.hasPrefix("/") || name.contains("://")
+            return UrlMasker.mask(name, shouldMask: shouldMask, dropQuery: isRoute && options.mode == .dropQuery, depth: 0)
+        }
+
+        /// Masks only the `fileName` of each frame, the field that holds a script URL. Other frame
+        /// text (`closure #1 in … == …`) looks like parameters and must be left alone, and the rest of
+        /// the JSON is not re-serialized, so untouched values keep their exact bytes.
+        func maskStackTrace(_ json: String) -> String {
+            guard let pattern = UrlMasker.fileNameValuePattern else { return json }
+            return UrlMasker.replace(pattern, in: json) { groups in
+                // Fail closed: a file name we cannot read or write back is reported redacted.
+                let redactedLiteral = "\(groups[1])\"\(UrlMasker.redacted)\""
+                guard let data = groups[2].data(using: .utf8),
+                      let fileName = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]) as? String else {
+                    return redactedLiteral
+                }
+                let masked = mask(fileName)
+                guard masked != fileName else { return groups[0] }
+                guard let out = try? JSONSerialization.data(withJSONObject: masked, options: [.fragmentsAllowed, .withoutEscapingSlashes]),
+                      let literal = String(data: out, encoding: .utf8) else {
+                    return redactedLiteral
+                }
+                return groups[1] + literal
+            }
+        }
+
+        /// Masks every string value inside a JSON document. Returns the input unchanged when nothing
+        /// needed masking, and `nil` (drop the field) when it cannot be re-encoded: fail closed.
+        func maskStrings(inJson json: String) -> String? {
+            guard let data = json.data(using: .utf8),
+                  let object = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]) else {
+                return mask(json)
+            }
+            var changed = false
+            func walk(_ value: Any) -> Any {
+                switch value {
+                case let string as String:
+                    let masked = mask(string)
+                    if masked != string { changed = true }
+                    return masked
+                case let array as [Any]:
+                    return array.map(walk)
+                case let dict as [String: Any]:
+                    var out: [String: Any] = [:]
+                    for (key, value) in dict {
+                        let maskedKey = mask(key)
+                        if maskedKey != key { changed = true }
+                        // Two keys can mask to the same string; keep both instead of dropping one.
+                        var uniqueKey = maskedKey
+                        var suffix = 2
+                        while out[uniqueKey] != nil {
+                            uniqueKey = "\(maskedKey) (\(suffix))"
+                            suffix += 1
+                        }
+                        out[uniqueKey] = walk(value)
+                    }
+                    return out
+                default:
+                    return value
+                }
+            }
+            let masked = walk(object)
+            guard changed else { return json }
+            guard let out = try? JSONSerialization.data(withJSONObject: masked, options: [.fragmentsAllowed, .withoutEscapingSlashes]) else { return nil }
+            return String(data: out, encoding: .utf8)
+        }
     }
 
-    private static func mask(_ url: String, options: UrlMaskingOptions, depth: Int) -> String {
+    static func mask(_ url: String, options: UrlMaskingOptions = UrlMaskingOptions()) -> String {
+        Masker(options).mask(url)
+    }
+
+    static func maskStrings(inJson json: String, options: UrlMaskingOptions = UrlMaskingOptions()) -> String? {
+        Masker(options).maskStrings(inJson: json)
+    }
+
+    private static func mask(_ url: String, shouldMask: (String) -> Bool, dropQuery: Bool, depth: Int) -> String {
         guard let maybeSensitivePattern, let inlineDataPattern, let userInfoPattern, let pathSessionIdPattern,
               let paramPattern, let encodedParamPattern, let jwtPattern else {
             // Fail closed: a URL we cannot mask is reported without the parts that hold secrets.
             return dropQueryAndFragment(url)
         }
         guard matches(maybeSensitivePattern, url), !matches(inlineDataPattern, url) else { return url }
-        let shouldMask = paramPredicate(options)
 
-        var result = options.mode == .dropQuery ? dropQueryAndFragment(url) : url
+        var result = dropQuery ? dropQueryAndFragment(url) : url
         result = replace(userInfoPattern, in: result) { "\($0[1])\(redacted)@" }
         result = replace(pathSessionIdPattern, in: result) { ";\($0[1])=\(redacted)" }
         result = replace(paramPattern, in: result) { groups in
@@ -110,7 +201,7 @@ enum UrlMasker {
             guard groups[3].contains("?") || groups[3].contains("#") else { return groups[0] }
             // Bounded so a crafted URL cannot recurse deep enough to exhaust the stack: fail closed.
             guard depth < maxNestingDepth else { return "\(groups[1])\(groups[2])=\(redacted)" }
-            return "\(groups[1])\(groups[2])=\(mask(groups[3], options: options, depth: depth + 1))"
+            return "\(groups[1])\(groups[2])=\(mask(groups[3], shouldMask: shouldMask, dropQuery: dropQuery, depth: depth + 1))"
         }
         result = replace(encodedParamPattern, in: result) { groups in
             !groups[3].isEmpty && shouldMask(groups[2]) ? "\(groups[1])\(groups[2])%3D\(redacted)" : groups[0]
@@ -118,53 +209,12 @@ enum UrlMasker {
         return replace(jwtPattern, in: result) { _ in redacted }
     }
 
-    /// Masks every string value inside a JSON document. Returns the input unchanged when nothing
-    /// needed masking, and `nil` (drop the field) when it cannot be re-encoded: fail closed.
-    static func maskStrings(inJson json: String, options: UrlMaskingOptions = UrlMaskingOptions()) -> String? {
-        guard let data = json.data(using: .utf8),
-              let object = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]) else {
-            return mask(json, options: options)
-        }
-        var changed = false
-        func walk(_ value: Any) -> Any {
-            switch value {
-            case let string as String:
-                let masked = mask(string, options: options)
-                if masked != string { changed = true }
-                return masked
-            case let array as [Any]:
-                return array.map(walk)
-            case let dict as [String: Any]:
-                var out: [String: Any] = [:]
-                for (key, value) in dict {
-                    let maskedKey = mask(key, options: options)
-                    if maskedKey != key { changed = true }
-                    // Two keys can mask to the same string; keep both instead of dropping one.
-                    var uniqueKey = maskedKey
-                    var suffix = 2
-                    while out[uniqueKey] != nil {
-                        uniqueKey = "\(maskedKey) (\(suffix))"
-                        suffix += 1
-                    }
-                    out[uniqueKey] = walk(value)
-                }
-                return out
-            default:
-                return value
-            }
-        }
-        let masked = walk(object)
-        guard changed else { return json }
-        guard let out = try? JSONSerialization.data(withJSONObject: masked, options: [.fragmentsAllowed, .withoutEscapingSlashes]) else { return nil }
-        return String(data: out, encoding: .utf8)
-    }
-
     static func dropQueryAndFragment(_ url: String) -> String {
         guard let range = url.firstIndex(where: { $0 == "?" || $0 == "#" }) else { return url }
         return String(url[..<range])
     }
 
-    private static func paramPredicate(_ options: UrlMaskingOptions) -> (String) -> Bool {
+    fileprivate static func paramPredicate(_ options: UrlMaskingOptions) -> (String) -> Bool {
         if options.mode == .maskAll { return { _ in true } }
         var extraNames = Set<String>()
         var extraRegexes: [NSRegularExpression] = []
@@ -200,7 +250,7 @@ enum UrlMasker {
 
     /// Replaces every match with `transform(groups)`, where `groups[0]` is the whole match and a
     /// group that did not participate is "".
-    private static func replace(_ regex: NSRegularExpression, in string: String,
+    fileprivate static func replace(_ regex: NSRegularExpression, in string: String,
                                 transform: ([String]) -> String) -> String {
         let ns = string as NSString
         var result = ""

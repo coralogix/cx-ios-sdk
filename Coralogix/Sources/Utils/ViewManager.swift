@@ -152,7 +152,8 @@ public class ViewManager {
     func applyUrlMasking(_ options: UrlMaskingOptions) {
         syncQueue.async(flags: .barrier) { [weak self] in
             guard let self = self else { return }
-            self.prevViewName = self.prevViewName.map { UrlMasker.mask($0, options: options) }
+            let masker = UrlMasker.Masker(options)
+            self.prevViewName = self.prevViewName.map { masker.maskViewName($0) }
         }
     }
 
