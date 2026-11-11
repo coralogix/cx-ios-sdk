@@ -153,7 +153,7 @@ public class ViewManager {
         syncQueue.async(flags: .barrier) { [weak self] in
             guard let self = self else { return }
             let masker = UrlMasker.Masker(options)
-            self.prevViewName = self.prevViewName.map { masker.maskViewName($0) }
+            self.prevViewName = self.prevViewName.map { masker.maskUrlOrText($0) }
         }
     }
 

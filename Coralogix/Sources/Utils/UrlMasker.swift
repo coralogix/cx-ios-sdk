@@ -102,11 +102,12 @@ enum UrlMasker {
             UrlMasker.mask(url, shouldMask: shouldMask, dropQuery: options.mode == .dropQuery, depth: 0)
         }
 
-        /// A view name is a route only in hybrid apps. `.dropQuery` applies to routes alone, so a
-        /// native name such as `Step #2` is not cut at its `#`.
-        func maskViewName(_ name: String) -> String {
-            let isRoute = name.hasPrefix("/") || name.contains("://")
-            return UrlMasker.mask(name, shouldMask: shouldMask, dropQuery: isRoute && options.mode == .dropQuery, depth: 0)
+        /// For a value that may be a URL or plain text: a view name (a route only in hybrid apps) or a
+        /// userInfo string. `.dropQuery` applies to URLs and routes alone, so text such as `Step #2`
+        /// or `Order #123 failed` is not cut at its `#`; param masking applies to every value.
+        func maskUrlOrText(_ value: String) -> String {
+            let isUrl = value.hasPrefix("/") || value.contains("://")
+            return UrlMasker.mask(value, shouldMask: shouldMask, dropQuery: isUrl && options.mode == .dropQuery, depth: 0)
         }
 
         /// Masks only the `fileName` of each frame, the field that holds a script URL. Other frame
@@ -136,13 +137,13 @@ enum UrlMasker {
         func maskStrings(inJson json: String) -> String? {
             guard let data = json.data(using: .utf8),
                   let object = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]) else {
-                return mask(json)
+                return maskUrlOrText(json)
             }
             var changed = false
             func walk(_ value: Any) -> Any {
                 switch value {
                 case let string as String:
-                    let masked = mask(string)
+                    let masked = maskUrlOrText(string)
                     if masked != string { changed = true }
                     return masked
                 case let array as [Any]:
@@ -150,7 +151,7 @@ enum UrlMasker {
                 case let dict as [String: Any]:
                     var out: [String: Any] = [:]
                     for (key, value) in dict {
-                        let maskedKey = mask(key)
+                        let maskedKey = maskUrlOrText(key)
                         if maskedKey != key { changed = true }
                         // Two keys can mask to the same string; keep both instead of dropping one.
                         var uniqueKey = maskedKey

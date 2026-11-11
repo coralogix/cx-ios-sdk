@@ -270,14 +270,22 @@ final class UrlMaskerTests: XCTestCase {
         XCTAssertEqual(UrlMasker.Masker(UrlMaskingOptions(mode: .maskAll)).maskStackTrace(json), json)
     }
 
-    func test_maskViewName_dropQuery_cutsRoutesOnly() {
+    func test_maskUrlOrText_dropQuery_cutsRoutesOnly() {
         let masker = UrlMasker.Masker(UrlMaskingOptions(mode: .dropQuery))
-        XCTAssertEqual(masker.maskViewName("Step #2"), "Step #2")
-        XCTAssertEqual(masker.maskViewName("/reset?token=abc&tab=1"), "/reset")
-        XCTAssertEqual(masker.maskViewName("app://reset#token=abc"), "app://reset")
+        XCTAssertEqual(masker.maskUrlOrText("Step #2"), "Step #2")
+        XCTAssertEqual(masker.maskUrlOrText("/reset?token=abc&tab=1"), "/reset")
+        XCTAssertEqual(masker.maskUrlOrText("app://reset#token=abc"), "app://reset")
     }
 
-    func test_maskViewName_defaultMode_stillMasksNonRouteNames() {
-        XCTAssertEqual(UrlMasker.Masker().maskViewName("Reset?token=abc"), "Reset?token=\(R)")
+    func test_maskUrlOrText_defaultMode_stillMasksNonRouteNames() {
+        XCTAssertEqual(UrlMasker.Masker().maskUrlOrText("Reset?token=abc"), "Reset?token=\(R)")
+    }
+
+    func test_maskStrings_dropQuery_keepsTextAndCutsUrls() throws {
+        let json = #"{"NSLocalizedDescription":"Order #123 failed?","NSErrorFailingURLStringKey":"https://x.com/cb?token=abc"}"#
+        let masked = try XCTUnwrap(UrlMasker.maskStrings(inJson: json, options: UrlMaskingOptions(mode: .dropQuery)))
+        let dict = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(masked.utf8)) as? [String: String])
+        XCTAssertEqual(dict["NSLocalizedDescription"], "Order #123 failed?")
+        XCTAssertEqual(dict["NSErrorFailingURLStringKey"], "https://x.com/cb")
     }
 }
