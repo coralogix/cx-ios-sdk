@@ -24,13 +24,11 @@ public class MetricsManager {
     var fpsDetector: FPSDetector?
     var launchRecording: LaunchRecording = RecorderLaunchRecording()
 
-    // MARK: - Reporting dependencies (CX-40573)
+    // MARK: - Reporting dependencies
     //
     // Production wires `SpanMetricsCollector` / `SpanEventReporter`. When
-    // unwired, calls into `emitMetricKitPayload` / `reportANR` /
-    // `flushAll` drop with a `Log.d`. The wire format is pinned by
-    // `WireFormatTests`. (Deprecated closure fallbacks removed in
-    // CX-43341.)
+    // unwired, `emitMetricKitPayload` and `flushAll` drop with a `Log.d`.
+    // The wire format is pinned by `WireFormatTests`.
     //
     // Threading: expected to be set once during init on the main thread.
     // Subsequent reads from background callbacks (MetricKit, ANR timer)
@@ -64,10 +62,6 @@ public class MetricsManager {
         MyMetricSubscriber.shared.metricKitClosure = { [weak self] dict in
             self?.emitMetricKitPayload(dict)
         }
-        MyMetricSubscriber.shared.hangDiagnosticClosure = { [weak self] message, errorType in
-            guard let self = self else { return }
-            self.reportANR(message: message, errorType: errorType, source: "MetricKit hang")
-        }
         MXMetricManager.shared.add(MyMetricSubscriber.shared)
         #endif
     }
@@ -89,18 +83,6 @@ public class MetricsManager {
         metricsCollector.collect(metrics)
     }
 
-    /// Routes an ANR-shaped event through the injected `EventReporter`
-    /// as a typed `ANRErrorEvent` (from CX-40572). Drops with a debug log
-    /// when no reporter is wired (set in production by
-    /// `CoralogixRum.initializeANRInstrumentation`).
-    private func reportANR(message: String, errorType: String, source: String) {
-        guard let eventReporter = self.eventReporter else {
-            Log.d("[MetricsManager] Warning: no eventReporter set, \(source) not reported")
-            return
-        }
-        eventReporter.report(ANRErrorEvent(errorMessage: message, errorType: errorType))
-    }
-    
     public func removeObservers() {
         #if os(iOS)
         MXMetricManager.shared.remove(MyMetricSubscriber.shared)
@@ -191,19 +173,11 @@ public class MetricsManager {
         self.warmDetector = detector
     }
     
-    func startANRMonitoring() {
-        self.anrDetector = ANRDetector(eventReporter: self.eventReporter)
-        self.anrDetector?.handleANRClosure = { [weak self] in
-            self?.handleANREvent()
-        }
-        self.anrDetector?.startMonitoring()
-    }
-
-    private func handleANREvent() {
-        let errorMessage = WireValues.anrErrorMessage.rawValue
-        let errorType = WireValues.anrErrorType.rawValue
-        reportANR(message: errorMessage, errorType: errorType, source: "ANR event")
-        Log.d("[MetricsManager] ANR error reported: \(errorMessage)")
+    func startANRMonitoring(hangObserver: HangObserving? = nil) {
+        guard anrDetector == nil else { return }
+        let detector = ANRDetector(eventReporter: self.eventReporter, hangObserver: hangObserver)
+        detector.startMonitoring()
+        self.anrDetector = detector
     }
 
     func startCPUMonitoring() {
@@ -290,25 +264,11 @@ public class MetricsManager {
         )
     }
 }
-  
-/// Abstracts `MXHangDiagnostic` so hang processing can be tested without
-/// instantiating the uninitializable system class.
-protocol HangDiagnosticProviding {
-    var hangDurationMs: Double { get }
-}
 
 #if os(iOS)
-@available(iOS 14.0, *)
-extension MXHangDiagnostic: HangDiagnosticProviding {
-    var hangDurationMs: Double {
-        hangDuration.converted(to: .milliseconds).value
-    }
-}
-
 class MyMetricSubscriber: NSObject, MXMetricManagerSubscriber {
     static let shared = MyMetricSubscriber()
     var metricKitClosure: (([String: Any]) -> Void)?
-    var hangDiagnosticClosure: ((String, String) -> Void)?
 
     // Handle received metrics
     public func didReceive(_ payloads: [MXMetricPayload]) {
@@ -326,21 +286,6 @@ class MyMetricSubscriber: NSObject, MXMetricManagerSubscriber {
             // TODO: Process disk I/O metrics (pending web UI support)
             // TODO: Process memory metrics (pending web UI support)
         }
-    }
-
-    // Handle received diagnostics
-    @available(iOS 14.0, *)
-    public func didReceive(_ payloads: [MXDiagnosticPayload]) {
-        for payload in payloads {
-            payload.hangDiagnostics?.forEach { processHang($0) }
-        }
-    }
-
-    /// Processes a single hang diagnostic. Accepts `HangDiagnosticProviding` so tests
-    /// can inject a mock without needing a real `MXHangDiagnostic` instance.
-    func processHang(_ diagnostic: HangDiagnosticProviding) {
-        let message = "App hang detected by MetricKit for \(Int(diagnostic.hangDurationMs.rounded())) ms"
-        hangDiagnosticClosure?(message, "MXHangDiagnostic")
     }
 }
 #endif

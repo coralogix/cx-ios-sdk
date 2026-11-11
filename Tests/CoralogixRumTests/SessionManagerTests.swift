@@ -376,52 +376,22 @@ class SessionManagerTests: XCTestCase {
 
     // MARK: - Crash attribution to the previous-launch session
     //
-    // A crash is captured on the *next* launch, after a fresh session has already
-    // been created. `lastLaunchSessionSpanAttributes` surfaces the session that was
-    // live when the previous launch ended (captured once at init into
-    // `lastLaunchSession`) so crash instrumentation can burn the crash under the
-    // session that actually crashed.
-
-    func testLastLaunchSessionSpanAttributes_returnsPreviousLaunchSession() {
-        sessionManager.lastLaunchSession = LastLaunchSession(sessionId: "crashed-session-abc",
-                                                             creationDate: 1_600_000_000,
-                                                             sampledIn: true)
-
-        let attrs = Dictionary(uniqueKeysWithValues: sessionManager.lastLaunchSessionSpanAttributes())
-        XCTAssertEqual(attrs[Keys.sessionId.rawValue], "crashed-session-abc",
-            "Crash span must carry the crashed session id, not the session created on relaunch")
-        XCTAssertEqual(attrs[Keys.sessionCreationDate.rawValue], "1600000000",
-            "Crash span must carry the crashed session's creation date")
-    }
-
-    /// A crash with no previous-launch record (a locked-keychain read, or a crash before the SDK
-    /// ever initialized) must not inherit a sampled-out relaunch's stamp, or it is dropped and
-    /// purged as resolved.
-    func testLastLaunchSessionSpanAttributes_noPreviousLaunch_stampsSampledInOnly() {
-        sessionManager.lastLaunchSession = nil
-
-        let attrs = Dictionary(uniqueKeysWithValues: sessionManager.lastLaunchSessionSpanAttributes())
-        XCTAssertEqual(attrs, [Keys.spanSessionSampledIn.rawValue: "true"],
-            "With no record, only the sampling stamp is overridden; the session identity stays the relaunch's")
-    }
+    // A crash report written by an SDK version that did not name its session is filed under
+    // `lastLaunchSession`: the session live when the previous launch ended, captured once at init.
 
     /// Every rotation rebuilds `SessionMetadata`, which re-reads `old*` from a keychain that by then
     /// holds this launch's sessions. A crash recovered after a rotation must still carry the crashed
     /// launch's identity and decision.
-    func testLastLaunchSessionSpanAttributes_unchangedByRotation() {
-        sessionManager.lastLaunchSession = LastLaunchSession(sessionId: "crashed-session-abc",
-                                                             creationDate: 1_600_000_000,
-                                                             sampledIn: true)
+    func testLastLaunchSession_unchangedByRotation() {
+        let crashed = LastLaunchSession(sessionId: "crashed-session-abc", creationDate: 1_600_000_000, sampledIn: true)
+        sessionManager.lastLaunchSession = crashed
         sessionManager.samplingRoller = { false }
 
         sessionManager.setupSessionMetadata()
         sessionManager.setupSessionMetadata()
 
-        let after = Dictionary(uniqueKeysWithValues: sessionManager.lastLaunchSessionSpanAttributes())
-        XCTAssertEqual(after[Keys.sessionId.rawValue], "crashed-session-abc")
-        XCTAssertEqual(after[Keys.sessionCreationDate.rawValue], "1600000000")
-        XCTAssertEqual(after[Keys.spanSessionSampledIn.rawValue], "true",
-            "A rotation that rolled sampled-out must not relabel the crashed session as sampled out")
+        XCTAssertEqual(sessionManager.lastLaunchSession, crashed,
+            "A rotation must not replace the crashed launch's identity or decision")
     }
 
     func testLastLaunchSession_readsPreviousLaunchFieldsOfFirstMetadata() {
@@ -477,5 +447,54 @@ class SessionManagerTests: XCTestCase {
         let stamped = values(try XCTUnwrap(sessionManager.startSessionSpanAttributes(sessionId)))
         XCTAssertEqual(stamped[Keys.spanViewName.rawValue], .string("checkout"))
         XCTAssertEqual(stamped[Keys.spanViewNumber.rawValue], .int(3))
+    }
+
+    /// The hang watchdog reads the crash stamp while another thread may hold `sessionLock`, stalled in
+    /// the very I/O that hang is about; the read must not wait for that lock.
+    func testLastPublishedCrashStamp_isReadableWhileARotationHoldsTheSessionLock() throws {
+        let rotationBlocked = DispatchSemaphore(value: 0)
+        let releaseRotation = DispatchSemaphore(value: 0)
+        let stampLock = NSLock()
+        var observed: [SessionManager.CrashStamp] = []
+        let manager = SessionManager(snapshotStore: SessionSnapshotStore.temporary(),
+                                     crashStampObserver: { stamp in
+            stampLock.lock()
+            observed.append(stamp)
+            let isRotation = observed.count > 1
+            stampLock.unlock()
+            guard isRotation else { return }
+            rotationBlocked.signal()
+            releaseRotation.wait()
+        })
+        let rotationDone = expectation(description: "rotation finished")
+        DispatchQueue.global().async {
+            manager.setupSessionMetadata()
+            rotationDone.fulfill()
+        }
+        XCTAssertEqual(rotationBlocked.wait(timeout: .now() + 5), .success, "rotation reached the observer")
+
+        let read = expectation(description: "stamp read while sessionLock is held")
+        var stamp: SessionManager.CrashStamp?
+        DispatchQueue.global().async {
+            stamp = manager.lastPublishedCrashStamp
+            read.fulfill()
+        }
+        wait(for: [read], timeout: 1)
+        releaseRotation.signal()
+        wait(for: [rotationDone], timeout: 5)
+
+        stampLock.lock()
+        let handedToObserver = observed.last
+        stampLock.unlock()
+        XCTAssertEqual(try XCTUnwrap(stamp), handedToObserver)
+    }
+
+    func testLastPublishedCrashStamp_isClearedOnShutdown() throws {
+        let manager = SessionManager(snapshotStore: SessionSnapshotStore.temporary())
+        XCTAssertEqual(try XCTUnwrap(manager.lastPublishedCrashStamp).sessionId, manager.getSessionMetadata()?.sessionId)
+
+        manager.shutdown()
+
+        XCTAssertNil(manager.lastPublishedCrashStamp)
     }
 }

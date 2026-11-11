@@ -110,6 +110,9 @@ final class CoralogixRumManager {
     private init() {}
 
     func initialize(application: String = "DemoApp-iOS-swift") {
+        // The Crash Lab's launch settings: none by default, so the demo app behaves as usual.
+        let lab = CrashLabSettings.shared
+        lab.beforeInit()
         let userContext = UserContext(userId: "ww",
                                       userName: "?",
                                       userEmail: "a@a.com",
@@ -121,27 +124,32 @@ final class CoralogixRumManager {
             if let port = ProcessInfo.processInfo.environment["CX_MOCK_PORT"], !port.isEmpty {
                 return "http://127.0.0.1:\(port)"
             }
+            if let labEndpoint = lab.proxyUrl {
+                return labEndpoint
+            }
             let configured = Envs.PROXY_URL.rawValue
             return configured.isEmpty ? nil : configured
         }()
-        let domain = CoralogixDomain.EU2
-        let publicKey = Envs.PUBLIC_KEY.rawValue
-        let options = CoralogixExporterOptions(coralogixDomain: domain,
+        let domain = lab.domain ?? CoralogixDomain.EU2
+        let publicKey = lab.publicKey ?? Envs.PUBLIC_KEY.rawValue
+        var options = CoralogixExporterOptions(coralogixDomain: domain,
                                                userContext: userContext,
                                                environment: "PROD",
                                                application: application,
-                                               version: "1",
+                                               version: lab.appVersion ?? "1",
                                                publicKey: publicKey,
-                                               instrumentations: [
+                                               ignoreErrors: lab.ignoreErrors,
+                                               sessionSampleRate: lab.sessionSampleRate,
+                                               instrumentations: lab.instrumentations([
                                                 .mobileVitals: true,
                                                                   .custom: true,
                                                                   .errors: true,
                                                                   .userActions: true,
                                                                   .network: true,
                                                                   .anr: true,
-                                                                  .lifeCycle: true],
+                                                                  .lifeCycle: true]),
                                                collectIPData: true,
-                                               beforeSend: CoralogixRumManager.maskedInteractionBeforeSend,
+                                               beforeSend: lab.beforeSend(wrapping: CoralogixRumManager.maskedInteractionBeforeSend),
                                                enableSwizzling: true,
                                                proxyUrl: proxyUrl,
                                                traceParentInHeader: ["enable": true],
@@ -176,13 +184,31 @@ final class CoralogixRumManager {
         },
                                                debug: true
         )
+        if lab.tracesExporterOn {
+            options.tracesExporter = { data in
+                NSLog("[CrashLab] tracesExporter received %d span(s)", data.spanCount)
+            }
+        }
+        if lab.isHybrid {
+            // A hybrid wrapper's round trip: every event comes back through sendBeforeSendData.
+            options.beforeSendCallBack = { [weak self] events in
+                self?._sdk?.sendBeforeSendData(events)
+            }
+        }
 //        let log = OSLog(subsystem: "test.CoralogixTest", category: .pointsOfInterest)
 //        let signpostID = OSSignpostID(log: log)
 //        os_signpost(.begin, log: log, name: "Init Coralogix", signpostID: signpostID)
         self.destination = Destination(domain: domain, proxyUrl: proxyUrl, publicKey: publicKey)
-        self._sdk = CoralogixRum(options: options)
+        let sdk = CoralogixRum(options: options,
+                               sdkFramework: lab.isHybrid ? .reactNative(version: "crash-lab") : .swift)
+        self._sdk = sdk
 //        os_signpost(.end, log: log, name: "Init Coralogix", signpostID: signpostID)
         print("SDK initialized:\(self._sdk?.isInitialized.description ?? "not initialized")")
+        lab.afterInit(sdk: sdk)
+        if let labCase = CrashLabSettings.launchCase {
+            // Once the first screen is up, as a tap on the lab screen would run it.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { CrashLabTriggers.run(labCase) }
+        }
     }
 
     func getSessionId() -> String? {

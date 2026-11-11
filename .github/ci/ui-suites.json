@@ -34,10 +34,12 @@
       "name": "component \u00b7 naming & redaction",
       "tier": "component",
       "scheme": "DemoAppSwift",
-      "seconds": 124,
+      "seconds": 152,
       "tests": [
         "DemoAppUITests/UserInteractionUITests/testResolveTargetName_tapLoginButton_customNameInBackend",
-        "DemoAppUITests/UserInteractionUITests/testShouldSendText_sensitiveLabel_noInnerTextInBackend"
+        "DemoAppUITests/UserInteractionUITests/testShouldSendText_sensitiveLabel_noInnerTextInBackend",
+        "DemoAppUITests/CrashLabUITests/testCrashLab_listsEveryCaseInCasesJson",
+        "DemoAppUITests/CrashLabUITests/testCrashLabSetting_persistsToTheNextLaunch"
       ]
     },
     {
@@ -67,9 +69,11 @@
       "name": "smoke \u00b7 SwiftUI interaction",
       "tier": "smoke",
       "scheme": "DemoAppSwiftUI",
-      "seconds": 62,
+      "seconds": 99,
       "tests": [
-        "DemoAppSwiftUIUITests/UserInteractionUITests/testAllUserInteractionEvents_combinedSchemaValidation"
+        "DemoAppSwiftUIUITests/UserInteractionUITests/testAllUserInteractionEvents_combinedSchemaValidation",
+        "DemoAppSwiftUIUITests/CrashLabSwiftUIUITests/testCrashLab_listsEveryCaseInCasesJson",
+        "DemoAppSwiftUIUITests/CrashLabSwiftUIUITests/testCrashLabSetting_persistsToTheNextLaunch"
       ]
     },
     {
@@ -92,6 +96,161 @@
       "seconds": 114,
       "tests": [
         "DemoAppUITests/SessionReplayLeakUITests/test_navigationTransition"
+      ]
+    },
+    {
+      "id": "component-crash-capture",
+      "name": "component \u00b7 crash capture & mapping",
+      "tier": "component",
+      "scheme": "CrashE2E",
+      "seconds": 455,
+      "tests": [
+        "CrashE2EUITests/CrashCaptureUITests/testCrashInAGlobalSpan_sentByTheNextLaunch_startsATraceOfItsOwn",
+        "CrashE2EUITests/CrashCaptureUITests/testExceptionOnABackgroundThread_isSentOnceByTheNextLaunch_withThatThreadFirst_andTheMainThreadAmongTheOthers",
+        "CrashE2EUITests/CrashCaptureUITests/testHangDeliveredThroughHybridBeforeSend_isNotReportedAgain_whenTheLaunchEndsDuringIt",
+        "CrashE2EUITests/CrashCaptureUITests/testHangReportedByItsOwnEvent_isNotReportedAgain_whenTheLaunchEndsDuringIt",
+        "CrashE2EUITests/CrashCaptureUITests/testHangTheLaunchEndsDuring_isSentOnceByTheNextLaunch",
+        "CrashE2EUITests/CrashCaptureUITests/testHybridCrashInAGlobalSpan_isSentLive_inThatSpansTrace",
+        "CrashE2EUITests/CrashCaptureUITests/testSignalCrash_isSentOnceByTheNextLaunch_asItsSignal_inTheSessionAndScreenItHappenedIn",
+        "CrashE2EUITests/CrashMappingUITests/testCxxException_isSentAsSIGABRT_withItsTypeAndWhat",
+        "CrashE2EUITests/CrashMappingUITests/testExceptionWithoutReason_isSentWithItsNameAlone",
+        "CrashE2EUITests/CrashMappingUITests/testException_isSentAsSIGABRT_withItsNameAndReasonAsMessage",
+        "CrashE2EUITests/CrashMappingUITests/testIgnoreErrors_appliesToANonCrashError",
+        "CrashE2EUITests/CrashMappingUITests/testIgnoreErrors_matchesTheTypeInAnyCase_tryingEveryPattern",
+        "CrashE2EUITests/CrashMappingUITests/testLongReason_isCutTo102Characters",
+        "CrashE2EUITests/CrashMappingUITests/testRCTFatalException_isSentAsSIGABRT_withRCTFatalExceptionAndItsReason",
+        "CrashE2EUITests/CrashMappingUITests/testSignal_carriesOnlyTheCrashedThread_andTheBaseAddressOfTheApp",
+        "CrashE2EUITests/CrashMappingUITests/testUnrecognizedSelector_isSentWithNSInvalidArgumentExceptionInItsMessage"
+      ]
+    },
+    {
+      "id": "component-crash-native",
+      "name": "component \u00b7 native signals",
+      "tier": "component",
+      "scheme": "CrashE2E",
+      "seconds": 390,
+      "tests": [
+        "CrashE2EUITests/NativeCrashUITests/testAbort_isSentAsSIGABRT",
+        "CrashE2EUITests/NativeCrashUITests/testCrashOnAPthreadTheAppStarted_isSentWithThatThreadAlone",
+        "CrashE2EUITests/NativeCrashUITests/testCrashTheMomentTheSdkIsInitialized_isSentByTheNextLaunch_inTheSessionItHappenedIn",
+        "CrashE2EUITests/NativeCrashUITests/testSigbus_isSentAsItsSignal",
+        "CrashE2EUITests/NativeCrashUITests/testSigfpe_isSentAsItsSignal",
+        "CrashE2EUITests/NativeCrashUITests/testSigill_isSentAsItsSignal",
+        "CrashE2EUITests/NativeCrashUITests/testSignalBeforeSendDrops_isDeletedWithoutBeingSent",
+        "CrashE2EUITests/NativeCrashUITests/testSignalIgnoreErrorsFiltersOut_isDeletedWithoutBeingSent",
+        "CrashE2EUITests/NativeCrashUITests/testSignalInAHybridApp_isSentOnce_withoutItsBeforeSend",
+        "CrashE2EUITests/NativeCrashUITests/testSignalInASampledInSession_isSentByASampledOutLaunch",
+        "CrashE2EUITests/NativeCrashUITests/testSignalInASampledOutSession_isNeverSent",
+        "CrashE2EUITests/NativeCrashUITests/testSignalTheProcessSurvives_isDroppedWithoutBeingSent",
+        "CrashE2EUITests/NativeCrashUITests/testSignal_isFiledUnderTheAppVersionItHappenedIn",
+        "CrashE2EUITests/NativeCrashUITests/testSigtrap_isSentAsItsSignal"
+      ]
+    },
+    {
+      "id": "component-crash-delivery",
+      "name": "component \u00b7 crash delivery",
+      "tier": "component",
+      "scheme": "CrashE2E",
+      "seconds": 410,
+      "tests": [
+        "CrashE2EUITests/CrashDeliveryUITests/testCrashAnswered400_isSentOnce_andDropped",
+        "CrashE2EUITests/CrashDeliveryUITests/testCrashAnswered401_isSentOnce_andDropped",
+        "CrashE2EUITests/CrashDeliveryUITests/testCrashAnswered403_isSentOnce_andDropped",
+        "CrashE2EUITests/CrashDeliveryUITests/testCrashAnswered413_isSentOnce_andDropped",
+        "CrashE2EUITests/CrashDeliveryUITests/testCrashBeforeSendDrops_isNotSent_andNotKept",
+        "CrashE2EUITests/CrashDeliveryUITests/testCrashFromASampledOutSession_isNeitherSentNorKept",
+        "CrashE2EUITests/CrashDeliveryUITests/testCrashIgnoreErrorsFiltersOut_isNeitherSentNorKept",
+        "CrashE2EUITests/CrashDeliveryUITests/testCrashLoop_doesNotPushOutAStoredFatalHang",
+        "CrashE2EUITests/CrashDeliveryUITests/testCrashLoop_keepsTheLatestTen_eachSentInARequestOfItsOwn",
+        "CrashE2EUITests/CrashDeliveryUITests/testCrashStoredByThePreviousVersion_isDeletedUnsent",
+        "CrashE2EUITests/CrashDeliveryUITests/testCrashWhoseUploadFailed_isSentAgainAbout30SecondsLater",
+        "CrashE2EUITests/CrashDeliveryUITests/testCrash_isSentOnceByTheNextLaunch_inARequestOfItsOwn",
+        "CrashE2EUITests/CrashDeliveryUITests/testHybridCrashWhoseLiveUploadFails_isNotSentByTheNextLaunch",
+        "CrashE2EUITests/CrashDeliveryUITests/testHybridCrash_isSentByTheProcessThatReportedIt_andNotAgain",
+        "CrashE2EUITests/CrashDeliveryUITests/testLaunchThatDiesMidUpload_leavesTheCrashAsItWas_forTheNextLaunch"
+      ]
+    },
+    {
+      "id": "component-crash-limits",
+      "name": "component \u00b7 crash delivery limits",
+      "tier": "component",
+      "scheme": "CrashE2E",
+      "seconds": 300,
+      "tests": [
+        "CrashE2EUITests/CrashDeliveryLimitsUITests/testCrashAnswered408_isSentAgainAbout30SecondsLater_untilAccepted",
+        "CrashE2EUITests/CrashDeliveryLimitsUITests/testCrashAnswered429_isSentAgainAbout30SecondsLater_untilAccepted",
+        "CrashE2EUITests/CrashDeliveryLimitsUITests/testCrashAnsweredWithRetryAfter_isNotSentAgainBeforeIt",
+        "CrashE2EUITests/CrashDeliveryLimitsUITests/testCrashIsKeptAfterItsFifteenthFailedUpload_andDroppedAfterItsSixteenth",
+        "CrashE2EUITests/CrashDeliveryLimitsUITests/testCrashJustOverSevenDaysOld_isDeletedWithoutBeingSent_whileOneJustUnderIsSent",
+        "CrashE2EUITests/CrashDeliveryLimitsUITests/testRetryAfterAsAnHttpDate_isHonoured",
+        "CrashE2EUITests/CrashDeliveryLimitsUITests/testRetryAfter_holdsBackTheNextCrashToo"
+      ]
+    },
+    {
+      "id": "component-crash-schedule",
+      "name": "component \u00b7 crash send schedule",
+      "tier": "component",
+      "scheme": "CrashE2E",
+      "seconds": 330,
+      "tests": [
+        "CrashE2EUITests/CrashSendScheduleUITests/testAnswerAfterTheSlot_skipsThatSlot",
+        "CrashE2EUITests/CrashSendScheduleUITests/testBackgroundedApp_keepsSendingUnderItsBackgroundTask",
+        "CrashE2EUITests/CrashSendScheduleUITests/testCrashWhoseUploadGetsNoAnswer_isCountedAsFailed_andSentAgainOnceItTimesOut",
+        "CrashE2EUITests/CrashSendScheduleUITests/testCrashWhoseUploadsFail_isSentAgainAfter30SecondsAnd2Minutes_thenLeftForLater",
+        "CrashE2EUITests/CrashSendScheduleUITests/testCrashesBehindAnUnansweredUpload_waitForIt_thenGoOneAtATime"
+      ]
+    },
+    {
+      "id": "component-crash-options-anr",
+      "name": "component \u00b7 crash options & ANR",
+      "tier": "component",
+      "scheme": "CrashE2E",
+      "seconds": 600,
+      "tests": [
+        "CrashE2EUITests/CrashOptionsUITests/testCrashBeforeSendEdits_isSentAsEdited_once",
+        "CrashE2EUITests/CrashOptionsUITests/testCrashSentTwice_reachesTheAppsTracesExporterOnce",
+        "CrashE2EUITests/CrashOptionsUITests/testCrashWithErrorsSwitchedOff_isNeitherSentNorKept",
+        "CrashE2EUITests/CrashOptionsUITests/testExceptionInAHybridApp_isSentOnceByTheNextLaunch_withoutItsBeforeSend",
+        "CrashE2EUITests/CrashOptionsUITests/testExceptionInASampledInSession_isSentByASampledOutLaunch",
+        "CrashE2EUITests/CrashOptionsUITests/testException_ignoreErrorsNamingItInAnotherCase_isNeitherSentNorKept",
+        "CrashE2EUITests/CrashOptionsUITests/testException_isFiledUnderTheAppVersionItHappenedIn",
+        "CrashE2EUITests/CrashOptionsUITests/testHybridCrash_isSentLive_withoutTheHybridBeforeSend",
+        "CrashE2EUITests/AnrUITests/testFatalHang_startsATraceOfItsOwn",
+        "CrashE2EUITests/AnrUITests/testFourSecondHang_isNotReported",
+        "CrashE2EUITests/AnrUITests/testHangFromTheColdLaunch_theLaunchEndsDuring_isSentOnceByTheNextLaunch",
+        "CrashE2EUITests/AnrUITests/testHangIgnoreErrorsNames_isNotSent_whenTheLaunchEndsDuringIt",
+        "CrashE2EUITests/AnrUITests/testHangInASampledInSession_isSentByASampledOutLaunch_whenTheLaunchEndsDuringIt",
+        "CrashE2EUITests/AnrUITests/testHangInASampledOutSession_isNotSent_whenTheLaunchEndsDuringIt",
+        "CrashE2EUITests/AnrUITests/testHangInAnAppThatSetsUpTheSdkOffTheMainThread_isOneAnr_withEveryThread",
+        "CrashE2EUITests/AnrUITests/testHangTheAppRecoversFrom_isSentOnce_byItsOwnEvent_withAndroidsMessage_andEveryThread",
+        "CrashE2EUITests/AnrUITests/testHangWithAnrsSwitchedOff_isNotSent_whenTheLaunchEndsDuringIt",
+        "CrashE2EUITests/AnrUITests/testHangWithErrorsSwitchedOff_isSentByItsOwnEvent",
+        "CrashE2EUITests/AnrUITests/testHangWithErrorsSwitchedOff_isSentByTheNextLaunch_whenTheLaunchEndsDuringIt",
+        "CrashE2EUITests/AnrUITests/testReturningFromTheBackground_isNotAnAnr_butAHangAfterIt_isOne",
+        "CrashE2EUITests/AnrUITests/testTwoHangs_areTwoAnrs"
+      ]
+    },
+    {
+      "id": "smoke-crash-attribution",
+      "name": "smoke \u00b7 crash attribution & edge cases",
+      "tier": "smoke",
+      "scheme": "CrashE2E",
+      "seconds": 420,
+      "tests": [
+        "CrashE2EUITests/CrashAttributionUITests/testCrashAfterARotation_isSentInTheRotatedSession_onTheScreenItHappenedOn",
+        "CrashE2EUITests/CrashAttributionUITests/testCrashBeforeAnyScreen_isNotFiledUnderAScreen",
+        "CrashE2EUITests/CrashAttributionUITests/testCrashFirstReadALaunchLater_carriesTheCountersScreenAndVersionItHappenedWith",
+        "CrashE2EUITests/CrashAttributionUITests/testCrashBeforeInit_isNeverSent_andTheNextLaunchsOwnEventsAreUnaffected",
+        "CrashE2EUITests/CrashAttributionUITests/testCrashResentOnThreeLaunches_carriesTheSameErrorCount",
+        "CrashE2EUITests/CrashAttributionUITests/testCrash_carriesTheErrorCountItHappenedWith",
+        "CrashE2EUITests/CrashAttributionUITests/testThreeLaunchesThatCrashBeforeDelivery_areAllSent_newestFirst",
+        "CrashE2EUITests/CrashEdgeCaseUITests/testAppTerminatedWhileIdle_isNotReportedAsACrashOrAHang",
+        "CrashE2EUITests/CrashEdgeCaseUITests/testAppThatExitsNormally_isNotReportedAsACrashOrAHang",
+        "CrashE2EUITests/CrashEdgeCaseUITests/testCrashBeforeInit_thenOneAfterInitOnTheNextLaunch_onlyTheSecondIsSent",
+        "CrashE2EUITests/CrashEdgeCaseUITests/testCrashWhileSessionReplayRecords_isSentOnce_inTheSessionItHappenedIn",
+        "CrashE2EUITests/CrashEdgeCaseUITests/testHybridCrashThenRCTFatalException_inOneLaunch_areOneCrashEvent",
+        "CrashE2EUITests/CrashEdgeCaseUITests/testRecoveredCrash_isTimedWhenItHappened_notWhenTheAppRelaunched",
+        "CrashE2EUITests/CrashEdgeCaseUITests/testTwoThreadsCrashingAtOnce_areOneCrashEvent"
       ]
     }
   ]

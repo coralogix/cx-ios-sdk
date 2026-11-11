@@ -1,0 +1,1485 @@
+[
+ {
+  "id": "N1",
+  "section": "native",
+  "title": "SIGSEGV, null dereference",
+  "expect": [
+   "Message is 'SIGSEGV (SEGV_MAPERR)', with no fault address",
+   "exception_type and error_type are 'SIGSEGV'",
+   "Arrives on the relaunch, never from the crashing launch",
+   "One error event with is_crash true, in the crashed launch's session and on the Crash Lab view (not the relaunch's)",
+   "The crashed session's error count includes it; app version is the one it crashed under",
+   "In a trace of its own; base_address is the main binary's load address",
+   "threads holds exactly one thread, the crashed one (triggered_by_thread 0), frames not capped",
+   "Top frame is in the demo app binary"
+  ],
+  "trigger": "N1",
+  "source": "RN C1"
+ },
+ {
+  "id": "N2",
+  "section": "native",
+  "title": "Stack overflow on the main thread",
+  "expect": [
+   "One error event with is_crash true, message starting 'SIGSEGV' or 'SIGBUS', with no fault address",
+   "In the crashed launch's session and on the Crash Lab view",
+   "threads holds exactly one thread, the crashed one (triggered_by_thread 0), frames not capped",
+   "Record whether it arrives at all and with which message"
+  ],
+  "note": "Stack overflow capture is a known gap on iOS pending a device spike: the crash handler may not run once the stack is exhausted. Run on a device.",
+  "requires": "device",
+  "trigger": "N2",
+  "source": "RN C2"
+ },
+ {
+  "id": "N3",
+  "section": "native",
+  "title": "abort()",
+  "expect": [
+   "Message is 'SIGABRT', with no fault address",
+   "exception_type and error_type are 'SIGABRT'",
+   "Arrives on the relaunch, never from the crashing launch",
+   "One error event with is_crash true, in the crashed launch's session and on the Crash Lab view (not the relaunch's)",
+   "The crashed session's error count includes it; app version is the one it crashed under",
+   "In a trace of its own; base_address is the main binary's load address",
+   "threads holds exactly one thread, the crashed one (triggered_by_thread 0), frames not capped",
+   "Never 'SIGABRT (#0)': a code with no name gives the bare signal"
+  ],
+  "trigger": "N3",
+  "source": "RN C3"
+ },
+ {
+  "id": "N4",
+  "section": "native",
+  "title": "Uncaught C++ exception (std::runtime_error)",
+  "expect": [
+   "Message is 'std::runtime_error: crash lab C++ exception' (demangled type, then what())",
+   "exception_type and error_type are 'SIGABRT'",
+   "Arrives on the relaunch, never from the crashing launch",
+   "One error event with is_crash true, in the crashed launch's session and on the Crash Lab view (not the relaunch's)",
+   "The crashed session's error count includes it; app version is the one it crashed under",
+   "In a trace of its own; base_address is the main binary's load address",
+   "threads holds exactly one thread, the crashed one (triggered_by_thread 0), frames not capped"
+  ],
+  "trigger": "N4",
+  "source": "RN C4"
+ },
+ {
+  "id": "N5",
+  "section": "native",
+  "title": "JNI FatalError",
+  "expect": [
+   "Not run on iOS"
+  ],
+  "status": "out_of_scope",
+  "note": "No JNI on iOS.",
+  "source": "RN C5"
+ },
+ {
+  "id": "N6",
+  "section": "native",
+  "title": "Real SIGBUS (read past the end of a mapped file)",
+  "expect": [
+   "Message is 'SIGBUS (BUS_ADRERR)', with no fault address",
+   "exception_type and error_type are 'SIGBUS'",
+   "Arrives on the relaunch, never from the crashing launch",
+   "One error event with is_crash true, in the crashed launch's session and on the Crash Lab view (not the relaunch's)",
+   "The crashed session's error count includes it; app version is the one it crashed under",
+   "In a trace of its own; base_address is the main binary's load address",
+   "threads holds exactly one thread, the crashed one (triggered_by_thread 0), frames not capped",
+   "If the system gives a code with no name, the message is the bare 'SIGBUS'"
+  ],
+  "trigger": "N6",
+  "source": "RN C6"
+ },
+ {
+  "id": "N7",
+  "section": "native",
+  "title": "Real SIGILL (undefined instruction)",
+  "expect": [
+   "Message is 'SIGILL (ILL_ILLOPC)', with no fault address",
+   "exception_type and error_type are 'SIGILL'",
+   "Arrives on the relaunch, never from the crashing launch",
+   "One error event with is_crash true, in the crashed launch's session and on the Crash Lab view (not the relaunch's)",
+   "The crashed session's error count includes it; app version is the one it crashed under",
+   "In a trace of its own; base_address is the main binary's load address",
+   "threads holds exactly one thread, the crashed one (triggered_by_thread 0), frames not capped",
+   "If the system gives a code with no name, the message is the bare 'SIGILL'"
+  ],
+  "trigger": "N7",
+  "source": "RN C7"
+ },
+ {
+  "id": "N8",
+  "section": "native",
+  "title": "SIGTRAP (__builtin_trap)",
+  "expect": [
+   "Message is 'SIGTRAP' or 'SIGTRAP (TRAP_BRKPT)', with no fault address; never 'SIGTRAP (#0)'",
+   "exception_type and error_type are 'SIGTRAP'",
+   "Arrives on the relaunch, never from the crashing launch",
+   "One error event with is_crash true, in the crashed launch's session and on the Crash Lab view (not the relaunch's)",
+   "The crashed session's error count includes it; app version is the one it crashed under",
+   "In a trace of its own; base_address is the main binary's load address",
+   "threads holds exactly one thread, the crashed one (triggered_by_thread 0), frames not capped"
+  ],
+  "trigger": "N8",
+  "source": "RN C8"
+ },
+ {
+  "id": "N9",
+  "section": "native",
+  "title": "SIGFPE (sent with pthread_kill)",
+  "expect": [
+   "Message is 'SIGFPE', with no fault address",
+   "exception_type and error_type are 'SIGFPE'",
+   "Arrives on the relaunch, never from the crashing launch",
+   "One error event with is_crash true, in the crashed launch's session and on the Crash Lab view (not the relaunch's)",
+   "The crashed session's error count includes it; app version is the one it crashed under",
+   "In a trace of its own; base_address is the main binary's load address",
+   "threads holds exactly one thread, the crashed one (triggered_by_thread 0), frames not capped",
+   "No code name: a signal sent with pthread_kill carries no fault code"
+  ],
+  "note": "Adapted: arm64 does not trap integer division by zero, so the lab sends SIGFPE to the main thread with pthread_kill.",
+  "trigger": "N9",
+  "source": "RN C9"
+ },
+ {
+  "id": "N10",
+  "section": "native",
+  "title": "Crash inside a system library",
+  "expect": [
+   "Message is 'SIGSEGV (SEGV_MAPERR)', with no fault address",
+   "exception_type and error_type are 'SIGSEGV'",
+   "Arrives on the relaunch, never from the crashing launch",
+   "One error event with is_crash true, in the crashed launch's session and on the Crash Lab view (not the relaunch's)",
+   "The crashed session's error count includes it; app version is the one it crashed under",
+   "In a trace of its own; base_address is the main binary's load address",
+   "threads holds exactly one thread, the crashed one (triggered_by_thread 0), frames not capped",
+   "Top frame is in a system library (for example libsystem_platform.dylib), not the app binary"
+  ],
+  "trigger": "N10",
+  "source": "RN C10"
+ },
+ {
+  "id": "N11",
+  "section": "native",
+  "title": "Crash on a pthread the app started",
+  "expect": [
+   "Message is 'SIGSEGV (SEGV_MAPERR)', with no fault address",
+   "exception_type and error_type are 'SIGSEGV'",
+   "Arrives on the relaunch, never from the crashing launch",
+   "One error event with is_crash true, in the crashed launch's session and on the Crash Lab view (not the relaunch's)",
+   "The crashed session's error count includes it; app version is the one it crashed under",
+   "In a trace of its own; base_address is the main binary's load address",
+   "threads holds exactly one thread, the crashed one (triggered_by_thread 0), frames not capped",
+   "The one thread is the lab's pthread, not the main thread"
+  ],
+  "trigger": "N11"
+ },
+ {
+  "id": "N12",
+  "section": "native",
+  "title": "Two threads crash at once",
+  "expect": [
+   "Exactly one crash event, not two",
+   "Message starts 'SIGSEGV'",
+   "Arrives on the relaunch, never from the crashing launch",
+   "One error event with is_crash true, in the crashed launch's session and on the Crash Lab view (not the relaunch's)",
+   "The crashed session's error count includes it; app version is the one it crashed under",
+   "In a trace of its own; base_address is the main binary's load address",
+   "threads holds exactly one thread, the crashed one (triggered_by_thread 0), frames not capped"
+  ],
+  "trigger": "N12"
+ },
+ {
+  "id": "N13",
+  "section": "native",
+  "title": "Fault the app's own handler recovers from",
+  "expect": [
+   "The app survives the fault",
+   "No crash event in either session"
+  ],
+  "steps": [
+   "Tap N13",
+   "Check the app is still running",
+   "Relaunch the app",
+   "Wait 30 s"
+  ],
+  "trigger": "N13"
+ },
+ {
+  "id": "N14",
+  "section": "native",
+  "title": "SIGSEGV on API 30 or lower",
+  "expect": [
+   "Not run on iOS"
+  ],
+  "status": "out_of_scope",
+  "note": "API levels are Android only; iOS has a single capture path."
+ },
+ {
+  "id": "N15",
+  "section": "native",
+  "title": "SIGSEGV on 32-bit armeabi-v7a",
+  "expect": [
+   "Not run on iOS"
+  ],
+  "status": "out_of_scope",
+  "note": "iOS runs only 64-bit apps."
+ },
+ {
+  "id": "N16",
+  "section": "native",
+  "title": "Crash the moment init returns",
+  "expect": [
+   "Reported: the SDK's handler is in place before init returns",
+   "Message 'SIGSEGV (SEGV_MAPERR)', exception_type and error_type 'SIGSEGV', is_crash true",
+   "In the crashed launch's session"
+  ],
+  "steps": [
+   "Set launchAction = signal",
+   "Relaunch the app (it crashes right after init)",
+   "Relaunch the app",
+   "Wait 30 s"
+  ]
+ },
+ {
+  "id": "I5",
+  "section": "native",
+  "title": "Swift fatalError / force-unwrap of nil",
+  "expect": [
+   "Message is 'SIGTRAP' or 'SIGTRAP (TRAP_BRKPT)', with no fault address",
+   "exception_type and error_type are 'SIGTRAP'",
+   "Arrives on the relaunch, never from the crashing launch",
+   "One error event with is_crash true, in the crashed launch's session and on the Crash Lab view (not the relaunch's)",
+   "The crashed session's error count includes it; app version is the one it crashed under",
+   "In a trace of its own; base_address is the main binary's load address",
+   "threads holds exactly one thread, the crashed one (triggered_by_thread 0), frames not capped"
+  ],
+  "trigger": "I5"
+ },
+ {
+  "id": "J1",
+  "section": "jvm",
+  "title": "NSException on the main thread",
+  "expect": [
+   "Message is 'NSInternalInconsistencyException: crash lab: main thread'",
+   "exception_type and error_type are 'SIGABRT'",
+   "Arrives on the relaunch, never from the crashing launch",
+   "One error event with is_crash true, in the crashed launch's session and on the Crash Lab view (not the relaunch's)",
+   "The crashed session's error count includes it; app version is the one it crashed under",
+   "In a trace of its own; base_address is the main binary's load address",
+   "threads: the crashed thread first, then every other thread, each cut to 200 frames",
+   "The crashed (main) thread is first"
+  ],
+  "trigger": "J1",
+  "source": "RN B1"
+ },
+ {
+  "id": "J2",
+  "section": "jvm",
+  "title": "NSException on a background thread",
+  "expect": [
+   "Message is 'NSInternalInconsistencyException: crash lab: background thread'",
+   "exception_type and error_type are 'SIGABRT'",
+   "Arrives on the relaunch, never from the crashing launch",
+   "One error event with is_crash true, in the crashed launch's session and on the Crash Lab view (not the relaunch's)",
+   "The crashed session's error count includes it; app version is the one it crashed under",
+   "In a trace of its own; base_address is the main binary's load address",
+   "threads: the crashed thread first, then every other thread, each cut to 200 frames",
+   "crash-lab-background first, then the others with main first among them"
+  ],
+  "trigger": "J2",
+  "source": "RN B2"
+ },
+ {
+  "id": "J3",
+  "section": "jvm",
+  "title": "Main-thread exception while session replay records",
+  "expect": [
+   "Message 'NSInternalInconsistencyException: crash lab: crash while session replay records'",
+   "The crash event arrives on the relaunch, in the crashed launch's session",
+   "The session has a replay covering the seconds before the crash",
+   "The crash event carries no session replay screenshot"
+  ],
+  "steps": [
+   "Set sessionReplay = true",
+   "Relaunch the app",
+   "Wait 10 s while replay records",
+   "Tap J3",
+   "Relaunch the app",
+   "Wait 30 s"
+  ],
+  "trigger": "J3",
+  "source": "crash lost while session replay records"
+ },
+ {
+  "id": "J4",
+  "section": "jvm",
+  "title": "Main-thread exception during a session rotation, replay on",
+  "expect": [
+   "Message 'NSInternalInconsistencyException: crash lab: crash during a session rotation'",
+   "The crash arrives on the relaunch; the app does not hang before dying",
+   "Filed under the session current when it crashed (the one the rotation started), not the relaunch's"
+  ],
+  "steps": [
+   "Set sessionReplay = true",
+   "Relaunch the app",
+   "Tap J4",
+   "Relaunch the app",
+   "Wait 30 s"
+  ],
+  "trigger": "J4"
+ },
+ {
+  "id": "J5",
+  "section": "jvm",
+  "title": "Exception in a Service (wrapped by Android)",
+  "expect": [
+   "Not run on iOS"
+  ],
+  "status": "out_of_scope",
+  "note": "No Android Service wrapping on iOS.",
+  "source": "RN B6"
+ },
+ {
+  "id": "J6",
+  "section": "jvm",
+  "title": "Fabric prop-setter crash (React Native new architecture)",
+  "expect": [
+   "Not run on iOS"
+  ],
+  "status": "out_of_scope",
+  "note": "React Native only; covered by the React Native crash lab."
+ },
+ {
+  "id": "J7",
+  "section": "jvm",
+  "title": "Cause chain 12 deep",
+  "expect": [
+   "Not run on iOS"
+  ],
+  "status": "out_of_scope",
+  "note": "NSException has no cause chain."
+ },
+ {
+  "id": "J8",
+  "section": "jvm",
+  "title": "Exception in a BroadcastReceiver",
+  "expect": [
+   "Not run on iOS"
+  ],
+  "status": "out_of_scope",
+  "note": "No BroadcastReceiver on iOS.",
+  "source": "RN B7"
+ },
+ {
+  "id": "J8b",
+  "section": "jvm",
+  "title": "Exception in a coroutine",
+  "expect": [
+   "Not run on iOS"
+  ],
+  "status": "out_of_scope",
+  "note": "Kotlin coroutines only; a crash on a background queue is J2.",
+  "source": "RN B9"
+ },
+ {
+  "id": "J9",
+  "section": "jvm",
+  "title": "Stack overflow (exception path)",
+  "expect": [
+   "Same as N2: a Swift or Objective-C stack overflow is a native stack overflow on iOS"
+  ],
+  "status": "covered_elsewhere",
+  "covered_by": "N2",
+  "source": "RN B10"
+ },
+ {
+  "id": "J10",
+  "section": "jvm",
+  "title": "OutOfMemoryError",
+  "expect": [
+   "Not run on iOS"
+  ],
+  "status": "out_of_scope",
+  "note": "iOS reports running out of memory as a jetsam kill with no in-process signal; see I12.",
+  "source": "RN B11"
+ },
+ {
+  "id": "J11",
+  "section": "jvm",
+  "title": "Exception with 100 deep threads",
+  "expect": [
+   "Message 'NSInternalInconsistencyException: crash lab: crash with 100 deep threads'",
+   "One crash event with every thread, including the lab's 100 parked deep threads, each cut to 200 frames",
+   "The crashed thread is first",
+   "Accepted even if large; note whether the platform parses it"
+  ],
+  "trigger": "J11"
+ },
+ {
+  "id": "J12",
+  "section": "jvm",
+  "title": "Disk write racing the thread dump",
+  "expect": [
+   "Not run on iOS"
+  ],
+  "status": "out_of_scope",
+  "note": "The crash report is written by the crash handler before the process dies; there is no separate thread dump to race."
+ },
+ {
+  "id": "J13",
+  "section": "jvm",
+  "title": "Exception inside an app global span",
+  "expect": [
+   "Message 'NSInternalInconsistencyException: crash lab: crash inside a global span'",
+   "Arrives on the relaunch, in the crashed launch's session",
+   "Captured as usual: the open global span 'crash-lab-global-span' does not affect it"
+  ],
+  "steps": [
+   "Tap J13 (it starts crash-lab-global-span, then throws)",
+   "Relaunch the app",
+   "Wait 30 s"
+  ],
+  "trigger": "J13"
+ },
+ {
+  "id": "J13b",
+  "section": "jvm",
+  "title": "Exception inside a global span starts a trace of its own",
+  "expect": [
+   "Arrives on the relaunch, in the crashed launch's session",
+   "Starts a trace of its own: no link to 'crash-lab-global-span' and no parent span (a crash sent by a later launch has no parent)"
+  ],
+  "steps": [
+   "Tap J13",
+   "Relaunch the app",
+   "Wait 30 s",
+   "Compare the crash's trace id with the global span's"
+  ],
+  "trigger": "J13"
+ },
+ {
+  "id": "I1",
+  "section": "jvm",
+  "title": "Unrecognized selector",
+  "expect": [
+   "Message is 'NSInvalidArgumentException: -[NSNull length]: unrecognized selector sent to instance 0x…'",
+   "exception_type and error_type are 'SIGABRT'",
+   "Arrives on the relaunch, never from the crashing launch",
+   "One error event with is_crash true, in the crashed launch's session and on the Crash Lab view (not the relaunch's)",
+   "The crashed session's error count includes it; app version is the one it crashed under",
+   "In a trace of its own; base_address is the main binary's load address",
+   "threads: the crashed thread first, then every other thread, each cut to 200 frames"
+  ],
+  "trigger": "I1"
+ },
+ {
+  "id": "I2",
+  "section": "jvm",
+  "title": "React Native fatal (RCTFatalException-named NSException)",
+  "expect": [
+   "Message is 'RCTFatalException: Unhandled JS Exception: TypeError: crash lab is not a function'",
+   "exception_type and error_type are 'SIGABRT'",
+   "Arrives on the relaunch, never from the crashing launch",
+   "One error event with is_crash true, in the crashed launch's session and on the Crash Lab view (not the relaunch's)",
+   "The crashed session's error count includes it; app version is the one it crashed under",
+   "In a trace of its own; base_address is the main binary's load address",
+   "threads: the crashed thread first, then every other thread, each cut to 200 frames",
+   "The reason appears once: the description in the exception's name is not repeated"
+  ],
+  "trigger": "I2"
+ },
+ {
+  "id": "I3",
+  "section": "jvm",
+  "title": "NSException with a nil reason",
+  "expect": [
+   "Message is the exception name alone, 'NSGenericException', with no trailing ': '",
+   "exception_type and error_type are 'SIGABRT'",
+   "Arrives on the relaunch, never from the crashing launch",
+   "One error event with is_crash true, in the crashed launch's session and on the Crash Lab view (not the relaunch's)",
+   "The crashed session's error count includes it; app version is the one it crashed under",
+   "In a trace of its own; base_address is the main binary's load address",
+   "threads: the crashed thread first, then every other thread, each cut to 200 frames"
+  ],
+  "trigger": "I3"
+ },
+ {
+  "id": "I4",
+  "section": "jvm",
+  "title": "NSException reason longer than 102 characters",
+  "expect": [
+   "Message is exactly 102 UTF-16 units long, starting 'NSInternalInconsistencyException: crash lab: a reason longer than the message cap'",
+   "exception_type and error_type are 'SIGABRT'",
+   "Arrives on the relaunch, never from the crashing launch",
+   "One error event with is_crash true, in the crashed launch's session and on the Crash Lab view (not the relaunch's)",
+   "The crashed session's error count includes it; app version is the one it crashed under",
+   "In a trace of its own; base_address is the main binary's load address",
+   "threads: the crashed thread first, then every other thread, each cut to 200 frames"
+  ],
+  "trigger": "I4"
+ },
+ {
+  "id": "I6",
+  "section": "jvm",
+  "title": "Hybrid reportError(isCrash:)",
+  "expect": [
+   "Message 'crash lab: hybrid crash'; sent live once, with is_crash true, in the current session",
+   "Nothing more on the relaunch: nothing is kept on disk",
+   "With the endpoint down: lost, and not sent by the relaunch either"
+  ],
+  "steps": [
+   "Tap I6",
+   "Wait 10 s",
+   "Relaunch the app",
+   "Wait 30 s",
+   "Repeat with the network off (Network Link Conditioner, 100% loss), then relaunch with it on"
+  ],
+  "note": "The endpoint-down half needs the Network Link Conditioner.",
+  "trigger": "I6"
+ },
+ {
+  "id": "P1",
+  "section": "pre_init",
+  "title": "React Native JS fatal before CoralogixRum.init",
+  "expect": [
+   "Nothing reported"
+  ],
+  "status": "out_of_scope",
+  "note": "React Native only; covered by the React Native crash lab."
+ },
+ {
+  "id": "P2",
+  "section": "pre_init",
+  "title": "NSException in didFinishLaunching before init",
+  "expect": [
+   "No crash event, on that launch or any later one: a crash before init is dropped at recovery",
+   "The relaunch's session shows no error"
+  ],
+  "steps": [
+   "Set crashBeforeInit = exception",
+   "Relaunch the app (it crashes before init)",
+   "Relaunch the app",
+   "Wait 30 s"
+  ],
+  "source": "RN B3"
+ },
+ {
+  "id": "P3",
+  "section": "pre_init",
+  "title": "Exception in a ContentProvider before initialize",
+  "expect": [
+   "Not run on iOS"
+  ],
+  "status": "out_of_scope",
+  "note": "No ContentProvider on iOS.",
+  "source": "RN B4"
+ },
+ {
+  "id": "P4",
+  "section": "pre_init",
+  "title": "Crash right after init returns (the boundary)",
+  "expect": [
+   "Reported normally: message 'NSInternalInconsistencyException: crash lab: launch crash'",
+   "exception_type and error_type are 'SIGABRT'",
+   "In the crashed launch's session"
+  ],
+  "steps": [
+   "Set launchAction = exception",
+   "Relaunch the app (it crashes right after init)",
+   "Relaunch the app",
+   "Wait 30 s"
+  ],
+  "source": "RN E5"
+ },
+ {
+  "id": "P5",
+  "section": "pre_init",
+  "title": "Crash before init, then a normal crash",
+  "expect": [
+   "Only the second crash ('NSInternalInconsistencyException: crash lab: main thread') arrives, in the second launch's session"
+  ],
+  "steps": [
+   "Set crashBeforeInit = exception",
+   "Relaunch the app (it crashes before init)",
+   "Relaunch the app",
+   "Tap J1",
+   "Relaunch the app",
+   "Wait 30 s"
+  ],
+  "trigger": "J1"
+ },
+ {
+  "id": "P6",
+  "section": "pre_init",
+  "title": "Signal before init",
+  "expect": [
+   "No crash event, on that launch or any later one: a crash before init is dropped at recovery"
+  ],
+  "steps": [
+   "Set crashBeforeInit = signal",
+   "Relaunch the app (it crashes before init)",
+   "Relaunch the app",
+   "Wait 30 s"
+  ]
+ },
+ {
+  "id": "A1",
+  "section": "anr",
+  "title": "Hang, launch terminated during it (online)",
+  "expect": [
+   "Exactly one ANR event across both sessions: the live one, sent about 5 s into the hang",
+   "Message 'Application Not Responding for at least 1000 ms.', error_type ANR, is_crash false",
+   "In the hung launch's session, on the Crash Lab view",
+   "threads: the main thread first, then every other thread",
+   "The relaunch sends no second ANR: its live event was delivered"
+  ],
+  "steps": [
+   "Tap A1",
+   "Wait for the live ANR to be sent (about 10 s)",
+   "Terminate the app during the hang (simctl terminate)",
+   "Relaunch the app",
+   "Wait 30 s"
+  ],
+  "trigger": "A1"
+ },
+ {
+  "id": "A2",
+  "section": "anr",
+  "title": "Hang with the endpoint down, launch terminated, relaunch with it up",
+  "expect": [
+   "Exactly one ANR event: the relaunch's report (the live event was never delivered)",
+   "Message 'Application Not Responding', error_type ANR, is_crash true",
+   "Timed at detection, not at the relaunch",
+   "In the hung launch's session, not the relaunch's"
+  ],
+  "steps": [
+   "Turn the network off (Network Link Conditioner, 100% loss)",
+   "Tap A1",
+   "Wait 10 s",
+   "Terminate the app during the hang (simctl terminate)",
+   "Turn the network back on",
+   "Relaunch the app",
+   "Wait 30 s"
+  ],
+  "requires": "network_link_conditioner",
+  "trigger": "A1"
+ },
+ {
+  "id": "A3",
+  "section": "anr",
+  "title": "Hang the app recovers from (8 s)",
+  "expect": [
+   "Exactly one ANR event, is_crash false, message 'Application Not Responding for at least 1000 ms.'",
+   "threads: the main thread first, then every other thread",
+   "Nothing more on the relaunch"
+  ],
+  "steps": [
+   "Tap A3",
+   "Wait 25 s",
+   "Relaunch the app",
+   "Wait 30 s"
+  ],
+  "trigger": "A3"
+ },
+ {
+  "id": "A4",
+  "section": "anr",
+  "title": "Hang on a cold launch",
+  "expect": [
+   "Exactly one ANR event across both sessions, in the session of the launch that hung"
+  ],
+  "steps": [
+   "Set launchAction = hang",
+   "Relaunch the app (it hangs right after init)",
+   "Wait 10 s",
+   "Terminate the app during the hang (simctl terminate)",
+   "Relaunch the app",
+   "Wait 30 s"
+  ]
+ },
+ {
+  "id": "A5",
+  "section": "anr",
+  "title": "Error instrumentation off, ANR on, launch terminated",
+  "expect": [
+   "No ANR event with is_crash true on the relaunch"
+  ],
+  "steps": [
+   "Set errorInstrumentation = false",
+   "Relaunch the app",
+   "Turn the network off (Network Link Conditioner, 100% loss)",
+   "Tap A1",
+   "Wait 10 s",
+   "Terminate the app during the hang (simctl terminate)",
+   "Turn the network back on",
+   "Relaunch the app",
+   "Wait 30 s"
+  ],
+  "requires": "network_link_conditioner",
+  "trigger": "A1"
+ },
+ {
+  "id": "A6",
+  "section": "anr",
+  "title": "ignoreErrors names ANR",
+  "expect": [
+   "No ANR event, live or on the relaunch"
+  ],
+  "status": "covered_elsewhere",
+  "covered_by": "AnrUITests/testHangIgnoreErrorsNames_isNotSent_whenTheLaunchEndsDuringIt"
+ },
+ {
+  "id": "A7",
+  "section": "anr",
+  "title": "Hang in a sampled-out session",
+  "expect": [
+   "Not sent"
+  ],
+  "status": "covered_elsewhere",
+  "covered_by": "AnrUITests/testHangInASampledOutSession_isNotSent_whenTheLaunchEndsDuringIt"
+ },
+ {
+  "id": "A8",
+  "section": "anr",
+  "title": "ANR instrumentation off",
+  "expect": [
+   "Not sent"
+  ],
+  "status": "covered_elsewhere",
+  "covered_by": "AnrUITests/testHangWithAnrsSwitchedOff_isNotSent_whenTheLaunchEndsDuringIt"
+ },
+ {
+  "id": "A9",
+  "section": "anr",
+  "title": "Hang through a hybrid beforeSend, then terminated",
+  "expect": [
+   "One ANR event, with every thread put back after beforeSend",
+   "Not reported again by the relaunch"
+  ],
+  "status": "covered_elsewhere",
+  "covered_by": "AnrUITests/testHangDeliveredThroughHybridBeforeSend_isNotReportedAgain_whenTheLaunchEndsDuringIt"
+ },
+ {
+  "id": "A10",
+  "section": "anr",
+  "title": "Watchdog ANR sent from the offline cache, then killed",
+  "expect": [
+   "Not run on iOS"
+  ],
+  "status": "out_of_scope",
+  "note": "iOS has no offline cache."
+ },
+ {
+  "id": "I7",
+  "section": "anr",
+  "title": "Hang under the debugger",
+  "expect": [
+   "No ANR event: the watchdog stands down while a debugger is attached"
+  ],
+  "steps": [
+   "Run the demo app from Xcode",
+   "Tap A3",
+   "Wait 25 s",
+   "Stop the app in Xcode",
+   "Relaunch the app",
+   "Wait 30 s"
+  ],
+  "requires": "xcode",
+  "trigger": "A3"
+ },
+ {
+  "id": "I8",
+  "section": "anr",
+  "title": "Hang while Control Center is open",
+  "expect": [
+   "One ANR event, is_crash false: an inactive app is still watched"
+  ],
+  "steps": [
+   "Tap A3",
+   "Open Control Center at once",
+   "Wait 25 s",
+   "Close Control Center",
+   "Relaunch the app",
+   "Wait 30 s"
+  ],
+  "trigger": "A3"
+ },
+ {
+  "id": "I9",
+  "section": "anr",
+  "title": "Hang in the background",
+  "expect": [
+   "No ANR event: the watchdog does not run while the app is in the background"
+  ],
+  "steps": [
+   "Tap A3 and press Home at once (Cmd+Shift+H)",
+   "Wait 25 s",
+   "Reopen the app",
+   "Relaunch the app",
+   "Wait 30 s"
+  ],
+  "trigger": "A3"
+ },
+ {
+  "id": "I10",
+  "section": "anr",
+  "title": "Long scroll",
+  "expect": [
+   "No ANR event: a busy but responsive main thread is not a hang"
+  ],
+  "steps": [
+   "Scroll the Crash Lab list top to bottom and back for 10 s",
+   "Relaunch the app",
+   "Wait 30 s"
+  ]
+ },
+ {
+  "id": "D1",
+  "section": "delivery",
+  "title": "Crash with the network on",
+  "expect": [
+   "Nothing sent by the crashing launch",
+   "Arrives early on the relaunch, exactly once, in the crashed launch's session"
+  ],
+  "steps": [
+   "Tap J1",
+   "Relaunch the app",
+   "Wait 30 s"
+  ],
+  "trigger": "J1"
+ },
+ {
+  "id": "D2",
+  "section": "delivery",
+  "title": "Crash offline, network back, app not reopened",
+  "expect": [
+   "Not run on iOS"
+  ],
+  "status": "out_of_scope",
+  "note": "No background job on iOS: a stored crash waits for the next launch."
+ },
+ {
+  "id": "D3",
+  "section": "delivery",
+  "title": "Crash offline, network back, app reopened",
+  "expect": [
+   "Not sent while offline",
+   "Delivered on the launch after the network is back, exactly once, in the crashed launch's session"
+  ],
+  "steps": [
+   "Turn the network off (Network Link Conditioner, 100% loss)",
+   "Tap J1",
+   "Relaunch the app",
+   "Wait 30 s and check nothing arrived",
+   "Turn the network back on",
+   "Relaunch the app",
+   "Wait 30 s"
+  ],
+  "status": "manual",
+  "requires": "network_link_conditioner",
+  "trigger": "J1"
+ },
+ {
+  "id": "D4",
+  "section": "delivery",
+  "title": "Native crash, app not reopened for 7 minutes",
+  "expect": [
+   "Not run on iOS"
+  ],
+  "status": "out_of_scope",
+  "note": "No background job on iOS: a stored crash is always sent by the next launch (D1).",
+  "source": "RN E1"
+ },
+ {
+  "id": "D5",
+  "section": "delivery",
+  "title": "Crash loop: three launches in a row crash",
+  "expect": [
+   "Exactly three crash events, each 'NSInternalInconsistencyException: crash lab: launch crash'",
+   "No duplicates; each in its own launch's session"
+  ],
+  "steps": [
+   "Set launchAction = exception",
+   "Set launchActionCount = 3",
+   "Relaunch the app (crashes)",
+   "Relaunch the app (crashes)",
+   "Relaunch the app (crashes)",
+   "Relaunch the app",
+   "Wait 60 s"
+  ]
+ },
+ {
+  "id": "D6",
+  "section": "delivery",
+  "title": "Server answers 2xx, 400 or 413",
+  "expect": [
+   "One send, deleted"
+  ],
+  "status": "covered_elsewhere",
+  "covered_by": "CrashDeliveryUITests/testCrashAnswered400_isSentOnce_andDropped; CrashDeliveryUITests/testCrashAnswered413_isSentOnce_andDropped"
+ },
+ {
+  "id": "D7",
+  "section": "delivery",
+  "title": "Server answers 503, 408 or 429",
+  "expect": [
+   "Kept, and the failure counted",
+   "Sent again 30 s and 2 min after its first failed send, one crash per request, then by later launches",
+   "Retry-After is honoured and holds later sends back",
+   "Deleted after 16 counted failures"
+  ],
+  "status": "covered_elsewhere",
+  "covered_by": "CrashDeliveryLimitsUITests/testCrashAnswered408_isSentAgainAbout30SecondsLater_untilAccepted; CrashDeliveryLimitsUITests/testCrashAnswered429_isSentAgainAbout30SecondsLater_untilAccepted; CrashSendScheduleUITests/testCrashWhoseUploadsFail_isSentAgainAfter30SecondsAnd2Minutes_thenLeftForLater"
+ },
+ {
+  "id": "D8",
+  "section": "delivery",
+  "title": "Server answers 401 or 403",
+  "expect": [
+   "One send, deleted"
+  ],
+  "status": "covered_elsewhere",
+  "covered_by": "CrashDeliveryUITests/testCrashAnswered401_isSentOnce_andDropped; CrashDeliveryUITests/testCrashAnswered403_isSentOnce_andDropped"
+ },
+ {
+  "id": "D9",
+  "section": "delivery",
+  "title": "Crash more than 7 days old",
+  "expect": [
+   "Deleted without being sent"
+  ],
+  "status": "covered_elsewhere",
+  "covered_by": "CrashDeliveryLimitsUITests/testCrashJustOverSevenDaysOld_isDeletedWithoutBeingSent_whileOneJustUnderIsSent"
+ },
+ {
+  "id": "D10a",
+  "section": "delivery",
+  "title": "Offline launch, or launch killed mid-upload",
+  "expect": [
+   "Not sent while offline",
+   "Doesn't count as a failure: the crash is left as it was for the next launch"
+  ],
+  "status": "covered_elsewhere",
+  "covered_by": "CrashDeliveryUITests/testLaunchThatDiesMidUpload_leavesTheCrashAsItWas_forTheNextLaunch"
+ },
+ {
+  "id": "D10b",
+  "section": "delivery",
+  "title": "No answer while online (timeout)",
+  "expect": [
+   "Counts as a failed send, and is sent again once it times out"
+  ],
+  "status": "covered_elsewhere",
+  "covered_by": "CrashSendScheduleUITests/testCrashWhoseUploadGetsNoAnswer_isCountedAsFailed_andSentAgainOnceItTimesOut"
+ },
+ {
+  "id": "D11",
+  "section": "delivery",
+  "title": "Slow server: 2xx after about 90 s",
+  "expect": [
+   "Accepted: the answer comes within the 120 s bound, so the crash is sent once and deleted",
+   "Not sent again while its answer is awaited",
+   "Crashes stored behind it wait, then go one per request"
+  ],
+  "steps": [
+   "Set endpoint = mock",
+   "Have the mock answer crash uploads with 200 after 90 s",
+   "Relaunch the app",
+   "Tap J1",
+   "Relaunch the app",
+   "Wait 150 s"
+  ],
+  "requires": "mock_endpoint",
+  "trigger": "J1"
+ },
+ {
+  "id": "D12",
+  "section": "delivery",
+  "title": "More than 10 stored crashes of one kind",
+  "expect": [
+   "Exactly 10 crash events arrive: the 10 newest of 12 stored, newest first",
+   "The 2 oldest never arrive",
+   "Each sent in a request of its own"
+  ],
+  "status": "covered_elsewhere",
+  "covered_by": "CrashDeliveryUITests/testCrashLoop_keepsTheLatestTen_eachSentInARequestOfItsOwn"
+ },
+ {
+  "id": "D13",
+  "section": "delivery",
+  "title": "Background job runs while startup recovery sends",
+  "expect": [
+   "Not run on iOS"
+  ],
+  "status": "out_of_scope",
+  "note": "No background job on iOS."
+ },
+ {
+  "id": "D14",
+  "section": "delivery",
+  "title": "Events logged offline, then several network changes",
+  "expect": [
+   "Not run on iOS"
+  ],
+  "status": "out_of_scope",
+  "note": "iOS has no offline span cache."
+ },
+ {
+  "id": "D15",
+  "section": "delivery",
+  "title": "An offline-cache upload that throws",
+  "expect": [
+   "Not run on iOS"
+  ],
+  "status": "out_of_scope",
+  "note": "iOS has no offline span cache."
+ },
+ {
+  "id": "D16",
+  "section": "delivery",
+  "title": "Crash in a secondary process",
+  "expect": [
+   "Not run on iOS"
+  ],
+  "status": "out_of_scope",
+  "note": "iOS apps run a single process."
+ },
+ {
+  "id": "I11",
+  "section": "delivery",
+  "title": "App backgrounded after the first failed send",
+  "expect": [
+   "Delivery continues in the background for about 30 s under a background task",
+   "A retry that falls after the background time runs out is sent by the next launch",
+   "The crash is accepted exactly once: never lost, never sent twice"
+  ],
+  "steps": [
+   "Set endpoint = mock",
+   "Have the mock answer the first crash upload with 503, then 200",
+   "Relaunch the app",
+   "Tap J1",
+   "Relaunch the app",
+   "Press Home right after the first failed send",
+   "Wait 3 min",
+   "Reopen the app",
+   "Wait 30 s"
+  ],
+  "requires": "mock_endpoint",
+  "trigger": "J1"
+ },
+ {
+  "id": "O1",
+  "section": "options",
+  "title": "ignoreErrors matching a signal",
+  "expect": [
+   "No crash event, on this or the next launch (dropped and deleted)"
+  ],
+  "steps": [
+   "Set ignoreErrors = SIGSEGV.*",
+   "Relaunch the app",
+   "Tap N1",
+   "Relaunch the app",
+   "Relaunch the app",
+   "Wait 30 s"
+  ],
+  "trigger": "N1"
+ },
+ {
+  "id": "O1b",
+  "section": "options",
+  "title": "ignoreErrors matching an exception name",
+  "expect": [
+   "No crash event, on this or the next launch"
+  ],
+  "steps": [
+   "Set ignoreErrors = NSInvalidArgumentException:.*",
+   "Relaunch the app",
+   "Tap I1",
+   "Relaunch the app",
+   "Wait 30 s"
+  ],
+  "trigger": "I1"
+ },
+ {
+  "id": "I13",
+  "section": "options",
+  "title": "ignoreErrors on a non-crash reportError",
+  "expect": [
+   "Not sent: a pattern matches by case-sensitive exact equality, then by case-insensitive substring regex, against the message and error_type",
+   "Every pattern is tried, not only the first",
+   "An error matching no pattern is still sent"
+  ],
+  "steps": [
+   "Set ignoreErrors = NSInvalidArgumentException:.*",
+   "Relaunch the app",
+   "Report an error with message 'NSInvalidArgumentException: crash lab' from the demo app",
+   "Report an error with message 'crash lab: not ignored'",
+   "Wait 30 s"
+  ]
+ },
+ {
+  "id": "O2",
+  "section": "options",
+  "title": "beforeSend edits a crash",
+  "expect": [
+   "Message is 'edited in beforeSend'",
+   "is_crash, threads and the rest of the crash intact"
+  ],
+  "steps": [
+   "Set crashBeforeSend = edit",
+   "Relaunch the app",
+   "Tap N1",
+   "Relaunch the app",
+   "Wait 30 s"
+  ],
+  "trigger": "N1"
+ },
+ {
+  "id": "O3",
+  "section": "options",
+  "title": "beforeSend drops a crash",
+  "expect": [
+   "No crash event, on this or the next launch (deleted for good)"
+  ],
+  "steps": [
+   "Set crashBeforeSend = drop",
+   "Relaunch the app",
+   "Tap N1",
+   "Relaunch the app",
+   "Relaunch the app",
+   "Wait 30 s"
+  ],
+  "trigger": "N1"
+ },
+ {
+  "id": "O4",
+  "section": "options",
+  "title": "Crashed session sampled out",
+  "expect": [
+   "No crash event, though the relaunch is sampled in"
+  ],
+  "steps": [
+   "Set sessionSampleRate = 0",
+   "Relaunch the app",
+   "Settings for the relaunch (set them before the crash; they apply at the next launch):",
+   "Set sessionSampleRate = 100",
+   "Tap N1",
+   "Relaunch the app",
+   "Wait 30 s"
+  ],
+  "source": "RN E4",
+  "trigger": "N1"
+ },
+ {
+  "id": "O5",
+  "section": "options",
+  "title": "Crashed session sampled in, relaunch sampled out",
+  "expect": [
+   "The crash arrives"
+  ],
+  "steps": [
+   "Settings for the relaunch (set them before the crash; they apply at the next launch):",
+   "Set sessionSampleRate = 0",
+   "Tap N1",
+   "Relaunch the app",
+   "Wait 30 s"
+  ],
+  "trigger": "N1"
+ },
+ {
+  "id": "O6",
+  "section": "options",
+  "title": "Error instrumentation off (exception)",
+  "expect": [
+   "No crash event"
+  ],
+  "steps": [
+   "Set errorInstrumentation = false",
+   "Relaunch the app",
+   "Tap J1",
+   "Relaunch the app",
+   "Wait 30 s"
+  ],
+  "trigger": "J1"
+ },
+ {
+  "id": "O6b",
+  "section": "options",
+  "title": "Error instrumentation off (signal)",
+  "expect": [
+   "No crash event"
+  ],
+  "steps": [
+   "Set errorInstrumentation = false",
+   "Relaunch the app",
+   "Tap N1",
+   "Relaunch the app",
+   "Wait 30 s"
+  ],
+  "trigger": "N1"
+ },
+ {
+  "id": "O7",
+  "section": "options",
+  "title": "tracesExporter set",
+  "expect": [
+   "The tracesExporter gets the crash exactly once, in the relaunch ('[CrashLab] tracesExporter received' in the log)",
+   "The crash arrives"
+  ],
+  "steps": [
+   "Set tracesExporter = true",
+   "Set sdkDebug = true",
+   "Relaunch the app",
+   "Tap N1",
+   "Relaunch the app",
+   "Wait 30 s"
+  ],
+  "trigger": "N1"
+ },
+ {
+  "id": "O8",
+  "section": "options",
+  "title": "React Native and Flutter: engine native crash and JVM crash",
+  "expect": [
+   "Arrive; hybrid beforeSend skipped for crashes"
+  ],
+  "status": "out_of_scope",
+  "note": "Hybrid frameworks; covered by the React Native and Flutter crash labs."
+ },
+ {
+  "id": "T1",
+  "section": "attribution",
+  "title": "App version changed between crash and relaunch",
+  "expect": [
+   "The crash carries version crashlab-old",
+   "The relaunch's own events carry crashlab-new"
+  ],
+  "steps": [
+   "Set appVersion = crashlab-old",
+   "Relaunch the app",
+   "Settings for the relaunch (set them before the crash; they apply at the next launch):",
+   "Set appVersion = crashlab-new",
+   "Tap N1",
+   "Relaunch the app",
+   "Wait 30 s"
+  ],
+  "trigger": "N1"
+ },
+ {
+  "id": "T2",
+  "section": "attribution",
+  "title": "OS upgraded between crash and relaunch",
+  "expect": [
+   "The crash carries the OS version it happened on, not the relaunch's"
+  ],
+  "steps": [
+   "Tap N1 on a device",
+   "Install an iOS update before reopening the app",
+   "Relaunch the app",
+   "Wait 30 s"
+  ],
+  "status": "manual",
+  "requires": "device",
+  "trigger": "N1"
+ },
+ {
+  "id": "T3",
+  "section": "attribution",
+  "title": "Crash after two reported errors",
+  "expect": [
+   "The crash arrives on the relaunch, in the session it happened in",
+   "Its error count is 3: the two errors and the crash itself",
+   "The relaunch's own events start counting from 0 in their own session"
+  ],
+  "steps": [
+   "Tap T3 (crashes 2 s later)",
+   "Relaunch the app",
+   "Wait 30 s"
+  ],
+  "trigger": "T3"
+ },
+ {
+  "id": "X1",
+  "section": "negative",
+  "title": "App killed in the background",
+  "expect": [
+   "No crash or ANR event in either session"
+  ],
+  "steps": [
+   "Relaunch the app",
+   "Press Home",
+   "Terminate the app (simctl terminate)",
+   "Relaunch the app",
+   "Wait 30 s"
+  ],
+  "source": "RN D1"
+ },
+ {
+  "id": "X2",
+  "section": "negative",
+  "title": "exit(0)",
+  "expect": [
+   "No crash or ANR event in either session"
+  ],
+  "trigger": "X2",
+  "source": "RN D3"
+ },
+ {
+  "id": "X3",
+  "section": "negative",
+  "title": "Swipe-away from the app switcher",
+  "expect": [
+   "No crash or ANR event in either session"
+  ],
+  "steps": [
+   "Relaunch the app",
+   "Open the app switcher and swipe the app away",
+   "Relaunch the app",
+   "Wait 30 s"
+  ],
+  "source": "RN D4"
+ },
+ {
+  "id": "X4",
+  "section": "negative",
+  "title": "Normal relaunch",
+  "expect": [
+   "No crash or ANR event in either session"
+  ],
+  "steps": [
+   "Relaunch the app",
+   "Wait 10 s",
+   "Relaunch the app",
+   "Wait 30 s"
+  ]
+ },
+ {
+  "id": "I12",
+  "section": "negative",
+  "title": "Jetsam / memory-pressure kill",
+  "expect": [
+   "No crash or ANR event in either session: iOS gives the app no in-process signal for a jetsam kill"
+  ],
+  "steps": [
+   "Relaunch the app",
+   "Press Home",
+   "Open memory-heavy apps until the system evicts the demo app",
+   "Relaunch the app",
+   "Wait 30 s"
+  ],
+  "requires": "device"
+ },
+ {
+  "id": "M1",
+  "section": "obfuscation",
+  "title": "Obfuscated crash on the main thread",
+  "expect": [
+   "Not run on iOS"
+  ],
+  "status": "out_of_scope",
+  "note": "iOS has no code obfuscation; symbolication is server-side from uploaded dSYMs."
+ },
+ {
+  "id": "M2",
+  "section": "obfuscation",
+  "title": "Obfuscated crash on a background thread",
+  "expect": [
+   "Not run on iOS"
+  ],
+  "status": "out_of_scope",
+  "note": "iOS has no code obfuscation; symbolication is server-side from uploaded dSYMs."
+ },
+ {
+  "id": "M3",
+  "section": "obfuscation",
+  "title": "Obfuscated wrapper and root cause",
+  "expect": [
+   "Not run on iOS"
+  ],
+  "status": "out_of_scope",
+  "note": "iOS has no code obfuscation; symbolication is server-side from uploaded dSYMs."
+ },
+ {
+  "id": "M4",
+  "section": "obfuscation",
+  "title": "Obfuscated crash sent by a later launch",
+  "expect": [
+   "Not run on iOS"
+  ],
+  "status": "out_of_scope",
+  "note": "iOS has no code obfuscation; symbolication is server-side from uploaded dSYMs."
+ },
+ {
+  "id": "M5",
+  "section": "obfuscation",
+  "title": "Fatal ANR in an obfuscated method",
+  "expect": [
+   "Not run on iOS"
+  ],
+  "status": "out_of_scope",
+  "note": "iOS has no code obfuscation; symbolication is server-side from uploaded dSYMs."
+ },
+ {
+  "id": "M6",
+  "section": "obfuscation",
+  "title": "Version with no mapping uploaded (control)",
+  "expect": [
+   "Not run on iOS"
+  ],
+  "status": "out_of_scope",
+  "note": "iOS has no code obfuscation; symbolication is server-side from uploaded dSYMs."
+ },
+ {
+  "id": "M7",
+  "section": "obfuscation",
+  "title": "Obfuscated error reported with reportError (no threads)",
+  "expect": [
+   "Not run on iOS"
+  ],
+  "status": "out_of_scope",
+  "note": "iOS has no code obfuscation; symbolication is server-side from uploaded dSYMs."
+ },
+ {
+  "id": "S1",
+  "section": "native_obfuscation",
+  "title": "Native crash in the app's own stripped .so",
+  "expect": [
+   "Not run on iOS"
+  ],
+  "status": "out_of_scope",
+  "note": "Symbolication on iOS is server-side from uploaded dSYMs; no per-library native symbols."
+ },
+ {
+  "id": "S2",
+  "section": "native_obfuscation",
+  "title": "Native crash on a thread native code started",
+  "expect": [
+   "Not run on iOS"
+  ],
+  "status": "out_of_scope",
+  "note": "Symbolication on iOS is server-side from uploaded dSYMs; no per-library native symbols."
+ },
+ {
+  "id": "S3",
+  "section": "native_obfuscation",
+  "title": "Native crash in a second app library",
+  "expect": [
+   "Not run on iOS"
+  ],
+  "status": "out_of_scope",
+  "note": "Symbolication on iOS is server-side from uploaded dSYMs; no per-library native symbols."
+ },
+ {
+  "id": "S4",
+  "section": "native_obfuscation",
+  "title": "Version with no native symbols uploaded (control)",
+  "expect": [
+   "Not run on iOS"
+  ],
+  "status": "out_of_scope",
+  "note": "Symbolication on iOS is server-side from uploaded dSYMs; no per-library native symbols."
+ }
+]

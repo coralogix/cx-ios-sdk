@@ -7,6 +7,9 @@
 
 import Foundation
 import CoralogixInternal
+#if canImport(CoralogixBootstrap)
+import CoralogixBootstrap
+#endif
 
 #if canImport(UIKit)
 import UIKit
@@ -168,6 +171,41 @@ public class SessionManager {
     internal var samplingRoller: (() -> Bool)?
     private var _isSessionSampledIn: Bool = true
 
+    /// Identity of the live session, in the form crash context records it.
+    struct CrashStamp: Equatable {
+        let sessionId: String
+        let creationDate: TimeInterval
+        let sampledIn: Bool
+    }
+
+    /// Told the live session's identity on every rotation and sampling decision, *under*
+    /// `sessionLock`, so a crash can never be written with an identity that is already gone. The
+    /// one exception to running callbacks outside the lock: it must stay cheap and never block.
+    /// Guarded by `sessionLock`; passed to `init` so it sees the first session too.
+    private var _crashStampObserver: ((CrashStamp) -> Void)?
+
+    /// Detaches the observer, so a manager the SDK has shut down — whose foreground and tap
+    /// observers keep rotating sessions — cannot write its sessions over a newer instance's.
+    func detachCrashStampObserver() {
+        sessionLock.lock()
+        defer { sessionLock.unlock() }
+        _crashStampObserver = nil
+    }
+
+    /// Attaches `observer` when none is attached and tells it the live session at once. For a
+    /// manager not built by `forLaunch()` — one a host app passes in — so its sessions still
+    /// reach the crash context.
+    func attachCrashStampObserverIfNeeded(_ observer: @escaping (CrashStamp) -> Void) {
+        sessionLock.lock()
+        defer { sessionLock.unlock() }
+        guard _crashStampObserver == nil else { return }
+        _crashStampObserver = observer
+        notifyCrashStampLocked()
+    }
+
+    /// The seed the first session adopts instead of minting its own id. Consumed by that rotation.
+    private var pendingLaunchSessionId: String?
+
     /// Whether the current session was sampled in. Per-session: re-rolled on every
     /// rotation. Defaults to `true` until the SDK seeds it (sessions created before the
     /// roller is installed inherit the init-time roll via `setSessionSampledIn`).
@@ -184,11 +222,49 @@ public class SessionManager {
         defer { sessionLock.unlock() }
         _isSessionSampledIn = sampledIn
         persistSessionSampledInLocked(sampledIn)
+        notifyCrashStampLocked()
+    }
+
+    /// PRECONDITION: caller holds `sessionLock`.
+    private func crashStampLocked() -> CrashStamp? {
+        guard let current = sessionMetadata, !current.sessionId.isEmpty else { return nil }
+        return CrashStamp(sessionId: current.sessionId,
+                          creationDate: current.sessionCreationDate,
+                          sampledIn: _isSessionSampledIn)
+    }
+
+    /// The crash stamp as last published, readable without `sessionLock`. The hang watchdog reads
+    /// this: a thread stalled in keychain or crash-context I/O while holding `sessionLock` is
+    /// exactly the hang it must record, so it cannot wait on that lock to learn the session.
+    var lastPublishedCrashStamp: CrashStamp? {
+        crashStampSnapshotLock.lock()
+        defer { crashStampSnapshotLock.unlock() }
+        return _crashStampSnapshot
+    }
+
+    /// A leaf lock: taken alone or inside `sessionLock`, never the other way round.
+    private let crashStampSnapshotLock = NSLock()
+    private var _crashStampSnapshot: CrashStamp?
+
+    /// PRECONDITION: caller holds `sessionLock`.
+    private func notifyCrashStampLocked() {
+        guard let stamp = publishCrashStampSnapshotLocked(), let observer = _crashStampObserver else { return }
+        observer(stamp)
+    }
+
+    /// PRECONDITION: caller holds `sessionLock`.
+    @discardableResult
+    private func publishCrashStampSnapshotLocked() -> CrashStamp? {
+        let stamp = crashStampLocked()
+        crashStampSnapshotLock.lock()
+        _crashStampSnapshot = stamp
+        crashStampSnapshotLock.unlock()
+        return stamp
     }
 
     /// Mirrors the live decision into the keychain next to the session identity, so a
     /// crash captured on the next launch can be attributed with the crashed session's
-    /// decision (`lastLaunchSessionSpanAttributes`) instead of the relaunch's fresh roll.
+    /// decision (`lastLaunchSession`, for a report that names no session) instead of the relaunch's fresh roll.
     /// PRECONDITION: caller holds `sessionLock` (same discipline as the identity writes
     /// in `SessionMetadata.loadPrevSession`, which also run under the lock).
     private func persistSessionSampledInLocked(_ sampledIn: Bool) {
@@ -197,7 +273,30 @@ public class SessionManager {
                                                 value: String(sampledIn))
     }
 
-    public var hasRecording: Bool = false
+    public var hasRecording: Bool = false {
+        didSet {
+            if hasRecording != oldValue { notifyCountersChanged() }
+        }
+    }
+
+    /// Fired after any session counter changes, outside `countersLock`.
+    private var _countersChanged: (() -> Void)?
+    var countersChanged: (() -> Void)? {
+        get {
+            countersLock.lock()
+            defer { countersLock.unlock() }
+            return _countersChanged
+        }
+        set {
+            countersLock.lock()
+            defer { countersLock.unlock() }
+            _countersChanged = newValue
+        }
+    }
+
+    private func notifyCountersChanged() {
+        countersChanged?()
+    }
 
     public var lastSnapshotEventTime: Date?
 
@@ -261,8 +360,21 @@ public class SessionManager {
         self.init(snapshotStore: SessionSnapshotStore())
     }
 
-    internal init(snapshotStore: SessionSnapshotStore) {
+    /// The manager the SDK starts with: its first session adopts the id minted at image load, and
+    /// every session it starts is written into the crash context.
+    @usableFromInline
+    static func forLaunch() -> SessionManager {
+        SessionManager(snapshotStore: SessionSnapshotStore(),
+                       launchSessionId: CRXCrashBootstrap.claimLaunchSession(),
+                       crashStampObserver: CrashContextSession.write)
+    }
+
+    internal init(snapshotStore: SessionSnapshotStore,
+                  launchSessionId: String? = nil,
+                  crashStampObserver: ((CrashStamp) -> Void)? = nil) {
         self.snapshotStore = snapshotStore
+        self.pendingLaunchSessionId = launchSessionId
+        self._crashStampObserver = crashStampObserver
         self.setupSessionMetadata()
         self.lastLaunchSession = self.sessionMetadata.flatMap(LastLaunchSession.init(previousOf:))
         NotificationCenter.default.addObserver(self,
@@ -281,22 +393,35 @@ public class SessionManager {
     
     public func incrementErrorCounter() {
         countersLock.lock()
-        defer { countersLock.unlock() }
         errorCount += 1
+        countersLock.unlock()
+        notifyCountersChanged()
     }
 
     public func decrementErrorCounter() {
         countersLock.lock()
-        defer { countersLock.unlock() }
-        if errorCount > 0 {
+        let changed = errorCount > 0
+        if changed {
             errorCount -= 1
         }
+        countersLock.unlock()
+        if changed { notifyCountersChanged() }
     }
     
     public func incrementClickCounter() {
         countersLock.lock()
-        defer { countersLock.unlock() }
         clickCount += 1
+        countersLock.unlock()
+        notifyCountersChanged()
+    }
+
+    /// The live session id as it stands, without the rotation check `getSessionMetadata` runs.
+    /// nil when there is none, or after shutdown.
+    var currentSessionId: String? {
+        sessionLock.lock()
+        defer { sessionLock.unlock() }
+        guard let id = sessionMetadata?.sessionId, !id.isEmpty else { return nil }
+        return id
     }
     
     /// Whether `sessionId` is the session the counters and snapshot throttle currently describe.
@@ -371,30 +496,6 @@ public class SessionManager {
             defer { sessionLock.unlock() }
             _lastLaunchSession = newValue
         }
-    }
-
-    /// Session attributes for the session that was live when the previous launch ended
-    /// (`lastLaunchSession`).
-    ///
-    /// Crash instrumentation overrides the crash span's `session_id` /
-    /// `session_creation_date` / sampling stamp with these: a crash captured on relaunch
-    /// belongs to the session that actually crashed, not the freshly-created one, and the
-    /// result is the same however many times this launch has rotated since.
-    ///
-    /// An unknown decision — no prior launch on record, or one that predates the persisted
-    /// decision — is stamped sampled-in. Leaving the relaunch's own stamp would let a
-    /// sampled-out relaunch drop the crash and purge it as resolved, and a crash
-    /// misclassified as sampled-out could also be dropped by a customer's beforeSend filter.
-    /// With no record the session identity is left as the relaunch's: there is none to restore.
-    func lastLaunchSessionSpanAttributes() -> [(key: String, value: String)] {
-        guard let last = self.lastLaunchSession else {
-            return [(Keys.spanSessionSampledIn.rawValue, String(true))]
-        }
-        return [
-            (Keys.sessionId.rawValue, last.sessionId),
-            (Keys.sessionCreationDate.rawValue, String(Int(last.creationDate))),
-            (Keys.spanSessionSampledIn.rawValue, String(last.sampledIn ?? true))
-        ]
     }
 
     /// The live session's id and sampling decision, read together after any rotation that is due, so the
@@ -479,6 +580,7 @@ public class SessionManager {
         // be consumed again, so it would otherwise outlive the teardown still holding
         // the user's identity.
         self._pendingSnapshotTrigger = nil
+        notifyCrashStampLocked()
         sessionLock.unlock()
         self.reset()
     }
@@ -489,6 +591,7 @@ public class SessionManager {
         self.clickCount = 0
         countersLock.unlock()
         self.hasRecording = false
+        notifyCountersChanged()
     }
     
     @objc private func appDidBecomeActiveNotification(notification: Notification) {
@@ -546,7 +649,9 @@ public class SessionManager {
             }
         }
         self.prevSessionMetadata = self.sessionMetadata
-        self.sessionMetadata = SessionMetadata(sessionId: UUID().uuidString.lowercased(),
+        let newSessionId = self.pendingLaunchSessionId ?? UUID().uuidString.lowercased()
+        self.pendingLaunchSessionId = nil
+        self.sessionMetadata = SessionMetadata(sessionId: newSessionId,
                                                sessionCreationDate: Date().timeIntervalSince1970,
                                                using: KeychainManager())
         // Roll the new session's sampling decision under the same lock acquisition that
@@ -555,6 +660,11 @@ public class SessionManager {
         // startup installs it) keeps the seeded/default value.
         if let samplingRoller = self.samplingRoller {
             self._isSessionSampledIn = samplingRoller()
+        }
+        // Published before the keychain write below, which can stall: a hang there belongs to
+        // the session this rotation has already started.
+        publishCrashStampSnapshotLocked()
+        if self.samplingRoller != nil {
             persistSessionSampledInLocked(self._isSessionSampledIn)
         }
         // Reset snapshot-throttle so the fresh session can emit its first
@@ -576,6 +686,7 @@ public class SessionManager {
         // nil throttle above already guarantees the new session's first qualifying
         // event emits a snapshot carrying the current user context.
         self._pendingSnapshotTrigger = nil
+        notifyCrashStampLocked()
 
         return RotationPendingCallbacks(
             endedCallback: endedCb,

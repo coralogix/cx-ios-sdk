@@ -127,35 +127,11 @@ extension CoralogixRum {
                                      customAttributes: [String: Any]? = nil,
                                      labels: [String: Any]? = nil) {
         guard isErrorsEnabled else { return }
-        var persistedEventId: String?
-        if isCrash {
-            // Persisted BEFORE the span is created: the process is usually about to
-            // die, and only a disk write is guaranteed to finish in time. The stored
-            // copy is removed once an upload is confirmed — or re-sent next launch.
-            persistedEventId = self.persistCrashEvent(message: message,
-                                                      stackTraceJson: stackTraceJson,
-                                                      errorType: errorType,
-                                                      arch: arch,
-                                                      buildId: buildId,
-                                                      stackTraceType: stackTraceType,
-                                                      customAttributes: customAttributes,
-                                                      labels: labels)
-        }
-        // A crash report may precede process death — don't leave the event in the batch queue
-        // (up to 2s) where it would die with the process. Sequenced on the span actually having
-        // ended, because a live crash now waits for its screenshot: flushing before that would
-        // miss the very event it was called for. If the process does die first, the copy
-        // persisted above is re-sent next launch, which is the same net as a failed flush.
-        // Remove only THIS event, and only once ITS OWN upload is confirmed: the store may hold
-        // an unconfirmed backlog from a previous launch, and an earlier crash's success must not
-        // delete a later crash that failed.
-        let flushCrash: (() -> Void)? = isCrash ? { [weak self] in
-            self?.flush { [weak self] in
-                guard let self, let persistedEventId,
-                      self.coralogixExporter?.didConfirmCrashUpload(id: persistedEventId) == true else { return }
-                self.crashEventStore.remove(ids: [persistedEventId])
-            }
-        } : nil
+        // A crash report may precede process death, so it is flushed rather than left in the batch
+        // queue (up to 2s) to die with the process. Sequenced on the span having ended, since a live
+        // crash waits for its screenshot. Nothing is kept on disk: as on Android, a hybrid crash
+        // whose upload fails is not re-sent.
+        let flushCrash: (() -> Void)? = isCrash ? { [weak self] in self?.flush() } : nil
 
         self.writeError(
             domain: "",
@@ -168,72 +144,8 @@ extension CoralogixRum {
             stackTraceType: stackTraceType,
             customAttributes: customAttributes,
             labels: labels,
-            crashEventId: persistedEventId,
             then: flushCrash
         )
-    }
-
-    private func persistCrashEvent(message: String,
-                                   stackTraceJson: String?,
-                                   errorType: String?,
-                                   arch: String?,
-                                   buildId: String?,
-                                   stackTraceType: String?,
-                                   customAttributes: [String: Any]?,
-                                   labels: [String: Any]?) -> String {
-        var event: [String: Any] = [
-            Keys.errorMessage.rawValue: message,
-            Keys.crashTimestamp.rawValue: String(Date().timeIntervalSince1970.milliseconds)
-        ]
-        if let stackTraceJson { event[Keys.stackTrace.rawValue] = stackTraceJson }
-        if let errorType { event[Keys.errorType.rawValue] = errorType }
-        if let arch { event[Keys.arch.rawValue] = arch }
-        if let buildId { event[Keys.buildId.rawValue] = buildId }
-        if let stackTraceType { event[Keys.stackTraceType.rawValue] = stackTraceType }
-        // Stored as a JSON string (not the raw dictionary): callers can pass values
-        // JSONSerialization rejects (e.g. Date), which would abort the whole store
-        // write and silently drop the crash backup.
-        if let json = Helper.jsonAttributeString(dict: customAttributes) {
-            event[Keys.data.rawValue] = json
-        }
-        if let json = Helper.jsonAttributeString(dict: labels) {
-            event[Keys.customLabels.rawValue] = json
-        }
-        return crashEventStore.append(event)
-    }
-
-    /// Re-emits crash events persisted by a previous process whose upload was never
-    /// confirmed — the hybrid analogue of PLCrashReporter's pending report. Emits
-    /// spans only; upload confirmation and store clearing happen in
-    /// `completeCrashRecovery()` once init has finished. The re-emitted event keeps
-    /// the original `crash_timestamp`; session attribution follows the same
-    /// prev-session stitching as PLCR crash reports.
-    internal func resendPendingStoredCrashEvents() {
-        let pending = crashEventStore.loadAll()
-        guard !pending.isEmpty else { return }
-        for event in pending {
-            self.writeError(
-                domain: "",
-                message: event[Keys.errorMessage.rawValue] as? String ?? "",
-                stackTraceJson: event[Keys.stackTrace.rawValue] as? String,
-                errorType: event[Keys.errorType.rawValue] as? String,
-                isCrash: true,
-                arch: event[Keys.arch.rawValue] as? String,
-                buildId: event[Keys.buildId.rawValue] as? String,
-                stackTraceType: event[Keys.stackTraceType.rawValue] as? String,
-                customAttributes: (event[Keys.data.rawValue] as? String)
-                    .flatMap { Helper.convertJsonStringToDict(jsonString: $0) },
-                labels: (event[Keys.customLabels.rawValue] as? String)
-                    .flatMap { Helper.convertJsonStringToDict(jsonString: $0) },
-                crashTimestamp: event[Keys.crashTimestamp.rawValue] as? String,
-                crashEventId: event[CrashEventStore.eventIdKey] as? String,
-                isRecoveredEvent: true
-            )
-        }
-        let resentIds = Set(pending.compactMap { $0[CrashEventStore.eventIdKey] as? String })
-        crashRecoveryLock.lock()
-        self.pendingRecoveryCrashEventIds = resentIds
-        crashRecoveryLock.unlock()
     }
 
     func logWith(severity: CoralogixLogSeverity,
@@ -320,34 +232,12 @@ extension CoralogixRum {
                             stackTraceType: String? = nil,
                             customAttributes: [String: Any]? = nil,
                             labels: [String: Any]? = nil,
-                            crashTimestamp: String? = nil,
-                            crashEventId: String? = nil,
-                            isRecoveredEvent: Bool = false,
                             then: (() -> Void)? = nil) {
-        // `crashTimestamp` is set only for events recovered from CrashEventStore on
-        // the launch after a crash. Anchor those to the original crash time and to
-        // the session that was live when the process died — the same attribution
-        // PLCrashReporter reports get in processPendingCrashReport. Without it the
-        // event would surface under the relaunch time and the recovery session.
-        let recoveredCrashDate = crashTimestamp
-            .flatMap { Double($0) }
-            .map { Date(timeIntervalSince1970: $0 / 1000.0) }
-        let span = makeSpan(event: .error, source: .console, severity: .error, startTime: recoveredCrashDate)
-        if recoveredCrashDate != nil {
-            self.overrideSessionForCrashedSession(on: span)
-        }
+        let span = makeSpan(event: .error, source: .console, severity: .error)
         span.setAttribute(key: Keys.domain.rawValue, value: domain)
         if let code { span.setAttribute(key: Keys.code.rawValue, value: code) }
         span.setAttribute(key: Keys.errorMessage.rawValue, value: message)
         span.setAttribute(key: Keys.isCrash.rawValue, value: isCrash)
-        // Correlation id for per-event upload confirmation (read by the exporter,
-        // not mapped into cx_rum, so it stays off the wire).
-        if let crashEventId {
-            span.setAttribute(key: Keys.crashEventId.rawValue, value: crashEventId)
-        }
-        if let crashTimestamp, !crashTimestamp.isEmpty {
-            span.setAttribute(key: Keys.crashTimestamp.rawValue, value: crashTimestamp)
-        }
         if let errorType { span.setAttribute(key: Keys.errorType.rawValue, value: errorType) }
         if let stackTraceJson { span.setAttribute(key: Keys.stackTrace.rawValue, value: stackTraceJson) }
         if let userInfo, !userInfo.isEmpty {
@@ -365,32 +255,8 @@ extension CoralogixRum {
         // Note: hybrid error paths (Flutter/RN) intentionally omit the code attribute — there is
         // no meaningful error code in these contexts. Native paths pass an explicit code when relevant.
         let endSpan = {
-            if let recoveredCrashDate {
-                span.end(time: recoveredCrashDate)
-            } else {
-                span.end()
-            }
+            span.end()
             then?()
-        }
-
-        // An event replayed from CrashEventStore takes no screenshot. It is re-emitted on the
-        // launch *after* the crash, so the only frame available shows this launch's screen —
-        // attached to an event dated to the previous session, it would be actively misleading.
-        //
-        // Asked as its own question rather than inferred from `recoveredCrashDate`. That date
-        // answers *when* to anchor the span, and it is nil whenever the persisted timestamp is
-        // missing, empty or unparsable — the store keeps any record whose outer JSON is an array,
-        // so a malformed one would have replayed and captured the relaunch screen.
-        //
-        // `isCrash` is not this question either. It is a caller-supplied flag on a public entry
-        // point, and the documented hybrid path — an RN or Flutter host reporting a JS or Dart
-        // fatal — passes it while the native process carries on. Skipping there would throw away
-        // the frame from the moment of failure, which for a hybrid fatal is the most useful
-        // artifact there is. The force-flush this guard once existed to protect is sequenced on
-        // `then` instead, so the span is in the batch before the flush runs either way.
-        guard !isRecoveredEvent else {
-            endSpan()
-            return
         }
 
         recordScreenshotForSpan(on: span) { _ in endSpan() }

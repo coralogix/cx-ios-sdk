@@ -23,6 +23,18 @@ public enum Keys: String {
     case nativeVersion = "native_version"
     case sessionId = "session_id"
     case sessionCreationDate = "session_creation_date"
+    // Crash context written into each PLCrashReporter report; mirrors CRXCrashContext.h.
+    case crashContextVersion = "v"
+    case crashContextSession = "session"
+    case crashContextSessionCreationTime = "session_creation_time"
+    case crashContextCxx = "cxx"
+    case crashContextCxxWhat = "what"
+    // Span attributes a recovered crash carries: the app and OS it crashed under, which the
+    // exporter reports instead of the relaunch's. Read by the exporter, not sent as such.
+    case crashedAppName = "crashed_app_name"
+    case crashedAppVersion = "crashed_app_version"
+    case crashedOsVersion = "crashed_os_version"
+    case crashedSnapshot = "crashed_snapshot"
     // Span attribute stamped at creation alongside session_id: the sampling decision
     // belongs to the session the span was created in, and reading the live flag at
     // export time would mis-attribute spans buffered across a session rotation
@@ -266,6 +278,10 @@ public enum Keys: String {
     case queueMediaInput = "com.coralogix.mediainput"
     case queueSpanProcessingQueue = "com.coralogix.spanProcessingQueue"
     case queueViewManagerQueue = "com.coralogix.viewManagerQueue"
+    case queueSessionRecordQueue = "com.coralogix.sessionRecordQueue"
+    case queueCrashDeliveryQueue = "com.coralogix.crashDeliveryQueue"
+    case queueStoredCrashUploadQueue = "com.coralogix.storedCrashUploadQueue"
+    case queueANRDetectorQueue = "com.coralogix.anrDetectorQueue"
     case queueSlowFrozenReporterQueue = "com.coralogix.vitals.slowfrozen.reporter"
     case queueUserAgentQueue = "com.coralogix.userAgentQueue"
     case undefined = ""
@@ -350,8 +366,13 @@ public enum Keys: String {
 /// attribute names — see the CLAUDE.md rule that all attribute keys live
 /// in `Keys.swift`. Values that flow into attribute slots live here.
 public enum WireValues: String {
-    /// `error_message` value emitted for ANR-derived error events.
-    case anrErrorMessage = "Application Not Responding"
+    /// `error_message` of an ANR the watchdog detects: the Android SDK's text, byte for byte, so
+    /// ANRs group the same way on both platforms. It does not describe the iOS threshold, as
+    /// Android's does not describe its own gate.
+    case anrErrorMessage = "Application Not Responding for at least 1000 ms."
+    /// `error_message` of a hang the process ended during, reported by the next launch: Android's
+    /// fatal-ANR text, without the system description iOS has no source for.
+    case fatalAnrErrorMessage = "Application Not Responding"
     /// `error_type` discriminator emitted for ANR-derived error events.
     case anrErrorType = "ANR"
 }

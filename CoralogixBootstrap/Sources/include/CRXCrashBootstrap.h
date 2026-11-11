@@ -27,7 +27,9 @@ NS_ASSUME_NONNULL_BEGIN
 /// because SPM targets are single-language.
 ///
 /// A host app that needs to opt out can set `CoralogixDisableEarlyCrashHandler` to `YES` in its
-/// Info.plist; see `disabledByHostApp`.
+/// Info.plist; see `disabledByHostApp`. The key covers PLCrashReporter's signal handlers only:
+/// the C++ terminate handler (`CRXTerminateHandler`) is installed from `+load` either way, and
+/// records nothing until a reporter of ours is enabled.
 @interface CRXCrashBootstrap : NSObject
 
 /// The reporter enabled during `+load`, or `nil` if enabling failed (see `enableError`).
@@ -46,6 +48,31 @@ NS_ASSUME_NONNULL_BEGIN
 /// crash reporter the host configures earlier can displace our handler again, which is the
 /// failure this target exists to prevent.
 @property (class, nonatomic, readonly) BOOL disabledByHostApp;
+
+/// Returns the session id minted at image load, exactly once per process; `nil` afterwards, or
+/// when `+load` never ran. The first session the SDK starts adopts it, so a crash report written
+/// from load onwards already names that session. Minted even when the host app opted out, since
+/// it costs nothing and crash context is still written once the fallback reporter is enabled.
++ (nullable NSString *)claimLaunchSession;
+
+/// Where the SDK keeps its own copy of each crash report, one file per crash
+/// (`<report uuid>.plcrash`). PLCrashReporter has a single pending-report slot, so a crash the
+/// next launch could not deliver would be overwritten by the one after it; the copies are not.
+@property (class, nonatomic, readonly, nullable) NSURL *crashCopiesDirectory;
+
+/// Copies `reporter`'s pending report into `directory`, leaving PLCrashReporter's slot as it is.
+/// Copying the same report again replaces its copy. Returns whether a report was copied.
++ (BOOL)copyPendingReportOf:(PLCrashReporter *)reporter toDirectory:(NSURL *)directory;
+
+/// Moves `reporter`'s pending report into `directory` and empties PLCrashReporter's slot.
+/// The slot is emptied only once the copy is written, so a copy that fails — the file system is
+/// still locked by data protection during prewarm, say — leaves the report for a later attempt.
+/// Returns whether a report was moved.
++ (BOOL)movePendingReportOf:(PLCrashReporter *)reporter toDirectory:(NSURL *)directory;
+
+/// Makes the launch session claimable again. Tests only: the first test to build the SDK would
+/// otherwise consume it for the whole test process.
++ (void)resetLaunchSessionClaimForTesting;
 
 @end
 

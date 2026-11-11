@@ -85,6 +85,12 @@ final class MainViewController: UITableViewController {
             subtitle: "startTimeMeasure / endTimeMeasure with labels, quick presets, captured spans",
             systemImageName: "timer",
             key: .timeMeasurement
+        ),
+        .init(
+            title: "Crash Lab",
+            subtitle: "Every crash, hang and delivery case, with launch settings",
+            systemImageName: "flame",
+            key: .crashLab
         )
     ]
 
@@ -306,6 +312,8 @@ final class MainViewController: UITableViewController {
             vc = LogSamplingDecouplingViewController()
         case .timeMeasurement:
             vc = TimeMeasurementViewController()
+        case .crashLab:
+            vc = CrashLabViewController()
         default:
             showToast("Not implemented for this menu item")
             return

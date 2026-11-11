@@ -166,12 +166,125 @@ extension SessionManager {
 }
 
 extension SessionSnapshotStore {
+    /// A directory of session records of its own, as an app's fresh install has.
+    static func temporaryDirectory() -> URL {
+        FileManager.default.temporaryDirectory.appendingPathComponent("SessionSnapshots-\(UUID().uuidString)", isDirectory: true)
+    }
+
+    /// A store over records no other test sees, as launch `launchId` reads them.
+    static func temporary(directory: URL = temporaryDirectory(),
+                          launchId: String = "this-launch",
+                          keychain: MockKeyChain = MockKeyChain()) -> SessionSnapshotStore {
+        SessionSnapshotStore(keychain: keychain, directory: directory, launchId: launchId)
+    }
+
     /// The store as the launch after one that persisted `record` sees it.
     static func relaunched(after record: SessionSnapshotRecord?,
-                           keychain: MockKeyChain = MockKeyChain()) -> SessionSnapshotStore {
+                           directory: URL = temporaryDirectory()) -> SessionSnapshotStore {
         if let record {
-            SessionSnapshotStore(keychain: keychain).persist(record)
+            temporary(directory: directory, launchId: "previous-launch").persist(record)
         }
-        return SessionSnapshotStore(keychain: keychain)
+        return temporary(directory: directory, launchId: "relaunch")
+    }
+}
+
+extension StoredCrashRecord {
+    /// A stored crash of session `sessionId` whose counters are `counters`.
+    static func fixture(crashId: String = "crash-id",
+                        sessionId: String = "crashed",
+                        sampledIn: Bool? = true,
+                        crashTime: Date = Date(timeIntervalSince1970: 1_700_000_000),
+                        failedUploads: Int = 0,
+                        counters: SessionSnapshotRecord? = nil) -> StoredCrashRecord {
+        StoredCrashRecord(crashId: crashId,
+                          kind: .native,
+                          crashTime: crashTime,
+                          failedUploads: failedUploads,
+                          session: .init(id: sessionId, creationDate: 1_699_999_000, sampledIn: sampledIn),
+                          counters: counters ?? SessionSnapshotRecord(sessionId: sessionId, errorCount: 0, viewCount: 0,
+                                                                      actionCount: 0, hasRecording: false))
+    }
+}
+
+extension CrashDeliveryStore {
+    /// A store in a directory of its own, so a test never touches the app's real crash files.
+    static func temporary() -> CrashDeliveryStore {
+        CrashDeliveryStore(directory: FileManager.default.temporaryDirectory
+            .appendingPathComponent("CrashDeliveryStore-\(UUID().uuidString)", isDirectory: true))
+    }
+}
+
+/// A clock that moves only when a test moves it.
+final class ManualDeliveryClock: DeliveryClock {
+    private let lock = NSLock()
+    private var current: Date
+    private var pending: [(date: Date, timer: DeliveryTimer, work: () -> Void)] = []
+
+    init(start: Date = Date()) {
+        self.current = start
+    }
+
+    func now() -> Date {
+        lock.lock(); defer { lock.unlock() }
+        return current
+    }
+
+    func schedule(at date: Date, _ work: @escaping () -> Void) -> DeliveryTimer {
+        let timer = DeliveryTimer()
+        lock.lock(); defer { lock.unlock() }
+        pending.append((date, timer, work))
+        return timer
+    }
+
+    /// When the next timer still armed fires.
+    var nextDate: Date? {
+        lock.lock(); defer { lock.unlock() }
+        return pending.filter { !$0.timer.isCancelled }.map(\.date).min()
+    }
+
+    /// Fires, in order, every timer due by `date`.
+    func advance(to date: Date) {
+        while true {
+            lock.lock()
+            pending.removeAll { $0.timer.isCancelled }
+            guard let index = pending.indices.filter({ pending[$0].date <= date })
+                .min(by: { pending[$0].date < pending[$1].date }) else {
+                current = max(current, date)
+                lock.unlock()
+                return
+            }
+            let due = pending.remove(at: index)
+            current = max(current, due.date)
+            lock.unlock()
+            due.work()
+        }
+    }
+}
+
+/// Background tasks that never expire on their own; a test expires them.
+final class FakeBackgroundTasks: BackgroundTaskRunning {
+    private let lock = NSLock()
+    private var expirations: [() -> Void] = []
+    private(set) var begun = 0
+    private(set) var ended = 0
+
+    func begin(name: String, expiration: @escaping () -> Void) -> BackgroundTask {
+        lock.lock(); defer { lock.unlock() }
+        begun += 1
+        let task = BackgroundTask { [weak self] in
+            guard let self = self else { return }
+            self.lock.lock(); self.ended += 1; self.lock.unlock()
+        }
+        expirations.append { expiration(); task.end() }
+        return task
+    }
+
+    /// The system taking the background time back.
+    func expireAll() {
+        lock.lock()
+        let all = expirations
+        expirations = []
+        lock.unlock()
+        all.forEach { $0() }
     }
 }

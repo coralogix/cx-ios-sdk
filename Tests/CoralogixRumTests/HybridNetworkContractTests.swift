@@ -228,9 +228,9 @@ final class HybridNetworkContractTests: XCTestCase {
     /// Test-only `SpanUploading` capturing the final payload handed to upload (no network I/O).
     private final class CapturingUploader: SpanUploading {
         private(set) var uploaded: [[String: Any]]?
-        func upload(_ spans: [[String: Any]], endPoint: String) -> SpanExporterResultCode {
+        func upload(_ spans: [[String: Any]], endPoint: String, kind: SpanUploadKind) -> SpanUploadResult {
             uploaded = spans
-            return .success
+            return .delivered
         }
     }
 

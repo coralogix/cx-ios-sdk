@@ -60,18 +60,9 @@ extension CoralogixRum {
             self.makeSpan(type: .type, value: .appDidEnterBackgroundNotification)
         }
 
-        // Request background time to ensure flush/export completes before app suspension.
-        // The expiration handler ensures we don't leak background task identifiers.
-        var backgroundTaskId: UIBackgroundTaskIdentifier = .invalid
-        backgroundTaskId = UIApplication.shared.beginBackgroundTask(expirationHandler: {
-            UIApplication.shared.endBackgroundTask(backgroundTaskId)
-            backgroundTaskId = .invalid
-        })
-
-        self.flush {
-            UIApplication.shared.endBackgroundTask(backgroundTaskId)
-            backgroundTaskId = .invalid
-        }
+        // Background time so the flush completes before the app is suspended.
+        let task = self.backgroundTasks.begin(name: "CoralogixFlush", expiration: {})
+        self.flush { task.end() }
     }
     
     @objc private func appWillTerminateNotification(notification: Notification) {

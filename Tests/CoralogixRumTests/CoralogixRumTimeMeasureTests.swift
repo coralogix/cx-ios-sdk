@@ -171,11 +171,11 @@ private final class TimeMeasureMockUploader: SpanUploading {
     private let lock = NSLock()
     private var batches: [[[String: Any]]] = []
 
-    func upload(_ spans: [[String: Any]], endPoint: String) -> SpanExporterResultCode {
+    func upload(_ spans: [[String: Any]], endPoint: String, kind: SpanUploadKind) -> SpanUploadResult {
         lock.lock()
         batches.append(spans)
         lock.unlock()
-        return .success
+        return .delivered
     }
 
     var allSpans: [[String: Any]] {

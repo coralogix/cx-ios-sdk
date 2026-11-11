@@ -225,7 +225,7 @@ final class WireFormatTests: XCTestCase {
     func testANRDetector_handleANR_pushesViaEventReporter_whenWired() throws {
         var captured: TelemetryEvent?
         let reporter = RecordingEventReporter { captured = $0 }
-        let detector = ANRDetector(eventReporter: reporter)
+        let detector = ANRDetector(captureThreads: { nil }, eventReporter: reporter)
 
         detector.handleANR()
 
@@ -235,17 +235,10 @@ final class WireFormatTests: XCTestCase {
         XCTAssertEqual(event.errorType, WireValues.anrErrorType.rawValue)
     }
 
-    func testANRDetector_handleANR_fallsBackToClosure_whenEventReporterNil() {
-        // Backward-compat path: when no protocol sink is wired, handleANR
-        // still routes through the legacy closure (out of scope to remove
-        // per CX-43340; covered by 1.5b).
-        var closureFired = false
-        let detector = ANRDetector()
-        detector.handleANRClosure = { closureFired = true }
-
-        detector.handleANR()
-
-        XCTAssertTrue(closureFired, "Closure path must still fire when eventReporter is nil")
+    /// Android's watchdog text, byte for byte: ANRs group the same way on both platforms.
+    func testANRMessage_isAndroidsWatchdogText() {
+        XCTAssertEqual(WireValues.anrErrorMessage.rawValue, "Application Not Responding for at least 1000 ms.")
+        XCTAssertEqual(WireValues.anrErrorType.rawValue, "ANR")
     }
 
     // MARK: - Cold / Warm / MetricKit single-shot payload pins
@@ -339,6 +332,7 @@ final class WireFormatTests: XCTestCase {
         }
 
         manager.startANRMonitoring()
+        defer { manager.removeObservers() }
         manager.anrDetector?.handleANR()
 
         let event = try XCTUnwrap(captured, "ANRDetector did not push ANRErrorEvent through eventReporter")
