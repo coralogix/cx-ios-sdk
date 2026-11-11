@@ -114,12 +114,15 @@ final class ANRDetectorTests: XCTestCase {
     /// Blocks the stand-in main queue until `done` holds (or `timeout` passes), then returns once it
     /// has answered again. For hangs that must last until the watchdog has acted, however slowly a
     /// loaded runner schedules it.
-    private func hang(until done: @escaping () -> Bool, timeout: TimeInterval = 15) {
+    private func hang(until done: @escaping () -> Bool, timeout: TimeInterval = 15,
+                      file: StaticString = #filePath, line: UInt = #line) {
         main.async {
             let end = Date(timeIntervalSinceNow: timeout)
             while !done() && Date() < end { Thread.sleep(forTimeInterval: 0.01) }
         }
         main.sync {}
+        XCTAssertTrue(done(), "the hang ended at its \(Int(timeout)) s cap without the watchdog acting",
+                      file: file, line: line)
     }
 
     /// Lets the detector run for `seconds` with the main queue free.
@@ -160,12 +163,13 @@ final class ANRDetectorTests: XCTestCase {
 
         // Each hang lasts until its ANR is out, so a starved watchdog cannot shorten one below the
         // threshold; the answer in between re-arms detection.
-        hang(until: { self.log.events.count == 1 })
+        hang(until: { self.log.events.count >= 1 })
         idle(for: 0.6)
-        hang(until: { self.log.events.count == 2 })
+        XCTAssertEqual(log.events.count, 1, "one ANR for the first hang")
+        hang(until: { self.log.events.count >= 2 })
         idle(for: 0.4)
 
-        XCTAssertEqual(log.events.count, 2)
+        XCTAssertEqual(log.events.count, 2, "one ANR for the second hang")
     }
 
     /// The timer it replaced was scheduled on the run loop of the thread that started it, so
@@ -194,7 +198,13 @@ final class ANRDetectorTests: XCTestCase {
         let debugger = self.debugger!
         debugger.value = true
         detector = ANRDetector(threshold: threshold, pollInterval: poll, mainQueue: main,
-                               isDebuggerAttached: { asked.value = true; return debugger.value },
+                               isDebuggerAttached: {
+                                   // Read before `asked` is published: the hang detaches the
+                                   // debugger as soon as it sees `asked`.
+                                   let attached = debugger.value
+                                   asked.value = true
+                                   return attached
+                               },
                                captureThreads: { "threads-at-detection" },
                                notificationCenter: center, eventReporter: log)
         detector.startMonitoring()
