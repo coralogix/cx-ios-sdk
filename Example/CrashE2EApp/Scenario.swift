@@ -13,7 +13,9 @@ import Foundation
 struct Scenario: Codable {
     /// Where the SDK sends: the test's endpoint.
     var proxyUrl: String?
-    /// `initialize`, `crashAfterInit:<kind>`, `crashBeforeInit:<kind>` or `withoutSdk`.
+    /// `initialize`, `initializeOffMain` (on a background queue, as React Native does),
+    /// `crashAfterInit:<kind>`, `crashBeforeInit:<kind>`, `hangAfterInit` (the main thread never
+    /// answers again, from before the first screen is up) or `withoutSdk`.
     var appStart: String = "initialize"
     /// Run in order once the first screen is up: a crash kind (`crash:<kind>`), `hang:<ms>`,
     /// `hangForever`, `rotate`, `view:Second`, `clicks:<n>`, `hybridCrash`, `wait:<ms>`.

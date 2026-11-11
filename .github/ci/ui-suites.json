@@ -205,7 +205,7 @@
       "name": "component \u00b7 crash options & ANR",
       "tier": "component",
       "scheme": "CrashE2E",
-      "seconds": 360,
+      "seconds": 600,
       "tests": [
         "CrashE2EUITests/CrashOptionsUITests/testCrashBeforeSendEdits_isSentAsEdited_once",
         "CrashE2EUITests/CrashOptionsUITests/testCrashSentTwice_reachesTheAppsTracesExporterOnce",
@@ -217,11 +217,16 @@
         "CrashE2EUITests/CrashOptionsUITests/testHybridCrash_isSentLive_withoutTheHybridBeforeSend",
         "CrashE2EUITests/AnrUITests/testFatalHang_startsATraceOfItsOwn",
         "CrashE2EUITests/AnrUITests/testFourSecondHang_isNotReported",
+        "CrashE2EUITests/AnrUITests/testHangFromTheColdLaunch_theLaunchEndsDuring_isSentOnceByTheNextLaunch",
         "CrashE2EUITests/AnrUITests/testHangIgnoreErrorsNames_isNotSent_whenTheLaunchEndsDuringIt",
         "CrashE2EUITests/AnrUITests/testHangInASampledInSession_isSentByASampledOutLaunch_whenTheLaunchEndsDuringIt",
         "CrashE2EUITests/AnrUITests/testHangInASampledOutSession_isNotSent_whenTheLaunchEndsDuringIt",
+        "CrashE2EUITests/AnrUITests/testHangInAnAppThatSetsUpTheSdkOffTheMainThread_isOneAnr_withEveryThread",
         "CrashE2EUITests/AnrUITests/testHangTheAppRecoversFrom_isSentOnce_byItsOwnEvent_withAndroidsMessage_andEveryThread",
         "CrashE2EUITests/AnrUITests/testHangWithAnrsSwitchedOff_isNotSent_whenTheLaunchEndsDuringIt",
+        "CrashE2EUITests/AnrUITests/testHangWithErrorsSwitchedOff_isSentByItsOwnEvent",
+        "CrashE2EUITests/AnrUITests/testHangWithErrorsSwitchedOff_isSentByTheNextLaunch_whenTheLaunchEndsDuringIt",
+        "CrashE2EUITests/AnrUITests/testReturningFromTheBackground_isNotAnAnr_butAHangAfterIt_isOne",
         "CrashE2EUITests/AnrUITests/testTwoHangs_areTwoAnrs"
       ]
     },

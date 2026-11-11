@@ -54,6 +54,12 @@ final class HomeViewController: E2EScreen {
         forwarded = label("e2e.forwarded")
         globalTrace = label("e2e.globalTrace")
         ready = label("e2e.ready")
+        let hang = UIButton(type: .system)
+        hang.setTitle("Hang 8 s", for: .normal)
+        hang.accessibilityIdentifier = "e2e.hang"
+        hang.addAction(UIAction { _ in Thread.sleep(forTimeInterval: 8) }, for: .touchUpInside)
+        stack.addArrangedSubview(hang)
+        // Last in the stack: the `clicks` action taps the last view.
         let tap = UIButton(type: .system)
         tap.setTitle("Tap me", for: .normal)
         tap.accessibilityIdentifier = "e2e.tap"

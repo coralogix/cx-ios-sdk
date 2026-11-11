@@ -30,11 +30,24 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         if start[0] == "crashBeforeInit" {
             E2ECrashes.crash(start.count > 1 ? start[1] : "signal")
         }
-        if start[0] != "withoutSdk" {
+        switch start[0] {
+        case "withoutSdk":
+            break
+        case "initializeOffMain":
+            // As React Native does: the SDK is set up on a background queue while launch goes on.
+            DispatchQueue.global().async {
+                let sdk = Self.initialize(scenario)
+                DispatchQueue.main.async { Self.sdk = sdk }
+            }
+        default:
             Self.sdk = Self.initialize(scenario)
         }
         if start[0] == "crashAfterInit" {
             E2ECrashes.crash(start.count > 1 ? start[1] : "signal")
+        }
+        if start[0] == "hangAfterInit" {
+            // On the launch's first run loop turn: before the first screen is up, never ending.
+            DispatchQueue.main.async { while true { Thread.sleep(forTimeInterval: 60) } }
         }
 
         let window = UIWindow(frame: UIScreen.main.bounds)

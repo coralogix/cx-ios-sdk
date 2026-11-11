@@ -67,5 +67,6 @@ final class CrashSendScheduleUITests: CrashE2ETestCase {
         awaitCrashes(2, timeout: 45)
         let arrivals = endpoint.crashRequests.map(\.arrival)
         XCTAssertEqual(arrivals[1].timeIntervalSince(arrivals[0]), 30, accuracy: 5)
+        XCTAssertTrue(anrs.isEmpty, "time in the background is not a hang")
     }
 }
