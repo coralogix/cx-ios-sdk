@@ -15,10 +15,15 @@ class CrashE2ETestCase: XCTestCase {
 
     override func setUpWithError() throws {
         continueAfterFailure = false
-        // The app crashes on purpose; XCTest reports that as an issue. Only that issue is expected.
+        // The app crashes on purpose; XCTest reports that as an issue. Only that issue is expected,
+        // in either of its forms: an app that dies while XCTest is still bringing it up is reported
+        // as a background assertion XCTest could not get for it, rather than as a crash.
         let crashes = XCTExpectedFailure.Options()
         crashes.isStrict = false
-        crashes.issueMatcher = { $0.compactDescription.contains("crashed") }
+        crashes.issueMatcher = { issue in
+            let description = issue.compactDescription
+            return description.contains("crashed") || description.contains("Failed to get background assertion for target app")
+        }
         XCTExpectFailure("the app under test crashes on purpose", options: crashes)
         endpoint = try Endpoint()
         app = XCUIApplication()
