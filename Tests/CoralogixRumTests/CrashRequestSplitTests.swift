@@ -78,7 +78,7 @@ final class CrashRequestSplitTests: XCTestCase {
     private static let rejected413 = SpanUploadResult(disposition: .permanentReject, httpStatus: 413, retryAfter: nil, countsAsFailedUpload: false)
     private static let serverError = SpanUploadResult(disposition: .retryable, httpStatus: 503, retryAfter: nil, countsAsFailedUpload: true)
 
-    private func makeCrashSpan(id: String) -> SpanData {
+    private func makeCrashSpan(id: String, spanId: SpanId = SpanId.random()) -> SpanData {
         let attributes: [String: AttributeValue] = [
             Keys.eventType.rawValue: AttributeValue(CoralogixEventType.error.rawValue),
             Keys.severity.rawValue: AttributeValue("5"),
@@ -90,7 +90,7 @@ final class CrashRequestSplitTests: XCTestCase {
             Keys.isCrash.rawValue: AttributeValue.bool(true),
             Keys.crashEventId.rawValue: AttributeValue(id)
         ]
-        return SpanData(traceId: TraceId.random(), spanId: SpanId.random(), name: "crash-\(id)",
+        return SpanData(traceId: TraceId.random(), spanId: spanId, name: "crash-\(id)",
                         kind: .client, startTime: Date(), attributes: attributes, endTime: Date(), hasEnded: true)
     }
 
@@ -250,6 +250,18 @@ final class CrashRequestSplitTests: XCTestCase {
 
         XCTAssertTrue(uploader.requests.isEmpty)
         XCTAssertEqual(exporter.crashUploadOutcome(id: "all-dropped"), .policyDropped)
+    }
+
+    func test_unencodableStoredCrash_isRejectedNotPolicyDropped() throws {
+        let (exporter, uploader) = try makeExporter()
+
+        _ = exporter.export(spans: [makeCrashSpan(id: "unencodable", spanId: SpanId.invalid)], explicitTimeout: nil)
+        exporter.waitForStoredCrashUploads()
+
+        XCTAssertTrue(uploader.requests.isEmpty, "a crash that cannot be encoded is never sent")
+        XCTAssertEqual(exporter.crashUploadOutcome(id: "unencodable"), .rejected,
+                       "with no beforeSend, an empty encode is a build failure, not the customer's drop")
+        XCTAssertTrue(exporter.didConfirmCrashUpload(id: "unencodable"), "it would fail the same way on every launch")
     }
 
     // MARK: - Idle session

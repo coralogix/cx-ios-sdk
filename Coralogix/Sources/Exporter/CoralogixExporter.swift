@@ -425,9 +425,17 @@ public class CoralogixExporter: SpanExporter {
     private func uploadCrash(_ span: SpanData) {
         guard let id = crashEventId(of: span) else { return }
         let encoded = autoreleasepool { encodeSpans(spans: [span]) }
-        // Empty means the native beforeSend dropped it: finished with, by the customer's choice.
+        // Empty means the native beforeSend dropped it or it could not be encoded. Both are
+        // final: a failed rebuild fails the same way on every launch. With a beforeSend set, an
+        // encode failure is also labelled `.policyDropped`, so that label is not proof the
+        // customer dropped it; the purge is the same either way.
         guard !encoded.isEmpty else {
-            recordCrashOutcome(CrashUploadAnswer(outcome: .policyDropped), ids: [id])
+            let customerMayHaveDropped = getOptions().beforeSend != nil
+            if !customerMayHaveDropped {
+                Log.e("[CoralogixExporter] stored crash \(id) could not be encoded — dropped")
+            }
+            let outcome: CrashUploadOutcome = customerMayHaveDropped ? .policyDropped : .rejected
+            recordCrashOutcome(CrashUploadAnswer(outcome: outcome), ids: [id])
             return
         }
         // Read on this thread: `spanUploader` is lazy, and the live path reads it here too.
