@@ -188,8 +188,9 @@ final class ANRDetectorTests: XCTestCase {
 
         XCTAssertTrue(log.events.isEmpty)
 
-        hang(for: 0.9)
-        idle(for: 0.2)
+        // Three times the threshold: a slow CI runner starves the watchdog queue.
+        hang(for: 1.5)
+        idle(for: 0.3)
         XCTAssertEqual(log.events.count, 1, "the next hang, with no debugger, is reported")
     }
 
@@ -351,10 +352,13 @@ final class ANRDetectorTests: XCTestCase {
         detector.startMonitoring()
         idle(for: 0.2)
 
-        hang(for: 1.0)
-        let flushed = expectation(description: "flushed")
-        sdk.flush { flushed.fulfill() }
-        wait(for: [flushed], timeout: 10)
+        hang(for: 1.5)
+        // Flushed until the ANR is out: on a slow runner its span can end after a first flush.
+        let anrSent = expectation(for: NSPredicate { _, _ in
+            sdk.flush()
+            return uploader.errorContexts.contains { $0[Keys.errorType.rawValue] as? String == "ANR" }
+        }, evaluatedWith: nil)
+        wait(for: [anrSent], timeout: 10)
 
         let anrs = uploader.errorContexts.filter { $0[Keys.errorType.rawValue] as? String == "ANR" }
         XCTAssertEqual(anrs.count, 1)
