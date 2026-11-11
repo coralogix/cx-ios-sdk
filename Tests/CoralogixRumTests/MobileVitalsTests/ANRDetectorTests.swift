@@ -92,14 +92,15 @@ final class ANRDetectorTests: XCTestCase {
         super.tearDown()
     }
 
-    private func makeDetector(mainQueue: DispatchQueue? = nil) -> ANRDetector {
+    private func makeDetector(mainQueue: DispatchQueue? = nil,
+                              captureThreads: @escaping () -> String? = { "threads-at-detection" }) -> ANRDetector {
         let debugger = self.debugger!
         let offset = self.uptimeOffset!
         return ANRDetector(threshold: threshold, pollInterval: poll,
                            uptime: { ProcessInfo.processInfo.systemUptime + offset.seconds },
                            mainQueue: mainQueue ?? main,
                            isDebuggerAttached: { debugger.value },
-                           captureThreads: { "threads-at-detection" },
+                           captureThreads: captureThreads,
                            notificationCenter: center,
                            eventReporter: log)
     }
@@ -265,6 +266,33 @@ final class ANRDetectorTests: XCTestCase {
         idle(for: 0.3)
 
         XCTAssertTrue(log.events.isEmpty)
+    }
+
+    /// Only the main thread answering re-arms detection, as on Android.
+    func test_aGapDuringAReportedHang_isStillOneANR() {
+        detector.startMonitoring()
+        idle(for: 0.2)
+
+        main.async { Thread.sleep(forTimeInterval: 2.0) }
+        idle(for: 0.8)
+        XCTAssertEqual(log.events.count, 1)
+        uptimeOffset.seconds = 30
+        main.sync {}
+        idle(for: 0.3)
+
+        XCTAssertEqual(log.events.count, 1, "the same hang is reported once")
+    }
+
+    func test_aReportSlowerThanTwoPolls_isStillOneANR() {
+        detector.stopMonitoring()
+        detector = makeDetector(captureThreads: { Thread.sleep(forTimeInterval: 0.2); return "threads" })
+        detector.startMonitoring()
+        idle(for: 0.2)
+
+        hang(for: 2.0)
+        idle(for: 0.3)
+
+        XCTAssertEqual(log.events.count, 1, "the same hang is reported once")
     }
 
     // MARK: - Start and stop

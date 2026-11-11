@@ -181,7 +181,9 @@ final class ANRDetector {
         guard !paused else { return }
         let now = uptime()
         // A gap this long means the process was not running (suspended): no hang to measure.
-        if now - lastTick > 2 * pollInterval {
+        // A hang already handled stays handled until main answers, so a slow report or a
+        // starved watchdog queue cannot re-arm it and report the same hang again.
+        if now - lastTick > 2 * pollInterval, !hangHandled {
             restart(at: now)
         }
         lastTick = now
