@@ -13,7 +13,7 @@ import CoralogixInternal
 import CoralogixBootstrap
 #endif
 
-extension CoralogixRum {
+extension CoralogixRum: StoredCrashSending {
     /// Installs crash capture for this launch. Recovering the crashes earlier launches left behind
     /// is a separate step, `recoverPendingCrashes`, which does not depend on this one.
     public func initializeCrashInstrumentation() {
@@ -35,34 +35,117 @@ extension CoralogixRum {
         }
     }
 
-    /// Re-emits the crashes earlier launches left behind.
+    /// Lines up the crashes earlier launches left behind for `completeCrashRecovery` to send: native
+    /// crashes, then fatal hangs, newest first within each kind, as Android sends them.
     ///
     /// Runs at init whatever this launch's sampling roll: the crash belongs to the session that
     /// crashed, so whether it is sent follows that session's decision, not this launch's.
+    ///
+    /// Reads only the SDK's own copies of the reports (see `CrashDeliveryStore`). A report still in
+    /// PLCrashReporter's slot — the load-time copy could not be written, or never ran — is moved
+    /// first. Each crash is reported as its delivery record says; a crash read for the first time
+    /// gets one, or, when its session left no record to build one from, is dropped.
+    ///
+    /// Native crashes follow the `.errors` switch and fatal hangs the `.anr` one, both read from
+    /// this launch's options.
     internal func recoverPendingCrashes() {
-        if let crashReporter = Self.crashReportReader(), crashReporter.hasPendingCrashReport() {
-            // Correlation id tying the emitted crash span to its upload confirmation,
-            // so the purge is gated on THIS report's own delivery.
-            let reportId = UUID().uuidString
-            if self.processPendingCrashReport(using: crashReporter, crashEventId: reportId) {
-                // Purge is deferred to completeCrashRecovery(): it must only happen
-                // after the upload is confirmed, and the uploader rejects requests
-                // until init finishes. Previously the purge was unconditional and ran
-                // before the span even left the batch queue, so a short-lived relaunch
-                // or an upload failure lost the crash permanently.
-                crashRecoveryLock.lock()
-                self.pendingCrashPurge = { crashReporter.purgePendingCrashReport() }
-                self.pendingCrashReportId = reportId
-                crashRecoveryLock.unlock()
-            } else {
-                // Nothing recoverable was emitted — drop the corrupt report so it
-                // isn't reprocessed (and re-fails) on every launch.
-                crashReporter.purgePendingCrashReport()
-            }
+        let options = self.coralogixExporter?.getOptions()
+        let reportsCrashes = options.map { Self.shouldRecoverCrashes(options: $0) } ?? false
+        let reportsHangs = options?.shouldInitInstrumentation(instrumentation: .anr) ?? false
+        let store = self.crashDeliveryStore
+        store.deleteLegacyHybridStore()
+        // A report the move could not take out of PLCrashReporter's slot is read on a later
+        // launch, and needs its launch's snapshot then.
+        var reportLeftInReporter = false
+        if reportsCrashes, let reader = Self.crashReportReader() {
+            CRXCrashBootstrap.movePendingReport(of: reader, toDirectory: store.copiesDirectory)
+            reportLeftInReporter = reader.hasPendingCrashReport()
         }
 
-        // Hybrid crash events persisted by a previous process (see CrashEventStore).
-        self.resendPendingStoredCrashEvents()
+        var readable: [(copy: URL, crash: MappedCrash)] = []
+        var allCopiesRead = true
+        for copy in store.copies() {
+            switch Self.readCopy(copy) {
+            case .readable(let crash):
+                readable.append((copy, crash))
+            case .notReadableYet:
+                allCopiesRead = false
+            case .corrupt:
+                store.removeCopy(copy)
+            }
+        }
+        // Read before the native rules below delete anything: a crash during the hang wins.
+        self.recordFatalHang(reportsHangs: reportsHangs, crashes: readable.map(\.crash))
+
+        var lined: [CrashDeliveryScheduler.Item] = []
+        if reportsCrashes {
+            lined += self.lineUpNativeCrashes(readable)
+        } else {
+            // Copied at image load whatever the options say: not sent, so not kept either.
+            for (copy, crash) in readable {
+                store.forget(copy: copy, crashId: crash.crashId)
+            }
+        }
+        if reportsHangs {
+            lined += self.pendingFatalHangs()
+        }
+
+        let outcome = RecoveryOutcome(allCopiesRead: allCopiesRead,
+                                      reportLeftInReporter: reportLeftInReporter,
+                                      hangMarkerLeft: store.hasHangMarker,
+                                      recordedCrashIds: store.recordedCrashIds(),
+                                      linedUpCrashIds: lined.map(\.crashId))
+        if outcome.earlierLaunchesAreSpent {
+            // Every crash and hang earlier launches left now has a delivery record holding its
+            // session's counters, or is gone: nothing reads their launches' records again.
+            let launchId = self.coralogixExporter?.getSessionManager().snapshotStore.launchId
+            SessionSnapshotStore.discardEarlierLaunches(in: store.snapshotsDirectory,
+                                                        keeping: launchId ?? SessionSnapshotStore.processLaunchId)
+        }
+
+        crashRecoveryLock.lock()
+        self.pendingRecoveredCrashes = lined
+        crashRecoveryLock.unlock()
+    }
+
+    /// The native crashes to send, newest first, capped; each with its delivery record.
+    private func lineUpNativeCrashes(_ readable: [(copy: URL, crash: MappedCrash)]) -> [CrashDeliveryScheduler.Item] {
+        let store = self.crashDeliveryStore
+        let (kept, dropped) = Self.newest(readable, limit: CrashDeliveryStore.maxPerKind)
+        for crash in dropped {
+            store.forget(copy: crash.copy, crashId: crash.crash.crashId)
+        }
+
+        var lined: [CrashDeliveryScheduler.Item] = []
+        for (copy, crash) in kept {
+            guard store.record(for: crash.crashId) != nil || self.firstRecord(of: crash) != nil else {
+                Log.d("[CrashInstrumentation] no record of the crashed session — dropping crash \(crash.crashId)")
+                store.removeCopy(copy)
+                continue
+            }
+            lined.append(.init(crashId: crash.crashId, copy: copy))
+        }
+        return lined
+    }
+
+    /// The `limit` newest crashes, newest first, and the rest. A crash with no time sorts oldest.
+    static func newest(_ crashes: [(copy: URL, crash: MappedCrash)],
+                       limit: Int) -> (kept: [(copy: URL, crash: MappedCrash)], dropped: [(copy: URL, crash: MappedCrash)]) {
+        let sorted = crashes.sorted { ($0.crash.crashTime ?? .distantPast) > ($1.crash.crashTime ?? .distantPast) }
+        return (Array(sorted.prefix(limit)), Array(sorted.dropFirst(limit)))
+    }
+
+    enum CopyReadResult {
+        case readable(MappedCrash)
+        /// The file exists but cannot be read yet (data protection before the first unlock).
+        case notReadableYet
+        case corrupt
+    }
+
+    static func readCopy(_ copy: URL) -> CopyReadResult {
+        guard let data = try? Data(contentsOf: copy) else { return .notReadableYet }
+        guard let report = try? PLCrashReport(data: data) else { return .corrupt }
+        return .readable(CrashReportMapper.map(PLCrashReportReader(report: report)))
     }
 
     /// The reporter to keep capturing with.
@@ -103,6 +186,10 @@ extension CoralogixRum {
         // PLCrashReporterErrorResourceBusy and ours captures nothing.
         do {
             try crashReporter.enable()
+            // Held here so the reporter outlives this call, and so crash context is written only
+            // through a reporter this SDK enabled.
+            CRXCrashContext.activeReporter = crashReporter
+            CRXConcurrentCrashGuard.install()
         } catch {
             Log.e("[CrashInstrumentation] PLCrashReporter could not be enabled — another instance already owns the process-wide slot, so crashes from this launch will not be captured: \(error)")
         }
@@ -129,235 +216,184 @@ extension CoralogixRum {
         return crashReporter
     }
 
-    /// Final step of crash recovery, run right after init completes: force-flushes
-    /// the crash spans emitted during `recoverPendingCrashes`, then decides
-    /// per-event what to clean up. Each recovered crash is confirmed independently by
-    /// its correlation id, so the PLCrashReporter report is purged only if its own
-    /// span uploaded, and only the stored events whose own upload succeeded are
-    /// removed. Anything unconfirmed stays on disk / on the pending report and is
-    /// retried on the next launch (at-least-once delivery).
-    internal func completeCrashRecovery() {
+    /// Final step of crash recovery, run right after init completes: hands the crashes
+    /// `recoverPendingCrashes` lined up to the delivery scheduler, which sends each one and deletes
+    /// its copy and record once that crash is finished with. `completion` runs when that pass ends.
+    internal func completeCrashRecovery(completion: (() -> Void)? = nil) {
         crashRecoveryLock.lock()
-        let hasPendingWork = pendingCrashPurge != nil || !pendingRecoveryCrashEventIds.isEmpty
+        let pending = self.pendingRecoveredCrashes
+        self.pendingRecoveredCrashes = []
         crashRecoveryLock.unlock()
-        guard hasPendingWork else { return }
+        self.crashDeliveryScheduler.start(pending, onEnd: completion)
+    }
 
-        self.flush { [weak self] in
-            guard let self, let exporter = self.coralogixExporter else { return }
+    /// Emits a recovered crash as an error span, under its `crash_event_id`.
+    ///
+    /// A crash is captured on a later launch, after a fresh session has already been created. The
+    /// span is anchored to the crash time, reported under the session it happened in as `record`
+    /// describes it, and starts a trace of its own: whatever span is current in this launch had
+    /// nothing to do with it.
+    internal func emitRecoveredCrash(_ crash: MappedCrash, as record: StoredCrashRecord) {
+        let span = makeSpan(event: .error, source: .console, severity: .error,
+                            startTime: crash.crashTime, startsNewTrace: true)
+        self.attribute(span, to: record)
 
-            // Snapshot-and-clear the process-scoped recovery state under the lock;
-            // do the confirmation checks and file IO outside it. Cleared state is
-            // repopulated from the store / pending report on the next launch, so an
-            // unconfirmed item is retried rather than lost.
-            self.crashRecoveryLock.lock()
-            let purge = self.pendingCrashPurge
-            let reportId = self.pendingCrashReportId
-            let recoveryIds = self.pendingRecoveryCrashEventIds
-            self.pendingCrashPurge = nil
-            self.pendingCrashReportId = nil
-            self.pendingRecoveryCrashEventIds = []
-            self.crashRecoveryLock.unlock()
-
-            // PLCrashReporter report: purge only if its own span uploaded.
-            if let reportId, exporter.didConfirmCrashUpload(id: reportId) {
-                purge?()
-            } else if reportId != nil {
-                Log.w("Crash-report upload not confirmed — keeping pending report for next launch")
-            }
-
-            // Stored hybrid crashes: remove only the ones whose own upload succeeded.
-            let confirmedStoreIds = recoveryIds.filter { exporter.didConfirmCrashUpload(id: $0) }
-            self.crashEventStore.remove(ids: confirmedStoreIds)
+        span.setAttribute(key: Keys.crashEventId.rawValue, value: crash.crashId)
+        span.setAttribute(key: Keys.isCrash.rawValue, value: true)
+        span.setAttribute(key: Keys.exceptionType.rawValue, value: crash.exceptionType)
+        span.setAttribute(key: Keys.errorType.rawValue, value: crash.errorType)
+        span.setAttribute(key: Keys.errorMessage.rawValue, value: crash.errorMessage)
+        if let crashTime = crash.crashTime {
+            span.setAttribute(key: Keys.crashTimestamp.rawValue, value: "\(crashTime.timeIntervalSince1970.milliseconds)")
         }
+        if let processName = crash.processName {
+            span.setAttribute(key: Keys.processName.rawValue, value: processName)
+        }
+        if let applicationIdentifier = crash.applicationIdentifier {
+            span.setAttribute(key: Keys.applicationIdentifier.rawValue, value: applicationIdentifier)
+        }
+        span.setAttribute(key: Keys.pid.rawValue, value: "\(crash.pid)")
+        if let triggeredByThread = crash.triggeredByThread {
+            span.setAttribute(key: Keys.triggeredByThread.rawValue, value: triggeredByThread)
+        }
+        span.setAttribute(key: Keys.threads.rawValue, value: crash.threadsJSON)
+        if let baseAddress = crash.baseAddress {
+            span.setAttribute(key: Keys.baseAddress.rawValue, value: baseAddress)
+        }
+        // The backend refuses an error carrying arch unless the app is React Native or Flutter.
+        if let arch = crash.arch, !CoralogixRum.mobileSDK.sdkFramework.isNative {
+            span.setAttribute(key: Keys.arch.rawValue, value: arch)
+        }
+
+        span.end(time: crash.crashTime ?? Date())
     }
 
-    /// Returns `true` when the report was parsed and emitted as a crash span,
-    /// `false` when the report could not be loaded or parsed. `crashEventId`
-    /// correlates the emitted span with its upload confirmation.
-    private func processPendingCrashReport(using crashReporter: PLCrashReporter, crashEventId: String) -> Bool {
-        do {
-            let data = try crashReporter.loadPendingCrashReportDataAndReturnError()
-            
-            // Retrieving crash reporter data.
-            let report = try PLCrashReport(data: data)
-
-            // A crash is captured on the *next* launch, after a fresh session has
-            // already been created. Anchor the span to the crash time (not relaunch
-            // time) and burn it under the session that was live when it crashed —
-            // recovered from the keychain into SessionManager at init.
-            let crashTimestamp = report.systemInfo.timestamp
-            let span = makeSpan(event: .error, source: .console, severity: .error, startTime: crashTimestamp)
-            self.overrideSessionForCrashedSession(on: span)
-            self.overrideViewForCrashedSession(on: span)
-
-            span.setAttribute(key: Keys.crashEventId.rawValue, value: crashEventId)
-            span.setAttribute(key: Keys.exceptionType.rawValue, value: report.signalInfo.name)
-            if let crashTimestamp {
-                span.setAttribute(key: Keys.crashTimestamp.rawValue, value: "\(crashTimestamp.timeIntervalSince1970.milliseconds)")
-            }
-            span.setAttribute(key: Keys.processName.rawValue, value: report.processInfo.processName)
-            span.setAttribute(key: Keys.applicationIdentifier.rawValue, value: report.applicationInfo.applicationIdentifier)
-            span.setAttribute(key: Keys.pid.rawValue, value: "\(report.processInfo.processID)")
-            
-            self.createStackTrace(report: report, span: span)
-            
-            if let text = PLCrashReportTextFormatter.stringValue(for: report, with: PLCrashReportTextFormatiOS) {
-                let substrings = text.components(separatedBy: "\n")
-                for value in substrings {
-                    if let processName = report.processInfo.processName,
-                       value.contains("+\(processName)") {
-                        let details = extractMemoryAddressAndArchitecture(input: value)
-                        if details.count == 7 {
-                            let baseAddress = details[0]  // Extracting the base memory address
-                            span.setAttribute(key: Keys.baseAddress.rawValue, value: "\(baseAddress)")
-                            let arch = details[4]     // Extracting the architecture
-                            span.setAttribute(key: Keys.arch.rawValue, value: "\(arch)")
-                        }
-                    }
-                }
-            } else {
-                Log.e("CrashReporter: can't convert report to text")
-            }
-            if let crashTimestamp {
-                span.end(time: crashTimestamp)
-            } else {
-                span.end()
-            }
-            return true
-        } catch let error {
-            Log.e("CrashReporter failed to load and parse with error: \(error)")
-            return false
-        }
-    }
-
-    /// Replaces the current-session attributes `makeSpan` stamped on the crash span
-    /// with the session that was live when the crash happened. No-op when there is
-    /// no previous-launch session on record — the span keeps the current session.
-    /// Internal: the CrashEventStore resend path (ErrorInstrumentation) applies the
-    /// same attribution to recovered hybrid crash events.
-    internal func overrideSessionForCrashedSession(on span: any Span) {
-        guard let sessionManager = self.coralogixExporter?.getSessionManager() else { return }
-        for attr in sessionManager.lastLaunchSessionSpanAttributes() {
-            span.setAttribute(key: attr.key, value: attr.value)
-        }
-    }
-
-    /// Replaces the view `makeSpan` froze onto the crash span — the relaunch process's
-    /// live view, which is empty this early in init — with the view that was on-screen
-    /// when the crash happened, recovered from the keychain into `ViewManager.prevViewName`.
-    /// No-op when the crashed session never showed a view, so the span keeps the empty
-    /// frozen view rather than inventing one.
-    /// Internal (rather than private) so unit tests can exercise it directly.
-    internal func overrideViewForCrashedSession(on span: any Span) {
-        guard let prevView = self.coralogixExporter?.getViewManager().getPrevDictionary()[Keys.view.rawValue] as? String,
-              !prevView.isEmpty else { return }
-        span.setAttribute(key: Keys.spanViewName.rawValue, value: prevView)
-    }
-    
-    private func createStackTrace(report: PLCrashReport, span: any Span) {
-        var threads = [String]()
-        for case let thread as PLCrashReportThreadInfo in report.threads {
-            if thread.crashed {
-                span.setAttribute(key: Keys.triggeredByThread.rawValue, value: thread.threadNumber)
-            }
-            
-            let crashedThreadFrames = crashedThread(report: report, thread: thread)
-            let data = self.parseFrameArray(crashedThreadFrameArray: crashedThreadFrames)
-            threads.append(Helper.convertArrayToJsonString(array: data))
-        }
-        span.setAttribute(key: Keys.threads.rawValue, value: Helper.convertArrayOfStringToJsonString(array: threads))
-    }
-    
-    func parseFrameArray(crashedThreadFrameArray: [StackFrame]) -> [[String: Any]] {
-        var result = [[String: Any]]()
-        for frame in crashedThreadFrameArray {
-            var frameObj = [String: Any]()
-            frameObj[Keys.frameNumber.rawValue] = frame.frameNumber
-            frameObj[Keys.binary.rawValue] = frame.binary
-            frameObj[Keys.functionAddressCalled.rawValue] = frame.functionAdresseCalled
-            frameObj[Keys.base.rawValue] = frame.base
-            frameObj[Keys.offset.rawValue] = frame.offset
-            result.append(frameObj)
-        }
-        return result
-    }
-    
-    func isDebuggerAttached() -> Bool {
-        var info = kinfo_proc()
-        var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, getpid()]
-        var size = MemoryLayout<kinfo_proc>.stride
-        let junk = sysctl(&mib, UInt32(mib.count), &info, &size, nil, 0)
-        guard junk == 0 else {
-            Log.w("sysctl failed with error \(junk)")
-            return false
-        }
-        return (info.kp_proc.p_flag & P_TRACED) != 0
-    }
-    
-    struct StackFrame {
-        let frameNumber: String
-        let binary: String
-        let functionAdresseCalled: String
-        let base: String
-        let offset: String
-        let description: String
-    }
-    
-    private func crashedThread(report: PLCrashReport, thread: PLCrashReportThreadInfo) -> [StackFrame] {
-        var stackFrames = [StackFrame]()
-        // stack.append("Thread \(thread.threadNumber) Crashed:")
-        var frameNum = 0
-        while frameNum < thread.stackFrames.count {
-            if let frame = thread.stackFrames[frameNum] as? PLCrashReportStackFrameInfo {
-                let stackFrame = formatStackFrame(frame: frame, frameNum: frameNum, report: report)
-                stackFrames.append(stackFrame)
-            }
-            frameNum += 1
-        }
-        return stackFrames
-    }
-    
-    private func formatStackFrame(frame: PLCrashReportStackFrameInfo, frameNum: Int, report: PLCrashReport) -> StackFrame {
-        var baseAddress: UInt64 = 0
-        var pcOffset: UInt64 = 0
-        var imageName = "???"
-        var symbolString = ""
-        
-        if let imageInfo = report.image(forAddress: frame.instructionPointer) {
-            imageName = imageInfo.imageName
-            imageName = URL(fileURLWithPath: imageName).lastPathComponent
-            baseAddress = imageInfo.imageBaseAddress
-            pcOffset = frame.instructionPointer - imageInfo.imageBaseAddress
-        }
-        
-        var offset: String = ""
-        var base: String = ""
-        if let symbolInfo = frame.symbolInfo,
-           let symbolName = symbolInfo.symbolName {
-            let symOffset = frame.instructionPointer - frame.symbolInfo.startAddress
-            offset = String(format: "%ld", symOffset)
-            base = symbolName
-            symbolString = String(format: "%@ + %ld", symbolName, symOffset)
+    /// The delivery record of a crash read for the first time, saved before it is returned: the
+    /// crashed session and what its own record held at the crash. nil when there is nothing to
+    /// build it from — the session left no record, which is also the case of a crash before the
+    /// SDK adopted its first session. Such a crash would otherwise be filed under a session it
+    /// did not happen in.
+    ///
+    /// The session is the one the report's own crash context names. Only a report without one —
+    /// written by an SDK version that did not record it — falls back to the session the keychain
+    /// says was live when the previous launch ended: for a report that names its session, the
+    /// keychain may hold a different one.
+    internal func firstRecord(of crash: MappedCrash) -> StoredCrashRecord? {
+        guard let sessionManager = self.coralogixExporter?.getSessionManager() else { return nil }
+        let session: StoredCrashRecord.Session
+        if let named = crash.context?.session {
+            session = .init(id: named.id,
+                            creationDate: named.creationTimeMillis.map { TimeInterval($0) / 1000 },
+                            sampledIn: named.sampledIn)
+        } else if let last = sessionManager.lastLaunchSession {
+            session = .init(id: last.sessionId, creationDate: last.creationDate, sampledIn: last.sampledIn)
         } else {
-            offset = String(format: "%ld", pcOffset)
-            base = String(format: "0x%lx", baseAddress)
-            symbolString = String(format: "0x%lx + %ld", baseAddress, pcOffset)
+            return nil
         }
-        let description = String(format: "%-4ld%-35@ 0x%016lx %@", frameNum, imageName, frame.instructionPointer, symbolString)
-        let stackFrame = StackFrame(frameNumber: "\(frameNum)",
-                                    binary: imageName,
-                                    functionAdresseCalled: String(format: "0x%016lx", frame.instructionPointer),
-                                    base: base,
-                                    offset: offset,
-                                    description: description)
-        
-        return stackFrame
+        guard var counters = Self.counters(of: session, in: sessionManager.snapshotStore) else { return nil }
+        // A record written before records carried the view, or the empty one of a session adopted
+        // just before the crash, has no view. The keychain view is the previous launch's last
+        // screen, so it is only the crashed session's when that session is the previous launch's.
+        if counters.viewName == nil,
+           session.id == sessionManager.lastLaunchSession?.sessionId,
+           let prevView = self.coralogixExporter?.getViewManager().getPrevDictionary()[Keys.view.rawValue] as? String,
+           !prevView.isEmpty {
+            counters.viewName = prevView
+        }
+
+        let record = StoredCrashRecord(crashId: crash.crashId,
+                                       kind: .native,
+                                       crashTime: crash.crashTime ?? Date(),
+                                       failedUploads: 0,
+                                       session: session,
+                                       counters: counters)
+        if self.crashDeliveryStore.save(record) {
+            sessionManager.snapshotStore.discardEarlierLaunch(of: session.id)
+        }
+        return record
     }
-    
-    private func extractMemoryAddressAndArchitecture(input: String) -> [String] {
-        let pattern = #"[^\s]+"#
-        let matches = input.matches(for: pattern)
-        return matches
+
+    /// The crashed session's counters. A session the SDK had adopted (it has a creation time) but
+    /// not recorded yet — a crash right after a rotation — counted nothing; a session that was
+    /// never adopted is a crash before init, which has none.
+    static func counters(of session: StoredCrashRecord.Session, in store: SessionSnapshotStore) -> SessionSnapshotRecord? {
+        if let record = store.record(for: session.id) { return record }
+        return session.creationDate == nil ? nil : .empty(sessionId: session.id)
+    }
+
+    /// Replaces what `makeSpan` stamped from the relaunch — session, view, counters, app and OS
+    /// version — with the crashed session's, as `record` holds them. The counters are reported with
+    /// this crash's error added, and neither store is changed: every send reports the same counts.
+    ///
+    /// An unknown sampling decision is stamped sampled-in: a crash misclassified as sampled-out
+    /// would be dropped and purged as resolved.
+    internal func attribute(_ span: any Span, to record: StoredCrashRecord) {
+        span.setAttribute(key: Keys.sessionId.rawValue, value: record.session.id)
+        // The relaunch's previous-session breadcrumbs would override the session set here when
+        // the previous launch's pid is the crashed one.
+        for key in [Keys.prevPid, .prevSessionId, .prevSessionCreationDate] {
+            span.setAttribute(key: key.rawValue, value: nil as AttributeValue?)
+        }
+        if let creationDate = record.session.creationDate {
+            span.setAttribute(key: Keys.sessionCreationDate.rawValue, value: String(Int(creationDate)))
+        }
+        span.setAttribute(key: Keys.spanSessionSampledIn.rawValue, value: String(record.session.sampledIn ?? true))
+
+        let counters = record.counters
+        span.setAttribute(key: Keys.spanViewName.rawValue,
+                          value: AttributeValue.string(counters.viewName ?? Keys.undefined.rawValue))
+        span.setAttribute(key: Keys.spanViewNumber.rawValue, value: counters.viewNumber.map(AttributeValue.int))
+        let versions: [(Keys, String?)] = [(.crashedAppName, counters.appName),
+                                           (.crashedAppVersion, counters.appVersion),
+                                           (.crashedOsVersion, counters.osVersion),
+                                           (.crashedSnapshot, record.reportedCounters.json)]
+        for case let (key, value?) in versions {
+            span.setAttribute(key: key.rawValue, value: value)
+        }
+    }
+
+    func sendStoredCrash(_ item: CrashDeliveryScheduler.Item,
+                         as record: StoredCrashRecord,
+                         completion: @escaping (CrashUploadAnswer) -> Void) {
+        guard let exporter = self.coralogixExporter else {
+            completion(CrashUploadAnswer(outcome: .notAttempted))
+            return
+        }
+        if record.kind == .anr {
+            sendStoredHang(item, as: record, through: exporter, completion: completion)
+            return
+        }
+        switch Self.readCopy(item.copy) {
+        case .readable(let crash):
+            exporter.awaitCrashUpload(id: crash.crashId, completion)
+            self.emitRecoveredCrash(crash, as: record)
+            self.flush()
+        case .notReadableYet:
+            completion(CrashUploadAnswer(outcome: .notAttempted))
+        case .corrupt:
+            // Can never be sent: finished with, like a report the backend refused.
+            completion(CrashUploadAnswer(outcome: .rejected))
+        }
+    }
+
+    private func sendStoredHang(_ item: CrashDeliveryScheduler.Item,
+                                as record: StoredCrashRecord,
+                                through exporter: CoralogixExporter,
+                                completion: @escaping (CrashUploadAnswer) -> Void) {
+        switch Self.readHang(item.copy) {
+        case .readable(let marker):
+            exporter.awaitCrashUpload(id: record.crashId, completion)
+            self.emitRecoveredHang(marker, as: record)
+            self.flush()
+        case .notReadableYet:
+            completion(CrashUploadAnswer(outcome: .notAttempted))
+        case .corrupt:
+            completion(CrashUploadAnswer(outcome: .rejected))
+        }
+    }
+
+    func cancelStoredCrashSend() {
+        self.coralogixExporter?.spanUploader.cancelStoredCrashUploads()
     }
 }
 
@@ -401,5 +437,24 @@ public struct FirebaseRuntimeDetector {
     /// Convenience
     public static func isConfigured() -> Bool {
         presence() == .configured
+    }
+}
+
+/// What a recovery pass left behind, for deciding whether earlier launches' snapshots can go.
+struct RecoveryOutcome {
+    var allCopiesRead: Bool
+    var reportLeftInReporter: Bool
+    var hangMarkerLeft: Bool
+    /// Nil when the delivery records cannot be read.
+    var recordedCrashIds: Set<String>?
+    var linedUpCrashIds: [String]
+
+    /// No crash or hang an earlier launch left can still need that launch's snapshot: every copy
+    /// was read, none is left in PLCrashReporter's slot, no hang marker waits, and every crash
+    /// lined up has a delivery record holding its session's counters.
+    var earlierLaunchesAreSpent: Bool {
+        guard allCopiesRead, !reportLeftInReporter, !hangMarkerLeft,
+              let recorded = recordedCrashIds else { return false }
+        return linedUpCrashIds.allSatisfy(recorded.contains)
     }
 }

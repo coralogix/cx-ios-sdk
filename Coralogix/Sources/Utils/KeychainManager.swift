@@ -52,8 +52,11 @@ class KeychainManager: KeyChainProtocol {
         // Delete existing item before adding new one
         SecItemDelete(query as CFDictionary)
         
-        // Add the item to the Keychain
-        let status = SecItemAdd(query as CFDictionary, nil)
+        // Readable after the first unlock, so a launch that starts while the device is locked
+        // (a background launch, prewarm) still finds the session a crash happened in.
+        var item = query
+        item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+        let status = SecItemAdd(item as CFDictionary, nil)
         if status != errSecSuccess {
             Log.e("Failed to save data to Keychain")
         }

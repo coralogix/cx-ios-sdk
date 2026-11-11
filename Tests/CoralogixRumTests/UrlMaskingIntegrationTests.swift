@@ -394,9 +394,9 @@ private final class CapturingUploader: SpanUploading {
         return _uploadedSpans
     }
 
-    func upload(_ spans: [[String: Any]], endPoint: String) -> SpanExporterResultCode {
+    func upload(_ spans: [[String: Any]], endPoint: String, kind: SpanUploadKind) -> SpanUploadResult {
         lock.lock(); defer { lock.unlock() }
         _uploadedSpans.append(contentsOf: spans)
-        return .success
+        return .delivered
     }
 }

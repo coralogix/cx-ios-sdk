@@ -87,6 +87,7 @@ func makeSamplingOptions(sampleRate: Int,
                          traceParentInHeader: [String: Any]? = nil,
                          enableSwizzling: Bool = true,
                          ignoreUrls: [String] = [],
+                         ignoreErrors: [String] = [],
                          tracesExporter: TracesExporterCallback? = nil) -> CoralogixExporterOptions {
     return CoralogixExporterOptions(
         coralogixDomain: .US2,
@@ -96,7 +97,7 @@ func makeSamplingOptions(sampleRate: Int,
         version: "1.0.0",
         publicKey: "test-key",
         ignoreUrls: ignoreUrls,
-        ignoreErrors: [],
+        ignoreErrors: ignoreErrors,
         labels: nil,
         sessionSampleRate: sampleRate,
         excludeFromSampling: exclude,
@@ -160,7 +161,7 @@ func makeSamplingSpan(eventType: CoralogixEventType,
 /// Test-only `SpanUploading` that returns `.success` without network I/O. Shared by all
 /// sampling-decoupling tests so we don't keep duplicating per-file mocks.
 final class SamplingMockSpanUploader: SpanUploading {
-    func upload(_ spans: [[String: Any]], endPoint: String) -> SpanExporterResultCode {
-        return .success
+    func upload(_ spans: [[String: Any]], endPoint: String, kind: SpanUploadKind) -> SpanUploadResult {
+        return .delivered
     }
 }

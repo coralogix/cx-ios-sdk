@@ -107,6 +107,7 @@ final class ErrorContextTests: XCTestCase {
         threads.append(Helper.convertArrayToJsonString(array: result))
         mockSpanData = MockSpanData(attributes: [
             Keys.threads.rawValue: AttributeValue(Helper.convertArrayOfStringToJsonString(array: threads)),
+            Keys.isCrash.rawValue: AttributeValue.bool(true),
             Keys.exceptionType.rawValue: AttributeValue("Fatal"),
             Keys.crashTimestamp.rawValue: AttributeValue("1625097600"),
             Keys.processName.rawValue: AttributeValue("ExampleApp"),
@@ -250,6 +251,7 @@ final class ErrorContextTests: XCTestCase {
 
         mockSpanData = MockSpanData(attributes: [
             Keys.threads.rawValue: AttributeValue(Helper.convertArrayOfStringToJsonString(array: threads)),
+            Keys.isCrash.rawValue: AttributeValue.bool(true),
             Keys.exceptionType.rawValue: AttributeValue("EXC_BAD_ACCESS"),
             Keys.crashTimestamp.rawValue: AttributeValue("1625097600"),
             Keys.processName.rawValue: AttributeValue("DemoApp"),

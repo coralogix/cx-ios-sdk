@@ -26,9 +26,22 @@ public class CoralogixExporter: SpanExporter {
     private var networkManager: NetworkProtocol
     private var metricsManager: MetricsManager
     private var screenshotManager = ScreenshotManager()
-    lazy var spanUploader: SpanUploading = SpanUploader(options: self.getOptions())
+    /// Set by `CoralogixRum` to its `NetworkManager`; read from the upload thread. Nil means
+    /// unknown, treated as online, so a failed upload still counts.
+    private weak var _reachability: NetworkReachability?
+    private let reachabilityLock = NSLock()
+    internal var reachability: NetworkReachability? {
+        get { reachabilityLock.lock(); defer { reachabilityLock.unlock() }; return _reachability }
+        set { reachabilityLock.lock(); defer { reachabilityLock.unlock() }; _reachability = newValue }
+    }
+    lazy var spanUploader: SpanUploading = SpanUploader(options: self.getOptions(),
+                                                        isOnline: { [weak self] in self?.reachability?.isOnline ?? true })
 
     private let spanProcessingQueue = DispatchQueue(label: Keys.queueSpanProcessingQueue.rawValue)
+    // A stored crash's request can stay open for two minutes. Sending it here keeps the
+    // caller of `export` (the batch worker, and every flush queued behind it) free; serial so
+    // crashes still go out one at a time, in batch order.
+    private let storedCrashUploadQueue = DispatchQueue(label: Keys.queueStoredCrashUploadQueue.rawValue)
 
     /// Per-session sampling decision. `true` while the SDK should export the current session's
     /// non-excluded events; `false` while only events listed in `options.excludeFromSampling`
@@ -36,54 +49,136 @@ public class CoralogixExporter: SpanExporter {
     private var currentSessionSampledIn: Bool = true
     private let samplingStateLock = NSLock()
 
-    /// Correlation ids (`crash_event_id`) of crash events whose upload was confirmed
-    /// in this process. Confirmation is per-event, not a process-wide flag: a crash
-    /// is only removed from disk / its PLCrashReporter report purged once THAT crash's
-    /// own upload succeeded, so a later failed crash can't be dropped just because an
-    /// earlier one delivered.
-    private var confirmedCrashEventIds: Set<String> = []
+    /// What became of each crash event (`crash_event_id`) this process tried to send, per crash,
+    /// so a later failed crash is never taken for finished because an earlier one was delivered.
+    private var crashUploadOutcomes: [String: CrashUploadOutcome] = [:]
+    /// Crash ids already handed to `tracesExporter`, oldest first, so a crash sent again (a
+    /// retry, or a later launch in the same process) reaches it once.
+    private var forwardedCrashIds: [String] = []
+    private static let maxForwardedCrashIds = 256
+    private var crashUploadWaiters: [String: (CrashUploadAnswer) -> Void] = [:]
+    /// Handlers waiting on a live event's delivery, by its `span_id`: read-only in `beforeSend`,
+    /// so it is the one id an event keeps through a hybrid round trip.
+    private var liveDeliveryWaiters: [String: (Bool) -> Void] = [:]
     private let crashUploadLock = NSLock()
 
-    func didConfirmCrashUpload(id: String) -> Bool {
-        crashUploadLock.lock()
-        defer { crashUploadLock.unlock() }
-        return confirmedCrashEventIds.contains(id)
+    /// Set when the SDK instance that owns this exporter shuts down. The upload gate is the
+    /// process-wide `CoralogixRum.isInitialized`, which a later init reopens; a retired exporter
+    /// must still send nothing its batch processor exports after that.
+    private let retiredLock = NSLock()
+    private var _isRetired = false
+    var isRetired: Bool {
+        retiredLock.lock()
+        defer { retiredLock.unlock() }
+        return _isRetired
     }
 
-    private func recordCrashUpload(ids: Set<String>, succeeded: Bool) {
-        guard succeeded, !ids.isEmpty else { return }
+    func retire() {
+        retiredLock.lock()
+        _isRetired = true
+        retiredLock.unlock()
+    }
+
+    /// Whether the crash is finished with — delivered, refused for good, or dropped by policy —
+    /// so its stored copy can be deleted.
+    func didConfirmCrashUpload(id: String) -> Bool {
+        crashUploadOutcome(id: id)?.isFinished ?? false
+    }
+
+    func crashUploadOutcome(id: String) -> CrashUploadOutcome? {
         crashUploadLock.lock()
-        confirmedCrashEventIds.formUnion(ids)
+        defer { crashUploadLock.unlock() }
+        return crashUploadOutcomes[id]
+    }
+
+    /// Calls `handler` once with the answer to the next send of crash `id`. Replaces a handler
+    /// still waiting on an earlier send of it.
+    func awaitCrashUpload(id: String, _ handler: @escaping (CrashUploadAnswer) -> Void) {
+        crashUploadLock.lock()
+        defer { crashUploadLock.unlock() }
+        crashUploadWaiters[id] = handler
+    }
+
+    /// Calls `handler` once the live event whose span id is `spanId` has been uploaded, with whether
+    /// it was delivered. An event dropped before upload (sampling, `ignoreErrors`, `beforeSend`)
+    /// never answers.
+    func awaitLiveDelivery(spanId: String, _ handler: @escaping (Bool) -> Void) {
+        crashUploadLock.lock()
+        defer { crashUploadLock.unlock() }
+        liveDeliveryWaiters[spanId] = handler
+    }
+
+    private func resolveLiveDeliveries(of events: [[String: Any]], result: SpanUploadResult) {
+        crashUploadLock.lock()
+        guard !liveDeliveryWaiters.isEmpty else {
+            crashUploadLock.unlock()
+            return
+        }
+        let spanIds = events.compactMap { Self.cxRum(of: $0)?[Keys.spanId.rawValue] as? String }
+        let waiters = spanIds.compactMap { liveDeliveryWaiters.removeValue(forKey: $0) }
         crashUploadLock.unlock()
+        let delivered = result.disposition == .delivered
+        waiters.forEach { $0(delivered) }
+    }
+
+    /// Uploads live events and answers whoever waits on their delivery.
+    @discardableResult
+    private func uploadLive(_ events: [[String: Any]]) -> SpanUploadResult {
+        // Re-checked here: an export can pass the entry check just before shutdown retires this
+        // exporter, and a later init reopens the process-wide gate the uploader checks.
+        let result = isRetired ? .notAttempted : spanUploader.upload(events, endPoint: self.endPoint)
+        resolveLiveDeliveries(of: events, result: result)
+        return result
+    }
+
+    private func recordCrashOutcome(_ answer: CrashUploadAnswer, ids: Set<String>) {
+        guard !ids.isEmpty else { return }
+        crashUploadLock.lock()
+        for id in ids where crashUploadOutcomes[id]?.isFinished != true {
+            crashUploadOutcomes[id] = answer.outcome
+        }
+        let waiters = ids.compactMap { crashUploadWaiters.removeValue(forKey: $0) }
+        crashUploadLock.unlock()
+        waiters.forEach { $0(answer) }
+    }
+
+    /// The spans `tracesExporter` should see: every non-crash span, and each crash only the
+    /// first time this process forwards it.
+    private func spansToForward(_ spans: [SpanData]) -> [SpanData] {
+        crashUploadLock.lock()
+        defer { crashUploadLock.unlock() }
+        return spans.filter { span in
+            guard let id = crashEventId(of: span) else { return true }
+            guard !forwardedCrashIds.contains(id) else { return false }
+            forwardedCrashIds.append(id)
+            if forwardedCrashIds.count > Self.maxForwardedCrashIds {
+                forwardedCrashIds.removeFirst()
+            }
+            return true
+        }
     }
 
     /// Resolves the crash spans this exporter itself declined to send — dropped by session
     /// sampling or by `ignoreErrors` — by recording their ids as confirmed. "Confirmed" here
     /// means the report is finished with, whether by delivery or by policy: `completeCrashRecovery`
-    /// gates the purge of a pending PLCrashReporter report, and `CrashEventStore` its removal, on
-    /// that flag alone. Without this a crash from a sampled-out session is re-parsed, re-emitted
-    /// and re-dropped on every launch until another crash overwrites the file. The idle-session
-    /// early return is deliberately not routed here: that is a deferral, and retrying it on the
-    /// next launch is the right outcome.
+    /// deletes a stored crash on that flag alone. Without this a crash from a sampled-out session
+    /// is re-read, re-emitted and re-dropped on every launch. The native
+    /// `beforeSend` dropping a crash during encoding is resolved the same way, in `uploadCrash`.
     private func resolveCrashSpansDroppedByPolicy(incoming: Set<String>, surviving spans: [SpanData]) {
         let dropped = incoming.subtracting(crashEventIds(in: spans))
-        recordCrashUpload(ids: dropped, succeeded: true)
+        recordCrashOutcome(CrashUploadAnswer(outcome: .policyDropped), ids: dropped)
     }
 
     /// Correlation ids of the crash events in this batch, read from the raw span
     /// attribute. The attribute is not mapped into cx_rum, so it stays off the wire.
     private func crashEventIds(in spans: [SpanData]) -> Set<String> {
-        var ids: Set<String> = []
-        for span in spans {
-            // Keyed on the correlation id alone: it is stamped only on crash spans, by both
-            // paths, and only where a confirmation is awaited. Gating on is_crash as well
-            // would miss the PLCrashReporter path, which never sets that attribute.
-            guard let id = span.getAttribute(forKey: Keys.crashEventId.rawValue) as? String else {
-                continue
-            }
-            ids.insert(id)
-        }
-        return ids
+        Set(spans.compactMap { crashEventId(of: $0) })
+    }
+
+    /// Keyed on the correlation id alone: it is stamped only on stored crashes, where an answer is
+    /// awaited. A live hybrid crash also sets is_crash, but is sent once and awaits nothing.
+    private func crashEventId(of span: SpanData) -> String? {
+        span.getAttribute(forKey: Keys.crashEventId.rawValue) as? String
     }
 
     public init(options: CoralogixExporterOptions,
@@ -96,17 +191,61 @@ public class CoralogixExporter: SpanExporter {
         self.networkManager = networkManager
         self.viewManager = viewManager
         self.metricsManager = metricsManager
-        
+        self.sessionRecorder = LiveSessionRecorder(store: sessionManager.snapshotStore)
+
         self.sessionManager.viewProvider = { [weak self] in
             self?.viewManager.currentView ?? (nil, nil)
         }
         self.sessionManager.sessionEndedCallback = { [weak self] in
+            // Before the resets: they clear what the ended session's record must keep.
+            self?.recordEndedSession()
             self?.viewManager.reset()
             self?.sessionManager.reset()
             self?.screenshotManager.reset()
         }
+        self.sessionManager.countersChanged = { [weak self] in
+            self?.recordLiveSession()
+        }
     }
-    
+
+    /// Writes the live session's record; called whenever what a crash would report changes.
+    let sessionRecorder: LiveSessionRecorder
+
+    /// Records the live session as it stands when the write runs. A write that runs after the
+    /// session it was scheduled for has ended writes nothing: the ended session got its final
+    /// record from `recordEndedSession`, and the live one gets its own write from the rotation.
+    func recordLiveSession() {
+        guard let sessionId = sessionManager.currentSessionId else { return }
+        sessionRecorder.record { [weak self] in
+            guard let self, self.sessionManager.currentSessionId == sessionId else { return nil }
+            return self.sessionRecord(sessionId)
+        }
+    }
+
+    /// The final record of the session a rotation just ended, taken before its counters reset.
+    private func recordEndedSession() {
+        guard let ended = sessionManager.getPrevSessionMetadata()?.sessionId, !ended.isEmpty else { return }
+        let record = sessionRecord(ended)
+        sessionRecorder.record { record }
+    }
+
+    /// What a crash right now would report about `sessionId`. View reads go through
+    /// `ViewManager`'s queue after any change already submitted to it, so they see that change.
+    private func sessionRecord(_ sessionId: String) -> SessionSnapshotRecord {
+        let options = getOptions()
+        let view = viewManager.currentView
+        return SessionSnapshotRecord(sessionId: sessionId,
+                                     errorCount: sessionManager.getErrorCount(),
+                                     viewCount: viewManager.getUniqueViewCount(),
+                                     actionCount: sessionManager.getClickCount(),
+                                     hasRecording: sessionManager.doesSessionHasRecording(),
+                                     viewName: view.name,
+                                     viewNumber: view.name == nil ? nil : view.number,
+                                     appName: options.application,
+                                     appVersion: options.version,
+                                     osVersion: Global.osVersionInfo())
+    }
+
     var pendingSpans: [SpanData] = []
     var endPoint: String {
       return "\(getOptions().coralogixDomain.rawValue)\(Global.coralogixPath.rawValue)"
@@ -136,6 +275,7 @@ public class CoralogixExporter: SpanExporter {
         } else if cxView.state == .notifyOnDisappear {
             self.viewManager.set(cxView: nil)
         }
+        self.recordLiveSession()
     }
     
     public func update(userContext: UserContext?) {
@@ -155,6 +295,7 @@ public class CoralogixExporter: SpanExporter {
             $0.version = version
             $0.application = application
         }
+        self.recordLiveSession()
     }
 
     /// Updates the per-session sampling decision. Called once at init and again on every session
@@ -178,7 +319,7 @@ public class CoralogixExporter: SpanExporter {
     
     internal func sendBeforeSendData(data: [[String: Any]]) {
         let rebuilt = data.map { self.rebuildOtelSpanAttributes(in: $0) }
-        self.spanUploader.upload(rebuilt, endPoint: self.endPoint)
+        self.uploadLive(rebuilt)
     }
 
     /// Hybrid (`beforeSendCallBack`) path: spans are encoded *before* the JS edit and the
@@ -201,7 +342,7 @@ public class CoralogixExporter: SpanExporter {
     private func rebuildOtelSpanAttributes(in event: [String: Any]) -> [String: Any] {
         guard var instrumentationData = event[Keys.instrumentationData.rawValue] as? [String: Any],
               var otelSpan = instrumentationData[Keys.otelSpan.rawValue] as? [String: Any],
-              let cxRum = (event[Keys.text.rawValue] as? [String: Any])?[Keys.cxRum.rawValue] as? [String: Any] else {
+              let cxRum = Self.cxRum(of: event) else {
             return event
         }
         let previousAttributes = otelSpan[Keys.attributes.rawValue] as? [String: Any] ?? [:]
@@ -222,11 +363,21 @@ public class CoralogixExporter: SpanExporter {
     #endif
 
     public func export(spans: [SpanData], explicitTimeout: TimeInterval?) -> SpanExporterResultCode {
+        guard !isRetired else {
+            Log.d("[SDK] Exporter of a shut-down SDK instance — dropping \(spans.count) span(s)")
+            return .success
+        }
         #if DEBUG
         Self.testExportCallback?(spans)
         #endif
-        if self.sessionManager.isIdle {
-            Log.d("[SDK] Skipping export, session is idle")
+        // An idle session drops its live spans, but a stored crash belongs to the session it
+        // happened in and still goes out.
+        let isIdle = self.sessionManager.isIdle
+        let spans = isIdle ? spans.filter { crashEventId(of: $0) != nil } : spans
+        if isIdle {
+            Log.d("[SDK] Session is idle, exporting only stored crashes (\(spans.count))")
+        }
+        if spans.isEmpty {
             return .success
         }
 
@@ -264,72 +415,120 @@ public class CoralogixExporter: SpanExporter {
         let masker = UrlMasker.Masker(getOptions().urlMasking)
         filterSpans = filterSpans.map { Self.maskingUrls(in: $0, masker: masker) }
 
-        // Deduplicate using spanId as key
-        let uniqueSpansDict = Dictionary(grouping: filterSpans, by: { $0.spanId })
-        let uniqueSpans = uniqueSpansDict.compactMap { $0.value.first }
+        // Deduplicated by span id in batch order, so stored crashes go out newest first, as
+        // recovery emitted them.
+        var seenSpanIds = Set<SpanId>()
+        let uniqueSpans = filterSpans.filter { seenSpanIds.insert($0.spanId).inserted }
 
         resolveCrashSpansDroppedByPolicy(incoming: incomingCrashIds, surviving: uniqueSpans)
 
-        if !uniqueSpans.isEmpty {
-            let options = getOptions()
-            // Invoke tracesExporter callback if configured (additive OTLP export path).
-            // This provides raw SpanData for external OTLP consumers and does NOT affect
-            // the CX log pipeline — instrumentation_data is always preserved.
-            if let tracesExporter = options.tracesExporter {
-                let exporterData = CoralogixTraceExporterData(spans: uniqueSpans)
+        guard !uniqueSpans.isEmpty else { return .failure }
+
+        let options = getOptions()
+        // Invoke tracesExporter callback if configured (additive OTLP export path).
+        // This provides raw SpanData for external OTLP consumers and does NOT affect
+        // the CX log pipeline — instrumentation_data is always preserved.
+        if let tracesExporter = options.tracesExporter {
+            let forwarded = spansToForward(uniqueSpans)
+            if !forwarded.isEmpty {
                 do {
-                    try tracesExporter(exporterData)
+                    try tracesExporter(CoralogixTraceExporterData(spans: forwarded))
                 } catch {
                     Log.e("[CoralogixExporter] tracesExporter callback threw: \(error)")
                 }
             }
-            
-            let cxSpansDictionary = autoreleasepool {
-                encodeSpans(spans: uniqueSpans)
-            }
-            Log.d("[CoralogixExporter] encodeSpans: \(uniqueSpans.count) in, \(cxSpansDictionary.count) encoded")
-            if cxSpansDictionary.isEmpty {
-                return .success
-            }
-            
-            // Crash correlation ids present in this batch, read from the raw spans.
-            let crashIds = self.crashEventIds(in: uniqueSpans)
-
-            let sdk = CoralogixRum.mobileSDK.sdkFramework
-            if !sdk.isNative, let callback = options.beforeSendCallBack {
-                // Crash events skip the hybrid JS round trip: when a crash is exported the
-                // process is usually about to terminate, and the extra native→JS→native hop
-                // loses the race. The hybrid beforeSend callback cannot edit or drop them;
-                // the native beforeSend option (applied during encoding) still can.
-                let crashSpans = cxSpansDictionary.filter { self.isCrashEvent($0) }
-                let editableSpans = cxSpansDictionary.filter { !self.isCrashEvent($0) }
-
-                var result: SpanExporterResultCode = .success
-                if !crashSpans.isEmpty {
-                    result = spanUploader.upload(crashSpans, endPoint: self.endPoint)
-                    recordCrashUpload(ids: crashIds, succeeded: result == .success)
-                }
-                if !editableSpans.isEmpty {
-                    let clonedSpans = editableSpans.deepCopy()
-                    callback(clonedSpans)
-                }
-                return result
-            }
-            let result = spanUploader.upload(cxSpansDictionary, endPoint: self.endPoint)
-            if !crashIds.isEmpty {
-                recordCrashUpload(ids: crashIds, succeeded: result == .success)
-            }
-            return result
         }
-        return .failure
+
+        // Each stored crash goes in a request of its own, so a reject of the live batch (a
+        // 413, say) or of another crash cannot take it down with it.
+        let crashSpans = uniqueSpans.filter { crashEventId(of: $0) != nil }
+        let liveSpans = uniqueSpans.filter { crashEventId(of: $0) == nil }
+        crashSpans.forEach { uploadCrash($0) }
+        // A crash's answer reaches its sender through `awaitCrashUpload`, not this result.
+        return liveSpans.isEmpty ? .success : exportLive(liveSpans, options: options)
+    }
+
+    /// Encodes the crash here, so beforeSend sees the same state as before, and sends it on
+    /// `storedCrashUploadQueue`.
+    private func uploadCrash(_ span: SpanData) {
+        guard let id = crashEventId(of: span) else { return }
+        let encoded = autoreleasepool { encodeSpans(spans: [span]) }
+        // Empty means the native beforeSend dropped it or it could not be encoded. Both are
+        // final: a failed rebuild fails the same way on every launch. With a beforeSend set, an
+        // encode failure is also labelled `.policyDropped`, so that label is not proof the
+        // customer dropped it; the purge is the same either way.
+        guard !encoded.isEmpty else {
+            let customerMayHaveDropped = getOptions().beforeSend != nil
+            if !customerMayHaveDropped {
+                Log.e("[CoralogixExporter] stored crash \(id) could not be encoded — dropped")
+            }
+            let outcome: CrashUploadOutcome = customerMayHaveDropped ? .policyDropped : .rejected
+            recordCrashOutcome(CrashUploadAnswer(outcome: outcome), ids: [id])
+            return
+        }
+        // Read on this thread: `spanUploader` is lazy, and the live path reads it here too.
+        let uploader = spanUploader
+        let endPoint = self.endPoint
+        // Strong self: a weak capture lost to a re-init would never answer the waiter, which
+        // would then sit out its whole timeout.
+        storedCrashUploadQueue.async {
+            // Queued uploads can run after shutdown retires this exporter; the crash stays stored.
+            let result = self.isRetired
+                ? .notAttempted
+                : uploader.upload(encoded, endPoint: endPoint, kind: .storedCrash)
+            self.recordCrashOutcome(CrashUploadAnswer(result), ids: [id])
+        }
+    }
+
+    /// Blocks until every stored-crash upload queued so far has been answered.
+    func waitForStoredCrashUploads() {
+        storedCrashUploadQueue.sync {}
+    }
+
+    /// Holds stored-crash uploads queued after this call until `release` is signalled. Tests only.
+    func holdStoredCrashUploads(until release: DispatchSemaphore) {
+        storedCrashUploadQueue.async { release.wait() }
+    }
+
+    private func exportLive(_ spans: [SpanData], options: CoralogixExporterOptions) -> SpanExporterResultCode {
+        let cxSpansDictionary = autoreleasepool {
+            encodeSpans(spans: spans)
+        }
+        Log.d("[CoralogixExporter] encodeSpans: \(spans.count) in, \(cxSpansDictionary.count) encoded")
+        if cxSpansDictionary.isEmpty {
+            return .success
+        }
+
+        let sdk = CoralogixRum.mobileSDK.sdkFramework
+        guard !sdk.isNative, let callback = options.beforeSendCallBack else {
+            return uploadLive(cxSpansDictionary).resultCode
+        }
+        // Crash events skip the hybrid JS round trip: when a crash is exported the
+        // process is usually about to terminate, and the extra native→JS→native hop
+        // loses the race. The hybrid beforeSend callback cannot edit or drop them;
+        // the native beforeSend option (applied during encoding) still can.
+        let crashEvents = cxSpansDictionary.filter { self.isCrashEvent($0) }
+        let editableSpans = cxSpansDictionary.filter { !self.isCrashEvent($0) }
+
+        var result: SpanExporterResultCode = .success
+        if !crashEvents.isEmpty {
+            result = uploadLive(crashEvents).resultCode
+        }
+        if !editableSpans.isEmpty {
+            callback(editableSpans.deepCopy())
+        }
+        return result
+    }
+
+    /// The `cx_rum` of an encoded event.
+    private static func cxRum(of event: [String: Any]) -> [String: Any]? {
+        (event[Keys.text.rawValue] as? [String: Any])?[Keys.cxRum.rawValue] as? [String: Any]
     }
 
     /// Whether an encoded span carries `error_context.is_crash == true` — a crash reported
     /// through the hybrid bridge or rebuilt from a pending PLCrashReporter report.
     private func isCrashEvent(_ encodedSpan: [String: Any]) -> Bool {
-        guard let text = encodedSpan[Keys.text.rawValue] as? [String: Any],
-              let cxRum = text[Keys.cxRum.rawValue] as? [String: Any],
-              let errorContext = cxRum[Keys.errorContext.rawValue] as? [String: Any] else {
+        guard let errorContext = Self.cxRum(of: encodedSpan)?[Keys.errorContext.rawValue] as? [String: Any] else {
             return false
         }
         return errorContext[Keys.isCrash.rawValue] as? Bool ?? false
@@ -366,8 +565,10 @@ public class CoralogixExporter: SpanExporter {
         }
         
         let options = getOptions()
-        let metadata = VersionMetadata(appName: options.application,
-                                         appVersion: options.version)
+        // A recovered crash reports the app version it crashed under, not this launch's.
+        let crashedApp = { (key: Keys) in otelSpan.attributes[key.rawValue]?.description }
+        let metadata = VersionMetadata(appName: crashedApp(.crashedAppName) ?? options.application,
+                                       appVersion: crashedApp(.crashedAppVersion) ?? options.version)
         
         // CxSpan init can fail if session attributes are missing
         guard let cxSpan = CxSpan(otel: otelSpan,
@@ -384,20 +585,17 @@ public class CoralogixExporter: SpanExporter {
     }
     
     private func isMatchesRegexPattern(string: String, regexs: [String]) -> Bool {
-        // Iterate over the regex patterns
-        for regex in regexs {
+        let range = NSRange(string.startIndex..., in: string)
+        for pattern in regexs {
             do {
-                let regex = try NSRegularExpression(pattern: regex, options: [.caseInsensitive])
-                let range = NSRange(string.startIndex..., in: string)
-                let matchFound = regex.firstMatch(in: string, options: [], range: range) != nil
-                return matchFound
+                let regex = try NSRegularExpression(pattern: pattern, options: [.caseInsensitive])
+                if regex.firstMatch(in: string, options: [], range: range) != nil {
+                    return true
+                }
             } catch {
-                Log.w("Invalid regex pattern: \(regex) — Error: \(error)")
-                continue // Skip invalid regex instead of crashing
+                Log.w("Invalid regex pattern: \(pattern) — Error: \(error)")
             }
         }
-        
-        // Return false if no regex matches the host
         return false
     }
     
@@ -540,7 +738,12 @@ public class CoralogixExporter: SpanExporter {
         }
         
         guard let ignoreErrors = getOptions().ignoreErrors, !ignoreErrors.isEmpty else { return true }
-        if ignoreErrors.contains(message) { return false }
-        return !self.isMatchesRegexPattern(string: message, regexs: ignoreErrors)
+        // The type is tried as well as the message, so a pattern naming the error type (or a
+        // crash's signal) drops it.
+        let errorType = attributeStringValue(forKey: Keys.errorType.rawValue, span: span)
+        let candidates = [message] + [errorType].compactMap { $0 }.filter { !$0.isEmpty }
+        return !candidates.contains { candidate in
+            ignoreErrors.contains(candidate) || self.isMatchesRegexPattern(string: candidate, regexs: ignoreErrors)
+        }
     }
 }

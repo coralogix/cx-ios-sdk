@@ -239,7 +239,9 @@ final class LogSamplingDecouplingTests: XCTestCase {
         let logCount = capture.eventTypes.filter { $0 == "log" }.count
         XCTAssertEqual(logCount, iterations,
                        "Every log export must survive the filter (logs are in excludeFromSampling).")
-        let nonLog = Set(capture.eventTypes).subtracting(["log"])
+        // `internal` is the SDK's own init event, which passes the filter here and arrives
+        // asynchronously — see case 5.
+        let nonLog = Set(capture.eventTypes).subtracting(["log", CoralogixEventType.internalKey.rawValue])
         XCTAssertTrue(nonLog.isEmpty,
                       "No non-log event_types should pass the filter; saw: \(nonLog.sorted())")
     }

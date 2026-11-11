@@ -30,9 +30,9 @@ final class HybridBeforeSendInstrumentationDataTests: XCTestCase {
     /// captures exactly what the hybrid path would POST.
     private final class CapturingUploader: SpanUploading {
         private(set) var uploaded: [[String: Any]]?
-        func upload(_ spans: [[String: Any]], endPoint: String) -> SpanExporterResultCode {
+        func upload(_ spans: [[String: Any]], endPoint: String, kind: SpanUploadKind) -> SpanUploadResult {
             uploaded = spans
-            return .success
+            return .delivered
         }
     }
 

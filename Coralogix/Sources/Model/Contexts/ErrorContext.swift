@@ -81,19 +81,25 @@ struct ErrorContext {
     func getDictionary() -> [String: Any] {
         var errorContext = [String: Any]()
 
-        if let threads = self.threads, !threads.isEmpty {
+        // A recovered native crash report: the only error that carries `exception_type`. A hybrid
+        // crash (`isCrash` from the bridge) keeps the general shape below, and so does an error
+        // that carries threads without being a crash.
+        if self.isCrash && !self.exceptionType.isEmpty {
             errorContext[Keys.exceptionType.rawValue] = self.exceptionType
             errorContext[Keys.crashTimestamp.rawValue] = self.crashTimestamp
             errorContext[Keys.processName.rawValue] = self.processName
             errorContext[Keys.applicationIdentifier.rawValue] = self.applicationIdentifier
             errorContext[Keys.triggeredByThread.rawValue] = self.triggeredByThread
             errorContext[Keys.baseAddress.rawValue] = self.baseAddress
-            errorContext[Keys.arch.rawValue] = self.arch
+            if !self.arch.isEmpty {
+                errorContext[Keys.arch.rawValue] = self.arch
+            }
             if let threads = self.threads {
                 errorContext[Keys.threads.rawValue] = threads
             }
             errorContext[Keys.isCrash.rawValue] = true
-            errorContext[Keys.errorMessage.rawValue] = self.exceptionType
+            errorContext[Keys.errorType.rawValue] = self.errorType.isEmpty ? self.exceptionType : self.errorType
+            errorContext[Keys.errorMessage.rawValue] = self.errorMessage.isEmpty ? self.exceptionType : self.errorMessage
         } else {
             if !self.domain.isEmpty {
                 errorContext[Keys.domain.rawValue] = self.domain
@@ -115,6 +121,10 @@ struct ErrorContext {
                 errorContext[Keys.originalStackTrace.rawValue] = stackTrace
             }
 
+            if let threads = self.threads, !threads.isEmpty {
+                errorContext[Keys.threads.rawValue] = threads
+            }
+
             if !self.errorType.isEmpty {
                 errorContext[Keys.errorType.rawValue] = errorType
             }
@@ -133,12 +143,6 @@ struct ErrorContext {
 
             if let data = self.data {
                 errorContext[Keys.errorCustomData.rawValue] = data
-            }
-
-            // Set for crash events re-sent from a previous process (CrashEventStore):
-            // preserves the real crash time, since the span itself is stamped at resend.
-            if !self.crashTimestamp.isEmpty {
-                errorContext[Keys.crashTimestamp.rawValue] = self.crashTimestamp
             }
 
             errorContext[Keys.isCrash.rawValue] = self.isCrash

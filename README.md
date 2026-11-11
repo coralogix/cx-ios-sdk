@@ -150,7 +150,7 @@ Turn on/off specific instrumentation, default to true. Each instrumentation is r
 ```
 
 ### Ignore Errors
-The ignoreErrors option allows you to exclude errors that meet specific criteria. This option accepts a set of strings and regular expressions to match against the event's error message. Use regular expressions for exact matching as strings remove partial matches.
+The ignoreErrors option allows you to exclude errors that meet specific criteria. Each pattern is compared with the event's error message and its error type, as an exact string or as a case-insensitive regular expression that can match part of the text. Every pattern is tried, so `SIGSEGV` drops segmentation-fault crashes and `ANR` drops ANR events.
 ```swift
  let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
                                         environment: "ENVIRONMENT",

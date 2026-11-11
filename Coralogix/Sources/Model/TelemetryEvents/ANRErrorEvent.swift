@@ -18,24 +18,32 @@ struct ANRErrorEvent: TelemetryEvent {
     var type: EventType { .error }
     let errorMessage: String
     let errorType: String
+    /// Every thread as the hang was detected, main first, in the crash threads' wire shape.
+    let threads: String?
 
     init(
         id: UUID = UUID(),
         timestamp: Date = Date(),
         errorMessage: String = WireValues.anrErrorMessage.rawValue,
-        errorType: String = WireValues.anrErrorType.rawValue
+        errorType: String = WireValues.anrErrorType.rawValue,
+        threads: String? = nil
     ) {
         self.id = id
         self.timestamp = timestamp
         self.errorMessage = errorMessage
         self.errorType = errorType
+        self.threads = threads
     }
 
     func toOTelAttributes() -> [String: AttributeValue] {
-        return [
+        var attributes: [String: AttributeValue] = [
             Keys.eventType.rawValue:    .string(type.rawValue),
             Keys.errorMessage.rawValue: .string(errorMessage),
             Keys.errorType.rawValue:    .string(errorType),
         ]
+        if let threads {
+            attributes[Keys.threads.rawValue] = .string(threads)
+        }
+        return attributes
     }
 }

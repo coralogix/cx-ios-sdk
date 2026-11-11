@@ -16,23 +16,25 @@ public class CoralogixRum {
     /// reaching through the global `OpenTelemetry.instance` (which another OTel
     /// consumer in the host app may have re-registered).
     internal var tracerProviderSdk: TracerProviderSdk?
-    /// Disk store for hybrid crash events (see `CrashEventStore`).
-    internal lazy var crashEventStore = CrashEventStore()
-    /// Deferred purge of the pending PLCrashReporter report. Set by
-    /// `recoverPendingCrashes`, executed by `completeCrashRecovery()`
-    /// after init finishes — the uploader rejects requests while
-    /// `isInitialized` is false, so upload confirmation is only possible then.
-    internal var pendingCrashPurge: (() -> Void)?
-    /// Correlation id of the pending PLCrashReporter report's span, so its purge
-    /// is gated on that report's own upload rather than any crash upload.
-    internal var pendingCrashReportId: String?
-    /// Store identities of the crash events re-emitted during this init, awaiting
-    /// upload confirmation. Only these are removed on confirm — an event persisted
-    /// after the resend (e.g. a fresh runtime crash) keeps its own lifecycle.
-    internal var pendingRecoveryCrashEventIds: Set<String> = []
-    /// Guards `pendingCrashPurge`, `pendingCrashReportId`, and
-    /// `pendingRecoveryCrashEventIds`: written during init and read-and-cleared on
-    /// `flush`'s background completion.
+    /// The SDK's copies of crash reports and their delivery records.
+    internal lazy var crashDeliveryStore = CrashDeliveryStore()
+    /// Background time for work that has to finish after the app leaves the foreground.
+    internal lazy var backgroundTasks: BackgroundTaskRunning = ApplicationBackgroundTaskRunner()
+    /// Keeps the marker of a hang the watchdog reports, for the next launch to find if this one ends during it.
+    internal lazy var fatalHangWatch = FatalHangWatch(store: self.crashDeliveryStore) { [weak self] in
+        self?.sessionManager?.lastPublishedCrashStamp.map {
+            StoredCrashRecord.Session(id: $0.sessionId, creationDate: $0.creationDate, sampledIn: $0.sampledIn)
+        }
+    }
+    /// Sends the crashes earlier launches left behind; started by `completeCrashRecovery`.
+    internal lazy var crashDeliveryScheduler = CrashDeliveryScheduler(
+        store: self.crashDeliveryStore,
+        sender: self,
+        backgroundTasks: self.backgroundTasks,
+        isOnline: { [weak self] in self?.coralogixExporter?.reachability?.isOnline ?? true })
+    /// The crashes `recoverPendingCrashes` lined up, newest first, for `completeCrashRecovery`.
+    internal var pendingRecoveredCrashes: [CrashDeliveryScheduler.Item] = []
+    /// Guards `pendingRecoveredCrashes`: written during init and read-and-cleared after it.
     internal let crashRecoveryLock = NSLock()
     internal var networkManager = NetworkManager()
     internal var viewManager = ViewManager(keyChain: KeychainManager())
@@ -95,7 +97,7 @@ public class CoralogixRum {
     public init(
         options: CoralogixExporterOptions,
         sdkFramework: SdkFramework = .swift,
-        sessionManager: SessionManager? = SessionManager()
+        sessionManager: SessionManager? = SessionManager.forLaunch()
     ){
         CoralogixRum.mobileSDK = MobileSDK(sdkFramework: sdkFramework)
         Log.isDebug = options.debug
@@ -149,7 +151,11 @@ public class CoralogixRum {
         // argument — rolling again here would let the filter and the stamp disagree, and
         // re-reading the live flag would let a concurrent rotation hide a sampled-in transition
         // from the callback meant to act on it.
+        sessionManager.attachCrashStampObserverIfNeeded(CrashContextSession.write)
         sessionManager.setSessionSampledIn(initialSampledIn)
+        // The first record of this launch: written at adoption, whatever the sampling decision,
+        // so a crash in a sampled-out session that still reports errors finds its session.
+        self.coralogixExporter?.recordLiveSession()
         sessionManager.samplingRoller = { options.sdkSampler.shouldInitialized() }
         self.coralogixExporter?.updateSessionSampling(sampledIn: initialSampledIn)
         sessionManager.samplingReevaluationCallback = { [weak self] _, sampledIn in
@@ -171,9 +177,8 @@ public class CoralogixRum {
 
         self.setupTracer(applicationName: options.application)
         self.swizzle()
-        if Self.shouldRecoverCrashes(options: options) {
-            self.recoverPendingCrashes()
-        }
+        // Whatever the options: the copies made at image load are cleaned up even when nothing is sent.
+        self.recoverPendingCrashes()
         self.installEligibleInstrumentations(using: options, sampledIn: initialSampledIn)
         self.emitStartupInitSpan()
 
@@ -322,6 +327,7 @@ public class CoralogixRum {
             viewManager: self.viewManager,
             metricsManager: self.metricsManager
         )
+        exporter.reachability = self.networkManager
         self.coralogixExporter = exporter
     }
     
@@ -539,7 +545,41 @@ public class CoralogixRum {
         }
     }
 
+    /// How long `shutdown()` waits for the batch processor to stop, as Android bounds its own.
+    static let tracerProviderShutdownTimeout: TimeInterval = 5
+
+    /// Drains and stops the batch processor while uploads are gated off. Left running, it exports
+    /// what it still holds once a later init reopens the gate — a stored crash then goes out from
+    /// here and again from the new instance's own pass. Stopping waits for an export already on the
+    /// network, so it runs off the calling thread and is waited for at most
+    /// `tracerProviderShutdownTimeout`. The reference is kept: `flush()` reads it from any thread,
+    /// and a stopped provider ignores it.
+    private func stopTracerProvider() {
+        guard let provider = self.tracerProviderSdk else { return }
+        let stopped = DispatchSemaphore(value: 0)
+        DispatchQueue.global(qos: .utility).async {
+            provider.shutdown()
+            stopped.signal()
+        }
+        if stopped.wait(timeout: .now() + Self.tracerProviderShutdownTimeout) == .timedOut {
+            Log.w("[CoralogixRum] the batch processor is still stopping; shutdown is not waiting for it")
+        }
+    }
+
+    /// Shutdown runs once per instance: a repeat returns at once instead of waiting again on the
+    /// batch processor.
+    private let shutdownLock = NSLock()
+    private var hasShutDown = false
+
     public func shutdown() {
+        shutdownLock.lock()
+        let alreadyShutDown = hasShutDown
+        hasShutDown = true
+        shutdownLock.unlock()
+        guard !alreadyShutDown else { return }
+        // Before the batch processor is stopped: a stop that outlasts its bound, or a later init
+        // reopening the process-wide gate, must not let this instance's exporter send anything.
+        self.coralogixExporter?.retire()
         CoralogixCustomGlobalSpanRegistry.shared.teardownIfNeeded()
         Self.customTracerIssuanceLock.lock()
         CoralogixRum.customTracerIssued = false
@@ -548,6 +588,8 @@ public class CoralogixRum {
         self.initSpanLock.lock()
         self.initSpanState = .retired
         self.initSpanLock.unlock()
+        self.crashDeliveryScheduler.stop()
+        stopTracerProvider()
         self.coralogixExporter?.shutdown(explicitTimeout: nil)
         self.removeNotification()
         self.metricsManager.removeObservers()
@@ -562,6 +604,7 @@ public class CoralogixRum {
         // make it visible. Re-arming a crash handler after an explicit shutdown is the case that
         // matters: shutdown is what a host calls when consent is withdrawn.
         self.sessionManager?.samplingReevaluationCallback = nil
+        self.sessionManager?.detachCrashStampObserver()
     }
     
     public var isInitialized: Bool { return CoralogixRum.isInitialized }
@@ -866,9 +909,20 @@ public class CoralogixRum {
         }
     }
 
-    internal func makeSpan(event: CoralogixEventType, source: Keys, severity: CoralogixLogSeverity, startTime: Date? = nil) -> any Span {
+    /// - Parameter startsNewTrace: the span starts a trace of its own instead of following the
+    ///   parent policy. Used for an event reported on a later launch than the one it happened in,
+    ///   which the current launch's spans have nothing to do with.
+    internal func makeSpan(event: CoralogixEventType,
+                           source: Keys,
+                           severity: CoralogixLogSeverity,
+                           startTime: Date? = nil,
+                           startsNewTrace: Bool = false) -> any Span {
         let builder = tracerProvider().spanBuilder(spanName: Keys.iosSdk.rawValue)
-        Self.applyAutoInstrumentationParentPolicy(builder: builder, event: event)
+        if startsNewTrace {
+            _ = builder.setNoParent()
+        } else {
+            Self.applyAutoInstrumentationParentPolicy(builder: builder, event: event)
+        }
         if let startTime {
             _ = builder.setStartTime(time: startTime)
         }

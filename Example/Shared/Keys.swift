@@ -67,4 +67,5 @@ enum Keys: String {
     case tracesExporter = "Traces Exporter"
     case logSamplingDecoupling = "Log Sampling Decoupling"
     case timeMeasurement = "Custom Time Measurement"
+    case crashLab = "Crash Lab"
 }

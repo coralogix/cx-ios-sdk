@@ -85,6 +85,12 @@ struct ContentView: View {
                 subtitle: "startTimeMeasure / endTimeMeasure with labels, quick presets, captured spans",
                 icon: "timer",
                 destination: AnyView(TimeMeasurementView())
+            ),
+            MenuItem(
+                title: "Crash Lab",
+                subtitle: "Every crash, hang and delivery case, with launch settings",
+                icon: "flame",
+                destination: AnyView(CrashLabView())
             )
         ]
     }
