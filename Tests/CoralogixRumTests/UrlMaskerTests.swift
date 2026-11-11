@@ -304,4 +304,58 @@ final class UrlMaskerTests: XCTestCase {
         XCTAssertFalse(UrlMasker.isUrlOrRoute("://x.com"))
         XCTAssertFalse(UrlMasker.isUrlOrRoute("1http://x.com"))
     }
+
+    // MARK: - URLs inside text (cases shared with the Android SDK)
+
+    func test_maskUrlOrText_masksTheUrlInsideAnErrorMessage() {
+        XCTAssertEqual(UrlMasker.Masker().maskUrlOrText("ClientException: Connection closed, uri=https://api.example.com/cb?code=abc&page=2"),
+                       "ClientException: Connection closed, uri=https://api.example.com/cb?code=\(R)&page=2")
+    }
+
+    func test_maskUrlOrText_masksEachOfTwoUrlsWithAdditionalParams() {
+        let masker = UrlMasker.Masker(UrlMaskingOptions(additionalParams: ["tenant"]))
+        XCTAssertEqual(masker.maskUrlOrText(#"GET https://a.com/x?tenant=acme failed, redirected to "https://b.com/y#access_token=xyz""#),
+                       #"GET https://a.com/x?tenant=\#(R) failed, redirected to "https://b.com/y#access_token=\#(R)""#)
+    }
+
+    func test_maskUrlOrText_dropQuery_cutsOnlyTheUrlsInText() {
+        let masker = UrlMasker.Masker(UrlMaskingOptions(mode: .dropQuery))
+        XCTAssertEqual(masker.maskUrlOrText("Failed host lookup for https://a.com/cb?code=abc&x=1 (code 7). Retry later?"),
+                       "Failed host lookup for https://a.com/cb (code 7). Retry later?")
+        XCTAssertEqual(masker.maskUrlOrText("Order #123 failed: see https://x.com/help?page=2#faq for details"),
+                       "Order #123 failed: see https://x.com/help for details")
+    }
+
+    /// Free text is not masked beyond the URLs in it, the same as Android.
+    func test_maskUrlOrText_textWithoutUrl_isUnchanged() {
+        XCTAssertEqual(UrlMasker.Masker().maskUrlOrText("timeout after 10000 ms? code=abc"), "timeout after 10000 ms? code=abc")
+        XCTAssertEqual(UrlMasker.Masker(UrlMaskingOptions(mode: .dropQuery)).maskUrlOrText("Step #2"), "Step #2")
+    }
+
+    func test_replacingUrlSpans_isLinear() {
+        let text = String(repeating: "a", count: 200_000) + "://" + String(repeating: "b", count: 200_000)
+            + String(repeating: " ://", count: 50_000)
+        let start = Date()
+        var spans = 0
+        _ = UrlMasker.replacingUrlSpans(in: text) { span in spans += 1; return span }
+        XCTAssertLessThan(Date().timeIntervalSince(start), 2)
+        XCTAssertEqual(spans, 1)
+    }
+
+    func test_userInfo_passwordWithUnencodedAt_isMaskedWhole() {
+        XCTAssertEqual(UrlMasker.mask("https://user:p@ss@host.com/x"), "https://\(R)@host.com/x")
+        XCTAssertEqual(UrlMasker.mask("https://u:p@host.com/a@b?x=1"), "https://\(R)@host.com/a@b?x=1")
+    }
+
+    func test_jwt_longRunOfRepeatedHeaders_isLinear() {
+        let run = String(repeating: "eyJ", count: 8000)
+        let start = Date()
+        XCTAssertEqual(UrlMasker.mask("https://a.com/" + run), "https://a.com/" + run)
+        XCTAssertLessThan(Date().timeIntervalSince(start), 0.5)
+    }
+
+    func test_jwt_stillMaskedAfterSeparatorsAndEscapes() {
+        XCTAssertEqual(UrlMasker.mask("https://a.com/cb?redirect=\(jwt)&x=1"), "https://a.com/cb?redirect=\(R)&x=1")
+        XCTAssertEqual(UrlMasker.mask("https://a.com/go?to=x%3Fid%3D\(jwt)"), "https://a.com/go?to=x%3Fid%3D\(R)")
+    }
 }

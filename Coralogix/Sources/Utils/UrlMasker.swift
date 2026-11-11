@@ -74,9 +74,13 @@ enum UrlMasker {
     /// hold percent-escapes (`%74oken`), other than the four delimiters, and is decoded before the check.
     private static let encodedParamPattern = regex("(%3F|%26|%23)((?:[A-Za-z0-9_.-]|%(?!3D|3F|26|23)[0-9A-F]{2})+)%3D((?:(?!%26|%23)[^&#])*)", .caseInsensitive)
     /// A JWT anywhere in the URL, the path included. The payload can be as short as `e30` (`{}`).
-    private static let jwtPattern = regex("eyJ[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{2,}(?:\\.[A-Za-z0-9_-]*){0,3}")
+    /// A match starts only where a token run starts (or right after a `%XX` escape, as in
+    /// `%3DeyJ…`), and the header is matched possessively: otherwise each `eyJ` inside a long run
+    /// with no `.` starts its own scan to the end of the run, which is quadratic.
+    private static let jwtPattern = regex("(?:(?<![A-Za-z0-9_-])|(?<=%[0-9A-Fa-f]{2}))eyJ[A-Za-z0-9_-]{8,}+\\.[A-Za-z0-9_-]{2,}(?:\\.[A-Za-z0-9_-]*){0,3}")
     /// Credentials written into the URL: `https://user:password@host`.
-    private static let userInfoPattern = regex("^([a-z][a-z0-9+.-]*://)[^/?#@]*@", .caseInsensitive)
+    /// Runs to the last `@` before the path, so a password holding an unencoded `@` is masked whole.
+    private static let userInfoPattern = regex("^([a-z][a-z0-9+.-]*://)[^/?#]*@", .caseInsensitive)
     /// Session ids rewritten into the path: `/cart;jsessionid=…`.
     private static let pathSessionIdPattern = regex(";(jsessionid|phpsessid|sessionid|sid)=[^;/?#]*", .caseInsensitive)
     /// A URL with none of these cannot hold anything we mask.
@@ -103,12 +107,17 @@ enum UrlMasker {
         }
 
         /// For a value that may be a URL or plain text: a view name (a route only in hybrid apps) or a
-        /// userInfo string. `.dropQuery` applies only when the whole value is a URL or route, so text
-        /// such as `Step #2` or `Order #123 failed: see https://…` is not cut at its `#`; param
-        /// masking applies to every value.
+        /// userInfo string. A value with no whitespace is masked whole, and `.dropQuery` cuts it only
+        /// when it is a URL or route, so a native name like `Step#2` keeps its `#`. Text with
+        /// whitespace has only the URLs inside it masked, each on its own span, `.dropQuery`
+        /// included: the words around them stay as they are, and a masked value cannot swallow the
+        /// rest of the sentence.
         func maskUrlOrText(_ value: String) -> String {
-            UrlMasker.mask(value, shouldMask: shouldMask,
-                           dropQuery: UrlMasker.isUrlOrRoute(value) && options.mode == .dropQuery, depth: 0)
+            guard value.unicodeScalars.contains(where: { $0.properties.isWhitespace }) else {
+                return UrlMasker.mask(value, shouldMask: shouldMask,
+                                      dropQuery: UrlMasker.isUrlOrRoute(value) && options.mode == .dropQuery, depth: 0)
+            }
+            return UrlMasker.replacingUrlSpans(in: value) { mask($0) }
         }
 
         /// Masks only the `fileName` of each frame, the field that holds a script URL. Other frame
@@ -211,13 +220,56 @@ enum UrlMasker {
         return replace(jwtPattern, in: result) { _ in redacted }
     }
 
-    /// Starts with `/`, or with a scheme (a letter, then letters, digits, `+`, `.` or `-`) and `://`.
+    /// The whole value is one URL or route: no whitespace, and it starts with `/`, or with a scheme
+    /// (a letter, then letters, digits, `+`, `.` or `-`) and `://`.
     static func isUrlOrRoute(_ value: String) -> Bool {
+        guard !value.unicodeScalars.contains(where: { $0.properties.isWhitespace }) else { return false }
         if value.hasPrefix("/") { return true }
         guard let separator = value.range(of: "://") else { return false }
         let scheme = value[..<separator.lowerBound].unicodeScalars
         guard let first = scheme.first, first.isASCII, first.properties.isAlphabetic else { return false }
         return scheme.allSatisfy { $0.isASCII && ($0.properties.isAlphabetic || ("0"..."9").contains($0) || "+.-".unicodeScalars.contains($0)) }
+    }
+
+    private static func isSchemeScalar(_ scalar: Unicode.Scalar) -> Bool {
+        scalar.isASCII && (scalar.properties.isAlphabetic || ("0"..."9").contains(scalar) || "+.-".unicodeScalars.contains(scalar))
+    }
+
+    private static func endsUrl(_ scalar: Unicode.Scalar) -> Bool {
+        scalar.properties.isWhitespace || "\"'<>".unicodeScalars.contains(scalar)
+    }
+
+    /// Replaces each URL inside free text with `transform(url)`. A URL runs from its scheme to the
+    /// next whitespace, `"`, `'`, `<` or `>`. A linear scan rather than a regex such as
+    /// `scheme://\S+`, which is quadratic on long runs of letters: from each `://` it walks back
+    /// over scheme characters, never past text already copied, then forward to the URL's end.
+    static func replacingUrlSpans(in text: String, transform: (String) -> String) -> String {
+        let scalars = Array(text.unicodeScalars)
+        var out = String.UnicodeScalarView()
+        var copied = 0
+        var index = 0
+        while index + 2 < scalars.count {
+            guard scalars[index] == ":", scalars[index + 1] == "/", scalars[index + 2] == "/" else {
+                index += 1
+                continue
+            }
+            var start = index
+            while start > copied, isSchemeScalar(scalars[start - 1]) { start -= 1 }
+            // The scheme must start with a letter: `1http://` begins at the `h`.
+            while start < index, !(scalars[start].isASCII && scalars[start].properties.isAlphabetic) { start += 1 }
+            guard start < index else {
+                index += 3
+                continue
+            }
+            var end = index + 3
+            while end < scalars.count, !endsUrl(scalars[end]) { end += 1 }
+            out.append(contentsOf: scalars[copied..<start])
+            out.append(contentsOf: transform(String(String.UnicodeScalarView(scalars[start..<end]))).unicodeScalars)
+            copied = end
+            index = end
+        }
+        out.append(contentsOf: scalars[copied...])
+        return String(out)
     }
 
     static func dropQueryAndFragment(_ url: String) -> String {
