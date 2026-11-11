@@ -28,25 +28,6 @@ extension SessionSnapshotRecord {
         SessionSnapshotRecord(sessionId: sessionId, errorCount: 0, viewCount: 0, actionCount: 0, hasRecording: false)
     }
 
-    init(sessionId: String, snapshot: SnapshotContext) {
-        self.init(sessionId: sessionId,
-                  errorCount: snapshot.errorCount,
-                  viewCount: snapshot.viewCount,
-                  actionCount: snapshot.actionCount,
-                  hasRecording: snapshot.hasRecording)
-    }
-
-    /// These counters with `other`'s view and versions.
-    func withContext(of other: SessionSnapshotRecord) -> SessionSnapshotRecord {
-        var record = self
-        record.viewName = other.viewName
-        record.viewNumber = other.viewNumber
-        record.appName = other.appName
-        record.appVersion = other.appVersion
-        record.osVersion = other.osVersion
-        return record
-    }
-
     func snapshotContext() -> SnapshotContext {
         SnapshotContext(timestamp: Date().timeIntervalSince1970,
                         errorCount: errorCount,
@@ -73,9 +54,9 @@ extension SessionSnapshotRecord {
 /// span exported after a rotation. Those events must not read or bump the live session's
 /// counters, which describe a different session.
 ///
-/// The live session's counters are persisted to one keychain slot each time it emits a snapshot.
-/// The slot is read once, at init: by the time a recovered crash is exported, this launch's own
-/// first snapshot may already have overwritten it.
+/// `LiveSessionRecorder` writes the live session's record to one keychain slot whenever its
+/// counters, view or versions change. The slot is read once, at init: by the time a recovered
+/// crash is exported, this launch's own first record may already have overwritten it.
 final class SessionSnapshotStore {
     private typealias Slot = ReferenceWritableKeyPath<SessionSnapshotStore, SessionSnapshotRecord?>
 
@@ -83,7 +64,7 @@ final class SessionSnapshotStore {
     private let lock = NSLock()
     /// What the keychain slot holds: the latest record this launch persisted.
     private var latestRecord: SessionSnapshotRecord?
-    /// The record `latestRecord` replaced when a new session emitted its first snapshot. Spans of
+    /// The record `latestRecord` replaced when a new session was first recorded. Spans of
     /// the rotated-out session can still be exported after that, in the same batch or later.
     private var previousRecord: SessionSnapshotRecord?
     /// The previous launch's last record — the crashed session's, when that launch crashed.
@@ -96,20 +77,12 @@ final class SessionSnapshotStore {
             .flatMap(SessionSnapshotRecord.init(json:))
     }
 
-    /// Snapshots fire on every error and navigation, so an unchanged record skips the keychain write.
+    /// The recorder writes on every counter and view change, so an unchanged record skips the
+    /// keychain write.
     func persist(_ record: SessionSnapshotRecord) {
         lock.lock()
         defer { lock.unlock() }
         persistLocked(record)
-    }
-
-    /// Persists counters taken from an emitted snapshot, keeping the view and versions the live
-    /// record already holds for that session: a snapshot does not know them.
-    func persistCounters(_ record: SessionSnapshotRecord) {
-        lock.lock()
-        defer { lock.unlock() }
-        let current = latestRecord?.sessionId == record.sessionId ? latestRecord : nil
-        persistLocked(current.map { record.withContext(of: $0) } ?? record)
     }
 
     private func persistLocked(_ record: SessionSnapshotRecord) {
@@ -130,7 +103,7 @@ final class SessionSnapshotStore {
     /// Moves the error count recorded for `sessionId` by `delta`, never below zero, so a second
     /// error in the same retired session counts on from the first. Returns the updated record,
     /// or nil when there is no record of the session. The keychain record is written through, so
-    /// a crash before the next snapshot still recovers the corrected count; the other records
+    /// a crash before the recorder's next write still recovers the corrected count; the other records
     /// change in memory only, since the slot is not theirs.
     func adjustErrorCount(of sessionId: String, by delta: Int) -> SessionSnapshotRecord? {
         lock.lock()

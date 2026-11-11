@@ -890,14 +890,11 @@ class CxRumBuilderTests: XCTestCase {
     }
 
     func test_build_spanExportedAfterRotation_usesItsSessionsLastRecord() throws {
-        mockSessionManager = makeSessionManager(liveSessionId: "rotated-out-session")
-        _ = build(makeSpan(sessionId: "rotated-out-session"))
-        // Rotation: a new live session with fresh counters and snapshot throttle.
-        mockSessionManager.makeLive()
-        mockSessionManager.errorCount = 0
-        mockSessionManager.lastSnapshotTime = nil
-        _ = try XCTUnwrap(build(makeSpan(sessionId: "session_001", severity: .info, eventType: "log"))?.snapshotContext,
-                          "Precondition: the new session's first snapshot is persisted before the late span")
+        mockSessionManager = makeSessionManager(liveSessionId: "session_001")
+        // What the recorder wrote: the rotated-out session's record, then the new session's.
+        mockSessionManager.snapshotStore.persist(SessionSnapshotRecord(sessionId: "rotated-out-session", errorCount: 1,
+                                                                       viewCount: 1, actionCount: 0, hasRecording: false))
+        mockSessionManager.snapshotStore.persist(.empty(sessionId: "session_001"))
 
         let lateSpan = try XCTUnwrap(build(makeSpan(sessionId: "rotated-out-session")))
 
@@ -906,19 +903,19 @@ class CxRumBuilderTests: XCTestCase {
         XCTAssertEqual(mockSessionManager.errorCount, 0, "The new session must not count the late error")
     }
 
-    func test_build_liveSnapshot_persistsItsCountersForTheNextLaunch() {
+    func test_build_liveSnapshotDecidedBeforeARotation_leavesTheNewSessionInTheSlot() throws {
         let keychain = MockKeyChain()
-        mockSessionManager = makeSessionManager(keychain: keychain)
-        mockSessionManager.incrementClickCounter()
-        mockSessionManager.incrementClickCounter()
-        mockSessionManager.hasRecording = true
-        mockViewManager.uniqueViewCount = 3
+        mockSessionManager = makeSessionManager(keychain: keychain, liveSessionId: "session_001")
+        // The span was judged live, then the rotation ran and the recorder wrote the new session.
+        mockSessionManager.snapshotStore.persist(.empty(sessionId: "session_001"))
+        mockSessionManager.snapshotStore.persist(.empty(sessionId: "next-session"))
 
-        _ = build(makeSpan(sessionId: "session_001"))
+        _ = try XCTUnwrap(build(makeSpan(sessionId: "session_001"))?.snapshotContext,
+                          "Precondition: the error emits a live snapshot")
 
-        XCTAssertEqual(SessionSnapshotStore(keychain: keychain).record(for: "session_001"),
-                       SessionSnapshotRecord(sessionId: "session_001", errorCount: 1, viewCount: 3,
-                                             actionCount: 2, hasRecording: true))
+        let nextLaunch = SessionSnapshotStore(keychain: keychain)
+        XCTAssertEqual(nextLaunch.record(for: "next-session"), .empty(sessionId: "next-session"),
+                       "A crash in the new session must recover the new session's record")
     }
 
     // MARK: - View frozen at creation wins over the live ViewManager at export

@@ -87,9 +87,7 @@ class CxRumBuilder {
             .flatMap(SessionSnapshotRecord.init(json:))?
             .snapshotContext()
         let snapshotContext = crashedSnapshot ?? (isLiveSession
-            ? buildLiveSessionSnapshotContext(for: eventContext,
-                                              sessionId: sessionContext.sessionId,
-                                              pendingTrigger: pendingSnapshotTrigger)
+            ? buildLiveSessionSnapshotContext(for: eventContext, pendingTrigger: pendingSnapshotTrigger)
             : buildRetiredSessionSnapshotContext(for: eventContext, sessionId: sessionContext.sessionId))
 
         // The promoted event reports the identity the token was armed with — the
@@ -225,23 +223,19 @@ class CxRumBuilder {
         return nil
     }
 
-    /// Counts the event on the live session and decides its snapshot. An emitted snapshot is
-    /// also persisted: it is what `buildRetiredSessionSnapshotContext` reads once this session
-    /// is no longer live.
+    /// Counts the event on the live session and decides its snapshot. The snapshot is not
+    /// persisted here: `LiveSessionRecorder` is the store's only writer for the live session, so
+    /// counts read on the export thread can never land over a newer record, or over the session
+    /// that replaced this one.
     private func buildLiveSessionSnapshotContext(for eventContext: EventContext,
-                                                 sessionId: String,
                                                  pendingTrigger: PendingSnapshotTrigger?) -> SnapshotContext? {
         updateSessionCounters(for: eventContext)
-        let snapshot = buildSnapshotContextIfNeeded(for: eventContext, pendingTrigger: pendingTrigger)
-        if let snapshot {
-            sessionManager.snapshotStore.persistCounters(SessionSnapshotRecord(sessionId: sessionId, snapshot: snapshot))
-        }
-        return snapshot
+        return buildSnapshotContextIfNeeded(for: eventContext, pendingTrigger: pendingTrigger)
     }
 
     /// Snapshot for a span reported under a session that is no longer live. Only the events
     /// that always carry a snapshot (error, navigation) get one — the one-minute throttle
-    /// tracks the live session. The counts are the ones that session last persisted, plus
+    /// tracks the live session. The counts are the ones the recorder last wrote for it, plus
     /// this event's error; with no record of the session the snapshot is omitted rather
     /// than borrowed from the live session.
     private func buildRetiredSessionSnapshotContext(for eventContext: EventContext,

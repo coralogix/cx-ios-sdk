@@ -185,22 +185,6 @@ final class LiveSessionRecordTests: XCTestCase {
         XCTAssertNotNil(try record(manager, exporter))
     }
 
-    func test_aSnapshotsCounters_keepTheRecordedView() {
-        let store = SessionSnapshotStore(keychain: MockKeyChain())
-        store.persist(SessionSnapshotRecord(sessionId: "s", errorCount: 0, viewCount: 1, actionCount: 0,
-                                            hasRecording: false, viewName: "Home", viewNumber: 0,
-                                            appName: "App", appVersion: "1", osVersion: "17.0"))
-
-        store.persistCounters(SessionSnapshotRecord(sessionId: "s", errorCount: 2, viewCount: 1,
-                                                    actionCount: 5, hasRecording: false))
-
-        let record = store.record(for: "s")
-        XCTAssertEqual(record?.errorCount, 2)
-        XCTAssertEqual(record?.actionCount, 5)
-        XCTAssertEqual(record?.viewName, "Home")
-        XCTAssertEqual(record?.appVersion, "1")
-    }
-
     func test_aRecordFromAnEarlierVersion_decodes() throws {
         let keychain = MockKeyChain()
         keychain.writeStringToKeychain(service: Keys.service.rawValue, key: Keys.keySessionSnapshot.rawValue,
