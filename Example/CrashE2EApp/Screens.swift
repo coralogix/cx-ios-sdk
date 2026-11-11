@@ -3,8 +3,8 @@
 //  CrashE2EApp
 //
 //  Two screens, Home and Second, so a crash has a view to be filed under. Home runs the scenario's
-//  actions once it is up, and shows what the test reads back: the session, the stored crashes and
-//  whether the actions are done.
+//  actions once it is up, and shows what the test reads back: the session, the stored crashes,
+//  whether the actions are done and whether crash recovery's first delivery pass is over.
 //
 
 import UIKit
@@ -43,6 +43,7 @@ final class HomeViewController: E2EScreen {
     private var forwarded: UILabel!
     private var globalTrace: UILabel!
     private var ready: UILabel!
+    private var recovery: UILabel!
     private var ranActions = false
     private var refresh: Timer?
 
@@ -54,6 +55,7 @@ final class HomeViewController: E2EScreen {
         forwarded = label("e2e.forwarded")
         globalTrace = label("e2e.globalTrace")
         ready = label("e2e.ready")
+        recovery = label("e2e.recovery")
         let hang = UIButton(type: .system)
         hang.setTitle("Hang 8 s", for: .normal)
         hang.accessibilityIdentifier = "e2e.hang"
@@ -80,6 +82,7 @@ final class HomeViewController: E2EScreen {
         store.text = E2EHooks.storedCrashes()
         forwarded.text = "\(ForwardedCrashes.count)"
         globalTrace.text = AppDelegate.globalTraceId ?? "none"
+        recovery.text = AppDelegate.recovery
     }
 
     /// Runs the actions in order, half a second apart, so each lands after the last one's effects.

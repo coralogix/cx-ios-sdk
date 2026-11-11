@@ -26,14 +26,14 @@ final class AnrUITests: CrashE2ETestCase {
 
     func testFourSecondHang_isNotReported() {
         launch(["hooks": ["reset"], "actions": ["wait:1000", "hang:4000", "wait:2000"]])
-        settle(4)
+        pause(4)
         XCTAssertTrue(anrs.isEmpty)
     }
 
     func testTwoHangs_areTwoAnrs() {
         launch(["hooks": ["reset"], "actions": ["wait:1000", "hang:6500", "wait:1500", "hang:6500", "wait:3000"]])
         XCTAssertTrue(waitFor(timeout: 20) { self.anrs.count >= 2 })
-        settle(4)
+        pause(4)
         XCTAssertEqual(anrs.count, 2)
     }
 
@@ -82,17 +82,17 @@ final class AnrUITests: CrashE2ETestCase {
         launch(["hooks": ["reset"], "actions": ["wait:1000"]])
         for _ in 0..<2 {
             XCUIDevice.shared.press(.home)
-            settle(10)
+            pause(10)
             app.activate()
             XCTAssertTrue(app.wait(for: .runningForeground, timeout: 10))
             // Live events go out every 2 s: one reported on the way back has arrived by now.
-            settle(4)
+            pause(4)
         }
         XCTAssertTrue(anrs.isEmpty, "\(anrs.count) ANR(s) for time spent in the background")
 
         app.buttons["e2e.hang"].tap()
         XCTAssertTrue(waitFor(timeout: 20) { !self.anrs.isEmpty })
-        settle(4)
+        pause(4)
         XCTAssertEqual(anrs.count, 1)
         XCTAssertEqual(isCrash(anrs[0]), false)
     }
@@ -102,7 +102,7 @@ final class AnrUITests: CrashE2ETestCase {
         launch(["hooks": ["reset"], "appStart": "initializeOffMain", "actions": ["wait:2000", "hang:6500", "wait:3000"]])
 
         XCTAssertTrue(waitFor(timeout: 20) { !self.anrs.isEmpty })
-        settle(4)
+        pause(4)
         XCTAssertEqual(anrs.count, 1)
         XCTAssertEqual(isCrash(anrs[0]), false)
         XCTAssertGreaterThan(threads(anrs[0]).count, 1)
@@ -111,7 +111,7 @@ final class AnrUITests: CrashE2ETestCase {
     func testHangFromTheColdLaunch_theLaunchEndsDuring_isSentOnceByTheNextLaunch() {
         endpoint.answerLive(.noAnswer)
         launch(["hooks": ["reset"], "appStart": "hangAfterInit"], waitForActions: false)
-        settle(8)
+        pause(8)
         kill()
         endpoint.answerLive(.ok)
 

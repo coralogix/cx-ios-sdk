@@ -22,8 +22,7 @@ final class NativeCrashUITests: CrashE2ETestCase {
     }
 
     func testCrashTheMomentTheSdkIsInitialized_isSentByTheNextLaunch_inTheSessionItHappenedIn() {
-        launch(["hooks": ["reset"], "appStart": "crashAfterInit:signal"], waitForActions: false)
-        XCTAssertTrue(app.wait(for: .notRunning, timeout: 30))
+        crashAtStart("crashAfterInit:signal")
         relaunch()
         let crash = awaitCrashes(1)[0]
         XCTAssertNotNil(session(crash))

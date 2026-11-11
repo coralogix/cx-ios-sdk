@@ -13,9 +13,9 @@ final class CrashDeliveryLimitsUITests: CrashE2ETestCase {
         endpoint.answerCrashes([.status(status)])
         crash("exception")
         relaunch()
-        awaitCrashes(2, timeout: 50)
+        awaitCrashes(2, timeout: 60)
         let arrivals = endpoint.crashRequests.map(\.arrival)
-        XCTAssertEqual(arrivals[1].timeIntervalSince(arrivals[0]), 30, accuracy: 5, file: file, line: line)
+        assertSent(after: arrivals[1].timeIntervalSince(arrivals[0]), inSlot: 30, file: file, line: line)
         XCTAssertTrue(storedCrashes().isEmpty, file: file, line: line)
     }
 

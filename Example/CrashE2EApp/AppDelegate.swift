@@ -8,7 +8,8 @@
 //
 
 import UIKit
-import Coralogix
+// The scheduler's test hook tells when recovery's first delivery pass is over.
+@testable import Coralogix
 import SessionReplay
 
 @main
@@ -19,6 +20,9 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
     /// Kept for the life of the process: a global span is ended once nothing holds it.
     static private(set) var globalSpan: CoralogixGlobalSpan?
     static var globalTraceId: String? { globalSpan?.traceId }
+    /// `done` once the crashes recovery lined up have each had their first send answered (or there
+    /// were none): what a test waits on before asserting that nothing was sent. Main thread only.
+    static private(set) var recovery = "pending"
 
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
@@ -37,10 +41,15 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
             // As React Native does: the SDK is set up on a background queue while launch goes on.
             DispatchQueue.global().async {
                 let sdk = Self.initialize(scenario)
-                DispatchQueue.main.async { Self.sdk = sdk }
+                DispatchQueue.main.async {
+                    Self.sdk = sdk
+                    Self.reportRecovery(of: sdk)
+                }
             }
         default:
-            Self.sdk = Self.initialize(scenario)
+            let sdk = Self.initialize(scenario)
+            Self.sdk = sdk
+            Self.reportRecovery(of: sdk)
         }
         if start[0] == "crashAfterInit" {
             E2ECrashes.crash(start.count > 1 ? start[1] : "signal")
@@ -103,6 +112,13 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
                 maskText: nil, maskOnlyCreditCards: false, maskAllImages: false, autoStartSessionRecording: true))
         }
         return sdk
+    }
+
+    private static func reportRecovery(of sdk: CoralogixRum) {
+        DispatchQueue.global(qos: .utility).async {
+            sdk.crashDeliveryScheduler.waitUntilAnswered()
+            DispatchQueue.main.async { recovery = "done" }
+        }
     }
 
     private static func hybridEdited(_ event: [String: Any]) -> [String: Any] {

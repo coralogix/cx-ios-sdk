@@ -15,16 +15,10 @@ class CrashE2ETestCase: XCTestCase {
 
     override func setUpWithError() throws {
         continueAfterFailure = false
-        // The app crashes on purpose; XCTest reports that as an issue. Only that issue is expected,
-        // in either of its forms: an app that dies while XCTest is still bringing it up is reported
-        // as a background assertion XCTest could not get for it, rather than as a crash.
-        let crashes = XCTExpectedFailure.Options()
-        crashes.isStrict = false
-        crashes.issueMatcher = { issue in
-            let description = issue.compactDescription
-            return description.contains("crashed") || description.contains("Failed to get background assertion for target app")
-        }
-        XCTExpectFailure("the app under test crashes on purpose", options: crashes)
+        // The app crashes on purpose; XCTest reports that, sometimes tens of seconds later, so the
+        // expectation spans the test. It is not what proves a relaunch healthy: `settle()` waits
+        // for the relaunch to finish its recovery pass, which a launch that crashes never does.
+        XCTExpectFailure("the app under test crashes on purpose", options: Self.deliberateDeath)
         endpoint = try Endpoint()
         app = XCUIApplication()
     }
@@ -32,6 +26,19 @@ class CrashE2ETestCase: XCTestCase {
     override func tearDownWithError() throws {
         app?.terminate()
         endpoint?.stop()
+    }
+
+    /// XCTest's report of an app that dies on purpose, in either of its forms: one that dies while
+    /// XCTest is still bringing it up is reported as a background assertion XCTest could not get
+    /// for it, rather than as a crash.
+    private static var deliberateDeath: XCTExpectedFailure.Options {
+        let options = XCTExpectedFailure.Options()
+        options.isStrict = false
+        options.issueMatcher = { issue in
+            let description = issue.compactDescription
+            return description.contains("crashed") || description.contains("Failed to get background assertion for target app")
+        }
+        return options
     }
 
     // MARK: - Scenarios
@@ -70,6 +77,12 @@ class CrashE2ETestCase: XCTestCase {
         XCTAssertTrue(app.wait(for: .notRunning, timeout: 30), "the app did not crash")
     }
 
+    /// A launch that crashes as it starts (`appStart`), on a fresh install.
+    func crashAtStart(_ appStart: String) {
+        launch(["hooks": ["reset"], "appStart": appStart], waitForActions: false)
+        XCTAssertTrue(app.wait(for: .notRunning, timeout: 30), "the app did not crash")
+    }
+
     /// Launches again, as the user opening the app after the crash.
     func relaunch(_ fields: [String: Any] = [:]) {
         launch(fields)
@@ -101,7 +114,7 @@ class CrashE2ETestCase: XCTestCase {
         scenario["hooks"] = (fresh ? ["reset"] : []) + (fields["hooks"] as? [String] ?? [])
         scenario["actions"] = ["wait:1000", "hangForever"]
         launch(scenario, waitForActions: false)
-        settle(liveDelivered ? 12 : 8)
+        pause(liveDelivered ? 12 : 8)
         kill()
         endpoint.answerLive(.ok)
     }
@@ -115,23 +128,55 @@ class CrashE2ETestCase: XCTestCase {
     @discardableResult
     func awaitCrashes(_ count: Int, timeout: TimeInterval = 30) -> [[String: Any]] {
         XCTAssertTrue(waitFor(timeout: timeout) { self.endpoint.crashes.count >= count },
-                      "expected \(count) crash event(s), got \(endpoint.crashes.count) in \(endpoint.requests.count) request(s); stored: \(storedCrashes())")
+                      "expected \(count) crash event(s), got \(endpoint.crashes.count) in \(endpoint.requests.count) request(s); stored: \(storeText)")
         return endpoint.crashes
     }
 
-    /// Lets `seconds` pass, for asserting that nothing (more) arrives.
-    func settle(_ seconds: TimeInterval = 8) {
+    /// Waits until the app's crash recovery has handed its crashes to delivery and each one's first
+    /// send is answered, then lets a few seconds pass: for asserting that nothing (more) arrives.
+    /// A crash that was sent has reached the endpoint by then, since its answer came from there.
+    func settle(file: StaticString = #filePath, line: UInt = #line) {
+        let recovery = app.staticTexts["e2e.recovery"]
+        XCTAssertTrue(recovery.waitForExistence(timeout: 20) && waitFor(timeout: 30) { recovery.label == "done" },
+                      "crash recovery did not finish its first delivery pass", file: file, line: line)
+        pause(3)
+    }
+
+    /// Lets `seconds` pass.
+    func pause(_ seconds: TimeInterval) {
         RunLoop.current.run(until: Date(timeIntervalSinceNow: seconds))
     }
 
-    /// The crashes the app keeps: id, kind and counted failures.
-    func storedCrashes() -> [[String: Any]] {
+    /// The crashes the app keeps: id, kind and counted failures. Fails the test when the app does
+    /// not show them, so an empty store cannot be read off an app that is not running.
+    func storedCrashes(file: StaticString = #filePath, line: UInt = #line) -> [[String: Any]] {
         let label = app.staticTexts["e2e.store"]
-        guard label.waitForExistence(timeout: 10) else { return [] }
+        guard label.waitForExistence(timeout: 10) else {
+            XCTFail("the app does not show its stored crashes", file: file, line: line)
+            return []
+        }
         // The screen refreshes every half second.
-        settle(1)
-        let text = app.staticTexts["e2e.store"].label
-        return (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [[String: Any]] ?? []
+        pause(1)
+        let text = label.label
+        guard let stored = (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [[String: Any]] else {
+            XCTFail("the stored crashes do not parse: \(text)", file: file, line: line)
+            return []
+        }
+        return stored
+    }
+
+    /// Asserts that a retry arrived `delay` seconds after the first send, in the `slot` seconds one:
+    /// not before it, and well short of the next. The upper margin leaves room for a slow runner.
+    func assertSent(after delay: TimeInterval, inSlot slot: TimeInterval, _ message: String = "",
+                    file: StaticString = #filePath, line: UInt = #line) {
+        XCTAssertTrue((slot - 3)...(slot + 15) ~= delay,
+                      "sent \(delay) s after the first send, not in the +\(Int(slot)) s slot. \(message)", file: file, line: line)
+    }
+
+    /// What the app shows of its stored crashes, for a failure message: no assertion of its own.
+    private var storeText: String {
+        let label = app.staticTexts["e2e.store"]
+        return label.exists ? label.label : "not shown"
     }
 
     func sessionId() -> String {

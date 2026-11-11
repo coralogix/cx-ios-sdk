@@ -44,7 +44,7 @@ final class CrashDeliveryUITests: CrashE2ETestCase {
         crash("exception")
         relaunch()
         awaitCrashes(1)
-        settle(40)  // past the +30 s slot
+        pause(45)  // past the +30 s slot, with its margin
         XCTAssertEqual(endpoint.crashes.count, 1, "HTTP \(status) is final", file: file, line: line)
         XCTAssertTrue(storedCrashes().isEmpty, file: file, line: line)
     }
@@ -59,9 +59,9 @@ final class CrashDeliveryUITests: CrashE2ETestCase {
         crash("exception")
         relaunch()
 
-        awaitCrashes(2, timeout: 50)
+        awaitCrashes(2, timeout: 60)
         let arrivals = endpoint.crashRequests.map(\.arrival)
-        XCTAssertEqual(arrivals[1].timeIntervalSince(arrivals[0]), 30, accuracy: 5)
+        assertSent(after: arrivals[1].timeIntervalSince(arrivals[0]), inSlot: 30)
         XCTAssertTrue(storedCrashes().isEmpty, "delivered the second time")
     }
 

@@ -32,8 +32,11 @@ final class CrashMappingUITests: CrashE2ETestCase {
     /// PLCrashReporter records it, so the report names the fault instead. Strict: the test fails
     /// once the gap is closed, so this marker cannot outlive it.
     func testExceptionWithoutReason_isSentWithItsNameAlone() {
-        XCTExpectFailure("an NSException with a nil reason is recorded as SIGSEGV (SEGV_ACCERR)") {
-            XCTAssertEqual(message(reported("exceptionWithoutReason")), "NSGenericException")
+        let crash = reported("exceptionWithoutReason")
+        let gap = XCTExpectedFailure.Options()
+        gap.issueMatcher = { $0.compactDescription.contains("NSGenericException") }
+        XCTExpectFailure("an NSException with a nil reason is recorded as SIGSEGV (SEGV_ACCERR)", options: gap) {
+            XCTAssertEqual(message(crash), "NSGenericException")
         }
     }
 

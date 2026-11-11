@@ -76,8 +76,8 @@ final class CrashOptionsUITests: CrashE2ETestCase {
         endpoint.answerCrashes([.status(503)])
         crash("exception", ["tracesExporter": true])
         relaunch(["tracesExporter": true])
-        awaitCrashes(2, timeout: 50)
-        settle(3)
+        awaitCrashes(2, timeout: 60)
+        pause(3)
         XCTAssertEqual(app.staticTexts["e2e.forwarded"].label, "1")
     }
 }

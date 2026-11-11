@@ -15,12 +15,12 @@ final class CrashSendScheduleUITests: CrashE2ETestCase {
         crash("exception")
         relaunch()
 
-        awaitCrashes(3, timeout: 140)
-        settle(20)
+        awaitCrashes(3, timeout: 160)
+        pause(20)
         let arrivals = endpoint.crashRequests.map(\.arrival)
         XCTAssertEqual(arrivals.count, 3)
-        XCTAssertEqual(arrivals[1].timeIntervalSince(arrivals[0]), 30, accuracy: 5)
-        XCTAssertEqual(arrivals[2].timeIntervalSince(arrivals[0]), 120, accuracy: 6)
+        assertSent(after: arrivals[1].timeIntervalSince(arrivals[0]), inSlot: 30)
+        assertSent(after: arrivals[2].timeIntervalSince(arrivals[0]), inSlot: 120)
         XCTAssertEqual(failedUploads(storedCrashes().first ?? [:]), 3, "kept, three failures counted")
     }
 
@@ -29,10 +29,10 @@ final class CrashSendScheduleUITests: CrashE2ETestCase {
         crash("exception")
         relaunch()
 
-        awaitCrashes(2, timeout: 150)
+        awaitCrashes(2, timeout: 160)
         let arrivals = endpoint.crashRequests.map(\.arrival)
         // The 45 s request timeout lands past the +30 s slot, so the retry is the +2 min one.
-        XCTAssertEqual(arrivals[1].timeIntervalSince(arrivals[0]), 120, accuracy: 8)
+        assertSent(after: arrivals[1].timeIntervalSince(arrivals[0]), inSlot: 120)
     }
 
     func testCrashesBehindAnUnansweredUpload_waitForIt_thenGoOneAtATime() {
@@ -52,9 +52,9 @@ final class CrashSendScheduleUITests: CrashE2ETestCase {
         crash("exception")
         relaunch()
 
-        awaitCrashes(2, timeout: 140)
+        awaitCrashes(2, timeout: 160)
         let arrivals = endpoint.crashRequests.map(\.arrival)
-        XCTAssertEqual(arrivals[1].timeIntervalSince(arrivals[0]), 120, accuracy: 6, "the +30 s slot had passed")
+        assertSent(after: arrivals[1].timeIntervalSince(arrivals[0]), inSlot: 120, "the +30 s slot had passed")
     }
 
     func testBackgroundedApp_keepsSendingUnderItsBackgroundTask() {
@@ -64,9 +64,9 @@ final class CrashSendScheduleUITests: CrashE2ETestCase {
         awaitCrashes(1)
         XCUIDevice.shared.press(.home)
 
-        awaitCrashes(2, timeout: 45)
+        awaitCrashes(2, timeout: 60)
         let arrivals = endpoint.crashRequests.map(\.arrival)
-        XCTAssertEqual(arrivals[1].timeIntervalSince(arrivals[0]), 30, accuracy: 5)
+        assertSent(after: arrivals[1].timeIntervalSince(arrivals[0]), inSlot: 30)
         XCTAssertTrue(anrs.isEmpty, "time in the background is not a hang")
     }
 }

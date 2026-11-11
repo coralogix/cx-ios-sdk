@@ -41,16 +41,14 @@ final class CrashAttributionUITests: CrashE2ETestCase {
     }
 
     func testCrashBeforeAnyScreen_isNotFiledUnderAScreen() {
-        launch(["hooks": ["reset"], "appStart": "crashAfterInit:exception"], waitForActions: false)
-        XCTAssertTrue(app.wait(for: .notRunning, timeout: 30))
+        crashAtStart("crashAfterInit:exception")
         relaunch()
         let crash = awaitCrashes(1)[0]
-        XCTAssertNotEqual(view(crash), "HomeViewController")
+        XCTAssertEqual(view(crash), "", "filed under no screen")
     }
 
     func testCrashBeforeInit_isNeverSent_andTheNextLaunchsOwnEventsAreUnaffected() {
-        launch(["hooks": ["reset"], "appStart": "crashBeforeInit:exception"], waitForActions: false)
-        XCTAssertTrue(app.wait(for: .notRunning, timeout: 30))
+        crashAtStart("crashBeforeInit:exception")
         relaunch(["actions": ["error:after the pre-init crash"]])
         XCTAssertTrue(waitFor(timeout: 15) { self.endpoint.events.contains { self.message($0) == "after the pre-init crash" } })
         settle()
@@ -68,7 +66,7 @@ final class CrashAttributionUITests: CrashE2ETestCase {
             XCTAssertTrue(waitFor { self.sessionId() != "none" && !self.sessionId().isEmpty })
             sessions.append(sessionId())
             XCTAssertTrue(app.wait(for: .notRunning, timeout: 30), "the app did not crash")
-            settle(1.5)  // a report's time is kept to the second
+            pause(1.5)  // a report's time is kept to the second
         }
         endpoint.answerCrashes([], then: .ok)
         let before = endpoint.crashRequests.count
