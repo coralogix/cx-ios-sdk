@@ -308,6 +308,72 @@ final class UrlMaskingIntegrationTests: XCTestCase {
         XCTAssertEqual(exporter.getViewManager().currentViewName, "/reset?token=[REDACTED]")
     }
 
+    /// Two routes that mask to the same name are still two views: the change is decided on the
+    /// raw name. Setting the same raw route again is not a new view.
+    func test_viewChange_isDecidedOnTheRawName() throws {
+        let (exporter, _) = try startSDK(urlMasking: UrlMaskingOptions(mode: .dropQuery))
+        let rum = try XCTUnwrap(self.rum)
+        let viewManager = exporter.getViewManager()
+        rum.setView(name: "/reset?token=a")
+        rum.setView(name: "/reset?token=b")
+        XCTAssertEqual(viewManager.currentViewName, "/reset")
+        XCTAssertEqual(viewManager.getUniqueViewCount(), 2)
+        XCTAssertEqual(viewManager.getViewNumber(), 1)
+        rum.setView(name: "/reset?token=b")
+        XCTAssertEqual(viewManager.getViewNumber(), 1)
+    }
+
+    /// An error or crash message often repeats the URL that failed: only the URL in it is masked.
+    func test_errorMessage_masksOnlyTheUrlInside() throws {
+        let (exporter, uploader) = try startSDK()
+        let span = SpanData(traceId: TraceId.random(),
+                            spanId: SpanId.random(),
+                            name: "error",
+                            kind: .client,
+                            startTime: Date(),
+                            attributes: [
+                                Keys.severity.rawValue: AttributeValue("5"),
+                                Keys.eventType.rawValue: AttributeValue(CoralogixEventType.error.rawValue),
+                                Keys.source.rawValue: AttributeValue("console"),
+                                Keys.sessionId.rawValue: AttributeValue("session_001"),
+                                Keys.sessionCreationDate.rawValue: AttributeValue("1609459200"),
+                                Keys.errorMessage.rawValue: AttributeValue("ClientException: Connection closed, uri=https://api.example.com/cb?code=abc&page=2 (retry? code=7)")
+                            ],
+                            endTime: Date(),
+                            hasEnded: true)
+        _ = exporter.export(spans: [span], explicitTimeout: nil)
+        let cxRum = try XCTUnwrap((uploader.uploadedSpans.first?[Keys.text.rawValue] as? [String: Any])?[Keys.cxRum.rawValue] as? [String: Any])
+        let errorContext = try XCTUnwrap(cxRum[Keys.errorContext.rawValue] as? [String: Any])
+        XCTAssertEqual(errorContext[Keys.errorMessage.rawValue] as? String,
+                       "ClientException: Connection closed, uri=https://api.example.com/cb?code=[REDACTED]&page=2 (retry? code=7)")
+    }
+
+    /// `reportError(message:)` reports as an error-severity log: the URL in its message is masked,
+    /// while an info log's message is left as the app wrote it.
+    func test_reportErrorMessage_masksOnlyTheUrlInside() throws {
+        let (exporter, uploader) = try startSDK()
+        func logSpan(severity: CoralogixLogSeverity, message: String) -> SpanData {
+            SpanData(traceId: TraceId.random(), spanId: SpanId.random(), name: "log", kind: .client, startTime: Date(),
+                     attributes: [
+                        Keys.severity.rawValue: AttributeValue(severity.rawValue),
+                        Keys.eventType.rawValue: AttributeValue(CoralogixEventType.log.rawValue),
+                        Keys.source.rawValue: AttributeValue("code"),
+                        Keys.sessionId.rawValue: AttributeValue("session_001"),
+                        Keys.sessionCreationDate.rawValue: AttributeValue("1609459200"),
+                        Keys.message.rawValue: AttributeValue(message)
+                     ],
+                     endTime: Date(), hasEnded: true)
+        }
+        _ = exporter.export(spans: [
+            logSpan(severity: .error, message: "failed: uri=https://x.com/cb?code=abc&page=2 (code=7)"),
+            logSpan(severity: .info, message: "opened https://x.com/cb?code=abc")
+        ], explicitTimeout: nil)
+        let messages = uploader.uploadedSpans.compactMap {
+            (((($0[Keys.text.rawValue] as? [String: Any])?[Keys.cxRum.rawValue] as? [String: Any])?[Keys.logContext.rawValue] as? [String: Any])?[Keys.message.rawValue] as? String)
+        }
+        XCTAssertEqual(Set(messages), ["failed: uri=https://x.com/cb?code=[REDACTED]&page=2 (code=7)", "opened https://x.com/cb?code=abc"])
+    }
+
     // MARK: - Headers stay allow-list only
 
     func test_headers_authorizationCapturedOnlyWhenListed() {

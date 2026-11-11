@@ -40,13 +40,16 @@ public struct UrlMaskingOptions {
     }
 }
 
-/// Masks secrets in a URL before it is reported, keeping everything else byte-for-byte: the URL is
-/// edited as a string and never re-serialized through `URL`, which would re-encode it.
-/// The rules and patterns mirror the browser SDK so every RUM SDK reports a given URL the same way.
+/// Masks secrets in URLs before they are reported. A port of the Android SDK's `UrlMaskingUtils`,
+/// so every RUM SDK reports a given URL the same way; the shared cases live in `UrlMaskerTests`.
+/// A URL is edited as a string, never re-serialized: in the default mode only masked values change,
+/// `.maskAll` masks every parameter value, and `.dropQuery`, or a failure to mask, removes the query
+/// and the fragment. Every scan is linear: the regexes are possessive and their start positions
+/// cannot overlap, and the rest (credentials, JWTs, URLs inside text) are manual scans.
 enum UrlMasker {
     static let redacted = "[REDACTED]"
 
-    /// A parameter is sensitive when its normalized name contains one of these.
+    /// Sensitive when the normalized name contains one of these.
     private static let sensitiveNameFragments = [
         "token", "secret", "password", "passwd", "passphrase", "apikey", "signature", "credential",
         "jwt", "session", "sessid", "oauth", "saml", "privatekey", "accesskey", "nonce"
@@ -60,37 +63,48 @@ enum UrlMasker {
         "pass", "pwd", "otp", "oobcode", "sid", "ticket"
     ]
 
+    /// Measured on the decoded name, so percent-encoding a short name cannot push it past the limit.
     private static let maxParamNameLength = 64
 
     private static func regex(_ pattern: String, _ options: NSRegularExpression.Options = []) -> NSRegularExpression? {
         try? NSRegularExpression(pattern: pattern, options: options)
     }
 
-    /// Query and fragment parameters, including the query of a hash route (`#/reset?token=…`).
-    /// The value runs to the next `&` or `#`, so a sensitive param holding an unencoded redirect URL
-    /// is masked whole; a non-sensitive one holding such a URL has that URL masked in turn.
-    private static let paramPattern = regex("([?&#])([^=&#?]+)=([^&#]*)")
-    /// The same, percent-encoded one level down: `?next=%2Freset%3Ftoken%3Dabc`. The name may itself
-    /// hold percent-escapes (`%74oken`), other than the four delimiters, and is decoded before the check.
-    private static let encodedParamPattern = regex("(%3F|%26|%23)((?:[A-Za-z0-9_.-]|%(?!3D|3F|26|23)[0-9A-F]{2})+)%3D((?:(?!%26|%23)[^&#])*)", .caseInsensitive)
-    /// A JWT anywhere in the URL, the path included. The payload can be as short as `e30` (`{}`).
-    /// A match starts only where a token run starts (or right after a `%XX` escape, as in
-    /// `%3DeyJ…`), and the header is matched possessively: otherwise each `eyJ` inside a long run
-    /// with no `.` starts its own scan to the end of the run, which is quadratic.
-    private static let jwtPattern = regex("(?:(?<![A-Za-z0-9_-])|(?<=%[0-9A-Fa-f]{2}))eyJ[A-Za-z0-9_-]{8,}+\\.[A-Za-z0-9_-]{2,}(?:\\.[A-Za-z0-9_-]*){0,3}")
-    /// Credentials written into the URL: `https://user:password@host`.
-    /// Runs to the last `@` before the path, so a password holding an unencoded `@` is masked whole.
-    private static let userInfoPattern = regex("^([a-z][a-z0-9+.-]*://)[^/?#]*@", .caseInsensitive)
-    /// Session ids rewritten into the path: `/cart;jsessionid=…`.
-    private static let pathSessionIdPattern = regex(";(jsessionid|phpsessid|sessionid|sid)=[^;/?#]*", .caseInsensitive)
-    /// A URL with none of these cannot hold anything we mask.
-    private static let maybeSensitivePattern = regex("[?#;@]|eyJ")
-    private static let inlineDataPattern = regex("^(data|blob):", .caseInsensitive)
+    // Every unbounded run below is an atomic group around a greedy loop, not a possessive
+    // quantifier inside a capture group: ICU keeps one backtrack entry per character for the
+    // latter, overflows past ~180k characters and then reports no match at all, which would let a
+    // long URL through unmasked. `replace` also treats any such abort as a failure (fail closed).
+
+    /// Query and fragment parameters, the query of a hash route included. An HTML-escaped `&amp;`
+    /// separates them as `&` does. The value runs to the next `&`, `#` or `;`. A name may be empty,
+    /// which only `.maskAll` masks.
+    private static let urlParamPattern = regex("([?#]|&(?:amp;)?)((?>[^=&#?;]*))=((?>[^&#;]*))")
+    /// Parameters after `;`, and matrix parameters in a path; the value also stops at `?` and `/`.
+    private static let semicolonParamPattern = regex("(;)((?>[^=&#?;/]+))=((?>[^&#;?/]*))")
+    /// One level down: `?next=%2Freset%3Ftoken%3Dabc`, or a value that is itself an encoded
+    /// parameter, `?return_to=code%3Dabc`. A name is any run up to the encoded `=` that holds none
+    /// of the separators, so no two starts read the same characters; it is decoded before the test.
+    private static let encodedParamPattern = regex(
+        "(%3F|%26amp%3B|%26|%23|%3B|=)((?=[^%&#=\\s]|%(?!3D|26|23|3F|3B)[0-9A-F]{2})(?>[^%&#=\\s]*)(?:%(?!3D|26|23|3F|3B)[0-9A-F]{2}(?>[^%&#=\\s]*))*)"
+            + "%3D((?>[^&#%]*)(?:%(?!26|23|3B)(?>[^&#%]*))*)",
+        .caseInsensitive)
+    /// A JWT: `eyJ` plus one more part however short (`e30` is `{}`), each with optional `=` padding.
+    /// Tried only at the starts `maskJwts` picks, never searched for.
+    private static let jwtPattern = regex("eyJ[A-Za-z0-9_-]{8,}={0,2}\\.[A-Za-z0-9_-]{2,}={0,2}(?:\\.[A-Za-z0-9_-]*={0,2}){0,3}")
+    /// Session ids rewritten into the path: `/cart;jsessionid=…`. The value stops at `&` too.
+    private static let pathSessionIdPattern = regex(";(jsessionid|phpsessid|sessionid|sid)=[^;/?#&]*", .caseInsensitive)
+    /// A URL with none of these cannot hold anything masked. Encoded separators count, as in a path
+    /// `/go/%3Ftoken%3Dabc`. `data:` and `blob:` URLs are masked like any other.
+    private static let maybeSensitivePattern = regex("[?#;@&]|eyJ|%3F|%26|%23|%3B", .caseInsensitive)
+    /// A `%` that does not start an escape, kept as a literal so the rest of a name still decodes.
+    private static let strayPercentPattern = regex("%(?![0-9A-Fa-f]{2})")
+    /// A `fileName` value inside a stack-trace JSON array, as a raw JSON string literal.
+    private static let fileNameValuePattern = regex("(\"\(Keys.fileName.rawValue)\"\\s*:\\s*)(\"(?>[^\"\\\\]*)(?:\\\\.(?>[^\"\\\\]*))*\")")
+    /// Any JSON string literal.
+    private static let jsonStringPattern = regex("\"(?>[^\"\\\\]*)(?:\\\\.(?>[^\"\\\\]*))*\"")
 
     /// How many redirect URLs nested inside one another are unwrapped; deeper values are redacted whole.
     private static let maxNestingDepth = 4
-    /// A `fileName` value inside a stack-trace JSON array, as a raw JSON string literal.
-    private static let fileNameValuePattern = regex("(\"\(Keys.fileName.rawValue)\"\\s*:\\s*)(\"(?:[^\"\\\\]|\\\\.)*\")")
 
     /// The customer's options with the parameter-name predicate built once, for masking many values.
     struct Masker {
@@ -106,81 +120,38 @@ enum UrlMasker {
             UrlMasker.mask(url, shouldMask: shouldMask, dropQuery: options.mode == .dropQuery, depth: 0)
         }
 
-        /// For a value that may be a URL or plain text: a view name (a route only in hybrid apps) or a
-        /// userInfo string. A value with no whitespace is masked whole, and `.dropQuery` cuts it only
-        /// when it is a URL or route, so a native name like `Step#2` keeps its `#`. Text with
-        /// whitespace has only the URLs inside it masked, each on its own span, `.dropQuery`
-        /// included: the words around them stay as they are, and a masked value cannot swallow the
-        /// rest of the sentence.
-        func maskUrlOrText(_ value: String) -> String {
-            guard value.unicodeScalars.contains(where: { $0.properties.isWhitespace }) else {
-                return UrlMasker.mask(value, shouldMask: shouldMask,
-                                      dropQuery: UrlMasker.isUrlOrRoute(value) && options.mode == .dropQuery, depth: 0)
-            }
-            return UrlMasker.replacingUrlSpans(in: value) { mask($0) }
+        /// A view name is a route only in hybrid apps. `.dropQuery` cuts it only when it is one (it
+        /// starts with `/` or `scheme://`), so a native name such as `Step #2` keeps its `#`.
+        func maskViewName(_ name: String) -> String {
+            UrlMasker.mask(name, shouldMask: shouldMask,
+                           dropQuery: UrlMasker.isUrlOrRoute(name) && options.mode == .dropQuery, depth: 0)
+        }
+
+        /// Masks each URL inside free text, such as an error message; the words around them are
+        /// kept, and text that is not a URL is never masked.
+        func maskText(_ text: String) -> String {
+            UrlMasker.maskUrlsInText(text) { mask($0) }
         }
 
         /// Masks only the `fileName` of each frame, the field that holds a script URL. Other frame
-        /// text (`closure #1 in … == …`) looks like parameters and must be left alone, and the rest of
-        /// the JSON is not re-serialized, so untouched values keep their exact bytes.
-        func maskStackTrace(_ json: String) -> String {
-            guard let pattern = UrlMasker.fileNameValuePattern else { return json }
+        /// text (`closure #1 in … == …`) looks like parameters and must be left alone.
+        /// `nil` when the JSON could not be scanned: the caller drops the field (fail closed).
+        func maskStackTrace(_ json: String) -> String? {
+            guard let pattern = UrlMasker.fileNameValuePattern else { return nil }
             return UrlMasker.replace(pattern, in: json) { groups in
-                // Fail closed: a file name we cannot read or write back is reported redacted.
-                let redactedLiteral = "\(groups[1])\"\(UrlMasker.redacted)\""
-                guard let data = groups[2].data(using: .utf8),
-                      let fileName = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]) as? String else {
-                    return redactedLiteral
-                }
-                let masked = mask(fileName)
-                guard masked != fileName else { return groups[0] }
-                guard let out = try? JSONSerialization.data(withJSONObject: masked, options: [.fragmentsAllowed, .withoutEscapingSlashes]),
-                      let literal = String(data: out, encoding: .utf8) else {
-                    return redactedLiteral
-                }
+                guard let literal = UrlMasker.maskingJsonLiteral(groups[2], with: mask) else { return groups[0] }
                 return groups[1] + literal
             }
         }
 
-        /// Masks every string value inside a JSON document. Returns the input unchanged when nothing
-        /// needed masking, and `nil` (drop the field) when it cannot be re-encoded: fail closed.
-        func maskStrings(inJson json: String) -> String? {
-            guard let data = json.data(using: .utf8),
-                  let object = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]) else {
-                return maskUrlOrText(json)
+        /// Masks the URLs inside every string of a userInfo JSON document, keys included, editing
+        /// each changed string literal in place so the rest keeps its exact bytes.
+        /// `nil` when the JSON could not be scanned: the caller drops the field (fail closed).
+        func maskUserInfo(_ json: String) -> String? {
+            guard let pattern = UrlMasker.jsonStringPattern else { return nil }
+            return UrlMasker.replace(pattern, in: json) { groups in
+                UrlMasker.maskingJsonLiteral(groups[0], with: maskText) ?? groups[0]
             }
-            var changed = false
-            func walk(_ value: Any) -> Any {
-                switch value {
-                case let string as String:
-                    let masked = maskUrlOrText(string)
-                    if masked != string { changed = true }
-                    return masked
-                case let array as [Any]:
-                    return array.map(walk)
-                case let dict as [String: Any]:
-                    var out: [String: Any] = [:]
-                    for (key, value) in dict {
-                        let maskedKey = maskUrlOrText(key)
-                        if maskedKey != key { changed = true }
-                        // Two keys can mask to the same string; keep both instead of dropping one.
-                        var uniqueKey = maskedKey
-                        var suffix = 2
-                        while out[uniqueKey] != nil {
-                            uniqueKey = "\(maskedKey) (\(suffix))"
-                            suffix += 1
-                        }
-                        out[uniqueKey] = walk(value)
-                    }
-                    return out
-                default:
-                    return value
-                }
-            }
-            let masked = walk(object)
-            guard changed else { return json }
-            guard let out = try? JSONSerialization.data(withJSONObject: masked, options: [.fragmentsAllowed, .withoutEscapingSlashes]) else { return nil }
-            return String(data: out, encoding: .utf8)
         }
     }
 
@@ -188,90 +159,344 @@ enum UrlMasker {
         Masker(options).mask(url)
     }
 
-    static func maskStrings(inJson json: String, options: UrlMaskingOptions = UrlMaskingOptions()) -> String? {
-        Masker(options).maskStrings(inJson: json)
+    static func maskUrlsInText(_ text: String, options: UrlMaskingOptions = UrlMaskingOptions()) -> String {
+        Masker(options).maskText(text)
+    }
+
+    /// `nil` when the literal is unchanged. A literal that cannot be read or written back is
+    /// reported redacted: fail closed.
+    private static func maskingJsonLiteral(_ literal: String, with transform: (String) -> String) -> String? {
+        let redactedLiteral = "\"\(redacted)\""
+        guard let data = literal.data(using: .utf8),
+              let value = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]) as? String else {
+            return redactedLiteral
+        }
+        let masked = transform(value)
+        guard masked != value else { return nil }
+        guard let out = try? JSONSerialization.data(withJSONObject: masked, options: [.fragmentsAllowed, .withoutEscapingSlashes]),
+              let encoded = String(data: out, encoding: .utf8) else {
+            return redactedLiteral
+        }
+        return encoded
     }
 
     private static func mask(_ url: String, shouldMask: (String) -> Bool, dropQuery: Bool, depth: Int) -> String {
-        guard let maybeSensitivePattern, let inlineDataPattern, let userInfoPattern, let pathSessionIdPattern,
-              let paramPattern, let encodedParamPattern, let jwtPattern else {
-            // Fail closed: a URL we cannot mask is reported without the parts that hold secrets.
-            return dropQueryAndFragment(url)
+        guard let maybeSensitivePattern, matches(maybeSensitivePattern, url) else { return url }
+        guard let urlParamPattern, let semicolonParamPattern, let encodedParamPattern, jwtPattern != nil else {
+            return failClosed(url)
         }
-        guard matches(maybeSensitivePattern, url), !matches(inlineDataPattern, url) else { return url }
-
-        var result = dropQuery ? dropQueryAndFragment(url) : url
-        result = replace(userInfoPattern, in: result) { "\($0[1])\(redacted)@" }
-        result = replace(pathSessionIdPattern, in: result) { ";\($0[1])=\(redacted)" }
-        result = replace(paramPattern, in: result) { groups in
+        // A JWT in the path or a `user:password@` survives a dropped query, so the rest still runs.
+        let base = maskOutsideParams(dropQuery ? dropQueryAndFragment(url) : url)
+        guard let params = replace(urlParamPattern, in: base, transform: { groups in
             guard !groups[3].isEmpty else { return groups[0] }
             if shouldMask(groups[2]) { return "\(groups[1])\(groups[2])=\(redacted)" }
             // `?redirect=https://b.com/cb?token=abc`: the inner `?token=` is part of this match, so
-            // matches never reach it on their own. Masking the value catches it.
-            // Deliberately stricter than the browser SDK, which leaves the inner param as is.
-            guard groups[3].contains("?") || groups[3].contains("#") else { return groups[0] }
+            // matches never reach it on their own. Masking the value catches it. Stricter than the
+            // browser and Android SDKs, which leave the inner parameter as is.
+            guard groups[3].contains("?") else { return groups[0] }
             // Bounded so a crafted URL cannot recurse deep enough to exhaust the stack: fail closed.
             guard depth < maxNestingDepth else { return "\(groups[1])\(groups[2])=\(redacted)" }
-            return "\(groups[1])\(groups[2])=\(mask(groups[3], shouldMask: shouldMask, dropQuery: dropQuery, depth: depth + 1))"
-        }
-        result = replace(encodedParamPattern, in: result) { groups in
+            return "\(groups[1])\(groups[2])=\(mask(groups[3], shouldMask: shouldMask, dropQuery: false, depth: depth + 1))"
+        }),
+              let semicolonParams = replace(semicolonParamPattern, in: params, transform: { groups in
+            !groups[3].isEmpty && shouldMask(groups[2]) ? "\(groups[1])\(groups[2])=\(redacted)" : groups[0]
+        }),
+              let encodedParams = replace(encodedParamPattern, in: semicolonParams, transform: { groups in
             !groups[3].isEmpty && shouldMask(groups[2]) ? "\(groups[1])\(groups[2])%3D\(redacted)" : groups[0]
+        }) else {
+            return failClosed(url)
         }
-        return replace(jwtPattern, in: result) { _ in redacted }
+        return maskJwts(encodedParams)
+    }
+
+    /// When masking cannot run to completion: drop the query, the fragment and anything after an
+    /// encoded separator (a path such as `/go/%3Ftoken%3D…` carries its query encoded), then still
+    /// mask credentials, path session ids and JWTs in what remains.
+    private static func failClosed(_ url: String) -> String {
+        var kept = dropQueryAndFragment(url)
+        if let cut = ["%3F", "%23", "%26", "%3B"].compactMap({ kept.range(of: $0, options: .caseInsensitive)?.lowerBound }).min() {
+            kept = String(kept[..<cut])
+        }
+        return maskJwts(maskOutsideParams(kept))
+    }
+
+    /// Credentials and path session ids: the parts of a URL that are not parameters.
+    private static func maskOutsideParams(_ url: String) -> String {
+        let withoutCredentials = maskCredentials(url)
+        guard let pathSessionIdPattern,
+              let masked = replace(pathSessionIdPattern, in: withoutCredentials, transform: { ";\($0[1])=\(redacted)" }) else {
+            return dropQueryAndFragment(withoutCredentials)
+        }
+        return masked
+    }
+
+    // MARK: - Manual scans, on UTF-16 code units like the regexes
+
+    private static func units(_ string: String) -> [UInt16] { Array(string.utf16) }
+
+    private static func string(_ units: ArraySlice<UInt16>) -> String {
+        String(decoding: units, as: UTF16.self)
+    }
+
+    private static let slash = UInt16(UInt8(ascii: "/"))
+    private static let backslash = UInt16(UInt8(ascii: "\\"))
+    private static let colon = UInt16(UInt8(ascii: ":"))
+    private static let at = UInt16(UInt8(ascii: "@"))
+    private static let question = UInt16(UInt8(ascii: "?"))
+    private static let hash = UInt16(UInt8(ascii: "#"))
+    private static let doubleQuote = UInt16(UInt8(ascii: "\""))
+    private static let apostrophe = UInt16(UInt8(ascii: "'"))
+    private static let lessThan = UInt16(UInt8(ascii: "<"))
+    private static let greaterThan = UInt16(UInt8(ascii: ">"))
+
+    private static func isAsciiLetter(_ unit: UInt16) -> Bool {
+        (65...90).contains(unit) || (97...122).contains(unit)
+    }
+
+    private static func isSchemeUnit(_ unit: UInt16) -> Bool {
+        isAsciiLetter(unit) || (48...57).contains(unit) || unit == 43 || unit == 46 || unit == 45
+    }
+
+    private static func isBase64UrlUnit(_ unit: UInt16) -> Bool {
+        isAsciiLetter(unit) || (48...57).contains(unit) || unit == 95 || unit == 45
+    }
+
+    private static func isWhitespace(_ unit: UInt16) -> Bool {
+        Unicode.Scalar(unit)?.properties.isWhitespace ?? false
+    }
+
+    private static func isLetterOrDigit(_ unit: UInt16) -> Bool {
+        guard let scalar = Unicode.Scalar(unit) else { return false }
+        switch scalar.properties.generalCategory {
+        case .uppercaseLetter, .lowercaseLetter, .titlecaseLetter, .modifierLetter, .otherLetter, .decimalNumber:
+            return true
+        default:
+            return false
+        }
+    }
+
+    private static func slashRunEnd(_ text: [UInt16], from: Int) -> Int {
+        var end = from
+        while end < text.count, text[end] == slash || text[end] == backslash { end += 1 }
+        return end
+    }
+
+    /// Credentials, masked up to the last `@` of the authority as URL parsers read it, so an
+    /// unencoded `@` or `'` in the password is masked too. An authority starts after `scheme:` and
+    /// two or more slashes (backslashes and JSON-escaped `\/\/` included) anywhere in the URL; after
+    /// a leading `//`; or, at the start, right after a scheme with no slashes. It ends at the next
+    /// `/`, `?`, `#` or whitespace. One pass: each authority read is skipped.
+    private static func maskCredentials(_ url: String) -> String {
+        guard url.contains("@") else { return url }
+        let text = units(url)
+        var result = ""
+        var copied = 0
+        var next = leadingAuthorityStart(text)
+        var index = next ?? 0
+        while index < text.count {
+            let start = next ?? slashedAuthorityStart(text, at: index)
+            next = nil
+            guard let start else {
+                index += 1
+                continue
+            }
+            var end = start
+            var lastAt = -1
+            while end < text.count {
+                let unit = text[end]
+                if unit == slash || unit == question || unit == hash || isWhitespace(unit) { break }
+                if unit == at { lastAt = end }
+                end += 1
+            }
+            if lastAt >= 0 {
+                result += string(text[copied..<start]) + redacted
+                copied = lastAt
+            }
+            index = max(end, start + 1)
+        }
+        return result + string(text[copied...])
+    }
+
+    /// After a leading `//` (or `\/\/`), or after a scheme with no slashes, at the start.
+    private static func leadingAuthorityStart(_ text: [UInt16]) -> Int? {
+        var index = 0
+        while index < text.count, isWhitespace(text[index]) { index += 1 }
+        let slashes = slashRunEnd(text, from: index)
+        if slashes - index >= 2 { return slashes }
+        if index < text.count, isAsciiLetter(text[index]) {
+            var schemeEnd = index
+            while schemeEnd < text.count, isSchemeUnit(text[schemeEnd]) { schemeEnd += 1 }
+            if schemeEnd < text.count, text[schemeEnd] == colon, slashRunEnd(text, from: schemeEnd + 1) == schemeEnd + 1 {
+                return schemeEnd + 1
+            }
+        }
+        return nil
+    }
+
+    /// After `:` and two or more slashes or backslashes, when `index` is that `:`.
+    private static func slashedAuthorityStart(_ text: [UInt16], at index: Int) -> Int? {
+        guard text[index] == colon else { return nil }
+        let slashes = slashRunEnd(text, from: index + 1)
+        return slashes - (index + 1) >= 2 ? slashes : nil
+    }
+
+    /// Replaces each JWT in one pass. A start that fails fails for every later `eyJ` in the same
+    /// run of base64url characters, which reaches the same end, so the scan moves past the run.
+    private static func maskJwts(_ url: String) -> String {
+        guard url.contains("eyJ"), let jwtPattern else { return url }
+        let text = units(url)
+        let nsUrl = url as NSString
+        var result = ""
+        var copied = 0
+        var start = indexOf(Array("eyJ".utf16), in: text, from: 0)
+        while let found = start {
+            let next: Int
+            if let match = jwtPattern.firstMatch(in: url, options: [.anchored],
+                                                 range: NSRange(location: found, length: nsUrl.length - found)) {
+                result += string(text[copied..<found]) + redacted
+                copied = match.range.location + match.range.length
+                next = copied
+            } else {
+                var end = found + 3
+                while end < text.count, isBase64UrlUnit(text[end]) { end += 1 }
+                next = end
+            }
+            start = indexOf(Array("eyJ".utf16), in: text, from: next)
+        }
+        return result + string(text[copied...])
+    }
+
+    private static func indexOf(_ needle: [UInt16], in text: [UInt16], from: Int) -> Int? {
+        guard !needle.isEmpty, from >= 0 else { return nil }
+        var index = from
+        while index + needle.count <= text.count {
+            if text[index] == needle[0] {
+                var offset = 1
+                while offset < needle.count, text[index + offset] == needle[offset] { offset += 1 }
+                if offset == needle.count { return index }
+            }
+            index += 1
+        }
+        return nil
+    }
+
+    /// JSON escapes slashes, so a URL in a JSON error body reads `https:\/\/host\/…`.
+    private static let escapedSlashes = Array("\\/\\/".utf16)
+    private static let plainSlashes = Array("//".utf16)
+
+    /// Masks each URL inside free text with `transform`; the words around them are kept. A URL runs
+    /// from its scheme, or from the `//` of a protocol-relative URL that starts a word, to the next
+    /// whitespace, `"`, `<`, `>` or escaped `\"`; an apostrophe ends it only when an apostrophe opened
+    /// it, and a closing bracket the URL never opened is left out of it. Found by scanning from each
+    /// `//` (or `\/\/`), each kind searched again only once the scan has passed the last one found.
+    static func maskUrlsInText(_ value: String, transform: (String) -> String) -> String {
+        let text = units(value)
+        var plainAt = indexOf(plainSlashes, in: text, from: 0)
+        var escapedAt = indexOf(escapedSlashes, in: text, from: 0)
+        func nextSlashes(from: Int) -> Int? {
+            if let p = plainAt, p < from { plainAt = indexOf(plainSlashes, in: text, from: from) }
+            if let e = escapedAt, e < from { escapedAt = indexOf(escapedSlashes, in: text, from: from) }
+            switch (plainAt, escapedAt) {
+            case (nil, nil): return nil
+            case (let p?, nil): return p
+            case (nil, let e?): return e
+            case (let p?, let e?): return min(p, e)
+            }
+        }
+        guard var slashes = nextSlashes(from: 0) else { return value }
+        var result = ""
+        var copied = 0
+        while true {
+            let isEscaped = slashes + escapedSlashes.count <= text.count
+                && Array(text[slashes..<(slashes + escapedSlashes.count)]) == escapedSlashes
+            let afterSlashes = slashes + (isEscaped ? escapedSlashes.count : 2)
+            var schemeStart: Int?
+            if slashes > 0, text[slashes - 1] == colon {
+                // scheme://…: back over the scheme, which starts with a letter.
+                let schemeColon = slashes - 1
+                var s = schemeColon
+                while s > copied, isSchemeUnit(text[s - 1]) { s -= 1 }
+                while s < schemeColon, !isAsciiLetter(text[s]) { s += 1 }
+                if s < schemeColon { schemeStart = s }
+            }
+            // //host…, or what follows a `:` no scheme precedes: a URL when the `//` starts a word
+            // and something other than a space or another slash follows, so `a // b` and
+            // `path//to` stay prose.
+            var start = schemeStart
+            if start == nil {
+                let startsWord = slashes == 0 || {
+                    let before = text[slashes - 1]
+                    return !isLetterOrDigit(before) && before != slash && before != backslash
+                }()
+                if startsWord, afterSlashes < text.count {
+                    let after = text[afterSlashes]
+                    if !isWhitespace(after), after != slash, after != backslash { start = slashes }
+                }
+            }
+            guard let urlStart = start else {
+                // Right after the rejected `//`, not past its word: a URL can still follow in it.
+                guard let following = nextSlashes(from: slashes + 1) else { break }
+                slashes = following
+                continue
+            }
+            let quotedBySingle = urlStart > 0 && text[urlStart - 1] == apostrophe
+            var end = afterSlashes
+            while end < text.count, !endsUrl(text, at: end, quotedBySingle: quotedBySingle) { end += 1 }
+            // A closing bracket the URL never opened is the text's; balanced ones (an IPv6 host's)
+            // stay. Counted once, then kept as each closer is trimmed.
+            var unmatched = [0, 0, 0]
+            for i in urlStart..<end {
+                switch text[i] {
+                case 40: unmatched[0] -= 1
+                case 41: unmatched[0] += 1
+                case 91: unmatched[1] -= 1
+                case 93: unmatched[1] += 1
+                case 123: unmatched[2] -= 1
+                case 125: unmatched[2] += 1
+                default: break
+                }
+            }
+            while end > afterSlashes {
+                let kind: Int
+                switch text[end - 1] {
+                case 41: kind = 0
+                case 93: kind = 1
+                case 125: kind = 2
+                default: kind = -1
+                }
+                guard kind >= 0, unmatched[kind] > 0 else { break }
+                unmatched[kind] -= 1
+                end -= 1
+            }
+            result += string(text[copied..<urlStart]) + transform(string(text[urlStart..<end]))
+            copied = end
+            guard let following = nextSlashes(from: end) else { break }
+            slashes = following
+        }
+        return result + string(text[copied...])
+    }
+
+    /// Whitespace, `"`, `<`, `>` or the `\"` of an escaped quote; an apostrophe only when quoted with one.
+    private static func endsUrl(_ text: [UInt16], at index: Int, quotedBySingle: Bool) -> Bool {
+        let unit = text[index]
+        return isWhitespace(unit) || unit == doubleQuote || (unit == apostrophe && quotedBySingle)
+            || unit == lessThan || unit == greaterThan
+            || (unit == backslash && index + 1 < text.count && text[index + 1] == doubleQuote)
     }
 
     /// The whole value is one URL or route: no whitespace, and it starts with `/`, or with a scheme
     /// (a letter, then letters, digits, `+`, `.` or `-`) and `://`.
     static func isUrlOrRoute(_ value: String) -> Bool {
-        guard !value.unicodeScalars.contains(where: { $0.properties.isWhitespace }) else { return false }
-        if value.hasPrefix("/") { return true }
-        guard let separator = value.range(of: "://") else { return false }
-        let scheme = value[..<separator.lowerBound].unicodeScalars
-        guard let first = scheme.first, first.isASCII, first.properties.isAlphabetic else { return false }
-        return scheme.allSatisfy { $0.isASCII && ($0.properties.isAlphabetic || ("0"..."9").contains($0) || "+.-".unicodeScalars.contains($0)) }
-    }
-
-    private static func isSchemeScalar(_ scalar: Unicode.Scalar) -> Bool {
-        scalar.isASCII && (scalar.properties.isAlphabetic || ("0"..."9").contains(scalar) || "+.-".unicodeScalars.contains(scalar))
-    }
-
-    private static func endsUrl(_ scalar: Unicode.Scalar) -> Bool {
-        scalar.properties.isWhitespace || "\"'<>".unicodeScalars.contains(scalar)
-    }
-
-    /// Replaces each URL inside free text with `transform(url)`. A URL runs from its scheme to the
-    /// next whitespace, `"`, `'`, `<` or `>`. A linear scan rather than a regex such as
-    /// `scheme://\S+`, which is quadratic on long runs of letters: from each `://` it walks back
-    /// over scheme characters, never past text already copied, then forward to the URL's end.
-    static func replacingUrlSpans(in text: String, transform: (String) -> String) -> String {
-        let scalars = Array(text.unicodeScalars)
-        var out = String.UnicodeScalarView()
-        var copied = 0
+        let text = units(value)
+        guard !text.contains(where: isWhitespace) else { return false }
+        if text.first == slash { return true }
+        guard let first = text.first, isAsciiLetter(first) else { return false }
         var index = 0
-        while index + 2 < scalars.count {
-            guard scalars[index] == ":", scalars[index + 1] == "/", scalars[index + 2] == "/" else {
-                index += 1
-                continue
-            }
-            var start = index
-            while start > copied, isSchemeScalar(scalars[start - 1]) { start -= 1 }
-            // The scheme must start with a letter: `1http://` begins at the `h`.
-            while start < index, !(scalars[start].isASCII && scalars[start].properties.isAlphabetic) { start += 1 }
-            guard start < index else {
-                index += 3
-                continue
-            }
-            var end = index + 3
-            while end < scalars.count, !endsUrl(scalars[end]) { end += 1 }
-            out.append(contentsOf: scalars[copied..<start])
-            out.append(contentsOf: transform(String(String.UnicodeScalarView(scalars[start..<end]))).unicodeScalars)
-            copied = end
-            index = end
-        }
-        out.append(contentsOf: scalars[copied...])
-        return String(out)
+        while index < text.count, isSchemeUnit(text[index]) { index += 1 }
+        return index + 2 < text.count && text[index] == colon && text[index + 1] == slash && text[index + 2] == slash
     }
 
+    /// Drops everything from the first `?` or `#`, line breaks included.
     static func dropQueryAndFragment(_ url: String) -> String {
         guard let range = url.firstIndex(where: { $0 == "?" || $0 == "#" }) else { return url }
         return String(url[..<range])
@@ -288,8 +513,8 @@ enum UrlMasker {
             }
         }
         return { rawName in
-            guard rawName.count <= maxParamNameLength else { return false }
-            let decoded = rawName.removingPercentEncoding ?? rawName
+            let decoded = decode(rawName)
+            guard decoded.utf16.count <= maxParamNameLength else { return false }
             let name = normalize(decoded)
             if sensitiveNames.contains(name) || extraNames.contains(name)
                 || sensitiveNameFragments.contains(where: name.contains) {
@@ -297,6 +522,14 @@ enum UrlMasker {
             }
             return extraRegexes.contains { matches($0, decoded) }
         }
+    }
+
+    /// Lenient: a stray `%` is kept as a literal so the rest still decodes, and `+` stays `+`, as
+    /// JavaScript's `decodeURIComponent` keeps it, so a pattern matches the same names in every SDK.
+    private static func decode(_ name: String) -> String {
+        guard let strayPercentPattern else { return name.removingPercentEncoding ?? name }
+        guard let escaped = replace(strayPercentPattern, in: name, transform: { _ in "%25" }) else { return name }
+        return escaped.removingPercentEncoding ?? name
     }
 
     /// Lowercased without separators, so `api_key`, `API-Key` and `apiKey` compare equal.
@@ -312,13 +545,23 @@ enum UrlMasker {
     }
 
     /// Replaces every match with `transform(groups)`, where `groups[0]` is the whole match and a
-    /// group that did not participate is "".
+    /// group that did not participate is "". `nil` when ICU stops early (it reports an internal
+    /// error, such as its backtrack stack overflowing, rather than throwing), so the caller can
+    /// fail closed instead of mistaking it for "nothing matched".
     fileprivate static func replace(_ regex: NSRegularExpression, in string: String,
-                                transform: ([String]) -> String) -> String {
+                                    transform: ([String]) -> String) -> String? {
         let ns = string as NSString
         var result = ""
         var cursor = 0
-        for match in regex.matches(in: string, range: NSRange(location: 0, length: ns.length)) {
+        var failed = false
+        regex.enumerateMatches(in: string, options: [.reportCompletion],
+                               range: NSRange(location: 0, length: ns.length)) { match, flags, stop in
+            if flags.contains(.internalError) {
+                failed = true
+                stop.pointee = true
+                return
+            }
+            guard let match else { return }
             result += ns.substring(with: NSRange(location: cursor, length: match.range.location - cursor))
             let groups = (0..<match.numberOfRanges).map { index -> String in
                 let range = match.range(at: index)
@@ -327,6 +570,7 @@ enum UrlMasker {
             result += transform(groups)
             cursor = match.range.location + match.range.length
         }
+        guard !failed else { return nil }
         result += ns.substring(from: cursor)
         return result
     }

@@ -210,22 +210,6 @@ final class UrlMaskerTests: XCTestCase {
         XCTAssertEqual(UrlMasker.mask("https://x.com/a?SESS\u{0130}ON=abc"), "https://x.com/a?SESS\u{0130}ON=\(R)")
     }
 
-    // MARK: - JSON fields
-
-    func test_maskStrings_masksEveryNestedStringValue() throws {
-        let json = #"[{"fileName":"https://cdn.x.com/bundle.js?sig=abc&v=2","lineNumber":3},{"functionName":"init"}]"#
-        let masked = try XCTUnwrap(UrlMasker.maskStrings(inJson: json))
-        let frames = try XCTUnwrap(Helper.convertJsonStringToArray(jsonString: masked))
-        XCTAssertEqual(frames[0]["fileName"] as? String, "https://cdn.x.com/bundle.js?sig=\(R)&v=2")
-        XCTAssertEqual(frames[0]["lineNumber"] as? Int, 3)
-        XCTAssertEqual(frames[1]["functionName"] as? String, "init")
-    }
-
-    func test_maskStrings_returnsInputUnchangedWhenNothingIsSensitive() {
-        let json = #"{"NSLocalizedDescription":"The request timed out."}"#
-        XCTAssertEqual(UrlMasker.maskStrings(inJson: json), json)
-    }
-
     // MARK: - Restored view name
 
     func test_restoredViewName_isMaskedWithCustomerOptions() {
@@ -238,7 +222,7 @@ final class UrlMaskerTests: XCTestCase {
     }
 
     /// Each nested redirect is unwrapped by one recursive pass; past the bound the value is
-    /// redacted whole instead, so a crafted URL cannot exhaust the stack.
+    /// redacted whole instead, so a crafted URL cannot exhaust the stack. Stricter than Android.
     func test_deeplyNestedRedirects_areBoundedAndRedacted() {
         let deep = (0..<5000).reduce("https://x.com/a?token=abc") { url, _ in "https://x.com/r?next=\(url)" }
         let masked = UrlMasker.mask(deep)
@@ -246,23 +230,14 @@ final class UrlMaskerTests: XCTestCase {
         XCTAssertTrue(masked.hasSuffix("next=\(R)"))
     }
 
-    func test_maskStrings_masksUrlKeysAndKeepsCollidingKeys() throws {
-        let json = #"{"https://x.com/cb?token=a":1,"https://x.com/cb?token=b":2}"#
-        let masked = try XCTUnwrap(UrlMasker.maskStrings(inJson: json))
-        let dict = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(masked.utf8)) as? [String: Int])
-        XCTAssertEqual(dict.count, 2)
-        XCTAssertEqual(Set(dict.values), [1, 2])
-        XCTAssertNotNil(dict["https://x.com/cb?token=\(R)"])
-    }
-
-    // MARK: - Stack frames and view names
+    // MARK: - Stack frames, userInfo and view names
 
     /// Only `fileName` is masked. Demangled Swift and Dart frames (`closure #1 in … == …`) look like
     /// fragment params, and untouched values keep their exact bytes because nothing is re-serialized.
     func test_maskStackTrace_masksOnlyFileNameAndKeepsOtherBytes() {
         let json = #"[{"functionName":"closure #1 in static MyApp.SessionToken.== infix(MyApp.SessionToken, MyApp.SessionToken) -> Swift.Bool","fileName":"https:\/\/cdn.x.com\/app.js?token=abc&v=2","lineNumber":1.1}]"#
-        let masked = UrlMasker.Masker().maskStackTrace(json)
-        XCTAssertEqual(masked, #"[{"functionName":"closure #1 in static MyApp.SessionToken.== infix(MyApp.SessionToken, MyApp.SessionToken) -> Swift.Bool","fileName":"https://cdn.x.com/app.js?token=[REDACTED]&v=2","lineNumber":1.1}]"#)
+        XCTAssertEqual(UrlMasker.Masker().maskStackTrace(json),
+                       #"[{"functionName":"closure #1 in static MyApp.SessionToken.== infix(MyApp.SessionToken, MyApp.SessionToken) -> Swift.Bool","fileName":"https://cdn.x.com/app.js?token=[REDACTED]&v=2","lineNumber":1.1}]"#)
     }
 
     func test_maskStackTrace_withNothingToMask_isUnchanged() {
@@ -270,31 +245,28 @@ final class UrlMaskerTests: XCTestCase {
         XCTAssertEqual(UrlMasker.Masker(UrlMaskingOptions(mode: .maskAll)).maskStackTrace(json), json)
     }
 
-    func test_maskUrlOrText_dropQuery_cutsRoutesOnly() {
+    /// Strings are edited in place, keys included; prose and untouched values keep their bytes.
+    func test_maskUserInfo_masksUrlsInPlace() {
+        let json = #"{"a":1.1,"NSLocalizedDescription":"Order #123 failed? code=abc","NSErrorFailingURLStringKey":"https:\/\/x.com\/cb?token=abc","https://k.com/?token=k":2}"#
+        XCTAssertEqual(UrlMasker.Masker().maskUserInfo(json),
+                       #"{"a":1.1,"NSLocalizedDescription":"Order #123 failed? code=abc","NSErrorFailingURLStringKey":"https://x.com/cb?token=[REDACTED]","https://k.com/?token=[REDACTED]":2}"#)
+    }
+
+    func test_maskUserInfo_dropQuery_cutsOnlyUrls() {
+        let json = #"{"d":"Order #123 failed: see https://x.com/help?page=2#faq now","u":"https://x.com/cb?token=abc"}"#
+        XCTAssertEqual(UrlMasker.Masker(UrlMaskingOptions(mode: .dropQuery)).maskUserInfo(json),
+                       #"{"d":"Order #123 failed: see https://x.com/help now","u":"https://x.com/cb"}"#)
+    }
+
+    func test_maskViewName_dropQuery_cutsRoutesOnly() {
         let masker = UrlMasker.Masker(UrlMaskingOptions(mode: .dropQuery))
-        XCTAssertEqual(masker.maskUrlOrText("Step #2"), "Step #2")
-        XCTAssertEqual(masker.maskUrlOrText("/reset?token=abc&tab=1"), "/reset")
-        XCTAssertEqual(masker.maskUrlOrText("app://reset#token=abc"), "app://reset")
+        XCTAssertEqual(masker.maskViewName("Step #2"), "Step #2")
+        XCTAssertEqual(masker.maskViewName("/reset?token=abc&tab=1"), "/reset")
+        XCTAssertEqual(masker.maskViewName("app://reset#token=abc"), "app://reset")
     }
 
-    func test_maskUrlOrText_defaultMode_stillMasksNonRouteNames() {
-        XCTAssertEqual(UrlMasker.Masker().maskUrlOrText("Reset?token=abc"), "Reset?token=\(R)")
-    }
-
-    func test_maskStrings_dropQuery_keepsTextAndCutsUrls() throws {
-        let json = #"{"NSLocalizedDescription":"Order #123 failed?","NSErrorFailingURLStringKey":"https://x.com/cb?token=abc"}"#
-        let masked = try XCTUnwrap(UrlMasker.maskStrings(inJson: json, options: UrlMaskingOptions(mode: .dropQuery)))
-        let dict = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(masked.utf8)) as? [String: String])
-        XCTAssertEqual(dict["NSLocalizedDescription"], "Order #123 failed?")
-        XCTAssertEqual(dict["NSErrorFailingURLStringKey"], "https://x.com/cb")
-    }
-
-    func test_maskUrlOrText_dropQuery_keepsProseThatMentionsAUrl() {
-        let masker = UrlMasker.Masker(UrlMaskingOptions(mode: .dropQuery))
-        XCTAssertEqual(masker.maskUrlOrText("Order #123 failed: see https://help.example.com"),
-                       "Order #123 failed: see https://help.example.com")
-        XCTAssertEqual(masker.maskUrlOrText("https://x.com/cb?token=abc"), "https://x.com/cb")
-        XCTAssertEqual(masker.maskUrlOrText("my-app+v2://reset#token=abc"), "my-app+v2://reset")
+    func test_maskViewName_defaultMode_masksNonRouteNames() {
+        XCTAssertEqual(UrlMasker.Masker().maskViewName("Reset?token=abc"), "Reset?token=\(R)")
     }
 
     func test_isUrlOrRoute() {
@@ -305,57 +277,226 @@ final class UrlMaskerTests: XCTestCase {
         XCTAssertFalse(UrlMasker.isUrlOrRoute("1http://x.com"))
     }
 
-    // MARK: - URLs inside text (cases shared with the Android SDK)
+    // MARK: - A. Rules shared with the Android SDK
 
-    func test_maskUrlOrText_masksTheUrlInsideAnErrorMessage() {
-        XCTAssertEqual(UrlMasker.Masker().maskUrlOrText("ClientException: Connection closed, uri=https://api.example.com/cb?code=abc&page=2"),
-                       "ClientException: Connection closed, uri=https://api.example.com/cb?code=\(R)&page=2")
+    private func assertMasks(_ cases: [(String, String)], _ options: UrlMaskingOptions = UrlMaskingOptions(),
+                             file: StaticString = #filePath, line: UInt = #line) {
+        for (input, expected) in cases {
+            XCTAssertEqual(UrlMasker.mask(input, options: options), expected, input, file: file, line: line)
+        }
     }
 
-    func test_maskUrlOrText_masksEachOfTwoUrlsWithAdditionalParams() {
-        let masker = UrlMasker.Masker(UrlMaskingOptions(additionalParams: ["tenant"]))
-        XCTAssertEqual(masker.maskUrlOrText(#"GET https://a.com/x?tenant=acme failed, redirected to "https://b.com/y#access_token=xyz""#),
-                       #"GET https://a.com/x?tenant=\#(R) failed, redirected to "https://b.com/y#access_token=\#(R)""#)
-    }
-
-    func test_maskUrlOrText_dropQuery_cutsOnlyTheUrlsInText() {
-        let masker = UrlMasker.Masker(UrlMaskingOptions(mode: .dropQuery))
-        XCTAssertEqual(masker.maskUrlOrText("Failed host lookup for https://a.com/cb?code=abc&x=1 (code 7). Retry later?"),
-                       "Failed host lookup for https://a.com/cb (code 7). Retry later?")
-        XCTAssertEqual(masker.maskUrlOrText("Order #123 failed: see https://x.com/help?page=2#faq for details"),
-                       "Order #123 failed: see https://x.com/help for details")
-    }
-
-    /// Free text is not masked beyond the URLs in it, the same as Android.
-    func test_maskUrlOrText_textWithoutUrl_isUnchanged() {
-        XCTAssertEqual(UrlMasker.Masker().maskUrlOrText("timeout after 10000 ms? code=abc"), "timeout after 10000 ms? code=abc")
-        XCTAssertEqual(UrlMasker.Masker(UrlMaskingOptions(mode: .dropQuery)).maskUrlOrText("Step #2"), "Step #2")
-    }
-
-    func test_replacingUrlSpans_isLinear() {
-        let text = String(repeating: "a", count: 200_000) + "://" + String(repeating: "b", count: 200_000)
-            + String(repeating: " ://", count: 50_000)
+    private func assertFast(_ input: String, _ options: UrlMaskingOptions = UrlMaskingOptions(),
+                            limit: TimeInterval = 2, file: StaticString = #filePath, line: UInt = #line) -> String {
         let start = Date()
-        var spans = 0
-        _ = UrlMasker.replacingUrlSpans(in: text) { span in spans += 1; return span }
-        XCTAssertLessThan(Date().timeIntervalSince(start), 2)
-        XCTAssertEqual(spans, 1)
+        let output = UrlMasker.mask(input, options: options)
+        XCTAssertLessThan(Date().timeIntervalSince(start), limit, file: file, line: line)
+        return output
+    }
+
+    func test_A1_A3_semicolonSeparatesParameters() {
+        assertMasks([
+            ("https://h/p?a=1;token=abc", "https://h/p?a=1;token=\(R)"),
+            ("https://shop/cart?x=1;sid=abc&sort=price", "https://shop/cart?x=1;sid=\(R)&sort=price"),
+            ("https://shop/cart;jsessionid=A1B2C3?item=5", "https://shop/cart;jsessionid=\(R)?item=5"),
+        ])
+    }
+
+    func test_A2_htmlEscapedAmpersandSeparatesParameters() {
+        assertMasks([
+            ("https://h/p?state=1&amp;code=abc", "https://h/p?state=\(R)&amp;code=\(R)"),
+            ("https://h/cb?a=1&amp;code=4/0AX4XfWh-rest", "https://h/cb?a=1&amp;code=\(R)"),
+        ])
+    }
+
+    func test_A4_encodedParameters() {
+        assertMasks([
+            ("https://sso/login?next=%2Freset%3Ftoken%3Dabc123%26lang%3Den", "https://sso/login?next=%2Freset%3Ftoken%3D\(R)%26lang%3Den"),
+            ("https://sso/login?next=%2Freset%3F%74oken%3Dabc%26lang%3Den", "https://sso/login?next=%2Freset%3F%74oken%3D\(R)%26lang%3Den"),
+            ("https://h/p?return_to=code%3Dabc%26lang%3Den", "https://h/p?return_to=code%3D\(R)%26lang%3Den"),
+            ("https://h/p?next=%2Freset%3Fuser[password]%3Dabc", "https://h/p?next=%2Freset%3Fuser[password]%3D\(R)"),
+            ("https://h/?next=%2Fcb%3F~token%3Dabc", "https://h/?next=%2Fcb%3F~token%3D\(R)"),
+            ("https://h/?r=%2Fcb%3Fx%3D1%26amp%3Bcode%3Dabc", "https://h/?r=%2Fcb%3Fx%3D1%26amp%3Bcode%3D\(R)"),
+            ("https://h/?return_to=x%3D1%3Bcode%3Dabc", "https://h/?return_to=x%3D1%3Bcode%3D\(R)"),
+        ])
+    }
+
+    func test_A4_encodedParameters_areLinear() {
+        let separators = "https://h/?a=" + String(repeating: "%3F", count: 200_000)
+        XCTAssertEqual(assertFast(separators), separators)
+        let longValue = "https://h/x?q=a%26" + String(repeating: "b", count: 200_000)
+        XCTAssertEqual(assertFast(longValue), longValue)
+    }
+
+    /// ICU overflows its backtrack stack on a possessive run inside a capture group past ~180k
+    /// characters and then reports no match at all; the patterns avoid that, and anything that still
+    /// overflows fails closed. Either way the secret must not come through.
+    func test_longValues_areMaskedNotPassedThrough() {
+        let long = String(repeating: "a", count: 200_000)
+        XCTAssertEqual(assertFast("https://h/?x=\(long)&token=secret"), "https://h/?x=\(long)&token=\(R)")
+        XCTAssertEqual(assertFast("https://h/p;x=\(long);token=secret"), "https://h/p;x=\(long);token=\(R)")
+        XCTAssertEqual(assertFast("https://h/p?token=\(long)"), "https://h/p?token=\(R)")
+        XCTAssertEqual(assertFast("https://h.example.com/x?q=a%26token%3D" + String(repeating: "b", count: 200_000)),
+                       "https://h.example.com/x?q=a%26token%3D\(R)")
+        XCTAssertFalse(assertFast("/go/%3Fx%3D" + String(repeating: "%41", count: 200_000) + "%26token%3Dsecret").contains("secret"))
+    }
+
+    func test_longJsonStrings_areMaskedNotPassedThrough() {
+        let long = String(repeating: "a", count: 200_000)
+        let json = #"{"u":"https:\/\/x.com\/cb?q="# + long + #"&token=secret"}"#
+        let masked = UrlMasker.Masker().maskUserInfo(json)
+        XCTAssertFalse(masked?.contains("secret") ?? false)
+    }
+
+    func test_A5_nameLimitIsMeasuredOnTheDecodedName() {
+        assertMasks([("https://x.com/a?access" + String(repeating: "%5F", count: 20) + "token=abc&q=1",
+                      "https://x.com/a?access" + String(repeating: "%5F", count: 20) + "token=\(R)&q=1")])
+    }
+
+    func test_A6_lenientDecoding() {
+        assertMasks([("https://h/p?%74oken%=abc", "https://h/p?%74oken%=\(R)")])
+    }
+
+    func test_A7_credentials() {
+        assertMasks([
+            ("https://u:p@ss@host/x", "https://\(R)@host/x"),
+            ("//alice:secret@cdn/app.js", "//\(R)@cdn/app.js"),
+            ("https:user:pw@example.com/", "https:\(R)@example.com/"),
+            ("https:///user:pw@example.com/", "https:///\(R)@example.com/"),
+            (" https://user:pw@example.com/", " https://\(R)@example.com/"),
+            ("https://proxy/fetch/https://user:pw@inner/x", "https://proxy/fetch/https://\(R)@inner/x"),
+            (#"https:/\user:pw@host/p"#, #"https:/\\#(R)@host/p"#),
+            (#"https:\/user:pw@host/p"#, #"https:\/\#(R)@host/p"#),
+            (#"https:\/\/user:pw@h\/x"#, #"https:\/\/\#(R)@h\/x"#),
+            (#"\/\/user:pw@h\/x"#, #"\/\/\#(R)@h\/x"#),
+            ("//:pw@h/x", "//\(R)@h/x"),
+        ])
+    }
+
+    func test_A7_credentials_areLinear() {
+        let input = "https://h/?a=" + String(repeating: #":\:\"#, count: 100_000) + "@x"
+        _ = assertFast(input)
+    }
+
+    func test_A8_jwts() {
+        assertMasks([
+            ("https://h/p/eyJhbGciOiJIUzI1NiJ9.e30.SIGNATUREabcdef", "https://h/p/\(R)"),
+            ("https://h/p/eyJhbGciOiJIUzI1NiJ9==.eyJzdWIiOiIxMjM0NTY3ODkwIn0=.SIGxyz", "https://h/p/\(R)"),
+        ])
+        let run = "https://x.com/a?q=" + String(repeating: "eyJ", count: 200_000)
+        XCTAssertEqual(assertFast(run), run)
+    }
+
+    func test_A9_dataAndBlobUrlsAreMasked() {
+        assertMasks([
+            ("data:text/plain,hi#access_token=abc", "data:text/plain,hi#access_token=\(R)"),
+            ("data:text/plain,hi?token=abc", "data:text/plain,hi?token=\(R)"),
+            ("data://h/?token=abc", "data://h/?token=\(R)"),
+            ("blob:https://h/?token=abc", "blob:https://h/?token=\(R)"),
+        ])
+        let png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+        XCTAssertEqual(UrlMasker.mask(png), png)
+    }
+
+    func test_A10_precheckFiresOnEncodedSeparatorsAndAmpersand() {
+        assertMasks([
+            ("https://h/go/%3Ftoken%3Dabc", "https://h/go/%3Ftoken%3D\(R)"),
+            ("/go/%3Ftoken%3Dabc", "/go/%3Ftoken%3D\(R)"),
+            ("https://h/cb&access_token=abc", "https://h/cb&access_token=\(R)"),
+        ])
+    }
+
+    func test_A11_maskAllMasksAnEmptyName_defaultDoesNot() {
+        assertMasks([("https://h/p?=abc&a=1", "https://h/p?=\(R)&a=\(R)")], UrlMaskingOptions(mode: .maskAll))
+        assertMasks([("https://h/p?=abc&a=1", "https://h/p?=abc&a=1")])
+    }
+
+    func test_A12_dropQueryDropsAQueryWithALineBreak() {
+        assertMasks([("https://x.com/a?q=1\nfoo#b", "https://x.com/a")], UrlMaskingOptions(mode: .dropQuery))
     }
 
     func test_userInfo_passwordWithUnencodedAt_isMaskedWhole() {
-        XCTAssertEqual(UrlMasker.mask("https://user:p@ss@host.com/x"), "https://\(R)@host.com/x")
-        XCTAssertEqual(UrlMasker.mask("https://u:p@host.com/a@b?x=1"), "https://\(R)@host.com/a@b?x=1")
-    }
-
-    func test_jwt_longRunOfRepeatedHeaders_isLinear() {
-        let run = String(repeating: "eyJ", count: 8000)
-        let start = Date()
-        XCTAssertEqual(UrlMasker.mask("https://a.com/" + run), "https://a.com/" + run)
-        XCTAssertLessThan(Date().timeIntervalSince(start), 0.5)
+        assertMasks([("https://u:p@host.com/a@b?x=1", "https://\(R)@host.com/a@b?x=1")])
     }
 
     func test_jwt_stillMaskedAfterSeparatorsAndEscapes() {
-        XCTAssertEqual(UrlMasker.mask("https://a.com/cb?redirect=\(jwt)&x=1"), "https://a.com/cb?redirect=\(R)&x=1")
-        XCTAssertEqual(UrlMasker.mask("https://a.com/go?to=x%3Fid%3D\(jwt)"), "https://a.com/go?to=x%3Fid%3D\(R)")
+        assertMasks([
+            ("https://a.com/cb?redirect=\(jwt)&x=1", "https://a.com/cb?redirect=\(R)&x=1"),
+            ("https://a.com/go?to=x%3Fid%3D\(jwt)", "https://a.com/go?to=x%3Fid%3D\(R)"),
+            ("https://a.com/p/session_eyJhbGciOiJIUzI1NiJ9.e30.sig", "https://a.com/p/session_\(R)"),
+        ])
+    }
+
+    // MARK: - C. URLs inside free text
+
+    private func assertText(_ cases: [(String, String)], _ options: UrlMaskingOptions = UrlMaskingOptions(),
+                            file: StaticString = #filePath, line: UInt = #line) {
+        for (input, expected) in cases {
+            XCTAssertEqual(UrlMasker.maskUrlsInText(input, options: options), expected, input, file: file, line: line)
+        }
+    }
+
+    private func assertTextFast(_ input: String, file: StaticString = #filePath, line: UInt = #line) -> String {
+        let start = Date()
+        let output = UrlMasker.maskUrlsInText(input)
+        XCTAssertLessThan(Date().timeIntervalSince(start), 2, file: file, line: line)
+        return output
+    }
+
+    func test_C4_errorMessages() {
+        assertText([
+            ("ClientException: Connection closed, uri=https://api/cb?code=abc&page=2",
+             "ClientException: Connection closed, uri=https://api/cb?code=\(R)&page=2"),
+            ("timeout after 10000 ms? code=abc", "timeout after 10000 ms? code=abc"),
+        ])
+        assertText([(#"GET https://a.com/x?tenant=acme failed, redirected to "https://b.com/y#access_token=xyz""#,
+                     #"GET https://a.com/x?tenant=\#(R) failed, redirected to "https://b.com/y#access_token=\#(R)""#)],
+                   UrlMaskingOptions(additionalParams: ["tenant"]))
+        assertText([("Failed host lookup for https://a.com/cb?code=abc&x=1 (code 7). Retry later?",
+                     "Failed host lookup for https://a.com/cb (code 7). Retry later?")],
+                   UrlMaskingOptions(mode: .dropQuery))
+    }
+
+    func test_C2_protocolRelativeUrls() {
+        assertText([
+            ("failed to load //api/reset?token=abc uri=//cdn/a.js?sig=xyz retrying",
+             "failed to load //api/reset?token=\(R) uri=//cdn/a.js?sig=\(R) retrying"),
+            ("[//a/r?token=abc] {//b/r?token=abc} x,//c/r?token=abc x;//d/r?token=abc x|//e/r?token=abc",
+             "[//a/r?token=\(R)] {//b/r?token=\(R)} x,//c/r?token=\(R) x;//d/r?token=\(R) x|//e/r?token=\(R)"),
+            ("load //[2001:db8::1]:8080/cb?code=abc failed", "load //[2001:db8::1]:8080/cb?code=\(R) failed"),
+            ("path//nothttps://x/cb?token=abc", "path//nothttps://x/cb?token=\(R)"),
+            ("see //:pw@h/x now", "see //\(R)@h/x now"),
+            ("a // b?token=abc and path/to//x?code=abc", "a // b?token=abc and path/to//x?code=abc"),
+        ])
+        for prefix in ["<td>", "`", "*", "!", "->", "[GET]:", "\u{200B}", "\u{FEFF}", "x\u{0085}"] {
+            assertText([("\(prefix)//h/?token=abc", "\(prefix)//h/?token=\(R)")])
+        }
+    }
+
+    func test_C2_C3_jsonEscapedUrlsAndQuotes() {
+        assertText([
+            (#"body {"u":"https:\/\/h\/?token=abc"}"#, #"body {"u":"https:\/\/h\/?token=\#(R)"}"#),
+            (#"{"u":"https:\/\/user:pw@h\/x"}"#, #"{"u":"https:\/\/\#(R)@h\/x"}"#),
+            ("uri=https://h/?q=O'Brien&token=abc end", "uri=https://h/?q=O'Brien&token=\(R) end"),
+            ("uri=https://u:p'pw@h/x end", "uri=https://\(R)@h/x end"),
+            ("see 'https://h/?token=abc' now", "see 'https://h/?token=\(R)' now"),
+        ])
+    }
+
+    func test_C3_closingBracketsStayOutside_ipv6BracketsInside() {
+        assertText([("x,//api/cb?code=abc) and (see https://b/y?token=xyz]}) but //[2001:db8::1]/z?sig=abc stays whole",
+                     "x,//api/cb?code=\(R)) and (see https://b/y?token=\(R)]}) but //[2001:db8::1]/z?sig=\(R) stays whole")])
+    }
+
+    func test_C_linearTime() {
+        let a = String(repeating: "a", count: 200_000) + "://" + String(repeating: "b", count: 200_000)
+            + String(repeating: " ://", count: 50_000)
+        XCTAssertEqual(assertTextFast(a), a)
+        let b = String(repeating: "/", count: 400_000) + "x" + String(repeating: "a//", count: 100_000)
+        XCTAssertEqual(assertTextFast(b), b)
+        let c = String(repeating: #"a\/\/"#, count: 200_000)
+        XCTAssertEqual(assertTextFast(c), c)
+        let d = "//h/a?token=abc" + String(repeating: ")", count: 200_000)
+        XCTAssertEqual(assertTextFast(d), "//h/a?token=\(R)" + String(repeating: ")", count: 200_000))
     }
 }

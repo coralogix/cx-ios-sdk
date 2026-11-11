@@ -20,6 +20,11 @@ public struct CXView {
     
     let state: AppState
     let name: String
+    /// The name as the app set it, before URL masking. Whether the view changed is decided on this,
+    /// so two routes that mask to the same name are still two views.
+    var rawName: String? = nil
+
+    var identity: String { rawName ?? name }
 }
 
 class SwizzleUtils {

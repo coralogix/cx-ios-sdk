@@ -498,16 +498,32 @@ public class CoralogixExporter: SpanExporter {
         if case .string(let json)? = attributes[Keys.stackTrace.rawValue] {
             let masked = masker.maskStackTrace(json)
             if masked != json {
-                attributes[Keys.stackTrace.rawValue] = .string(masked)
+                attributes[Keys.stackTrace.rawValue] = masked.map { .string($0) }
                 changed = true
             }
         }
         // A URLSession error's userInfo carries the failing URL, under keys that vary and can nest,
-        // so every string inside is masked.
+        // so the URLs inside every string are masked.
         if case .string(let json)? = attributes[Keys.userInfo.rawValue] {
-            let masked = masker.maskStrings(inJson: json)
+            let masked = masker.maskUserInfo(json)
             if masked != json {
                 attributes[Keys.userInfo.rawValue] = masked.map { .string($0) }
+                changed = true
+            }
+        }
+        // An error or crash message often repeats the URL that failed; only the URLs in it change.
+        // `reportError(message:)` reports as an error-severity log, so its message is covered too.
+        var messageKeys = [Keys.errorMessage.rawValue]
+        if attributes[Keys.eventType.rawValue]?.description == CoralogixEventType.log.rawValue,
+           let severity = attributes[Keys.severity.rawValue].flatMap({ Int($0.description) }),
+           severity >= CoralogixLogSeverity.error.rawValue {
+            messageKeys.append(Keys.message.rawValue)
+        }
+        for key in messageKeys {
+            guard case .string(let message)? = attributes[key] else { continue }
+            let masked = masker.maskText(message)
+            if masked != message {
+                attributes[key] = .string(masked)
                 changed = true
             }
         }
