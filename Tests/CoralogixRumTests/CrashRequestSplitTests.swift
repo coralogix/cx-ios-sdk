@@ -42,6 +42,8 @@ final class CrashRequestSplitTests: XCTestCase {
     /// Holds every stored-crash request open until `release`, and records how many were open at once.
     private final class BlockingCrashUploader: SpanUploading {
         private let gate = DispatchSemaphore(value: 0)
+        /// Signalled once per stored-crash request, when it is open and blocked.
+        let entered = DispatchSemaphore(value: 0)
         private let lock = NSLock()
         private var open = 0
         private var _maxOpen = 0
@@ -65,6 +67,7 @@ final class CrashRequestSplitTests: XCTestCase {
             _maxOpen = max(_maxOpen, open)
             _crashMessages.append(message)
             lock.unlock()
+            entered.signal()
             gate.wait()
             lock.lock(); open -= 1; lock.unlock()
             return .delivered
@@ -148,6 +151,7 @@ final class CrashRequestSplitTests: XCTestCase {
                                      explicitTimeout: nil)
 
         XCTAssertEqual(result, .success)
+        XCTAssertEqual(uploader.entered.wait(timeout: .now() + 5), .success, "the crash request opened")
         XCTAssertEqual(uploader.liveRequests, 1, "the live batch went out while the crash request was still open")
         XCTAssertNil(exporter.crashUploadOutcome(id: "slow"), "the crash request is still open")
         XCTAssertTrue(answers.isEmpty)

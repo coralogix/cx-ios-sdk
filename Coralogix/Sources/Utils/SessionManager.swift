@@ -248,12 +248,18 @@ public class SessionManager {
 
     /// PRECONDITION: caller holds `sessionLock`.
     private func notifyCrashStampLocked() {
+        guard let stamp = publishCrashStampSnapshotLocked(), let observer = _crashStampObserver else { return }
+        observer(stamp)
+    }
+
+    /// PRECONDITION: caller holds `sessionLock`.
+    @discardableResult
+    private func publishCrashStampSnapshotLocked() -> CrashStamp? {
         let stamp = crashStampLocked()
         crashStampSnapshotLock.lock()
         _crashStampSnapshot = stamp
         crashStampSnapshotLock.unlock()
-        guard let observer = _crashStampObserver, let stamp else { return }
-        observer(stamp)
+        return stamp
     }
 
     /// Mirrors the live decision into the keychain next to the session identity, so a
@@ -654,6 +660,11 @@ public class SessionManager {
         // startup installs it) keeps the seeded/default value.
         if let samplingRoller = self.samplingRoller {
             self._isSessionSampledIn = samplingRoller()
+        }
+        // Published before the keychain write below, which can stall: a hang there belongs to
+        // the session this rotation has already started.
+        publishCrashStampSnapshotLocked()
+        if self.samplingRoller != nil {
             persistSessionSampledInLocked(self._isSessionSampledIn)
         }
         // Reset snapshot-throttle so the fresh session can emit its first
