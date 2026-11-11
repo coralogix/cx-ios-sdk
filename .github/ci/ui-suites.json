@@ -239,6 +239,7 @@
       "tests": [
         "CrashE2EUITests/CrashAttributionUITests/testCrashAfterARotation_isSentInTheRotatedSession_onTheScreenItHappenedOn",
         "CrashE2EUITests/CrashAttributionUITests/testCrashBeforeAnyScreen_isNotFiledUnderAScreen",
+        "CrashE2EUITests/CrashAttributionUITests/testCrashFirstReadALaunchLater_carriesTheCountersScreenAndVersionItHappenedWith",
         "CrashE2EUITests/CrashAttributionUITests/testCrashBeforeInit_isNeverSent_andTheNextLaunchsOwnEventsAreUnaffected",
         "CrashE2EUITests/CrashAttributionUITests/testCrashResentOnThreeLaunches_carriesTheSameErrorCount",
         "CrashE2EUITests/CrashAttributionUITests/testCrash_carriesTheErrorCountItHappenedWith",

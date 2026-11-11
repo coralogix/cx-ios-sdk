@@ -59,12 +59,13 @@ extension CoralogixRum: StoredCrashSending {
         }
 
         var readable: [(copy: URL, crash: MappedCrash)] = []
+        var allCopiesRead = true
         for copy in store.copies() {
             switch Self.readCopy(copy) {
             case .readable(let crash):
                 readable.append((copy, crash))
             case .notReadableYet:
-                continue
+                allCopiesRead = false
             case .corrupt:
                 store.removeCopy(copy)
             }
@@ -83,6 +84,16 @@ extension CoralogixRum: StoredCrashSending {
         }
         if reportsHangs {
             lined += self.pendingFatalHangs()
+        }
+
+        if allCopiesRead && !store.hasHangMarker,
+           let recorded = store.recordedCrashIds(),
+           lined.allSatisfy({ recorded.contains($0.crashId) }) {
+            // Every crash and hang earlier launches left now has a delivery record holding its
+            // session's counters, or is gone: nothing reads their launches' records again.
+            let launchId = self.coralogixExporter?.getSessionManager().snapshotStore.launchId
+            SessionSnapshotStore.discardEarlierLaunches(in: store.snapshotsDirectory,
+                                                        keeping: launchId ?? SessionSnapshotStore.processLaunchId)
         }
 
         crashRecoveryLock.lock()
@@ -288,7 +299,9 @@ extension CoralogixRum: StoredCrashSending {
                                        failedUploads: 0,
                                        session: session,
                                        counters: counters)
-        self.crashDeliveryStore.save(record)
+        if self.crashDeliveryStore.save(record) {
+            sessionManager.snapshotStore.discardEarlierLaunch(of: session.id)
+        }
         return record
     }
 

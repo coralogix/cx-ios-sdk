@@ -166,13 +166,26 @@ extension SessionManager {
 }
 
 extension SessionSnapshotStore {
+    /// A directory of session records of its own, as an app's fresh install has.
+    static func temporaryDirectory() -> URL {
+        FileManager.default.temporaryDirectory.appendingPathComponent("SessionSnapshots-\(UUID().uuidString)", isDirectory: true)
+    }
+
+    /// A store over records no other test sees, as launch `launchId` reads them.
+    static func temporary(directory: URL = temporaryDirectory(),
+                          launchId: String = "this-launch",
+                          keychain: MockKeyChain = MockKeyChain(),
+                          now: Date = Date()) -> SessionSnapshotStore {
+        SessionSnapshotStore(keychain: keychain, directory: directory, launchId: launchId, now: now)
+    }
+
     /// The store as the launch after one that persisted `record` sees it.
     static func relaunched(after record: SessionSnapshotRecord?,
-                           keychain: MockKeyChain = MockKeyChain()) -> SessionSnapshotStore {
+                           directory: URL = temporaryDirectory()) -> SessionSnapshotStore {
         if let record {
-            SessionSnapshotStore(keychain: keychain).persist(record)
+            temporary(directory: directory, launchId: "previous-launch").persist(record)
         }
-        return SessionSnapshotStore(keychain: keychain)
+        return temporary(directory: directory, launchId: "relaunch")
     }
 }
 

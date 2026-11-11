@@ -119,15 +119,17 @@ final class CrashRecoveryAcrossLaunchesTests: XCTestCase {
         try super.tearDownWithError()
     }
 
-    /// A launch whose snapshot store holds `lastSession` from the launch before, recovering from
-    /// `store`, sending through `uploader`.
-    private func launch(store: CrashDeliveryStore, lastSession: SessionSnapshotRecord?,
+    /// A launch whose snapshot store holds `lastSession` from the launch before (or is `snapshots`),
+    /// recovering from `store`, sending through `uploader`.
+    @discardableResult
+    private func launch(store: CrashDeliveryStore, lastSession: SessionSnapshotRecord? = nil,
+                        snapshots: SessionSnapshotStore? = nil,
                         uploader: SwitchableUploader, version: String = "9.9",
                         ignoreErrors: [String] = [],
                         instrumentations: [CoralogixExporterOptions.InstrumentationType: Bool]? = nil,
                         beforeSend: (([String: Any]) -> [String: Any]?)? = nil,
                         framework: SdkFramework = .swift) throws -> CoralogixRum {
-        let manager = SessionManager(snapshotStore: .relaunched(after: lastSession))
+        let manager = SessionManager(snapshotStore: snapshots ?? .relaunched(after: lastSession))
         manager.lastLaunchSession = nil
         var options = makeSamplingOptions(sampleRate: 100, exclude: [], instrumentations: instrumentations,
                                           ignoreErrors: ignoreErrors)
@@ -182,6 +184,60 @@ final class CrashRecoveryAcrossLaunchesTests: XCTestCase {
         XCTAssertEqual(value(sent, .versionMetaData, .appVersion) as? String, "1.0")
         XCTAssertTrue(store.copies().isEmpty, "a delivered crash's copy is deleted")
         XCTAssertNil(store.record(for: crash.crashId))
+    }
+
+    /// Launch 1 crashes in S1; launch 2 cannot read the crash yet (the device is still locked) and
+    /// records a session of its own; launch 3 reads the crash and reports it with S1's counters,
+    /// view and versions — not launch 2's, and not nothing.
+    func test_aCrashReadOnlyAfterALaunchThatCouldNot_reportsItsOwnLaunchsRecord() throws {
+        let store = CrashDeliveryStore.temporary()
+        let snapshots = store.snapshotsDirectory
+        SessionSnapshotStore.temporary(directory: snapshots, launchId: "crashed").persist(sessionRecord(of: "S1"))
+        let crash = try leaveCrash(in: store, sessionId: "S1")
+        let copy = try XCTUnwrap(store.copies().first)
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: copy.path)
+
+        let locked = SwitchableUploader()
+        let lockedLaunch = try launch(store: store, snapshots: .temporary(directory: snapshots, launchId: "locked"),
+                                      uploader: locked, version: "2.0")
+        try XCTUnwrap(lockedLaunch.coralogixExporter).sessionRecorder.waitForPendingWrites()
+        XCTAssertTrue(locked.crashes.isEmpty, "the crash could not be read")
+        XCTAssertNil(store.record(for: crash.crashId))
+        let lockedFiles = try FileManager.default.contentsOfDirectory(atPath: snapshots.path)
+        XCTAssertEqual(Set(lockedFiles), ["crashed.json", "locked.json"],
+                       "the launch recorded its own session beside the crashed launch's record")
+
+        try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: copy.path)
+        let delivering = SwitchableUploader()
+        try launch(store: store, snapshots: .temporary(directory: snapshots, launchId: "unlocked"),
+                   uploader: delivering, version: "3.0")
+
+        let sent = try XCTUnwrap(delivering.crashes.first)
+        XCTAssertEqual(value(sent, .sessionContext, .sessionId) as? String, "S1")
+        XCTAssertEqual(value(sent, .viewContext, .view) as? String, "Checkout")
+        XCTAssertEqual(value(sent, .versionMetaData, .appVersion) as? String, "1.0")
+        XCTAssertEqual(value(sent, .snapshotContext, .errorCount) as? Int, 3, "the session's two errors and this crash")
+        XCTAssertEqual(value(sent, .snapshotContext, .actionCount) as? Int, 4)
+        let remaining = try FileManager.default.contentsOfDirectory(atPath: snapshots.path)
+        XCTAssertFalse(remaining.contains("crashed.json"), "read into the crash's record, then pruned")
+        XCTAssertFalse(remaining.contains("locked.json"), "every crash was read: no earlier launch's record is needed")
+    }
+
+    /// While a crash cannot be read, no earlier launch's record is pruned: it may be the crash's.
+    func test_aLaunchWithACrashItCannotRead_prunesNoEarlierRecord() throws {
+        let store = CrashDeliveryStore.temporary()
+        let snapshots = store.snapshotsDirectory
+        SessionSnapshotStore.temporary(directory: snapshots, launchId: "crashed").persist(sessionRecord(of: "S1"))
+        SessionSnapshotStore.temporary(directory: snapshots, launchId: "ended-normally").persist(sessionRecord(of: "S0"))
+        try leaveCrash(in: store, sessionId: "S1")
+        let copy = try XCTUnwrap(store.copies().first)
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: copy.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: copy.path) }
+
+        try launch(store: store, snapshots: .temporary(directory: snapshots, launchId: "locked"), uploader: SwitchableUploader())
+
+        let files = Set(try FileManager.default.contentsOfDirectory(atPath: snapshots.path))
+        XCTAssertTrue(files.isSuperset(of: ["crashed.json", "ended-normally.json"]))
     }
 
     /// PLCrashReporter's single slot would have kept only the last of these. A report's time has

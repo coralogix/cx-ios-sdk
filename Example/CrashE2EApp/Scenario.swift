@@ -36,7 +36,7 @@ struct Scenario: Codable {
     /// Session replay is set up with the SDK and records from the first screen.
     var sessionReplay: Bool = false
     /// Applied to the SDK's files before init: `reset`, `setFailedUploads:<n>`,
-    /// `ageCrashesBySeconds:<s>`, `seedLegacyHybridStore`.
+    /// `ageCrashesBySeconds:<s>`, `seedLegacyHybridStore`, `lockCrashCopies`, `unlockCrashCopies`.
     var hooks: [String] = []
 
     static let environmentKey = "CX_E2E_SCENARIO"

@@ -33,7 +33,7 @@ final class LaunchSessionTests: XCTestCase {
     }
 
     func test_theFirstSession_adoptsTheSeed_andLaterOnesMintTheirOwn() {
-        let manager = SessionManager(snapshotStore: SessionSnapshotStore(keychain: MockKeyChain()),
+        let manager = SessionManager(snapshotStore: SessionSnapshotStore.temporary(),
                                      launchSessionId: "seed-session")
         XCTAssertEqual(manager.currentSessionId, "seed-session")
 
@@ -45,7 +45,7 @@ final class LaunchSessionTests: XCTestCase {
 
     func test_theCrashStamp_followsAdoption_samplingAndRotation_inOrder() throws {
         var stamps: [SessionManager.CrashStamp] = []
-        let manager = SessionManager(snapshotStore: SessionSnapshotStore(keychain: MockKeyChain()),
+        let manager = SessionManager(snapshotStore: SessionSnapshotStore.temporary(),
                                      launchSessionId: "seed-session",
                                      crashStampObserver: { stamps.append($0) })
         manager.setSessionSampledIn(false)
@@ -61,7 +61,7 @@ final class LaunchSessionTests: XCTestCase {
 
     func test_aDetachedObserver_hearsNoMoreSessions() {
         var stamps: [SessionManager.CrashStamp] = []
-        let manager = SessionManager(snapshotStore: SessionSnapshotStore(keychain: MockKeyChain()),
+        let manager = SessionManager(snapshotStore: SessionSnapshotStore.temporary(),
                                      crashStampObserver: { stamps.append($0) })
         manager.detachCrashStampObserver()
 
@@ -98,7 +98,7 @@ final class LiveSessionRecordTests: XCTestCase {
     private func start(sampleRate: Int = 100,
                        exclude: Set<ExcludableInstrumentation> = [],
                        version: String = "1.0.0") throws -> (CoralogixRum, SessionManager, CoralogixExporter) {
-        let manager = SessionManager(snapshotStore: SessionSnapshotStore(keychain: MockKeyChain()))
+        let manager = SessionManager(snapshotStore: SessionSnapshotStore.temporary())
         var options = makeSamplingOptions(sampleRate: sampleRate, exclude: exclude)
         options.version = version
         let sdk = CoralogixRum(options: options, sessionManager: manager)
@@ -115,7 +115,7 @@ final class LiveSessionRecordTests: XCTestCase {
     }
 
     func test_noRecordBeforeAdoption_oneRightAfter() throws {
-        let manager = SessionManager(snapshotStore: SessionSnapshotStore(keychain: MockKeyChain()))
+        let manager = SessionManager(snapshotStore: SessionSnapshotStore.temporary())
         let id = try XCTUnwrap(manager.currentSessionId)
         XCTAssertNil(manager.snapshotStore.record(for: id), "a session the SDK never adopted has no record")
 
@@ -190,7 +190,7 @@ final class LiveSessionRecordTests: XCTestCase {
         keychain.writeStringToKeychain(service: Keys.service.rawValue, key: Keys.keySessionSnapshot.rawValue,
                                        value: #"{"sessionId":"old","errorCount":1,"viewCount":2,"actionCount":3,"hasRecording":true}"#)
 
-        let record = try XCTUnwrap(SessionSnapshotStore(keychain: keychain).record(for: "old"))
+        let record = try XCTUnwrap(SessionSnapshotStore.temporary(keychain: keychain).record(for: "old"))
 
         XCTAssertEqual(record.actionCount, 3)
         XCTAssertNil(record.viewName)

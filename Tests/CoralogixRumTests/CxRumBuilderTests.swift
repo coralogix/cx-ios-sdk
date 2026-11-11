@@ -18,10 +18,10 @@ class MockSessionManager: SessionManager {
     var incrementErrorCounterCallCount = 0
     var decrementErrorCounterCallCount = 0
 
-    // An in-memory keychain by default, so a record persisted by one test never surfaces
+    // Records of its own by default, so a record persisted by one test never surfaces
     // as another test's previous-launch record.
     convenience init() {
-        self.init(snapshotStore: SessionSnapshotStore(keychain: MockKeyChain()))
+        self.init(snapshotStore: SessionSnapshotStore.temporary())
     }
 
     override func getErrorCount() -> Int { return errorCount }
@@ -772,11 +772,11 @@ class CxRumBuilderTests: XCTestCase {
                                                              actionCount: 7,
                                                              hasRecording: true)
 
-    /// "session_001" live, over a keychain holding what the previous launch persisted.
-    private func makeSessionManager(keychain: MockKeyChain = MockKeyChain(),
+    /// "session_001" live, over the records the previous launch persisted.
+    private func makeSessionManager(snapshots: URL = SessionSnapshotStore.temporaryDirectory(),
                                     previousLaunchRecord: SessionSnapshotRecord? = nil,
                                     liveSessionId: String = "session_001") -> MockSessionManager {
-        MockSessionManager(snapshotStore: .relaunched(after: previousLaunchRecord, keychain: keychain))
+        MockSessionManager(snapshotStore: .relaunched(after: previousLaunchRecord, directory: snapshots))
             .makeLive(sessionId: liveSessionId)
     }
 
@@ -904,8 +904,8 @@ class CxRumBuilderTests: XCTestCase {
     }
 
     func test_build_liveSnapshotDecidedBeforeARotation_leavesTheNewSessionInTheSlot() throws {
-        let keychain = MockKeyChain()
-        mockSessionManager = makeSessionManager(keychain: keychain, liveSessionId: "session_001")
+        let snapshots = SessionSnapshotStore.temporaryDirectory()
+        mockSessionManager = makeSessionManager(snapshots: snapshots, liveSessionId: "session_001")
         // The span was judged live, then the rotation ran and the recorder wrote the new session.
         mockSessionManager.snapshotStore.persist(.empty(sessionId: "session_001"))
         mockSessionManager.snapshotStore.persist(.empty(sessionId: "next-session"))
@@ -913,7 +913,7 @@ class CxRumBuilderTests: XCTestCase {
         _ = try XCTUnwrap(build(makeSpan(sessionId: "session_001"))?.snapshotContext,
                           "Precondition: the error emits a live snapshot")
 
-        let nextLaunch = SessionSnapshotStore(keychain: keychain)
+        let nextLaunch = SessionSnapshotStore.temporary(directory: snapshots, launchId: "next-launch")
         XCTAssertEqual(nextLaunch.record(for: "next-session"), .empty(sessionId: "next-session"),
                        "A crash in the new session must recover the new session's record")
     }

@@ -3,7 +3,8 @@
 //  CrashE2EApp
 //
 //  Test hooks applied to the SDK's own files before CoralogixRum is initialized: the iOS stand-ins
-//  for Android's fresh install, `recordFailedUploads` and `dateCrash`. They read and edit the
+//  for Android's fresh install, `recordFailedUploads` and `dateCrash`, and for a device still locked
+//  when the app launches (`lockCrashCopies`). They read and edit the
 //  delivery store's JSON, which pins its format in this repo; they exist only in this test host.
 //
 
@@ -16,6 +17,11 @@ enum E2EHooks {
     }
     static var sdkDirectory: URL { supportDirectory.appendingPathComponent("CoralogixRum", isDirectory: true) }
     static var recordsFile: URL { sdkDirectory.appendingPathComponent("crash_delivery.json") }
+    static var copiesDirectory: URL { sdkDirectory.appendingPathComponent("crashes", isDirectory: true) }
+    static var plCrashReporterDirectory: URL {
+        FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("com.plausiblelabs.crashreporter.data")
+    }
 
     static func apply(_ hooks: [String]) {
         for hook in hooks {
@@ -30,6 +36,8 @@ enum E2EHooks {
                     if let time = record["crashTime"] as? Double { record["crashTime"] = time - (argument ?? 0) }
                 }
             case "seedLegacyHybridStore": seedLegacyHybridStore()
+            case "lockCrashCopies": lockCrashCopies()
+            case "unlockCrashCopies": setPermissions(0o644, ofFilesIn: copiesDirectory)
             default: NSLog("[CrashE2E] unknown hook %@", hook)
             }
         }
@@ -39,9 +47,8 @@ enum E2EHooks {
     /// Files only: PLCrashReporter was enabled at image load, before this runs, and writes a crash of
     /// this launch into its directory, which must still be there.
     private static func reset() {
-        let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
         removeFiles(in: sdkDirectory)
-        removeFiles(in: caches.appendingPathComponent("com.plausiblelabs.crashreporter.data"))
+        removeFiles(in: plCrashReporterDirectory)
         SecItemDelete([kSecClass as String: kSecClassGenericPassword] as CFDictionary)
     }
 
@@ -50,6 +57,22 @@ enum E2EHooks {
         while let file = files?.nextObject() as? URL {
             let isDirectory = (try? file.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
             if !isDirectory { try? FileManager.default.removeItem(at: file) }
+        }
+    }
+
+    /// The crash copies cannot be read this launch, as before the first unlock: the files are
+    /// listed, their contents refused. The image-load copy of PLCrashReporter's pending report is
+    /// already made, so the report is removed too: recovery would otherwise copy it again,
+    /// readable, over the locked copy.
+    private static func lockCrashCopies() {
+        removeFiles(in: plCrashReporterDirectory)
+        setPermissions(0o000, ofFilesIn: copiesDirectory)
+    }
+
+    private static func setPermissions(_ permissions: Int, ofFilesIn directory: URL) {
+        let files = (try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? []
+        for file in files {
+            try? FileManager.default.setAttributes([.posixPermissions: permissions], ofItemAtPath: file.path)
         }
     }
 

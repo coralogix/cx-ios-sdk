@@ -456,7 +456,7 @@ class SessionManagerTests: XCTestCase {
         let releaseRotation = DispatchSemaphore(value: 0)
         let stampLock = NSLock()
         var observed: [SessionManager.CrashStamp] = []
-        let manager = SessionManager(snapshotStore: SessionSnapshotStore(keychain: MockKeyChain()),
+        let manager = SessionManager(snapshotStore: SessionSnapshotStore.temporary(),
                                      crashStampObserver: { stamp in
             stampLock.lock()
             observed.append(stamp)
@@ -490,7 +490,7 @@ class SessionManagerTests: XCTestCase {
     }
 
     func testLastPublishedCrashStamp_isClearedOnShutdown() throws {
-        let manager = SessionManager(snapshotStore: SessionSnapshotStore(keychain: MockKeyChain()))
+        let manager = SessionManager(snapshotStore: SessionSnapshotStore.temporary())
         XCTAssertEqual(try XCTUnwrap(manager.lastPublishedCrashStamp).sessionId, manager.getSessionMetadata()?.sessionId)
 
         manager.shutdown()

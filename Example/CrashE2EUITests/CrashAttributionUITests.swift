@@ -26,6 +26,25 @@ final class CrashAttributionUITests: CrashE2ETestCase {
         XCTAssertEqual(errorCount(awaitCrashes(1)[0]), 3, "two errors and this crash")
     }
 
+    /// The launch after the crash cannot read it (the device is still locked) and records a
+    /// session of its own; the one after that reads it, and reports what the crashed launch had.
+    func testCrashFirstReadALaunchLater_carriesTheCountersScreenAndVersionItHappenedWith() {
+        crash("exception", before: ["error:one", "view:Second"])
+        let crashed = endpoint.events.first { message($0) == "one" }.flatMap(session)
+        relaunch(["hooks": ["lockCrashCopies"], "appVersion": "2.0", "actions": ["error:on the locked launch"]])
+        settle()
+        XCTAssertTrue(endpoint.crashes.isEmpty, "the crash could not be read yet")
+        kill()
+
+        relaunch(["hooks": ["unlockCrashCopies"], "appVersion": "3.0"])
+        let crash = awaitCrashes(1)[0]
+        XCTAssertNotNil(crashed)
+        XCTAssertEqual(session(crash), crashed)
+        XCTAssertEqual(view(crash), "SecondViewController")
+        XCTAssertEqual(errorCount(crash), 2, "its launch's error and this crash")
+        XCTAssertEqual(appVersion(crash), "1.0")
+    }
+
     func testCrashResentOnThreeLaunches_carriesTheSameErrorCount() {
         crash("exception", before: ["error:one"])
         endpoint.answerCrashes([], then: .noAnswer)

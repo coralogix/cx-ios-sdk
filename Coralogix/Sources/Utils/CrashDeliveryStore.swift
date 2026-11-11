@@ -63,7 +63,25 @@ final class CrashDeliveryStore {
     static let baseDirectory = FileManager.SearchPathDirectory.applicationSupportDirectory
     #endif
 
+    /// Where the SDK keeps its files when no directory is passed in.
+    static var defaultFolder: URL {
+        let base = FileManager.default.urls(for: baseDirectory, in: .userDomainMask).first
+            ?? FileManager.default.temporaryDirectory
+        return folder(in: base)
+    }
+
+    private static func folder(in base: URL) -> URL {
+        base.appendingPathComponent("CoralogixRum", isDirectory: true)
+    }
+
+    static func snapshotsDirectory(in folder: URL) -> URL {
+        folder.appendingPathComponent("sessions", isDirectory: true)
+    }
+
     let copiesDirectory: URL
+    /// The session record of each launch (`SessionSnapshotStore`), which a crash read for the
+    /// first time is attributed with.
+    let snapshotsDirectory: URL
     /// One file per stored fatal hang (`<crash id>.json`), as `copiesDirectory` holds crashes.
     let hangsDirectory: URL
     /// Written while the watchdog sees the main thread hung, and cleared when it answers again.
@@ -75,13 +93,11 @@ final class CrashDeliveryStore {
     private static let lock = NSLock()
 
     init(directory: URL? = nil) {
-        let base = directory
-            ?? FileManager.default.urls(for: Self.baseDirectory, in: .userDomainMask).first
-            ?? FileManager.default.temporaryDirectory
-        let folder = base.appendingPathComponent("CoralogixRum", isDirectory: true)
+        let folder = directory.map(Self.folder(in:)) ?? Self.defaultFolder
         let ownCopies = folder.appendingPathComponent("crashes", isDirectory: true)
         // The bootstrap writes the copies at image load, so by default its directory is the one.
         self.copiesDirectory = directory == nil ? (CRXCrashBootstrap.crashCopiesDirectory ?? ownCopies) : ownCopies
+        self.snapshotsDirectory = Self.snapshotsDirectory(in: folder)
         self.hangsDirectory = folder.appendingPathComponent("hangs", isDirectory: true)
         self.hangMarkerFile = folder.appendingPathComponent("anr-in-progress.json")
         self.recordsFile = folder.appendingPathComponent("crash_delivery.json")
@@ -156,6 +172,14 @@ final class CrashDeliveryStore {
         return marker
     }
 
+    /// Whether a hang marker is still on disk: one that could not be read yet, or kept for a later
+    /// launch to record.
+    var hasHangMarker: Bool {
+        Self.lock.lock()
+        defer { Self.lock.unlock() }
+        return FileManager.default.fileExists(atPath: hangMarkerFile.path)
+    }
+
     func clearHangMarker() {
         Self.lock.lock()
         defer { Self.lock.unlock() }
@@ -179,6 +203,13 @@ final class CrashDeliveryStore {
         Self.lock.lock()
         defer { Self.lock.unlock() }
         return readLocked()?[crashId]
+    }
+
+    /// The crashes that have a delivery record; nil when the records file cannot be read yet.
+    func recordedCrashIds() -> Set<String>? {
+        Self.lock.lock()
+        defer { Self.lock.unlock() }
+        return readLocked().map { Set($0.keys) }
     }
 
     /// Returns whether the record reached disk.
