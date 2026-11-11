@@ -100,8 +100,8 @@ enum UrlMasker {
     private static let strayPercentPattern = regex("%(?![0-9A-Fa-f]{2})")
     /// A `fileName` value inside a stack-trace JSON array, as a raw JSON string literal.
     private static let fileNameValuePattern = regex("(\"\(Keys.fileName.rawValue)\"\\s*:\\s*)(\"(?>[^\"\\\\]*)(?:\\\\.(?>[^\"\\\\]*))*\")")
-    /// Any JSON string literal.
-    private static let jsonStringPattern = regex("\"(?>[^\"\\\\]*)(?:\\\\.(?>[^\"\\\\]*))*\"")
+    /// Any JSON string literal, and the `:` after it when it is an object key.
+    private static let jsonStringPattern = regex("(\"(?>[^\"\\\\]*)(?:\\\\.(?>[^\"\\\\]*))*\")(\\s*:)?")
 
     /// How many redirect URLs nested inside one another are unwrapped; deeper values are redacted whole.
     private static let maxNestingDepth = 4
@@ -120,17 +120,22 @@ enum UrlMasker {
             UrlMasker.mask(url, shouldMask: shouldMask, dropQuery: options.mode == .dropQuery, depth: 0)
         }
 
-        /// A view name is a route only in hybrid apps. `.dropQuery` cuts it only when it is one (it
-        /// starts with `/` or `scheme://`), so a native name such as `Step #2` keeps its `#`.
+        /// A view name is a route only in hybrid apps, and is then masked as a URL. Otherwise each
+        /// URL inside it is masked (`.dropQuery` included), then sensitive parameters in the rest,
+        /// without dropping anything: a native name such as `Step #2` keeps its `#`.
         func maskViewName(_ name: String) -> String {
-            UrlMasker.mask(name, shouldMask: shouldMask,
-                           dropQuery: UrlMasker.isUrlOrRoute(name) && options.mode == .dropQuery, depth: 0)
+            if UrlMasker.isUrlOrRoute(name) { return mask(name) }
+            return UrlMasker.mask(maskText(name), shouldMask: shouldMask, dropQuery: false, depth: 0)
         }
 
         /// Masks each URL inside free text, such as an error message; the words around them are
-        /// kept, and text that is not a URL is never masked.
+        /// kept, and text that is not a URL is never masked. A value that is wholly a root-relative
+        /// route (`/reset?token=…`), which the URL scan cannot find, is masked as one: stricter than
+        /// the Android SDK. Scheme and `//` URLs stay with the scan, which leaves unmatched closing
+        /// brackets outside them.
         func maskText(_ text: String) -> String {
-            UrlMasker.maskUrlsInText(text) { mask($0) }
+            if text.hasPrefix("/"), !text.hasPrefix("//"), UrlMasker.isUrlOrRoute(text) { return mask(text) }
+            return UrlMasker.maskUrlsInText(text) { mask($0) }
         }
 
         /// Masks only the `fileName` of each frame, the field that holds a script URL. Other frame
@@ -149,8 +154,22 @@ enum UrlMasker {
         /// `nil` when the JSON could not be scanned: the caller drops the field (fail closed).
         func maskUserInfo(_ json: String) -> String? {
             guard let pattern = UrlMasker.jsonStringPattern else { return nil }
+            var keyOwners: [String: String] = [:]
             return UrlMasker.replace(pattern, in: json) { groups in
-                UrlMasker.maskingJsonLiteral(groups[0], with: maskText) ?? groups[0]
+                let literal = groups[1]
+                guard let masked = UrlMasker.maskingJsonLiteral(literal, with: maskText) else { return groups[0] }
+                let isKey = !groups[2].isEmpty
+                guard isKey else { return masked }
+                // Two keys can mask to the same string; number the later ones so no member is lost
+                // when the JSON is parsed.
+                var key = masked
+                var suffix = 2
+                while let owner = keyOwners[key], owner != literal {
+                    key = String(masked.dropLast()) + " (\(suffix))\""
+                    suffix += 1
+                }
+                keyOwners[key] = literal
+                return key + groups[2]
             }
         }
     }

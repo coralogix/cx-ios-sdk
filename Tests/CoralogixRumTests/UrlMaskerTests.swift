@@ -258,6 +258,31 @@ final class UrlMaskerTests: XCTestCase {
                        #"{"d":"Order #123 failed: see https://x.com/help now","u":"https://x.com/cb"}"#)
     }
 
+    func test_maskUserInfo_numbersKeysThatMaskAlike() throws {
+        let json = #"{"https://x.com/cb?token=a":1,"https://x.com/cb?token=b":2}"#
+        let masked = try XCTUnwrap(UrlMasker.Masker().maskUserInfo(json))
+        let dict = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(masked.utf8)) as? [String: Int])
+        XCTAssertEqual(dict.count, 2)
+        XCTAssertEqual(Set(dict.values), [1, 2])
+        XCTAssertNotNil(dict["https://x.com/cb?token=\(R)"])
+    }
+
+    /// A value that is wholly a route is masked as one, in text fields and userInfo alike; prose
+    /// that only contains a route is still left alone.
+    func test_wholeValueRoutes_areMaskedInTextAndUserInfo() {
+        let masker = UrlMasker.Masker()
+        XCTAssertEqual(masker.maskText("/reset?token=abc"), "/reset?token=\(R)")
+        XCTAssertEqual(masker.maskText("see /reset?token=abc now"), "see /reset?token=abc now")
+        XCTAssertEqual(masker.maskUserInfo(#"{"u":"/callback?token=abc"}"#), #"{"u":"/callback?token=\#(R)"}"#)
+        XCTAssertEqual(UrlMasker.Masker(UrlMaskingOptions(mode: .dropQuery)).maskText("/reset?token=abc&tab=1"), "/reset")
+    }
+
+    func test_maskViewName_dropQuery_cutsUrlsInsideAName() {
+        let masker = UrlMasker.Masker(UrlMaskingOptions(mode: .dropQuery))
+        XCTAssertEqual(masker.maskViewName("Checkout https://x.com/cb?page=2#top"), "Checkout https://x.com/cb")
+        XCTAssertEqual(masker.maskViewName("Step #2"), "Step #2")
+    }
+
     func test_maskViewName_dropQuery_cutsRoutesOnly() {
         let masker = UrlMasker.Masker(UrlMaskingOptions(mode: .dropQuery))
         XCTAssertEqual(masker.maskViewName("Step #2"), "Step #2")
