@@ -348,7 +348,28 @@ final class CrashDeliveryTests: XCTestCase {
             $0.attributes[Keys.message.rawValue]?.description == "queued-at-shutdown"
         }
         XCTAssertTrue(leaked.isEmpty, "the old batch processor exported a span it held at shutdown")
-        XCTAssertNil(first.tracerProviderSdk, "shutdown must release the stopped tracer provider")
+    }
+
+    /// An export already on the network when the host calls `shutdown()` is not waited for past
+    /// the bound, as Android caps its own shutdown at 5 s.
+    func test_shutdown_waitsAtMostTheBound_forAnExportAlreadyOnTheNetwork() throws {
+        let sdk = CoralogixRum(options: makeSamplingOptions(sampleRate: 100, exclude: []))
+        let uploader = HangingLiveUploader()
+        try XCTUnwrap(sdk.coralogixExporter).spanUploader = uploader
+        defer { uploader.release() }
+        sdk.log(severity: .info, message: "on the network at shutdown", data: nil, labels: nil)
+        sdk.flush()
+        XCTAssertEqual(uploader.entered.wait(timeout: .now() + 10), .success, "precondition: an export is in flight")
+
+        let start = Date()
+        sdk.shutdown()
+        let elapsed = Date().timeIntervalSince(start)
+
+        // Well under the in-flight request, which hangs here for 30 s; the slack covers the rest
+        // of shutdown on a loaded runner.
+        XCTAssertLessThan(elapsed, CoralogixRum.tracerProviderShutdownTimeout + 5)
+        XCTAssertGreaterThanOrEqual(elapsed, CoralogixRum.tracerProviderShutdownTimeout - 0.5,
+                                    "shutdown waited for the in-flight export, up to the bound")
     }
 
     func test_flush_beforeInit_callsCompletionImmediately() {
@@ -403,4 +424,20 @@ final class CrashDeliveryTests: XCTestCase {
                       "a live crash report must capture the screen it crashed on")
     }
 
+}
+
+/// A live upload that stays on the network until released.
+private final class HangingLiveUploader: SpanUploading {
+    let entered = DispatchSemaphore(value: 0)
+    private let gate = DispatchSemaphore(value: 0)
+
+    func upload(_ spans: [[String: Any]], endPoint: String, kind: SpanUploadKind) -> SpanUploadResult {
+        entered.signal()
+        _ = gate.wait(timeout: .now() + 30)
+        return .delivered
+    }
+
+    func release() {
+        for _ in 0..<10 { gate.signal() }
+    }
 }

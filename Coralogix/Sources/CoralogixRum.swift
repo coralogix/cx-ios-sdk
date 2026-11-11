@@ -544,6 +544,27 @@ public class CoralogixRum {
         }
     }
 
+    /// How long `shutdown()` waits for the batch processor to stop, as Android bounds its own.
+    static let tracerProviderShutdownTimeout: TimeInterval = 5
+
+    /// Drains and stops the batch processor while uploads are gated off. Left running, it exports
+    /// what it still holds once a later init reopens the gate — a stored crash then goes out from
+    /// here and again from the new instance's own pass. Stopping waits for an export already on the
+    /// network, so it runs off the calling thread and is waited for at most
+    /// `tracerProviderShutdownTimeout`. The reference is kept: `flush()` reads it from any thread,
+    /// and a stopped provider ignores it.
+    private func stopTracerProvider() {
+        guard let provider = self.tracerProviderSdk else { return }
+        let stopped = DispatchSemaphore(value: 0)
+        DispatchQueue.global(qos: .utility).async {
+            provider.shutdown()
+            stopped.signal()
+        }
+        if stopped.wait(timeout: .now() + Self.tracerProviderShutdownTimeout) == .timedOut {
+            Log.w("[CoralogixRum] the batch processor is still stopping; shutdown is not waiting for it")
+        }
+    }
+
     public func shutdown() {
         CoralogixCustomGlobalSpanRegistry.shared.teardownIfNeeded()
         Self.customTracerIssuanceLock.lock()
@@ -554,11 +575,7 @@ public class CoralogixRum {
         self.initSpanState = .retired
         self.initSpanLock.unlock()
         self.crashDeliveryScheduler.stop()
-        // Drain and stop the batch processor now, while uploads are gated off. Left running, it
-        // exports what it still holds once a later init reopens the gate — a stored crash then goes
-        // out from here and again from the new instance's own pass.
-        self.tracerProviderSdk?.shutdown()
-        self.tracerProviderSdk = nil
+        stopTracerProvider()
         self.coralogixExporter?.shutdown(explicitTimeout: nil)
         self.removeNotification()
         self.metricsManager.removeObservers()
