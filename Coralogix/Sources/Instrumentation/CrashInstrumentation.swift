@@ -271,7 +271,16 @@ extension CoralogixRum: StoredCrashSending {
         } else {
             return nil
         }
-        guard let counters = Self.counters(of: session, in: sessionManager.snapshotStore) else { return nil }
+        guard var counters = Self.counters(of: session, in: sessionManager.snapshotStore) else { return nil }
+        // A record written before records carried the view, or the empty one of a session adopted
+        // just before the crash, has no view. The keychain view is the previous launch's last
+        // screen, so it is only the crashed session's when that session is the previous launch's.
+        if counters.viewName == nil,
+           session.id == sessionManager.lastLaunchSession?.sessionId,
+           let prevView = self.coralogixExporter?.getViewManager().getPrevDictionary()[Keys.view.rawValue] as? String,
+           !prevView.isEmpty {
+            counters.viewName = prevView
+        }
 
         let record = StoredCrashRecord(crashId: crash.crashId,
                                        kind: .native,

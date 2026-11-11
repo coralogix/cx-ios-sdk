@@ -313,6 +313,47 @@ final class CrashedSessionRecoveryTests: XCTestCase {
         XCTAssertNil(attributes[Keys.spanViewNumber.rawValue])
     }
 
+    func test_aRecordWithoutAView_takesThePreviousLaunchsView() throws {
+        let legacy = SessionSnapshotRecord(sessionId: "S1", errorCount: 1, viewCount: 2, actionCount: 3,
+                                           hasRecording: false)
+        let sdk = try relaunch(after: legacy, keychainSession: "S1")
+        sdk.coralogixExporter?.getViewManager().prevViewName = "Checkout"
+
+        let crash = CrashReportMapper.map(Report.naming("S1"))
+        let record = try XCTUnwrap(sdk.firstRecord(of: crash))
+        XCTAssertEqual(record.counters.viewName, "Checkout")
+        XCTAssertNil(record.counters.viewNumber)
+        XCTAssertEqual(sdk.crashDeliveryStore.record(for: record.crashId)?.counters.viewName, "Checkout",
+                       "the filled view is saved, so every resend reports it")
+
+        let attributes = try attributes(of: crash, in: sdk)
+        XCTAssertEqual(attributes[Keys.spanViewName.rawValue]?.description, "Checkout")
+    }
+
+    func test_aRecordedView_isNeverReplacedByThePreviousLaunchsView() throws {
+        var cart = crashedRecord
+        cart.viewName = "Cart"
+        let sdk = try relaunch(after: cart, keychainSession: "S1")
+        sdk.coralogixExporter?.getViewManager().prevViewName = "Checkout"
+
+        let record = try XCTUnwrap(sdk.firstRecord(of: CrashReportMapper.map(Report.naming("S1"))))
+
+        XCTAssertEqual(record.counters.viewName, "Cart")
+    }
+
+    func test_aSessionThatWasNotThePreviousLaunchs_neverTakesItsView() throws {
+        var noView = crashedRecord
+        noView.viewName = nil
+        noView.viewNumber = nil
+        let sdk = try relaunch(after: noView, keychainSession: "S2")
+        sdk.coralogixExporter?.getViewManager().prevViewName = "Checkout"
+
+        let attributes = try attributes(of: CrashReportMapper.map(Report.naming("S1")), in: sdk)
+
+        XCTAssertEqual(attributes[Keys.spanViewName.rawValue]?.description, Keys.undefined.rawValue,
+                       "the keychain view is S2's launch's screen, not S1's")
+    }
+
     // MARK: - On the wire
 
     private final class RecordingUploader: SpanUploading {
