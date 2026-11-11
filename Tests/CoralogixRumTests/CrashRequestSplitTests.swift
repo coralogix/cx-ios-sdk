@@ -139,15 +139,15 @@ final class CrashRequestSplitTests: XCTestCase {
 
     // MARK: - Off the export thread
 
-    /// Work already past the export's entry check when shutdown retires the exporter — a queued
-    /// stored crash, a live batch — must not upload, even once a later init reopens the gate.
-    func test_uploadsQueuedBeforeRetirement_areNotSent_andTheCrashStaysForLater() throws {
+    /// A stored crash already queued when shutdown retires the exporter must not upload, even once
+    /// a later init reopens the gate, and stays stored for a later pass.
+    func test_aStoredCrashQueuedBeforeRetirement_isNotSent_andStaysForLater() throws {
         let (exporter, uploader) = try makeExporter()
         let release = DispatchSemaphore(value: 0)
         exporter.holdStoredCrashUploads(until: release)
         let answered = expectation(description: "crash answered")
-        var outcome: CrashUploadOutcome?
-        exporter.awaitCrashUpload(id: "queued") { outcome = $0.outcome; answered.fulfill() }
+        let outcome = LockedBox<CrashUploadOutcome?>(nil)
+        exporter.awaitCrashUpload(id: "queued") { outcome.value = $0.outcome; answered.fulfill() }
         _ = exporter.export(spans: [makeCrashSpan(id: "queued")], explicitTimeout: nil)
 
         exporter.retire()
@@ -155,7 +155,20 @@ final class CrashRequestSplitTests: XCTestCase {
         wait(for: [answered], timeout: 5)
 
         XCTAssertTrue(uploader.requests.isEmpty, "a retired exporter sent a request")
-        XCTAssertEqual(outcome, .notAttempted, "the crash is left stored for a later pass")
+        XCTAssertEqual(outcome.value, .notAttempted, "the crash is left stored for a later pass")
+    }
+
+    /// A live batch already past the export's entry check when the exporter is retired must not
+    /// upload either.
+    func test_aLiveBatchPastTheEntryCheck_isNotSent_whenRetiredMidExport() throws {
+        let (exporter, uploader) = try makeExporter()
+        // Runs after the entry check, before the batch is encoded and uploaded.
+        CoralogixExporter.testExportCallback = { _ in exporter.retire() }
+        defer { CoralogixExporter.testExportCallback = nil }
+
+        _ = exporter.export(spans: [makeSamplingSpan(eventType: .networkRequest)], explicitTimeout: nil)
+
+        XCTAssertTrue(uploader.requests.isEmpty, "a retired exporter sent the live batch")
     }
 
     func test_aStoredCrashStillUploading_doesNotHoldBackExportOrTheLiveBatch() throws {
@@ -339,5 +352,16 @@ final class CrashRequestSplitTests: XCTestCase {
 
         XCTAssertEqual(uploader.requests.count, 2, "the crash is sent both times")
         XCTAssertEqual(forwardedNames.filter { $0 == "crash-twice" }.count, 1, "but forwarded once")
+    }
+}
+
+/// A value shared between a test and a callback on another queue.
+private final class LockedBox<Value> {
+    private let lock = NSLock()
+    private var _value: Value
+    init(_ value: Value) { _value = value }
+    var value: Value {
+        get { lock.lock(); defer { lock.unlock() }; return _value }
+        set { lock.lock(); _value = newValue; lock.unlock() }
     }
 }
