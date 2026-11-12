@@ -101,8 +101,8 @@ final class UrlMaskingIntegrationTests: XCTestCase {
         XCTAssertEqual(uploadedNetworkUrl(uploader), "https://api.example.com/callback")
     }
 
-    func test_export_additionalParams_masksCustomerParam() throws {
-        let (exporter, uploader) = try startSDK(urlMasking: UrlMaskingOptions(additionalParams: ["foo"]))
+    func test_export_params_masksCustomerParam() throws {
+        let (exporter, uploader) = try startSDK(urlMasking: UrlMaskingOptions(params: ["foo"]))
         _ = exporter.export(spans: [makeNetworkSpan(url: Self.secretUrl)], explicitTimeout: nil)
         XCTAssertEqual(uploadedNetworkUrl(uploader),
                        "https://api.example.com/callback?code=[REDACTED]&foo=[REDACTED]#access_token=[REDACTED]")

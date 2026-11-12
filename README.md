@@ -196,13 +196,13 @@ let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
                                         version: "APP-VERSION",
                                         publicKey: "API-KEY",
                                         urlMasking: UrlMaskingOptions(
-                                            additionalParams: maskedParams,
+                                            params: maskedParams,
                                             mode: .mask))
 ```
 
 | Field | Description |
 | --- | --- |
-| additionalParams | More parameter names to mask. A name such as `"tenant_id"` matches the whole name, compared the same way as the built-in names. `.regex(_:)` is tested against the decoded name. |
+| params | More parameter names to mask. A name such as `"tenant_id"` matches the whole name, compared the same way as the built-in names. `.regex(_:)` is tested against the decoded name. |
 | mode | `.mask` (default) masks sensitive values only. `.maskAll` masks the value of every query and fragment parameter and keeps the names. `.dropQuery` removes the query and the fragment. |
 
 `beforeSend` and `tracesExporter` receive the masked URL.

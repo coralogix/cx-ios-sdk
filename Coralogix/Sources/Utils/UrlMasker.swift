@@ -31,11 +31,11 @@ public struct UrlMaskingOptions {
         }
     }
 
-    public var additionalParams: [Param]
+    public var params: [Param]
     public var mode: Mode
 
-    public init(additionalParams: [Param] = [], mode: Mode = .mask) {
-        self.additionalParams = additionalParams
+    public init(params: [Param] = [], mode: Mode = .mask) {
+        self.params = params
         self.mode = mode
     }
 }
@@ -279,6 +279,8 @@ enum UrlMasker {
     private static let slash = UInt16(UInt8(ascii: "/"))
     private static let backslash = UInt16(UInt8(ascii: "\\"))
     private static let colon = UInt16(UInt8(ascii: ":"))
+    private static let period = UInt16(UInt8(ascii: "."))
+    private static let comma = UInt16(UInt8(ascii: ","))
     private static let at = UInt16(UInt8(ascii: "@"))
     private static let question = UInt16(UInt8(ascii: "?"))
     private static let hash = UInt16(UInt8(ascii: "#"))
@@ -322,7 +324,7 @@ enum UrlMasker {
     /// Credentials, masked up to the last `@` of the authority as URL parsers read it, so an
     /// unencoded `@` or `'` in the password is masked too. An authority starts after `scheme:` and
     /// two or more slashes (backslashes and JSON-escaped `\/\/` included) anywhere in the URL; after
-    /// a leading `//`; or, at the start, right after a scheme with no slashes. It ends at the next
+    /// a leading `//`; or, at the start, right after a web scheme with no slashes. It ends at the next
     /// `/`, `?`, `#` or whitespace. One pass: each authority read is skipped.
     private static func maskCredentials(_ url: String) -> String {
         guard url.contains("@") else { return url }
@@ -355,7 +357,10 @@ enum UrlMasker {
         return result + string(text[copied...])
     }
 
-    /// After a leading `//` (or `\/\/`), or after a scheme with no slashes, at the start.
+    /// Only these take `scheme:user:pw@host`; elsewhere (`mailto:support@example.com`) the `@` is not a credential.
+    private static let webSchemes: Set<String> = ["http", "https", "ws", "wss", "ftp", "file"]
+
+    /// After a leading `//` (or `\/\/`), or after a web scheme with no slashes, at the start.
     private static func leadingAuthorityStart(_ text: [UInt16]) -> Int? {
         var index = 0
         while index < text.count, isWhitespace(text[index]) { index += 1 }
@@ -364,7 +369,8 @@ enum UrlMasker {
         if index < text.count, isAsciiLetter(text[index]) {
             var schemeEnd = index
             while schemeEnd < text.count, isSchemeUnit(text[schemeEnd]) { schemeEnd += 1 }
-            if schemeEnd < text.count, text[schemeEnd] == colon, slashRunEnd(text, from: schemeEnd + 1) == schemeEnd + 1 {
+            if schemeEnd < text.count, text[schemeEnd] == colon, slashRunEnd(text, from: schemeEnd + 1) == schemeEnd + 1,
+               webSchemes.contains(string(text[index..<schemeEnd]).lowercased()) {
                 return schemeEnd + 1
             }
         }
@@ -425,7 +431,7 @@ enum UrlMasker {
     /// Masks each URL inside free text with `transform`; the words around them are kept. A URL runs
     /// from its scheme, or from the `//` of a protocol-relative URL that starts a word, to the next
     /// whitespace, `"`, `<`, `>` or escaped `\"`; an apostrophe ends it only when an apostrophe opened
-    /// it, and a closing bracket the URL never opened is left out of it. Found by scanning from each
+    /// it, and a trailing `:`, `.` or `,`, or a closing bracket the URL never opened, is left out of it. Found by scanning from each
     /// `//` (or `\/\/`), each kind searched again only once the scan has passed the last one found.
     static func maskUrlsInText(_ value: String, transform: (String) -> String) -> String {
         let text = units(value)
@@ -494,9 +500,11 @@ enum UrlMasker {
                 default: break
                 }
             }
+            // Sentence punctuation after a URL (`…?token=abc: 401`) is the text's too.
             while end > afterSlashes {
                 let kind: Int
                 switch text[end - 1] {
+                case colon, period, comma: end -= 1; continue
                 case 41: kind = 0
                 case 93: kind = 1
                 case 125: kind = 2
@@ -544,7 +552,7 @@ enum UrlMasker {
         if options.mode == .maskAll { return { _ in true } }
         var extraNames = Set<String>()
         var extraRegexes: [NSRegularExpression] = []
-        for param in options.additionalParams {
+        for param in options.params {
             switch param {
             case .name(let extra): extraNames.insert(normalize(extra))
             case .regex(let regex): extraRegexes.append(regex)

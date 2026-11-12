@@ -132,6 +132,26 @@ final class UrlMaskerTests: XCTestCase {
         XCTAssertEqual(UrlMasker.mask(untouched), untouched)
     }
 
+    func test_textUrl_leavesTrailingSentencePunctuationOutside() {
+        XCTAssertEqual(UrlMasker.maskUrlsInText("Http failure response for https://api.example.com/items?token=abc: 401 Unauthorized"),
+                       "Http failure response for https://api.example.com/items?token=\(R): 401 Unauthorized")
+        XCTAssertEqual(UrlMasker.maskUrlsInText("See https://a.example.com/x?token=abc, then https://b.example.com/y?code=xyz."),
+                       "See https://a.example.com/x?token=\(R), then https://b.example.com/y?code=\(R).")
+    }
+
+    func test_slashlessCredentials_onlyForWebSchemes() {
+        let mailto = "mailto:support@example.com?subject=Help"
+        XCTAssertEqual(UrlMasker.mask(mailto), mailto)
+        XCTAssertEqual(UrlMasker.mask("wss:user:pw@example.com/socket"), "wss:\(R)@example.com/socket")
+    }
+
+    func test_unencodedRedirects_masksNestedParams() {
+        XCTAssertEqual(UrlMasker.mask("https://app.example.com/login?returnUrl=/reset-password?token=abc"),
+                       "https://app.example.com/login?returnUrl=/reset-password?token=\(R)")
+        XCTAssertEqual(UrlMasker.mask("https://app.example.com/login?return_to=https://b.example.com/cb?code=xyz&state=1&lang=en"),
+                       "https://app.example.com/login?return_to=https://b.example.com/cb?code=\(R)&state=\(R)&lang=en")
+    }
+
     func test_leavesOrdinaryUrlsUntouched() {
         let cases: [(String, String)] = [
             ("names that only contain a short sensitive name", "https://shop.example.com/cart?promo_code=SAVE10&zipcode=33147"),
@@ -181,22 +201,22 @@ final class UrlMaskerTests: XCTestCase {
 
     // MARK: - Additional params
 
-    func test_additionalParams_name_ignoresCaseAndSeparators() {
+    func test_params_name_ignoresCaseAndSeparators() {
         XCTAssertEqual(UrlMasker.mask("https://x.com/a?TenantId=acme&q=1",
-                                      options: UrlMaskingOptions(additionalParams: ["tenant_id"])),
+                                      options: UrlMaskingOptions(params: ["tenant_id"])),
                        "https://x.com/a?TenantId=\(R)&q=1")
     }
 
-    func test_additionalParams_regex_isTestedAgainstDecodedName() throws {
+    func test_params_regex_isTestedAgainstDecodedName() throws {
         let regex = try NSRegularExpression(pattern: "^customer ")
         XCTAssertEqual(UrlMasker.mask("https://x.com/a?customer%20ref=9&q=1",
-                                      options: UrlMaskingOptions(additionalParams: [.regex(regex)])),
+                                      options: UrlMaskingOptions(params: [.regex(regex)])),
                        "https://x.com/a?customer%20ref=\(R)&q=1")
     }
 
-    func test_additionalParams_keepTheBuiltInRules() {
+    func test_params_keepTheBuiltInRules() {
         XCTAssertEqual(UrlMasker.mask("https://api.example.com/callback?code=abc&foo=1#access_token=xyz",
-                                      options: UrlMaskingOptions(additionalParams: ["foo"])),
+                                      options: UrlMaskingOptions(params: ["foo"])),
                        "https://api.example.com/callback?code=\(R)&foo=\(R)#access_token=\(R)")
     }
     /// The README sample, so it keeps compiling.
@@ -205,7 +225,7 @@ final class UrlMaskerTests: XCTestCase {
         if let customerPattern = try? NSRegularExpression(pattern: "^customer") {
             maskedParams.append(.regex(customerPattern))
         }
-        let options = UrlMaskingOptions(additionalParams: maskedParams, mode: .mask)
+        let options = UrlMaskingOptions(params: maskedParams, mode: .mask)
         XCTAssertEqual(UrlMasker.mask("https://x.com/a?tenant_id=1&customerRef=2&q=3", options: options),
                        "https://x.com/a?tenant_id=\(R)&customerRef=\(R)&q=3")
     }
@@ -225,7 +245,7 @@ final class UrlMaskerTests: XCTestCase {
         let keyChain = MockKeyChain()
         keyChain.storage[Keys.view.rawValue] = "/home?tenant_id=42&token=abc&tab=1"
         let viewManager = ViewManager(keyChain: keyChain)
-        viewManager.applyUrlMasking(UrlMaskingOptions(additionalParams: ["tenant_id"]))
+        viewManager.applyUrlMasking(UrlMaskingOptions(params: ["tenant_id"]))
         XCTAssertEqual(viewManager.getPrevDictionary()[Keys.view.rawValue] as? String,
                        "/home?tenant_id=\(R)&token=\(R)&tab=1")
     }
@@ -518,7 +538,7 @@ final class UrlMaskerTests: XCTestCase {
         ])
         assertText([(#"GET https://a.com/x?tenant=acme failed, redirected to "https://b.com/y#access_token=xyz""#,
                      #"GET https://a.com/x?tenant=\#(R) failed, redirected to "https://b.com/y#access_token=\#(R)""#)],
-                   UrlMaskingOptions(additionalParams: ["tenant"]))
+                   UrlMaskingOptions(params: ["tenant"]))
         assertText([("Failed host lookup for https://a.com/cb?code=abc&x=1 (code 7). Retry later?",
                      "Failed host lookup for https://a.com/cb (code 7). Retry later?")],
                    UrlMaskingOptions(mode: .dropQuery))
