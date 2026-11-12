@@ -123,6 +123,15 @@ final class UrlMaskerTests: XCTestCase {
 
     // MARK: - Leaves ordinary URLs untouched
 
+    func test_masksAntiForgeryAndSsoParams() {
+        XCTAssertEqual(UrlMasker.mask("https://forum.example.com/session/sso_login?sso=bm9uY2U9YWJj&sig=1a2b3c"),
+                       "https://forum.example.com/session/sso_login?sso=\(R)&sig=\(R)")
+        XCTAssertEqual(UrlMasker.mask("https://app.example.com/form?_csrf=a1&X-XSRF-TOKEN=b2&csrfmiddlewaretoken=c3&xsrf=d4&page=2"),
+                       "https://app.example.com/form?_csrf=\(R)&X-XSRF-TOKEN=\(R)&csrfmiddlewaretoken=\(R)&xsrf=\(R)&page=2")
+        let untouched = "https://shop.example.com/search?lasso=1&espresso=2"
+        XCTAssertEqual(UrlMasker.mask(untouched), untouched)
+    }
+
     func test_leavesOrdinaryUrlsUntouched() {
         let cases: [(String, String)] = [
             ("names that only contain a short sensitive name", "https://shop.example.com/cart?promo_code=SAVE10&zipcode=33147"),

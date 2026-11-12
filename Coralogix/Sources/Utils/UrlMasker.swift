@@ -52,7 +52,7 @@ enum UrlMasker {
     /// Sensitive when the normalized name contains one of these.
     private static let sensitiveNameFragments = [
         "token", "secret", "password", "passwd", "passphrase", "apikey", "signature", "credential",
-        "jwt", "session", "sessid", "oauth", "saml", "privatekey", "accesskey", "nonce"
+        "jwt", "session", "sessid", "oauth", "saml", "privatekey", "accesskey", "nonce", "csrf", "xsrf"
     ]
 
     /// Sensitive only as the whole normalized name: too short or common to match inside longer
@@ -60,7 +60,7 @@ enum UrlMasker {
     private static let sensitiveNames: Set<String> = [
         "code", "state", "codeverifier", "assertion", "clientassertion", "devicecode", "usercode",
         "bearer", "auth", "authorization", "authcode", "authkey", "sig", "hmac", "key",
-        "pass", "pwd", "otp", "oobcode", "sid", "ticket"
+        "pass", "pwd", "otp", "oobcode", "sid", "ticket", "sso"
     ]
 
     /// Measured on the decoded name, so percent-encoding a short name cannot push it past the limit.
