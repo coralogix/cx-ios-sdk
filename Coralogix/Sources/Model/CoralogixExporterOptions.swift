@@ -163,6 +163,10 @@ public struct CoralogixExporterOptions {
     /// ```
     public var tracesExporter: TracesExporterCallback?
 
+    /// Extra rules for masking secrets in reported URLs. Sensitive parameters such as `token`,
+    /// `code` and `password` are always masked; this can only add to them.
+    public var urlMasking: UrlMaskingOptions
+
     public init(coralogixDomain: CoralogixDomain,
                 userContext: UserContext? = nil,
                 environment: String,
@@ -185,6 +189,7 @@ public struct CoralogixExporterOptions {
                 tracesExporter: TracesExporterCallback? = nil,
                 shouldSendText: ((UIView, String) -> Bool)? = nil,
                 resolveTargetName: ((UIView) -> String?)? = nil,
+                urlMasking: UrlMaskingOptions = UrlMaskingOptions(),
                 debug: Bool = false) {
         self.coralogixDomain = coralogixDomain
         self.userContext = userContext
@@ -209,6 +214,7 @@ public struct CoralogixExporterOptions {
         self.tracesExporter = tracesExporter
         self.shouldSendText = shouldSendText
         self.resolveTargetName = resolveTargetName
+        self.urlMasking = urlMasking
     }
     
     internal func shouldInitInstrumentation(instrumentation: InstrumentationType) -> Bool {
