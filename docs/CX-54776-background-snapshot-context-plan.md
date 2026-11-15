@@ -31,7 +31,7 @@ keep the normal rules (error / navigation / 1-minute throttle / pending `setUser
 | Android 2.27.1 | none — `BackgroundFlushScheduler.onStop` only flushes | whatever span is first in the batch, usually none |
 | RN 0.18.0 / Flutter 0.21.0 | no own code — native handles background, flush and snapshot | inherits native |
 
-## iOS — CX-54778 (2.23.0 → 2.23.1)
+## iOS — CX-54778 (2.24.0 → 2.24.1)
 
 Change (`Coralogix/Sources/Model/CxRumBuilder.swift`):
 - In `build()`, compute `isBackgroundEvent` once: `eventContext.type == .lifeCycle` and
@@ -56,7 +56,7 @@ Tests (`Tests/CoralogixRumTests`, component · unit):
 Unchanged, by design (pre-existing, browser parity): no background snapshot when `.lifeCycle` is off, the session
 is idle, or sampled out; a `beforeSend` drop of the event loses the snapshot and still stamps the throttle.
 
-Release: `/bump-version` 2.23.1, one CHANGELOG line, no README change. Must reach CocoaPods trunk before 2026-12-02.
+Release: `/bump-version` 2.24.1 (after 2.24.0 URL masking), one CHANGELOG line, no README change. Must reach CocoaPods trunk before 2026-12-02.
 
 ## Android — CX-54779 (2.27.1 → 2.27.2, from origin/master)
 
@@ -72,7 +72,7 @@ foreground event / next session, breaks the `setUserContext` restore slot, is lo
 ## React Native — CX-54781 / Flutter — CX-54780 (after native releases)
 
 - No bridge / JS / Dart change.
-- RN: `scripts/bump-ios-sdk.sh 2.23.1` + Android pin 2.26.0 → 2.27.2 (brings in 2.27.0 default URL masking → open: 0.19.0 vs 0.18.1). Jest: snapshot fields survive `beforeSend`.
+- RN: `scripts/bump-ios-sdk.sh 2.24.1` + Android pin 2.26.0 → 2.27.2 (brings in 2.27.0 default URL masking → open: 0.19.0 vs 0.18.1). Jest: snapshot fields survive `beforeSend`.
 - Flutter: `scripts/bump_ios_sdk.sh` + `scripts/bump_version.sh` (0.21.1), Android pin → 2.27.2. Test: `applyEditable` restores `snapshotContext`.
 - E2E in both example apps, with and without `beforeSend`.
 
