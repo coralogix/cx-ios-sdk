@@ -1,7 +1,7 @@
 Pod::Spec.new do |spec|
 
   spec.name         = "Coralogix"
-  spec.version      = "2.23.0"
+  spec.version      = "2.24.0"
   spec.summary      = "Coralogix OpenTelemetry pod for iOS."
 
   spec.description  = <<-DESC
@@ -33,7 +33,7 @@ Pod::Spec.new do |spec|
   # The C++ terminate handler (CoralogixBootstrap) needs libc++; not left to PLCrashReporter's pod.
   spec.libraries = 'c++'
   spec.dependency 'PLCrashReporter', '~> 1.12'
-  spec.dependency 'CoralogixInternal', '2.23.0'
+  spec.dependency 'CoralogixInternal', '2.24.0'
 
   spec.test_spec 'Tests' do |test|
     test.source_files = 'Tests/CoralogixRumTests/**/*.swift'

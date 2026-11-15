@@ -409,7 +409,12 @@ public class CoralogixExporter: SpanExporter {
 
         // ignore Error
         filterSpans = filterSpans.filter { self.shouldFilterIgnoreError(span: $0) }
-        
+
+        // After the ignoreUrls filter, which matches the URL as the app sent it, and before
+        // anything that reads or forwards the span: tracesExporter, encoding, beforeSend.
+        let masker = UrlMasker.Masker(getOptions().urlMasking)
+        filterSpans = filterSpans.map { Self.maskingUrls(in: $0, masker: masker) }
+
         // Deduplicated by span id in batch order, so stored crashes go out newest first, as
         // recovery emitted them.
         var seenSpanIds = Set<SpanId>()
@@ -672,6 +677,58 @@ public class CoralogixExporter: SpanExporter {
             return !Global.isURLIgnored(url, ignoreUrls: getOptions().ignoreUrls)
         }
         return false
+    }
+
+    /// `http.target` is masked too: the hybrid bridge fills it from the reported fragments,
+    /// which can carry the query.
+    internal static func maskingUrls(in span: SpanData, masker: UrlMasker.Masker) -> SpanData {
+        var attributes = span.attributes
+        var changed = false
+        for key in [SemanticAttributes.httpUrl.rawValue, SemanticAttributes.httpTarget.rawValue] {
+            guard case .string(let value)? = attributes[key] else { continue }
+            let masked = masker.mask(value)
+            if masked != value {
+                attributes[key] = .string(masked)
+                changed = true
+            }
+        }
+        // Hybrid stack frames carry script URLs in `fileName`.
+        if case .string(let json)? = attributes[Keys.stackTrace.rawValue] {
+            let masked = masker.maskStackTrace(json)
+            if masked != json {
+                attributes[Keys.stackTrace.rawValue] = masked.map { .string($0) }
+                changed = true
+            }
+        }
+        // A URLSession error's userInfo carries the failing URL, under keys that vary and can nest,
+        // so the URLs inside every string are masked.
+        if case .string(let json)? = attributes[Keys.userInfo.rawValue] {
+            let masked = masker.maskUserInfo(json)
+            if masked != json {
+                attributes[Keys.userInfo.rawValue] = masked.map { .string($0) }
+                changed = true
+            }
+        }
+        // An error or crash message often repeats the URL that failed; only the URLs in it change.
+        // `reportError(message:)` reports as an error-severity log, so its message is covered too.
+        var messageKeys = [Keys.errorMessage.rawValue]
+        if attributes[Keys.eventType.rawValue]?.description == CoralogixEventType.log.rawValue,
+           let severity = attributes[Keys.severity.rawValue].flatMap({ Int($0.description) }),
+           severity >= CoralogixLogSeverity.error.rawValue {
+            messageKeys.append(Keys.message.rawValue)
+        }
+        for key in messageKeys {
+            guard case .string(let message)? = attributes[key] else { continue }
+            let masked = masker.maskText(message)
+            if masked != message {
+                attributes[key] = .string(masked)
+                changed = true
+            }
+        }
+        guard changed else { return span }
+        var span = span
+        span.settingAttributes(attributes)
+        return span
     }
 
     internal func shouldFilterIgnoreError(span: SpanDataProtocol) -> Bool {

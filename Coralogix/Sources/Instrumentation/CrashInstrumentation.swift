@@ -339,14 +339,19 @@ extension CoralogixRum: StoredCrashSending {
         }
         span.setAttribute(key: Keys.spanSessionSampledIn.rawValue, value: String(record.session.sampledIn ?? true))
 
-        let counters = record.counters
+        // A record stored by an SDK from before URL masking can hold a hybrid route with its query.
+        let masker = UrlMasker.Masker(coralogixExporter?.getOptions().urlMasking ?? UrlMaskingOptions())
+        var counters = record.counters
+        counters.viewName = counters.viewName.map { masker.maskViewName($0) }
+        var reported = record.reportedCounters
+        reported.viewName = counters.viewName
         span.setAttribute(key: Keys.spanViewName.rawValue,
                           value: AttributeValue.string(counters.viewName ?? Keys.undefined.rawValue))
         span.setAttribute(key: Keys.spanViewNumber.rawValue, value: counters.viewNumber.map(AttributeValue.int))
         let versions: [(Keys, String?)] = [(.crashedAppName, counters.appName),
                                            (.crashedAppVersion, counters.appVersion),
                                            (.crashedOsVersion, counters.osVersion),
-                                           (.crashedSnapshot, record.reportedCounters.json)]
+                                           (.crashedSnapshot, reported.json)]
         for case let (key, value?) in versions {
             span.setAttribute(key: key.rawValue, value: value)
         }

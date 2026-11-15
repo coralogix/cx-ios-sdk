@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Release-mechanics commits (version bumps, podspec/script tweaks, README edits) are
 omitted; the focus here is user-facing behavior changes.
 
+## [2.24.0] - 2026-11-11
+
+### Added
+- `urlMasking` option to mask more URL parameters, by name or regular expression, or to report every parameter value masked (`.maskAll`) or URLs without their query and fragment (`.dropQuery`).
+
+### Changed
+- Sensitive parameters in reported URLs, such as `token`, `password`, `code` and `state`, are now masked as `[REDACTED]` by default, in both the query and the fragment. This applies to network requests, view names, URLs in error details and URLs inside error and crash messages, and cannot be turned off. `ignoreUrls` still matches the original URL; `beforeSend` and `tracesExporter` receive the masked one.
+
 ## [2.23.0] - 2026-11-10
 
 ### Added

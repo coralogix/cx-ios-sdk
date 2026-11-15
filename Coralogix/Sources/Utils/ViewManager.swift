@@ -80,13 +80,13 @@ public class ViewManager {
             guard let self = self else { return }
 
             if let view = cxView {
-                if self.visibleView?.name == view.name {
+                if self.visibleView?.identity == view.identity {
                     return
                 }
 
                 if view.state == .notifyOnAppear {
-                    if self.isUniqueView(name: view.name) {
-                        self.uniqueViewsPerSession.insert(view.name)
+                    if self.isUniqueView(name: view.identity) {
+                        self.uniqueViewsPerSession.insert(view.identity)
                     }
                     // CX-44687: every name-differing appearance is a navigation step.
                     // First-ever: nil → 0. Subsequent: previous + 1. Revisits count
@@ -147,6 +147,16 @@ public class ViewManager {
         }
     }
     
+    /// The restored previous view may have been stored by an SDK from before URL masking, as a
+    /// route with its query. Masked here, once the customer's options are known.
+    func applyUrlMasking(_ options: UrlMaskingOptions) {
+        syncQueue.async(flags: .barrier) { [weak self] in
+            guard let self = self else { return }
+            let masker = UrlMasker.Masker(options)
+            self.prevViewName = self.prevViewName.map { masker.maskViewName($0) }
+        }
+    }
+
     func getPrevDictionary() -> [String: Any] {
         return syncSafe {
             guard let prevViewName = self.prevViewName else {
@@ -162,7 +172,7 @@ public class ViewManager {
 
             self.uniqueViewsPerSession.removeAll()
             if let currentView = self.visibleView {
-                self.uniqueViewsPerSession.insert(currentView.name)
+                self.uniqueViewsPerSession.insert(currentView.identity)
                 // CX-44687: the current view is view #0 of the new session.
                 self.viewNumber = 0
             } else {

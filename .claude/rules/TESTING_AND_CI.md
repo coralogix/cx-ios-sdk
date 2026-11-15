@@ -186,8 +186,9 @@ job, pinning `ARCHS` to a single slice, and not running the unit tests twice.
   `macos-15` and `-xlarge` are Apple Silicon. A `lipo` check fails loudly if this
   ever diverges.
 - **Pin Xcode, never probe it.** A fallback ladder silently changes the compiler,
-  so a green run proves nothing about which toolchain ran. Each workflow pins its
-  own — today all on macOS 15 / Xcode 16.4.
+  so a green run proves nothing about which toolchain ran. Each CI workflow under
+  `ci.yml` pins its own — today all on macOS 15 / Xcode 16.4. The release workflow
+  `publish-pods.yml` is the exception: it runs on `macos-latest` with no Xcode pin.
 - **The simulator runtime is derived from the selected Xcode's SDK.** A runner
   carries runtimes newer than its SDK (18.6 and 26.x beside an 18.5 SDK); picking
   one fails at launch.
