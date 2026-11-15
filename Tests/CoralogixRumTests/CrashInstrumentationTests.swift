@@ -64,8 +64,40 @@ final class CrashInstrumentationTests: XCTestCase {
                        "with no crash-time view on record, the view is left empty")
     }
 
+    // A crash stored by an SDK from before URL masking holds the hybrid route as it was.
+    func test_attributeCrashedSession_masksARouteStoredBeforeUrlMasking() throws {
+        let rum = CoralogixRum(options: options)
+        let span = rum.makeSpan(event: .error, source: .console, severity: .error)
+        let record = SessionSnapshotRecord(sessionId: "crashed", errorCount: 0, viewCount: 1, actionCount: 0,
+                                           hasRecording: false, viewName: "/reset?token=abc&page=2", viewNumber: 0)
+        rum.attribute(span, to: .fixture(counters: record))
+
+        XCTAssertEqual(frozenViewName(of: span), "/reset?token=[REDACTED]&page=2")
+        XCTAssertEqual(snapshot(of: span)?.viewName, "/reset?token=[REDACTED]&page=2")
+    }
+
+    // Masking uses this launch's options; a name already masked at capture comes out unchanged.
+    func test_attributeCrashedSession_appliesThisLaunchsOptions_andLeavesAMaskedNameAsIs() throws {
+        options.urlMasking = UrlMaskingOptions(params: ["page"])
+        let rum = CoralogixRum(options: options)
+        let span = rum.makeSpan(event: .error, source: .console, severity: .error)
+        let record = SessionSnapshotRecord(sessionId: "crashed", errorCount: 0, viewCount: 1, actionCount: 0,
+                                           hasRecording: false, viewName: "/reset?token=[REDACTED]&page=2",
+                                           viewNumber: 0)
+        rum.attribute(span, to: .fixture(counters: record))
+
+        XCTAssertEqual(frozenViewName(of: span), "/reset?token=[REDACTED]&page=[REDACTED]")
+        XCTAssertEqual(snapshot(of: span)?.errorCount, 1, "the snapshot still reports this crash")
+    }
+
     private func frozenViewName(of span: any Span) -> String? {
         guard let data = (span as? any ReadableSpan)?.toSpanData() else { return nil }
         return data.attributes[Keys.spanViewName.rawValue]?.description
+    }
+
+    private func snapshot(of span: any Span) -> SessionSnapshotRecord? {
+        guard let data = (span as? any ReadableSpan)?.toSpanData(),
+              let json = data.attributes[Keys.crashedSnapshot.rawValue]?.description else { return nil }
+        return SessionSnapshotRecord(json: json)
     }
 }
