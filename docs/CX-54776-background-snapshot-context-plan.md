@@ -34,9 +34,9 @@ keep the normal rules (error / navigation / 1-minute throttle / pending `setUser
 ## iOS — CX-54778 (2.24.0 → 2.24.1)
 
 Change (`Coralogix/Sources/Model/CxRumBuilder.swift`):
-- In `build()`, compute `isBackgroundEvent` once: `eventContext.type == .lifeCycle` and
-  `LifeCycleContext(otel:).lifeCycleType == Keys.appDidEnterBackgroundNotification.rawValue`.
-- Pass it into `buildSnapshotContextIfNeeded` (like `pendingTrigger`) and OR it into the trigger condition.
+- In `buildSnapshotContextIfNeeded`, compute `isBackgroundEvent` once: `eventContext.type == .lifeCycle` and
+  `LifeCycleContext(otel:).lifeCycleType == Keys.appDidEnterBackgroundNotification.rawValue`,
+  and OR it into the trigger condition.
   Stamps `lastSnapshotEventTime` (browser parity); does not touch the error counter.
 - Live session only. Retired-session path stays error / navigation only.
 - No new Keys, no wire change, no new event. Hybrid covered automatically (native notification fires in the host process).
