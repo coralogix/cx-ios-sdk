@@ -27,6 +27,19 @@ private final class EventLog: EventReporter {
     }
 }
 
+/// Records each ANR, then hands it on to the SDK's own reporter.
+private final class ForwardingEventLog: EventReporter {
+    private let log = EventLog()
+    private let next: EventReporter
+    init(to next: EventReporter) { self.next = next }
+    var events: [ANRErrorEvent] { log.events }
+
+    func report(_ event: TelemetryEvent) {
+        log.report(event)
+        next.report(event)
+    }
+}
+
 private final class RecordingUploader: SpanUploading {
     private let lock = NSLock()
     private var _events: [[String: Any]] = []
@@ -111,14 +124,17 @@ final class ANRDetectorTests: XCTestCase {
         main.sync {}
     }
 
-    /// Blocks the stand-in main queue until `done` holds (or `timeout` passes), then returns once it
-    /// has answered again. For hangs that must last until the watchdog has acted, however slowly a
-    /// loaded runner schedules it.
-    private func hang(until done: @escaping () -> Bool, timeout: TimeInterval = 15,
+    /// Blocks the stand-in main queue until `done` holds (or `timeout` passes), keeps it blocked for
+    /// `extra` more, then returns once it has answered again. For hangs that must last until the
+    /// watchdog has acted: a fixed-length hang is not enough, because a timer tick delayed past two
+    /// polls reads as a suspension and restarts the hang clock — routine on a loaded CI runner.
+    private func hang(until done: @escaping () -> Bool, thenFor extra: TimeInterval = 0,
+                      timeout: TimeInterval = 15,
                       file: StaticString = #filePath, line: UInt = #line) {
         main.async {
             let end = Date(timeIntervalSinceNow: timeout)
             while !done() && Date() < end { Thread.sleep(forTimeInterval: 0.01) }
+            Thread.sleep(forTimeInterval: extra)
         }
         main.sync {}
         XCTAssertTrue(done(), "the hang ended at its \(Int(timeout)) s cap without the watchdog acting",
@@ -136,7 +152,7 @@ final class ANRDetectorTests: XCTestCase {
         detector.startMonitoring()
         idle(for: 0.2)
 
-        hang(for: 1.2)
+        hang(until: { self.log.events.count >= 1 }, thenFor: 0.7)
         idle(for: 0.2)
 
         XCTAssertEqual(log.events.count, 1, "one hang, one ANR however long it lasts")
@@ -241,9 +257,9 @@ final class ANRDetectorTests: XCTestCase {
         XCTAssertTrue(log.events.isEmpty)
 
         center.post(name: UIApplication.willEnterForegroundNotification, object: nil)
-        // Wide margins: the watchdog restarts asynchronously, and a slow CI runner needs them.
+        // The watchdog restarts asynchronously; the hang lasts until it has noticed.
         idle(for: 0.5)
-        hang(for: 1.5)
+        hang(until: { self.log.events.count >= 1 })
         idle(for: 0.3)
         XCTAssertEqual(log.events.count, 1)
     }
@@ -259,9 +275,9 @@ final class ANRDetectorTests: XCTestCase {
         XCTAssertTrue(log.events.isEmpty)
 
         center.post(name: UIApplication.didBecomeActiveNotification, object: nil)
-        // Wide margins: the watchdog restarts asynchronously, and a slow CI runner needs them.
+        // The watchdog restarts asynchronously; the hang lasts until it has noticed.
         idle(for: 0.5)
-        hang(for: 1.5)
+        hang(until: { self.log.events.count >= 1 })
         idle(for: 0.3)
         XCTAssertEqual(log.events.count, 1)
     }
@@ -272,7 +288,7 @@ final class ANRDetectorTests: XCTestCase {
         idle(for: 0.2)
 
         center.post(name: UIApplication.willResignActiveNotification, object: nil)
-        hang(for: 0.9)
+        hang(until: { self.log.events.count >= 1 })
         idle(for: 0.2)
 
         XCTAssertEqual(log.events.count, 1)
@@ -286,7 +302,7 @@ final class ANRDetectorTests: XCTestCase {
 
         detector.startMonitoring()
         idle(for: 0.2)
-        hang(for: 0.9)
+        hang(until: { self.log.events.count >= 1 })
         idle(for: 0.2)
         XCTAssertEqual(log.events.count, 1, "a fresh start is not paused")
     }
@@ -308,10 +324,17 @@ final class ANRDetectorTests: XCTestCase {
         detector.startMonitoring()
         idle(for: 0.2)
 
-        main.async { Thread.sleep(forTimeInterval: 2.0) }
-        idle(for: 0.8)
-        XCTAssertEqual(log.events.count, 1)
+        // Hung until the ANR is out, then on through the gap until released.
+        let release = Flag(false)
+        main.async {
+            let end = Date(timeIntervalSinceNow: 15)
+            while !release.value && Date() < end { Thread.sleep(forTimeInterval: 0.01) }
+        }
+        let reported = expectation(for: NSPredicate { _, _ in self.log.events.count >= 1 }, evaluatedWith: nil)
+        wait(for: [reported], timeout: 15)
         uptimeOffset.seconds = 30
+        idle(for: 0.3)
+        release.value = true
         main.sync {}
         idle(for: 0.3)
 
@@ -324,7 +347,7 @@ final class ANRDetectorTests: XCTestCase {
         detector.startMonitoring()
         idle(for: 0.2)
 
-        hang(for: 2.0)
+        hang(until: { self.log.events.count >= 1 }, thenFor: 1.0)
         idle(for: 0.3)
 
         XCTAssertEqual(log.events.count, 1, "the same hang is reported once")
@@ -381,12 +404,13 @@ final class ANRDetectorTests: XCTestCase {
         let uploader = RecordingUploader()
         try XCTUnwrap(sdk.coralogixExporter).spanUploader = uploader
         let reporter = try XCTUnwrap(sdk.metricsManager.eventReporter, "ANR instrumentation is on by default")
+        let forwarded = ForwardingEventLog(to: reporter)
         detector = ANRDetector(threshold: threshold, pollInterval: poll, mainQueue: main,
-                               isDebuggerAttached: { false }, notificationCenter: center, eventReporter: reporter)
+                               isDebuggerAttached: { false }, notificationCenter: center, eventReporter: forwarded)
         detector.startMonitoring()
         idle(for: 0.2)
 
-        hang(for: 1.5)
+        hang(until: { forwarded.events.count >= 1 })
         // Flushed until the ANR is out: on a slow runner its span can end after a first flush.
         // The long timeout is for a cold CI runner, where the first SDK init of the class waits
         // ~40 s on WebKit's helper processes launching.
