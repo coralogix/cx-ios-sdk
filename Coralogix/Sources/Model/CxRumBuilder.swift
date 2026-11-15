@@ -242,9 +242,9 @@ class CxRumBuilder {
 
     /// Snapshot for a span reported under a session that is no longer live. Only the events
     /// that always carry a snapshot (error, navigation) get one — the one-minute throttle
-    /// and the forced background snapshot track the live session. The counts are the ones the recorder last wrote for it, plus
-    /// this event's error; with no record of the session the snapshot is omitted rather
-    /// than borrowed from the live session.
+    /// and the forced background snapshot track the live session. The counts are the ones the
+    /// recorder last wrote for it, plus this event's error; with no record of the session the
+    /// snapshot is omitted rather than borrowed from the live session.
     private func buildRetiredSessionSnapshotContext(for eventContext: EventContext,
                                                     sessionId: String) -> SnapshotContext? {
         let isErrorSeverity = eventContext.severity == CoralogixLogSeverity.error.rawValue
