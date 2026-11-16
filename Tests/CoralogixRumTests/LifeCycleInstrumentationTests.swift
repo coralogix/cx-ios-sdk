@@ -27,7 +27,95 @@ final class LifeCycleInstrumentationTests: XCTestCase {
         coralogixRum = nil
         options = nil
         CoralogixRum.isInitialized = false
+        // A hybrid init rewrites this process-wide static; later tests expect native.
+        CoralogixRum.mobileSDK = MobileSDK(sdkFramework: .swift)
         RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+    }
+
+    // MARK: - Snapshot on the background event (encoded payload)
+
+    func testBackgroundEvent_insideThrottleWindow_isUploadedAsSnapshotEvent() throws {
+        let uploader = CapturingSpanUploader()
+        try startSession(uploadingTo: uploader)
+
+        NotificationCenter.default.post(name: UIApplication.didEnterBackgroundNotification, object: nil)
+
+        let event = try XCTUnwrap(waitForLifeCycleEvent(.appDidEnterBackgroundNotification, in: uploader.cxRumPayloads),
+                                  "The background event must reach the uploader")
+        XCTAssertEqual(event[Keys.isSnapshotEvent.rawValue] as? Bool, true)
+        XCTAssertNotNil(event[Keys.snapshotContext.rawValue] as? [String: Any])
+    }
+
+    func testBecomeActiveEvent_insideThrottleWindow_isUploadedWithoutSnapshot() throws {
+        let uploader = CapturingSpanUploader()
+        try startSession(uploadingTo: uploader)
+
+        NotificationCenter.default.post(name: UIApplication.didBecomeActiveNotification, object: nil)
+
+        let event = try XCTUnwrap(waitForLifeCycleEvent(.appDidBecomeActiveNotification, in: uploader.cxRumPayloads),
+                                  "Control: the become-active event must reach the uploader")
+        XCTAssertNil(event[Keys.isSnapshotEvent.rawValue], "The flag is only written on snapshot events")
+        XCTAssertNil(event[Keys.snapshotContext.rawValue])
+    }
+
+    func testHybridBackgroundEvent_reachesBeforeSendAsSnapshotEvent() throws {
+        for framework in [SdkFramework.flutter(version: "1.0.0"), .reactNative(version: "1.0.0")] {
+            let capture = EncodedEventCapture()
+            var hybridOptions = try XCTUnwrap(options)
+            hybridOptions.beforeSendCallBack = capture.append
+            try startSession(options: hybridOptions, sdkFramework: framework, uploadingTo: CapturingSpanUploader())
+
+            NotificationCenter.default.post(name: UIApplication.didEnterBackgroundNotification, object: nil)
+
+            let event = try XCTUnwrap(waitForLifeCycleEvent(.appDidEnterBackgroundNotification, in: capture.cxRumPayloads),
+                                      "\(framework): the background event must reach beforeSend")
+            XCTAssertEqual(event[Keys.isSnapshotEvent.rawValue] as? Bool, true, "\(framework)")
+            XCTAssertNotNil(event[Keys.snapshotContext.rawValue] as? [String: Any], "\(framework)")
+
+            coralogixRum?.shutdown()
+            coralogixRum = nil
+            CoralogixRum.isInitialized = false
+        }
+    }
+
+    /// Starts a sampled-in session whose snapshot throttle has just been stamped, so only a forced
+    /// snapshot can put one on the next plain event. Without the stamp, the first event after init
+    /// gets a snapshot anyway (nil throttle) and the assertions above would pass without the fix.
+    private func startSession(options: CoralogixExporterOptions? = nil,
+                              sdkFramework: SdkFramework = .swift,
+                              uploadingTo uploader: SpanUploading) throws {
+        let rum = CoralogixRum(options: try XCTUnwrap(options ?? self.options), sdkFramework: sdkFramework)
+        coralogixRum = rum
+        try XCTUnwrap(rum.coralogixExporter).spanUploader = uploader
+        XCTAssertTrue(rum.isInstrumentationInstalled(.lifeCycle), "Precondition: life-cycle events are installed")
+
+        drainPendingSpans()
+        let sessionManager = try XCTUnwrap(rum.sessionManager)
+        sessionManager.lastActivity = Date()
+        sessionManager.lastSnapshotEventTime = Date()
+    }
+
+    private func drainPendingSpans() {
+        Thread.sleep(forTimeInterval: 0.3)
+        (OpenTelemetry.instance.tracerProvider as? TracerProviderSdk)?.forceFlush(timeout: 3)
+        Thread.sleep(forTimeInterval: 0.3)
+    }
+
+    private func waitForLifeCycleEvent(_ type: Keys,
+                                       in cxRumPayloads: () -> [[String: Any]],
+                                       timeout: TimeInterval = 5) -> [String: Any]? {
+        let deadline = Date().addingTimeInterval(timeout)
+        repeat {
+            if let match = cxRumPayloads().first(where: { Self.lifeCycleType(of: $0) == type.rawValue }) {
+                return match
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        } while Date() < deadline
+        return nil
+    }
+
+    private static func lifeCycleType(of cxRum: [String: Any]) -> String? {
+        (cxRum[Keys.lifeCycleContext.rawValue] as? [String: Any])?[Keys.eventName.rawValue] as? String
     }
 
     func testBackgroundNotificationTriggersFlush() {
@@ -79,5 +167,23 @@ final class LifeCycleInstrumentationTests: XCTestCase {
         }
 
         wait(for: [backgroundFlushExpectation], timeout: 5.0)
+    }
+}
+
+/// Thread-safe collector of the encoded batches a hybrid `beforeSendCallBack` receives.
+private final class EncodedEventCapture {
+    private let lock = NSLock()
+    private var collected: [[String: Any]] = []
+
+    func append(_ batch: [[String: Any]]) {
+        lock.lock()
+        defer { lock.unlock() }
+        collected.append(contentsOf: batch)
+    }
+
+    func cxRumPayloads() -> [[String: Any]] {
+        lock.lock()
+        defer { lock.unlock() }
+        return collected.compactMap { ($0[Keys.text.rawValue] as? [String: Any])?[Keys.cxRum.rawValue] as? [String: Any] }
     }
 }

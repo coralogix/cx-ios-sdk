@@ -190,11 +190,18 @@ class CxRumBuilder {
     /// qualifying event's snapshot. The caller (`build()`) owns consuming the pending
     /// setUserContext trigger and passes the token in, so a span dropped before this
     /// point can never swallow the one-shot promotion.
+    ///
+    /// The background life-cycle event always carries a snapshot, regardless of the
+    /// throttle: it is the last event the background flush is guaranteed to ship before the
+    /// app may be suspended or killed, so it reports the session's final counts (browser
+    /// parity with the `visibilitychange → hidden` event). Other life-cycle events don't.
     internal func buildSnapshotContextIfNeeded(for eventContext: EventContext,
                                                pendingTrigger: PendingSnapshotTrigger? = nil) -> SnapshotContext? {
         let currentTime = otel.getStartTime() ?? Date().timeIntervalSince1970
         let isErrorSeverity = eventContext.severity == CoralogixLogSeverity.error.rawValue
         let isNavigationEvent = eventContext.type == .navigation
+        let isBackgroundEvent = eventContext.type == .lifeCycle
+            && LifeCycleContext(otel: otel).lifeCycleType == Keys.appDidEnterBackgroundNotification.rawValue
         // nil means no snapshot has been emitted yet on this session (initial
         // launch or just-rotated), so treat the throttle as expired and emit
         // the next qualifying event. SessionManager.setupSessionMetadata()
@@ -204,7 +211,7 @@ class CxRumBuilder {
         } ?? true
         
         // Check if any of the conditions for creating a snapshot are met
-        if isErrorSeverity || isNavigationEvent || oneMinuteHasPassed || pendingTrigger != nil {
+        if isErrorSeverity || isNavigationEvent || isBackgroundEvent || oneMinuteHasPassed || pendingTrigger != nil {
             
             if isErrorSeverity {
                 sessionManager.incrementErrorCounter()
@@ -235,9 +242,9 @@ class CxRumBuilder {
 
     /// Snapshot for a span reported under a session that is no longer live. Only the events
     /// that always carry a snapshot (error, navigation) get one — the one-minute throttle
-    /// tracks the live session. The counts are the ones the recorder last wrote for it, plus
-    /// this event's error; with no record of the session the snapshot is omitted rather
-    /// than borrowed from the live session.
+    /// and the forced background snapshot track the live session. The counts are the ones the
+    /// recorder last wrote for it, plus this event's error; with no record of the session the
+    /// snapshot is omitted rather than borrowed from the live session.
     private func buildRetiredSessionSnapshotContext(for eventContext: EventContext,
                                                     sessionId: String) -> SnapshotContext? {
         let isErrorSeverity = eventContext.severity == CoralogixLogSeverity.error.rawValue

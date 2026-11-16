@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Release-mechanics commits (version bumps, podspec/script tweaks, README edits) are
 omitted; the focus here is user-facing behavior changes.
 
+## [2.24.1] - 2026-11-15
+
+### Fixed
+- The life-cycle event sent when the app moves to the background now always includes the session snapshot (error, view and action counts).
+
 ## [2.24.0] - 2026-11-11
 
 ### Added

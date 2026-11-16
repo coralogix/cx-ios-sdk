@@ -411,6 +411,93 @@ class CxRumBuilderTests: XCTestCase {
         XCTAssertGreaterThan(timestamp, 0)
     }
 
+    // MARK: - Background life-cycle event always carries a snapshot
+
+    private func makeLifeCycleSUT(_ lifeCycleType: Keys, currentTime: Date) -> CxRumBuilder? {
+        makeSUT(currentTime: currentTime,
+                eventType: CoralogixEventType.lifeCycle.rawValue,
+                extraAttributes: [Keys.type.rawValue: AttributeValue(lifeCycleType.rawValue)])
+    }
+
+    func test_build_backgroundEvent_insideThrottleWindow_carriesSnapshotWithLiveCounts() throws {
+        let now = Date()
+        let throttleStart = now.addingTimeInterval(-5)
+        mockSessionManager.lastSnapshotTime = throttleStart
+        mockSessionManager.errorCount = 2
+        mockSessionManager.incrementClickCounter()
+        mockViewManager.uniqueViewCount = 3
+
+        let rum = try XCTUnwrap(makeLifeCycleSUT(.appDidEnterBackgroundNotification, currentTime: now)?.build())
+
+        let snapshot = try XCTUnwrap(rum.snapshotContext,
+                                     "The background event must carry a snapshot even inside the one-minute window")
+        XCTAssertEqual(snapshot.errorCount, 2)
+        XCTAssertEqual(snapshot.actionCount, 1)
+        XCTAssertEqual(snapshot.viewCount, 3)
+        let stamped = try XCTUnwrap(mockSessionManager.lastSnapshotTime)
+        XCTAssertGreaterThan(stamped, throttleStart, "The forced snapshot restarts the throttle window")
+    }
+
+    func test_build_otherLifeCycleEvents_insideThrottleWindow_carryNoSnapshot() throws {
+        let others: [Keys] = [.appDidFinishLaunching,
+                              .appDidBecomeActiveNotification,
+                              .appWillTerminateNotification,
+                              .appDidReceiveMemoryWarningNotification]
+        for lifeCycleType in others {
+            let now = Date()
+            mockSessionManager.lastSnapshotTime = now
+            let rum = try XCTUnwrap(makeLifeCycleSUT(lifeCycleType, currentTime: now)?.build())
+            XCTAssertNil(rum.snapshotContext, "\(lifeCycleType.rawValue) must keep the normal throttle")
+        }
+    }
+
+    func test_build_backgroundEvent_doesNotCountAnError() throws {
+        let now = Date()
+        mockSessionManager.lastSnapshotTime = now
+        mockSessionManager.errorCount = 4
+
+        let rum = try XCTUnwrap(makeLifeCycleSUT(.appDidEnterBackgroundNotification, currentTime: now)?.build())
+
+        XCTAssertEqual(rum.snapshotContext?.errorCount, 4)
+        XCTAssertEqual(mockSessionManager.errorCount, 4)
+        XCTAssertEqual(mockSessionManager.incrementErrorCounterCallCount, 0)
+    }
+
+    func test_build_backgroundEvent_consumesPendingUserContextTokenOnce() throws {
+        let newUser = UserContext(userId: "user-after-login", userName: "New Name",
+                                  userEmail: "new@example.com", userMetadata: [:])
+        mockSessionManager.triggerSnapshotOnNextEvent(userContext: newUser)
+        let now = Date()
+        mockSessionManager.lastSnapshotTime = now
+
+        let rum = try XCTUnwrap(makeLifeCycleSUT(.appDidEnterBackgroundNotification, currentTime: now)?.build())
+
+        XCTAssertNotNil(rum.snapshotContext)
+        XCTAssertNotNil(rum.consumedSnapshotTrigger,
+                        "The background event must record the token so a beforeSend drop hands it back")
+        XCTAssertEqual(rum.sessionContext?.userId, "user-after-login")
+        XCTAssertNil(mockSessionManager.consumePendingSnapshotTrigger(), "The token is one-shot")
+    }
+
+    func test_build_backgroundEventOfRetiredSession_getsNoForcedSnapshot() throws {
+        mockSessionManager = makeSessionManager(liveSessionId: "session_001")
+        mockSessionManager.snapshotStore.persist(SessionSnapshotRecord(sessionId: "rotated-out-session", errorCount: 1,
+                                                                       viewCount: 1, actionCount: 1, hasRecording: false))
+        let liveSnapshotTime = Date()
+        mockSessionManager.lastSnapshotTime = liveSnapshotTime
+
+        let rum = try XCTUnwrap(build(makeSpan(sessionId: "rotated-out-session",
+                                               severity: .info,
+                                               eventType: CoralogixEventType.lifeCycle.rawValue,
+                                               extraAttributes: [
+                                                Keys.type.rawValue: AttributeValue(Keys.appDidEnterBackgroundNotification.rawValue)
+                                               ])))
+
+        XCTAssertNil(rum.snapshotContext, "A retired session's background event must not borrow live counts")
+        XCTAssertEqual(mockSessionManager.lastSnapshotTime, liveSnapshotTime,
+                       "Another session's span must not restart the live throttle")
+    }
+
     /// A span with no session attributes — build() drops it at the SessionContext guard.
     private func makeNoSessionSUT(currentTime: Date) -> CxRumBuilder? {
         let otel = MockSpanData(attributes: [
