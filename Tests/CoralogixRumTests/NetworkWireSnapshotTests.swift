@@ -146,15 +146,17 @@ final class NetworkWireSnapshotTests: XCTestCase {
     /// whose first path update arrives asynchronously: a request made right after it would read
     /// `unavailable` on any thread. Start it and let it settle before any test, so the recorded
     /// value does not depend on which test runs first.
+    /// Independent of the SDK's own monitor; sampled when each request starts.
+    private static var probe: NetworkMonitor?
+
     override class func setUp() {
         super.setUp()
         #if os(iOS) && !targetEnvironment(macCatalyst)
         _ = URLSessionLogger.netstatInjector
-        if let probe = try? NetworkMonitor() {
-            let deadline = Date().addingTimeInterval(3)
-            while probe.getConnection() == .unavailable, Date() < deadline {
-                Thread.sleep(forTimeInterval: 0.05)
-            }
+        probe = try? NetworkMonitor()
+        let deadline = Date().addingTimeInterval(3)
+        while probe?.getConnection() == .unavailable, Date() < deadline {
+            Thread.sleep(forTimeInterval: 0.05)
         }
         Thread.sleep(forTimeInterval: 0.2)
         #endif
@@ -165,6 +167,8 @@ final class NetworkWireSnapshotTests: XCTestCase {
     private var session: URLSession?
     private let otlpLock = NSLock()
     private var otlpBatches: [[String: Any]] = []
+    /// The host's connection type sampled right before this test's request starts.
+    private var hostConnectionTypeAtRequest: String?
 
     override func tearDownWithError() throws {
         session?.invalidateAndCancel()
@@ -296,6 +300,7 @@ final class NetworkWireSnapshotTests: XCTestCase {
                 self?.otlpLock.unlock()
             }
         )
+        hostConnectionTypeAtRequest = Self.hostConnectionTypeNow()
         let rum = CoralogixRum(options: options)
         self.rum = rum
         XCTAssertTrue(CoralogixRum.isInitialized)
@@ -377,7 +382,7 @@ final class NetworkWireSnapshotTests: XCTestCase {
             // Records today's value, not the correct one: the connection type is read on the main
             // thread only, so a request started off it (async/await here) reports `unavailable`
             // whatever the network. This expectation changes with the NetworkStatus fix.
-            let connectionType = startedOnMainThread ? Self.connectionTypeTheSDKReads() : "unavailable"
+            let connectionType = startedOnMainThread ? hostConnectionTypeAtRequest : "unavailable"
             assertExplicitContract(captured, url: url, connectionType: connectionType, file: file, line: line)
         }
 
@@ -464,6 +469,12 @@ final class NetworkWireSnapshotTests: XCTestCase {
         XCTAssertEqual(captured.otlpScope["name"] as? String, "NSURLSession", file: file, line: line)
         XCTAssertEqual(captured.otlpScope["version"] as? String, "0.0.1", file: file, line: line)
 
+        // The wire vocabulary, whatever the host: a renamed value fails here even where the
+        // independent sample happens to agree with it.
+        let wireValue = Self.otlpString(captured.otlpSpan, "network.connection.type")
+        XCTAssertTrue(["wifi", "cell", "unavailable"].contains(wireValue ?? ""),
+                      "network.connection.type outside the wire vocabulary: \(wireValue ?? "nil")",
+                      file: file, line: line)
         let deviceContext = ((captured.event[Keys.text.rawValue] as? [String: Any])?[Keys.cxRum.rawValue] as? [String: Any])?[Keys.deviceContext.rawValue] as? [String: Any]
         XCTAssertEqual(deviceContext?[Keys.networkConnectionType.rawValue] as? String, connectionType,
                        "network_connection_type", file: file, line: line)
@@ -471,17 +482,17 @@ final class NetworkWireSnapshotTests: XCTestCase {
                        "network.connection.type", file: file, line: line)
     }
 
-    /// The connection type the SDK's own injector stamps right now, read on the main thread as a
-    /// main-thread request reads it. Uses an isolated tracer so the probe span is never exported.
-    private static func connectionTypeTheSDKReads() -> String? {
+    /// The value a main-thread request should carry, from a monitor independent of the SDK's,
+    /// spelled with the wire vocabulary written out here — so a regression in the SDK's monitor
+    /// or its mapping cannot also move the expectation.
+    private static func hostConnectionTypeNow() -> String? {
         #if os(iOS) && !targetEnvironment(macCatalyst)
-        let span = TracerProviderSdk().get(instrumentationName: "NetworkWireSnapshotTests")
-            .spanBuilder(spanName: "connection-type-probe").startSpan()
-        defer { span.end() }
-        URLSessionLogger.netstatInjector?.inject(span: span)
-        guard case .string(let type)? = (span as? ReadableSpan)?
-                .toSpanData().attributes[SemanticAttributes.networkConnectionType.rawValue] else { return nil }
-        return type
+        switch probe?.getConnection() {
+        case .wifi?: return "wifi"
+        case .cellular?: return "cell"
+        case .unavailable?: return "unavailable"
+        case nil: return nil
+        }
         #else
         return nil
         #endif
