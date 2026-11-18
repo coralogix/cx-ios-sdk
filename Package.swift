@@ -52,7 +52,9 @@ let package = Package(
         .testTarget(
             name: "CoralogixRumTests",
             dependencies: ["Coralogix", "CoralogixBootstrap"],
-            path: "Tests/CoralogixRumTests/"
+            path: "Tests/CoralogixRumTests/",
+            // Golden files read through #filePath, not bundled: CocoaPods' test_spec has no resources.
+            exclude: ["WireSnapshots"]
         ),
         .testTarget(
             name: "CoralogixInternalTests",
