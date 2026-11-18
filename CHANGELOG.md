@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Release-mechanics commits (version bumps, podspec/script tweaks, README edits) are
 omitted; the focus here is user-facing behavior changes.
 
+## [2.24.3] - 2026-11-19
+
+### Fixed
+- Network requests started off the main thread now report the actual connection type (`wifi` or `cell`) instead of `unavailable`.
+
 ## [2.24.2] - 2026-11-18
 
 ### Fixed

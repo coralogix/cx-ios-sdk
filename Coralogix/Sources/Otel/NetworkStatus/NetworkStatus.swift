@@ -11,7 +11,16 @@ import Network
 public class NetworkStatusClass {
     public private(set) var networkInfo: CTTelephonyNetworkInfo?
     public private(set) var networkMonitor: NetworkMonitorProtocol
-    
+
+    // Telephony state is snapshotted here so status() can run on any thread: reading
+    // CTTelephonyNetworkInfo concurrently from several threads crashes, and hopping to
+    // the main thread made off-main callers report "unavailable".
+    private let lock = NSLock()
+    private var cachedServiceId: String?
+    private var cachedRadioTech: [String: String]?
+    private var cachedProviders: [String: CTCarrier]?
+    private var delegateProxy: NetworkInfoDelegateProxy?
+
     public convenience init() throws {
         self.init(with: try NetworkMonitor())
     }
@@ -23,46 +32,54 @@ public class NetworkStatusClass {
 #else
         networkInfo = CTTelephonyNetworkInfo()
 #endif
+        refreshCachedState()
+        guard let networkInfo else { return }
+        let proxy = NetworkInfoDelegateProxy { [weak self] in self?.refreshCachedState() }
+        networkInfo.delegate = proxy
+        delegateProxy = proxy
     }
 
     public func status() -> (String, String?, Any?) {
-        var result: (String, String?, Any?) = ("unavailable", nil, nil)
-        
-        let fetchStatus = {
-            switch self.networkMonitor.getConnection() {
-            case .wifi:
-                result = ("wifi", nil, nil)
-            case .cellular:
-                if #available(iOS 16.0, *) {
-                    if let networkInfo = self.networkInfo,
-                       let serviceId = networkInfo.dataServiceIdentifier,
-                       let radioAccessTechnology = networkInfo.serviceCurrentRadioAccessTechnology?[serviceId] {
-                        result = ("cell", self.simpleConnectionName(connectionType: radioAccessTechnology), nil)
-                    } else {
-                        result = ("cell", "unknown", nil)
-                    }
-                } else {
-                    if let networkInfo = self.networkInfo, let serviceId = networkInfo.dataServiceIdentifier,
-                       let radioAccessTechnology = networkInfo.serviceCurrentRadioAccessTechnology?[serviceId],
-                       let carrier = networkInfo.serviceSubscriberCellularProviders?[serviceId] {
-                        result = ("cell", self.simpleConnectionName(connectionType: radioAccessTechnology), carrier)
-                    } else {
-                        result = ("cell", "unknown", nil)
-                    }
-                }
-            case .unavailable:
-                result = ("unavailable", nil, nil)
+        switch networkMonitor.getConnection() {
+        case .wifi:
+            return ("wifi", nil, nil)
+        case .unavailable:
+            return ("unavailable", nil, nil)
+        case .cellular:
+            lock.lock()
+            let serviceId = cachedServiceId
+            let radioTech = cachedRadioTech
+            let providers = cachedProviders
+            lock.unlock()
+
+            guard let serviceId, let technology = radioTech?[serviceId] else {
+                return ("cell", "unknown", nil)
             }
-        }
-        
-        if Thread.isMainThread {
-            fetchStatus()
-        } else {
-            DispatchQueue.main.async {
-                fetchStatus()
+            if #available(iOS 16.0, *) {
+                return ("cell", simpleConnectionName(connectionType: technology), nil)
             }
+            guard let carrier = providers?[serviceId] else {
+                return ("cell", "unknown", nil)
+            }
+            return ("cell", simpleConnectionName(connectionType: technology), carrier)
         }
-        return result
+    }
+
+    private func refreshCachedState() {
+        let serviceId = networkInfo?.dataServiceIdentifier
+        let radioTech = networkInfo?.serviceCurrentRadioAccessTechnology
+        let providers = Self.cellularProviders(of: networkInfo)
+        lock.lock()
+        cachedServiceId = serviceId
+        cachedRadioTech = radioTech
+        cachedProviders = providers
+        lock.unlock()
+    }
+
+    // The carrier is reported only before iOS 16, where Apple stopped returning real values.
+    private static func cellularProviders(of networkInfo: CTTelephonyNetworkInfo?) -> [String: CTCarrier]? {
+        if #available(iOS 16.0, *) { return nil }
+        return networkInfo?.serviceSubscriberCellularProviders
     }
 
     func simpleConnectionName(connectionType: String) -> String {
@@ -96,6 +113,22 @@ public class NetworkStatusClass {
         default:
             return "unknown"
         }
+    }
+}
+
+private final class NetworkInfoDelegateProxy: NSObject, CTTelephonyNetworkInfoDelegate {
+    private let onUpdate: () -> Void
+
+    init(onUpdate: @escaping () -> Void) {
+        self.onUpdate = onUpdate
+    }
+
+    func dataServiceIdentifierDidChange(_ identifier: String) {
+        onUpdate()
+    }
+
+    func serviceCurrentRadioAccessTechnologyDidChange(_ serviceCurrentRadioAccessTechnology: [String: String]) {
+        onUpdate()
     }
 }
 
