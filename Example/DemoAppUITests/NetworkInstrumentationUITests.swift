@@ -575,7 +575,7 @@ final class NetworkInstrumentationUITests: XCTestCase {
             ("jsonplaceholder.typicode.com/posts", 200, "2. Successful GET"),
             ("jsonplaceholder.typicode.com/posts", 200, "5. Alamofire success"),
             ("jsonplaceholder.typicode.com/posts1", 404, "6. Alamofire failure"),
-            ("api.escuelajs.co/api/v1/files/upload", 201, "7. Alamofire upload"),
+            ("jsonplaceholder.typicode.com/photos", 201, "7. Alamofire upload"),
         ]
         if afnetworkingLinked {
             expectedRequests.append((url: "jsonplaceholder.typicode.com/posts", statusCode: 200, description: "8. AFNetworking"))
