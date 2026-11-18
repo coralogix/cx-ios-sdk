@@ -63,7 +63,7 @@
             "device" : "<volatile>",
             "device_name" : "<volatile>",
             "emulator" : true,
-            "network_connection_type" : "unavailable",
+            "network_connection_type" : "<connection_type>",
             "os" : "ios",
             "osVersion" : "<volatile>",
             "user_agent" : "<volatile>"
@@ -235,9 +235,7 @@
           },
           {
             "key" : "network.connection.type",
-            "value" : {
-              "string_value" : "unavailable"
-            }
+            "value" : "<connection_type>"
           },
           {
             "key" : "session_creation_date",
@@ -354,7 +352,7 @@
             "device" : "<volatile>",
             "device_name" : "<volatile>",
             "emulator" : true,
-            "network_connection_type" : "wifi",
+            "network_connection_type" : "<connection_type>",
             "os" : "ios",
             "osVersion" : "<volatile>",
             "user_agent" : "<volatile>"
@@ -526,9 +524,7 @@
           },
           {
             "key" : "network.connection.type",
-            "value" : {
-              "string_value" : "wifi"
-            }
+            "value" : "<connection_type>"
           },
           {
             "key" : "session_creation_date",
@@ -645,7 +641,7 @@
             "device" : "<volatile>",
             "device_name" : "<volatile>",
             "emulator" : true,
-            "network_connection_type" : "wifi",
+            "network_connection_type" : "<connection_type>",
             "os" : "ios",
             "osVersion" : "<volatile>",
             "user_agent" : "<volatile>"
@@ -817,9 +813,7 @@
           },
           {
             "key" : "network.connection.type",
-            "value" : {
-              "string_value" : "wifi"
-            }
+            "value" : "<connection_type>"
           },
           {
             "key" : "session_creation_date",
@@ -1239,7 +1233,7 @@
             "device" : "<volatile>",
             "device_name" : "<volatile>",
             "emulator" : true,
-            "network_connection_type" : "wifi",
+            "network_connection_type" : "<connection_type>",
             "os" : "ios",
             "osVersion" : "<volatile>",
             "user_agent" : "<volatile>"
@@ -1411,9 +1405,7 @@
           },
           {
             "key" : "network.connection.type",
-            "value" : {
-              "string_value" : "wifi"
-            }
+            "value" : "<connection_type>"
           },
           {
             "key" : "session_creation_date",
@@ -1530,7 +1522,7 @@
             "device" : "<volatile>",
             "device_name" : "<volatile>",
             "emulator" : true,
-            "network_connection_type" : "wifi",
+            "network_connection_type" : "<connection_type>",
             "os" : "ios",
             "osVersion" : "<volatile>",
             "user_agent" : "<volatile>"
@@ -1702,9 +1694,7 @@
           },
           {
             "key" : "network.connection.type",
-            "value" : {
-              "string_value" : "wifi"
-            }
+            "value" : "<connection_type>"
           },
           {
             "key" : "session_creation_date",
@@ -1821,7 +1811,7 @@
             "device" : "<volatile>",
             "device_name" : "<volatile>",
             "emulator" : true,
-            "network_connection_type" : "wifi",
+            "network_connection_type" : "<connection_type>",
             "os" : "ios",
             "osVersion" : "<volatile>",
             "user_agent" : "<volatile>"
@@ -1993,9 +1983,7 @@
           },
           {
             "key" : "network.connection.type",
-            "value" : {
-              "string_value" : "wifi"
-            }
+            "value" : "<connection_type>"
           },
           {
             "key" : "session_creation_date",

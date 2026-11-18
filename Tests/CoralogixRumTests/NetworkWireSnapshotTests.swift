@@ -137,6 +137,14 @@ final class NetworkWireSnapshotTests: XCTestCase {
         "network_type",
     ]
 
+    /// The connection type depends on the machine (a CI runner has no wifi interface), so the
+    /// golden file holds a token and `assertExplicitContract` pins the value instead.
+    private static let connectionTypeKeys: Set<String> = ["network_connection_type", "network.connection.type"]
+    private static let connectionTypeToken = "<connection_type>"
+
+    /// What the host reports on the main thread, read once the monitor has settled.
+    private static var hostConnectionType = "unavailable"
+
     /// The connection type comes from a monitor created lazily on the first instrumented request,
     /// whose first path update arrives asynchronously: a request made right after it would read
     /// `unavailable` on any thread. Start it and let it settle before any test, so the recorded
@@ -149,6 +157,11 @@ final class NetworkWireSnapshotTests: XCTestCase {
             let deadline = Date().addingTimeInterval(3)
             while probe.getConnection() == .unavailable, Date() < deadline {
                 Thread.sleep(forTimeInterval: 0.05)
+            }
+            switch probe.getConnection() {
+            case .wifi: hostConnectionType = "wifi"
+            case .cellular: hostConnectionType = "cell"
+            case .unavailable: hostConnectionType = "unavailable"
             }
         }
         Thread.sleep(forTimeInterval: 0.2)
@@ -210,7 +223,7 @@ final class NetworkWireSnapshotTests: XCTestCase {
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         _ = try await XCTUnwrap(session).data(for: request)
-        try assertWireSnapshot(named: "async_await_data_for", url: url, nativeConnectionType: "unavailable")
+        try assertWireSnapshot(named: "async_await_data_for", url: url, startedOnMainThread: false)
     }
 
     func test_uploadTaskWithFrom() throws {
@@ -263,7 +276,7 @@ final class NetworkWireSnapshotTests: XCTestCase {
             Keys.traceId.rawValue: Self.hybridTraceId,
             Keys.spanId.rawValue: Self.hybridSpanId
         ])
-        try assertWireSnapshot(named: "hybrid_set_network_request_context", url: url, nativeConnectionType: nil)
+        try assertWireSnapshot(named: "hybrid_set_network_request_context", url: url, startedOnMainThread: nil)
     }
 
     // MARK: - SDK setup
@@ -360,16 +373,20 @@ final class NetworkWireSnapshotTests: XCTestCase {
 
     // MARK: - Assertions
 
-    /// `nativeConnectionType` is the `network_connection_type` the request reports today; nil
-    /// for the hybrid path, which reports none and is not a URLSession span.
-    private func assertWireSnapshot(named name: String, url: URL, nativeConnectionType: String? = "wifi",
+    /// `startedOnMainThread` is where the request started, which decides its
+    /// `network_connection_type` today; nil for the hybrid path, which is not a URLSession span.
+    private func assertWireSnapshot(named name: String, url: URL, startedOnMainThread: Bool? = true,
                                     file: StaticString = #filePath, line: UInt = #line) throws {
         let captured = try XCTUnwrap(capture(url: url),
                                      "No uploaded event and OTLP span for \(url) — the request was not instrumented",
                                      file: file, line: line)
 
-        if let nativeConnectionType {
-            assertExplicitContract(captured, url: url, connectionType: nativeConnectionType, file: file, line: line)
+        if let startedOnMainThread {
+            // Records today's value, not the correct one: the connection type is read on the main
+            // thread only, so a request started off it (async/await here) reports `unavailable`
+            // whatever the network. This expectation changes with the NetworkStatus fix.
+            let connectionType = startedOnMainThread ? Self.hostConnectionType : "unavailable"
+            assertExplicitContract(captured, url: url, connectionType: connectionType, file: file, line: line)
         }
 
         let snapshot: [String: Any] = [
@@ -394,9 +411,43 @@ final class NetworkWireSnapshotTests: XCTestCase {
                                            "Golden file has no '\(name)' section — record it (see the header of this file)",
                                            file: file, line: line)
         let expected = try Self.serialize(expectedObject)
-        XCTAssertEqual(actual, expected,
-                       "Wire snapshot '\(name)' changed. If the change is intended, re-record (see the header of this file) and review the diff.",
-                       file: file, line: line)
+        guard actual != expected else { return }
+        // The whole JSON is too long for a CI log line, so the message lists the differing paths.
+        let differences = Self.differences(actual: Self.flatten(snapshot), golden: Self.flatten(expectedObject))
+        XCTFail("""
+                Wire snapshot '\(name)' changed. If the change is intended, re-record (see the header \
+                of this file) and review the diff.
+                \(differences.prefix(40).joined(separator: "\n"))
+                """, file: file, line: line)
+    }
+
+    /// Leaf values by path; an OTLP key/value pair contributes its key to the path.
+    private static func flatten(_ value: Any, path: String = "") -> [String: String] {
+        switch value {
+        case let dict as [String: Any]:
+            if let key = dict["key"] as? String, let child = dict["value"], dict.count == 2 {
+                return flatten(child, path: path + "/" + key)
+            }
+            return dict.reduce(into: [:]) { result, entry in
+                result.merge(flatten(entry.value, path: path + "/" + entry.key)) { first, _ in first }
+            }
+        case let array as [Any]:
+            return array.enumerated().reduce(into: [:]) { result, entry in
+                result.merge(flatten(entry.element, path: path + "[\(entry.offset)]")) { first, _ in first }
+            }
+        default:
+            // As JSON, so a Bool and the NSNumber it decodes back to both print `false`.
+            let json = (try? JSONSerialization.data(withJSONObject: value, options: .fragmentsAllowed))
+                .map { String(decoding: $0, as: UTF8.self) }
+            return [path: json ?? "\(value)"]
+        }
+    }
+
+    private static func differences(actual: [String: String], golden: [String: String]) -> [String] {
+        Set(actual.keys).union(golden.keys).sorted().compactMap { path in
+            let now = actual[path], was = golden[path]
+            return now == was ? nil : "  \(path): golden=\(was ?? "<absent>") actual=\(now ?? "<absent>")"
+        }
     }
 
     /// Named, explicit claims on top of the golden comparison, so the most load-bearing fields
@@ -421,12 +472,11 @@ final class NetworkWireSnapshotTests: XCTestCase {
         XCTAssertEqual(captured.otlpScope["name"] as? String, "NSURLSession", file: file, line: line)
         XCTAssertEqual(captured.otlpScope["version"] as? String, "0.0.1", file: file, line: line)
 
-        // Records today's value, not the correct one: the connection type is read on the main
-        // thread only, so a request started off it (async/await here) reports `unavailable`.
-        // This expectation, and the golden file, change with the NetworkStatus fix.
         let deviceContext = ((captured.event[Keys.text.rawValue] as? [String: Any])?[Keys.cxRum.rawValue] as? [String: Any])?[Keys.deviceContext.rawValue] as? [String: Any]
         XCTAssertEqual(deviceContext?[Keys.networkConnectionType.rawValue] as? String, connectionType,
                        "network_connection_type", file: file, line: line)
+        XCTAssertEqual(Self.otlpString(captured.otlpSpan, "network.connection.type"), connectionType,
+                       "network.connection.type", file: file, line: line)
     }
 
     // MARK: - Normalization and golden I/O
@@ -455,6 +505,9 @@ final class NetworkWireSnapshotTests: XCTestCase {
     }
 
     private static func normalize(_ value: Any, under key: String) -> Any {
+        if connectionTypeKeys.contains(key) {
+            return connectionTypeToken
+        }
         guard volatileKeys.contains(key), !isFixedHybridId(value) else { return normalize(value) }
         return blank
     }
