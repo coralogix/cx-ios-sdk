@@ -1,8 +1,6 @@
 //
 //  EventSource.swift
 //
-//  Created by Coralogix DEV TEAM.
-//
 
 import Foundation
 import CoralogixInternal
