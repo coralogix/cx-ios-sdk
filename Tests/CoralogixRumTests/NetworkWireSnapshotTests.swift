@@ -142,9 +142,6 @@ final class NetworkWireSnapshotTests: XCTestCase {
     private static let connectionTypeKeys: Set<String> = ["network_connection_type", "network.connection.type"]
     private static let connectionTypeToken = "<connection_type>"
 
-    /// What the host reports on the main thread, read once the monitor has settled.
-    private static var hostConnectionType = "unavailable"
-
     /// The connection type comes from a monitor created lazily on the first instrumented request,
     /// whose first path update arrives asynchronously: a request made right after it would read
     /// `unavailable` on any thread. Start it and let it settle before any test, so the recorded
@@ -157,11 +154,6 @@ final class NetworkWireSnapshotTests: XCTestCase {
             let deadline = Date().addingTimeInterval(3)
             while probe.getConnection() == .unavailable, Date() < deadline {
                 Thread.sleep(forTimeInterval: 0.05)
-            }
-            switch probe.getConnection() {
-            case .wifi: hostConnectionType = "wifi"
-            case .cellular: hostConnectionType = "cell"
-            case .unavailable: hostConnectionType = "unavailable"
             }
         }
         Thread.sleep(forTimeInterval: 0.2)
@@ -385,7 +377,7 @@ final class NetworkWireSnapshotTests: XCTestCase {
             // Records today's value, not the correct one: the connection type is read on the main
             // thread only, so a request started off it (async/await here) reports `unavailable`
             // whatever the network. This expectation changes with the NetworkStatus fix.
-            let connectionType = startedOnMainThread ? Self.hostConnectionType : "unavailable"
+            let connectionType = startedOnMainThread ? Self.connectionTypeTheSDKReads() : "unavailable"
             assertExplicitContract(captured, url: url, connectionType: connectionType, file: file, line: line)
         }
 
@@ -452,7 +444,7 @@ final class NetworkWireSnapshotTests: XCTestCase {
 
     /// Named, explicit claims on top of the golden comparison, so the most load-bearing fields
     /// fail with a readable message rather than a JSON diff.
-    private func assertExplicitContract(_ captured: Captured, url: URL, connectionType: String,
+    private func assertExplicitContract(_ captured: Captured, url: URL, connectionType: String?,
                                         file: StaticString, line: UInt) {
         // Legacy (pre-1.x semconv) attribute keys the backend reads today.
         let span = captured.otlpSpan
@@ -477,6 +469,22 @@ final class NetworkWireSnapshotTests: XCTestCase {
                        "network_connection_type", file: file, line: line)
         XCTAssertEqual(Self.otlpString(captured.otlpSpan, "network.connection.type"), connectionType,
                        "network.connection.type", file: file, line: line)
+    }
+
+    /// The connection type the SDK's own injector stamps right now, read on the main thread as a
+    /// main-thread request reads it. Uses an isolated tracer so the probe span is never exported.
+    private static func connectionTypeTheSDKReads() -> String? {
+        #if os(iOS) && !targetEnvironment(macCatalyst)
+        let span = TracerProviderSdk().get(instrumentationName: "NetworkWireSnapshotTests")
+            .spanBuilder(spanName: "connection-type-probe").startSpan()
+        defer { span.end() }
+        URLSessionLogger.netstatInjector?.inject(span: span)
+        guard case .string(let type)? = (span as? ReadableSpan)?
+                .toSpanData().attributes[SemanticAttributes.networkConnectionType.rawValue] else { return nil }
+        return type
+        #else
+        return nil
+        #endif
     }
 
     // MARK: - Normalization and golden I/O
