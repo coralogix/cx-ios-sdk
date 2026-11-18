@@ -247,19 +247,18 @@ final class CoralogixRumTests: XCTestCase {
         }
     }
     
-    func testGetNavigationSpanShouldSetCorrectAttributes() {
+    func testGetNavigationSpanShouldSetCorrectAttributes() throws {
         let coralogixRum = makeMockCoralogixRum()
         
         coralogixRum.tracerProvider = {
             return MockTracer()
         }
         
-        if let mockSpan = coralogixRum.makeSpan(event: .navigation, source: .console, severity: .info) as? MockSpan {
-            // Assert
-            XCTAssertEqual(mockSpan.recordedAttributes[Keys.eventType.rawValue], .string(CoralogixEventType.navigation.rawValue))
-            XCTAssertEqual(mockSpan.recordedAttributes[Keys.source.rawValue], .string(Keys.console.rawValue))
-            XCTAssertEqual(mockSpan.recordedAttributes[Keys.severity.rawValue], .int(CoralogixLogSeverity.info.rawValue))
-        }
+        let mockSpan = try XCTUnwrap(coralogixRum.makeSpan(event: .navigation, source: nil, severity: .info) as? MockSpan)
+        XCTAssertEqual(mockSpan.recordedAttributes[Keys.eventType.rawValue], .string(CoralogixEventType.navigation.rawValue))
+        XCTAssertEqual(mockSpan.recordedAttributes[Keys.severity.rawValue], .int(CoralogixLogSeverity.info.rawValue))
+        XCTAssertNil(mockSpan.recordedAttributes[Keys.source.rawValue],
+                     "A nil source must leave the attribute unwritten, not write an empty string")
     }
     
     func testHandleNotificationShouldSetCxViewInExporter() {
@@ -478,13 +477,13 @@ final class CoralogixRumTests: XCTestCase {
         coralogixRum.tracerProvider = {
             return MockTracer()
         }
-        let span = coralogixRum.makeSpan(event: .error, source: .console, severity: .error)
+        let span = coralogixRum.makeSpan(event: .error, source: .captured, severity: .error)
         guard let mockSpan = span as? MockSpan else {
             XCTFail("Expected span to be MockSpan")
             return
         }
         XCTAssertEqual(mockSpan.recordedAttributes[Keys.eventType.rawValue], .string(CoralogixEventType.error.rawValue))
-        XCTAssertEqual(mockSpan.recordedAttributes[Keys.source.rawValue], .string(Keys.console.rawValue))
+        XCTAssertEqual(mockSpan.recordedAttributes[Keys.source.rawValue], .string(EventSource.captured.rawValue))
         XCTAssertEqual(mockSpan.recordedAttributes[Keys.severity.rawValue], .int(CoralogixLogSeverity.error.rawValue))
     }
     

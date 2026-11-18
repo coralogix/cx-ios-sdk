@@ -118,6 +118,12 @@ final class CapturingSpanUploader: SpanUploading {
         return .delivered
     }
 
+    /// Every uploaded wire dict, in upload order.
+    var uploadedSpans: [[String: Any]] {
+        lock.lock(); defer { lock.unlock() }
+        return uploaded
+    }
+
     /// The `text.cx_rum` dict of every uploaded span, in upload order.
     func cxRumPayloads() -> [[String: Any]] {
         lock.lock(); defer { lock.unlock() }

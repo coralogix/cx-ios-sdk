@@ -183,7 +183,7 @@ extension CoralogixRum {
     /// Static version for use in swizzled closures that persist across SDK reinitializations (CX-37986).
     private static func spanCustomizationStatic(request: URLRequest, spanBuilder: SpanBuilder) {
         spanBuilder.setAttribute(key: Keys.eventType.rawValue, value: CoralogixEventType.networkRequest.rawValue)
-        spanBuilder.setAttribute(key: Keys.source.rawValue, value: Keys.fetch.rawValue)
+        spanBuilder.setAttribute(key: Keys.source.rawValue, value: EventSource.fetch.rawValue)
 
         // Network spans must share the same session as the rest of the SDK's events
         // (CX-37986). `sessionSpanAttributes()` routes through `getSessionMetadata()`
