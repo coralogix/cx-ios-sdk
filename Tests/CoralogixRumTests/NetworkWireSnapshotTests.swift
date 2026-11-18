@@ -470,11 +470,13 @@ final class NetworkWireSnapshotTests: XCTestCase {
         XCTAssertEqual(captured.otlpScope["version"] as? String, "0.0.1", file: file, line: line)
 
         // The wire vocabulary, whatever the host: a renamed value fails here even where the
-        // independent sample happens to agree with it.
+        // independent sample happens to agree with it. The SDK sets the attribute on iOS only.
+        #if os(iOS) && !targetEnvironment(macCatalyst)
         let wireValue = Self.otlpString(captured.otlpSpan, "network.connection.type")
         XCTAssertTrue(["wifi", "cell", "unavailable"].contains(wireValue ?? ""),
                       "network.connection.type outside the wire vocabulary: \(wireValue ?? "nil")",
                       file: file, line: line)
+        #endif
         let deviceContext = ((captured.event[Keys.text.rawValue] as? [String: Any])?[Keys.cxRum.rawValue] as? [String: Any])?[Keys.deviceContext.rawValue] as? [String: Any]
         XCTAssertEqual(deviceContext?[Keys.networkConnectionType.rawValue] as? String, connectionType,
                        "network_connection_type", file: file, line: line)
