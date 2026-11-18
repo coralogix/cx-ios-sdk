@@ -264,7 +264,8 @@ class NetworkSim {
     }
     
     static func uploadFile(fileURL: URL?) {
-        let url = "https://api.escuelajs.co/api/v1/files/upload"
+        // A path no other demo request uses, so the network UI test can only match the upload itself.
+        let url = "https://jsonplaceholder.typicode.com/photos"
         
         // Simulated file — use a file from your local bundle or Documents directory
         guard let fileURL = fileURL else {
