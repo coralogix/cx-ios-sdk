@@ -57,6 +57,10 @@ final class ErrorOnlyBuffer {
     /// and sessions whose buffer was discarded at rotation, so a late event cannot start it again.
     static let triggeredSessionsKept = 32
     static let discardedSessionsKept = 32
+    /// How long an ended session that had no error keeps its buffer, as on Android: an error
+    /// reported just before the session changed can still be in the batch processor or on a
+    /// hybrid `beforeSend` round trip, and must still trigger it.
+    static let endedSessionGrace: TimeInterval = 30
 
     private static let eventsExtension = "jsonl"
     private static let metadataSuffix = ".meta.json"
@@ -99,10 +103,18 @@ final class ErrorOnlyBuffer {
     }
 
     #if DEBUG
-    /// Tests only: where an SDK instance keeps its buffers instead of the app's folder. Not
-    /// compiled in Release.
+    /// Tests only: where an SDK instance keeps its buffers instead of the app's folder, and the
+    /// clock its grace periods run on. Not compiled in Release.
     static var testDirectory: URL?
+    static var testClock: DeliveryClock?
     #endif
+
+    static var defaultClock: DeliveryClock {
+        #if DEBUG
+        if let testClock { return testClock }
+        #endif
+        return SystemDeliveryClock()
+    }
 
     static var defaultDirectory: URL {
         #if DEBUG
@@ -122,14 +134,19 @@ final class ErrorOnlyBuffer {
     private var triggeredSessionIds: [String] = []
     /// Oldest first, capped at `discardedSessionsKept`.
     private var discardedSessionIds: [String] = []
+    /// Ended sessions still within `endedSessionGrace`, with the timer that ends it.
+    private var endingSessions: [String: DeliveryTimer] = [:]
+    private let clock: DeliveryClock
 
     init(maxRumEvents: Int,
          directory: URL = ErrorOnlyBuffer.defaultDirectory,
-         writer: ErrorOnlyFileWriting = PosixFileWriter()) {
+         writer: ErrorOnlyFileWriting = PosixFileWriter(),
+         clock: DeliveryClock = ErrorOnlyBuffer.defaultClock) {
         self.directory = directory
         self.maxEvents = maxRumEvents
         self.maxBytes = min(maxRumEvents * Self.bytesPerEvent, Self.maxBufferBytes)
         self.writer = writer
+        self.clock = clock
     }
 
     // MARK: - Holding
@@ -214,6 +231,8 @@ final class ErrorOnlyBuffer {
     func trigger(_ sessionId: String) -> Bool {
         lock.lock()
         defer { lock.unlock() }
+        // A session in its grace that has its error is drained like any other.
+        endingSessions.removeValue(forKey: sessionId)?.cancel()
         if !triggeredSessionIds.contains(sessionId) {
             triggeredSessionIds.append(sessionId)
             if triggeredSessionIds.count > Self.triggeredSessionsKept {
@@ -229,11 +248,32 @@ final class ErrorOnlyBuffer {
         return true
     }
 
-    /// Called when `sessionId` ends: unless it had its error, what it held is deleted, and it is
-    /// never held for again — a late event of it is dropped rather than starting a new buffer.
+    /// Called when `sessionId` ends. Unless it had its error, it keeps holding for
+    /// `endedSessionGrace`: a late event of it is still held, and a late error still triggers it.
+    /// When the grace runs out without one, its buffer is discarded.
+    func endSession(_ sessionId: String) {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !isTriggeredLocked(sessionId), endingSessions[sessionId] == nil,
+              !discardedSessionIds.contains(sessionId) else { return }
+        endingSessions[sessionId] = clock.schedule(at: clock.now().addingTimeInterval(Self.endedSessionGrace)) { [weak self] in
+            self?.discardUntriggered(sessionId)
+        }
+    }
+
+    /// Whether `sessionId` ended within `endedSessionGrace` and has not had its error yet.
+    func isInGrace(_ sessionId: String) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return endingSessions[sessionId] != nil
+    }
+
+    /// Deletes what `sessionId` held, unless it had its error, and never holds for it again: a
+    /// later event of it is dropped rather than starting a new buffer.
     func discardUntriggered(_ sessionId: String) {
         lock.lock()
         defer { lock.unlock() }
+        endingSessions.removeValue(forKey: sessionId)?.cancel()
         guard !isTriggeredLocked(sessionId) else { return }
         if !discardedSessionIds.contains(sessionId) {
             discardedSessionIds.append(sessionId)
@@ -252,6 +292,8 @@ final class ErrorOnlyBuffer {
         for (id, session) in sessions where !session.metadata.triggered && session.metadata.owner == owner {
             removeLocked(id)
         }
+        endingSessions.values.forEach { $0.cancel() }
+        endingSessions = [:]
     }
 
     // MARK: - Draining

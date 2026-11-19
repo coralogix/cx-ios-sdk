@@ -100,7 +100,7 @@ final class ErrorOnlyBufferTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: file.path), "Files go once everything is sent.")
     }
 
-    func testRotation_discardsAnUntriggeredSession_butNotATriggeredOne() {
+    func testDiscard_removesAnUntriggeredSession_butNotATriggeredOne() {
         let buffer = makeBuffer()
         buffer.hold(event(0), sessionId: "a")
         buffer.hold(event(0), sessionId: "b")
@@ -110,6 +110,36 @@ final class ErrorOnlyBufferTests: XCTestCase {
         XCTAssertNil(buffer.metadata(of: "a"))
         XCTAssertEqual(buffer.metadata(of: "b")?.triggered, true)
         XCTAssertFalse(FileManager.default.fileExists(atPath: directory.appendingPathComponent("a.jsonl").path))
+    }
+
+    func testEndedSession_keepsHoldingThroughItsGrace_thenIsDiscarded() {
+        let clock = ManualDeliveryClock()
+        let buffer = ErrorOnlyBuffer(maxRumEvents: 5_000, directory: directory, clock: clock)
+        buffer.hold(event(0), sessionId: "a")
+        buffer.endSession("a")
+
+        clock.advance(to: clock.now().addingTimeInterval(29))
+        XCTAssertTrue(buffer.isInGrace("a"))
+        buffer.hold(event(1), sessionId: "a")
+        XCTAssertNotNil(buffer.metadata(of: "a"), "Still held 29 s after the session ended.")
+
+        clock.advance(to: clock.now().addingTimeInterval(2))
+        XCTAssertFalse(buffer.isInGrace("a"))
+        XCTAssertNil(buffer.metadata(of: "a"), "No error within the grace: deleted.")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: directory.appendingPathComponent("a.jsonl").path))
+        buffer.hold(event(2), sessionId: "a")
+        XCTAssertNil(buffer.metadata(of: "a"), "After the grace it is never held for again.")
+    }
+
+    func testEndedSession_triggeredInItsGrace_isKeptForTheDrain() throws {
+        let clock = ManualDeliveryClock()
+        let buffer = ErrorOnlyBuffer(maxRumEvents: 5_000, directory: directory, clock: clock)
+        buffer.hold(event(0), sessionId: "a")
+        buffer.endSession("a")
+        buffer.trigger("a")
+        clock.advance(to: clock.now().addingTimeInterval(60))
+        let chunk = try XCTUnwrap(buffer.nextChunk(of: "a", maxEvents: 500, maxBytes: ErrorOnlyDrain.maxBytesPerRequest))
+        XCTAssertEqual(chunk.events.map(index), [0], "A triggered session is not touched by the grace.")
     }
 
     func testAfterADiscard_aLateEventOfThatSessionIsNotHeldAgain() {

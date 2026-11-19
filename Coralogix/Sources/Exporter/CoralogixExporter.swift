@@ -231,7 +231,7 @@ public class CoralogixExporter: SpanExporter {
         }
         owner.exporter = self
         self.sessionManager.endedSessionIdCallback = { [weak self] ended in
-            self?.errorOnlyBuffer.discardUntriggered(ended)
+            self?.errorOnlyBuffer.endSession(ended)
         }
         self.sessionManager.sessionEndedCallback = { [weak self] in
             // Before the resets: they clear what the ended session's record must keep.

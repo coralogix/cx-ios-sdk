@@ -26,8 +26,9 @@ extension CoralogixExporter {
     /// Splits final events into those sent now, which it returns, and those held for an error.
     ///
     /// Keyed by each event's own session, so a late event of a session that has since ended can
-    /// neither trigger the live one nor land in its buffer: if its own session had its error it is
-    /// sent, otherwise it is dropped with the rest of that session.
+    /// neither trigger the live one nor land in its buffer. Within `ErrorOnlyBuffer.endedSessionGrace`
+    /// of its end it is still held for, and triggers, its own session; after that it is sent only
+    /// if that session had its error, and dropped otherwise.
     func routeErrorOnly(_ events: [[String: Any]]) -> [[String: Any]] {
         let options = getOptions()
         guard options.holdsSessionsForErrors else { return events }
@@ -45,7 +46,7 @@ extension CoralogixExporter {
             if errorOnlyBuffer.isTriggered(route.sessionId) {
                 live.append(OtelSpan.markingSessionHasError(event))
                 sends = true
-            } else if !getSessionManager().isLiveSession(route.sessionId) {
+            } else if !getSessionManager().isLiveSession(route.sessionId) && !errorOnlyBuffer.isInGrace(route.sessionId) {
                 Log.d("[CoralogixExporter] event of ended session \(route.sessionId) held for an error — dropped")
                 sends = false
             } else if route.isError {
