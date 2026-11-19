@@ -1,0 +1,2039 @@
+{
+  "async_await_data_for" : {
+    "cx_rum_event" : {
+      "applicationName" : "WireSnapshotApp",
+      "instrumentation_data" : {
+        "otelResource" : {
+          "attributes" : {
+            "service.name" : "WireSnapshotApp",
+            "telemetry.sdk.language" : "swift",
+            "telemetry.sdk.name" : "opentelemetry",
+            "telemetry.sdk.version" : "1.9.2"
+          }
+        },
+        "otelSpan" : {
+          "attributes" : {
+            "cx_rum.environment" : "wire-test",
+            "cx_rum.event_context.severity" : 3,
+            "cx_rum.event_context.source" : "fetch",
+            "cx_rum.event_context.type" : "network-request",
+            "cx_rum.is_navigation_event" : false,
+            "cx_rum.labels" : {
+              "suite" : "wire-snapshot"
+            },
+            "cx_rum.mobile_sdk.version" : "<sdk_version>",
+            "cx_rum.network_request_context.fragments" : "/v1/async-await",
+            "cx_rum.network_request_context.method" : "GET",
+            "cx_rum.network_request_context.status_code" : 200,
+            "cx_rum.network_request_context.status_text" : "",
+            "cx_rum.network_request_context.url" : "https://wire-snapshot.test/v1/async-await",
+            "cx_rum.platform" : "mobile",
+            "cx_rum.session_context.device" : "<volatile>",
+            "cx_rum.session_context.hasRecording" : false,
+            "cx_rum.session_context.isSessionSampledIn" : true,
+            "cx_rum.session_context.os" : "ios",
+            "cx_rum.session_context.osVersion" : "<volatile>",
+            "cx_rum.session_context.session_creation_date" : "<volatile>",
+            "cx_rum.session_context.session_id" : "<volatile>",
+            "cx_rum.session_context.user_agent" : "<volatile>",
+            "cx_rum.session_context.user_email" : "wire@example.com",
+            "cx_rum.session_context.user_id" : "user-1",
+            "cx_rum.session_context.user_name" : "Wire Snapshot",
+            "cx_rum.version_metadata.app_name" : "WireSnapshotApp",
+            "cx_rum.version_metadata.app_version" : "9.9.9"
+          },
+          "duration" : "<volatile>",
+          "endTime" : "<volatile>",
+          "kind" : 3,
+          "name" : "HTTP GET",
+          "sessionId" : "<volatile>",
+          "spanId" : "<volatile>",
+          "startTime" : "<volatile>",
+          "status" : {
+            "code" : 0
+          },
+          "traceId" : "<volatile>"
+        }
+      },
+      "severity" : 3,
+      "subsystemName" : "cx_rum",
+      "text" : {
+        "cx_rum" : {
+          "device_context" : {
+            "device" : "<volatile>",
+            "device_name" : "<volatile>",
+            "emulator" : true,
+            "network_connection_type" : "<connection_type>",
+            "os" : "ios",
+            "osVersion" : "<volatile>",
+            "user_agent" : "<volatile>"
+          },
+          "device_state" : {
+            "battery" : "",
+            "network_type" : "<volatile>"
+          },
+          "environment" : "wire-test",
+          "event_context" : {
+            "severity" : 3,
+            "source" : "fetch",
+            "type" : "network-request"
+          },
+          "fingerPrint" : "<volatile>",
+          "isNavigationEvent" : false,
+          "labels" : {
+            "suite" : "wire-snapshot"
+          },
+          "mobile_sdk" : {
+            "framework" : "swift",
+            "os" : "ios",
+            "sdk_version" : "<sdk_version>"
+          },
+          "network_request_context" : {
+            "domain" : "wire-snapshot.test",
+            "duration" : "<volatile>",
+            "fragments" : "/v1/async-await",
+            "host" : "wire-snapshot.test",
+            "method" : "GET",
+            "response_content_length" : 27,
+            "schema" : "https",
+            "status_code" : 200,
+            "status_text" : "",
+            "subdomain" : "",
+            "url" : "https://wire-snapshot.test/v1/async-await"
+          },
+          "platform" : "mobile",
+          "session_context" : {
+            "hasRecording" : false,
+            "isSessionSampledIn" : true,
+            "session_creation_date" : "<volatile>",
+            "session_id" : "<volatile>",
+            "user_email" : "wire@example.com",
+            "user_id" : "user-1",
+            "user_metadata" : {
+              "tier" : "gold"
+            },
+            "user_name" : "Wire Snapshot"
+          },
+          "spanId" : "<volatile>",
+          "timestamp" : "<volatile>",
+          "traceId" : "<volatile>",
+          "version_metadata" : {
+            "app_name" : "WireSnapshotApp",
+            "app_version" : "9.9.9"
+          },
+          "view_context" : {
+            "view" : ""
+          }
+        }
+      },
+      "timestamp" : "<volatile>",
+      "version_metadata" : {
+        "app_name" : "WireSnapshotApp",
+        "app_version" : "9.9.9"
+      }
+    },
+    "otlp" : {
+      "resource" : {
+        "attributes" : [
+          {
+            "key" : "service.name",
+            "value" : {
+              "string_value" : "WireSnapshotApp"
+            }
+          },
+          {
+            "key" : "telemetry.sdk.language",
+            "value" : {
+              "string_value" : "swift"
+            }
+          },
+          {
+            "key" : "telemetry.sdk.name",
+            "value" : {
+              "string_value" : "opentelemetry"
+            }
+          },
+          {
+            "key" : "telemetry.sdk.version",
+            "value" : {
+              "string_value" : "1.9.2"
+            }
+          }
+        ]
+      },
+      "scope" : {
+        "name" : "NSURLSession",
+        "version" : "0.0.1"
+      },
+      "span" : {
+        "attributes" : [
+          {
+            "key" : "cx.span.view_name",
+            "value" : {
+              "string_value" : ""
+            }
+          },
+          {
+            "key" : "environment",
+            "value" : {
+              "string_value" : "wire-test"
+            }
+          },
+          {
+            "key" : "event_type",
+            "value" : {
+              "string_value" : "network-request"
+            }
+          },
+          {
+            "key" : "http.method",
+            "value" : {
+              "string_value" : "GET"
+            }
+          },
+          {
+            "key" : "http.response.body.size",
+            "value" : {
+              "int_value" : "27"
+            }
+          },
+          {
+            "key" : "http.scheme",
+            "value" : {
+              "string_value" : "https"
+            }
+          },
+          {
+            "key" : "http.status_code",
+            "value" : {
+              "int_value" : "200"
+            }
+          },
+          {
+            "key" : "http.target",
+            "value" : {
+              "string_value" : "/v1/async-await"
+            }
+          },
+          {
+            "key" : "http.url",
+            "value" : {
+              "string_value" : "https://wire-snapshot.test/v1/async-await"
+            }
+          },
+          {
+            "key" : "is_session_sampled_in",
+            "value" : {
+              "string_value" : "true"
+            }
+          },
+          {
+            "key" : "net.peer.name",
+            "value" : {
+              "string_value" : "wire-snapshot.test"
+            }
+          },
+          {
+            "key" : "network.connection.type",
+            "value" : "<connection_type>"
+          },
+          {
+            "key" : "session_creation_date",
+            "value" : "<volatile>"
+          },
+          {
+            "key" : "session_id",
+            "value" : "<volatile>"
+          },
+          {
+            "key" : "severity",
+            "value" : {
+              "int_value" : "3"
+            }
+          },
+          {
+            "key" : "source",
+            "value" : {
+              "string_value" : "fetch"
+            }
+          },
+          {
+            "key" : "user_email",
+            "value" : {
+              "string_value" : "wire@example.com"
+            }
+          },
+          {
+            "key" : "user_id",
+            "value" : {
+              "string_value" : "user-1"
+            }
+          },
+          {
+            "key" : "user_name",
+            "value" : {
+              "string_value" : "Wire Snapshot"
+            }
+          }
+        ],
+        "end_time_unix_nano" : "<volatile>",
+        "kind" : "SPAN_KIND_CLIENT",
+        "name" : "HTTP GET",
+        "span_id" : "<volatile>",
+        "start_time_unix_nano" : "<volatile>",
+        "status" : {
+          "code" : "STATUS_CODE_UNSET"
+        },
+        "trace_id" : "<volatile>"
+      }
+    }
+  },
+  "bare_url_data_task" : {
+    "cx_rum_event" : {
+      "applicationName" : "WireSnapshotApp",
+      "instrumentation_data" : {
+        "otelResource" : {
+          "attributes" : {
+            "service.name" : "WireSnapshotApp",
+            "telemetry.sdk.language" : "swift",
+            "telemetry.sdk.name" : "opentelemetry",
+            "telemetry.sdk.version" : "1.9.2"
+          }
+        },
+        "otelSpan" : {
+          "attributes" : {
+            "cx_rum.environment" : "wire-test",
+            "cx_rum.event_context.severity" : 3,
+            "cx_rum.event_context.source" : "fetch",
+            "cx_rum.event_context.type" : "network-request",
+            "cx_rum.is_navigation_event" : false,
+            "cx_rum.labels" : {
+              "suite" : "wire-snapshot"
+            },
+            "cx_rum.mobile_sdk.version" : "<sdk_version>",
+            "cx_rum.network_request_context.fragments" : "/v1/bare-url",
+            "cx_rum.network_request_context.method" : "GET",
+            "cx_rum.network_request_context.status_code" : 200,
+            "cx_rum.network_request_context.status_text" : "",
+            "cx_rum.network_request_context.url" : "https://wire-snapshot.test/v1/bare-url",
+            "cx_rum.platform" : "mobile",
+            "cx_rum.session_context.device" : "<volatile>",
+            "cx_rum.session_context.hasRecording" : false,
+            "cx_rum.session_context.isSessionSampledIn" : true,
+            "cx_rum.session_context.os" : "ios",
+            "cx_rum.session_context.osVersion" : "<volatile>",
+            "cx_rum.session_context.session_creation_date" : "<volatile>",
+            "cx_rum.session_context.session_id" : "<volatile>",
+            "cx_rum.session_context.user_agent" : "<volatile>",
+            "cx_rum.session_context.user_email" : "wire@example.com",
+            "cx_rum.session_context.user_id" : "user-1",
+            "cx_rum.session_context.user_name" : "Wire Snapshot",
+            "cx_rum.version_metadata.app_name" : "WireSnapshotApp",
+            "cx_rum.version_metadata.app_version" : "9.9.9"
+          },
+          "duration" : "<volatile>",
+          "endTime" : "<volatile>",
+          "kind" : 3,
+          "name" : "HTTP GET",
+          "sessionId" : "<volatile>",
+          "spanId" : "<volatile>",
+          "startTime" : "<volatile>",
+          "status" : {
+            "code" : 0
+          },
+          "traceId" : "<volatile>"
+        }
+      },
+      "severity" : 3,
+      "subsystemName" : "cx_rum",
+      "text" : {
+        "cx_rum" : {
+          "device_context" : {
+            "device" : "<volatile>",
+            "device_name" : "<volatile>",
+            "emulator" : true,
+            "network_connection_type" : "<connection_type>",
+            "os" : "ios",
+            "osVersion" : "<volatile>",
+            "user_agent" : "<volatile>"
+          },
+          "device_state" : {
+            "battery" : "",
+            "network_type" : "<volatile>"
+          },
+          "environment" : "wire-test",
+          "event_context" : {
+            "severity" : 3,
+            "source" : "fetch",
+            "type" : "network-request"
+          },
+          "fingerPrint" : "<volatile>",
+          "isNavigationEvent" : false,
+          "labels" : {
+            "suite" : "wire-snapshot"
+          },
+          "mobile_sdk" : {
+            "framework" : "swift",
+            "os" : "ios",
+            "sdk_version" : "<sdk_version>"
+          },
+          "network_request_context" : {
+            "domain" : "wire-snapshot.test",
+            "duration" : "<volatile>",
+            "fragments" : "/v1/bare-url",
+            "host" : "wire-snapshot.test",
+            "method" : "GET",
+            "response_content_length" : 27,
+            "schema" : "https",
+            "status_code" : 200,
+            "status_text" : "",
+            "subdomain" : "",
+            "url" : "https://wire-snapshot.test/v1/bare-url"
+          },
+          "platform" : "mobile",
+          "session_context" : {
+            "hasRecording" : false,
+            "isSessionSampledIn" : true,
+            "session_creation_date" : "<volatile>",
+            "session_id" : "<volatile>",
+            "user_email" : "wire@example.com",
+            "user_id" : "user-1",
+            "user_metadata" : {
+              "tier" : "gold"
+            },
+            "user_name" : "Wire Snapshot"
+          },
+          "spanId" : "<volatile>",
+          "timestamp" : "<volatile>",
+          "traceId" : "<volatile>",
+          "version_metadata" : {
+            "app_name" : "WireSnapshotApp",
+            "app_version" : "9.9.9"
+          },
+          "view_context" : {
+            "view" : ""
+          }
+        }
+      },
+      "timestamp" : "<volatile>",
+      "version_metadata" : {
+        "app_name" : "WireSnapshotApp",
+        "app_version" : "9.9.9"
+      }
+    },
+    "otlp" : {
+      "resource" : {
+        "attributes" : [
+          {
+            "key" : "service.name",
+            "value" : {
+              "string_value" : "WireSnapshotApp"
+            }
+          },
+          {
+            "key" : "telemetry.sdk.language",
+            "value" : {
+              "string_value" : "swift"
+            }
+          },
+          {
+            "key" : "telemetry.sdk.name",
+            "value" : {
+              "string_value" : "opentelemetry"
+            }
+          },
+          {
+            "key" : "telemetry.sdk.version",
+            "value" : {
+              "string_value" : "1.9.2"
+            }
+          }
+        ]
+      },
+      "scope" : {
+        "name" : "NSURLSession",
+        "version" : "0.0.1"
+      },
+      "span" : {
+        "attributes" : [
+          {
+            "key" : "cx.span.view_name",
+            "value" : {
+              "string_value" : ""
+            }
+          },
+          {
+            "key" : "environment",
+            "value" : {
+              "string_value" : "wire-test"
+            }
+          },
+          {
+            "key" : "event_type",
+            "value" : {
+              "string_value" : "network-request"
+            }
+          },
+          {
+            "key" : "http.method",
+            "value" : {
+              "string_value" : "GET"
+            }
+          },
+          {
+            "key" : "http.response.body.size",
+            "value" : {
+              "int_value" : "27"
+            }
+          },
+          {
+            "key" : "http.scheme",
+            "value" : {
+              "string_value" : "https"
+            }
+          },
+          {
+            "key" : "http.status_code",
+            "value" : {
+              "int_value" : "200"
+            }
+          },
+          {
+            "key" : "http.target",
+            "value" : {
+              "string_value" : "/v1/bare-url"
+            }
+          },
+          {
+            "key" : "http.url",
+            "value" : {
+              "string_value" : "https://wire-snapshot.test/v1/bare-url"
+            }
+          },
+          {
+            "key" : "is_session_sampled_in",
+            "value" : {
+              "string_value" : "true"
+            }
+          },
+          {
+            "key" : "net.peer.name",
+            "value" : {
+              "string_value" : "wire-snapshot.test"
+            }
+          },
+          {
+            "key" : "network.connection.type",
+            "value" : "<connection_type>"
+          },
+          {
+            "key" : "session_creation_date",
+            "value" : "<volatile>"
+          },
+          {
+            "key" : "session_id",
+            "value" : "<volatile>"
+          },
+          {
+            "key" : "severity",
+            "value" : {
+              "int_value" : "3"
+            }
+          },
+          {
+            "key" : "source",
+            "value" : {
+              "string_value" : "fetch"
+            }
+          },
+          {
+            "key" : "user_email",
+            "value" : {
+              "string_value" : "wire@example.com"
+            }
+          },
+          {
+            "key" : "user_id",
+            "value" : {
+              "string_value" : "user-1"
+            }
+          },
+          {
+            "key" : "user_name",
+            "value" : {
+              "string_value" : "Wire Snapshot"
+            }
+          }
+        ],
+        "end_time_unix_nano" : "<volatile>",
+        "kind" : "SPAN_KIND_CLIENT",
+        "name" : "HTTP GET",
+        "span_id" : "<volatile>",
+        "start_time_unix_nano" : "<volatile>",
+        "status" : {
+          "code" : "STATUS_CODE_UNSET"
+        },
+        "trace_id" : "<volatile>"
+      }
+    }
+  },
+  "completion_handler" : {
+    "cx_rum_event" : {
+      "applicationName" : "WireSnapshotApp",
+      "instrumentation_data" : {
+        "otelResource" : {
+          "attributes" : {
+            "service.name" : "WireSnapshotApp",
+            "telemetry.sdk.language" : "swift",
+            "telemetry.sdk.name" : "opentelemetry",
+            "telemetry.sdk.version" : "1.9.2"
+          }
+        },
+        "otelSpan" : {
+          "attributes" : {
+            "cx_rum.environment" : "wire-test",
+            "cx_rum.event_context.severity" : 3,
+            "cx_rum.event_context.source" : "fetch",
+            "cx_rum.event_context.type" : "network-request",
+            "cx_rum.is_navigation_event" : false,
+            "cx_rum.labels" : {
+              "suite" : "wire-snapshot"
+            },
+            "cx_rum.mobile_sdk.version" : "<sdk_version>",
+            "cx_rum.network_request_context.fragments" : "/v1/completion-handler",
+            "cx_rum.network_request_context.method" : "GET",
+            "cx_rum.network_request_context.status_code" : 200,
+            "cx_rum.network_request_context.status_text" : "",
+            "cx_rum.network_request_context.url" : "https://wire-snapshot.test/v1/completion-handler",
+            "cx_rum.platform" : "mobile",
+            "cx_rum.session_context.device" : "<volatile>",
+            "cx_rum.session_context.hasRecording" : false,
+            "cx_rum.session_context.isSessionSampledIn" : true,
+            "cx_rum.session_context.os" : "ios",
+            "cx_rum.session_context.osVersion" : "<volatile>",
+            "cx_rum.session_context.session_creation_date" : "<volatile>",
+            "cx_rum.session_context.session_id" : "<volatile>",
+            "cx_rum.session_context.user_agent" : "<volatile>",
+            "cx_rum.session_context.user_email" : "wire@example.com",
+            "cx_rum.session_context.user_id" : "user-1",
+            "cx_rum.session_context.user_name" : "Wire Snapshot",
+            "cx_rum.version_metadata.app_name" : "WireSnapshotApp",
+            "cx_rum.version_metadata.app_version" : "9.9.9"
+          },
+          "duration" : "<volatile>",
+          "endTime" : "<volatile>",
+          "kind" : 3,
+          "name" : "HTTP GET",
+          "sessionId" : "<volatile>",
+          "spanId" : "<volatile>",
+          "startTime" : "<volatile>",
+          "status" : {
+            "code" : 0
+          },
+          "traceId" : "<volatile>"
+        }
+      },
+      "severity" : 3,
+      "subsystemName" : "cx_rum",
+      "text" : {
+        "cx_rum" : {
+          "device_context" : {
+            "device" : "<volatile>",
+            "device_name" : "<volatile>",
+            "emulator" : true,
+            "network_connection_type" : "<connection_type>",
+            "os" : "ios",
+            "osVersion" : "<volatile>",
+            "user_agent" : "<volatile>"
+          },
+          "device_state" : {
+            "battery" : "",
+            "network_type" : "<volatile>"
+          },
+          "environment" : "wire-test",
+          "event_context" : {
+            "severity" : 3,
+            "source" : "fetch",
+            "type" : "network-request"
+          },
+          "fingerPrint" : "<volatile>",
+          "isNavigationEvent" : false,
+          "labels" : {
+            "suite" : "wire-snapshot"
+          },
+          "mobile_sdk" : {
+            "framework" : "swift",
+            "os" : "ios",
+            "sdk_version" : "<sdk_version>"
+          },
+          "network_request_context" : {
+            "domain" : "wire-snapshot.test",
+            "duration" : "<volatile>",
+            "fragments" : "/v1/completion-handler",
+            "host" : "wire-snapshot.test",
+            "method" : "GET",
+            "response_content_length" : 27,
+            "schema" : "https",
+            "status_code" : 200,
+            "status_text" : "",
+            "subdomain" : "",
+            "url" : "https://wire-snapshot.test/v1/completion-handler"
+          },
+          "platform" : "mobile",
+          "session_context" : {
+            "hasRecording" : false,
+            "isSessionSampledIn" : true,
+            "session_creation_date" : "<volatile>",
+            "session_id" : "<volatile>",
+            "user_email" : "wire@example.com",
+            "user_id" : "user-1",
+            "user_metadata" : {
+              "tier" : "gold"
+            },
+            "user_name" : "Wire Snapshot"
+          },
+          "spanId" : "<volatile>",
+          "timestamp" : "<volatile>",
+          "traceId" : "<volatile>",
+          "version_metadata" : {
+            "app_name" : "WireSnapshotApp",
+            "app_version" : "9.9.9"
+          },
+          "view_context" : {
+            "view" : ""
+          }
+        }
+      },
+      "timestamp" : "<volatile>",
+      "version_metadata" : {
+        "app_name" : "WireSnapshotApp",
+        "app_version" : "9.9.9"
+      }
+    },
+    "otlp" : {
+      "resource" : {
+        "attributes" : [
+          {
+            "key" : "service.name",
+            "value" : {
+              "string_value" : "WireSnapshotApp"
+            }
+          },
+          {
+            "key" : "telemetry.sdk.language",
+            "value" : {
+              "string_value" : "swift"
+            }
+          },
+          {
+            "key" : "telemetry.sdk.name",
+            "value" : {
+              "string_value" : "opentelemetry"
+            }
+          },
+          {
+            "key" : "telemetry.sdk.version",
+            "value" : {
+              "string_value" : "1.9.2"
+            }
+          }
+        ]
+      },
+      "scope" : {
+        "name" : "NSURLSession",
+        "version" : "0.0.1"
+      },
+      "span" : {
+        "attributes" : [
+          {
+            "key" : "cx.span.view_name",
+            "value" : {
+              "string_value" : ""
+            }
+          },
+          {
+            "key" : "environment",
+            "value" : {
+              "string_value" : "wire-test"
+            }
+          },
+          {
+            "key" : "event_type",
+            "value" : {
+              "string_value" : "network-request"
+            }
+          },
+          {
+            "key" : "http.method",
+            "value" : {
+              "string_value" : "GET"
+            }
+          },
+          {
+            "key" : "http.response.body.size",
+            "value" : {
+              "int_value" : "27"
+            }
+          },
+          {
+            "key" : "http.scheme",
+            "value" : {
+              "string_value" : "https"
+            }
+          },
+          {
+            "key" : "http.status_code",
+            "value" : {
+              "int_value" : "200"
+            }
+          },
+          {
+            "key" : "http.target",
+            "value" : {
+              "string_value" : "/v1/completion-handler"
+            }
+          },
+          {
+            "key" : "http.url",
+            "value" : {
+              "string_value" : "https://wire-snapshot.test/v1/completion-handler"
+            }
+          },
+          {
+            "key" : "is_session_sampled_in",
+            "value" : {
+              "string_value" : "true"
+            }
+          },
+          {
+            "key" : "net.peer.name",
+            "value" : {
+              "string_value" : "wire-snapshot.test"
+            }
+          },
+          {
+            "key" : "network.connection.type",
+            "value" : "<connection_type>"
+          },
+          {
+            "key" : "session_creation_date",
+            "value" : "<volatile>"
+          },
+          {
+            "key" : "session_id",
+            "value" : "<volatile>"
+          },
+          {
+            "key" : "severity",
+            "value" : {
+              "int_value" : "3"
+            }
+          },
+          {
+            "key" : "source",
+            "value" : {
+              "string_value" : "fetch"
+            }
+          },
+          {
+            "key" : "user_email",
+            "value" : {
+              "string_value" : "wire@example.com"
+            }
+          },
+          {
+            "key" : "user_id",
+            "value" : {
+              "string_value" : "user-1"
+            }
+          },
+          {
+            "key" : "user_name",
+            "value" : {
+              "string_value" : "Wire Snapshot"
+            }
+          }
+        ],
+        "end_time_unix_nano" : "<volatile>",
+        "kind" : "SPAN_KIND_CLIENT",
+        "name" : "HTTP GET",
+        "span_id" : "<volatile>",
+        "start_time_unix_nano" : "<volatile>",
+        "status" : {
+          "code" : "STATUS_CODE_UNSET"
+        },
+        "trace_id" : "<volatile>"
+      }
+    }
+  },
+  "hybrid_set_network_request_context" : {
+    "cx_rum_event" : {
+      "applicationName" : "WireSnapshotApp",
+      "instrumentation_data" : {
+        "otelResource" : {
+          "attributes" : {
+            "service.name" : "WireSnapshotApp",
+            "telemetry.sdk.language" : "swift",
+            "telemetry.sdk.name" : "opentelemetry",
+            "telemetry.sdk.version" : "1.9.2"
+          }
+        },
+        "otelSpan" : {
+          "attributes" : {
+            "cx_rum.environment" : "wire-test",
+            "cx_rum.event_context.severity" : 3,
+            "cx_rum.event_context.source" : "fetch",
+            "cx_rum.event_context.type" : "network-request",
+            "cx_rum.is_navigation_event" : false,
+            "cx_rum.labels" : {
+              "suite" : "wire-snapshot"
+            },
+            "cx_rum.mobile_sdk.version" : "<sdk_version>",
+            "cx_rum.network_request_context.fragments" : "/v1/hybrid",
+            "cx_rum.network_request_context.method" : "POST",
+            "cx_rum.network_request_context.status_code" : 201,
+            "cx_rum.network_request_context.status_text" : "Created",
+            "cx_rum.network_request_context.url" : "https://wire-snapshot.test/v1/hybrid",
+            "cx_rum.platform" : "mobile",
+            "cx_rum.session_context.device" : "<volatile>",
+            "cx_rum.session_context.hasRecording" : false,
+            "cx_rum.session_context.isSessionSampledIn" : true,
+            "cx_rum.session_context.os" : "ios",
+            "cx_rum.session_context.osVersion" : "<volatile>",
+            "cx_rum.session_context.session_creation_date" : "<volatile>",
+            "cx_rum.session_context.session_id" : "<volatile>",
+            "cx_rum.session_context.user_agent" : "<volatile>",
+            "cx_rum.session_context.user_email" : "wire@example.com",
+            "cx_rum.session_context.user_id" : "user-1",
+            "cx_rum.session_context.user_name" : "Wire Snapshot",
+            "cx_rum.version_metadata.app_name" : "WireSnapshotApp",
+            "cx_rum.version_metadata.app_version" : "9.9.9"
+          },
+          "duration" : "<volatile>",
+          "endTime" : "<volatile>",
+          "kind" : 3,
+          "name" : "ios_sdk",
+          "sessionId" : "<volatile>",
+          "spanId" : "b7ad6b7169203331",
+          "startTime" : "<volatile>",
+          "status" : {
+            "code" : 0
+          },
+          "traceId" : "0af7651916cd43dd8448eb211c80319c"
+        }
+      },
+      "severity" : 3,
+      "subsystemName" : "cx_rum",
+      "text" : {
+        "cx_rum" : {
+          "device_context" : {
+            "device" : "<volatile>",
+            "device_name" : "<volatile>",
+            "emulator" : true,
+            "os" : "ios",
+            "osVersion" : "<volatile>",
+            "user_agent" : "<volatile>"
+          },
+          "device_state" : {
+            "battery" : "",
+            "network_type" : "<volatile>"
+          },
+          "environment" : "wire-test",
+          "event_context" : {
+            "severity" : 3,
+            "source" : "fetch",
+            "type" : "network-request"
+          },
+          "fingerPrint" : "<volatile>",
+          "isNavigationEvent" : false,
+          "labels" : {
+            "suite" : "wire-snapshot"
+          },
+          "mobile_sdk" : {
+            "framework" : "swift",
+            "os" : "ios",
+            "sdk_version" : "<sdk_version>"
+          },
+          "network_request_context" : {
+            "domain" : "wire-snapshot.test",
+            "duration" : "<volatile>",
+            "fragments" : "/v1/hybrid",
+            "host" : "wire-snapshot.test",
+            "method" : "POST",
+            "response_content_length" : 27,
+            "schema" : "https",
+            "status_code" : 201,
+            "status_text" : "Created",
+            "subdomain" : "",
+            "url" : "https://wire-snapshot.test/v1/hybrid"
+          },
+          "platform" : "mobile",
+          "session_context" : {
+            "hasRecording" : false,
+            "isSessionSampledIn" : true,
+            "session_creation_date" : "<volatile>",
+            "session_id" : "<volatile>",
+            "user_email" : "wire@example.com",
+            "user_id" : "user-1",
+            "user_metadata" : {
+              "tier" : "gold"
+            },
+            "user_name" : "Wire Snapshot"
+          },
+          "spanId" : "b7ad6b7169203331",
+          "timestamp" : "<volatile>",
+          "traceId" : "0af7651916cd43dd8448eb211c80319c",
+          "version_metadata" : {
+            "app_name" : "WireSnapshotApp",
+            "app_version" : "9.9.9"
+          },
+          "view_context" : {
+            "view" : ""
+          }
+        }
+      },
+      "timestamp" : "<volatile>",
+      "version_metadata" : {
+        "app_name" : "WireSnapshotApp",
+        "app_version" : "9.9.9"
+      }
+    },
+    "otlp" : {
+      "resource" : {
+        "attributes" : [
+          {
+            "key" : "service.name",
+            "value" : {
+              "string_value" : "WireSnapshotApp"
+            }
+          },
+          {
+            "key" : "telemetry.sdk.language",
+            "value" : {
+              "string_value" : "swift"
+            }
+          },
+          {
+            "key" : "telemetry.sdk.name",
+            "value" : {
+              "string_value" : "opentelemetry"
+            }
+          },
+          {
+            "key" : "telemetry.sdk.version",
+            "value" : {
+              "string_value" : "1.9.2"
+            }
+          }
+        ]
+      },
+      "scope" : {
+        "name" : "ios_sdk",
+        "version" : "<sdk_version>"
+      },
+      "span" : {
+        "attributes" : [
+          {
+            "key" : "customSpanId",
+            "value" : {
+              "string_value" : "b7ad6b7169203331"
+            }
+          },
+          {
+            "key" : "customTraceId",
+            "value" : {
+              "string_value" : "0af7651916cd43dd8448eb211c80319c"
+            }
+          },
+          {
+            "key" : "cx.span.view_name",
+            "value" : {
+              "string_value" : ""
+            }
+          },
+          {
+            "key" : "environment",
+            "value" : {
+              "string_value" : "wire-test"
+            }
+          },
+          {
+            "key" : "event_type",
+            "value" : {
+              "string_value" : "network-request"
+            }
+          },
+          {
+            "key" : "http.method",
+            "value" : {
+              "string_value" : "POST"
+            }
+          },
+          {
+            "key" : "http.response.body.size",
+            "value" : {
+              "int_value" : "27"
+            }
+          },
+          {
+            "key" : "http.scheme",
+            "value" : {
+              "string_value" : "https"
+            }
+          },
+          {
+            "key" : "http.status_code",
+            "value" : {
+              "int_value" : "201"
+            }
+          },
+          {
+            "key" : "http.target",
+            "value" : {
+              "string_value" : "/v1/hybrid"
+            }
+          },
+          {
+            "key" : "http.url",
+            "value" : {
+              "string_value" : "https://wire-snapshot.test/v1/hybrid"
+            }
+          },
+          {
+            "key" : "is_session_sampled_in",
+            "value" : {
+              "string_value" : "true"
+            }
+          },
+          {
+            "key" : "net.peer.name",
+            "value" : {
+              "string_value" : "wire-snapshot.test"
+            }
+          },
+          {
+            "key" : "session_creation_date",
+            "value" : "<volatile>"
+          },
+          {
+            "key" : "session_id",
+            "value" : "<volatile>"
+          },
+          {
+            "key" : "severity",
+            "value" : {
+              "int_value" : "3"
+            }
+          },
+          {
+            "key" : "source",
+            "value" : {
+              "string_value" : "fetch"
+            }
+          },
+          {
+            "key" : "status_text",
+            "value" : {
+              "string_value" : "Created"
+            }
+          },
+          {
+            "key" : "user_email",
+            "value" : {
+              "string_value" : "wire@example.com"
+            }
+          },
+          {
+            "key" : "user_id",
+            "value" : {
+              "string_value" : "user-1"
+            }
+          },
+          {
+            "key" : "user_name",
+            "value" : {
+              "string_value" : "Wire Snapshot"
+            }
+          }
+        ],
+        "dropped_attributes_count" : 1,
+        "end_time_unix_nano" : "<volatile>",
+        "kind" : "SPAN_KIND_INTERNAL",
+        "name" : "ios_sdk",
+        "span_id" : "<volatile>",
+        "start_time_unix_nano" : "<volatile>",
+        "status" : {
+          "code" : "STATUS_CODE_UNSET"
+        },
+        "trace_id" : "<volatile>"
+      }
+    }
+  },
+  "redirect" : {
+    "cx_rum_event" : {
+      "applicationName" : "WireSnapshotApp",
+      "instrumentation_data" : {
+        "otelResource" : {
+          "attributes" : {
+            "service.name" : "WireSnapshotApp",
+            "telemetry.sdk.language" : "swift",
+            "telemetry.sdk.name" : "opentelemetry",
+            "telemetry.sdk.version" : "1.9.2"
+          }
+        },
+        "otelSpan" : {
+          "attributes" : {
+            "cx_rum.environment" : "wire-test",
+            "cx_rum.event_context.severity" : 3,
+            "cx_rum.event_context.source" : "fetch",
+            "cx_rum.event_context.type" : "network-request",
+            "cx_rum.is_navigation_event" : false,
+            "cx_rum.labels" : {
+              "suite" : "wire-snapshot"
+            },
+            "cx_rum.mobile_sdk.version" : "<sdk_version>",
+            "cx_rum.network_request_context.fragments" : "/v1/redirect-start",
+            "cx_rum.network_request_context.method" : "GET",
+            "cx_rum.network_request_context.status_code" : 200,
+            "cx_rum.network_request_context.status_text" : "",
+            "cx_rum.network_request_context.url" : "https://wire-snapshot.test/v1/redirect-start",
+            "cx_rum.platform" : "mobile",
+            "cx_rum.session_context.device" : "<volatile>",
+            "cx_rum.session_context.hasRecording" : false,
+            "cx_rum.session_context.isSessionSampledIn" : true,
+            "cx_rum.session_context.os" : "ios",
+            "cx_rum.session_context.osVersion" : "<volatile>",
+            "cx_rum.session_context.session_creation_date" : "<volatile>",
+            "cx_rum.session_context.session_id" : "<volatile>",
+            "cx_rum.session_context.user_agent" : "<volatile>",
+            "cx_rum.session_context.user_email" : "wire@example.com",
+            "cx_rum.session_context.user_id" : "user-1",
+            "cx_rum.session_context.user_name" : "Wire Snapshot",
+            "cx_rum.version_metadata.app_name" : "WireSnapshotApp",
+            "cx_rum.version_metadata.app_version" : "9.9.9"
+          },
+          "duration" : "<volatile>",
+          "endTime" : "<volatile>",
+          "kind" : 3,
+          "name" : "HTTP GET",
+          "sessionId" : "<volatile>",
+          "spanId" : "<volatile>",
+          "startTime" : "<volatile>",
+          "status" : {
+            "code" : 0
+          },
+          "traceId" : "<volatile>"
+        }
+      },
+      "severity" : 3,
+      "subsystemName" : "cx_rum",
+      "text" : {
+        "cx_rum" : {
+          "device_context" : {
+            "device" : "<volatile>",
+            "device_name" : "<volatile>",
+            "emulator" : true,
+            "network_connection_type" : "<connection_type>",
+            "os" : "ios",
+            "osVersion" : "<volatile>",
+            "user_agent" : "<volatile>"
+          },
+          "device_state" : {
+            "battery" : "",
+            "network_type" : "<volatile>"
+          },
+          "environment" : "wire-test",
+          "event_context" : {
+            "severity" : 3,
+            "source" : "fetch",
+            "type" : "network-request"
+          },
+          "fingerPrint" : "<volatile>",
+          "isNavigationEvent" : false,
+          "labels" : {
+            "suite" : "wire-snapshot"
+          },
+          "mobile_sdk" : {
+            "framework" : "swift",
+            "os" : "ios",
+            "sdk_version" : "<sdk_version>"
+          },
+          "network_request_context" : {
+            "domain" : "wire-snapshot.test",
+            "duration" : "<volatile>",
+            "fragments" : "/v1/redirect-start",
+            "host" : "wire-snapshot.test",
+            "method" : "GET",
+            "response_content_length" : 27,
+            "schema" : "https",
+            "status_code" : 200,
+            "status_text" : "",
+            "subdomain" : "",
+            "url" : "https://wire-snapshot.test/v1/redirect-start"
+          },
+          "platform" : "mobile",
+          "session_context" : {
+            "hasRecording" : false,
+            "isSessionSampledIn" : true,
+            "session_creation_date" : "<volatile>",
+            "session_id" : "<volatile>",
+            "user_email" : "wire@example.com",
+            "user_id" : "user-1",
+            "user_metadata" : {
+              "tier" : "gold"
+            },
+            "user_name" : "Wire Snapshot"
+          },
+          "spanId" : "<volatile>",
+          "timestamp" : "<volatile>",
+          "traceId" : "<volatile>",
+          "version_metadata" : {
+            "app_name" : "WireSnapshotApp",
+            "app_version" : "9.9.9"
+          },
+          "view_context" : {
+            "view" : ""
+          }
+        }
+      },
+      "timestamp" : "<volatile>",
+      "version_metadata" : {
+        "app_name" : "WireSnapshotApp",
+        "app_version" : "9.9.9"
+      }
+    },
+    "otlp" : {
+      "resource" : {
+        "attributes" : [
+          {
+            "key" : "service.name",
+            "value" : {
+              "string_value" : "WireSnapshotApp"
+            }
+          },
+          {
+            "key" : "telemetry.sdk.language",
+            "value" : {
+              "string_value" : "swift"
+            }
+          },
+          {
+            "key" : "telemetry.sdk.name",
+            "value" : {
+              "string_value" : "opentelemetry"
+            }
+          },
+          {
+            "key" : "telemetry.sdk.version",
+            "value" : {
+              "string_value" : "1.9.2"
+            }
+          }
+        ]
+      },
+      "scope" : {
+        "name" : "NSURLSession",
+        "version" : "0.0.1"
+      },
+      "span" : {
+        "attributes" : [
+          {
+            "key" : "cx.span.view_name",
+            "value" : {
+              "string_value" : ""
+            }
+          },
+          {
+            "key" : "environment",
+            "value" : {
+              "string_value" : "wire-test"
+            }
+          },
+          {
+            "key" : "event_type",
+            "value" : {
+              "string_value" : "network-request"
+            }
+          },
+          {
+            "key" : "http.method",
+            "value" : {
+              "string_value" : "GET"
+            }
+          },
+          {
+            "key" : "http.response.body.size",
+            "value" : {
+              "int_value" : "27"
+            }
+          },
+          {
+            "key" : "http.scheme",
+            "value" : {
+              "string_value" : "https"
+            }
+          },
+          {
+            "key" : "http.status_code",
+            "value" : {
+              "int_value" : "200"
+            }
+          },
+          {
+            "key" : "http.target",
+            "value" : {
+              "string_value" : "/v1/redirect-start"
+            }
+          },
+          {
+            "key" : "http.url",
+            "value" : {
+              "string_value" : "https://wire-snapshot.test/v1/redirect-start"
+            }
+          },
+          {
+            "key" : "is_session_sampled_in",
+            "value" : {
+              "string_value" : "true"
+            }
+          },
+          {
+            "key" : "net.peer.name",
+            "value" : {
+              "string_value" : "wire-snapshot.test"
+            }
+          },
+          {
+            "key" : "network.connection.type",
+            "value" : "<connection_type>"
+          },
+          {
+            "key" : "session_creation_date",
+            "value" : "<volatile>"
+          },
+          {
+            "key" : "session_id",
+            "value" : "<volatile>"
+          },
+          {
+            "key" : "severity",
+            "value" : {
+              "int_value" : "3"
+            }
+          },
+          {
+            "key" : "source",
+            "value" : {
+              "string_value" : "fetch"
+            }
+          },
+          {
+            "key" : "user_email",
+            "value" : {
+              "string_value" : "wire@example.com"
+            }
+          },
+          {
+            "key" : "user_id",
+            "value" : {
+              "string_value" : "user-1"
+            }
+          },
+          {
+            "key" : "user_name",
+            "value" : {
+              "string_value" : "Wire Snapshot"
+            }
+          }
+        ],
+        "end_time_unix_nano" : "<volatile>",
+        "kind" : "SPAN_KIND_CLIENT",
+        "name" : "HTTP GET",
+        "span_id" : "<volatile>",
+        "start_time_unix_nano" : "<volatile>",
+        "status" : {
+          "code" : "STATUS_CODE_UNSET"
+        },
+        "trace_id" : "<volatile>"
+      }
+    }
+  },
+  "session_delegate" : {
+    "cx_rum_event" : {
+      "applicationName" : "WireSnapshotApp",
+      "instrumentation_data" : {
+        "otelResource" : {
+          "attributes" : {
+            "service.name" : "WireSnapshotApp",
+            "telemetry.sdk.language" : "swift",
+            "telemetry.sdk.name" : "opentelemetry",
+            "telemetry.sdk.version" : "1.9.2"
+          }
+        },
+        "otelSpan" : {
+          "attributes" : {
+            "cx_rum.environment" : "wire-test",
+            "cx_rum.event_context.severity" : 3,
+            "cx_rum.event_context.source" : "fetch",
+            "cx_rum.event_context.type" : "network-request",
+            "cx_rum.is_navigation_event" : false,
+            "cx_rum.labels" : {
+              "suite" : "wire-snapshot"
+            },
+            "cx_rum.mobile_sdk.version" : "<sdk_version>",
+            "cx_rum.network_request_context.fragments" : "/v1/session-delegate",
+            "cx_rum.network_request_context.method" : "GET",
+            "cx_rum.network_request_context.status_code" : 200,
+            "cx_rum.network_request_context.status_text" : "",
+            "cx_rum.network_request_context.url" : "https://wire-snapshot.test/v1/session-delegate",
+            "cx_rum.platform" : "mobile",
+            "cx_rum.session_context.device" : "<volatile>",
+            "cx_rum.session_context.hasRecording" : false,
+            "cx_rum.session_context.isSessionSampledIn" : true,
+            "cx_rum.session_context.os" : "ios",
+            "cx_rum.session_context.osVersion" : "<volatile>",
+            "cx_rum.session_context.session_creation_date" : "<volatile>",
+            "cx_rum.session_context.session_id" : "<volatile>",
+            "cx_rum.session_context.user_agent" : "<volatile>",
+            "cx_rum.session_context.user_email" : "wire@example.com",
+            "cx_rum.session_context.user_id" : "user-1",
+            "cx_rum.session_context.user_name" : "Wire Snapshot",
+            "cx_rum.version_metadata.app_name" : "WireSnapshotApp",
+            "cx_rum.version_metadata.app_version" : "9.9.9"
+          },
+          "duration" : "<volatile>",
+          "endTime" : "<volatile>",
+          "kind" : 3,
+          "name" : "HTTP GET",
+          "sessionId" : "<volatile>",
+          "spanId" : "<volatile>",
+          "startTime" : "<volatile>",
+          "status" : {
+            "code" : 0
+          },
+          "traceId" : "<volatile>"
+        }
+      },
+      "severity" : 3,
+      "subsystemName" : "cx_rum",
+      "text" : {
+        "cx_rum" : {
+          "device_context" : {
+            "device" : "<volatile>",
+            "device_name" : "<volatile>",
+            "emulator" : true,
+            "network_connection_type" : "<connection_type>",
+            "os" : "ios",
+            "osVersion" : "<volatile>",
+            "user_agent" : "<volatile>"
+          },
+          "device_state" : {
+            "battery" : "",
+            "network_type" : "<volatile>"
+          },
+          "environment" : "wire-test",
+          "event_context" : {
+            "severity" : 3,
+            "source" : "fetch",
+            "type" : "network-request"
+          },
+          "fingerPrint" : "<volatile>",
+          "isNavigationEvent" : false,
+          "labels" : {
+            "suite" : "wire-snapshot"
+          },
+          "mobile_sdk" : {
+            "framework" : "swift",
+            "os" : "ios",
+            "sdk_version" : "<sdk_version>"
+          },
+          "network_request_context" : {
+            "domain" : "wire-snapshot.test",
+            "duration" : "<volatile>",
+            "fragments" : "/v1/session-delegate",
+            "host" : "wire-snapshot.test",
+            "method" : "GET",
+            "response_content_length" : 27,
+            "schema" : "https",
+            "status_code" : 200,
+            "status_text" : "",
+            "subdomain" : "",
+            "url" : "https://wire-snapshot.test/v1/session-delegate"
+          },
+          "platform" : "mobile",
+          "session_context" : {
+            "hasRecording" : false,
+            "isSessionSampledIn" : true,
+            "session_creation_date" : "<volatile>",
+            "session_id" : "<volatile>",
+            "user_email" : "wire@example.com",
+            "user_id" : "user-1",
+            "user_metadata" : {
+              "tier" : "gold"
+            },
+            "user_name" : "Wire Snapshot"
+          },
+          "spanId" : "<volatile>",
+          "timestamp" : "<volatile>",
+          "traceId" : "<volatile>",
+          "version_metadata" : {
+            "app_name" : "WireSnapshotApp",
+            "app_version" : "9.9.9"
+          },
+          "view_context" : {
+            "view" : ""
+          }
+        }
+      },
+      "timestamp" : "<volatile>",
+      "version_metadata" : {
+        "app_name" : "WireSnapshotApp",
+        "app_version" : "9.9.9"
+      }
+    },
+    "otlp" : {
+      "resource" : {
+        "attributes" : [
+          {
+            "key" : "service.name",
+            "value" : {
+              "string_value" : "WireSnapshotApp"
+            }
+          },
+          {
+            "key" : "telemetry.sdk.language",
+            "value" : {
+              "string_value" : "swift"
+            }
+          },
+          {
+            "key" : "telemetry.sdk.name",
+            "value" : {
+              "string_value" : "opentelemetry"
+            }
+          },
+          {
+            "key" : "telemetry.sdk.version",
+            "value" : {
+              "string_value" : "1.9.2"
+            }
+          }
+        ]
+      },
+      "scope" : {
+        "name" : "NSURLSession",
+        "version" : "0.0.1"
+      },
+      "span" : {
+        "attributes" : [
+          {
+            "key" : "cx.span.view_name",
+            "value" : {
+              "string_value" : ""
+            }
+          },
+          {
+            "key" : "environment",
+            "value" : {
+              "string_value" : "wire-test"
+            }
+          },
+          {
+            "key" : "event_type",
+            "value" : {
+              "string_value" : "network-request"
+            }
+          },
+          {
+            "key" : "http.method",
+            "value" : {
+              "string_value" : "GET"
+            }
+          },
+          {
+            "key" : "http.response.body.size",
+            "value" : {
+              "int_value" : "27"
+            }
+          },
+          {
+            "key" : "http.scheme",
+            "value" : {
+              "string_value" : "https"
+            }
+          },
+          {
+            "key" : "http.status_code",
+            "value" : {
+              "int_value" : "200"
+            }
+          },
+          {
+            "key" : "http.target",
+            "value" : {
+              "string_value" : "/v1/session-delegate"
+            }
+          },
+          {
+            "key" : "http.url",
+            "value" : {
+              "string_value" : "https://wire-snapshot.test/v1/session-delegate"
+            }
+          },
+          {
+            "key" : "is_session_sampled_in",
+            "value" : {
+              "string_value" : "true"
+            }
+          },
+          {
+            "key" : "net.peer.name",
+            "value" : {
+              "string_value" : "wire-snapshot.test"
+            }
+          },
+          {
+            "key" : "network.connection.type",
+            "value" : "<connection_type>"
+          },
+          {
+            "key" : "session_creation_date",
+            "value" : "<volatile>"
+          },
+          {
+            "key" : "session_id",
+            "value" : "<volatile>"
+          },
+          {
+            "key" : "severity",
+            "value" : {
+              "int_value" : "3"
+            }
+          },
+          {
+            "key" : "source",
+            "value" : {
+              "string_value" : "fetch"
+            }
+          },
+          {
+            "key" : "user_email",
+            "value" : {
+              "string_value" : "wire@example.com"
+            }
+          },
+          {
+            "key" : "user_id",
+            "value" : {
+              "string_value" : "user-1"
+            }
+          },
+          {
+            "key" : "user_name",
+            "value" : {
+              "string_value" : "Wire Snapshot"
+            }
+          }
+        ],
+        "end_time_unix_nano" : "<volatile>",
+        "kind" : "SPAN_KIND_CLIENT",
+        "name" : "HTTP GET",
+        "span_id" : "<volatile>",
+        "start_time_unix_nano" : "<volatile>",
+        "status" : {
+          "code" : "STATUS_CODE_UNSET"
+        },
+        "trace_id" : "<volatile>"
+      }
+    }
+  },
+  "upload_task_with_from" : {
+    "cx_rum_event" : {
+      "applicationName" : "WireSnapshotApp",
+      "instrumentation_data" : {
+        "otelResource" : {
+          "attributes" : {
+            "service.name" : "WireSnapshotApp",
+            "telemetry.sdk.language" : "swift",
+            "telemetry.sdk.name" : "opentelemetry",
+            "telemetry.sdk.version" : "1.9.2"
+          }
+        },
+        "otelSpan" : {
+          "attributes" : {
+            "cx_rum.environment" : "wire-test",
+            "cx_rum.event_context.severity" : 3,
+            "cx_rum.event_context.source" : "fetch",
+            "cx_rum.event_context.type" : "network-request",
+            "cx_rum.is_navigation_event" : false,
+            "cx_rum.labels" : {
+              "suite" : "wire-snapshot"
+            },
+            "cx_rum.mobile_sdk.version" : "<sdk_version>",
+            "cx_rum.network_request_context.fragments" : "/v1/upload",
+            "cx_rum.network_request_context.method" : "POST",
+            "cx_rum.network_request_context.status_code" : 200,
+            "cx_rum.network_request_context.status_text" : "",
+            "cx_rum.network_request_context.url" : "https://wire-snapshot.test/v1/upload",
+            "cx_rum.platform" : "mobile",
+            "cx_rum.session_context.device" : "<volatile>",
+            "cx_rum.session_context.hasRecording" : false,
+            "cx_rum.session_context.isSessionSampledIn" : true,
+            "cx_rum.session_context.os" : "ios",
+            "cx_rum.session_context.osVersion" : "<volatile>",
+            "cx_rum.session_context.session_creation_date" : "<volatile>",
+            "cx_rum.session_context.session_id" : "<volatile>",
+            "cx_rum.session_context.user_agent" : "<volatile>",
+            "cx_rum.session_context.user_email" : "wire@example.com",
+            "cx_rum.session_context.user_id" : "user-1",
+            "cx_rum.session_context.user_name" : "Wire Snapshot",
+            "cx_rum.version_metadata.app_name" : "WireSnapshotApp",
+            "cx_rum.version_metadata.app_version" : "9.9.9"
+          },
+          "duration" : "<volatile>",
+          "endTime" : "<volatile>",
+          "kind" : 3,
+          "name" : "HTTP POST",
+          "sessionId" : "<volatile>",
+          "spanId" : "<volatile>",
+          "startTime" : "<volatile>",
+          "status" : {
+            "code" : 0
+          },
+          "traceId" : "<volatile>"
+        }
+      },
+      "severity" : 3,
+      "subsystemName" : "cx_rum",
+      "text" : {
+        "cx_rum" : {
+          "device_context" : {
+            "device" : "<volatile>",
+            "device_name" : "<volatile>",
+            "emulator" : true,
+            "network_connection_type" : "<connection_type>",
+            "os" : "ios",
+            "osVersion" : "<volatile>",
+            "user_agent" : "<volatile>"
+          },
+          "device_state" : {
+            "battery" : "",
+            "network_type" : "<volatile>"
+          },
+          "environment" : "wire-test",
+          "event_context" : {
+            "severity" : 3,
+            "source" : "fetch",
+            "type" : "network-request"
+          },
+          "fingerPrint" : "<volatile>",
+          "isNavigationEvent" : false,
+          "labels" : {
+            "suite" : "wire-snapshot"
+          },
+          "mobile_sdk" : {
+            "framework" : "swift",
+            "os" : "ios",
+            "sdk_version" : "<sdk_version>"
+          },
+          "network_request_context" : {
+            "domain" : "wire-snapshot.test",
+            "duration" : "<volatile>",
+            "fragments" : "/v1/upload",
+            "host" : "wire-snapshot.test",
+            "method" : "POST",
+            "response_content_length" : 27,
+            "schema" : "https",
+            "status_code" : 200,
+            "status_text" : "",
+            "subdomain" : "",
+            "url" : "https://wire-snapshot.test/v1/upload"
+          },
+          "platform" : "mobile",
+          "session_context" : {
+            "hasRecording" : false,
+            "isSessionSampledIn" : true,
+            "session_creation_date" : "<volatile>",
+            "session_id" : "<volatile>",
+            "user_email" : "wire@example.com",
+            "user_id" : "user-1",
+            "user_metadata" : {
+              "tier" : "gold"
+            },
+            "user_name" : "Wire Snapshot"
+          },
+          "spanId" : "<volatile>",
+          "timestamp" : "<volatile>",
+          "traceId" : "<volatile>",
+          "version_metadata" : {
+            "app_name" : "WireSnapshotApp",
+            "app_version" : "9.9.9"
+          },
+          "view_context" : {
+            "view" : ""
+          }
+        }
+      },
+      "timestamp" : "<volatile>",
+      "version_metadata" : {
+        "app_name" : "WireSnapshotApp",
+        "app_version" : "9.9.9"
+      }
+    },
+    "otlp" : {
+      "resource" : {
+        "attributes" : [
+          {
+            "key" : "service.name",
+            "value" : {
+              "string_value" : "WireSnapshotApp"
+            }
+          },
+          {
+            "key" : "telemetry.sdk.language",
+            "value" : {
+              "string_value" : "swift"
+            }
+          },
+          {
+            "key" : "telemetry.sdk.name",
+            "value" : {
+              "string_value" : "opentelemetry"
+            }
+          },
+          {
+            "key" : "telemetry.sdk.version",
+            "value" : {
+              "string_value" : "1.9.2"
+            }
+          }
+        ]
+      },
+      "scope" : {
+        "name" : "NSURLSession",
+        "version" : "0.0.1"
+      },
+      "span" : {
+        "attributes" : [
+          {
+            "key" : "cx.span.view_name",
+            "value" : {
+              "string_value" : ""
+            }
+          },
+          {
+            "key" : "environment",
+            "value" : {
+              "string_value" : "wire-test"
+            }
+          },
+          {
+            "key" : "event_type",
+            "value" : {
+              "string_value" : "network-request"
+            }
+          },
+          {
+            "key" : "http.method",
+            "value" : {
+              "string_value" : "POST"
+            }
+          },
+          {
+            "key" : "http.response.body.size",
+            "value" : {
+              "int_value" : "27"
+            }
+          },
+          {
+            "key" : "http.scheme",
+            "value" : {
+              "string_value" : "https"
+            }
+          },
+          {
+            "key" : "http.status_code",
+            "value" : {
+              "int_value" : "200"
+            }
+          },
+          {
+            "key" : "http.target",
+            "value" : {
+              "string_value" : "/v1/upload"
+            }
+          },
+          {
+            "key" : "http.url",
+            "value" : {
+              "string_value" : "https://wire-snapshot.test/v1/upload"
+            }
+          },
+          {
+            "key" : "is_session_sampled_in",
+            "value" : {
+              "string_value" : "true"
+            }
+          },
+          {
+            "key" : "net.peer.name",
+            "value" : {
+              "string_value" : "wire-snapshot.test"
+            }
+          },
+          {
+            "key" : "network.connection.type",
+            "value" : "<connection_type>"
+          },
+          {
+            "key" : "session_creation_date",
+            "value" : "<volatile>"
+          },
+          {
+            "key" : "session_id",
+            "value" : "<volatile>"
+          },
+          {
+            "key" : "severity",
+            "value" : {
+              "int_value" : "3"
+            }
+          },
+          {
+            "key" : "source",
+            "value" : {
+              "string_value" : "fetch"
+            }
+          },
+          {
+            "key" : "user_email",
+            "value" : {
+              "string_value" : "wire@example.com"
+            }
+          },
+          {
+            "key" : "user_id",
+            "value" : {
+              "string_value" : "user-1"
+            }
+          },
+          {
+            "key" : "user_name",
+            "value" : {
+              "string_value" : "Wire Snapshot"
+            }
+          }
+        ],
+        "end_time_unix_nano" : "<volatile>",
+        "kind" : "SPAN_KIND_CLIENT",
+        "name" : "HTTP POST",
+        "span_id" : "<volatile>",
+        "start_time_unix_nano" : "<volatile>",
+        "status" : {
+          "code" : "STATUS_CODE_UNSET"
+        },
+        "trace_id" : "<volatile>"
+      }
+    }
+  }
+}
