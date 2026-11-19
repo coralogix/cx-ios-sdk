@@ -214,6 +214,14 @@ final class CrashDeliveryStore {
         return readLocked().map { Set($0.keys) }
     }
 
+    /// The sessions of the crashes and hangs that have a delivery record; nil when the records file
+    /// cannot be read yet.
+    func recordedSessionIds() -> Set<String>? {
+        Self.lock.lock()
+        defer { Self.lock.unlock() }
+        return readLocked().map { Set($0.values.map(\.session.id)) }
+    }
+
     /// Returns whether the record reached disk.
     @discardableResult
     func save(_ record: StoredCrashRecord) -> Bool {
