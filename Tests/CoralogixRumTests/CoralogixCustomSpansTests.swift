@@ -50,7 +50,7 @@ final class CoralogixCustomSpansTests: XCTestCase {
         XCTAssertNil(rum.getCustomTracer())
     }
 
-    func testCustomSpansStampEventTypeSourceSeverityLikeBrowserSdk() {
+    func testCustomSpansStampEventTypeAndSeverityButNoSourceLikeBrowserSdk() {
         let rum = CoralogixRum(options: options!)
         guard let tracer = rum.getCustomTracer() else {
             return XCTFail("Expected custom tracer")
@@ -64,8 +64,8 @@ final class CoralogixCustomSpansTests: XCTestCase {
             return XCTFail("Expected ReadableSpan")
         }
         XCTAssertEqual(globalData.attributes[Keys.eventType.rawValue], .string(CoralogixEventType.customSpan.rawValue))
-        XCTAssertEqual(globalData.attributes[Keys.source.rawValue], .string(Keys.code.rawValue))
         XCTAssertEqual(globalData.attributes[Keys.severity.rawValue], .int(CoralogixLogSeverity.info.rawValue))
+        XCTAssertNil(globalData.attributes[Keys.source.rawValue])
 
         let child = global.startCustomSpan(name: "c")
         defer { child.endSpan() }
@@ -74,8 +74,8 @@ final class CoralogixCustomSpansTests: XCTestCase {
             return XCTFail("Expected ReadableSpan")
         }
         XCTAssertEqual(childData.attributes[Keys.eventType.rawValue], .string(CoralogixEventType.customSpan.rawValue))
-        XCTAssertEqual(childData.attributes[Keys.source.rawValue], .string(Keys.code.rawValue))
         XCTAssertEqual(childData.attributes[Keys.severity.rawValue], .int(CoralogixLogSeverity.info.rawValue))
+        XCTAssertNil(childData.attributes[Keys.source.rawValue])
     }
 
     /// Nested custom spans must carry session/user attributes so `SessionContext` succeeds during export (otherwise the child is dropped and only the global appears in RUM).

@@ -74,7 +74,7 @@ extension CoralogixRum {
     }
     
     private func makeSpan(type: Keys, value: Keys) {
-        let span = makeSpan(event: .lifeCycle, source: .console, severity: .info)
+        let span = makeSpan(event: .lifeCycle, source: nil, severity: .info)
         span.setAttribute(key: type.rawValue, value: value.rawValue)
         span.end()
     }

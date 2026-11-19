@@ -342,7 +342,7 @@ public class CoralogixRum {
         // MetricsManager. Wire format is unchanged — pinned by
         // WireFormatTests.testMetricsManager_protocolPath_equalsClosurePath_endToEnd.
         self.metricsManager.metricsCollector = SpanMetricsCollector { [weak self] in
-            self?.makeSpan(event: .mobileVitals, source: .code, severity: .info)
+            self?.makeSpan(event: .mobileVitals, source: nil, severity: .info)
         }
     }
     
@@ -435,7 +435,8 @@ public class CoralogixRum {
                             buildId: String? = nil,
                             stackTraceType: String? = nil,
                             customAttributes: [String: Any]? = nil,
-                            labels: [String: Any]? = nil) {
+                            labels: [String: Any]? = nil,
+                            source: String? = nil) {
         guard CoralogixRum.isInitialized else { return }
         self.reportErrorWith(message: message,
                              stackTrace: stackTrace,
@@ -445,7 +446,8 @@ public class CoralogixRum {
                              buildId: buildId,
                              stackTraceType: stackTraceType,
                              customAttributes: customAttributes,
-                             labels: labels)
+                             labels: labels,
+                             source: source)
     }
 
     /// Reports a Dart obfuscated error from Flutter.
@@ -460,13 +462,18 @@ public class CoralogixRum {
     ///   - buildId: The Dart snapshot build ID used for symbolication.
     ///   - stackTraceType: The stack trace type (e.g. `"obfuscated"`).
     ///   - customAttributes: Optional custom attributes to attach to the error event.
+    ///   - isCrash: Whether the error terminated the app.
+    ///   - source: How the wrapper caught the error, for `event_context.source`. `nil` reports
+    ///     it as `captured`.
     public func reportError(message: String,
                             obfuscatedStackTrace: [String],
                             arch: String? = nil,
                             buildId: String? = nil,
                             stackTraceType: String? = Keys.obfuscated.rawValue,
                             customAttributes: [String: Any]? = nil,
-                            labels: [String: Any]? = nil) {
+                            labels: [String: Any]? = nil,
+                            isCrash: Bool = false,
+                            source: String? = nil) {
         guard CoralogixRum.isInitialized else { return }
         self.reportErrorWith(message: message,
                              obfuscatedStackTrace: obfuscatedStackTrace,
@@ -474,7 +481,9 @@ public class CoralogixRum {
                              buildId: buildId,
                              stackTraceType: stackTraceType,
                              customAttributes: customAttributes,
-                             labels: labels)
+                             labels: labels,
+                             isCrash: isCrash,
+                             source: source)
     }
     
     public func reportMobileVitalsMeasurement(type: String, metrics: [HybridMetric]) {
@@ -722,7 +731,7 @@ public class CoralogixRum {
     
     public func sendCustomMeasurement(name: String, value: Double) {
         guard CoralogixRum.isInitialized else { return }
-        let span = self.makeSpan(event: .customMeasurement, source: .code, severity: .info)
+        let span = self.makeSpan(event: .customMeasurement, source: nil, severity: .info)
         span.setAttribute(key: Keys.name.rawValue, value: name)
         span.setAttribute(key: Keys.value.rawValue, value: value)
         span.end()
@@ -775,7 +784,7 @@ public class CoralogixRum {
     }
 
     private func emitTimedMeasurement(name: String, durationMs: Double, labels: [String: Any]?) {
-        let span = self.makeSpan(event: .customMeasurement, source: .code, severity: .info)
+        let span = self.makeSpan(event: .customMeasurement, source: nil, severity: .info)
         span.setAttribute(key: Keys.name.rawValue, value: name)
         span.setAttribute(key: Keys.value.rawValue, value: durationMs)
         let merged = mergedCustomLabels(layer: labels)
@@ -909,11 +918,14 @@ public class CoralogixRum {
         }
     }
 
+    /// - Parameter source: `nil` for every event that is not an error, a log or a network request —
+    ///   those leave `event_context.source` out, as the browser SDK does. Deliberately has no default,
+    ///   so a new error path cannot drop its source by omission.
     /// - Parameter startsNewTrace: the span starts a trace of its own instead of following the
     ///   parent policy. Used for an event reported on a later launch than the one it happened in,
     ///   which the current launch's spans have nothing to do with.
     internal func makeSpan(event: CoralogixEventType,
-                           source: Keys,
+                           source: EventSource?,
                            severity: CoralogixLogSeverity,
                            startTime: Date? = nil,
                            startsNewTrace: Bool = false) -> any Span {
@@ -928,7 +940,9 @@ public class CoralogixRum {
         }
         var span = builder.startSpan()
         span.setAttribute(key: Keys.eventType.rawValue, value: event.rawValue)
-        span.setAttribute(key: Keys.source.rawValue, value: source.rawValue)
+        if let source {
+            span.setAttribute(key: Keys.source.rawValue, value: source.rawValue)
+        }
         span.setAttribute(key: Keys.severity.rawValue, value: AttributeValue.int(severity.rawValue))
         addRumCorrelationMetadata(to: &span)
         return span

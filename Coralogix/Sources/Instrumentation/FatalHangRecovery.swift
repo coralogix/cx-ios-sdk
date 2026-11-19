@@ -181,7 +181,7 @@ extension CoralogixRum {
     /// Emits a stored fatal hang as a crash in the session it happened in, timed when it was
     /// detected, in a trace of its own.
     internal func emitRecoveredHang(_ marker: HangMarker, as record: StoredCrashRecord) {
-        let span = makeSpan(event: .error, source: .console, severity: .error,
+        let span = makeSpan(event: .error, source: .anr, severity: .error,
                             startTime: marker.detectedAt, startsNewTrace: true)
         self.attribute(span, to: record)
         span.setAttribute(key: Keys.crashEventId.rawValue, value: record.crashId)

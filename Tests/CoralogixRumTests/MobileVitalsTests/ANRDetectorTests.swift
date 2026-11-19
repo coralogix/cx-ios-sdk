@@ -43,11 +43,21 @@ private final class ForwardingEventLog: EventReporter {
 private final class RecordingUploader: SpanUploading {
     private let lock = NSLock()
     private var _events: [[String: Any]] = []
-    var errorContexts: [[String: Any]] {
+    var errorContexts: [[String: Any]] { cxRums.compactMap { $0[Keys.errorContext.rawValue] as? [String: Any] } }
+
+    /// `event_context` of every error event, alongside its `error_context`.
+    var errorEvents: [(error: [String: Any], event: [String: Any])] {
+        cxRums.compactMap { cxRum in
+            guard let error = cxRum[Keys.errorContext.rawValue] as? [String: Any],
+                  let event = cxRum[Keys.eventContext.rawValue] as? [String: Any] else { return nil }
+            return (error, event)
+        }
+    }
+
+    private var cxRums: [[String: Any]] {
         lock.lock(); defer { lock.unlock() }
         return _events.compactMap {
-            let cxRum = ($0[Keys.text.rawValue] as? [String: Any])?[Keys.cxRum.rawValue] as? [String: Any]
-            return cxRum?[Keys.errorContext.rawValue] as? [String: Any]
+            ($0[Keys.text.rawValue] as? [String: Any])?[Keys.cxRum.rawValue] as? [String: Any]
         }
     }
 
@@ -425,6 +435,8 @@ final class ANRDetectorTests: XCTestCase {
         let anr = try XCTUnwrap(anrs.first)
         XCTAssertEqual(anr[Keys.errorMessage.rawValue] as? String, "Application Not Responding for at least 1000 ms.")
         XCTAssertEqual(anr[Keys.isCrash.rawValue] as? Bool, false)
+        let anrEvent = try XCTUnwrap(uploader.errorEvents.first { $0.error[Keys.errorType.rawValue] as? String == "ANR" })
+        XCTAssertEqual(anrEvent.event[Keys.source.rawValue] as? String, EventSource.anr.rawValue)
         let threads = try XCTUnwrap(anr[Keys.threads.rawValue] as? [[[String: Any]]])
         XCTAssertGreaterThan(threads.count, 1)
     }

@@ -37,7 +37,7 @@ extension CoralogixRum {
 
                 coralogixExporter?.set(cxView: cxView)
 
-                let span = makeSpan(event: .navigation, source: .console, severity: .info)
+                let span = makeSpan(event: .navigation, source: nil, severity: .info)
                 handleAppearStateIfNeeded(cxView: cxView, span: span) { span.end() }
                 return
             }

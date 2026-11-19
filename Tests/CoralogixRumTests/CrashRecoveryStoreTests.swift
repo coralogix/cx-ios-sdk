@@ -598,6 +598,8 @@ extension CrashRecoveryAcrossLaunchesTests {
         XCTAssertEqual(errorType(anr), "ANR")
         XCTAssertEqual(value(anr, .errorContext, .errorMessage) as? String, "Application Not Responding")
         XCTAssertEqual(value(anr, .errorContext, .isCrash) as? Bool, true)
+        XCTAssertEqual(value(anr, .eventContext, .source) as? String, EventSource.anr.rawValue,
+                       "a fatal hang is sourced by how it was caught; is_crash carries the fatality")
         XCTAssertEqual((value(anr, .errorContext, .threads) as? [Any])?.count, 2)
         XCTAssertEqual(value(anr, .sessionContext, .sessionId) as? String, "S1")
         XCTAssertEqual(value(anr, .viewContext, .view) as? String, "Checkout")

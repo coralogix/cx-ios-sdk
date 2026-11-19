@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Release-mechanics commits (version bumps, podspec/script tweaks, README edits) are
 omitted; the focus here is user-facing behavior changes.
 
+## [2.24.2] - 2026-11-18
+
+### Fixed
+- `event_context.source` is now set only on errors, logs and network requests, as on the browser and Android SDKs, and is no longer sent on other events. On an error it says how the error was caught: `captured` for an error or exception passed to `reportError`, `crash` for crashes, `anr` for ANRs. Update queries that filter on `source` `console` or `code`.
+
 ## [2.24.1] - 2026-11-15
 
 ### Fixed

@@ -17,7 +17,7 @@ extension CoralogixRum {
         self.metricsManager.eventReporter = SpanEventReporter(
             createErrorSpan: { [weak self] in
                 guard let self = self else { return nil }
-                let span = self.makeSpan(event: .error, source: .code, severity: .error)
+                let span = self.makeSpan(event: .error, source: .anr, severity: .error)
                 if let exporter = self.coralogixExporter {
                     self.fatalHangWatch.awaitDelivery(ofSpan: span.context.spanId.hexString, through: exporter)
                 }

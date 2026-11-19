@@ -111,7 +111,7 @@ extension CoralogixRum: CoralogixInterface {
     /// emits no span at all — the same rule Android applies, where the screenshot log is reported
     /// only for a frame that shipped.
     internal func reportScreenshot(properties: [String: Any] = [:], isManual: Bool = false) {
-        let span = makeSpan(event: .screenshot, source: .console, severity: .info)
+        let span = makeSpan(event: .screenshot, source: nil, severity: .info)
         var properties = properties
         if isManual {
             span.setAttribute(key: Keys.isManual.rawValue, value: AttributeValue(true))

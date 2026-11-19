@@ -26,6 +26,7 @@ extension CoralogixRum {
         guard isErrorsEnabled else { return }
         let userInfo = Helper.convertDictionary(exception.userInfo ?? [:])
         self.writeError(
+            source: .captured,
             domain: exception.name.rawValue,
             code: 0,
             message: exception.reason ?? "",
@@ -40,6 +41,7 @@ extension CoralogixRum {
                          labels: [String: Any]? = nil) {
         guard isErrorsEnabled else { return }
         self.writeError(
+            source: .captured,
             domain: error.domain,
             code: error.code,
             message: error.localizedDescription,
@@ -54,6 +56,7 @@ extension CoralogixRum {
                          labels: [String: Any]? = nil) {
         guard isErrorsEnabled else { return }
         self.writeError(
+            source: .captured,
             domain: String(describing: type(of: error)),
             code: 0,
             message: error.localizedDescription,
@@ -67,15 +70,6 @@ extension CoralogixRum {
         self.log(severity: CoralogixLogSeverity.error, message: message, data: data, labels: labels)
     }
     
-    // MARK: - Used By Flutter (symbolicated)
-    func reportErrorWith(message: String, stackTrace: String?) {
-        let stackTraceJson = stackTrace.flatMap {
-            let stackTraceArray = Helper.parseStackTrace($0)
-            return Helper.convertArrayToJsonString(array: stackTraceArray)
-        }
-        reportErrorInternal(message: message, stackTraceJson: stackTraceJson)
-    }
-
     // MARK: - Used By Flutter (obfuscated)
     func reportErrorWith(message: String,
                          obfuscatedStackTrace: [String],
@@ -83,11 +77,15 @@ extension CoralogixRum {
                          buildId: String?,
                          stackTraceType: String?,
                          customAttributes: [String: Any]? = nil,
-                         labels: [String: Any]? = nil) {
+                         labels: [String: Any]? = nil,
+                         isCrash: Bool = false,
+                         source: String? = nil) {
         let frames: [[String: Any]] = obfuscatedStackTrace.map { [Keys.virt.rawValue: $0] }
         let stackTraceJson = Helper.convertArrayToJsonString(array: frames)
         reportErrorInternal(message: message,
+                            hybridSource: source,
                             stackTraceJson: stackTraceJson,
+                            isCrash: isCrash,
                             arch: arch,
                             buildId: buildId,
                             stackTraceType: stackTraceType,
@@ -104,9 +102,11 @@ extension CoralogixRum {
                          buildId: String? = nil,
                          stackTraceType: String? = nil,
                          customAttributes: [String: Any]? = nil,
-                         labels: [String: Any]? = nil) {
+                         labels: [String: Any]? = nil,
+                         source: String? = nil) {
         let stackTraceJson = Helper.convertArrayToJsonString(array: stackTrace)
         reportErrorInternal(message: message,
+                            hybridSource: source,
                             stackTraceJson: stackTraceJson,
                             errorType: errorType,
                             isCrash: isCrash,
@@ -118,6 +118,7 @@ extension CoralogixRum {
     }
 
     private func reportErrorInternal(message: String,
+                                     hybridSource: String?,
                                      stackTraceJson: String?,
                                      errorType: String? = nil,
                                      isCrash: Bool = false,
@@ -134,6 +135,7 @@ extension CoralogixRum {
         let flushCrash: (() -> Void)? = isCrash ? { [weak self] in self?.flush() } : nil
 
         self.writeError(
+            source: .hybrid(hybridSource),
             domain: "",
             message: message,
             stackTraceJson: stackTraceJson,
@@ -222,7 +224,8 @@ extension CoralogixRum {
     /// `then` fires once the span has ended, which for a live error is after its screenshot
     /// resolves. The crash force-flush is sequenced on it: a span that ends after the flush
     /// misses the batch it was written for.
-    private func writeError(domain: String, code: Int? = nil, message: String,
+    private func writeError(source: EventSource,
+                            domain: String, code: Int? = nil, message: String,
                             userInfo: [String: Any]? = nil,
                             stackTraceJson: String? = nil,
                             errorType: String? = nil,
@@ -233,7 +236,7 @@ extension CoralogixRum {
                             customAttributes: [String: Any]? = nil,
                             labels: [String: Any]? = nil,
                             then: (() -> Void)? = nil) {
-        let span = makeSpan(event: .error, source: .console, severity: .error)
+        let span = makeSpan(event: .error, source: source, severity: .error)
         span.setAttribute(key: Keys.domain.rawValue, value: domain)
         if let code { span.setAttribute(key: Keys.code.rawValue, value: code) }
         span.setAttribute(key: Keys.errorMessage.rawValue, value: message)
