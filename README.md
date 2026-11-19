@@ -373,6 +373,8 @@ What to expect:
 - An event with error severity triggers the session, including a network request that failed with an HTTP
   error status. A critical event does not. `ignoreErrors` and `beforeSend` apply first, so an error they
   drop or change to another severity does not trigger it.
+- An error reported right before the session changes, for example just before `createNewSession()`,
+  still counts for the session it was reported in.
 - While a session is held, `excludeFromSampling` sends nothing early. Use `instrumentationsToSend` for that.
 - Session recording does not record in a held session.
 - `tracesExporter` receives a held session's spans only for events sent as they happen: from the error on,
