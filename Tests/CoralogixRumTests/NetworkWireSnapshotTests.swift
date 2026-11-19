@@ -219,7 +219,7 @@ final class NetworkWireSnapshotTests: XCTestCase {
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         _ = try await XCTUnwrap(session).data(for: request)
-        try assertWireSnapshot(named: "async_await_data_for", url: url, startedOnMainThread: false)
+        try assertWireSnapshot(named: "async_await_data_for", url: url)
     }
 
     func test_uploadTaskWithFrom() throws {
@@ -272,7 +272,7 @@ final class NetworkWireSnapshotTests: XCTestCase {
             Keys.traceId.rawValue: Self.hybridTraceId,
             Keys.spanId.rawValue: Self.hybridSpanId
         ])
-        try assertWireSnapshot(named: "hybrid_set_network_request_context", url: url, startedOnMainThread: nil)
+        try assertWireSnapshot(named: "hybrid_set_network_request_context", url: url, isURLSessionSpan: false)
     }
 
     // MARK: - SDK setup
@@ -370,20 +370,17 @@ final class NetworkWireSnapshotTests: XCTestCase {
 
     // MARK: - Assertions
 
-    /// `startedOnMainThread` is where the request started, which decides its
-    /// `network_connection_type` today; nil for the hybrid path, which is not a URLSession span.
-    private func assertWireSnapshot(named name: String, url: URL, startedOnMainThread: Bool? = true,
+    /// `isURLSessionSpan` is false for the hybrid path, which is not a URLSession span and skips the
+    /// explicit contract. A URLSession span reports the host's connection type whichever thread
+    /// started the request.
+    private func assertWireSnapshot(named name: String, url: URL, isURLSessionSpan: Bool = true,
                                     file: StaticString = #filePath, line: UInt = #line) throws {
         let captured = try XCTUnwrap(capture(url: url),
                                      "No uploaded event and OTLP span for \(url) — the request was not instrumented",
                                      file: file, line: line)
 
-        if let startedOnMainThread {
-            // Records today's value, not the correct one: the connection type is read on the main
-            // thread only, so a request started off it (async/await here) reports `unavailable`
-            // whatever the network. This expectation changes with the NetworkStatus fix.
-            let connectionType = startedOnMainThread ? hostConnectionTypeAtRequest : "unavailable"
-            assertExplicitContract(captured, url: url, connectionType: connectionType, file: file, line: line)
+        if isURLSessionSpan {
+            assertExplicitContract(captured, url: url, connectionType: hostConnectionTypeAtRequest, file: file, line: line)
         }
 
         let snapshot: [String: Any] = [
