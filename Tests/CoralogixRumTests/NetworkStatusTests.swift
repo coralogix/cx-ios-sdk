@@ -55,6 +55,9 @@ private final class StubTelephonyInfo: CTTelephonyNetworkInfo {
     }
 }
 
+// The CTRadioAccessTechnologyNR constant needs iOS 14.1; the test target builds for iOS 13.
+private let radioAccessTechnologyNR = "CTRadioAccessTechnologyNR"
+
 final class NetworkStatusTests: XCTestCase {
 
     private func statusOffMain(_ connection: Connection) -> (String, String?, Any?) {
@@ -114,7 +117,7 @@ final class NetworkStatusTests: XCTestCase {
 
     func test_status_cellular_offMainThread_reportsRadioTechnology() {
         let info = StubTelephonyInfo(serviceId: "0000000100000001",
-                                     radioTech: ["0000000100000001": CTRadioAccessTechnologyNR])
+                                     radioTech: ["0000000100000001": radioAccessTechnologyNR])
         let sut = NetworkStatusClass(with: StubNetworkMonitor(connection: .cellular), networkInfo: info)
         var subtype: String?
         let done = expectation(description: "status() returned off the main thread")
@@ -147,7 +150,7 @@ final class NetworkStatusTests: XCTestCase {
         XCTAssertEqual(sut.status().1, "LTE")
 
         info.set(serviceId: "0000000100000001",
-                 radioTech: ["0000000100000001": CTRadioAccessTechnologyNR])
+                 radioTech: ["0000000100000001": radioAccessTechnologyNR])
         NotificationCenter.default.post(name: .CTServiceRadioAccessTechnologyDidChange,
                                         object: "0000000100000001")
 
