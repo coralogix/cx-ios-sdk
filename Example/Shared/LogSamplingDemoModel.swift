@@ -33,11 +33,17 @@ final class LogSamplingDemoModel: ObservableObject {
     /// the picker/switches and do NOT reflect what the SDK is currently configured with.
     @Published var sampleRate: Int = 0
     @Published var exclude: Set<ExcludableInstrumentation> = [.logs]
+    /// Sessions sent only if an error happens in them (`alwaysTrackSessionsWithErrors` and
+    /// `onlyWithErrorConfig.enable`).
+    @Published var alwaysTrackSessionsWithErrors: Bool = false
+    @Published var onlyWithErrorEnable: Bool = false
 
     /// Snapshot of the values that were in effect on the last successful Apply. Use these
     /// (not the editable fields above) when displaying "what the SDK is configured with".
     @Published var appliedSampleRate: Int = 0
     @Published var appliedExclude: Set<ExcludableInstrumentation> = []
+    @Published var appliedAlwaysTrackSessionsWithErrors: Bool = false
+    @Published var appliedOnlyWithErrorEnable: Bool = false
 
     @Published var isApplied: Bool = false
     @Published var captured: [CapturedSpan] = []
@@ -61,6 +67,8 @@ final class LogSamplingDemoModel: ObservableObject {
     var appliedConfigDescription: String {
         "rate=\(appliedSampleRate)\n" +
         "exclude=\(formattedAppliedExclude)\n" +
+        "alwaysTrackSessionsWithErrors=\(appliedAlwaysTrackSessionsWithErrors)\n" +
+        "onlyWithErrorConfig.enable=\(appliedOnlyWithErrorEnable)\n" +
         "isInitialized=\(CoralogixRumManager.shared.sdk.isInitialized)"
     }
 
@@ -68,6 +76,9 @@ final class LogSamplingDemoModel: ObservableObject {
         if set.isEmpty { return "[]" }
         return "[" + set.map { ".\($0.rawValue)" }.sorted().joined(separator: ", ") + "]"
     }
+
+    /// Explains the two sessions-with-errors switches; shared so both demo apps say the same.
+    static let sessionsWithErrorsNote = "A held session sends nothing until Send Error; then everything it held is sent. Watch the captured list."
 
     /// Status line under the config controls; shared so both demo apps describe the same rules.
     static func statusText(sampleRate: Int, exclude: Set<ExcludableInstrumentation>) -> String {
@@ -92,6 +103,8 @@ final class LogSamplingDemoModel: ObservableObject {
         // fields later (the closure below is captured by reference into the SDK).
         let attemptedSampleRate = sampleRate
         let attemptedExclude = exclude
+        let attemptedAlwaysTrack = alwaysTrackSessionsWithErrors
+        let attemptedOnlyWithErrorEnable = onlyWithErrorEnable
         let attemptedFormatted = Self.formatExclude(attemptedExclude)
 
         runToken += 1
@@ -110,6 +123,8 @@ final class LogSamplingDemoModel: ObservableObject {
             publicKey: Envs.PUBLIC_KEY.rawValue,
             sessionSampleRate: attemptedSampleRate,
             excludeFromSampling: attemptedExclude,
+            alwaysTrackSessionsWithErrors: attemptedAlwaysTrack,
+            onlyWithErrorConfig: SessionWithErrorConfig(enable: attemptedOnlyWithErrorEnable),
             instrumentations: [.mobileVitals: true, .custom: true, .errors: true,
                                .userActions: true, .network: true, .anr: true, .lifeCycle: true],
             collectIPData: true,
@@ -146,6 +161,8 @@ final class LogSamplingDemoModel: ObservableObject {
             // the previous run's rows visible if Apply fails.
             appliedSampleRate = attemptedSampleRate
             appliedExclude = attemptedExclude
+            appliedAlwaysTrackSessionsWithErrors = attemptedAlwaysTrack
+            appliedOnlyWithErrorEnable = attemptedOnlyWithErrorEnable
             captured.removeAll()
         }
         return didApply

@@ -24,6 +24,8 @@ final class LogSamplingDecouplingViewController: UIViewController {
     private let statusLabel = UILabel()
     private let appliedConfigLabel = UILabel()
     private var excludeToggles: [ExcludableInstrumentation: UISwitch] = [:]
+    private let alwaysTrackToggle = UISwitch()
+    private let onlyWithErrorEnableToggle = UISwitch()
 
     private lazy var applyButton: UIButton = makeButton("Apply (reinit SDK)",
                                                         icon: "arrow.clockwise.circle",
@@ -102,6 +104,20 @@ final class LogSamplingDecouplingViewController: UIViewController {
             contentStack.addArrangedSubview(makeExcludeRow(excludable))
         }
 
+        contentStack.addArrangedSubview(makeSectionHeader("Sessions with errors"))
+        alwaysTrackToggle.accessibilityIdentifier = "alwaysTrackSessionsWithErrorsToggle"
+        alwaysTrackToggle.addTarget(self, action: #selector(sessionsWithErrorsChanged), for: .valueChanged)
+        contentStack.addArrangedSubview(makeToggleRow("alwaysTrackSessionsWithErrors", toggle: alwaysTrackToggle))
+        onlyWithErrorEnableToggle.accessibilityIdentifier = "onlyWithErrorEnableToggle"
+        onlyWithErrorEnableToggle.addTarget(self, action: #selector(sessionsWithErrorsChanged), for: .valueChanged)
+        contentStack.addArrangedSubview(makeToggleRow("onlyWithErrorConfig.enable", toggle: onlyWithErrorEnableToggle))
+        let sessionsWithErrorsNote = UILabel()
+        sessionsWithErrorsNote.text = LogSamplingDemoModel.sessionsWithErrorsNote
+        sessionsWithErrorsNote.font = .preferredFont(forTextStyle: .caption2)
+        sessionsWithErrorsNote.textColor = .secondaryLabel
+        sessionsWithErrorsNote.numberOfLines = 0
+        contentStack.addArrangedSubview(sessionsWithErrorsNote)
+
         statusLabel.font = .preferredFont(forTextStyle: .footnote)
         statusLabel.numberOfLines = 0
         contentStack.addArrangedSubview(statusLabel)
@@ -153,6 +169,8 @@ final class LogSamplingDecouplingViewController: UIViewController {
         for (excludable, toggle) in excludeToggles {
             toggle.isOn = model.exclude.contains(excludable)
         }
+        alwaysTrackToggle.isOn = model.alwaysTrackSessionsWithErrors
+        onlyWithErrorEnableToggle.isOn = model.onlyWithErrorEnable
     }
 
     private func refreshFromModel() {
@@ -175,6 +193,11 @@ final class LogSamplingDecouplingViewController: UIViewController {
         } else {
             model.exclude.remove(excludable)
         }
+    }
+
+    @objc private func sessionsWithErrorsChanged() {
+        model.alwaysTrackSessionsWithErrors = alwaysTrackToggle.isOn
+        model.onlyWithErrorEnable = onlyWithErrorEnableToggle.isOn
     }
 
     @objc private func didTapApply() { showToast(model.apply()) }
@@ -218,14 +241,17 @@ final class LogSamplingDecouplingViewController: UIViewController {
     }
 
     private func makeExcludeRow(_ excludable: ExcludableInstrumentation) -> UIView {
-        let label = UILabel()
-        label.text = ".\(excludable.rawValue)"
-        label.font = .preferredFont(forTextStyle: .body)
-
         let toggle = UISwitch()
         toggle.isOn = model.exclude.contains(excludable)
         toggle.addTarget(self, action: #selector(excludeToggleChanged(_:)), for: .valueChanged)
         excludeToggles[excludable] = toggle
+        return makeToggleRow(".\(excludable.rawValue)", toggle: toggle)
+    }
+
+    private func makeToggleRow(_ title: String, toggle: UISwitch) -> UIView {
+        let label = UILabel()
+        label.text = title
+        label.font = .preferredFont(forTextStyle: .body)
 
         let row = UIStackView(arrangedSubviews: [label, UIView(), toggle])
         row.axis = .horizontal
