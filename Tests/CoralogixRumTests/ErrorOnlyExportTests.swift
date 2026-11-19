@@ -308,7 +308,7 @@ final class ErrorOnlyExportTests: XCTestCase {
     }
 
     private func cxRum(_ event: [String: Any]) -> [String: Any] {
-        (event[Keys.text.rawValue] as? [String: Any])?[Keys.cxRum.rawValue] as? [String: Any] ?? [:]
+        CoralogixExporter.cxRum(of: event) ?? [:]
     }
 
     private func session(_ cxRum: [String: Any]) -> [String: Any] {

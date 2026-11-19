@@ -247,16 +247,7 @@ struct OtelSpan {
     /// Sets `session_context.hasError` on an encoded event, in `text.cx_rum` and in its
     /// `otelSpan.attributes` mirror. Stamped after the last `beforeSend`, so no callback sees it.
     internal static func markingSessionHasError(_ event: [String: Any]) -> [String: Any] {
-        guard var text = event[Keys.text.rawValue] as? [String: Any],
-              var cxRum = text[Keys.cxRum.rawValue] as? [String: Any],
-              var session = cxRum[Keys.sessionContext.rawValue] as? [String: Any] else {
-            return event
-        }
-        var result = event
-        session[Keys.hasError.rawValue] = true
-        cxRum[Keys.sessionContext.rawValue] = session
-        text[Keys.cxRum.rawValue] = cxRum
-        result[Keys.text.rawValue] = text
+        var result = CoralogixExporter.updatingSessionContext(of: event) { $0[Keys.hasError.rawValue] = true }
         if var instrumentationData = event[Keys.instrumentationData.rawValue] as? [String: Any],
            var otelSpan = instrumentationData[Keys.otelSpan.rawValue] as? [String: Any],
            var attributes = otelSpan[Keys.attributes.rawValue] as? [String: Any] {
