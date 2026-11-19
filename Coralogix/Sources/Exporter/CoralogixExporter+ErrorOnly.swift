@@ -95,14 +95,24 @@ extension CoralogixExporter {
     /// The hybrid return path uploads what JS/Dart hands back verbatim, so the mode a callback may
     /// have rewritten is put back from what the SDK knows of the session.
     func restoringErrorOnlyMode(in event: [String: Any]) -> [String: Any] {
-        guard getOptions().holdsSessionsForErrors, var text = event[Keys.text.rawValue] as? [String: Any],
+        guard getOptions().holdsSessionsForErrors else { return event }
+        let sessionManager = getSessionManager()
+        return Self.updatingSessionContext(of: event) { session in
+            guard let sessionId = session[Keys.sessionId.rawValue] as? String else { return }
+            session[Keys.onlyWithErrorMode.rawValue] = sessionManager.isErrorOnlySession(sessionId)
+            session[Keys.hasError.rawValue] = nil
+        }
+    }
+
+    /// `event` with its `text.cx_rum.session_context` changed by `change`; unchanged when it has none.
+    static func updatingSessionContext(of event: [String: Any],
+                                       _ change: (inout [String: Any]) -> Void) -> [String: Any] {
+        guard var text = event[Keys.text.rawValue] as? [String: Any],
               var cxRum = text[Keys.cxRum.rawValue] as? [String: Any],
-              var session = cxRum[Keys.sessionContext.rawValue] as? [String: Any],
-              let sessionId = session[Keys.sessionId.rawValue] as? String else {
+              var session = cxRum[Keys.sessionContext.rawValue] as? [String: Any] else {
             return event
         }
-        session[Keys.onlyWithErrorMode.rawValue] = getSessionManager().isErrorOnlySession(sessionId)
-        session[Keys.hasError.rawValue] = nil
+        change(&session)
         cxRum[Keys.sessionContext.rawValue] = session
         text[Keys.cxRum.rawValue] = cxRum
         var result = event
