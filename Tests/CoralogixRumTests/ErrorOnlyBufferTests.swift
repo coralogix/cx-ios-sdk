@@ -112,7 +112,64 @@ final class ErrorOnlyBufferTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: directory.appendingPathComponent("a.jsonl").path))
     }
 
+    func testAfterADiscard_aLateEventOfThatSessionIsNotHeldAgain() {
+        let buffer = makeBuffer()
+        buffer.hold(event(0), sessionId: "a")
+        buffer.discardUntriggered("a")
+        XCTAssertTrue(buffer.hold(event(1), sessionId: "a"), "Handled: dropped, not sent live.")
+        XCTAssertNil(buffer.metadata(of: "a"), "The ended session's buffer is not started again.")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: directory.appendingPathComponent("a.jsonl").path))
+    }
+
+    func testHoldAndTriggerAtTheSameTime_everyEventIsHeldOrSentOnce() {
+        let buffer = makeBuffer()
+        let count = 400
+        let sentLive = SentLive()
+        DispatchQueue.concurrentPerform(iterations: count + 1) { i in
+            if i == count / 2 {
+                buffer.trigger("s")
+            } else {
+                let index = i > count / 2 ? i - 1 : i
+                if !buffer.hold(event(index), sessionId: "s") { sentLive.add(index) }
+            }
+        }
+        var held: [Int] = []
+        while let chunk = buffer.nextChunk(of: "s", maxEvents: 500, maxBytes: ErrorOnlyDrain.maxBytesPerRequest) {
+            held += chunk.events.map(index)
+            buffer.commit(chunk)
+        }
+        XCTAssertEqual((held + sentLive.values).sorted(), Array(0..<count),
+                       "Each event is either held for the drain or sent live, exactly once.")
+        XCTAssertFalse(sentLive.values.isEmpty || held.isEmpty, "Precondition: the trigger landed mid-way.")
+    }
+
     // MARK: - Leftovers
+
+    func testLeftoverWithAnImpossibleOffset_isDeletedAsCorrupt() throws {
+        let earlier = makeBuffer()
+        earlier.hold(event(0), sessionId: "s")
+        earlier.trigger("s")
+        let metaURL = directory.appendingPathComponent("s.meta.json")
+        var json = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: metaURL)) as? [String: Any])
+        json["sentOffset"] = UInt64.max
+        try JSONSerialization.data(withJSONObject: json).write(to: metaURL)
+
+        let relaunch = makeBuffer()
+        XCTAssertEqual(relaunch.adoptLeftovers { _ in true }, [], "Not drained: it would trap converting the offset.")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: metaURL.path), "Deleted as corrupt.")
+    }
+
+    func testShutdown_keepsALeftoverWaitingForItsCrash() {
+        let earlier = makeBuffer()
+        earlier.hold(event(0), sessionId: "crashed")
+        let relaunch = makeBuffer()
+        _ = relaunch.adoptLeftovers { _ in true }
+        relaunch.hold(event(1), sessionId: "own")
+
+        relaunch.discardAllUntriggered()
+        XCTAssertNotNil(relaunch.metadata(of: "crashed"), "The crash, sent later, is its trigger.")
+        XCTAssertNil(relaunch.metadata(of: "own"), "This instance's own untriggered buffer goes.")
+    }
 
     func testLeftovers_triggeredDrain_crashedWait_restDeleted() {
         let earlier = makeBuffer()
@@ -229,6 +286,51 @@ final class ErrorOnlyBufferTests: XCTestCase {
         XCTAssertEqual(nextUploader.requests.flatMap { $0 }.map(index), Array(500..<600))
     }
 
+    func testDrain_stopWithARequestInFlight_cancelsIt_andKeepsTheBuffer() {
+        let buffer = makeBuffer()
+        (0..<10).forEach { buffer.hold(event($0), sessionId: "s") }
+        buffer.trigger("s")
+        let inFlight = BlockingUpload()
+        let drain = ErrorOnlyDrain(buffer: buffer, clock: ManualDeliveryClock(), backgroundTasks: FakeBackgroundTasks(),
+                                   isOnline: { true }, upload: inFlight.upload, cancelUpload: inFlight.cancel)
+        drain.start(["s"])
+        inFlight.waitUntilStarted()
+        drain.stop()
+        drain.waitUntilSettled()
+
+        XCTAssertEqual(inFlight.requests, 1)
+        XCTAssertEqual(buffer.metadata(of: "s")?.sentOffset, 0, "A cancelled request is not committed.")
+        XCTAssertEqual(buffer.metadata(of: "s")?.failedUploads, 0, "Nor counted.")
+        drain.start(["s"])
+        drain.waitUntilSettled()
+        XCTAssertEqual(inFlight.requests, 1, "A stopped drain sends nothing more.")
+    }
+
+    func testDrain_backgroundExpiry_resumesLater_withoutSendingAChunkTwice() {
+        let buffer = makeBuffer()
+        (0..<600).forEach { buffer.hold(event($0), sessionId: "s") }
+        buffer.trigger("s")
+        let tasks = FakeBackgroundTasks()
+        let clock = ManualDeliveryClock()
+        let inFlight = BlockingUpload(blockOnRequest: 2)
+        let drain = ErrorOnlyDrain(buffer: buffer, clock: clock, backgroundTasks: tasks,
+                                   isOnline: { true }, upload: inFlight.upload, cancelUpload: inFlight.cancel)
+        drain.start(["s"])
+        drain.waitUntilSettled()
+        clock.advance(to: clock.now().addingTimeInterval(1))
+        inFlight.waitUntilStarted()
+        tasks.expireAll()
+        drain.waitUntilSettled()
+
+        drain.start(["s"])
+        drain.waitUntilSettled()
+        clock.advance(to: clock.now().addingTimeInterval(1))
+        drain.waitUntilSettled()
+
+        XCTAssertEqual(inFlight.deliveredIndices(index), Array(0..<600), "Every event once, in order.")
+        XCTAssertNil(buffer.metadata(of: "s"))
+    }
+
     func testDrain_givesUpAfter16CountedFailures() {
         let buffer = makeBuffer()
         buffer.hold(event(0), sessionId: "s")
@@ -303,6 +405,66 @@ private final class ScriptedUploads {
         Thread.sleep(forTimeInterval: 0.001)
         lock.lock(); inFlight -= 1; lock.unlock()
         return result
+    }
+}
+
+/// Delivers every request except the `blockOnRequest`th, which waits until it is cancelled and
+/// then answers `notAttempted`, as a cancelled URLSession task does.
+private final class BlockingUpload {
+    private let lock = NSLock()
+    private let started = DispatchSemaphore(value: 0)
+    private let release = DispatchSemaphore(value: 0)
+    private let blockOnRequest: Int
+    private var count = 0
+    private var delivered: [[[String: Any]]] = []
+
+    init(blockOnRequest: Int = 1) {
+        self.blockOnRequest = blockOnRequest
+    }
+
+    var requests: Int {
+        lock.lock(); defer { lock.unlock() }
+        return count
+    }
+
+    func deliveredIndices(_ index: ([String: Any]) -> Int) -> [Int] {
+        lock.lock(); defer { lock.unlock() }
+        return delivered.flatMap { $0.map(index) }
+    }
+
+    func upload(_ events: [[String: Any]]) -> SpanUploadResult {
+        lock.lock()
+        count += 1
+        let blocks = count == blockOnRequest
+        lock.unlock()
+        guard blocks else {
+            lock.lock(); delivered.append(events); lock.unlock()
+            return .delivered
+        }
+        started.signal()
+        release.wait()
+        return .notAttempted
+    }
+
+    func waitUntilStarted() {
+        _ = started.wait(timeout: .now() + 5)
+    }
+
+    func cancel() {
+        release.signal()
+    }
+}
+
+private final class SentLive {
+    private let lock = NSLock()
+    private var _values: [Int] = []
+    var values: [Int] {
+        lock.lock(); defer { lock.unlock() }
+        return _values
+    }
+    func add(_ value: Int) {
+        lock.lock(); defer { lock.unlock() }
+        _values.append(value)
     }
 }
 

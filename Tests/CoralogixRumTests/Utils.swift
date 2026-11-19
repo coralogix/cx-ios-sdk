@@ -109,8 +109,12 @@ class MockKeyschainManager: KeyChainProtocol {
     /// nil (unlike the "" sentinels above) so tests can distinguish "never written"
     /// from "written empty" — loadPrevSession treats absence as a legacy launch.
     var sessionSampledIn: String?
+    var sessionOnlyWithErrorMode: String?
 
     func readStringFromKeychain(service: String, key: String) -> String? {
+        if key == Keys.keySessionOnlyWithErrorMode.rawValue {
+            return self.sessionOnlyWithErrorMode
+        }
         if key == "pid" {
             return self.pid
         } else if key == "sessionId" {

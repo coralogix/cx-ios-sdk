@@ -92,16 +92,42 @@ extension CoralogixExporter {
         return (encoded.map(OtelSpan.markingSessionHasError), route.sessionId)
     }
 
-    /// The hybrid return path uploads what JS/Dart hands back verbatim, so the mode a callback may
-    /// have rewritten is put back from what the SDK knows of the session.
+    /// Records the mode each event is handed to a hybrid `beforeSend` with.
+    func rememberErrorOnlyModes(of events: [[String: Any]]) {
+        let modes = events.compactMap { event -> (spanId: String, errorOnly: Bool)? in
+            guard let cxRum = Self.cxRum(of: event), let spanId = cxRum[Keys.spanId.rawValue] as? String else { return nil }
+            let session = cxRum[Keys.sessionContext.rawValue] as? [String: Any]
+            return (spanId, session?[Keys.onlyWithErrorMode.rawValue] as? Bool ?? false)
+        }
+        hybridModesLock.lock()
+        defer { hybridModesLock.unlock() }
+        hybridModes.append(contentsOf: modes)
+        if hybridModes.count > Self.maxHybridModes {
+            hybridModes.removeFirst(hybridModes.count - Self.maxHybridModes)
+        }
+    }
+
+    /// The hybrid return path uploads what JS/Dart hands back verbatim, so both read-only fields
+    /// are put back on every event, feature on or off: the mode the event was encoded with, and
+    /// no `hasError` (stamped only after this, by routing). An event the SDK did not hand out
+    /// falls back to what it knows of the session.
     func restoringErrorOnlyMode(in event: [String: Any]) -> [String: Any] {
-        guard getOptions().holdsSessionsForErrors else { return event }
+        let spanId = Self.cxRum(of: event)?[Keys.spanId.rawValue] as? String
+        let remembered = spanId.flatMap(takeRememberedMode)
         let sessionManager = getSessionManager()
         return Self.updatingSessionContext(of: event) { session in
-            guard let sessionId = session[Keys.sessionId.rawValue] as? String else { return }
-            session[Keys.onlyWithErrorMode.rawValue] = sessionManager.isErrorOnlySession(sessionId)
+            let sessionId = session[Keys.sessionId.rawValue] as? String
+            session[Keys.onlyWithErrorMode.rawValue] = remembered
+                ?? sessionId.map(sessionManager.isErrorOnlySession) ?? false
             session[Keys.hasError.rawValue] = nil
         }
+    }
+
+    private func takeRememberedMode(_ spanId: String) -> Bool? {
+        hybridModesLock.lock()
+        defer { hybridModesLock.unlock() }
+        guard let index = hybridModes.firstIndex(where: { $0.spanId == spanId }) else { return nil }
+        return hybridModes.remove(at: index).errorOnly
     }
 
     /// `event` with its `text.cx_rum.session_context` changed by `change`; unchanged when it has none.
@@ -122,12 +148,6 @@ extension CoralogixExporter {
 
     // MARK: - Lifecycle
 
-    /// Called on rotation, for the session that ended: unless it had its error, what it held goes.
-    func discardEndedErrorOnlySession() {
-        guard let ended = getSessionManager().getPrevSessionMetadata()?.sessionId, !ended.isEmpty else { return }
-        errorOnlyBuffer.discardUntriggered(ended)
-    }
-
     /// Takes over what earlier launches left: a buffer that had its error is kept for
     /// `resumeErrorOnlyDrains`; one whose session has a stored crash waits for that crash, its
     /// trigger; the rest is deleted. `crashedSessionIds` nil means the crash records could not be
@@ -143,8 +163,8 @@ extension CoralogixExporter {
         errorOnlyDrain.start(errorOnlyBuffer.triggeredSessions())
     }
 
-    /// What this instance held without an error goes; a buffer that had one stays for a later
-    /// launch to finish sending.
+    /// What this instance held without an error goes; a buffer that had one, or one an earlier
+    /// launch left for its crash, stays for a later launch.
     func shutdownErrorOnly() {
         errorOnlyDrain.stop()
         errorOnlyBuffer.discardAllUntriggered()
