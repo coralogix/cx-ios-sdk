@@ -140,21 +140,45 @@ final class ErrorOnlyExportTests: XCTestCase {
 
     // MARK: - Rotation and shutdown
 
+    func testLateErrorWithinTheGrace_triggersTheEndedSession_andSendsWhatItHeld() throws {
+        let clock = ManualDeliveryClock()
+        ErrorOnlyBuffer.testClock = clock
+        defer { ErrorOnlyBuffer.testClock = nil }
+        let (exporter, uploader) = try start(makeErrorOnlyOptions(sampleRate: 0, alwaysTrack: true))
+        let oldStamp = exporter.getSessionManager().sessionSpanAttributes()
+        export(exporter, .log, message: "old-held")
+
+        // reportError then createNewSession: the error is exported after the rotation.
+        rum?.createNewSession()
+        clock.advance(to: clock.now().addingTimeInterval(20))
+        export(exporter, .error, severity: .error, message: "old-late-error", stamp: oldStamp)
+        exporter.errorOnlyDrain.waitUntilSettled()
+
+        XCTAssertNotNil(payload(uploader, message: "old-late-error"))
+        XCTAssertNotNil(payload(uploader, message: "old-held"), "What the ended session held is sent with its error.")
+        let oldId = oldStamp.first { $0.key == Keys.sessionId.rawValue }?.value
+        XCTAssertEqual(session(try XCTUnwrap(payload(uploader, message: "old-held")))[Keys.sessionId.rawValue] as? String, oldId)
+    }
+
     func testRotation_dropsWhatTheEndedSessionHeld_andNeverSendsItUnderTheNewOne() throws {
+        let clock = ManualDeliveryClock()
+        ErrorOnlyBuffer.testClock = clock
+        defer { ErrorOnlyBuffer.testClock = nil }
         let (exporter, uploader) = try start(makeErrorOnlyOptions(sampleRate: 0, alwaysTrack: true))
         let sessionManager = exporter.getSessionManager()
         let oldStamp = sessionManager.sessionSpanAttributes()
         export(exporter, .log, message: "old-held")
 
         rum?.createNewSession()
-        // A late event of the ended session, exported after the rotation.
+        clock.advance(to: clock.now().addingTimeInterval(ErrorOnlyBuffer.endedSessionGrace + 1))
+        // A late event of the ended session, exported after its grace.
         export(exporter, .error, severity: .error, message: "old-late-error", stamp: oldStamp)
         export(exporter, .log, message: "new-held")
         export(exporter, .error, severity: .error, message: "new-error")
         exporter.errorOnlyDrain.waitUntilSettled()
 
         XCTAssertNil(payload(uploader, message: "old-held"))
-        XCTAssertNil(payload(uploader, message: "old-late-error"), "A late event cannot trigger the ended session.")
+        XCTAssertNil(payload(uploader, message: "old-late-error"), "Past the grace, a late error cannot trigger the ended session.")
         XCTAssertNotNil(payload(uploader, message: "new-held"))
         let newId = try XCTUnwrap(sessionManager.currentSessionId)
         XCTAssertTrue(uploader.cxRumPayloads().allSatisfy { session($0)[Keys.sessionId.rawValue] as? String == newId })
