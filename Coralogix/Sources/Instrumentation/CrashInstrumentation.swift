@@ -234,7 +234,7 @@ extension CoralogixRum: StoredCrashSending {
     /// describes it, and starts a trace of its own: whatever span is current in this launch had
     /// nothing to do with it.
     internal func emitRecoveredCrash(_ crash: MappedCrash, as record: StoredCrashRecord) {
-        let span = makeSpan(event: .error, source: .console, severity: .error,
+        let span = makeSpan(event: .error, source: .crash, severity: .error,
                             startTime: crash.crashTime, startsNewTrace: true)
         self.attribute(span, to: record)
 

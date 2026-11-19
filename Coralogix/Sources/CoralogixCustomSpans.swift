@@ -110,9 +110,9 @@ final class CoralogixCustomGlobalSpanRegistry {
 }
 
 /// Browser SDK sets `EVENT_TYPE` to `custom-span` on global and nested custom spans (`coralogix-rum.ts`).
+/// Like the browser, a custom span carries no `event_context.source`.
 private func stampCoralogixCustomSpanRUM(on span: inout any Span) {
     span.setAttribute(key: Keys.eventType.rawValue, value: CoralogixEventType.customSpan.rawValue)
-    span.setAttribute(key: Keys.source.rawValue, value: Keys.code.rawValue)
     span.setAttribute(key: Keys.severity.rawValue, value: AttributeValue.int(CoralogixLogSeverity.info.rawValue))
 }
 

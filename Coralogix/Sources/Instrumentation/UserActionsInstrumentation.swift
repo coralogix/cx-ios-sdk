@@ -82,7 +82,7 @@ extension CoralogixRum {
     /// One `user_interaction` span per interaction, native or bridge-reported: the payload and no
     /// screenshot (contract: `handleInteractionNotification`).
     internal func reportUserInteraction(_ properties: [String: Any]) {
-        let span = makeSpan(event: .userInteraction, source: .console, severity: .info)
+        let span = makeSpan(event: .userInteraction, source: nil, severity: .info)
         span.setAttribute(key: Keys.tapObject.rawValue,
                           value: Helper.convertDictionaryToJsonString(dict: properties))
         span.end()

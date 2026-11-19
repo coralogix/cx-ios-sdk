@@ -335,6 +335,18 @@ final class RecoveredCrashWireTests: XCTestCase {
         }
     }
 
+    func test_recoveredCrash_isSourcedAsCrash() throws {
+        let crash = CrashReportMapper.map(FakeReport.nsException())
+        let (uploader, _) = try emit(crash)
+
+        let cxRum = try XCTUnwrap(uploader.events.lazy.compactMap {
+            ($0[Keys.text.rawValue] as? [String: Any])?[Keys.cxRum.rawValue] as? [String: Any]
+        }.first { (($0[Keys.errorContext.rawValue] as? [String: Any])?[Keys.isCrash.rawValue] as? Bool) == true })
+        let eventContext = try XCTUnwrap(cxRum[Keys.eventContext.rawValue] as? [String: Any])
+        XCTAssertEqual(eventContext[Keys.type.rawValue] as? String, CoralogixEventType.error.rawValue)
+        XCTAssertEqual(eventContext[Keys.source.rawValue] as? String, EventSource.crash.rawValue)
+    }
+
     private func emit(_ crash: MappedCrash, ignoring patterns: [String] = []) throws -> (RecordingUploader, CoralogixExporter) {
         let sdk = CoralogixRum(options: makeSamplingOptions(sampleRate: 100, exclude: [], ignoreErrors: patterns))
         rum = sdk
