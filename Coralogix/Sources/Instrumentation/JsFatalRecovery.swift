@@ -94,7 +94,8 @@ extension CoralogixRum {
     /// The live session as a crash record names it; nil before the SDK has one.
     var liveCrashSession: StoredCrashRecord.Session? {
         sessionManager?.lastPublishedCrashStamp.map {
-            StoredCrashRecord.Session(id: $0.sessionId, creationDate: $0.creationDate, sampledIn: $0.sampledIn)
+            StoredCrashRecord.Session(id: $0.sessionId, creationDate: $0.creationDate, sampledIn: $0.sampledIn,
+                                      errorOnly: $0.errorOnly)
         }
     }
 

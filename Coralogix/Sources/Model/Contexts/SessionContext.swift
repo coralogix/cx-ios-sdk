@@ -24,6 +24,9 @@ struct SessionContext {
     // describe a newer session. Defaults to true: a span without the stamp (e.g. one
     // persisted by an older SDK version) can only reach export on a sampled-in session.
     var isSessionSampledIn: Bool = true
+    // Whether the session is held until an error. Read from the span's creation-time stamp, like
+    // isSessionSampledIn; a span without the stamp belongs to a session that is not.
+    var onlyWithErrorMode: Bool = false
 
     init?(otel: SpanDataProtocol,
           userMetadata: [String: String]?,
@@ -44,6 +47,7 @@ struct SessionContext {
         self.accountName = accountName
         self.hasRecording = hasRecording
         self.isSessionSampledIn = otel.getString(forKey: .spanSessionSampledIn).map { $0 == "true" } ?? true
+        self.onlyWithErrorMode = otel.getString(forKey: .spanSessionOnlyWithErrorMode) == "true"
     }
     
     private static func resolveSession(from otel: SpanDataProtocol) -> (id: String, creationDate: TimeInterval, isPidEqual: Bool)? {
@@ -108,6 +112,7 @@ struct SessionContext {
         result[Keys.userEmail.rawValue] = self.userEmail
         result[Keys.hasRecording.rawValue] = self.hasRecording
         result[Keys.isSessionSampledIn.rawValue] = self.isSessionSampledIn
+        result[Keys.onlyWithErrorMode.rawValue] = self.onlyWithErrorMode
         if let userMetadata = self.userMetadata {
             result[Keys.userMetadata.rawValue] = userMetadata
         }

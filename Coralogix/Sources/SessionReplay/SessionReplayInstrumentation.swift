@@ -133,6 +133,10 @@ extension CoralogixRum: CoralogixInterface {
     public func isSessionSampledIn() -> Bool {
         return self.sessionManager?.isSessionSampledIn ?? false
     }
+
+    public func isSessionErrorOnly() -> Bool {
+        return self.sessionManager?.isSessionErrorOnly ?? false
+    }
     
     public func getNextScreenshotLocationProperties() -> [String: Any] {
         guard let screenshotManager = self.coralogixExporter?.getScreenshotManager() else {

@@ -25,6 +25,8 @@ struct StoredCrashRecord: Codable, Equatable {
         /// nil for a session seeded at image load that the SDK never adopted.
         let creationDate: TimeInterval?
         let sampledIn: Bool?
+        /// Whether the session was held until an error; nil in a record written before it was kept.
+        var errorOnly: Bool? = nil
     }
 
     let crashId: String

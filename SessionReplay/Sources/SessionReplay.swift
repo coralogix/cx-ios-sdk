@@ -291,6 +291,12 @@ public class SessionReplay: SessionReplayInterface {
             return reject(.sessionSampledOut)
         }
 
+        // Read per capture for the same reason: the mode is decided per session.
+        guard !coralogixSdk.isSessionErrorOnly() else {
+            Log.d("[SessionReplay] session held until an error — capture skipped")
+            return reject(.sessionErrorOnly)
+        }
+
         guard let sessionReplayModel = self.sessionReplayModel,
               let sessionReplayOptions = sessionReplayModel.sessionReplayOptions else {
             Log.e("[SessionReplay] missing sessionReplayOptions")

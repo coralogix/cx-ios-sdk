@@ -42,6 +42,12 @@ public enum Keys: String {
     case spanSessionSampledIn = "is_session_sampled_in"
     // session_context payload key; camelCase matches hasRecording and the Android wire format.
     case isSessionSampledIn = "isSessionSampledIn"
+    // Span attribute stamped at creation alongside is_session_sampled_in: whether the session is
+    // held until an error. Also the field crash context and stored crash records keep it under.
+    case spanSessionOnlyWithErrorMode = "only_with_error_mode"
+    // session_context payload keys, camelCase like isSessionSampledIn (browser parity).
+    case onlyWithErrorMode
+    case hasError
     case prevSessionCreationDate
     case prevSessionId
     case prevPid
@@ -167,6 +173,8 @@ public enum Keys: String {
     // recovered on the next launch can be stamped with the crashed session's decision
     // instead of inheriting the relaunch session's roll.
     case keySessionSampledIn = "sessionSampledIn"
+    // Keychain slot next to keySessionSampledIn: whether the live session is held until an error.
+    case keySessionOnlyWithErrorMode = "sessionOnlyWithErrorMode"
     // Keychain slot (NOT a wire key): the counters of the live session's latest snapshot,
     // as JSON tagged with the session id, so a crash recovered on the next launch reports
     // the crashed session's counts instead of the relaunch session's.
@@ -282,6 +290,7 @@ public enum Keys: String {
     case queueSessionRecordQueue = "com.coralogix.sessionRecordQueue"
     case queueCrashDeliveryQueue = "com.coralogix.crashDeliveryQueue"
     case queueStoredCrashUploadQueue = "com.coralogix.storedCrashUploadQueue"
+    case queueErrorOnlyDrainQueue = "com.coralogix.errorOnlyDrainQueue"
     case queueANRDetectorQueue = "com.coralogix.anrDetectorQueue"
     case queueSlowFrozenReporterQueue = "com.coralogix.vitals.slowfrozen.reporter"
     case queueUserAgentQueue = "com.coralogix.userAgentQueue"
@@ -347,6 +356,10 @@ public enum Keys: String {
     case collectIPData
     case sessionSampleRate
     case excludeFromSampling
+    case alwaysTrackSessionsWithErrors
+    case onlyWithErrorConfig
+    case maxRumEvents
+    case instrumentationsToSend
     case traceParentInHeader
     case debug
     case proxyUrl

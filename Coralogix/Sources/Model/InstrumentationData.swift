@@ -97,6 +97,8 @@ struct OtelSpan {
         static let hasRecording              = "cx_rum.session_context.hasRecording"
         // camelCase like hasRecording; matches the Android SDK mirror key exactly.
         static let isSessionSampledIn        = "cx_rum.session_context.isSessionSampledIn"
+        static let onlyWithErrorMode         = "cx_rum.session_context.onlyWithErrorMode"
+        static let hasError                  = "cx_rum.session_context.hasError"
         static let userId                    = "cx_rum.session_context.user_id"
         static let userName                  = "cx_rum.session_context.user_name"
         static let userEmail                 = "cx_rum.session_context.user_email"
@@ -167,6 +169,8 @@ struct OtelSpan {
             // Same default as SessionContext: a span without the stamp can only reach
             // export on a sampled-in session.
             attrs[AttrKey.isSessionSampledIn] = (session[Keys.isSessionSampledIn.rawValue] as? Bool) ?? true
+            attrs[AttrKey.onlyWithErrorMode] = (session[Keys.onlyWithErrorMode.rawValue] as? Bool) ?? false
+            if let v = session[Keys.hasError.rawValue] as? Bool { attrs[AttrKey.hasError] = v }
             if let v = session[Keys.userId.rawValue] as? String, !v.isEmpty { attrs[AttrKey.userId] = v }
             if let v = session[Keys.userName.rawValue] as? String, !v.isEmpty { attrs[AttrKey.userName] = v }
             if let v = session[Keys.userEmail.rawValue] as? String, !v.isEmpty { attrs[AttrKey.userEmail] = v }
@@ -284,6 +288,7 @@ struct OtelSpan {
             attrs[AttrKey.sessionCreationDate] = session.sessionCreationDate.milliseconds
             attrs[AttrKey.hasRecording] = session.hasRecording
             attrs[AttrKey.isSessionSampledIn] = session.isSessionSampledIn
+            attrs[AttrKey.onlyWithErrorMode] = session.onlyWithErrorMode
             if !session.userId.isEmpty    { attrs[AttrKey.userId]    = session.userId }
             if !session.userName.isEmpty  { attrs[AttrKey.userName]  = session.userName }
             if !session.userEmail.isEmpty { attrs[AttrKey.userEmail] = session.userEmail }

@@ -12,6 +12,7 @@ public enum CaptureEventError: Error {
     case dummyInstance
     case sdkIdle
     case sessionSampledOut
+    case sessionErrorOnly
     case missingSessionReplayOptions
     case notRecording
     case skippingEvent
@@ -36,6 +37,10 @@ public protocol CoralogixInterface {
     /// a sampled-out session drops its `screenshot` events at export, so a frame captured for one
     /// would upload with nothing to index it.
     func isSessionSampledIn() -> Bool
+
+    /// Whether the current RUM session is held until an error. Session replay records nothing in
+    /// one: its events may never be sent, so frames would upload with nothing to index them.
+    func isSessionErrorOnly() -> Bool
     
     /// Returns the next screenshot location properties (segmentIndex, page, screenshotId).
     /// Used by SessionReplay when captureEvent is called without properties.
