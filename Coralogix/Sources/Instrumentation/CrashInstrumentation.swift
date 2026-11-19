@@ -284,9 +284,11 @@ extension CoralogixRum: StoredCrashSending {
         if let named = crash.context?.session {
             session = .init(id: named.id,
                             creationDate: named.creationTimeMillis.map { TimeInterval($0) / 1000 },
-                            sampledIn: named.sampledIn)
+                            sampledIn: named.sampledIn,
+                            errorOnly: named.errorOnly)
         } else if let last = sessionManager.lastLaunchSession {
-            session = .init(id: last.sessionId, creationDate: last.creationDate, sampledIn: last.sampledIn)
+            session = .init(id: last.sessionId, creationDate: last.creationDate,
+                            sampledIn: last.sampledIn, errorOnly: last.errorOnly)
         } else {
             return nil
         }
@@ -338,6 +340,7 @@ extension CoralogixRum: StoredCrashSending {
             span.setAttribute(key: Keys.sessionCreationDate.rawValue, value: String(Int(creationDate)))
         }
         span.setAttribute(key: Keys.spanSessionSampledIn.rawValue, value: String(record.session.sampledIn ?? true))
+        span.setAttribute(key: Keys.spanSessionOnlyWithErrorMode.rawValue, value: String(record.session.errorOnly ?? false))
 
         // A record stored by an SDK from before URL masking can hold a hybrid route with its query.
         let masker = UrlMasker.Masker(coralogixExporter?.getOptions().urlMasking ?? UrlMaskingOptions())

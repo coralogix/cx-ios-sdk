@@ -12,7 +12,7 @@ import CoralogixInternal
 /// The flag carries the session's sampling decision for that request, so the backend can tell a
 /// propagate-only request from a reported one:
 ///
-///     reportsNetworkEvent = sampledIn OR excludes(network)
+///     reportsNetworkEvent = sampledIn OR errorOnly OR excludes(network)
 ///     flagsByte           = reportsNetworkEvent ? "01" : "00"
 ///
 /// A not-sampled decision clears the flag on the span context, which is what `W3CTraceContextPropagator`
@@ -66,9 +66,12 @@ internal final class CxCustomSampler: Sampler {
 
         // Hybrid network spans (`reportHybrid…`) receive their attributes after the span has started,
         // so they do not match above and stay sampled.
+        // A session held until an error may send every event, so its requests are sampled too.
         let stamp = attributes[Keys.spanSessionSampledIn.rawValue]?.description
         let sampledIn = stamp.map { $0 == String(true) } ?? true
-        let exportsEvent = Self.exportsNetworkEvent(sampledIn: sampledIn, excludeFromSampling: self.excludeFromSampling)
+        let errorOnly = attributes[Keys.spanSessionOnlyWithErrorMode.rawValue]?.description == String(true)
+        let exportsEvent = Self.exportsNetworkEvent(sampledIn: sampledIn || errorOnly,
+                                                    excludeFromSampling: self.excludeFromSampling)
         return exportsEvent ? Samplers.alwaysOnDecision : Samplers.alwaysOffDecision
     }
 
