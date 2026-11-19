@@ -112,6 +112,11 @@ extension CoralogixRum: StoredCrashSending {
         crashRecoveryLock.lock()
         self.pendingRecoveredCrashes = lined
         crashRecoveryLock.unlock()
+
+        // After the crashes have their records: a held session's buffer waits for its crash. Until
+        // every crash earlier launches left is accounted for, no buffer is taken for crash-free.
+        let crashedSessionIds = outcome.earlierLaunchesAreSpent ? store.recordedSessionIds() : nil
+        self.coralogixExporter?.recoverErrorOnlyLeftovers(crashedSessionIds: crashedSessionIds)
     }
 
     /// The native crashes to send, newest first, capped; each with its delivery record.
@@ -231,6 +236,8 @@ extension CoralogixRum: StoredCrashSending {
         self.pendingRecoveredCrashes = []
         crashRecoveryLock.unlock()
         self.crashDeliveryScheduler.start(pending, onEnd: completion)
+        // After the crashes, which go first; an upload before init completes is never attempted.
+        self.coralogixExporter?.resumeErrorOnlyDrains()
     }
 
     /// Emits a recovered crash as an error span, under its `crash_event_id`.

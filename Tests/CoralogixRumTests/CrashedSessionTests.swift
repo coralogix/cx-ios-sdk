@@ -76,10 +76,12 @@ final class LaunchSessionTests: XCTestCase {
             CRXCrashContext.setSection(Keys.crashContextSession.rawValue,
                                        value: saved[Keys.crashContextSession.rawValue] as? [String: Any])
         }
-        CrashContextSession.write(.init(sessionId: "live-session", creationDate: 1_700_000_000.5, sampledIn: false))
+        CrashContextSession.write(.init(sessionId: "live-session", creationDate: 1_700_000_000.5, sampledIn: false,
+                                        errorOnly: true))
 
         let session = try XCTUnwrap(CrashContextEnvelope(data: CrashContextTests.liveReport().customData)?.session)
-        XCTAssertEqual(session, .init(id: "live-session", creationTimeMillis: 1_700_000_000_500, sampledIn: false))
+        XCTAssertEqual(session, .init(id: "live-session", creationTimeMillis: 1_700_000_000_500, sampledIn: false,
+                                      errorOnly: true))
     }
 }
 

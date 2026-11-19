@@ -244,6 +244,30 @@ struct OtelSpan {
         return attrs
     }
 
+    /// Sets `session_context.hasError` on an encoded event, in `text.cx_rum` and in its
+    /// `otelSpan.attributes` mirror. Stamped after the last `beforeSend`, so no callback sees it.
+    internal static func markingSessionHasError(_ event: [String: Any]) -> [String: Any] {
+        guard var text = event[Keys.text.rawValue] as? [String: Any],
+              var cxRum = text[Keys.cxRum.rawValue] as? [String: Any],
+              var session = cxRum[Keys.sessionContext.rawValue] as? [String: Any] else {
+            return event
+        }
+        var result = event
+        session[Keys.hasError.rawValue] = true
+        cxRum[Keys.sessionContext.rawValue] = session
+        text[Keys.cxRum.rawValue] = cxRum
+        result[Keys.text.rawValue] = text
+        if var instrumentationData = event[Keys.instrumentationData.rawValue] as? [String: Any],
+           var otelSpan = instrumentationData[Keys.otelSpan.rawValue] as? [String: Any],
+           var attributes = otelSpan[Keys.attributes.rawValue] as? [String: Any] {
+            attributes[AttrKey.hasError] = true
+            otelSpan[Keys.attributes.rawValue] = attributes
+            instrumentationData[Keys.otelSpan.rawValue] = otelSpan
+            result[Keys.instrumentationData.rawValue] = instrumentationData
+        }
+        return result
+    }
+
     /// Mirrors `text.cx_rum`: tvOS carries the SDK under `tv_sdk`. Its version key follows the
     /// field path (`tv_sdk.sdk_version`) so it matches the other `platform: tv` SDK.
     private static func addSdkVersionAndPlatform(to attrs: inout [String: Any], sdkVersion: String, os: String) {
