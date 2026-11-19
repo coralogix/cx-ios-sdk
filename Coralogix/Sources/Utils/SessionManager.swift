@@ -165,6 +165,9 @@ public class SessionManager {
     /// whatever the latest rotation left behind, so a concurrent rotation could make a sampled-in
     /// transition invisible to the callback that was supposed to act on it.
     internal var samplingReevaluationCallback: ((String, Bool) -> Void)?
+    /// Fired with the id of the session a rotation ended, captured under the rotation's own lock,
+    /// so two rotations close together each report their own ended session.
+    internal var endedSessionIdCallback: ((String) -> Void)?
 
     /// Rolls the sampling decision for a newly rotated session. Installed once at startup;
     /// invoked inside `performRotationLocked` so the decision is replaced atomically with
@@ -671,6 +674,8 @@ public class SessionManager {
     /// AFTER releasing `sessionLock` so callbacks never run while the lock is held.
     private struct RotationPendingCallbacks {
         let endedCallback: (() -> Void)?
+        let endedSessionId: String?
+        let endedSessionIdCallback: ((String) -> Void)?
         let priorExisted: Bool
         let newSessionId: String?
         let changedCallback: ((String) -> Void)?
@@ -737,6 +742,8 @@ public class SessionManager {
 
         return RotationPendingCallbacks(
             endedCallback: endedCb,
+            endedSessionId: self.prevSessionMetadata?.sessionId,
+            endedSessionIdCallback: self.endedSessionIdCallback,
             priorExisted: priorExisted,
             newSessionId: self.sessionMetadata?.sessionId,
             changedCallback: self.sessionChangedCallback,
@@ -757,6 +764,9 @@ public class SessionManager {
         // to end.
         if pending.priorExisted {
             pending.endedCallback?()
+            if let ended = pending.endedSessionId, !ended.isEmpty {
+                pending.endedSessionIdCallback?(ended)
+            }
         }
         if let newId = pending.newSessionId {
             pending.changedCallback?(newId)

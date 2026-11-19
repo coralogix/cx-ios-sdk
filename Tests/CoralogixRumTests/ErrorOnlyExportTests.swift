@@ -203,6 +203,44 @@ final class ErrorOnlyExportTests: XCTestCase {
         XCTAssertNil(session(held)[Keys.hasError.rawValue], "A forged hasError does not survive.")
     }
 
+    func testHybrid_featureOff_bothFieldsAreRestoredOnReturn() throws {
+        var options = makeErrorOnlyOptions(sampleRate: 100)
+        let js = HandedToJS()
+        options.beforeSendCallBack = { js.append($0) }
+        let rum = CoralogixRum(options: options, sdkFramework: .reactNative(version: "1.0.0"))
+        self.rum = rum
+        let exporter = try XCTUnwrap(rum.coralogixExporter)
+        let uploader = CapturingSpanUploader()
+        exporter.spanUploader = uploader
+
+        export(exporter, .log, message: "full")
+        exporter.sendBeforeSendData(data: forging(js.events.filter { message(cxRum($0)) == "full" },
+                                                  onlyWithErrorMode: true))
+
+        let sent = try XCTUnwrap(payload(uploader, message: "full"))
+        XCTAssertEqual(session(sent)[Keys.onlyWithErrorMode.rawValue] as? Bool, false,
+                       "A callback cannot mark a full session error-only.")
+        XCTAssertNil(session(sent)[Keys.hasError.rawValue], "Nor give it hasError.")
+    }
+
+    func testHybrid_aReturnedEventKeepsItsOwnMode_evenUnderAnUnknownSession() throws {
+        var options = makeErrorOnlyOptions(sampleRate: 0, alwaysTrack: true)
+        let js = HandedToJS()
+        options.beforeSendCallBack = { js.append($0) }
+        let rum = CoralogixRum(options: options, sdkFramework: .flutter(version: "1.0.0"))
+        self.rum = rum
+        let exporter = try XCTUnwrap(rum.coralogixExporter)
+        let uploader = CapturingSpanUploader()
+        exporter.spanUploader = uploader
+
+        export(exporter, .log, message: "held")
+        let returned = forging(js.events.filter { message(cxRum($0)) == "held" }, onlyWithErrorMode: false,
+                               sessionId: "a-session-the-sdk-does-not-know")
+        exporter.sendBeforeSendData(data: returned)
+        XCTAssertNil(payload(uploader, message: "held"),
+                     "The event was handed out error-only; it is never sent live as a full session's.")
+    }
+
     // MARK: - Crash on the next launch
 
     func testRecoveredCrash_sendsTheCrash_thenWhatItsSessionHeld() throws {
@@ -250,6 +288,17 @@ final class ErrorOnlyExportTests: XCTestCase {
     }
 
     // MARK: - Helpers
+
+    /// What a hybrid callback hands back after rewriting the read-only session fields.
+    private func forging(_ events: [[String: Any]], onlyWithErrorMode: Bool, sessionId: String? = nil) -> [[String: Any]] {
+        events.map { event in
+            CoralogixExporter.updatingSessionContext(of: event) { session in
+                session[Keys.onlyWithErrorMode.rawValue] = onlyWithErrorMode
+                session[Keys.hasError.rawValue] = true
+                if let sessionId { session[Keys.sessionId.rawValue] = sessionId }
+            }
+        }
+    }
 
     private func start(_ options: CoralogixExporterOptions) throws -> (CoralogixExporter, CapturingSpanUploader) {
         let rum = CoralogixRum(options: options)

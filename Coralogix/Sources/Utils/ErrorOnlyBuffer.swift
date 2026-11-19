@@ -53,8 +53,10 @@ final class ErrorOnlyBuffer {
     static let bytesPerEvent = 4 * 1_024
     static let maxMemoryEvents = 1_000
     static let maxMemoryBytes = 4 * 1_024 * 1_024
-    /// Sessions that had their error, remembered so their later events are sent as they happen.
+    /// Sessions that had their error, remembered so their later events are sent as they happen;
+    /// and sessions whose buffer was discarded at rotation, so a late event cannot start it again.
     static let triggeredSessionsKept = 32
+    static let discardedSessionsKept = 32
 
     private static let eventsExtension = "jsonl"
     private static let metadataSuffix = ".meta.json"
@@ -118,6 +120,8 @@ final class ErrorOnlyBuffer {
     private var sessions: [String: Session] = [:]
     /// Oldest first, capped at `triggeredSessionsKept`.
     private var triggeredSessionIds: [String] = []
+    /// Oldest first, capped at `discardedSessionsKept`.
+    private var discardedSessionIds: [String] = []
 
     init(maxRumEvents: Int,
          directory: URL = ErrorOnlyBuffer.defaultDirectory,
@@ -137,6 +141,10 @@ final class ErrorOnlyBuffer {
         lock.lock()
         defer { lock.unlock() }
         guard !isTriggeredLocked(sessionId) else { return false }
+        guard !discardedSessionIds.contains(sessionId) else {
+            Log.d("[ErrorOnlyBuffer] event of ended session \(sessionId) held for an error — dropped")
+            return true
+        }
         guard event.count <= Self.maxEventBytes else {
             Log.e("[ErrorOnlyBuffer] an event of \(event.count) bytes is over the 1 MB limit — dropped")
             return true
@@ -221,19 +229,27 @@ final class ErrorOnlyBuffer {
         return true
     }
 
-    /// Deletes what `sessionId` held, unless it had its error: its drain still needs it.
+    /// Called when `sessionId` ends: unless it had its error, what it held is deleted, and it is
+    /// never held for again — a late event of it is dropped rather than starting a new buffer.
     func discardUntriggered(_ sessionId: String) {
         lock.lock()
         defer { lock.unlock() }
-        guard let session = sessions[sessionId], !session.metadata.triggered else { return }
+        guard !isTriggeredLocked(sessionId) else { return }
+        if !discardedSessionIds.contains(sessionId) {
+            discardedSessionIds.append(sessionId)
+            if discardedSessionIds.count > Self.discardedSessionsKept {
+                discardedSessionIds.removeFirst(discardedSessionIds.count - Self.discardedSessionsKept)
+            }
+        }
         removeLocked(sessionId)
     }
 
-    /// Deletes every session this instance holds that has not had its error.
+    /// Deletes every session this instance itself held that has not had its error. A buffer an
+    /// earlier launch left for its crash stays: the crash, sent later, is its trigger.
     func discardAllUntriggered() {
         lock.lock()
         defer { lock.unlock() }
-        for (id, session) in sessions where !session.metadata.triggered {
+        for (id, session) in sessions where !session.metadata.triggered && session.metadata.owner == owner {
             removeLocked(id)
         }
     }
@@ -291,8 +307,7 @@ final class ErrorOnlyBuffer {
     private func fileLinesLocked(_ session: Session, maxEvents: Int, maxBytes: Int) -> (lines: [Data], endOffset: UInt64)? {
         let fileURL = eventsURL(of: session.metadata.sessionId)
         guard let data = try? Data(contentsOf: fileURL, options: .mappedIfSafe) else { return nil }
-        let start = Int(session.metadata.sentOffset)
-        guard start < data.count else { return nil }
+        guard let start = Int(exactly: session.metadata.sentOffset), start < data.count else { return nil }
         let window = data[start..<min(data.count, start + maxBytes + 1)]
         var lines: [Data] = []
         var consumed = 0
@@ -357,7 +372,8 @@ final class ErrorOnlyBuffer {
                 continue
             }
             guard metadata.owner != owner, sessions[metadata.sessionId] == nil else { continue }
-            guard keep(metadata), FileManager.default.fileExists(atPath: eventsURL(of: metadata.sessionId).path) else {
+            // An offset no file can have is a corrupt buffer.
+            guard Int(exactly: metadata.sentOffset) != nil, keep(metadata), FileManager.default.fileExists(atPath: eventsURL(of: metadata.sessionId).path) else {
                 deleteFilesLocked(metadata.sessionId)
                 continue
             }

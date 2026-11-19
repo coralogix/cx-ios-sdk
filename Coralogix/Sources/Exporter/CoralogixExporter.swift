@@ -35,8 +35,14 @@ public class CoralogixExporter: SpanExporter {
         get { reachabilityLock.lock(); defer { reachabilityLock.unlock() }; return _reachability }
         set { reachabilityLock.lock(); defer { reachabilityLock.unlock() }; _reachability = newValue }
     }
-    lazy var spanUploader: SpanUploading = SpanUploader(options: self.getOptions(),
-                                                        isOnline: { [weak self] in self?.reachability?.isOnline ?? true })
+    /// Built in `init`: the export thread, the error-only drain and the shutdown path all read it,
+    /// and must all reach one instance. Replaced only by tests.
+    private var _spanUploader: SpanUploading
+    private let spanUploaderLock = NSLock()
+    var spanUploader: SpanUploading {
+        get { spanUploaderLock.lock(); defer { spanUploaderLock.unlock() }; return _spanUploader }
+        set { spanUploaderLock.lock(); defer { spanUploaderLock.unlock() }; _spanUploader = newValue }
+    }
 
     private let spanProcessingQueue = DispatchQueue(label: Keys.queueSpanProcessingQueue.rawValue)
     // A stored crash's request can stay open for two minutes. Sending it here keeps the
@@ -77,6 +83,11 @@ public class CoralogixExporter: SpanExporter {
     var heldTraceSpans: [(spanId: String, span: SpanData)] = []
     let heldTraceSpansLock = NSLock()
     static let maxHeldTraceSpans = 1_000
+    /// Each span's `onlyWithErrorMode` as it was encoded, by span id, for the events handed to a
+    /// hybrid `beforeSend`: the mode is put back from here when they return. Oldest first.
+    var hybridModes: [(spanId: String, errorOnly: Bool)] = []
+    let hybridModesLock = NSLock()
+    static let maxHybridModes = 5_000
     var isRetired: Bool {
         retiredLock.lock()
         defer { retiredLock.unlock() }
@@ -205,8 +216,10 @@ public class CoralogixExporter: SpanExporter {
         self.metricsManager = metricsManager
         self.sessionRecorder = LiveSessionRecorder(store: sessionManager.snapshotStore)
         let buffer = ErrorOnlyBuffer(maxRumEvents: options.onlyWithErrorConfig.maxRumEvents)
-        // The drain outlives no exporter: it reaches this one weakly, once init has finished.
+        // The uploader and the drain reach this exporter weakly, once init has finished.
         let owner = WeakExporter()
+        self._spanUploader = SpanUploader(options: options,
+                                          isOnline: { owner.exporter?.reachability?.isOnline ?? true })
         self.errorOnlyBuffer = buffer
         self.errorOnlyDrain = ErrorOnlyDrain(buffer: buffer,
                                              isOnline: { owner.exporter?.reachability?.isOnline ?? true },
@@ -217,10 +230,12 @@ public class CoralogixExporter: SpanExporter {
             self?.viewManager.currentView ?? (nil, nil)
         }
         owner.exporter = self
+        self.sessionManager.endedSessionIdCallback = { [weak self] ended in
+            self?.errorOnlyBuffer.discardUntriggered(ended)
+        }
         self.sessionManager.sessionEndedCallback = { [weak self] in
             // Before the resets: they clear what the ended session's record must keep.
             self?.recordEndedSession()
-            self?.discardEndedErrorOnlySession()
             self?.viewManager.reset()
             self?.sessionManager.reset()
             self?.screenshotManager.reset()
@@ -505,7 +520,6 @@ public class CoralogixExporter: SpanExporter {
             recordCrashOutcome(CrashUploadAnswer(outcome: outcome), ids: [id])
             return
         }
-        // Read on this thread: `spanUploader` is lazy, and the live path reads it here too.
         let uploader = spanUploader
         let endPoint = self.endPoint
         // Strong self: a weak capture lost to a re-init would never answer the waiter, which
@@ -516,10 +530,11 @@ public class CoralogixExporter: SpanExporter {
                 ? .notAttempted
                 : uploader.upload(encoded, endPoint: endPoint, kind: .storedCrash)
             self.recordCrashOutcome(CrashUploadAnswer(result), ids: [id])
-        }
-        // After the crash is queued, so it goes first; the drain does not wait on its answer.
-        if let sessionId = triggersSession {
-            errorOnlyDrain.start([sessionId])
+            // Once the crash has been answered, so it goes first; the drain starts whatever the
+            // answer, and the crash's own retries do not wait on it.
+            if let sessionId = triggersSession {
+                self.errorOnlyDrain.start([sessionId])
+            }
         }
     }
 
@@ -558,6 +573,7 @@ public class CoralogixExporter: SpanExporter {
             result = uploadLive(routeErrorOnly(crashEvents)).resultCode
         }
         if !editableSpans.isEmpty {
+            rememberErrorOnlyModes(of: editableSpans)
             callback(editableSpans.deepCopy())
         }
         return result

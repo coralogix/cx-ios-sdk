@@ -80,6 +80,17 @@ final class ErrorOnlySessionModeTests: XCTestCase {
         XCTAssertEqual(manager.liveSessionSampling()?.errorOnly, false)
     }
 
+    func testTwoRotationsCloseTogether_eachReportsItsOwnEndedSession() throws {
+        let manager = SessionManager(snapshotStore: SessionSnapshotStore(directory: temporaryDirectory()))
+        let first = try XCTUnwrap(manager.currentSessionId)
+        var ended: [String] = []
+        manager.endedSessionIdCallback = { ended.append($0) }
+        manager.setupSessionMetadata()
+        let second = try XCTUnwrap(manager.currentSessionId)
+        manager.setupSessionMetadata()
+        XCTAssertEqual(ended, [first, second], "Each rotation names the session it ended, not the latest previous one.")
+    }
+
     // MARK: - Crash context and records
 
     func testCrashContextEnvelope_decodesTheMode_andToleratesItsAbsence() throws {
