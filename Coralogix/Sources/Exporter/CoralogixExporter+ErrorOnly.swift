@@ -30,7 +30,7 @@ extension CoralogixExporter {
     /// sent, otherwise it is dropped with the rest of that session.
     func routeErrorOnly(_ events: [[String: Any]]) -> [[String: Any]] {
         let options = getOptions()
-        guard options.alwaysTrackSessionsWithErrors || options.onlyWithErrorConfig.enable else { return events }
+        guard options.holdsSessionsForErrors else { return events }
         let sendsBeforeError = Set(options.onlyWithErrorConfig.instrumentationsToSend.map(\.eventType.rawValue))
 
         var live: [[String: Any]] = []
@@ -95,27 +95,19 @@ extension CoralogixExporter {
     /// The hybrid return path uploads what JS/Dart hands back verbatim, so the mode a callback may
     /// have rewritten is put back from what the SDK knows of the session.
     func restoringErrorOnlyMode(in event: [String: Any]) -> [String: Any] {
-        guard var text = event[Keys.text.rawValue] as? [String: Any],
+        guard getOptions().holdsSessionsForErrors, var text = event[Keys.text.rawValue] as? [String: Any],
               var cxRum = text[Keys.cxRum.rawValue] as? [String: Any],
               var session = cxRum[Keys.sessionContext.rawValue] as? [String: Any],
               let sessionId = session[Keys.sessionId.rawValue] as? String else {
             return event
         }
-        session[Keys.onlyWithErrorMode.rawValue] = isErrorOnlySession(sessionId)
+        session[Keys.onlyWithErrorMode.rawValue] = getSessionManager().isErrorOnlySession(sessionId)
         session[Keys.hasError.rawValue] = nil
         cxRum[Keys.sessionContext.rawValue] = session
         text[Keys.cxRum.rawValue] = cxRum
         var result = event
         result[Keys.text.rawValue] = text
         return result
-    }
-
-    /// Whether `sessionId` is held until an error: the live session's mode, or that of a session
-    /// that ended recently in this process.
-    private func isErrorOnlySession(_ sessionId: String) -> Bool {
-        getSessionManager().startSessionSpanAttributes(sessionId)?
-            .first { $0.key == Keys.spanSessionOnlyWithErrorMode.rawValue }?
-            .value?.description == String(true)
     }
 
     // MARK: - Lifecycle

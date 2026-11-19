@@ -255,6 +255,11 @@ public struct CoralogixExporterOptions {
         return alwaysTrackSessionsWithErrors ? .errorOnly : .dropped
     }
 
+    /// Whether any session can be held until an error.
+    internal var holdsSessionsForErrors: Bool {
+        alwaysTrackSessionsWithErrors || onlyWithErrorConfig.enable
+    }
+
     /// Whether `excludeFromSampling` requires `instrumentation` to keep running on a sampled-out session.
     internal func isExcludedFromSampling(_ instrumentation: InstrumentationType) -> Bool {
         self.excludeFromSampling.contains { $0.instrumentationTypes.contains(instrumentation) }
