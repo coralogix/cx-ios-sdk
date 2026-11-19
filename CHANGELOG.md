@@ -11,6 +11,7 @@ omitted; the focus here is user-facing behavior changes.
 ## [2.24.3] - 2026-11-19
 
 ### Fixed
+- Network requests started off the main thread now report the actual connection type (`wifi` or `cell`) instead of `unavailable`.
 - In React Native and Flutter apps, the life-cycle event sent when the app moves to the background is now delivered even if the app is closed right after.
 
 ## [2.24.2] - 2026-11-18
