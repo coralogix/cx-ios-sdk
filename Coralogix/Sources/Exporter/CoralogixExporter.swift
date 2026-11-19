@@ -6,9 +6,7 @@
 
 import Foundation
 import CoralogixInternal
-#if canImport(UIKit)
 import UIKit
-#endif
 
 public class CoralogixExporter: SpanExporter {
     // Written from the caller's thread (set(labels:), setUserContext, setApplicationContext) and

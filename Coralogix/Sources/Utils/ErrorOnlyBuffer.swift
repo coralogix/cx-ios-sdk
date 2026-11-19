@@ -86,6 +86,10 @@ final class ErrorOnlyBuffer {
         var metadata: Metadata
         var eventCount = 0
         var byteCount = 0
+        /// Bytes this instance has appended to the events file, so a failed write is cut back
+        /// without asking the file system.
+        var fileLength: UInt64 = 0
+        var fileCreated = false
         /// Set once a write failed: the rest of the session is held in memory.
         var diskFailed = false
         var memory: [Data] = []
@@ -132,7 +136,7 @@ final class ErrorOnlyBuffer {
     func hold(_ event: Data, sessionId: String) -> Bool {
         lock.lock()
         defer { lock.unlock() }
-        guard !triggeredSessionIds.contains(sessionId) else { return false }
+        guard !isTriggeredLocked(sessionId) else { return false }
         guard event.count <= Self.maxEventBytes else {
             Log.e("[ErrorOnlyBuffer] an event of \(event.count) bytes is over the 1 MB limit — dropped")
             return true
@@ -166,18 +170,19 @@ final class ErrorOnlyBuffer {
     /// Returns whether the write reached disk. A failed one is cut back to the last whole event.
     private func appendLocked(_ event: Data, to session: inout Session) -> Bool {
         let fileURL = eventsURL(of: session.metadata.sessionId)
-        var length: UInt64 = 0
         do {
-            if session.eventCount == 0 || !FileManager.default.fileExists(atPath: fileURL.path) {
+            if !session.fileCreated {
                 try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
                 try Self.write(Data(), to: fileURL)
                 try writeMetadataLocked(session.metadata)
+                session.fileCreated = true
             }
-            length = Self.fileSize(of: fileURL)
-            try writer.append(event + Self.newline, to: fileURL)
+            let line = event + Self.newline
+            try writer.append(line, to: fileURL)
+            session.fileLength += UInt64(line.count)
             return true
         } catch {
-            writer.truncate(fileURL, to: length)
+            writer.truncate(fileURL, to: session.fileLength)
             Log.e("[ErrorOnlyBuffer] could not write a held event (\(error)) — holding the rest of session \(session.metadata.sessionId) in memory")
             return false
         }
@@ -185,10 +190,15 @@ final class ErrorOnlyBuffer {
 
     // MARK: - Trigger
 
+    /// Whether `sessionId` had its error: in this process, or recorded by the launch that left its buffer.
     func isTriggered(_ sessionId: String) -> Bool {
         lock.lock()
         defer { lock.unlock() }
-        return triggeredSessionIds.contains(sessionId)
+        return isTriggeredLocked(sessionId)
+    }
+
+    private func isTriggeredLocked(_ sessionId: String) -> Bool {
+        triggeredSessionIds.contains(sessionId) || sessions[sessionId]?.metadata.triggered == true
     }
 
     /// Records that `sessionId` had its error. Returns whether it has held events to drain.
@@ -248,11 +258,20 @@ final class ErrorOnlyBuffer {
     /// `maxEvents` of them and `maxBytes` in all. The file comes first, then what is held in
     /// memory. nil when nothing is left, in which case the session's files are deleted.
     func nextChunk(of sessionId: String, maxEvents: Int, maxBytes: Int) -> Chunk? {
+        // Lines are taken under the lock and decoded after it, so `hold` on the export path does
+        // not wait on JSON parsing.
+        guard let raw = nextLines(of: sessionId, maxEvents: maxEvents, maxBytes: maxBytes) else { return nil }
+        return Chunk(sessionId: sessionId, events: raw.lines.compactMap(Self.decode),
+                     fileEndOffset: raw.fileEndOffset, memoryCount: raw.memoryCount)
+    }
+
+    private func nextLines(of sessionId: String, maxEvents: Int, maxBytes: Int)
+        -> (lines: [Data], fileEndOffset: UInt64?, memoryCount: Int)? {
         lock.lock()
         defer { lock.unlock() }
         guard let session = sessions[sessionId] else { return nil }
-        if let chunk = fileChunkLocked(session, maxEvents: maxEvents, maxBytes: maxBytes) {
-            return chunk
+        if let file = fileLinesLocked(session, maxEvents: maxEvents, maxBytes: maxBytes) {
+            return (file.lines, file.endOffset, 0)
         }
         var taken = 0
         var bytes = 0
@@ -265,30 +284,28 @@ final class ErrorOnlyBuffer {
             removeLocked(sessionId)
             return nil
         }
-        return Chunk(sessionId: sessionId, events: session.memory.prefix(taken).compactMap(Self.decode),
-                     fileEndOffset: nil, memoryCount: taken)
+        return (Array(session.memory.prefix(taken)), nil, taken)
     }
 
     /// A missing or short file is a normal case (the OS may purge the folder): what is there goes.
-    private func fileChunkLocked(_ session: Session, maxEvents: Int, maxBytes: Int) -> Chunk? {
+    private func fileLinesLocked(_ session: Session, maxEvents: Int, maxBytes: Int) -> (lines: [Data], endOffset: UInt64)? {
         let fileURL = eventsURL(of: session.metadata.sessionId)
         guard let data = try? Data(contentsOf: fileURL, options: .mappedIfSafe) else { return nil }
         let start = Int(session.metadata.sentOffset)
         guard start < data.count else { return nil }
         let window = data[start..<min(data.count, start + maxBytes + 1)]
-        var events: [[String: Any]] = []
+        var lines: [Data] = []
         var consumed = 0
         var lineStart = window.startIndex
-        while events.count < maxEvents, let newline = window[lineStart...].firstIndex(of: 0x0A) {
+        while lines.count < maxEvents, let newline = window[lineStart...].firstIndex(of: 0x0A) {
             let line = window[lineStart..<newline]
             guard consumed + line.count <= maxBytes || consumed == 0 else { break }
             consumed += line.count + 1
-            if let event = Self.decode(Data(line)) { events.append(event) }
+            lines.append(Data(line))
             lineStart = window.index(after: newline)
         }
         guard consumed > 0 else { return nil }
-        return Chunk(sessionId: session.metadata.sessionId, events: events,
-                     fileEndOffset: session.metadata.sentOffset + UInt64(consumed), memoryCount: 0)
+        return (lines, session.metadata.sentOffset + UInt64(consumed))
     }
 
     /// The chunk was delivered or refused for good: it is never sent again.
@@ -377,11 +394,6 @@ final class ErrorOnlyBuffer {
     /// Readable from the first unlock on, like the crash store's files.
     private static func write(_ data: Data, to url: URL) throws {
         try data.write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
-    }
-
-    private static func fileSize(of url: URL) -> UInt64 {
-        let size = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? NSNumber
-        return size?.uint64Value ?? 0
     }
 
     private static func decode(_ line: Data) -> [String: Any]? {

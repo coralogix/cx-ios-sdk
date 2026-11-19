@@ -122,6 +122,8 @@ final class ErrorOnlyBufferTests: XCTestCase {
         let relaunch = makeBuffer()
         let toDrain = relaunch.adoptLeftovers { $0.triggered || ["crashed"].contains($0.sessionId) }
         XCTAssertEqual(toDrain, ["triggered"])
+        XCTAssertTrue(relaunch.isTriggered("triggered"), "An adopted buffer that had its error is known as triggered.")
+        XCTAssertFalse(relaunch.hold(event(1), sessionId: "triggered"), "Nothing more is held for it.")
         XCTAssertNotNil(relaunch.metadata(of: "crashed"), "Kept for its crash to trigger it.")
         XCTAssertNil(relaunch.metadata(of: "plain"))
         XCTAssertFalse(FileManager.default.fileExists(atPath: directory.appendingPathComponent("plain.jsonl").path),

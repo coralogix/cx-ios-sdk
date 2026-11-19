@@ -558,6 +558,16 @@ public class SessionManager {
         return stamp?.spanAttributes
     }
 
+    /// Whether `sessionId` — the live session or one of the last few that ended — is held until an
+    /// error. A plain read, without the rotation check: asking about an exported event must not
+    /// itself rotate the session.
+    func isErrorOnlySession(_ sessionId: String) -> Bool {
+        sessionLock.lock()
+        defer { sessionLock.unlock() }
+        if sessionMetadata?.sessionId == sessionId { return _isSessionErrorOnly }
+        return endedSessions.last { $0.sessionId == sessionId }?.errorOnly ?? false
+    }
+
     /// PRECONDITION: caller holds `sessionLock`.
     private func liveSessionStampLocked() -> SessionStamp? {
         guard let current = self.sessionMetadata else { return nil }
