@@ -503,16 +503,17 @@ public class CoralogixExporter: SpanExporter {
         guard !sdk.isNative, let callback = options.beforeSendCallBack else {
             return uploadLive(cxSpansDictionary).resultCode
         }
-        // Crash events skip the hybrid JS round trip: when a crash is exported the
-        // process is usually about to terminate, and the extra native→JS→native hop
-        // loses the race. The hybrid beforeSend callback cannot edit or drop them;
-        // the native beforeSend option (applied during encoding) still can.
-        let crashEvents = cxSpansDictionary.filter { self.isCrashEvent($0) }
-        let editableSpans = cxSpansDictionary.filter { !self.isCrashEvent($0) }
+        // Crash and background events skip the hybrid JS round trip. A crash is exported as the
+        // process is about to terminate; the background event is flushed under a background task
+        // that ends when this export returns, after which iOS may suspend and kill the app. Either
+        // way the native→JS→native hop loses the race. The hybrid beforeSend callback cannot edit
+        // or drop them; the native beforeSend option (applied during encoding) still can.
+        let directEvents = cxSpansDictionary.filter { self.bypassesHybridBeforeSend($0) }
+        let editableSpans = cxSpansDictionary.filter { !self.bypassesHybridBeforeSend($0) }
 
         var result: SpanExporterResultCode = .success
-        if !crashEvents.isEmpty {
-            result = uploadLive(crashEvents).resultCode
+        if !directEvents.isEmpty {
+            result = uploadLive(directEvents).resultCode
         }
         if !editableSpans.isEmpty {
             callback(editableSpans.deepCopy())
@@ -525,13 +526,18 @@ public class CoralogixExporter: SpanExporter {
         (event[Keys.text.rawValue] as? [String: Any])?[Keys.cxRum.rawValue] as? [String: Any]
     }
 
-    /// Whether an encoded span carries `error_context.is_crash == true` — a crash reported
-    /// through the hybrid bridge or rebuilt from a pending PLCrashReporter report.
-    private func isCrashEvent(_ encodedSpan: [String: Any]) -> Bool {
-        guard let errorContext = Self.cxRum(of: encodedSpan)?[Keys.errorContext.rawValue] as? [String: Any] else {
-            return false
-        }
-        return errorContext[Keys.isCrash.rawValue] as? Bool ?? false
+    /// Whether an encoded span uploads directly instead of taking the hybrid beforeSend round trip:
+    /// a crash (`error_context.is_crash == true`, reported through the hybrid bridge or rebuilt from
+    /// a pending PLCrashReporter report) or the life-cycle event sent on entering the background.
+    private func bypassesHybridBeforeSend(_ encodedSpan: [String: Any]) -> Bool {
+        guard let cxRum = Self.cxRum(of: encodedSpan) else { return false }
+        let errorContext = cxRum[Keys.errorContext.rawValue] as? [String: Any]
+        let isCrash = errorContext?[Keys.isCrash.rawValue] as? Bool ?? false
+        let eventType = (cxRum[Keys.eventContext.rawValue] as? [String: Any])?[Keys.type.rawValue] as? String
+        let lifeCycleEvent = (cxRum[Keys.lifeCycleContext.rawValue] as? [String: Any])?[Keys.eventName.rawValue] as? String
+        let isBackgroundEvent = eventType == CoralogixEventType.lifeCycle.rawValue
+            && lifeCycleEvent == Keys.appDidEnterBackgroundNotification.rawValue
+        return isCrash || isBackgroundEvent
     }
 
     public func flush(explicitTimeout: TimeInterval?) -> SpanExporterResultCode {

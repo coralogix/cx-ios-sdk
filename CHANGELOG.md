@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Release-mechanics commits (version bumps, podspec/script tweaks, README edits) are
 omitted; the focus here is user-facing behavior changes.
 
+## [2.24.3] - 2026-11-19
+
+### Fixed
+- In React Native and Flutter apps, the life-cycle event sent when the app moves to the background is now delivered even if the app is closed right after.
+
 ## [2.24.2] - 2026-11-18
 
 ### Fixed
