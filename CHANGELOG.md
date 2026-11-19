@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Release-mechanics commits (version bumps, podspec/script tweaks, README edits) are
 omitted; the focus here is user-facing behavior changes.
 
+## [2.25.0] - 2026-11-19
+
+### Added
+- `alwaysTrackSessionsWithErrors` option: a session that `sessionSampleRate` leaves out is kept on the device and sent whole if an error or crash happens in it. Off by default.
+- `onlyWithErrorConfig` option (`SessionWithErrorConfig`): `enable` holds every session until an error, `maxRumEvents` caps what a session keeps (default 5000, at most 20000), and `instrumentationsToSend` lists categories sent before an error.
+- Every event carries `session_context.onlyWithErrorMode`; events sent from a session's error on carry `session_context.hasError`.
+
+### Changed
+- In a session held for an error, categories listed in `excludeFromSampling` are held too, and session recording does not record.
+
 ## [2.24.4] - 2026-11-22
 
 ### Fixed
