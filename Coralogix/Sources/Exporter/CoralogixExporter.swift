@@ -508,8 +508,15 @@ public class CoralogixExporter: SpanExporter {
         // that ends when this export returns, after which iOS may suspend and kill the app. Either
         // way the native→JS→native hop loses the race. The hybrid beforeSend callback cannot edit
         // or drop them; the native beforeSend option (applied during encoding) still can.
-        let directEvents = cxSpansDictionary.filter { self.bypassesHybridBeforeSend($0) }
-        let editableSpans = cxSpansDictionary.filter { !self.bypassesHybridBeforeSend($0) }
+        var directEvents: [[String: Any]] = []
+        var editableSpans: [[String: Any]] = []
+        for span in cxSpansDictionary {
+            if bypassesHybridBeforeSend(span) {
+                directEvents.append(span)
+            } else {
+                editableSpans.append(span)
+            }
+        }
 
         var result: SpanExporterResultCode = .success
         if !directEvents.isEmpty {
@@ -533,10 +540,10 @@ public class CoralogixExporter: SpanExporter {
         guard let cxRum = Self.cxRum(of: encodedSpan) else { return false }
         let errorContext = cxRum[Keys.errorContext.rawValue] as? [String: Any]
         let isCrash = errorContext?[Keys.isCrash.rawValue] as? Bool ?? false
-        let eventType = (cxRum[Keys.eventContext.rawValue] as? [String: Any])?[Keys.type.rawValue] as? String
-        let lifeCycleEvent = (cxRum[Keys.lifeCycleContext.rawValue] as? [String: Any])?[Keys.eventName.rawValue] as? String
-        let isBackgroundEvent = eventType == CoralogixEventType.lifeCycle.rawValue
-            && lifeCycleEvent == Keys.appDidEnterBackgroundNotification.rawValue
+        let eventType = ((cxRum[Keys.eventContext.rawValue] as? [String: Any])?[Keys.type.rawValue] as? String)
+            .flatMap(CoralogixEventType.init(rawValue:))
+        let lifeCycleName = (cxRum[Keys.lifeCycleContext.rawValue] as? [String: Any])?[Keys.eventName.rawValue] as? String
+        let isBackgroundEvent = LifeCycleContext.isBackgroundEvent(type: eventType, lifeCycleName: lifeCycleName)
         return isCrash || isBackgroundEvent
     }
 
