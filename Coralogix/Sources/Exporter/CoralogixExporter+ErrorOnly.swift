@@ -67,7 +67,7 @@ extension CoralogixExporter {
             if let spanId = route.spanId { settled[spanId] = sends }
         }
         forwardErrorOnlyTraces(settled)
-        errorOnlyDrain.start(triggered)
+        startErrorOnlyDrains(triggered)
         return live
     }
 
@@ -82,15 +82,16 @@ extension CoralogixExporter {
     }
 
     /// A stored crash, encoded: if its session is held until an error, the crash is its trigger,
-    /// provided `beforeSend` left it an error. Returns what to send, and the session to drain.
-    func crashOfErrorOnlySession(_ encoded: [[String: Any]]) -> ([[String: Any]], String?) {
-        guard let event = encoded.first, let route = ErrorOnlyRoute(event) else { return (encoded, nil) }
+    /// provided `beforeSend` left it an error. Returns what to send. The session drains once the
+    /// crash is finished with (`recordCrashOutcome`).
+    func crashOfErrorOnlySession(_ encoded: [[String: Any]]) -> [[String: Any]] {
+        guard let event = encoded.first, let route = ErrorOnlyRoute(event) else { return encoded }
         guard route.isError || errorOnlyBuffer.isTriggered(route.sessionId) else {
             Log.d("[CoralogixExporter] crash of session \(route.sessionId) is no longer an error after beforeSend — not sent")
-            return ([], nil)
+            return []
         }
         errorOnlyBuffer.trigger(route.sessionId)
-        return (encoded.map(OtelSpan.markingSessionHasError), route.sessionId)
+        return encoded.map(OtelSpan.markingSessionHasError)
     }
 
     /// Records the mode each event is handed to a hybrid `beforeSend` with.
@@ -162,8 +163,12 @@ extension CoralogixExporter {
     /// Resumes drains a launch, background or offline spell cut short. Does nothing until the
     /// launch's stored crashes have had their pass (`releaseErrorOnlyDrains`).
     func resumeErrorOnlyDrains() {
-        guard errorOnlyDrainsReleased else { return }
-        errorOnlyDrain.start(errorOnlyBuffer.triggeredSessions())
+        startErrorOnlyDrains(errorOnlyBuffer.triggeredSessions())
+    }
+
+    /// Starts the drains of `sessionIds` that wait on no crash (`drainableSessions`).
+    func startErrorOnlyDrains(_ sessionIds: [String]) {
+        errorOnlyDrain.start(drainableSessions(sessionIds))
     }
 
     /// Called once the stored-crash pass of this launch is over.

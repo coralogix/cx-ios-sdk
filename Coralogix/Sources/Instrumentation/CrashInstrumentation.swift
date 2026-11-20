@@ -109,7 +109,10 @@ extension CoralogixRum: StoredCrashSending {
 
         // After the crashes have their records: a held session's buffer waits for its crash. Until
         // every crash earlier launches left is accounted for, no buffer is taken for crash-free.
-        let crashedSessionIds = outcome.earlierLaunchesAreSpent ? store.recordedSessionIds() : nil
+        // Each stored crash also holds its session's drain until it is finished with.
+        let crashSessions = store.recordedCrashSessions()
+        self.coralogixExporter?.awaitStoredCrashes(crashSessions ?? [:])
+        let crashedSessionIds = outcome.earlierLaunchesAreSpent ? crashSessions.map { Set($0.values) } : nil
         self.coralogixExporter?.recoverErrorOnlyLeftovers(crashedSessionIds: crashedSessionIds)
     }
 
