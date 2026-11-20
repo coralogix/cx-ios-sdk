@@ -160,6 +160,27 @@ final class ErrorOnlyExportTests: XCTestCase {
         XCTAssertEqual(session(try XCTUnwrap(payload(uploader, message: "old-held")))[Keys.sessionId.rawValue] as? String, oldId)
     }
 
+    func testLeftoverDrains_waitForThisLaunchsCrashPass() throws {
+        let (exporter, uploader) = try start(makeErrorOnlyOptions(sampleRate: 0, alwaysTrack: true))
+        let earlier = ErrorOnlyBuffer(maxRumEvents: 5_000, directory: directory)
+        let event: [String: Any] = [Keys.text.rawValue: [Keys.cxRum.rawValue: [Keys.logContext.rawValue: [Keys.message.rawValue: "leftover"]]]]
+        earlier.hold(try JSONSerialization.data(withJSONObject: event), sessionId: "earlier")
+        earlier.trigger("earlier")
+        exporter.recoverErrorOnlyLeftovers(crashedSessionIds: [])
+
+        // A crash pass is under way: a foreground must not start the leftover ahead of it.
+        exporter.errorOnlyDrainsReleased = false
+        exporter.resumeErrorOnlyDrains()
+        exporter.errorOnlyDrain.waitUntilSettled()
+        XCTAssertNil(payload(uploader, message: "leftover"), "Not before the stored crashes have had their pass.")
+
+        let passOver = expectation(description: "crash pass over")
+        rum?.completeCrashRecovery { passOver.fulfill() }
+        wait(for: [passOver], timeout: 10)
+        exporter.errorOnlyDrain.waitUntilSettled()
+        XCTAssertNotNil(payload(uploader, message: "leftover"), "Drained once the pass is over.")
+    }
+
     func testRotation_dropsWhatTheEndedSessionHeld_andNeverSendsItUnderTheNewOne() throws {
         let clock = ManualDeliveryClock()
         ErrorOnlyBuffer.testClock = clock
