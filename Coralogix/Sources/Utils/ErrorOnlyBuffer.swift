@@ -6,11 +6,12 @@
 import Foundation
 import CoralogixInternal
 
-/// Appends bytes to a file, and cuts a file back to a length. A protocol so tests can make a
-/// write fail the way a full disk does.
+/// Appends bytes to a file, cuts a file back to a length, and replaces a whole file. A protocol
+/// so tests can make a write fail the way a full disk does.
 protocol ErrorOnlyFileWriting {
     func append(_ data: Data, to url: URL) throws
     func truncate(_ url: URL, to length: UInt64)
+    func replace(_ url: URL, with data: Data) throws
 }
 
 /// POSIX calls, because `FileHandle.write(_:)` raises an Objective-C exception on a full disk and
@@ -33,6 +34,11 @@ struct PosixFileWriter: ErrorOnlyFileWriting {
 
     func truncate(_ url: URL, to length: UInt64) {
         _ = Darwin.truncate(url.path, off_t(length))
+    }
+
+    /// Readable from the first unlock on, like the crash store's files.
+    func replace(_ url: URL, with data: Data) throws {
+        try data.write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
     }
 }
 
@@ -96,6 +102,10 @@ final class ErrorOnlyBuffer {
         /// without asking the file system.
         var fileLength: UInt64 = 0
         var fileCreated = false
+        /// Set while the metadata on disk is behind: a trigger or a delivered request it does not
+        /// record yet. No request goes until it is written, or a restart would take the session
+        /// for one without an error, or send a delivered request again.
+        var metadataUnsaved = false
         /// Set once a write failed: the rest of the session is held in memory.
         var diskFailed = false
         var memory: [Data] = []
@@ -198,7 +208,7 @@ final class ErrorOnlyBuffer {
         do {
             if !session.fileCreated {
                 try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-                try Self.write(Data(), to: fileURL)
+                try writer.replace(fileURL, with: Data())
                 try writeMetadataLocked(session.metadata)
                 session.fileCreated = true
             }
@@ -241,11 +251,35 @@ final class ErrorOnlyBuffer {
         }
         guard var session = sessions[sessionId] else { return false }
         session.metadata.triggered = true
-        sessions[sessionId] = session
         // Persisted so a drain cut short resumes on the next launch instead of being taken for a
         // session that ended without an error.
-        try? writeMetadataLocked(session.metadata)
+        persistMetadataLocked(&session)
+        sessions[sessionId] = session
         return true
+    }
+
+    /// Whether `sessionId`'s metadata on disk is current, writing it again if it was not. The drain
+    /// sends nothing for a session until it is. A session that never had a file has nothing on
+    /// disk to fall behind.
+    func ensureMetadataSaved(of sessionId: String) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard var session = sessions[sessionId], session.metadataUnsaved else { return true }
+        persistMetadataLocked(&session)
+        sessions[sessionId] = session
+        return !session.metadataUnsaved
+    }
+
+    /// Writes the metadata, trying once more on failure, and records whether it reached disk.
+    private func persistMetadataLocked(_ session: inout Session) {
+        let hasFile = session.fileCreated || session.metadata.owner != owner
+        guard hasFile else { return }
+        let saved = (try? writeMetadataLocked(session.metadata)) != nil
+            || (try? writeMetadataLocked(session.metadata)) != nil
+        if !saved {
+            Log.e("[ErrorOnlyBuffer] could not save the state of session \(session.metadata.sessionId) — its drain waits")
+        }
+        session.metadataUnsaved = !saved
     }
 
     /// Called when `sessionId` ends. Unless it had its error, it keeps holding for
@@ -372,7 +406,7 @@ final class ErrorOnlyBuffer {
         guard var session = sessions[chunk.sessionId] else { return }
         if let end = chunk.fileEndOffset {
             session.metadata.sentOffset = end
-            try? writeMetadataLocked(session.metadata)
+            persistMetadataLocked(&session)
         } else {
             let removed = session.memory.prefix(chunk.memoryCount)
             session.memoryBytes -= removed.reduce(0) { $0 + $1.count }
@@ -387,8 +421,8 @@ final class ErrorOnlyBuffer {
         defer { lock.unlock() }
         guard var session = sessions[sessionId] else { return }
         session.metadata.failedUploads += 1
+        persistMetadataLocked(&session)
         sessions[sessionId] = session
-        try? writeMetadataLocked(session.metadata)
     }
 
     func remove(_ sessionId: String) {
@@ -446,12 +480,7 @@ final class ErrorOnlyBuffer {
 
     private func writeMetadataLocked(_ metadata: Metadata) throws {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        try Self.write(JSONEncoder().encode(metadata), to: metadataURL(of: metadata.sessionId))
-    }
-
-    /// Readable from the first unlock on, like the crash store's files.
-    private static func write(_ data: Data, to url: URL) throws {
-        try data.write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+        try writer.replace(metadataURL(of: metadata.sessionId), with: JSONEncoder().encode(metadata))
     }
 
     private static func decode(_ line: Data) -> [String: Any]? {

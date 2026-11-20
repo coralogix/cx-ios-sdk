@@ -146,6 +146,14 @@ final class ErrorOnlyDrain {
             wait(pass, until: hold)
             return
         }
+        // A trigger or a delivered request the disk does not record yet: sending on could send it
+        // again after a restart, or lose the session to cleanup. Retried on the failure slots,
+        // without counting.
+        guard buffer.ensureMetadataSaved(of: pass.sessionId) else {
+            pass.anchor = pass.anchor ?? now
+            retry(pass, after: now)
+            return
+        }
         guard let chunk = buffer.nextChunk(of: pass.sessionId,
                                            maxEvents: Self.maxEventsPerRequest,
                                            maxBytes: Self.maxBytesPerRequest) else {
