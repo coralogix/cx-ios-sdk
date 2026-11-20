@@ -365,6 +365,12 @@ class MockCoralogix: CoralogixInterface {
     func isSessionSampledIn() -> Bool {
         return sessionSampledIn
     }
+
+    var sessionErrorOnly: Bool = false
+
+    func isSessionErrorOnly() -> Bool {
+        return sessionErrorOnly
+    }
     
     func getNextScreenshotLocationProperties() -> [String: Any] {
         return [:]

@@ -105,6 +105,7 @@ public class SessionManager {
         let sessionId: String
         let creationDate: TimeInterval
         let sampledIn: Bool
+        let errorOnly: Bool
         let prevSession: SessionMetadata?
         /// nil when no view source was wired (`viewProvider`), so the span's own view is left in place.
         let view: (name: String?, number: Int?)?
@@ -115,7 +116,8 @@ public class SessionManager {
             var attributes: [(key: String, value: AttributeValue?)] = [
                 (Keys.sessionId.rawValue, .string(sessionId)),
                 (Keys.sessionCreationDate.rawValue, .string(String(Int(creationDate)))),
-                (Keys.spanSessionSampledIn.rawValue, .string(String(sampledIn)))
+                (Keys.spanSessionSampledIn.rawValue, .string(String(sampledIn))),
+                (Keys.spanSessionOnlyWithErrorMode.rawValue, .string(String(errorOnly)))
             ]
             attributes += SessionManager.prevSessionAttributes(prevSession).map { ($0.key, $0.value.map(AttributeValue.string)) }
             if let view {
@@ -163,6 +165,10 @@ public class SessionManager {
     /// whatever the latest rotation left behind, so a concurrent rotation could make a sampled-in
     /// transition invisible to the callback that was supposed to act on it.
     internal var samplingReevaluationCallback: ((String, Bool) -> Void)?
+    /// Told the id of the session a rotation ended, *under* `sessionLock`, in the same step that
+    /// stops it being live: no reader can see the old session as neither live nor ended. Like the
+    /// crash-stamp observer it must stay cheap, never block, and never call back into this class.
+    internal var endedSessionIdCallback: ((String) -> Void)?
 
     /// Rolls the sampling decision for a newly rotated session. Installed once at startup;
     /// invoked inside `performRotationLocked` so the decision is replaced atomically with
@@ -170,12 +176,18 @@ public class SessionManager {
     /// sampling filter and the per-span stamp observe, so they can never disagree.
     internal var samplingRoller: (() -> Bool)?
     private var _isSessionSampledIn: Bool = true
+    /// Whether the live session is held until an error. Derived from the sampling decision by
+    /// `errorOnlyPolicy` every time that decision is made, under the same lock, so the two always
+    /// describe one session.
+    private var _isSessionErrorOnly: Bool = false
+    private var _errorOnlyPolicy: ((Bool) -> Bool)?
 
     /// Identity of the live session, in the form crash context records it.
     struct CrashStamp: Equatable {
         let sessionId: String
         let creationDate: TimeInterval
         let sampledIn: Bool
+        var errorOnly: Bool = false
     }
 
     /// Told the live session's identity on every rotation and sampling decision, *under*
@@ -215,14 +227,35 @@ public class SessionManager {
         return _isSessionSampledIn
     }
 
+    /// Whether the current session is held until an error (`SessionMode.errorOnly`).
+    internal var isSessionErrorOnly: Bool {
+        sessionLock.lock()
+        defer { sessionLock.unlock() }
+        return _isSessionErrorOnly
+    }
+
+    /// Installs the rule that turns a session's sampling decision into whether it is held until an
+    /// error. Set at startup before the decision is seeded; nil holds no session.
+    internal func setErrorOnlyPolicy(_ policy: ((Bool) -> Bool)?) {
+        sessionLock.lock()
+        defer { sessionLock.unlock() }
+        _errorOnlyPolicy = policy
+    }
+
     /// Seeds the decision for the session that already exists when the SDK starts up
     /// (created by `init` before `samplingRoller` could be installed).
     internal func setSessionSampledIn(_ sampledIn: Bool) {
         sessionLock.lock()
         defer { sessionLock.unlock() }
-        _isSessionSampledIn = sampledIn
-        persistSessionSampledInLocked(sampledIn)
+        applySamplingLocked(sampledIn)
+        persistSessionSamplingLocked()
         notifyCrashStampLocked()
+    }
+
+    /// PRECONDITION: caller holds `sessionLock`.
+    private func applySamplingLocked(_ sampledIn: Bool) {
+        _isSessionSampledIn = sampledIn
+        _isSessionErrorOnly = _errorOnlyPolicy?(sampledIn) ?? false
     }
 
     /// PRECONDITION: caller holds `sessionLock`.
@@ -230,7 +263,8 @@ public class SessionManager {
         guard let current = sessionMetadata, !current.sessionId.isEmpty else { return nil }
         return CrashStamp(sessionId: current.sessionId,
                           creationDate: current.sessionCreationDate,
-                          sampledIn: _isSessionSampledIn)
+                          sampledIn: _isSessionSampledIn,
+                          errorOnly: _isSessionErrorOnly)
     }
 
     /// The crash stamp as last published, readable without `sessionLock`. The hang watchdog reads
@@ -267,10 +301,14 @@ public class SessionManager {
     /// decision (`lastLaunchSession`, for a report that names no session) instead of the relaunch's fresh roll.
     /// PRECONDITION: caller holds `sessionLock` (same discipline as the identity writes
     /// in `SessionMetadata.loadPrevSession`, which also run under the lock).
-    private func persistSessionSampledInLocked(_ sampledIn: Bool) {
-        KeychainManager().writeStringToKeychain(service: Keys.service.rawValue,
-                                                key: Keys.keySessionSampledIn.rawValue,
-                                                value: String(sampledIn))
+    private func persistSessionSamplingLocked() {
+        let keychain = KeychainManager()
+        keychain.writeStringToKeychain(service: Keys.service.rawValue,
+                                       key: Keys.keySessionSampledIn.rawValue,
+                                       value: String(_isSessionSampledIn))
+        keychain.writeStringToKeychain(service: Keys.service.rawValue,
+                                       key: Keys.keySessionOnlyWithErrorMode.rawValue,
+                                       value: String(_isSessionErrorOnly))
     }
 
     public var hasRecording: Bool = false {
@@ -464,6 +502,7 @@ public class SessionManager {
         let current = self.sessionMetadata
         let prev = self.prevSessionMetadata
         let sampledIn = self._isSessionSampledIn
+        let errorOnly = self._isSessionErrorOnly
         sessionLock.unlock()
 
         var attrs: [(key: String, value: String)] = []
@@ -471,6 +510,7 @@ public class SessionManager {
             attrs.append((Keys.sessionId.rawValue, current.sessionId))
             attrs.append((Keys.sessionCreationDate.rawValue, String(Int(current.sessionCreationDate))))
             attrs.append((Keys.spanSessionSampledIn.rawValue, String(sampledIn)))
+            attrs.append((Keys.spanSessionOnlyWithErrorMode.rawValue, String(errorOnly)))
         }
         attrs += Self.prevSessionAttributes(prev).compactMap { attr in attr.value.map { (attr.key, $0) } }
         return attrs
@@ -498,14 +538,14 @@ public class SessionManager {
         }
     }
 
-    /// The live session's id and sampling decision, read together after any rotation that is due, so the
-    /// two always describe one session. nil when there is no session.
-    func liveSessionSampling() -> (sessionId: String, sampledIn: Bool)? {
+    /// The live session's id, sampling decision and error-only mode, read together after any rotation
+    /// that is due, so they always describe one session. nil when there is no session.
+    func liveSessionSampling() -> (sessionId: String, sampledIn: Bool, errorOnly: Bool)? {
         _ = getSessionMetadata()
         sessionLock.lock()
         defer { sessionLock.unlock() }
         guard let current = self.sessionMetadata else { return nil }
-        return (current.sessionId, self._isSessionSampledIn)
+        return (current.sessionId, self._isSessionSampledIn, self._isSessionErrorOnly)
     }
 
     /// Everything a span made in session `sessionId` records about it — the live session or one of the last
@@ -522,12 +562,23 @@ public class SessionManager {
         return stamp?.spanAttributes
     }
 
+    /// Whether `sessionId` — the live session or one of the last few that ended — is held until an
+    /// error. A plain read, without the rotation check: asking about an exported event must not
+    /// itself rotate the session.
+    func isErrorOnlySession(_ sessionId: String) -> Bool {
+        sessionLock.lock()
+        defer { sessionLock.unlock() }
+        if sessionMetadata?.sessionId == sessionId { return _isSessionErrorOnly }
+        return endedSessions.last { $0.sessionId == sessionId }?.errorOnly ?? false
+    }
+
     /// PRECONDITION: caller holds `sessionLock`.
     private func liveSessionStampLocked() -> SessionStamp? {
         guard let current = self.sessionMetadata else { return nil }
         return SessionStamp(sessionId: current.sessionId,
                             creationDate: current.sessionCreationDate,
                             sampledIn: self._isSessionSampledIn,
+                            errorOnly: self._isSessionErrorOnly,
                             prevSession: self.prevSessionMetadata,
                             view: self.viewProvider?())
     }
@@ -649,6 +700,9 @@ public class SessionManager {
             }
         }
         self.prevSessionMetadata = self.sessionMetadata
+        if let ended = self.prevSessionMetadata?.sessionId, !ended.isEmpty {
+            self.endedSessionIdCallback?(ended)
+        }
         let newSessionId = self.pendingLaunchSessionId ?? UUID().uuidString.lowercased()
         self.pendingLaunchSessionId = nil
         self.sessionMetadata = SessionMetadata(sessionId: newSessionId,
@@ -659,13 +713,13 @@ public class SessionManager {
         // the previous session's sampling decision (or vice versa). Absent roller (before
         // startup installs it) keeps the seeded/default value.
         if let samplingRoller = self.samplingRoller {
-            self._isSessionSampledIn = samplingRoller()
+            applySamplingLocked(samplingRoller())
         }
         // Published before the keychain write below, which can stall: a hang there belongs to
         // the session this rotation has already started.
         publishCrashStampSnapshotLocked()
         if self.samplingRoller != nil {
-            persistSessionSampledInLocked(self._isSessionSampledIn)
+            persistSessionSamplingLocked()
         }
         // Reset snapshot-throttle so the fresh session can emit its first
         // snapshot immediately. CxRumBuilder.buildSnapshotContextIfNeeded
@@ -766,6 +820,8 @@ struct LastLaunchSession: Equatable {
     let creationDate: TimeInterval
     /// nil when the previous launch predates the persisted decision.
     let sampledIn: Bool?
+    /// nil when the previous launch predates the persisted mode.
+    var errorOnly: Bool? = nil
 }
 
 extension LastLaunchSession {
@@ -774,6 +830,7 @@ extension LastLaunchSession {
     init?(previousOf metadata: SessionMetadata) {
         guard let sessionId = metadata.oldSessionId,
               let creationDate = metadata.oldSessionTimeInterval else { return nil }
-        self.init(sessionId: sessionId, creationDate: creationDate, sampledIn: metadata.oldSessionSampledIn)
+        self.init(sessionId: sessionId, creationDate: creationDate, sampledIn: metadata.oldSessionSampledIn,
+                  errorOnly: metadata.oldSessionErrorOnly)
     }
 }

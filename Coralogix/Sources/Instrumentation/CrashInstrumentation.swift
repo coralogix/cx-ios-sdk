@@ -106,6 +106,14 @@ extension CoralogixRum: StoredCrashSending {
         crashRecoveryLock.lock()
         self.pendingRecoveredCrashes = lined
         crashRecoveryLock.unlock()
+
+        // After the crashes have their records: a held session's buffer waits for its crash. Until
+        // every crash earlier launches left is accounted for, no buffer is taken for crash-free.
+        // Each stored crash also holds its session's drain until it is finished with.
+        let crashSessions = store.recordedCrashSessions()
+        self.coralogixExporter?.awaitStoredCrashes(crashSessions ?? [:])
+        let crashedSessionIds = outcome.earlierLaunchesAreSpent ? crashSessions.map { Set($0.values) } : nil
+        self.coralogixExporter?.recoverErrorOnlyLeftovers(crashedSessionIds: crashedSessionIds)
     }
 
     /// The native crashes to send, newest first, capped; each with its delivery record.
@@ -224,7 +232,13 @@ extension CoralogixRum: StoredCrashSending {
         let pending = self.pendingRecoveredCrashes
         self.pendingRecoveredCrashes = []
         crashRecoveryLock.unlock()
-        self.crashDeliveryScheduler.start(pending, onEnd: completion)
+        // Buffers earlier launches left drain once this pass is over: a crash goes before the
+        // events of its session, whether it is sent now or left for a later launch.
+        let exporter = self.coralogixExporter
+        self.crashDeliveryScheduler.start(pending) {
+            exporter?.releaseErrorOnlyDrains()
+            completion?()
+        }
     }
 
     /// Emits a recovered crash as an error span, under its `crash_event_id`.
@@ -284,9 +298,11 @@ extension CoralogixRum: StoredCrashSending {
         if let named = crash.context?.session {
             session = .init(id: named.id,
                             creationDate: named.creationTimeMillis.map { TimeInterval($0) / 1000 },
-                            sampledIn: named.sampledIn)
+                            sampledIn: named.sampledIn,
+                            errorOnly: named.errorOnly)
         } else if let last = sessionManager.lastLaunchSession {
-            session = .init(id: last.sessionId, creationDate: last.creationDate, sampledIn: last.sampledIn)
+            session = .init(id: last.sessionId, creationDate: last.creationDate,
+                            sampledIn: last.sampledIn, errorOnly: last.errorOnly)
         } else {
             return nil
         }
@@ -338,6 +354,7 @@ extension CoralogixRum: StoredCrashSending {
             span.setAttribute(key: Keys.sessionCreationDate.rawValue, value: String(Int(creationDate)))
         }
         span.setAttribute(key: Keys.spanSessionSampledIn.rawValue, value: String(record.session.sampledIn ?? true))
+        span.setAttribute(key: Keys.spanSessionOnlyWithErrorMode.rawValue, value: String(record.session.errorOnly ?? false))
 
         // A record stored by an SDK from before URL masking can hold a hybrid route with its query.
         let masker = UrlMasker.Masker(coralogixExporter?.getOptions().urlMasking ?? UrlMaskingOptions())

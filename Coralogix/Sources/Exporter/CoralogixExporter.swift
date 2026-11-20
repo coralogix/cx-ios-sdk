@@ -6,6 +6,7 @@
 
 import Foundation
 import CoralogixInternal
+import UIKit
 
 public class CoralogixExporter: SpanExporter {
     // Written from the caller's thread (set(labels:), setUserContext, setApplicationContext) and
@@ -34,8 +35,14 @@ public class CoralogixExporter: SpanExporter {
         get { reachabilityLock.lock(); defer { reachabilityLock.unlock() }; return _reachability }
         set { reachabilityLock.lock(); defer { reachabilityLock.unlock() }; _reachability = newValue }
     }
-    lazy var spanUploader: SpanUploading = SpanUploader(options: self.getOptions(),
-                                                        isOnline: { [weak self] in self?.reachability?.isOnline ?? true })
+    /// Built in `init`: the export thread, the error-only drain and the shutdown path all read it,
+    /// and must all reach one instance. Replaced only by tests.
+    private var _spanUploader: SpanUploading
+    private let spanUploaderLock = NSLock()
+    var spanUploader: SpanUploading {
+        get { spanUploaderLock.lock(); defer { spanUploaderLock.unlock() }; return _spanUploader }
+        set { spanUploaderLock.lock(); defer { spanUploaderLock.unlock() }; _spanUploader = newValue }
+    }
 
     private let spanProcessingQueue = DispatchQueue(label: Keys.queueSpanProcessingQueue.rawValue)
     // A stored crash's request can stay open for two minutes. Sending it here keeps the
@@ -67,6 +74,56 @@ public class CoralogixExporter: SpanExporter {
     /// must still send nothing its batch processor exports after that.
     private let retiredLock = NSLock()
     private var _isRetired = false
+
+    /// What sessions held until an error hold, and the drain that sends it once they have one.
+    let errorOnlyBuffer: ErrorOnlyBuffer
+    let errorOnlyDrain: ErrorOnlyDrain
+    /// Spans of error-only sessions waiting to learn whether they are sent now, by span id, for
+    /// `tracesExporter`: it sees only what is sent (see `forwardErrorOnlyTraces`). Oldest first.
+    var heldTraceSpans: [(spanId: String, span: SpanData)] = []
+    let heldTraceSpansLock = NSLock()
+    static let maxHeldTraceSpans = 1_000
+    /// Each span's `onlyWithErrorMode` as it was encoded, by span id, for the events handed to a
+    /// hybrid `beforeSend`: the mode is put back from here when they return. Oldest first.
+    var hybridModes: [(spanId: String, errorOnly: Bool)] = []
+    let hybridModesLock = NSLock()
+    /// Crashes go before the held events of their session. No drain starts until this launch's
+    /// stored-crash pass is over (`errorOnlyDrainsReleased`), and a session with a stored crash
+    /// not yet delivered or given up (`pendingCrashSessions`, crash id → session id) keeps waiting
+    /// after it, for a later pass that delivers the crash.
+    private var _errorOnlyDrainsReleased = false
+    private var pendingCrashSessions: [String: String] = [:]
+    private let errorOnlyGateLock = NSLock()
+    var errorOnlyDrainsReleased: Bool {
+        get { errorOnlyGateLock.lock(); defer { errorOnlyGateLock.unlock() }; return _errorOnlyDrainsReleased }
+        set { errorOnlyGateLock.lock(); defer { errorOnlyGateLock.unlock() }; _errorOnlyDrainsReleased = newValue }
+    }
+
+    /// Holds the drains of the sessions these stored crashes (crash id → session id) happened in.
+    func awaitStoredCrashes(_ crashSessions: [String: String]) {
+        errorOnlyGateLock.lock()
+        defer { errorOnlyGateLock.unlock() }
+        pendingCrashSessions.merge(crashSessions) { _, new in new }
+    }
+
+    /// Which of `sessionIds` may drain now.
+    func drainableSessions(_ sessionIds: [String]) -> [String] {
+        errorOnlyGateLock.lock()
+        defer { errorOnlyGateLock.unlock() }
+        guard _errorOnlyDrainsReleased else { return [] }
+        let waiting = Set(pendingCrashSessions.values)
+        return sessionIds.filter { !waiting.contains($0) }
+    }
+
+    /// The crashes `ids` are finished with; returns the sessions that no longer wait on a crash.
+    private func settleStoredCrashes(_ ids: Set<String>) -> [String] {
+        errorOnlyGateLock.lock()
+        defer { errorOnlyGateLock.unlock() }
+        let sessions = ids.compactMap { pendingCrashSessions.removeValue(forKey: $0) }
+        let waiting = Set(pendingCrashSessions.values)
+        return Array(Set(sessions).subtracting(waiting))
+    }
+    static let maxHybridModes = 5_000
     var isRetired: Bool {
         retiredLock.lock()
         defer { retiredLock.unlock() }
@@ -124,6 +181,8 @@ public class CoralogixExporter: SpanExporter {
     /// Uploads live events and answers whoever waits on their delivery.
     @discardableResult
     private func uploadLive(_ events: [[String: Any]]) -> SpanUploadResult {
+        // Everything may have been held for an error.
+        guard !events.isEmpty else { return .delivered }
         // Re-checked here: an export can pass the entry check just before shutdown retires this
         // exporter, and a later init reopens the process-wide gate the uploader checks.
         let result = isRetired ? .notAttempted : spanUploader.upload(events, endPoint: self.endPoint)
@@ -140,6 +199,9 @@ public class CoralogixExporter: SpanExporter {
         let waiters = ids.compactMap { crashUploadWaiters.removeValue(forKey: $0) }
         crashUploadLock.unlock()
         waiters.forEach { $0(answer) }
+        if answer.outcome.isFinished {
+            startErrorOnlyDrains(settleStoredCrashes(ids))
+        }
     }
 
     /// The spans `tracesExporter` should see: every non-crash span, and each crash only the
@@ -192,9 +254,23 @@ public class CoralogixExporter: SpanExporter {
         self.viewManager = viewManager
         self.metricsManager = metricsManager
         self.sessionRecorder = LiveSessionRecorder(store: sessionManager.snapshotStore)
+        let buffer = ErrorOnlyBuffer(maxRumEvents: options.onlyWithErrorConfig.maxRumEvents)
+        // The uploader and the drain reach this exporter weakly, once init has finished.
+        let owner = WeakExporter()
+        self._spanUploader = SpanUploader(options: options,
+                                          isOnline: { owner.exporter?.reachability?.isOnline ?? true })
+        self.errorOnlyBuffer = buffer
+        self.errorOnlyDrain = ErrorOnlyDrain(buffer: buffer,
+                                             isOnline: { owner.exporter?.reachability?.isOnline ?? true },
+                                             upload: { owner.exporter?.uploadHeld($0) ?? .notAttempted },
+                                             cancelUpload: { owner.exporter?.spanUploader.cancelStoredCrashUploads() })
 
         self.sessionManager.viewProvider = { [weak self] in
             self?.viewManager.currentView ?? (nil, nil)
+        }
+        owner.exporter = self
+        self.sessionManager.endedSessionIdCallback = { [weak self] ended in
+            self?.errorOnlyBuffer.endSession(ended)
         }
         self.sessionManager.sessionEndedCallback = { [weak self] in
             // Before the resets: they clear what the ended session's record must keep.
@@ -206,6 +282,16 @@ public class CoralogixExporter: SpanExporter {
         self.sessionManager.countersChanged = { [weak self] in
             self?.recordLiveSession()
         }
+        self.foregroundObserver = NotificationCenter.default.addObserver(
+            forName: UIApplication.didBecomeActiveNotification, object: nil, queue: nil) { [weak self] _ in
+                self?.resumeErrorOnlyDrains()
+            }
+    }
+
+    private var foregroundObserver: NSObjectProtocol?
+
+    deinit {
+        if let foregroundObserver { NotificationCenter.default.removeObserver(foregroundObserver) }
     }
 
     /// Writes the live session's record; called whenever what a crash would report changes.
@@ -318,8 +404,8 @@ public class CoralogixExporter: SpanExporter {
     }
     
     internal func sendBeforeSendData(data: [[String: Any]]) {
-        let rebuilt = data.map { self.rebuildOtelSpanAttributes(in: $0) }
-        self.uploadLive(rebuilt)
+        let rebuilt = data.map { self.rebuildOtelSpanAttributes(in: self.restoringErrorOnlyMode(in: $0)) }
+        self.uploadLive(self.routeErrorOnly(rebuilt))
     }
 
     /// Hybrid (`beforeSendCallBack`) path: spans are encoded *before* the JS edit and the
@@ -428,15 +514,8 @@ public class CoralogixExporter: SpanExporter {
         // Invoke tracesExporter callback if configured (additive OTLP export path).
         // This provides raw SpanData for external OTLP consumers and does NOT affect
         // the CX log pipeline — instrumentation_data is always preserved.
-        if let tracesExporter = options.tracesExporter {
-            let forwarded = spansToForward(uniqueSpans)
-            if !forwarded.isEmpty {
-                do {
-                    try tracesExporter(CoralogixTraceExporterData(spans: forwarded))
-                } catch {
-                    Log.e("[CoralogixExporter] tracesExporter callback threw: \(error)")
-                }
-            }
+        if options.tracesExporter != nil {
+            forwardTraces(spansToForward(holdingErrorOnlyTraces(of: uniqueSpans)))
         }
 
         // Each stored crash goes in a request of its own, so a reject of the live batch (a
@@ -448,11 +527,25 @@ public class CoralogixExporter: SpanExporter {
         return liveSpans.isEmpty ? .success : exportLive(liveSpans, options: options)
     }
 
+    /// Hands `spans` to `tracesExporter`, if one is set.
+    func forwardTraces(_ spans: [SpanData]) {
+        guard !spans.isEmpty, let tracesExporter = getOptions().tracesExporter else { return }
+        do {
+            try tracesExporter(CoralogixTraceExporterData(spans: spans))
+        } catch {
+            Log.e("[CoralogixExporter] tracesExporter callback threw: \(error)")
+        }
+    }
+
     /// Encodes the crash here, so beforeSend sees the same state as before, and sends it on
     /// `storedCrashUploadQueue`.
     private func uploadCrash(_ span: SpanData) {
         guard let id = crashEventId(of: span) else { return }
-        let encoded = autoreleasepool { encodeSpans(spans: [span]) }
+        let encodedEvents = autoreleasepool { encodeSpans(spans: [span]) }
+        // A crash of a session held until an error is its trigger, decided after beforeSend like
+        // any other event's. One beforeSend took out of error severity triggers nothing, and is
+        // not sent: a session without an error sends nothing.
+        let encoded = crashOfErrorOnlySession(encodedEvents)
         // Empty means the native beforeSend dropped it or it could not be encoded. Both are
         // final: a failed rebuild fails the same way on every launch. With a beforeSend set, an
         // encode failure is also labelled `.policyDropped`, so that label is not proof the
@@ -466,7 +559,6 @@ public class CoralogixExporter: SpanExporter {
             recordCrashOutcome(CrashUploadAnswer(outcome: outcome), ids: [id])
             return
         }
-        // Read on this thread: `spanUploader` is lazy, and the live path reads it here too.
         let uploader = spanUploader
         let endPoint = self.endPoint
         // Strong self: a weak capture lost to a re-init would never answer the waiter, which
@@ -476,6 +568,8 @@ public class CoralogixExporter: SpanExporter {
             let result = self.isRetired
                 ? .notAttempted
                 : uploader.upload(encoded, endPoint: endPoint, kind: .storedCrash)
+            // Settles the crash; its session's drain starts once the crash is finished with,
+            // and the launch's crash pass is over.
             self.recordCrashOutcome(CrashUploadAnswer(result), ids: [id])
         }
     }
@@ -501,7 +595,7 @@ public class CoralogixExporter: SpanExporter {
 
         let sdk = CoralogixRum.mobileSDK.sdkFramework
         guard !sdk.isNative, let callback = options.beforeSendCallBack else {
-            return uploadLive(cxSpansDictionary).resultCode
+            return uploadLive(routeErrorOnly(cxSpansDictionary)).resultCode
         }
         // Crash events skip the hybrid JS round trip: when a crash is exported the
         // process is usually about to terminate, and the extra native→JS→native hop
@@ -512,16 +606,17 @@ public class CoralogixExporter: SpanExporter {
 
         var result: SpanExporterResultCode = .success
         if !crashEvents.isEmpty {
-            result = uploadLive(crashEvents).resultCode
+            result = uploadLive(routeErrorOnly(crashEvents)).resultCode
         }
         if !editableSpans.isEmpty {
+            rememberErrorOnlyModes(of: editableSpans)
             callback(editableSpans.deepCopy())
         }
         return result
     }
 
     /// The `cx_rum` of an encoded event.
-    private static func cxRum(of event: [String: Any]) -> [String: Any]? {
+    static func cxRum(of event: [String: Any]) -> [String: Any]? {
         (event[Keys.text.rawValue] as? [String: Any])?[Keys.cxRum.rawValue] as? [String: Any]
     }
 
@@ -539,6 +634,7 @@ public class CoralogixExporter: SpanExporter {
     }
     
     public func shutdown(explicitTimeout: TimeInterval?) {
+        shutdownErrorOnly()
         self.sessionManager.shutdown()
         self.viewManager.shutdown()
     }
@@ -601,7 +697,7 @@ public class CoralogixExporter: SpanExporter {
     
     /// Returns the string value of `key` on `span`, supporting both `AttributeValue` and raw
     /// `String` encodings. Returns nil when the attribute is absent or stored as another type.
-    private func attributeStringValue(forKey key: String, span: SpanDataProtocol) -> String? {
+    func attributeStringValue(forKey key: String, span: SpanDataProtocol) -> String? {
         let attributes = span.getAttributes()
         if let attrValue = attributes?[key] as? AttributeValue {
             return attrValue.description
@@ -619,6 +715,13 @@ public class CoralogixExporter: SpanExporter {
     /// non-empty. Spans missing an `event_type` attribute are dropped when stamped sampled-out.
     /// Internal (rather than private per the ticket) so unit tests can exercise it directly.
     internal func passesSessionSampling(_ span: SpanDataProtocol) -> Bool {
+        // A session held until an error passes everything, excluded types included: what is sent
+        // is decided after beforeSend (`routeErrorOnly`). Session Replay records nothing in it, so
+        // its init would announce a recording that does not exist.
+        if isErrorOnly(span) {
+            return attributeStringValue(forKey: Keys.internalEventType.rawValue, span: span) != Keys.sessionReplayInit.rawValue
+        }
+
         // The sampling decision belongs to the session the span was created in, not the live one.
         // Read the per-span stamp SessionManager burns at creation rather than the live
         // `currentSessionSampledIn` flag: a span created in a sampled-in session but exported
