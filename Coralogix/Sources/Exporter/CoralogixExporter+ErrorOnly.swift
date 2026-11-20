@@ -159,9 +159,17 @@ extension CoralogixExporter {
         }
     }
 
-    /// Resumes drains a launch, background or offline spell cut short.
+    /// Resumes drains a launch, background or offline spell cut short. Does nothing until the
+    /// launch's stored crashes have had their pass (`releaseErrorOnlyDrains`).
     func resumeErrorOnlyDrains() {
+        guard errorOnlyDrainsReleased else { return }
         errorOnlyDrain.start(errorOnlyBuffer.triggeredSessions())
+    }
+
+    /// Called once the stored-crash pass of this launch is over.
+    func releaseErrorOnlyDrains() {
+        errorOnlyDrainsReleased = true
+        resumeErrorOnlyDrains()
     }
 
     /// What this instance held without an error goes; a buffer that had one, or one an earlier

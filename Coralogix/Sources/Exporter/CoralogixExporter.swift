@@ -87,6 +87,14 @@ public class CoralogixExporter: SpanExporter {
     /// hybrid `beforeSend`: the mode is put back from here when they return. Oldest first.
     var hybridModes: [(spanId: String, errorOnly: Bool)] = []
     let hybridModesLock = NSLock()
+    /// False until this launch's stored crashes have had their pass, so no leftover buffer drains
+    /// ahead of its crash.
+    private var _errorOnlyDrainsReleased = false
+    private let errorOnlyDrainsReleasedLock = NSLock()
+    var errorOnlyDrainsReleased: Bool {
+        get { errorOnlyDrainsReleasedLock.lock(); defer { errorOnlyDrainsReleasedLock.unlock() }; return _errorOnlyDrainsReleased }
+        set { errorOnlyDrainsReleasedLock.lock(); defer { errorOnlyDrainsReleasedLock.unlock() }; _errorOnlyDrainsReleased = newValue }
+    }
     static let maxHybridModes = 5_000
     var isRetired: Bool {
         retiredLock.lock()

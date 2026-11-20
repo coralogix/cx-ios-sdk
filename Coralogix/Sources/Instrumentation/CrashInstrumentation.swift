@@ -235,9 +235,13 @@ extension CoralogixRum: StoredCrashSending {
         let pending = self.pendingRecoveredCrashes
         self.pendingRecoveredCrashes = []
         crashRecoveryLock.unlock()
-        self.crashDeliveryScheduler.start(pending, onEnd: completion)
-        // After the crashes, which go first; an upload before init completes is never attempted.
-        self.coralogixExporter?.resumeErrorOnlyDrains()
+        // Buffers earlier launches left drain once this pass is over: a crash goes before the
+        // events of its session, whether it is sent now or left for a later launch.
+        let exporter = self.coralogixExporter
+        self.crashDeliveryScheduler.start(pending) {
+            exporter?.releaseErrorOnlyDrains()
+            completion?()
+        }
     }
 
     /// Emits a recovered crash as an error span, under its `crash_event_id`.
