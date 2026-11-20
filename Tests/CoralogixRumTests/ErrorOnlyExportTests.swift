@@ -318,10 +318,11 @@ final class ErrorOnlyExportTests: XCTestCase {
             earlier.hold(try JSONSerialization.data(withJSONObject: event), sessionId: "crashed")
         }
 
+        exporter.awaitStoredCrashes(["crash-1": "crashed"])
         exporter.recoverErrorOnlyLeftovers(crashedSessionIds: ["crashed"])
         XCTAssertTrue(uploader.uploadedSpans.isEmpty, "Kept for the crash, not sent before it.")
 
-        _ = exporter.export(spans: [makeCrashSpan(sessionId: "crashed")], explicitTimeout: nil)
+        _ = exporter.export(spans: [makeCrashSpan(sessionId: "crashed", crashId: "crash-1")], explicitTimeout: nil)
         exporter.waitForStoredCrashUploads()
         exporter.errorOnlyDrain.waitUntilSettled()
 
@@ -329,6 +330,52 @@ final class ErrorOnlyExportTests: XCTestCase {
                        "The crash first, then the drain.")
         let crash = try XCTUnwrap(uploader.cxRumPayloads().first)
         XCTAssertEqual(session(crash)[Keys.hasError.rawValue] as? Bool, true)
+    }
+
+    /// Several stored crashes in one pass: a session's held events wait for the whole pass, not
+    /// only for their own crash.
+    func testHeldEvents_waitForTheRestOfTheCrashPass() throws {
+        let (exporter, uploader) = try startWithCrashUploader()
+        try leaveHeldEvents(["held-a"], of: "a")
+        exporter.awaitStoredCrashes(["crash-a": "a", "crash-b": "b"])
+        exporter.recoverErrorOnlyLeftovers(crashedSessionIds: ["a", "b"])
+        exporter.errorOnlyDrainsReleased = false
+
+        _ = exporter.export(spans: [makeCrashSpan(sessionId: "a", crashId: "crash-a")], explicitTimeout: nil)
+        exporter.waitForStoredCrashUploads()
+        exporter.errorOnlyDrain.waitUntilSettled()
+        XCTAssertNil(labelled(uploader, "held-a"), "Crash b of the same pass has not gone yet.")
+
+        _ = exporter.export(spans: [makeCrashSpan(sessionId: "b", crashId: "crash-b")], explicitTimeout: nil)
+        exporter.waitForStoredCrashUploads()
+        exporter.releaseErrorOnlyDrains()
+        exporter.errorOnlyDrain.waitUntilSettled()
+        let order = uploader.labels(using: message).compactMap { $0 }.filter { ["the-crash", "held-a"].contains($0) }
+        XCTAssertEqual(order, ["the-crash", "the-crash", "held-a"], "Both crashes, then the held events.")
+    }
+
+    /// A pass that ends with the crash still undelivered (offline, retries used up) leaves its
+    /// session held: a later pass that delivers the crash releases it.
+    func testHeldEvents_waitForTheirCrash_acrossAnEndedPass() throws {
+        let (exporter, uploader) = try startWithCrashUploader()
+        uploader.crashResult = SpanUploadResult(disposition: .retryable, httpStatus: 503, retryAfter: nil,
+                                                countsAsFailedUpload: true)
+        try leaveHeldEvents(["held-a"], of: "a")
+        exporter.awaitStoredCrashes(["crash-a": "a"])
+        exporter.recoverErrorOnlyLeftovers(crashedSessionIds: ["a"])
+        exporter.errorOnlyDrainsReleased = false
+
+        _ = exporter.export(spans: [makeCrashSpan(sessionId: "a", crashId: "crash-a")], explicitTimeout: nil)
+        exporter.waitForStoredCrashUploads()
+        exporter.releaseErrorOnlyDrains()   // the pass ends with the crash undelivered
+        exporter.errorOnlyDrain.waitUntilSettled()
+        XCTAssertNil(labelled(uploader, "held-a"), "The crash is still pending: its session stays held.")
+
+        uploader.crashResult = .delivered
+        _ = exporter.export(spans: [makeCrashSpan(sessionId: "a", crashId: "crash-a")], explicitTimeout: nil)
+        exporter.waitForStoredCrashUploads()
+        exporter.errorOnlyDrain.waitUntilSettled()
+        XCTAssertNotNil(labelled(uploader, "held-a"), "Released once the crash is delivered.")
     }
 
     func testLeftoverWithoutCrashOrError_isDeletedAtLaunch() throws {
@@ -398,7 +445,29 @@ final class ErrorOnlyExportTests: XCTestCase {
         labels[span.spanId.hexString] = text
     }
 
-    private func makeCrashSpan(sessionId: String) -> SpanData {
+    private func startWithCrashUploader() throws -> (CoralogixExporter, CrashResultUploader) {
+        let rum = CoralogixRum(options: makeErrorOnlyOptions(sampleRate: 0, alwaysTrack: true))
+        self.rum = rum
+        let exporter = try XCTUnwrap(rum.coralogixExporter)
+        let uploader = CrashResultUploader()
+        exporter.spanUploader = uploader
+        return (exporter, uploader)
+    }
+
+    /// What an earlier launch held for session `sessionId`, left on disk.
+    private func leaveHeldEvents(_ texts: [String], of sessionId: String) throws {
+        let earlier = ErrorOnlyBuffer(maxRumEvents: 5_000, directory: directory)
+        for text in texts {
+            let event: [String: Any] = [Keys.text.rawValue: [Keys.cxRum.rawValue: [Keys.logContext.rawValue: [Keys.message.rawValue: text]]]]
+            earlier.hold(try JSONSerialization.data(withJSONObject: event), sessionId: sessionId)
+        }
+    }
+
+    private func labelled(_ uploader: CrashResultUploader, _ text: String) -> [String: Any]? {
+        uploader.cxRumPayloads().first { message($0) == text }
+    }
+
+    private func makeCrashSpan(sessionId: String, crashId: String = UUID().uuidString) -> SpanData {
         let attributes: [String: AttributeValue] = [
             Keys.eventType.rawValue: .string(CoralogixEventType.error.rawValue),
             Keys.severity.rawValue: .string("5"),
@@ -410,7 +479,7 @@ final class ErrorOnlyExportTests: XCTestCase {
             Keys.spanSessionOnlyWithErrorMode.rawValue: .string("true"),
             Keys.errorMessage.rawValue: .string("the-crash"),
             Keys.isCrash.rawValue: .bool(true),
-            Keys.crashEventId.rawValue: .string(UUID().uuidString)
+            Keys.crashEventId.rawValue: .string(crashId)
         ]
         let span = SpanData(traceId: TraceId.random(), spanId: SpanId.random(), name: "crash", kind: .client,
                             startTime: Date(), attributes: attributes, endTime: Date(), hasEnded: true)
@@ -461,5 +530,37 @@ private final class HandedToJS {
     func append(_ batch: [[String: Any]]) {
         lock.lock(); defer { lock.unlock() }
         _events += batch
+    }
+}
+
+/// Answers stored crashes with `crashResult` and delivers everything else; records every event.
+private final class CrashResultUploader: SpanUploading {
+    private let lock = NSLock()
+    private var _crashResult = SpanUploadResult.delivered
+    private var uploaded: [[String: Any]] = []
+
+    var crashResult: SpanUploadResult {
+        get { lock.lock(); defer { lock.unlock() }; return _crashResult }
+        set { lock.lock(); defer { lock.unlock() }; _crashResult = newValue }
+    }
+
+    func upload(_ spans: [[String: Any]], endPoint: String, kind: SpanUploadKind) -> SpanUploadResult {
+        lock.lock(); defer { lock.unlock() }
+        let isCrash = spans.contains { event in
+            let errorContext = CoralogixExporter.cxRum(of: event)?[Keys.errorContext.rawValue] as? [String: Any]
+            return errorContext?[Keys.isCrash.rawValue] as? Bool == true
+        }
+        let result = isCrash ? _crashResult : .delivered
+        if result.disposition == .delivered { uploaded.append(contentsOf: spans) }
+        return result
+    }
+
+    func cxRumPayloads() -> [[String: Any]] {
+        lock.lock(); defer { lock.unlock() }
+        return uploaded.compactMap(CoralogixExporter.cxRum(of:))
+    }
+
+    func labels(using message: ([String: Any]) -> String?) -> [String?] {
+        cxRumPayloads().map(message)
     }
 }

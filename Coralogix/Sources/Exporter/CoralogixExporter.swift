@@ -87,13 +87,41 @@ public class CoralogixExporter: SpanExporter {
     /// hybrid `beforeSend`: the mode is put back from here when they return. Oldest first.
     var hybridModes: [(spanId: String, errorOnly: Bool)] = []
     let hybridModesLock = NSLock()
-    /// False until this launch's stored crashes have had their pass, so no leftover buffer drains
-    /// ahead of its crash.
+    /// Crashes go before the held events of their session. No drain starts until this launch's
+    /// stored-crash pass is over (`errorOnlyDrainsReleased`), and a session with a stored crash
+    /// not yet delivered or given up (`pendingCrashSessions`, crash id → session id) keeps waiting
+    /// after it, for a later pass that delivers the crash.
     private var _errorOnlyDrainsReleased = false
-    private let errorOnlyDrainsReleasedLock = NSLock()
+    private var pendingCrashSessions: [String: String] = [:]
+    private let errorOnlyGateLock = NSLock()
     var errorOnlyDrainsReleased: Bool {
-        get { errorOnlyDrainsReleasedLock.lock(); defer { errorOnlyDrainsReleasedLock.unlock() }; return _errorOnlyDrainsReleased }
-        set { errorOnlyDrainsReleasedLock.lock(); defer { errorOnlyDrainsReleasedLock.unlock() }; _errorOnlyDrainsReleased = newValue }
+        get { errorOnlyGateLock.lock(); defer { errorOnlyGateLock.unlock() }; return _errorOnlyDrainsReleased }
+        set { errorOnlyGateLock.lock(); defer { errorOnlyGateLock.unlock() }; _errorOnlyDrainsReleased = newValue }
+    }
+
+    /// Holds the drains of the sessions these stored crashes (crash id → session id) happened in.
+    func awaitStoredCrashes(_ crashSessions: [String: String]) {
+        errorOnlyGateLock.lock()
+        defer { errorOnlyGateLock.unlock() }
+        pendingCrashSessions.merge(crashSessions) { _, new in new }
+    }
+
+    /// Which of `sessionIds` may drain now.
+    func drainableSessions(_ sessionIds: [String]) -> [String] {
+        errorOnlyGateLock.lock()
+        defer { errorOnlyGateLock.unlock() }
+        guard _errorOnlyDrainsReleased else { return [] }
+        let waiting = Set(pendingCrashSessions.values)
+        return sessionIds.filter { !waiting.contains($0) }
+    }
+
+    /// The crashes `ids` are finished with; returns the sessions that no longer wait on a crash.
+    private func settleStoredCrashes(_ ids: Set<String>) -> [String] {
+        errorOnlyGateLock.lock()
+        defer { errorOnlyGateLock.unlock() }
+        let sessions = ids.compactMap { pendingCrashSessions.removeValue(forKey: $0) }
+        let waiting = Set(pendingCrashSessions.values)
+        return Array(Set(sessions).subtracting(waiting))
     }
     static let maxHybridModes = 5_000
     var isRetired: Bool {
@@ -171,6 +199,9 @@ public class CoralogixExporter: SpanExporter {
         let waiters = ids.compactMap { crashUploadWaiters.removeValue(forKey: $0) }
         crashUploadLock.unlock()
         waiters.forEach { $0(answer) }
+        if answer.outcome.isFinished {
+            startErrorOnlyDrains(settleStoredCrashes(ids))
+        }
     }
 
     /// The spans `tracesExporter` should see: every non-crash span, and each crash only the
@@ -514,7 +545,7 @@ public class CoralogixExporter: SpanExporter {
         // A crash of a session held until an error is its trigger, decided after beforeSend like
         // any other event's. One beforeSend took out of error severity triggers nothing, and is
         // not sent: a session without an error sends nothing.
-        let (encoded, triggersSession) = crashOfErrorOnlySession(encodedEvents)
+        let encoded = crashOfErrorOnlySession(encodedEvents)
         // Empty means the native beforeSend dropped it or it could not be encoded. Both are
         // final: a failed rebuild fails the same way on every launch. With a beforeSend set, an
         // encode failure is also labelled `.policyDropped`, so that label is not proof the
@@ -537,12 +568,9 @@ public class CoralogixExporter: SpanExporter {
             let result = self.isRetired
                 ? .notAttempted
                 : uploader.upload(encoded, endPoint: endPoint, kind: .storedCrash)
+            // Settles the crash; its session's drain starts once the crash is finished with,
+            // and the launch's crash pass is over.
             self.recordCrashOutcome(CrashUploadAnswer(result), ids: [id])
-            // Once the crash has been answered, so it goes first; the drain starts whatever the
-            // answer, and the crash's own retries do not wait on it.
-            if let sessionId = triggersSession {
-                self.errorOnlyDrain.start([sessionId])
-            }
         }
     }
 
