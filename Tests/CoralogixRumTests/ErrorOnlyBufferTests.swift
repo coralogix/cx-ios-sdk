@@ -361,6 +361,69 @@ final class ErrorOnlyBufferTests: XCTestCase {
         XCTAssertNil(buffer.metadata(of: "s"))
     }
 
+    func testUnsavedTrigger_holdsTheDrain_untilItIsWritten_andSurvivesARestart() throws {
+        let writer = FlakyMetadataWriter()
+        let buffer = makeBuffer(writer: writer)
+        (0..<3).forEach { buffer.hold(event($0), sessionId: "s") }
+        writer.failing = true
+        buffer.trigger("s")
+
+        let clock = ManualDeliveryClock()
+        let uploader = ScriptedUploads()
+        let drain = makeDrain(buffer, clock: clock, uploader: uploader)
+        drain.start(["s"])
+        drain.waitUntilSettled()
+        XCTAssertTrue(uploader.requests.isEmpty, "Nothing goes past a trigger the disk does not record.")
+        XCTAssertEqual(try savedMetadata("s").triggered, false,
+                       "Precondition: on disk the session still reads as one without an error.")
+
+        writer.failing = false
+        clock.advance(to: clock.now().addingTimeInterval(30))
+        drain.waitUntilSettled()
+        XCTAssertEqual(uploader.requests.map { $0.map(index) }, [[0, 1, 2]], "Sent once the trigger is saved.")
+    }
+
+    private func savedMetadata(_ sessionId: String) throws -> ErrorOnlyBuffer.Metadata {
+        try JSONDecoder().decode(ErrorOnlyBuffer.Metadata.self,
+                                 from: Data(contentsOf: directory.appendingPathComponent("\(sessionId).meta.json")))
+    }
+
+    func testUnsavedTrigger_savedOnRetry_isKeptByTheNextLaunch() {
+        let writer = FlakyMetadataWriter()
+        let buffer = makeBuffer(writer: writer)
+        buffer.hold(event(0), sessionId: "s")
+        writer.failing = true
+        buffer.trigger("s")
+        writer.failing = false
+        XCTAssertTrue(buffer.ensureMetadataSaved(of: "s"))
+
+        XCTAssertEqual(makeBuffer().adoptLeftovers { $0.triggered }, ["s"],
+                       "After a restart the session is still known to have had its error.")
+    }
+
+    func testUnsavedCursor_isNotPassed() throws {
+        let writer = FlakyMetadataWriter()
+        let buffer = makeBuffer(writer: writer)
+        (0..<600).forEach { buffer.hold(event($0), sessionId: "s") }
+        buffer.trigger("s")
+        let clock = ManualDeliveryClock()
+        let uploader = ScriptedUploads()
+        let drain = makeDrain(buffer, clock: clock, uploader: uploader)
+        writer.failing = true
+        drain.start(["s"])
+        drain.waitUntilSettled()
+        clock.advance(to: clock.now().addingTimeInterval(1))
+        drain.waitUntilSettled()
+        XCTAssertEqual(uploader.requests.count, 1, "The second request waits for the first one's cursor to be saved.")
+        XCTAssertEqual(try savedMetadata("s").sentOffset, 0, "A restart resends the first request rather than skip past it.")
+        writer.failing = false
+        clock.advance(to: clock.now().addingTimeInterval(30))
+        drain.waitUntilSettled()
+        clock.advance(to: clock.now().addingTimeInterval(1))
+        drain.waitUntilSettled()
+        XCTAssertEqual(uploader.requests.flatMap { $0 }.map(index), Array(0..<600), "Then it goes on, nothing twice.")
+    }
+
     func testDrain_givesUpAfter16CountedFailures() {
         let buffer = makeBuffer()
         buffer.hold(event(0), sessionId: "s")
@@ -518,5 +581,27 @@ private final class FailingWriter: ErrorOnlyFileWriting {
 
     func truncate(_ url: URL, to length: UInt64) {
         real.truncate(url, to: length)
+    }
+
+    func replace(_ url: URL, with data: Data) throws {
+        try real.replace(url, with: data)
+    }
+}
+
+/// Fails every metadata write while `failing` is set, as a full disk would.
+private final class FlakyMetadataWriter: ErrorOnlyFileWriting {
+    private let lock = NSLock()
+    private var _failing = false
+    private let real = PosixFileWriter()
+    var failing: Bool {
+        get { lock.lock(); defer { lock.unlock() }; return _failing }
+        set { lock.lock(); defer { lock.unlock() }; _failing = newValue }
+    }
+
+    func append(_ data: Data, to url: URL) throws { try real.append(data, to: url) }
+    func truncate(_ url: URL, to length: UInt64) { real.truncate(url, to: length) }
+    func replace(_ url: URL, with data: Data) throws {
+        if failing && url.lastPathComponent.hasSuffix(".meta.json") { throw POSIXError(.ENOSPC) }
+        try real.replace(url, with: data)
     }
 }
