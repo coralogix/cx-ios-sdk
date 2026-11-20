@@ -160,6 +160,27 @@ final class ErrorOnlyExportTests: XCTestCase {
         XCTAssertEqual(session(try XCTUnwrap(payload(uploader, message: "old-held")))[Keys.sessionId.rawValue] as? String, oldId)
     }
 
+    /// The ended session's grace starts in the same locked step that ends it: an event exported
+    /// while the rotation's callbacks are still running is held, not dropped.
+    func testAnEventExportedDuringTheRotation_isHeldForTheEndedSession() throws {
+        let (exporter, uploader) = try start(makeErrorOnlyOptions(sampleRate: 0, alwaysTrack: true))
+        let sessionManager = exporter.getSessionManager()
+        let oldStamp = sessionManager.sessionSpanAttributes()
+        export(exporter, .log, message: "old-held")
+
+        let exporterEnded = sessionManager.sessionEndedCallback
+        sessionManager.sessionEndedCallback = { [unowned self] in
+            // The first thing that runs after the rotation releases its lock.
+            self.export(exporter, .error, severity: .error, message: "error-in-the-rotation", stamp: oldStamp)
+            exporterEnded?()
+        }
+        rum?.createNewSession()
+        exporter.errorOnlyDrain.waitUntilSettled()
+
+        XCTAssertNotNil(payload(uploader, message: "error-in-the-rotation"))
+        XCTAssertNotNil(payload(uploader, message: "old-held"), "The ended session was still triggered, and drained.")
+    }
+
     func testLeftoverDrains_waitForThisLaunchsCrashPass() throws {
         let (exporter, uploader) = try start(makeErrorOnlyOptions(sampleRate: 0, alwaysTrack: true))
         let earlier = ErrorOnlyBuffer(maxRumEvents: 5_000, directory: directory)

@@ -165,8 +165,9 @@ public class SessionManager {
     /// whatever the latest rotation left behind, so a concurrent rotation could make a sampled-in
     /// transition invisible to the callback that was supposed to act on it.
     internal var samplingReevaluationCallback: ((String, Bool) -> Void)?
-    /// Fired with the id of the session a rotation ended, captured under the rotation's own lock,
-    /// so two rotations close together each report their own ended session.
+    /// Told the id of the session a rotation ended, *under* `sessionLock`, in the same step that
+    /// stops it being live: no reader can see the old session as neither live nor ended. Like the
+    /// crash-stamp observer it must stay cheap, never block, and never call back into this class.
     internal var endedSessionIdCallback: ((String) -> Void)?
 
     /// Rolls the sampling decision for a newly rotated session. Installed once at startup;
@@ -674,8 +675,6 @@ public class SessionManager {
     /// AFTER releasing `sessionLock` so callbacks never run while the lock is held.
     private struct RotationPendingCallbacks {
         let endedCallback: (() -> Void)?
-        let endedSessionId: String?
-        let endedSessionIdCallback: ((String) -> Void)?
         let priorExisted: Bool
         let newSessionId: String?
         let changedCallback: ((String) -> Void)?
@@ -701,6 +700,9 @@ public class SessionManager {
             }
         }
         self.prevSessionMetadata = self.sessionMetadata
+        if let ended = self.prevSessionMetadata?.sessionId, !ended.isEmpty {
+            self.endedSessionIdCallback?(ended)
+        }
         let newSessionId = self.pendingLaunchSessionId ?? UUID().uuidString.lowercased()
         self.pendingLaunchSessionId = nil
         self.sessionMetadata = SessionMetadata(sessionId: newSessionId,
@@ -742,8 +744,6 @@ public class SessionManager {
 
         return RotationPendingCallbacks(
             endedCallback: endedCb,
-            endedSessionId: self.prevSessionMetadata?.sessionId,
-            endedSessionIdCallback: self.endedSessionIdCallback,
             priorExisted: priorExisted,
             newSessionId: self.sessionMetadata?.sessionId,
             changedCallback: self.sessionChangedCallback,
@@ -764,9 +764,6 @@ public class SessionManager {
         // to end.
         if pending.priorExisted {
             pending.endedCallback?()
-            if let ended = pending.endedSessionId, !ended.isEmpty {
-                pending.endedSessionIdCallback?(ended)
-            }
         }
         if let newId = pending.newSessionId {
             pending.changedCallback?(newId)
