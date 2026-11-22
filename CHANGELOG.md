@@ -10,6 +10,9 @@ omitted; the focus here is user-facing behavior changes.
 
 ## [2.24.4] - 2026-11-22
 
+### Changed
+- The bundled `URLSessionInstrumentationConfiguration` no longer has `shouldCollectRequestPayload`, and its `receivedResponse` callback now takes three arguments. The four-argument form, with the request, is now `receivedResponseWithRequest`. This only affects code that builds this configuration directly; the SDK's network events are unchanged.
+
 ### Fixed
 - In React Native apps, a fatal JavaScript error is now reported once instead of twice, with its JavaScript message and stack.
 
