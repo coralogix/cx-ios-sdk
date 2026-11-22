@@ -48,7 +48,7 @@ final class SpanDataToOtlpConverterTests: XCTestCase {
             },
             hasRemoteParent: false,
             spanLimits: SpanLimits(),
-            spanProcessor: NoopSpanProcessor(),
+            spanProcessor: NoopTestSpanProcessor(),
             clock: MillisClock(),
             resource: resource,
             attributes: AttributesDictionary(capacity: 100),
@@ -438,3 +438,13 @@ final class SpanDataToOtlpConverterTests: XCTestCase {
     }
 }
 
+/// Upstream OpenTelemetry keeps its `NoopSpanProcessor` internal, so the tests carry their own.
+private struct NoopTestSpanProcessor: SpanProcessor {
+    let isStartRequired = false
+    let isEndRequired = false
+
+    func onStart(parentContext: SpanContext?, span: any ReadableSpan) {}
+    func onEnd(span: any ReadableSpan) {}
+    func shutdown(explicitTimeout: TimeInterval?) {}
+    func forceFlush(timeout: TimeInterval?) {}
+}
