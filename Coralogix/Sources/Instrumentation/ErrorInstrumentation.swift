@@ -128,26 +128,31 @@ extension CoralogixRum {
                                      customAttributes: [String: Any]? = nil,
                                      labels: [String: Any]? = nil) {
         guard isErrorsEnabled else { return }
-        // A crash report may precede process death, so it is flushed rather than left in the batch
-        // queue (up to 2s) to die with the process. Sequenced on the span having ended, since a live
-        // crash waits for its screenshot. Nothing is kept on disk: as on Android, a hybrid crash
-        // whose upload fails is not re-sent.
+        let source = EventSource.hybrid(hybridSource)
+        let fields = ErrorFields(domain: "",
+                                 message: message,
+                                 isCrash: isCrash,
+                                 errorType: errorType,
+                                 stackTraceJson: stackTraceJson,
+                                 arch: arch,
+                                 buildId: buildId,
+                                 stackTraceType: stackTraceType,
+                                 dataJson: Helper.jsonAttributeString(dict: customAttributes),
+                                 labelsJson: Helper.jsonAttributeString(dict: labels))
+        // A crash report may precede process death, so what the batch queue holds (up to 2s) is
+        // flushed rather than left to die with the process.
         let flushCrash: (() -> Void)? = isCrash ? { [weak self] in self?.flush() } : nil
-
-        self.writeError(
-            source: .hybrid(hybridSource),
-            domain: "",
-            message: message,
-            stackTraceJson: stackTraceJson,
-            errorType: errorType,
-            isCrash: isCrash,
-            arch: arch,
-            buildId: buildId,
-            stackTraceType: stackTraceType,
-            customAttributes: customAttributes,
-            labels: labels,
-            then: flushCrash
-        )
+        // React Native's own fatal handler: the same process is about to end in a native crash
+        // report of this error, so the error is kept on disk and sent once, by the next launch,
+        // in place of that report (`JsFatalRecovery`). A hold that cannot be written is sent live.
+        if isCrash, source == .crash, CoralogixRum.mobileSDK.sdkFramework.isReactNative,
+           self.holdReactNativeFatal(fields) {
+            flushCrash?()
+            return
+        }
+        // Sequenced on the span having ended, since a live crash waits for its screenshot. Nothing
+        // is kept on disk: as on Android, any other hybrid crash whose upload fails is not re-sent.
+        self.writeError(source: source, fields: fields, then: flushCrash)
     }
 
     func logWith(severity: CoralogixLogSeverity,
@@ -234,34 +239,67 @@ extension CoralogixRum {
                             buildId: String? = nil,
                             stackTraceType: String? = nil,
                             customAttributes: [String: Any]? = nil,
-                            labels: [String: Any]? = nil,
-                            then: (() -> Void)? = nil) {
+                            labels: [String: Any]? = nil) {
+        let userInfoJson = userInfo.flatMap { $0.isEmpty ? nil : Helper.convertDictionaryToJsonString(dict: $0) }
+        let fields = ErrorFields(domain: domain,
+                                 code: code,
+                                 message: message,
+                                 isCrash: isCrash,
+                                 errorType: errorType,
+                                 stackTraceJson: stackTraceJson,
+                                 userInfoJson: userInfoJson,
+                                 arch: arch,
+                                 buildId: buildId,
+                                 stackTraceType: stackTraceType,
+                                 dataJson: Helper.jsonAttributeString(dict: customAttributes),
+                                 labelsJson: Helper.jsonAttributeString(dict: labels))
+        writeError(source: source, fields: fields)
+    }
+
+    private func writeError(source: EventSource, fields: ErrorFields, then: (() -> Void)? = nil) {
         let span = makeSpan(event: .error, source: source, severity: .error)
+        fields.apply(to: span)
+        recordScreenshotForSpan(on: span) { _ in
+            span.end()
+            then?()
+        }
+    }
+}
+
+/// An error's own attributes, as every error span carries them. Codable so a React Native fatal
+/// kept for the next launch is sent with exactly the attributes it would have been sent with live.
+struct ErrorFields: Codable, Equatable {
+    var domain: String
+    /// Hybrid errors (Flutter, React Native) leave it out: they have no meaningful error code.
+    var code: Int? = nil
+    var message: String
+    var isCrash: Bool
+    var errorType: String? = nil
+    var stackTraceJson: String? = nil
+    var userInfoJson: String? = nil
+    var arch: String? = nil
+    var buildId: String? = nil
+    var stackTraceType: String? = nil
+    var dataJson: String? = nil
+    var labelsJson: String? = nil
+
+    func apply(to span: any Span) {
         span.setAttribute(key: Keys.domain.rawValue, value: domain)
         if let code { span.setAttribute(key: Keys.code.rawValue, value: code) }
         span.setAttribute(key: Keys.errorMessage.rawValue, value: message)
         span.setAttribute(key: Keys.isCrash.rawValue, value: isCrash)
-        if let errorType { span.setAttribute(key: Keys.errorType.rawValue, value: errorType) }
-        if let stackTraceJson { span.setAttribute(key: Keys.stackTrace.rawValue, value: stackTraceJson) }
-        if let userInfo, !userInfo.isEmpty {
-            span.setAttribute(key: Keys.userInfo.rawValue, value: Helper.convertDictionaryToJsonString(dict: userInfo))
+        func set(_ key: Keys, _ value: String?, omitEmpty: Bool = false) {
+            guard let value, !(omitEmpty && value.isEmpty) else { return }
+            span.setAttribute(key: key.rawValue, value: value)
         }
-        if let arch, !arch.isEmpty { span.setAttribute(key: Keys.arch.rawValue, value: arch) }
-        if let buildId, !buildId.isEmpty { span.setAttribute(key: Keys.buildId.rawValue, value: buildId) }
-        if let stackTraceType, !stackTraceType.isEmpty { span.setAttribute(key: Keys.stackTraceType.rawValue, value: stackTraceType) }
-        if let json = Helper.jsonAttributeString(dict: customAttributes) {
-            span.setAttribute(key: Keys.data.rawValue, value: json)
-        }
-        if let json = Helper.jsonAttributeString(dict: labels) {
-            span.setAttribute(key: Keys.customLabels.rawValue, value: json)
-        }
-        // Note: hybrid error paths (Flutter/RN) intentionally omit the code attribute — there is
-        // no meaningful error code in these contexts. Native paths pass an explicit code when relevant.
-        let endSpan = {
-            span.end()
-            then?()
-        }
-
-        recordScreenshotForSpan(on: span) { _ in endSpan() }
+        set(.errorType, errorType)
+        set(.stackTrace, stackTraceJson)
+        set(.userInfo, userInfoJson)
+        // An empty arch, build id or stack-trace type is left out.
+        set(.arch, arch, omitEmpty: true)
+        set(.buildId, buildId, omitEmpty: true)
+        set(.stackTraceType, stackTraceType, omitEmpty: true)
+        set(.data, dataJson)
+        set(.customLabels, labelsJson)
     }
 }

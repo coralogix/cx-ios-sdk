@@ -29,6 +29,11 @@ public enum SdkFramework: Equatable {
         }
     }
     
+    var isReactNative: Bool {
+        if case .reactNative = self { return true }
+        return false
+    }
+
     var version: String {
         switch self {
         case .flutter(let version), .reactNative(let version):

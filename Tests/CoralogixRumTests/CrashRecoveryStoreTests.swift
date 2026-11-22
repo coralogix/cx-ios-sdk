@@ -100,6 +100,10 @@ private func leaveCrash(in store: CrashDeliveryStore, data: Data) throws -> Mapp
     return crash
 }
 
+/// The process every report written by this test run names, and a relaunch that is not it.
+private let thisProcess = ProcessIdentity.current
+private let laterProcess = ProcessIdentity(pid: 1, startSecond: 1)
+
 private func sessionRecord(of sessionId: String, view: String? = "Checkout", appVersion: String = "1.0",
                     errorCount: Int = 2) -> SessionSnapshotRecord {
     SessionSnapshotRecord(sessionId: sessionId, errorCount: errorCount, viewCount: 1, actionCount: 4,
@@ -116,6 +120,7 @@ final class CrashRecoveryAcrossLaunchesTests: XCTestCase {
     override func tearDownWithError() throws {
         launches.forEach { $0.shutdown() }
         launches = []
+        CoralogixRum.mobileSDK = MobileSDK(sdkFramework: .swift)
         try super.tearDownWithError()
     }
 
@@ -128,7 +133,8 @@ final class CrashRecoveryAcrossLaunchesTests: XCTestCase {
                         ignoreErrors: [String] = [],
                         instrumentations: [CoralogixExporterOptions.InstrumentationType: Bool]? = nil,
                         beforeSend: (([String: Any]) -> [String: Any]?)? = nil,
-                        framework: SdkFramework = .swift) throws -> CoralogixRum {
+                        framework: SdkFramework = .swift,
+                        process: ProcessIdentity? = laterProcess) throws -> CoralogixRum {
         let manager = SessionManager(snapshotStore: snapshots ?? .relaunched(after: lastSession))
         manager.lastLaunchSession = nil
         var options = makeSamplingOptions(sampleRate: 100, exclude: [], instrumentations: instrumentations,
@@ -138,6 +144,7 @@ final class CrashRecoveryAcrossLaunchesTests: XCTestCase {
         let sdk = CoralogixRum(options: options, sdkFramework: framework, sessionManager: manager)
         launches.append(sdk)
         sdk.crashDeliveryStore = store
+        sdk.ownProcess = process
         try XCTUnwrap(sdk.coralogixExporter).spanUploader = uploader
 
         let clock = ManualDeliveryClock()
@@ -753,6 +760,267 @@ extension CrashRecoveryAcrossLaunchesTests {
 
         XCTAssertTrue(uploader.crashes.isEmpty)
         XCTAssertNil(store.hangMarker())
+    }
+}
+
+// MARK: - React Native fatals
+
+private let jsMessage = "TypeError: undefined is not a function"
+
+/// The fatal React Native's error handler reports, held by this test process in session `session`.
+private func heldFatal(session: String = "S1", process: ProcessIdentity? = thisProcess,
+                       crashTime: Date = Date(timeIntervalSinceNow: -60)) throws -> HeldJsFatal {
+    HeldJsFatal(crashId: HeldJsFatal.crashIdPrefix + UUID().uuidString,
+                process: try XCTUnwrap(process, "the kernel names this process"),
+                crashTime: crashTime,
+                session: .init(id: session, creationDate: 1_700_000_000, sampledIn: true),
+                fields: ErrorFields(domain: "", message: jsMessage, isCrash: true, errorType: "TypeError",
+                                    stackTraceJson: #"[{"fileName":"index.bundle","lineNumber":12}]"#))
+}
+
+/// The report a bridgeless app leaves: RN converts `RCTFatalException` to a C++ `jsi::JSError`,
+/// which the terminate handler records.
+private func bridgelessFatalReportData(sessionId: String, cxxType: String = CoralogixRum.jsErrorCxxType) throws -> Data {
+    let reporter = try XCTUnwrap(PLCrashReporter(configuration: PLCrashReporterConfig(signalHandlerType: .BSD,
+                                                                                     symbolicationStrategy: [])))
+    reporter.customData = Data(#"{"v":1,"session":{"session_id":"\#(sessionId)","session_creation_time":1700000000000,"is_session_sampled_in":true},"cxx":{"type":"\#(cxxType)","what":"Exception in HostFunction: Unhandled JS Exception: \#(jsMessage)"}}"#.utf8)
+    return try ANRThreads.withLiveReportLock { try reporter.generateLiveReportAndReturnError() }
+}
+
+extension CrashRecoveryAcrossLaunchesTests {
+
+    private func store(_ fatal: HeldJsFatal, in store: CrashDeliveryStore) {
+        XCTAssertTrue(store.storeJsFatal(fatal))
+    }
+
+    func test_reactNativesFatal_isHeldForTheNextLaunch_notSentLive() throws {
+        let store = CrashDeliveryStore.temporary()
+        let uploader = SwitchableUploader()
+        let sdk = try launch(store: store, uploader: uploader, framework: .reactNative(version: "0.19.1"),
+                             process: thisProcess)
+
+        sdk.reportError(message: jsMessage, stackTrace: [], errorType: "TypeError", isCrash: true, source: "crash")
+        let flushed = expectation(description: "flushed")
+        sdk.flush { flushed.fulfill() }
+        wait(for: [flushed], timeout: 10)
+
+        XCTAssertTrue(uploader.crashes.isEmpty)
+        let file = try XCTUnwrap(store.jsFatals().first)
+        guard case .readable(let fatal) = CoralogixRum.readJsFatal(file) else { return XCTFail("readable") }
+        XCTAssertEqual(fatal.process, thisProcess)
+        XCTAssertEqual(fatal.fields.message, jsMessage)
+        XCTAssertEqual(fatal.fields.errorType, "TypeError")
+        XCTAssertEqual(fatal.session.id, sdk.liveCrashSession?.id)
+    }
+
+    /// Only React Native's own fatal handler ends in a native report of the same error.
+    func test_everyOtherHybridError_isSentLive_andNothingIsHeld() throws {
+        let cases: [(SdkFramework, Bool, String?)] = [(.reactNative(version: "0.19.1"), true, "captured"),
+                                                      (.reactNative(version: "0.19.1"), false, "crash"),
+                                                      (.flutter(version: "0.22.2"), true, "crash"),
+                                                      (.swift, true, "crash")]
+        for (framework, isCrash, source) in cases {
+            let store = CrashDeliveryStore.temporary()
+            let uploader = SwitchableUploader()
+            let sdk = try launch(store: store, uploader: uploader, framework: framework, process: thisProcess)
+
+            sdk.reportError(message: jsMessage, stackTrace: [], errorType: "TypeError", isCrash: isCrash, source: source)
+            let sent = expectation(for: NSPredicate { _, _ in
+                uploader.events.contains { event in
+                    let cxRum = (event[Keys.text.rawValue] as? [String: Any])?[Keys.cxRum.rawValue] as? [String: Any]
+                    return (cxRum?[Keys.errorContext.rawValue] as? [String: Any])?[Keys.errorMessage.rawValue] as? String == jsMessage
+                }
+            }, evaluatedWith: nil)
+            sdk.flush()
+            wait(for: [sent], timeout: 10)
+            XCTAssertTrue(store.jsFatals().isEmpty, "\(framework) \(isCrash) \(String(describing: source))")
+        }
+    }
+
+    /// The next launch sends the JS error once, as it would have been sent live, in place of the
+    /// `RCTFatalException` report its process left.
+    func test_aHeldFatal_isSentOnce_inPlaceOfItsProcesssNativeReport() throws {
+        let store = CrashDeliveryStore.temporary()
+        let fatal = try heldFatal()
+        self.store(fatal, in: store)
+        try leaveCrash(in: store, data: try reactNativeFatalReportData(sessionId: "S1",
+                                                                         description: "Unhandled JS Exception: \(jsMessage)"))
+
+        let uploader = SwitchableUploader()
+        try launch(store: store, lastSession: sessionRecord(of: "S1"), uploader: uploader,
+                   framework: .reactNative(version: "0.19.1"))
+
+        XCTAssertEqual(uploader.crashes.count, 1)
+        let sent = try XCTUnwrap(uploader.crashes.first)
+        XCTAssertEqual(value(sent, .errorContext, .errorMessage) as? String, jsMessage)
+        XCTAssertEqual(value(sent, .errorContext, .errorType) as? String, "TypeError")
+        XCTAssertNotNil(value(sent, .errorContext, .originalStackTrace))
+        XCTAssertNil(value(sent, .errorContext, .exceptionType), "not the native report")
+        XCTAssertNil(value(sent, .errorContext, .threads))
+        XCTAssertEqual(value(sent, .eventContext, .source) as? String, EventSource.crash.rawValue)
+        XCTAssertEqual(value(sent, .sessionContext, .sessionId) as? String, "S1")
+        XCTAssertEqual(value(sent, .viewContext, .view) as? String, "Checkout")
+        XCTAssertEqual(value(sent, .snapshotContext, .errorCount) as? Int, 3, "the session's two errors and this one")
+        let timestamp = try XCTUnwrap((sent[Keys.timestamp.rawValue] as? NSNumber)?.doubleValue)
+        XCTAssertEqual(timestamp, fatal.crashTime.timeIntervalSince1970 * 1000, accuracy: 1)
+        XCTAssertTrue(store.copies().isEmpty)
+        XCTAssertTrue(store.jsFatals().isEmpty)
+        XCTAssertEqual(store.recordedCrashIds(), [])
+
+        let again = SwitchableUploader()
+        try launch(store: store, lastSession: sessionRecord(of: "S2"), uploader: again)
+        XCTAssertTrue(again.crashes.isEmpty)
+    }
+
+    func test_aBridgelessAppsJSErrorReport_isReplacedToo() throws {
+        let store = CrashDeliveryStore.temporary()
+        self.store(try heldFatal(), in: store)
+        let native = try leaveCrash(in: store, data: try bridgelessFatalReportData(sessionId: "S1"))
+        XCTAssertEqual(native.kind, .cxx)
+
+        let uploader = SwitchableUploader()
+        try launch(store: store, lastSession: sessionRecord(of: "S1"), uploader: uploader)
+
+        XCTAssertEqual(uploader.crashes.map { value($0, .errorContext, .errorMessage) as? String }, [jsMessage])
+        XCTAssertTrue(store.copies().isEmpty)
+    }
+
+    /// Two events rather than none: a report the fatal cannot be proven to have left is sent.
+    func test_aReportItsProcessDidNotLeaveAsAJsFatal_isSentAlongside() throws {
+        let otherStart = try XCTUnwrap(thisProcess).startSecond - 1
+        let reports: [(String, Data, HeldJsFatal)] = [
+            ("another process", try reactNativeFatalReportData(sessionId: "S1", description: "Unhandled JS Exception: x"),
+             try heldFatal(process: ProcessIdentity(pid: getpid(), startSecond: otherStart))),
+            ("a signal", try liveReportData(sessionId: "S1"), try heldFatal()),
+            ("another C++ exception", try bridgelessFatalReportData(sessionId: "S1", cxxType: "St13runtime_error"),
+             try heldFatal()),
+        ]
+        for (name, data, fatal) in reports {
+            let store = CrashDeliveryStore.temporary()
+            self.store(fatal, in: store)
+            try leaveCrash(in: store, data: data)
+
+            let uploader = SwitchableUploader()
+            try launch(store: store, lastSession: sessionRecord(of: "S1"), uploader: uploader)
+
+            XCTAssertEqual(uploader.crashes.count, 2, name)
+            XCTAssertTrue(store.copies().isEmpty, name)
+            XCTAssertTrue(store.jsFatals().isEmpty, name)
+        }
+    }
+
+    /// A fatal the handler survived (a debug build) with no report: sent by the next launch, alone.
+    func test_aHeldFatalWithNoNativeReport_isSentAlone() throws {
+        let store = CrashDeliveryStore.temporary()
+        self.store(try heldFatal(), in: store)
+
+        let uploader = SwitchableUploader()
+        try launch(store: store, lastSession: sessionRecord(of: "S1"), uploader: uploader)
+
+        XCTAssertEqual(uploader.crashes.map { value($0, .errorContext, .errorMessage) as? String }, [jsMessage])
+    }
+
+    func test_aFatalTheRunningProcessHeld_waitsForTheNextLaunch() throws {
+        let store = CrashDeliveryStore.temporary()
+        self.store(try heldFatal(), in: store)
+
+        let uploader = SwitchableUploader()
+        try launch(store: store, lastSession: sessionRecord(of: "S1"), uploader: uploader, process: thisProcess)
+
+        XCTAssertTrue(uploader.crashes.isEmpty)
+        XCTAssertEqual(store.jsFatals().count, 1)
+    }
+
+    /// A report that cannot be read yet does not hold the fatal back: its own report was found.
+    func test_aReportThatCannotBeReadYet_doesNotDelayAFatalWhoseReportWasFound() throws {
+        let store = CrashDeliveryStore.temporary()
+        self.store(try heldFatal(), in: store)
+        try leaveCrash(in: store, data: try reactNativeFatalReportData(sessionId: "S1", description: "Unhandled JS Exception: x"))
+        let locked = store.copiesDirectory.appendingPathComponent("locked.plcrash")
+        try liveReportData(sessionId: "S0").write(to: locked)
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: locked.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: locked.path) }
+
+        let uploader = SwitchableUploader()
+        try launch(store: store, lastSession: sessionRecord(of: "S1"), uploader: uploader)
+        XCTAssertEqual(uploader.crashes.map { value($0, .errorContext, .errorMessage) as? String }, [jsMessage])
+        XCTAssertEqual(store.copies().map(\.lastPathComponent), [locked.lastPathComponent])
+    }
+
+    /// The fatal's own report turns up a launch later — after the fatal was recorded, before it was
+    /// delivered: the report is dropped then.
+    func test_aNativeReportThatTurnsUpLater_isDroppedWhileItsFatalWaits() throws {
+        let store = CrashDeliveryStore.temporary()
+        self.store(try heldFatal(), in: store)
+        let failing = SwitchableUploader()
+        failing.result = SwitchableUploader.serverError
+        try launch(store: store, lastSession: sessionRecord(of: "S1"), uploader: failing)
+        XCTAssertEqual(store.jsFatals().count, 1)
+
+        try leaveCrash(in: store, data: try reactNativeFatalReportData(sessionId: "S1", description: "Unhandled JS Exception: x"))
+        let uploader = SwitchableUploader()
+        try launch(store: store, lastSession: sessionRecord(of: "S2"), uploader: uploader)
+        XCTAssertEqual(uploader.crashes.map { value($0, .errorContext, .errorMessage) as? String }, [jsMessage])
+        XCTAssertTrue(store.copies().isEmpty)
+    }
+
+    /// Held fatals share the crashes' schedule; the native report is not sent in the meantime.
+    func test_anUndeliveredHeldFatal_isSentByALaterLaunch_andItsReportNever() throws {
+        let store = CrashDeliveryStore.temporary()
+        self.store(try heldFatal(), in: store)
+        try leaveCrash(in: store, data: try reactNativeFatalReportData(sessionId: "S1", description: "Unhandled JS Exception: x"))
+
+        let failing = SwitchableUploader()
+        failing.result = SwitchableUploader.serverError
+        try launch(store: store, lastSession: sessionRecord(of: "S1"), uploader: failing)
+        XCTAssertEqual(failing.crashes.count, 3, "0 s, +30 s and +2 min")
+        XCTAssertEqual(store.jsFatals().count, 1)
+        XCTAssertTrue(store.copies().isEmpty)
+
+        let delivering = SwitchableUploader()
+        try launch(store: store, lastSession: sessionRecord(of: "S2"), uploader: delivering)
+        XCTAssertEqual(delivering.crashes.map { value($0, .errorContext, .errorMessage) as? String }, [jsMessage])
+        XCTAssertEqual(value(try XCTUnwrap(delivering.crashes.first), .sessionContext, .sessionId) as? String, "S1")
+        XCTAssertTrue(store.jsFatals().isEmpty)
+    }
+
+    /// With no record of the crashed session the fatal cannot be attributed; its report still can be.
+    func test_aFatalWhoseSessionLeftNoRecord_isDropped_andItsReportSent() throws {
+        let store = CrashDeliveryStore.temporary()
+        let fatal = HeldJsFatal(crashId: HeldJsFatal.crashIdPrefix + "x", process: try XCTUnwrap(thisProcess),
+                                crashTime: Date(), session: .init(id: "never-adopted", creationDate: nil, sampledIn: true),
+                                fields: ErrorFields(domain: "", message: jsMessage, isCrash: true))
+        self.store(fatal, in: store)
+        try leaveCrash(in: store, data: try reactNativeFatalReportData(sessionId: "S1", description: "Unhandled JS Exception: x"))
+
+        let uploader = SwitchableUploader()
+        try launch(store: store, lastSession: sessionRecord(of: "S1"), uploader: uploader)
+
+        XCTAssertEqual(uploader.crashes.map { value($0, .errorContext, .exceptionType) as? String }, ["SIGABRT"])
+        XCTAssertTrue(store.jsFatals().isEmpty)
+    }
+
+    func test_withErrorsSwitchedOff_aHeldFatalIsNeitherSentNorKept() throws {
+        let store = CrashDeliveryStore.temporary()
+        self.store(try heldFatal(), in: store)
+
+        let uploader = SwitchableUploader()
+        try launch(store: store, lastSession: sessionRecord(of: "S1"), uploader: uploader, instrumentations: [.errors: false])
+
+        XCTAssertTrue(uploader.crashes.isEmpty)
+        XCTAssertTrue(store.jsFatals().isEmpty)
+    }
+
+    func test_onlyTheNewestTenHeldFatals_areSent() throws {
+        let store = CrashDeliveryStore.temporary()
+        for minutes in 1...12 {
+            self.store(try heldFatal(crashTime: Date(timeIntervalSinceNow: TimeInterval(-60 * minutes))), in: store)
+        }
+        let uploader = SwitchableUploader()
+        try launch(store: store, lastSession: sessionRecord(of: "S1"), uploader: uploader)
+
+        XCTAssertEqual(uploader.crashes.count, CrashDeliveryStore.maxPerKind)
+        XCTAssertTrue(store.jsFatals().isEmpty)
     }
 }
 

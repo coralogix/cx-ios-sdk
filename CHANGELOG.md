@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Release-mechanics commits (version bumps, podspec/script tweaks, README edits) are
 omitted; the focus here is user-facing behavior changes.
 
+## [2.24.4] - 2026-11-22
+
+### Fixed
+- In React Native apps, a fatal JavaScript error is now reported once instead of twice. It is sent when the app next starts, as the JavaScript error with its message and stack, in place of the native crash report the same error left. The event is timed when the error happened and reported under the session it happened in.
+
 ## [2.24.3] - 2026-11-19
 
 ### Fixed

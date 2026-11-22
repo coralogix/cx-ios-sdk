@@ -161,16 +161,21 @@ final class ColdDetector {
     /// giving a more accurate cold-start start point than any time recorded inside the app.
     /// Returns `nil` if the syscall fails; callers should fall back to `CFAbsoluteTimeGetCurrent()`.
     static func processStartTime() -> CFAbsoluteTime? {
-        var kip = kinfo_proc()
-        var size = MemoryLayout<kinfo_proc>.size
-        var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, getpid()]
-        guard sysctl(&mib, UInt32(mib.count), &kip, &size, nil, 0) == 0 else { return nil }
-
-        let tv = kip.kp_proc.p_starttime
+        guard let tv = processStartTimeval() else { return nil }
         // tv_sec / tv_usec are relative to Unix epoch (1 Jan 1970).
         // Subtract kCFAbsoluteTimeIntervalSince1970 to align with CFAbsoluteTime (1 Jan 2001).
         let unixTime = Double(tv.tv_sec) + Double(tv.tv_usec) / Double(USEC_PER_SEC)
         return unixTime - kCFAbsoluteTimeIntervalSince1970
+    }
+
+    /// The kernel's process birth time, as `sysctl(KERN_PROC_PID)` gives it. PLCrashReporter
+    /// records its whole seconds in every report, so `tv_sec` names this process exactly.
+    static func processStartTimeval() -> timeval? {
+        var kip = kinfo_proc()
+        var size = MemoryLayout<kinfo_proc>.size
+        var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, getpid()]
+        guard sysctl(&mib, UInt32(mib.count), &kip, &size, nil, 0) == 0 else { return nil }
+        return kip.kp_proc.p_starttime
     }
 
     deinit {

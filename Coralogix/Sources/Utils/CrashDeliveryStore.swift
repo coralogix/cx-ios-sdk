@@ -86,6 +86,8 @@ final class CrashDeliveryStore {
     let hangsDirectory: URL
     /// Written while the watchdog sees the main thread hung, and cleared when it answers again.
     let hangMarkerFile: URL
+    /// One file per React Native fatal held for the next launch (`<crash id>.json`).
+    let jsFatalsDirectory: URL
     private let recordsFile: URL
     private let legacyHybridStoreFile: URL
     /// Shared by every instance: each `CoralogixRum` has its own store, and all of them read, change
@@ -100,6 +102,7 @@ final class CrashDeliveryStore {
         self.snapshotsDirectory = Self.snapshotsDirectory(in: folder)
         self.hangsDirectory = folder.appendingPathComponent("hangs", isDirectory: true)
         self.hangMarkerFile = folder.appendingPathComponent("anr-in-progress.json")
+        self.jsFatalsDirectory = folder.appendingPathComponent("jsfatals", isDirectory: true)
         self.recordsFile = folder.appendingPathComponent("crash_delivery.json")
         self.legacyHybridStoreFile = folder.appendingPathComponent("pending_crash_events.json")
     }
@@ -197,6 +200,24 @@ final class CrashDeliveryStore {
         try? JSONEncoder().encode(marker).write(to: hangMarkerFile, options: .atomic)
     }
 
+    // MARK: - React Native fatals
+
+    /// The held React Native fatal files.
+    func jsFatals() -> [URL] {
+        Self.files(in: jsFatalsDirectory, withExtension: "json")
+    }
+
+    /// Keeps `fatal` for the next launch, under its crash id. Returns whether it reached disk.
+    func storeJsFatal(_ fatal: HeldJsFatal) -> Bool {
+        do {
+            try Self.writeJSON(fatal, to: jsFatalsDirectory.appendingPathComponent("\(fatal.crashId).json"))
+            return true
+        } catch {
+            Log.e("[CrashDeliveryStore] Failed to hold a React Native fatal: \(error)")
+            return false
+        }
+    }
+
     // MARK: - Delivery records
 
     func record(for crashId: String) -> StoredCrashRecord? {
@@ -273,7 +294,8 @@ final class CrashDeliveryStore {
     // MARK: - Migration
 
     /// Earlier versions kept hybrid crash events in a file of their own and re-sent them. Hybrid
-    /// crashes are now sent once, live; what that file still holds is deleted, not sent.
+    /// crashes are now sent once — live, or for React Native's fatal handler by the next launch
+    /// (`JsFatalRecovery`); what that file still holds is deleted, not sent.
     func deleteLegacyHybridStore() {
         try? FileManager.default.removeItem(at: legacyHybridStoreFile)
     }
