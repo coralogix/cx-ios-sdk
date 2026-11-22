@@ -20,10 +20,10 @@ public struct URLSessionInstrumentationConfiguration {
                 spanCustomization: ((URLRequest, SpanBuilder) -> Void)? = nil,
                 shouldInjectTracingHeaders: ((URLRequest) -> (Bool)?)? = nil,
                 shouldCollectResponsePayload: ((URLRequest) -> Bool)? = nil,
-                shouldCollectRequestPayload: ((URLRequest) -> Bool)? = nil,
                 injectCustomHeaders: ((inout URLRequest, (any Span)?) -> Void)? = nil,
                 createdRequest: ((URLRequest, any Span) -> Void)? = nil,
-                receivedResponse: ((URLResponse, DataOrFile?, any Span, URLRequest?) -> Void)? = nil,
+                receivedResponse: ((URLResponse, DataOrFile?, any Span) -> Void)? = nil,
+                receivedResponseWithRequest: ((URLResponse, DataOrFile?, any Span, URLRequest?) -> Void)? = nil,
                 receivedError: ((Error, DataOrFile?, HTTPStatus, any Span) -> Void)? = nil,
                 delegateClassesToInstrument: [AnyClass]? = nil,
                 tracer: Tracer? = nil) {
@@ -31,12 +31,12 @@ public struct URLSessionInstrumentationConfiguration {
         self.shouldInstrument = shouldInstrument
         self.shouldInjectTracingHeaders = shouldInjectTracingHeaders
         self.shouldCollectResponsePayload = shouldCollectResponsePayload
-        self.shouldCollectRequestPayload = shouldCollectRequestPayload
         self.injectCustomHeaders = injectCustomHeaders
         self.nameSpan = nameSpan
         self.spanCustomization = spanCustomization
         self.createdRequest = createdRequest
         self.receivedResponse = receivedResponse
+        self.receivedResponseWithRequest = receivedResponseWithRequest
         self.receivedError = receivedError
         self.delegateClassesToInstrument = delegateClassesToInstrument
         self.tracer = tracer ??
@@ -58,10 +58,6 @@ public struct URLSessionInstrumentationConfiguration {
     /// Used for rule-based response payload capture (e.g. NetworkCaptureRule.collectResPayload). Prefer over speculative buffering.
     public var shouldCollectResponsePayload: ((URLRequest) -> Bool)?
 
-    /// When non-nil and returning true for a request, request body is captured and stringified (1024-char limit).
-    /// Used for rule-based request payload capture (e.g. NetworkCaptureRule.collectReqPayload). Body is read at task-creation time.
-    public var shouldCollectRequestPayload: ((URLRequest) -> Bool)?
-
     /// Implement this callback to filter which requests you want to inject headers to follow the trace,
     /// also must implement it if you want to inject custom headers
     /// Instruments all requests by default
@@ -80,9 +76,12 @@ public struct URLSessionInstrumentationConfiguration {
     ///  Called before the span is created, it allows to add extra information to the Span
     public var createdRequest: ((URLRequest, any Span) -> Void)?
 
-    ///  Called before the span is ended, it allows to add extra information to the Span.
-    ///  The optional URLRequest is the original request (when available) for use in network capture (e.g. header filtering).
-    public var receivedResponse: ((URLResponse, DataOrFile?, any Span, URLRequest?) -> Void)?
+    ///  Called before the span is ended, it allows to add extra information to the Span
+    public var receivedResponse: ((URLResponse, DataOrFile?, any Span) -> Void)?
+
+    ///  Called before the span is ended, like `receivedResponse`, and additionally given the request
+    ///  the response belongs to where it is still known. Both are called if both are implemented.
+    public var receivedResponseWithRequest: ((URLResponse, DataOrFile?, any Span, URLRequest?) -> Void)?
 
     ///  Called before the span is ended, it allows to add extra information to the Span
     public var receivedError: ((Error, DataOrFile?, HTTPStatus, any Span) -> Void)?

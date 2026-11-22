@@ -3,7 +3,7 @@
 //  CoralogixRumTests
 //
 //  Integration coverage for custom global span + auto-instrumentation:
-//  - CX-35954: `registeredGlobalForAutoInstrumentationParent()` + `URLSessionLogger.applyNetworkAutoInstrumentationParentPolicy`
+//  - CX-35954: `registeredGlobalForAutoInstrumentationParent()` + `CoralogixRum.applyNetworkParentPolicy` (network `spanCustomization`)
 //    / `CoralogixRum.applyAutoInstrumentationParentPolicy` — same trace when global is active or when active OTel
 //    context is empty on async work (explicit `setParent(global)`).
 //  - CX-35955: `ignoredInstruments` on the tracer passed to `startGlobalSpan` — matching instruments use `setNoParent()`
@@ -385,6 +385,54 @@ final class GlobalSpanPropagationIntegrationTests: XCTestCase {
         let net = try XCTUnwrap(waitForNetworkSpan(urlContains: "ignored-net"))
         XCTAssertNotEqual(net.traceId, globalData.traceId, "Ignored network must not share global trace id (CX-35955)")
         XCTAssertNil(net.parentSpanId, "Ignored network span must be a root span")
+    }
+
+    // MARK: - Network parent policy without a live instance
+
+    /// Starts a span through the network `spanCustomization` while `getCurrentInstance()` is nil, so the
+    /// customization returns before setting session attributes. `preset` sets the parent the builder would
+    /// otherwise use, so the assertions can only pass if the policy overrides it.
+    private func networkSpanWithoutInstance(preset: (SpanBuilder) -> Void) throws -> SpanData {
+        CoralogixRum.clearCurrentInstanceForTesting()
+        XCTAssertNil(CoralogixRum.getCurrentInstance())
+        let builder = OpenTelemetry.instance.tracerProvider
+            .get(instrumentationName: "parent-policy-test", instrumentationVersion: nil)
+            .spanBuilder(spanName: "HTTP GET")
+        preset(builder)
+        let request = URLRequest(url: try XCTUnwrap(URL(string: "\(Self.baseURL)/no-instance")))
+        CoralogixRum.spanCustomizationStatic(request: request, spanBuilder: builder)
+        let span = builder.startSpan()
+        defer { span.end() }
+        return try XCTUnwrap(span as? any ReadableSpan).toSpanData()
+    }
+
+    func testNetworkParentPolicy_withoutInstance_parentsUnderGlobal() throws {
+        startRUM()
+        let tracer = try XCTUnwrap(rum?.getCustomTracer())
+        let global = try XCTUnwrap(tracer.startGlobalSpan(name: "no-instance.root"))
+        defer { global.endSpan() }
+        let globalData = try XCTUnwrap(global.span as? any ReadableSpan).toSpanData()
+
+        // Preset no parent: only the policy's setParent(global) can attach the global.
+        let net = try networkSpanWithoutInstance { $0.setNoParent() }
+
+        XCTAssertNil(net.attributes[Keys.sessionId.rawValue], "Instance guard must have returned early")
+        XCTAssertEqual(net.traceId, globalData.traceId)
+        XCTAssertEqual(net.parentSpanId, globalData.spanId)
+    }
+
+    func testNetworkParentPolicy_withoutInstance_ignoredNetwork_hasNoParent() throws {
+        startRUM()
+        let tracer = try XCTUnwrap(rum?.getCustomTracer(ignoredInstruments: [.networkRequests]))
+        let global = try XCTUnwrap(tracer.startGlobalSpan(name: "no-instance.ignored"))
+        defer { global.endSpan() }
+        let globalData = try XCTUnwrap(global.span as? any ReadableSpan).toSpanData()
+
+        // Preset the global as parent: only the policy's setNoParent can remove it.
+        let net = try networkSpanWithoutInstance { $0.setParent(global.span) }
+
+        XCTAssertNil(net.parentSpanId)
+        XCTAssertNotEqual(net.traceId, globalData.traceId)
     }
 
     func testIgnoredInstruments_userInteractions_makeSpanUsesSeparateTrace() throws {

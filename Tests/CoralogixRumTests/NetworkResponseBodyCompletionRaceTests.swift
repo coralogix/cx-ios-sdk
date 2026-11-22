@@ -71,7 +71,7 @@ final class NetworkResponseBodyCompletionRaceTests: XCTestCase {
             shouldInstrument: { _ in true },
             shouldInjectTracingHeaders: { _ in false },
             shouldCollectResponsePayload: { _ in true },
-            receivedResponse: { [weak self] _, dataOrFile, _, _ in
+            receivedResponseWithRequest: { [weak self] _, dataOrFile, _, _ in
                 self?.record(NetworkCaptureRule.responseData(from: dataOrFile), in: \.responseBodies)
             },
             receivedError: { [weak self] _, dataOrFile, _, _ in

@@ -35,6 +35,11 @@ extension CoralogixRum {
         return instance
     }
 
+    /// Lets a test run the network callbacks the way they run once the instance is gone.
+    internal static func clearCurrentInstanceForTesting() {
+        exporterQueue.sync { currentInstance = nil }
+    }
+
     public func initializeNetworkInstrumentation() {
         guard let options = self.options else {
             Log.e("[Coralogix] missing coralogix options")
@@ -96,12 +101,8 @@ extension CoralogixRum {
                 guard let currentOptions = Self.getCurrentNetworkOptions() else { return false }
                 return Self.shouldCollectResponsePayload(for: request, options: currentOptions)
             },
-            shouldCollectRequestPayload: { request in
-                // Use static options to support SDK reinitialization with different networkExtraConfig (CX-37986)
-                guard let currentOptions = Self.getCurrentNetworkOptions() else { return false }
-                return Self.shouldCollectRequestPayload(for: request, options: currentOptions)
-            },
-            receivedResponse: Self.handleReceivedResponse(response:data:span:request:),
+            createdRequest: Self.handleCreatedRequest(request:span:),
+            receivedResponseWithRequest: Self.handleReceivedResponse(response:data:span:request:),
             delegateClassesToInstrument: Self.urlSessionDelegateClassesForReactNative()
         )
         self.sessionInstrumentation = URLSessionInstrumentation(configuration: configuration)
@@ -187,7 +188,11 @@ extension CoralogixRum {
     }
     
     /// Static version for use in swizzled closures that persist across SDK reinitializations (CX-37986).
-    private static func spanCustomizationStatic(request: URLRequest, spanBuilder: SpanBuilder) {
+    internal static func spanCustomizationStatic(request: URLRequest, spanBuilder: SpanBuilder) {
+        // Before the instance guard below: the parent depends only on the global span registry, so a
+        // span that misses its session attributes must still join the active global trace.
+        applyNetworkParentPolicy(to: spanBuilder)
+
         spanBuilder.setAttribute(key: Keys.eventType.rawValue, value: CoralogixEventType.networkRequest.rawValue)
         spanBuilder.setAttribute(key: Keys.source.rawValue, value: EventSource.fetch.rawValue)
 
@@ -212,6 +217,35 @@ extension CoralogixRum {
         }
     }
     
+    /// When `.networkRequests` is ignored for the active global span, the network span starts a new trace
+    /// (matching the `traceparent` sent). Otherwise a registered global span is set as the parent explicitly:
+    /// the default `.currentSpan` parent relies on `os_activity` thread-local context, which does not carry
+    /// across URLSession swizzle boundaries, so `activeSpan` is often nil even while a global is active.
+    private static func applyNetworkParentPolicy(to spanBuilder: SpanBuilder) {
+        let registry = CoralogixCustomGlobalSpanRegistry.shared
+        if registry.shouldBreakTraceInheritance(for: .networkRequests) {
+            _ = spanBuilder.setNoParent()
+            return
+        }
+        if let global = registry.registeredGlobalForAutoInstrumentationParent() {
+            _ = spanBuilder.setParent(global)
+        }
+    }
+
+    /// Captures the request body when the matching rule has `collectReqPayload`. Runs when the task is
+    /// created, while `httpBody` is still set.
+    private static func handleCreatedRequest(request: URLRequest, span: any Span) {
+        guard let body = NetworkCaptureRule.readRequestBody(from: request).data,
+              let options = getCurrentNetworkOptions(),
+              shouldCollectRequestPayload(for: request, options: options) else {
+            return
+        }
+        let contentType = request.allHTTPHeaderFields?.first { $0.key.lowercased() == "content-type" }?.value
+        if let payload = NetworkCaptureRule.stringifyBody(data: body, contentType: contentType) {
+            span.setAttribute(key: Keys.requestPayload.rawValue, value: AttributeValue.string(payload))
+        }
+    }
+
     /// Static handler so `URLSessionInstrumentationConfiguration` does not strongly retain a `CoralogixRum` instance across SDK reinitializations (CX-37986).
     private static func handleReceivedResponse(response: URLResponse, data: DataOrFile?, span: any Span, request: URLRequest?) {
         if let httpResponse = response as? HTTPURLResponse {

@@ -30,22 +30,8 @@ class URLSessionLogger {
         }()
     #endif // os(iOS) && !targetEnvironment(macCatalyst)
 
-    /// CX-35955: when `.networkRequests` is ignored for the active global, start a new trace (`traceparent` matches).
-    /// CX-35954: when a global span is registered, always explicitly set it as parent. The default `.currentSpan`
-    /// behavior relies on `os_activity` thread-local context which doesn't propagate reliably across URLSession
-    /// swizzle boundaries — `activeSpan` is often nil even when a global is active.
-    private static func applyNetworkAutoInstrumentationParentPolicy(to spanBuilder: SpanBuilder) {
-        if CoralogixCustomGlobalSpanRegistry.shared.shouldBreakTraceInheritance(for: .networkRequests) {
-            _ = spanBuilder.setNoParent()
-            return
-        }
-        if let global = CoralogixCustomGlobalSpanRegistry.shared.registeredGlobalForAutoInstrumentationParent() {
-            _ = spanBuilder.setParent(global)
-        }
-    }
-
     /// This methods creates a Span for a request, and optionally injects tracing headers, returns a  new request if it was needed to create a new one to add the tracing headers
-    @discardableResult static func processAndLogRequest(_ request: URLRequest, sessionTaskId: String, instrumentation: URLSessionInstrumentation, shouldInjectHeaders: Bool, preCapturedRequestBody: Data? = nil) -> URLRequest? {
+    @discardableResult static func processAndLogRequest(_ request: URLRequest, sessionTaskId: String, instrumentation: URLSessionInstrumentation, shouldInjectHeaders: Bool) -> URLRequest? {
         // Prefer shared (latest init); fallback to this instance's configuration.
         let effectiveConfig = (URLSessionInstrumentation.shared ?? instrumentation).configuration
         guard effectiveConfig.shouldInstrument?(request) ?? true else {
@@ -106,22 +92,10 @@ class URLSessionLogger {
             spanBuilder.setAttribute(key: $0.key, value: $0.value)
         }
         effectiveConfig.spanCustomization?(request, spanBuilder)
-        Self.applyNetworkAutoInstrumentationParentPolicy(to: spanBuilder)
 
         let span = spanBuilder.startSpan()
         runningSpansQueue.sync {
             runningSpans[sessionTaskId] = span
-        }
-
-        // Request body capture (CX-33235): stringify and set request_payload when rule has collectReqPayload; 1024-char limit in stringifyBody.
-        // Use preCapturedRequestBody when provided (e.g. from prepareAndLogRequest) since request.httpBody may be nil after URLSession/URLProtocol handling.
-        let bodyData = preCapturedRequestBody ?? request.httpBody
-        if effectiveConfig.shouldCollectRequestPayload?(request) == true,
-           let bodyData {
-            let contentType = request.allHTTPHeaderFields?.first { $0.key.lowercased() == "content-type" }?.value
-            if let payload = NetworkCaptureRule.stringifyBody(data: bodyData, contentType: contentType) {
-                span.setAttribute(key: Keys.requestPayload.rawValue, value: payload)
-            }
         }
 
         var returnRequest: URLRequest?
@@ -175,7 +149,8 @@ class URLSessionLogger {
             responseUrl: response.url?.absoluteString
         )
         let effectiveConfig = (URLSessionInstrumentation.shared ?? instrumentation).configuration
-        effectiveConfig.receivedResponse?(response, effectiveData, span, request)
+        effectiveConfig.receivedResponse?(response, effectiveData, span)
+        effectiveConfig.receivedResponseWithRequest?(response, effectiveData, span, request)
         span.end()
     }
 
