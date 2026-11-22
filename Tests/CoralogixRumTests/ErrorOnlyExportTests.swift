@@ -408,6 +408,34 @@ final class ErrorOnlyExportTests: XCTestCase {
         XCTAssertNotNil(exporter.errorOnlyBuffer.metadata(of: "a"), "Its buffer is left as it was.")
     }
 
+    /// With ANR reporting off, a stored fatal hang is kept for a later launch but not sent: it must
+    /// not hold its session's drain, since nothing this launch would ever release it.
+    func testAnUnsentHangRecord_doesNotHoldItsSession_whenANRIsOff() throws {
+        var options = makeErrorOnlyOptions(sampleRate: 0, alwaysTrack: true)
+        options.instrumentations = [.anr: false]
+        let rum = CoralogixRum(options: options)
+        self.rum = rum
+        let exporter = try XCTUnwrap(rum.coralogixExporter)
+        let uploader = CapturingSpanUploader()
+        exporter.spanUploader = uploader
+        let store = CrashDeliveryStore.temporary()
+        let hang = StoredCrashRecord.fixture(crashId: "hang-h", sessionId: "h")
+        store.save(StoredCrashRecord(crashId: hang.crashId, kind: .anr, crashTime: hang.crashTime,
+                                     failedUploads: 0, session: hang.session, counters: hang.counters))
+        rum.crashDeliveryStore = store
+        let earlier = ErrorOnlyBuffer(maxRumEvents: 5_000, directory: directory)
+        let event: [String: Any] = [Keys.text.rawValue: [Keys.cxRum.rawValue: [Keys.logContext.rawValue: [Keys.message.rawValue: "held-h"]]]]
+        earlier.hold(try JSONSerialization.data(withJSONObject: event), sessionId: "h")
+        earlier.trigger("h")
+
+        rum.recoverPendingCrashes()
+        exporter.releaseErrorOnlyDrains()
+        exporter.errorOnlyDrain.waitUntilSettled()
+
+        XCTAssertNotNil(store.record(for: "hang-h"), "Precondition: the hang is kept, not sent.")
+        XCTAssertNotNil(payload(uploader, message: "held-h"), "Its session's buffer, which had its error, drains.")
+    }
+
     func testLeftoverWithoutCrashOrError_isDeletedAtLaunch() throws {
         let (exporter, uploader) = try start(makeErrorOnlyOptions(sampleRate: 0, alwaysTrack: true))
         let earlier = ErrorOnlyBuffer(maxRumEvents: 5_000, directory: directory)
