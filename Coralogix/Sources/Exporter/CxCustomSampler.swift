@@ -52,6 +52,18 @@ internal final class CxCustomSampler: Sampler {
                                kind: SpanKind,
                                attributes: [String: AttributeValue],
                                parentLinks: [SpanData.Link]) -> Decision {
+        // OpenTelemetry keeps its stock decision values internal; delegating to the public samplers
+        // reuses them as they are, rather than carrying a `Decision` type of our own.
+        let sampler = isSampled(attributes: attributes) ? Samplers.alwaysOn : Samplers.alwaysOff
+        return sampler.shouldSample(parentContext: parentContext,
+                                    traceId: traceId,
+                                    name: name,
+                                    kind: kind,
+                                    attributes: attributes,
+                                    parentLinks: parentLinks)
+    }
+
+    private func isSampled(attributes: [String: AttributeValue]) -> Bool {
         // Both reads come from the builder attributes `NetworkInstrumentation.spanCustomizationStatic`
         // set before `startSpan`, never from the live SessionManager. One read means the flag on the
         // wire and the stamp on the exported span always describe the same session, even if the
@@ -61,15 +73,14 @@ internal final class CxCustomSampler: Sampler {
         // `CoralogixExporter.attributeStringValue` does. Two readers of one stamp that disagree on its
         // encoding would put a flag on the wire that the export decision contradicts.
         guard attributes[Keys.eventType.rawValue]?.description == CoralogixEventType.networkRequest.rawValue else {
-            return Samplers.alwaysOnDecision
+            return true
         }
 
         // Hybrid network spans (`reportHybrid…`) receive their attributes after the span has started,
         // so they do not match above and stay sampled.
         let stamp = attributes[Keys.spanSessionSampledIn.rawValue]?.description
         let sampledIn = stamp.map { $0 == String(true) } ?? true
-        let exportsEvent = Self.exportsNetworkEvent(sampledIn: sampledIn, excludeFromSampling: self.excludeFromSampling)
-        return exportsEvent ? Samplers.alwaysOnDecision : Samplers.alwaysOffDecision
+        return Self.exportsNetworkEvent(sampledIn: sampledIn, excludeFromSampling: self.excludeFromSampling)
     }
 
     /// `sampledIn OR excludes(network)`: the one rule behind the flag. `CoralogixRum.networkRequestSampling()`
