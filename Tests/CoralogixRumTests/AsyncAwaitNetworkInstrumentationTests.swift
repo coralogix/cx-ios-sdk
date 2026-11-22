@@ -30,7 +30,8 @@ final class AsyncAwaitNetworkInstrumentationTests: XCTestCase {
             delegateClassesToInstrument: []
         )
         
-        instrumentation = URLSessionInstrumentation(configuration: config)
+        // The process's one instance: swizzling is bound to whichever instance is created first.
+        instrumentation = CoralogixRum.installURLSessionInstrumentation(configuration: config)
     }
     
     override func tearDownWithError() throws {

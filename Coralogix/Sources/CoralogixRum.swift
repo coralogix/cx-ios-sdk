@@ -57,8 +57,16 @@ public class CoralogixRum {
     }
     internal var userActionsDelegates: UserActionsDelegates?
 
-    internal lazy var tracerProvider: () -> Tracer = {
-        return OpenTelemetry.instance.tracerProvider.get(
+    /// The provider every SDK span is built from: the SDK's own, never the global one another library
+    /// may replace. Without one (before `setupTracer`, or if it failed) spans go to a no-op tracer and
+    /// are dropped, which is what the global default did when no provider was registered.
+    internal var ownTracerProvider: TracerProvider {
+        tracerProviderSdk ?? DefaultTracerProvider.instance
+    }
+
+    internal lazy var tracerProvider: () -> Tracer = { [weak self] in
+        let provider = self?.ownTracerProvider ?? DefaultTracerProvider.instance
+        return provider.get(
             instrumentationName: Keys.iosSdk.rawValue,
             instrumentationVersion: Global.sdk.rawValue
         )

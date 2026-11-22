@@ -46,8 +46,7 @@ class URLSessionLogger {
 
     /// This methods creates a Span for a request, and optionally injects tracing headers, returns a  new request if it was needed to create a new one to add the tracing headers
     @discardableResult static func processAndLogRequest(_ request: URLRequest, sessionTaskId: String, instrumentation: URLSessionInstrumentation, shouldInjectHeaders: Bool, preCapturedRequestBody: Data? = nil) -> URLRequest? {
-        // Prefer shared (latest init); fallback to this instance's configuration.
-        let effectiveConfig = (URLSessionInstrumentation.shared ?? instrumentation).configuration
+        let effectiveConfig = instrumentation.configuration
         guard effectiveConfig.shouldInstrument?(request) ?? true else {
             return nil
         }
@@ -174,8 +173,7 @@ class URLSessionLogger {
             originalUrl: request?.url?.absoluteString,
             responseUrl: response.url?.absoluteString
         )
-        let effectiveConfig = (URLSessionInstrumentation.shared ?? instrumentation).configuration
-        effectiveConfig.receivedResponse?(response, effectiveData, span, request)
+        instrumentation.configuration.receivedResponse?(response, effectiveData, span, request)
         span.end()
     }
 
@@ -187,8 +185,7 @@ class URLSessionLogger {
         }
         span.setAttribute(key: SemanticAttributes.httpStatusCode.rawValue, value: AttributeValue.int(statusCode))
         span.status = URLSessionLogger.statusForStatusCode(code: statusCode)
-        let effectiveConfig = (URLSessionInstrumentation.shared ?? instrumentation).configuration
-        effectiveConfig.receivedError?(error, (claim.body as Any?) ?? dataOrFile, statusCode, span)
+        instrumentation.configuration.receivedError?(error, (claim.body as Any?) ?? dataOrFile, statusCode, span)
 
         span.end()
     }
