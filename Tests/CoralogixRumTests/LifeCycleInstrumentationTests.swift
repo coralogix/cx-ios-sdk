@@ -58,24 +58,61 @@ final class LifeCycleInstrumentationTests: XCTestCase {
         XCTAssertNil(event[Keys.snapshotContext.rawValue])
     }
 
-    func testHybridBackgroundEvent_reachesBeforeSendAsSnapshotEvent() throws {
+    /// The hybrid callback here never answers, like JS/Dart that is suspended or killed before the
+    /// round trip finishes. The background event must still be uploaded, with its snapshot.
+    func testHybridBackgroundEvent_uploadsDirectlyAsSnapshotEvent_withoutBeforeSendAnswering() throws {
         for framework in [SdkFramework.flutter(version: "1.0.0"), .reactNative(version: "1.0.0")] {
             let capture = EncodedEventCapture()
+            let uploader = CapturingSpanUploader()
             var hybridOptions = try XCTUnwrap(options)
             hybridOptions.beforeSendCallBack = capture.append
-            try startSession(options: hybridOptions, sdkFramework: framework, uploadingTo: CapturingSpanUploader())
+            try startSession(options: hybridOptions, sdkFramework: framework, uploadingTo: uploader)
 
+            NotificationCenter.default.post(name: UIApplication.didBecomeActiveNotification, object: nil)
             NotificationCenter.default.post(name: UIApplication.didEnterBackgroundNotification, object: nil)
 
-            let event = try XCTUnwrap(waitForLifeCycleEvent(.appDidEnterBackgroundNotification, in: capture.cxRumPayloads),
-                                      "\(framework): the background event must reach beforeSend")
+            let event = try XCTUnwrap(waitForLifeCycleEvent(.appDidEnterBackgroundNotification, in: uploader.cxRumPayloads),
+                                      "\(framework): the background event must upload without the round trip")
             XCTAssertEqual(event[Keys.isSnapshotEvent.rawValue] as? Bool, true, "\(framework)")
             XCTAssertNotNil(event[Keys.snapshotContext.rawValue] as? [String: Any], "\(framework)")
+            XCTAssertNotNil(waitForLifeCycleEvent(.appDidBecomeActiveNotification, in: capture.cxRumPayloads),
+                            "\(framework): other life-cycle events still take the beforeSend round trip")
 
             coralogixRum?.shutdown()
             coralogixRum = nil
             CoralogixRum.isInitialized = false
         }
+    }
+
+    /// The background flush ends its background task when the export returns, so the event must
+    /// already be uploaded by then, not left waiting on a callback that may never answer.
+    func testHybridExport_backgroundEventIsUploadedBeforeExportReturns() throws {
+        let capture = EncodedEventCapture()
+        let uploader = CapturingSpanUploader()
+        var hybridOptions = try XCTUnwrap(options)
+        hybridOptions.beforeSendCallBack = capture.append
+        let rum = CoralogixRum(options: hybridOptions, sdkFramework: .reactNative(version: "1.0.0"))
+        coralogixRum = rum
+        let exporter = try XCTUnwrap(rum.coralogixExporter)
+        exporter.spanUploader = uploader
+        drainPendingSpans()
+        let uploadedBefore = uploader.cxRumPayloads().count
+
+        let background = makeSamplingSpan(
+            eventType: .lifeCycle,
+            extraAttributes: [Keys.type.rawValue: AttributeValue(Keys.appDidEnterBackgroundNotification.rawValue)])
+        let result = exporter.export(spans: [background, makeSamplingSpan(eventType: .networkRequest)], explicitTimeout: nil)
+
+        XCTAssertEqual(result, .success)
+        let uploaded = Array(uploader.cxRumPayloads().dropFirst(uploadedBefore))
+        XCTAssertEqual(uploaded.map(Self.lifeCycleType), [Keys.appDidEnterBackgroundNotification.rawValue],
+                       "Only the background event uploads directly, before export returns")
+        XCTAssertTrue(capture.cxRumPayloads().contains { Self.eventType(of: $0) == CoralogixEventType.networkRequest.rawValue },
+                      "The network event still goes to beforeSend")
+    }
+
+    private static func eventType(of cxRum: [String: Any]) -> String? {
+        (cxRum[Keys.eventContext.rawValue] as? [String: Any])?[Keys.type.rawValue] as? String
     }
 
     /// Starts a sampled-in session whose snapshot throttle has just been stamped, so only a forced

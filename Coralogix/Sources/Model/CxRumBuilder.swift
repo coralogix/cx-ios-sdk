@@ -200,8 +200,8 @@ class CxRumBuilder {
         let currentTime = otel.getStartTime() ?? Date().timeIntervalSince1970
         let isErrorSeverity = eventContext.severity == CoralogixLogSeverity.error.rawValue
         let isNavigationEvent = eventContext.type == .navigation
-        let isBackgroundEvent = eventContext.type == .lifeCycle
-            && LifeCycleContext(otel: otel).lifeCycleType == Keys.appDidEnterBackgroundNotification.rawValue
+        let isBackgroundEvent = LifeCycleContext.isBackgroundEvent(type: eventContext.type,
+                                                                   lifeCycleName: LifeCycleContext(otel: otel).lifeCycleType)
         // nil means no snapshot has been emitted yet on this session (initial
         // launch or just-rotated), so treat the throttle as expired and emit
         // the next qualifying event. SessionManager.setupSessionMetadata()
