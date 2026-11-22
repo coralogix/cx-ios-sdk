@@ -132,6 +132,9 @@ The fields accepted by `CoralogixExporterOptions`. Each one is described in deta
 | shouldSendText | `((UIView, String) -> Bool)?` | Called before recording tapped text. Return `false` to redact it: the field is still sent, carrying `***` instead of the text. Taps on a deliberately masked view (`cxMask`, SwiftUI `.cxMask()`), inside a masked subtree, or on a field carrying sensitive traits are redacted without consulting this closure. Text masked only by the replay's pixel policy (`maskText`, `maskAllImages`) still reaches it, so use this closure for anything you need kept out of events. | No |
 | resolveTargetName | `((UIView) -> String?)?` | Returns a human-readable name for a tapped view, used as `target_element`. Return `nil` to fall back to the class name. Runs on the main thread on every tap, so keep it fast. | No |
 
+> [!NOTE]
+> In React Native and Flutter apps, crashes and the life-cycle event sent when the app moves to the background do not pass through the JavaScript or Dart `beforeSend`. They are sent directly so they are not lost when the app closes.
+
 ### Instrumentations
 Turn on/off specific instrumentation, default to true. Each instrumentation is responsible for which data the SDK will track and collect for you.
 ```swift
