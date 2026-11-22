@@ -109,12 +109,18 @@ extension CoralogixRum {
     
     /// React Native uses `RCTHTTPRequestHandler` as its `NSURLSessionDataDelegate` and does not use the
     /// completion-handler API, so response body is only available if this delegate class is instrumented.
-    /// Returns the class in an array when present at runtime (safe no-op in non–React Native apps).
+    /// Returns the class in an array when present at runtime, and an empty array otherwise.
+    /// Never returns nil: upstream OpenTelemetry treats a nil list as "scan every loaded class and
+    /// swizzle each session delegate it finds", which would reach into the host app's own classes.
     /// - Note: Class name is fixed; if React Native renames this class in a future version, this integration will no-op until updated.
-    private static func urlSessionDelegateClassesForReactNative() -> [AnyClass]? {
-        guard let cls = NSClassFromString("RCTHTTPRequestHandler") else { return nil }
+    static func urlSessionDelegateClassesForReactNative(
+        className: String = reactNativeHTTPRequestHandlerClassName
+    ) -> [AnyClass] {
+        guard let cls = NSClassFromString(className) else { return [] }
         return [cls]
     }
+
+    static let reactNativeHTTPRequestHandlerClassName = "RCTHTTPRequestHandler"
 
     /// Returns whether response body should be buffered for this request (rule-based; used for collectResPayload).
     private static func shouldCollectResponsePayload(for request: URLRequest, options: CoralogixExporterOptions) -> Bool {
