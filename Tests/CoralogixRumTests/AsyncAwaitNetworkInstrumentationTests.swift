@@ -27,7 +27,7 @@ final class AsyncAwaitNetworkInstrumentationTests: XCTestCase {
             createdRequest: { _, _ in },
             receivedResponse: { _, _, _, _ in }, // 4th param: optional URLRequest for header capture
             receivedError: { _, _, _, _ in },
-            delegateClassesToInstrument: nil
+            delegateClassesToInstrument: []
         )
         
         instrumentation = URLSessionInstrumentation(configuration: config)
