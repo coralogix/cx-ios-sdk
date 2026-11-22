@@ -767,15 +767,18 @@ extension CrashRecoveryAcrossLaunchesTests {
 
 private let jsMessage = "TypeError: undefined is not a function"
 
-/// The fatal React Native's error handler reports, held by this test process in session `session`.
+/// The fatal React Native's error handler reports, kept by this test process in session `session`;
+/// by default its live send was never delivered.
 private func heldFatal(session: String = "S1", process: ProcessIdentity? = thisProcess,
-                       crashTime: Date = Date(timeIntervalSinceNow: -60)) throws -> HeldJsFatal {
+                       crashTime: Date = Date(timeIntervalSinceNow: -60),
+                       liveDelivered: Bool? = nil) throws -> HeldJsFatal {
     HeldJsFatal(crashId: HeldJsFatal.crashIdPrefix + UUID().uuidString,
                 process: try XCTUnwrap(process, "the kernel names this process"),
                 crashTime: crashTime,
                 session: .init(id: session, creationDate: 1_700_000_000, sampledIn: true),
                 fields: ErrorFields(domain: "", message: jsMessage, isCrash: true, errorType: "TypeError",
-                                    stackTraceJson: #"[{"fileName":"index.bundle","lineNumber":12}]"#))
+                                    stackTraceJson: #"[{"fileName":"index.bundle","lineNumber":12}]"#),
+                liveDelivered: liveDelivered)
 }
 
 /// The report a bridgeless app leaves: RN converts `RCTFatalException` to a C++ `jsi::JSError`,
@@ -793,24 +796,87 @@ extension CrashRecoveryAcrossLaunchesTests {
         XCTAssertTrue(store.storeJsFatal(fatal))
     }
 
-    func test_reactNativesFatal_isHeldForTheNextLaunch_notSentLive() throws {
+    private func keptFatal(in store: CrashDeliveryStore) throws -> HeldJsFatal {
+        let file = try XCTUnwrap(store.jsFatals().first)
+        guard case .readable(let fatal) = CoralogixRum.readJsFatal(file) else { throw XCTSkip("not readable") }
+        return fatal
+    }
+
+    /// Sent now, as on Android, and kept with its process for the next launch, marked delivered.
+    func test_reactNativesFatal_isSentLive_andKeptForTheNextLaunch() throws {
         let store = CrashDeliveryStore.temporary()
         let uploader = SwitchableUploader()
         let sdk = try launch(store: store, uploader: uploader, framework: .reactNative(version: "0.19.1"),
                              process: thisProcess)
 
         sdk.reportError(message: jsMessage, stackTrace: [], errorType: "TypeError", isCrash: true, source: "crash")
-        let flushed = expectation(description: "flushed")
-        sdk.flush { flushed.fulfill() }
-        wait(for: [flushed], timeout: 10)
+        let delivered = expectation(for: NSPredicate { _, _ in (try? self.keptFatal(in: store))?.liveDelivered == true },
+                                    evaluatedWith: nil)
+        sdk.flush()
+        wait(for: [delivered], timeout: 10)
 
-        XCTAssertTrue(uploader.crashes.isEmpty)
-        let file = try XCTUnwrap(store.jsFatals().first)
-        guard case .readable(let fatal) = CoralogixRum.readJsFatal(file) else { return XCTFail("readable") }
+        XCTAssertEqual(uploader.crashes.count, 1)
+        let sent = try XCTUnwrap(uploader.crashes.first)
+        XCTAssertEqual(value(sent, .errorContext, .errorMessage) as? String, jsMessage)
+        XCTAssertEqual(value(sent, .errorContext, .errorType) as? String, "TypeError")
+        XCTAssertEqual(value(sent, .eventContext, .source) as? String, EventSource.crash.rawValue)
+        let fatal = try keptFatal(in: store)
         XCTAssertEqual(fatal.process, thisProcess)
         XCTAssertEqual(fatal.fields.message, jsMessage)
-        XCTAssertEqual(fatal.fields.errorType, "TypeError")
         XCTAssertEqual(fatal.session.id, sdk.liveCrashSession?.id)
+    }
+
+    /// The usual case: delivered live, so the next launch only drops the native report it left.
+    func test_aFatalDeliveredLive_dropsItsNativeReport_andIsNotSentAgain() throws {
+        for data in [try reactNativeFatalReportData(sessionId: "S1", description: "Unhandled JS Exception: \(jsMessage)"),
+                     try bridgelessFatalReportData(sessionId: "S1")] {
+            let store = CrashDeliveryStore.temporary()
+            self.store(try heldFatal(liveDelivered: true), in: store)
+            try leaveCrash(in: store, data: data)
+
+            let uploader = SwitchableUploader()
+            try launch(store: store, lastSession: sessionRecord(of: "S1"), uploader: uploader)
+
+            XCTAssertTrue(uploader.crashes.isEmpty)
+            XCTAssertTrue(store.copies().isEmpty)
+            XCTAssertTrue(store.jsFatals().isEmpty)
+            XCTAssertEqual(store.recordedCrashIds(), [])
+        }
+    }
+
+    /// Its native report cannot be read yet: the fatal is kept, so the report is still dropped once
+    /// a later launch reads it.
+    func test_aFatalWhoseNativeReportCannotBeReadYet_isKeptUntilItCanBeDropped() throws {
+        let store = CrashDeliveryStore.temporary()
+        self.store(try heldFatal(liveDelivered: true), in: store)
+        let locked = store.copiesDirectory.appendingPathComponent("locked.plcrash")
+        try FileManager.default.createDirectory(at: store.copiesDirectory, withIntermediateDirectories: true)
+        try reactNativeFatalReportData(sessionId: "S1", description: "Unhandled JS Exception: \(jsMessage)").write(to: locked)
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: locked.path)
+
+        let first = SwitchableUploader()
+        try launch(store: store, lastSession: sessionRecord(of: "S1"), uploader: first)
+        XCTAssertTrue(first.crashes.isEmpty)
+        XCTAssertEqual(store.jsFatals().count, 1, "kept while its report cannot be read")
+
+        try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: locked.path)
+        let second = SwitchableUploader()
+        try launch(store: store, lastSession: sessionRecord(of: "S2"), uploader: second)
+        XCTAssertTrue(second.crashes.isEmpty, "the report is dropped, the fatal was delivered live")
+        XCTAssertTrue(store.copies().isEmpty)
+        XCTAssertTrue(store.jsFatals().isEmpty)
+    }
+
+    /// Delivered live with no native report (React Native did not end the process): nothing more.
+    func test_aFatalDeliveredLiveWithNoNativeReport_isNotSentAgain() throws {
+        let store = CrashDeliveryStore.temporary()
+        self.store(try heldFatal(liveDelivered: true), in: store)
+
+        let uploader = SwitchableUploader()
+        try launch(store: store, lastSession: sessionRecord(of: "S1"), uploader: uploader)
+
+        XCTAssertTrue(uploader.crashes.isEmpty)
+        XCTAssertTrue(store.jsFatals().isEmpty)
     }
 
     /// Only React Native's own fatal handler ends in a native report of the same error.
@@ -837,8 +903,8 @@ extension CrashRecoveryAcrossLaunchesTests {
         }
     }
 
-    /// The next launch sends the JS error once, as it would have been sent live, in place of the
-    /// `RCTFatalException` report its process left.
+    /// A live send that was never delivered: the next launch sends the JS error again, as it would
+    /// have been sent live, in place of the `RCTFatalException` report its process left.
     func test_aHeldFatal_isSentOnce_inPlaceOfItsProcesssNativeReport() throws {
         let store = CrashDeliveryStore.temporary()
         let fatal = try heldFatal()

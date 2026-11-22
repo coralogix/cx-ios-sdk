@@ -143,10 +143,10 @@ extension CoralogixRum {
         // flushed rather than left to die with the process.
         let flushCrash: (() -> Void)? = isCrash ? { [weak self] in self?.flush() } : nil
         // React Native's own fatal handler: the same process is about to end in a native crash
-        // report of this error, so the error is kept on disk and sent once, by the next launch,
-        // in place of that report (`JsFatalRecovery`). A hold that cannot be written is sent live.
+        // report of this error. The error is sent now and kept on disk, and the next launch drops
+        // that report (`JsFatalRecovery`). One that cannot be kept goes the usual way below.
         if isCrash, source == .crash, CoralogixRum.mobileSDK.sdkFramework.isReactNative,
-           self.holdReactNativeFatal(fields) {
+           self.reportReactNativeFatal(fields) {
             flushCrash?()
             return
         }

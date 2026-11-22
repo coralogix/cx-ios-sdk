@@ -158,11 +158,9 @@ final class EventSourceWireTests: XCTestCase {
     func test_hybridReportError_carriesTheSourceTheWrapperSent() throws {
         let (sdk, uploader) = try start(framework: .reactNative(version: "1.0.0"))
         let sent: [EventSource] = [.captured, .console, .code, .crash]
-        // Not marked a crash: React Native's fatal (`is_crash` with source `crash`) is held for the
-        // next launch instead of sent live (see the React Native fatal tests in CrashRecoveryStoreTests).
         for source in sent {
             sdk.reportError(message: "rn \(source.rawValue)", stackTrace: [], errorType: "Error",
-                            isCrash: false, source: source.rawValue)
+                            isCrash: source == .crash, source: source.rawValue)
         }
         for source in sent {
             assertSource(try awaitError(sdk, uploader, message: "rn \(source.rawValue)"), source)

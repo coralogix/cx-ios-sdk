@@ -78,7 +78,8 @@ extension CoralogixRum: StoredCrashSending {
         // Read before the native rules below delete anything: a crash during the hang wins.
         self.recordFatalHang(reportsHangs: reportsHangs, crashes: readable.map(\.crash))
         // Before the native rules: a React Native fatal takes its process's native report out.
-        let jsFatals = self.settleJsFatals(&readable, reportsCrashes: reportsCrashes)
+        let jsFatals = self.settleJsFatals(&readable, reportsCrashes: reportsCrashes,
+                                           nativeMayBePending: !allCopiesRead || reportLeftInReporter)
 
         var lined: [CrashDeliveryScheduler.Item] = []
         if reportsCrashes {

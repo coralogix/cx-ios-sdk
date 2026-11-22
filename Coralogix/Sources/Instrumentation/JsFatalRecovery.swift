@@ -4,9 +4,10 @@
 //
 //  A React Native JS fatal ends the process in a native crash of its own: RN raises
 //  `RCTFatalException` (the bridge) or terminates on `facebook::jsi::JSError` (bridgeless), and
-//  PLCrashReporter records it. Sent live as well, the fatal would reach Coralogix twice. Instead
-//  the fatal handler's error is held on disk, and the next launch — the first point where both
-//  copies are known — sends it once, in place of the native report its own process left.
+//  PLCrashReporter records it. The fatal handler's error is sent at once, as on Android, and kept
+//  on disk with the process it came from. The next launch, the first that can read the native
+//  report, drops the report that process left, and sends the JS error again only if it was never
+//  delivered.
 //
 
 import Foundation
@@ -32,7 +33,8 @@ struct ProcessIdentity: Codable, Equatable {
     }
 }
 
-/// React Native's fatal-handler error, held for the next launch to send.
+/// React Native's fatal-handler error, sent live and kept for the next launch: to drop its
+/// process's native report, and to send it again if the live send was never delivered.
 struct HeldJsFatal: Codable, Equatable {
     static let crashIdPrefix = "jsfatal-"
 
@@ -41,6 +43,8 @@ struct HeldJsFatal: Codable, Equatable {
     let crashTime: Date
     let session: StoredCrashRecord.Session
     let fields: ErrorFields
+    /// Set once the live send is delivered.
+    var liveDelivered: Bool? = nil
 
     static func isHeld(crashId: String) -> Bool {
         crashId.hasPrefix(crashIdPrefix)
@@ -59,13 +63,24 @@ extension CoralogixRum {
         }
     }
 
-    /// Keeps React Native's fatal for the next launch instead of sending it live. Returns false —
-    /// send it live — when this process or its session is unknown, or the file cannot be written.
-    func holdReactNativeFatal(_ fields: ErrorFields) -> Bool {
+    /// Sends React Native's fatal now, as a crash with no screenshot, and keeps it for the next
+    /// launch. Returns false, leaving it to the usual live path and its native report to be sent
+    /// as well, when this process or its session is unknown or the file cannot be written.
+    func reportReactNativeFatal(_ fields: ErrorFields) -> Bool {
         guard let process = ownProcess, let session = liveCrashSession else { return false }
         let held = HeldJsFatal(crashId: HeldJsFatal.crashIdPrefix + UUID().uuidString,
                                process: process, crashTime: Date(), session: session, fields: fields)
-        return crashDeliveryStore.storeJsFatal(held)
+        let store = crashDeliveryStore
+        guard store.storeJsFatal(held) else { return false }
+        let span = makeSpan(event: .error, source: .crash, severity: .error)
+        // Before the span ends, so the answer cannot come ahead of its listener.
+        coralogixExporter?.awaitLiveDelivery(spanId: span.context.spanId.hexString) { delivered in
+            // Delivered only: one refused or dropped never reached the product.
+            if delivered { store.markJsFatalDelivered(crashId: held.crashId) }
+        }
+        fields.apply(to: span)
+        span.end()
+        return true
     }
 
     /// Whether `crash` is the native report a React Native JS fatal leaves.
@@ -73,19 +88,24 @@ extension CoralogixRum {
         crash.kind == .rnFatal || (crash.kind == .cxx && crash.context?.cxx?.type == jsErrorCxxType)
     }
 
-    /// Lines up the held React Native fatals to send, and takes the native report each one's
-    /// process left out of `readable`: the fatal is sent in its place.
+    /// Takes the native report each kept React Native fatal's process left out of `readable`, and
+    /// lines up the fatals whose live send was never delivered, to send again.
     ///
-    /// A fatal is settled — given a delivery record, its native report forgotten — on the first
-    /// launch that reads it. A report already being sent from an earlier launch wins instead, and
-    /// the fatal is dropped; a report that turns up only on a later launch, while the fatal is
-    /// still waiting to be delivered, is forgotten then. Every doubt keeps the native report: two
-    /// events, never none. Like native crashes, held fatals follow this launch's `.errors` switch.
+    /// A fatal is settled — its native report forgotten, and it either deleted, delivered, or given
+    /// a delivery record — on the first launch that reads it. A report already being sent from an
+    /// earlier launch wins instead; a report that turns up only on a later launch, while an
+    /// undelivered fatal still waits, is forgotten then. Every doubt keeps the native report: two
+    /// events, never none. Like native crashes, kept fatals follow this launch's `.errors` switch.
+    ///
+    /// A fatal whose native report was not found while one may still be on its way
+    /// (`nativeMayBePending`: a copy not readable yet, or a report left in PLCrashReporter's slot)
+    /// is kept for a later launch, so that report is still dropped when it is read.
     ///
     /// Returns the fatals to send, newest first and capped, and whether any was left for a later
     /// launch, which still needs its launch's session snapshot.
     internal func settleJsFatals(_ readable: inout [(copy: URL, crash: MappedCrash)],
-                                 reportsCrashes: Bool) -> (lined: [CrashDeliveryScheduler.Item], unsettled: Bool) {
+                                 reportsCrashes: Bool,
+                                 nativeMayBePending: Bool) -> (lined: [CrashDeliveryScheduler.Item], unsettled: Bool) {
         let store = self.crashDeliveryStore
         var held: [(file: URL, fatal: HeldJsFatal)] = []
         var unsettled = false
@@ -114,7 +134,21 @@ extension CoralogixRum {
         var lined: [CrashDeliveryScheduler.Item] = []
         for (file, fatal) in newest.prefix(CrashDeliveryStore.maxPerKind) {
             let nativeIndex = readable.firstIndex { fatal.process.wrote($0.crash) && Self.isReactNativeFatal($0.crash) }
+            if nativeIndex == nil, nativeMayBePending {
+                unsettled = true
+                continue
+            }
             let nativeIsRecorded = nativeIndex.map { store.record(for: readable[$0].crash.crashId) != nil } ?? false
+            // Already reported by its live send: only its native report is left to drop.
+            if fatal.liveDelivered == true {
+                if let nativeIndex, !nativeIsRecorded {
+                    let native = readable.remove(at: nativeIndex)
+                    Log.d("[JsFatalRecovery] \(fatal.crashId) was delivered live — dropping its native report \(native.crash.crashId)")
+                    store.forget(copy: native.copy, crashId: native.crash.crashId)
+                }
+                store.removeCopy(file)
+                continue
+            }
             let sendsFatal: Bool
             switch store.lookUpRecord(for: fatal.crashId) {
             case .found:

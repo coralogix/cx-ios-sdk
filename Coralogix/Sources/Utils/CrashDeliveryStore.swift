@@ -209,13 +209,31 @@ final class CrashDeliveryStore {
 
     /// Keeps `fatal` for the next launch, under its crash id. Returns whether it reached disk.
     func storeJsFatal(_ fatal: HeldJsFatal) -> Bool {
+        Self.lock.lock()
+        defer { Self.lock.unlock() }
         do {
-            try Self.writeJSON(fatal, to: jsFatalsDirectory.appendingPathComponent("\(fatal.crashId).json"))
+            try Self.writeJSON(fatal, to: jsFatalFile(crashId: fatal.crashId))
             return true
         } catch {
-            Log.e("[CrashDeliveryStore] Failed to hold a React Native fatal: \(error)")
+            Log.e("[CrashDeliveryStore] Failed to keep a React Native fatal: \(error)")
             return false
         }
+    }
+
+    /// Notes that the kept fatal `crashId` was delivered by its live send, if it is still there.
+    func markJsFatalDelivered(crashId: String) {
+        Self.lock.lock()
+        defer { Self.lock.unlock() }
+        let url = jsFatalFile(crashId: crashId)
+        guard let data = try? Data(contentsOf: url),
+              var fatal = try? JSONDecoder().decode(HeldJsFatal.self, from: data),
+              fatal.liveDelivered != true else { return }
+        fatal.liveDelivered = true
+        try? Self.writeJSON(fatal, to: url)
+    }
+
+    private func jsFatalFile(crashId: String) -> URL {
+        jsFatalsDirectory.appendingPathComponent("\(crashId).json")
     }
 
     // MARK: - Delivery records
