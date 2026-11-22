@@ -378,6 +378,36 @@ final class ErrorOnlyExportTests: XCTestCase {
         XCTAssertNotNil(labelled(uploader, "held-a"), "Released once the crash is delivered.")
     }
 
+    /// A crash `beforeSend` demotes is no trigger: settling it frees its session's gate, but the
+    /// session never had its error, so what it held stays held.
+    func testCrashDemotedByBeforeSend_sendsNothingItsSessionHeld() throws {
+        let demoteCrashes: ([String: Any]) -> [String: Any]? = { cxRum in
+            guard (cxRum[Keys.errorContext.rawValue] as? [String: Any])?[Keys.isCrash.rawValue] as? Bool == true,
+                  var context = cxRum[Keys.eventContext.rawValue] as? [String: Any] else { return cxRum }
+            context[Keys.severity.rawValue] = CoralogixLogSeverity.info.rawValue
+            var edited = cxRum
+            edited[Keys.eventContext.rawValue] = context
+            return edited
+        }
+        let rum = CoralogixRum(options: makeErrorOnlyOptions(sampleRate: 0, alwaysTrack: true, beforeSend: demoteCrashes))
+        self.rum = rum
+        let exporter = try XCTUnwrap(rum.coralogixExporter)
+        let uploader = CrashResultUploader()
+        exporter.spanUploader = uploader
+        try leaveHeldEvents(["held-a"], of: "a")
+        exporter.awaitStoredCrashes(["crash-a": "a"])
+        exporter.recoverErrorOnlyLeftovers(crashedSessionIds: ["a"])
+        exporter.releaseErrorOnlyDrains()   // the launch's crash pass is over
+
+        _ = exporter.export(spans: [makeCrashSpan(sessionId: "a", crashId: "crash-a")], explicitTimeout: nil)
+        exporter.waitForStoredCrashUploads()
+        exporter.errorOnlyDrain.waitUntilSettled()
+
+        XCTAssertEqual(exporter.crashUploadOutcome(id: "crash-a"), .policyDropped, "Precondition: the crash was settled.")
+        XCTAssertNil(labelled(uploader, "held-a"), "The session never had its error: nothing it held is sent.")
+        XCTAssertNotNil(exporter.errorOnlyBuffer.metadata(of: "a"), "Its buffer is left as it was.")
+    }
+
     func testLeftoverWithoutCrashOrError_isDeletedAtLaunch() throws {
         let (exporter, uploader) = try start(makeErrorOnlyOptions(sampleRate: 0, alwaysTrack: true))
         let earlier = ErrorOnlyBuffer(maxRumEvents: 5_000, directory: directory)

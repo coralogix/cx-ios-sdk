@@ -166,9 +166,11 @@ extension CoralogixExporter {
         startErrorOnlyDrains(errorOnlyBuffer.triggeredSessions())
     }
 
-    /// Starts the drains of `sessionIds` that wait on no crash (`drainableSessions`).
+    /// Starts the drains of `sessionIds` that had their error and wait on no crash. A session
+    /// freed from a crash that `beforeSend` dropped or demoted never had its error: what it holds
+    /// stays held, under the usual rules.
     func startErrorOnlyDrains(_ sessionIds: [String]) {
-        errorOnlyDrain.start(drainableSessions(sessionIds))
+        errorOnlyDrain.start(drainableSessions(sessionIds).filter(errorOnlyBuffer.isTriggered))
     }
 
     /// Called once the stored-crash pass of this launch is over.
