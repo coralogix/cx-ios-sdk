@@ -24,6 +24,19 @@ final class URLSessionLoggerResponseCallbackTests: XCTestCase {
 
     private let lock = NSLock()
     private var calls: [Call] = []
+    private var previousShared: URLSessionInstrumentation?
+
+    override func setUp() {
+        super.setUp()
+        previousShared = URLSessionInstrumentation.shared
+    }
+
+    // Building an instance replaces the process-wide `shared` one, which later tests read.
+    override func tearDown() {
+        URLSessionInstrumentation.restoreSharedForTesting(previousShared)
+        previousShared = nil
+        super.tearDown()
+    }
 
     private func record(_ name: String, _ data: DataOrFile?, _ span: any Span, _ request: URLRequest?) {
         lock.lock()

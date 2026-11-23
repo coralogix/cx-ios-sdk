@@ -59,7 +59,14 @@ public class URLSessionInstrumentation {
         defer { sharedInstanceLock.unlock() }
         return sharedInstance
     }
-    
+
+    /// Lets a test that builds its own instance hand `shared` back to the one it found.
+    internal static func restoreSharedForTesting(_ instance: URLSessionInstrumentation?) {
+        sharedInstanceLock.lock()
+        defer { sharedInstanceLock.unlock() }
+        sharedInstance = instance
+    }
+
     private let queue = DispatchQueue(label: "io.opentelemetry.ddnetworkinstrumentation", attributes: .concurrent)
     /// Serial queue for response body interception store (CX-33234).
     private let captureQueue = DispatchQueue(label: "com.coralogix.network-capture")
