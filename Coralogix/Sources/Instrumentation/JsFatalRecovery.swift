@@ -101,6 +101,10 @@ extension CoralogixRum {
     /// Sends React Native's fatal now, as a crash with no screenshot, and keeps it for the next
     /// launch. Returns false, leaving it to the usual live path and its native report to be sent
     /// as well, when this process or its session is unknown or the file cannot be written.
+    ///
+    /// Only a delivery the server answered marks it delivered. One the process ends before the
+    /// answer arrives is sent again by the next launch, as Android sends a crash whose live upload
+    /// got no answer: the same error twice, never none.
     func reportReactNativeFatal(_ fields: ErrorFields) -> Bool {
         guard let process = ownProcess, let session = liveCrashSession else { return false }
         let held = HeldJsFatal(crashId: HeldJsFatal.crashIdPrefix + UUID().uuidString,
