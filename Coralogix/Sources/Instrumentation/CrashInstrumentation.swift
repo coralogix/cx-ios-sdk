@@ -36,7 +36,8 @@ extension CoralogixRum: StoredCrashSending {
     }
 
     /// Lines up the crashes earlier launches left behind for `completeCrashRecovery` to send: native
-    /// crashes, then fatal hangs, newest first within each kind, as Android sends them.
+    /// crashes, then held React Native fatals, then fatal hangs, newest first within each kind, as
+    /// Android sends them.
     ///
     /// Runs at init whatever this launch's sampling roll: the crash belongs to the session that
     /// crashed, so whether it is sent follows that session's decision, not this launch's.
@@ -76,10 +77,14 @@ extension CoralogixRum: StoredCrashSending {
         }
         // Read before the native rules below delete anything: a crash during the hang wins.
         self.recordFatalHang(reportsHangs: reportsHangs, crashes: readable.map(\.crash))
+        // Before the native rules: a React Native fatal takes its process's native report out.
+        let jsFatals = self.settleJsFatals(&readable, reportsCrashes: reportsCrashes,
+                                           nativeMayBePending: !allCopiesRead || reportLeftInReporter)
 
         var lined: [CrashDeliveryScheduler.Item] = []
         if reportsCrashes {
             lined += self.lineUpNativeCrashes(readable)
+            lined += jsFatals.lined
         } else {
             // Copied at image load whatever the options say: not sent, so not kept either.
             for (copy, crash) in readable {
@@ -93,6 +98,7 @@ extension CoralogixRum: StoredCrashSending {
         let outcome = RecoveryOutcome(allCopiesRead: allCopiesRead,
                                       reportLeftInReporter: reportLeftInReporter,
                                       hangMarkerLeft: store.hasHangMarker,
+                                      jsFatalLeft: jsFatals.unsettled,
                                       recordedCrashIds: store.recordedCrashIds(),
                                       linedUpCrashIds: lined.map(\.crashId))
         if outcome.earlierLaunchesAreSpent {
@@ -368,6 +374,11 @@ extension CoralogixRum: StoredCrashSending {
             sendStoredHang(item, as: record, through: exporter, completion: completion)
             return
         }
+        // Recorded as native crashes, so an earlier SDK reading the records file still decodes it.
+        if HeldJsFatal.isHeld(crashId: record.crashId) {
+            sendStoredJsFatal(item, as: record, through: exporter, completion: completion)
+            return
+        }
         switch Self.readCopy(item.copy) {
         case .readable(let crash):
             exporter.awaitCrashUpload(id: crash.crashId, completion)
@@ -450,15 +461,17 @@ struct RecoveryOutcome {
     var allCopiesRead: Bool
     var reportLeftInReporter: Bool
     var hangMarkerLeft: Bool
+    /// A held React Native fatal waits, unrecorded, for a later launch.
+    var jsFatalLeft: Bool = false
     /// Nil when the delivery records cannot be read.
     var recordedCrashIds: Set<String>?
     var linedUpCrashIds: [String]
 
     /// No crash or hang an earlier launch left can still need that launch's snapshot: every copy
-    /// was read, none is left in PLCrashReporter's slot, no hang marker waits, and every crash
-    /// lined up has a delivery record holding its session's counters.
+    /// was read, none is left in PLCrashReporter's slot, no hang marker or React Native fatal
+    /// waits, and every crash lined up has a delivery record holding its session's counters.
     var earlierLaunchesAreSpent: Bool {
-        guard allCopiesRead, !reportLeftInReporter, !hangMarkerLeft,
+        guard allCopiesRead, !reportLeftInReporter, !hangMarkerLeft, !jsFatalLeft,
               let recorded = recordedCrashIds else { return false }
         return linedUpCrashIds.allSatisfy(recorded.contains)
     }

@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Release-mechanics commits (version bumps, podspec/script tweaks, README edits) are
 omitted; the focus here is user-facing behavior changes.
 
+## [2.24.4] - 2026-11-22
+
+### Fixed
+- In React Native apps, a fatal JavaScript error is now reported once instead of twice, with its JavaScript message and stack.
+
 ## [2.24.3] - 2026-11-19
 
 ### Fixed

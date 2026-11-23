@@ -77,6 +77,9 @@ struct MappedCrash: Equatable {
     let arch: String?
     /// The session and C++ context written into the report, when it has a readable one.
     let context: CrashContextEnvelope?
+    /// For the report React Native's JS fatal handler ends the process with, the error as it
+    /// describes it, uncapped: what follows `jsFatalMarker`. nil for any other report.
+    var jsFatalDescription: String? = nil
 
     /// Equal to `exceptionType`, as Android's native crash sets it.
     var errorType: String { exceptionType }
@@ -88,6 +91,9 @@ enum CrashReportMapper {
     /// Android's cap for each thread of a JVM crash; a native crash sends one thread uncapped.
     static let maxFramesPerThread = 200
     static let rnFatalPrefix = "RCTFatalException"
+    /// What `RCTExceptionsManager` puts before a JS fatal's description, on every React Native
+    /// version. A native `RCTFatal` (a native module's error, a failed bundle load) has none.
+    static let jsFatalMarker = "Unhandled JS Exception: "
 
     static func map(_ report: CrashReportReading) -> MappedCrash {
         let context = CrashContextEnvelope(data: report.customData)
@@ -109,7 +115,26 @@ enum CrashReportMapper {
                            triggeredByThread: threads.isEmpty ? nil : 0,
                            baseAddress: report.mainBinaryImage?.baseAddress,
                            arch: report.mainBinaryImage?.arch,
-                           context: context)
+                           context: context,
+                           jsFatalDescription: jsFatalDescription(of: report, kind: crashKind, context: context))
+    }
+
+    /// The bridge raises the fatal as `RCTFatalException`, its reason starting with the marker. A
+    /// bridgeless app rethrows it as a C++ `jsi::JSError`, whose `what()` puts a prefix before the
+    /// reason that differs between React Native versions, so the marker is searched for there.
+    static func jsFatalDescription(of report: CrashReportReading, kind: MappedCrash.Kind,
+                                   context: CrashContextEnvelope?) -> String? {
+        let text: String?
+        switch kind {
+        case .rnFatal:
+            text = report.exceptionReason
+        case .cxx where context?.cxx?.type == CoralogixRum.jsErrorCxxType:
+            text = context?.cxx?.what
+        default:
+            text = nil
+        }
+        guard let text, let marker = text.range(of: jsFatalMarker) else { return nil }
+        return String(text[marker.upperBound...])
     }
 
     static func kind(of report: CrashReportReading, context: CrashContextEnvelope?) -> MappedCrash.Kind {
