@@ -77,7 +77,8 @@ private func liveReportData(sessionId: String?, adopted: Bool = true, exception:
 /// names are seven bytes, so the protobuf stays valid.
 private func reactNativeFatalReportData(sessionId: String, description: String) throws -> Data {
     let exception = NSException(name: NSExceptionName("RCTFatalException: \(description)"), reason: description)
-    var data = try liveReportData(sessionId: sessionId, exception: exception)
+    // Copied into bytes of its own: the report can come back over memory that cannot be written.
+    var data = Data([UInt8](try liveReportData(sessionId: sessionId, exception: exception)))
     // The signal message's `name` field: tag 1, length-delimited, 7 bytes.
     let liveSignal = Data([0x0A, 0x07]) + Data("SIGTRAP".utf8)
     let range = try XCTUnwrap(data.range(of: liveSignal), "a live report records SIGTRAP")
@@ -765,28 +766,58 @@ extension CrashRecoveryAcrossLaunchesTests {
 
 // MARK: - React Native fatals
 
-private let jsMessage = "TypeError: undefined is not a function"
+/// The plugin reports a JS error's message and its name apart, as `error.message` and `error.name`.
+private let jsMessage = "undefined is not a function"
+/// The reason of the `RCTFatalException` React Native ends the process with for `jsMessage`.
+private let jsFatalDescription = reactNativeReason(name: "TypeError", message: jsMessage)
+
+/// What `RCTFatal` gives as the exception's reason for a JS fatal: `RCTExceptionsManager`'s
+/// description, cut to 175 UTF-16 units with "..." by `RCTFormatError`, then the JS stack.
+private func reactNativeReason(name: String, message: String) -> String {
+    let description = "Unhandled JS Exception: \(name): \(message), js engine: hermes"
+    let units = Array(description.utf16)
+    let kept = units.count > 175 ? (String(utf16CodeUnits: Array(units.prefix(175)), count: 175) + "...") : description
+    return kept + ", stack:\nonPress@12:4\n"
+}
+
+/// What a bridgeless app's `jsi::JSError` gives as `what()`: React Native 0.75's prefix, the
+/// reason, the JS stack — kept, as the terminate handler keeps it, to 256 bytes, never mid-character.
+private func bridgelessWhat(reason: String) -> String {
+    let full = "Exception in HostFunction: \(reason)\n\nError: Exception in HostFunction: \(reason)\n    at reportFatal"
+    var kept = String.UnicodeScalarView()
+    var bytes = 0
+    for scalar in full.unicodeScalars {
+        bytes += String(scalar).utf8.count
+        if bytes > 256 { break }
+        kept.append(scalar)
+    }
+    return String(kept)
+}
 
 /// The fatal React Native's error handler reports, kept by this test process in session `session`;
 /// by default its live send was never delivered.
 private func heldFatal(session: String = "S1", process: ProcessIdentity? = thisProcess,
                        crashTime: Date = Date(timeIntervalSinceNow: -60),
-                       liveDelivered: Bool? = nil) throws -> HeldJsFatal {
+                       liveDelivered: Bool? = nil, message: String = jsMessage,
+                       errorType: String = "TypeError") throws -> HeldJsFatal {
     HeldJsFatal(crashId: HeldJsFatal.crashIdPrefix + UUID().uuidString,
                 process: try XCTUnwrap(process, "the kernel names this process"),
                 crashTime: crashTime,
                 session: .init(id: session, creationDate: 1_700_000_000, sampledIn: true),
-                fields: ErrorFields(domain: "", message: jsMessage, isCrash: true, errorType: "TypeError",
+                fields: ErrorFields(domain: "", message: message, isCrash: true, errorType: errorType,
                                     stackTraceJson: #"[{"fileName":"index.bundle","lineNumber":12}]"#),
                 liveDelivered: liveDelivered)
 }
 
 /// The report a bridgeless app leaves: RN converts `RCTFatalException` to a C++ `jsi::JSError`,
 /// which the terminate handler records.
-private func bridgelessFatalReportData(sessionId: String, cxxType: String = CoralogixRum.jsErrorCxxType) throws -> Data {
+private func bridgelessFatalReportData(sessionId: String, cxxType: String = CoralogixRum.jsErrorCxxType,
+                                       what: String = bridgelessWhat(reason: jsFatalDescription)) throws -> Data {
+    let whatJson = String(decoding: try JSONSerialization.data(withJSONObject: [what], options: [.fragmentsAllowed]),
+                          as: UTF8.self).dropFirst().dropLast()
     let reporter = try XCTUnwrap(PLCrashReporter(configuration: PLCrashReporterConfig(signalHandlerType: .BSD,
                                                                                      symbolicationStrategy: [])))
-    reporter.customData = Data(#"{"v":1,"session":{"session_id":"\#(sessionId)","session_creation_time":1700000000000,"is_session_sampled_in":true},"cxx":{"type":"\#(cxxType)","what":"Exception in HostFunction: Unhandled JS Exception: \#(jsMessage)"}}"#.utf8)
+    reporter.customData = Data(#"{"v":1,"session":{"session_id":"\#(sessionId)","session_creation_time":1700000000000,"is_session_sampled_in":true},"cxx":{"type":"\#(cxxType)","what":\#(whatJson)}}"#.utf8)
     return try ANRThreads.withLiveReportLock { try reporter.generateLiveReportAndReturnError() }
 }
 
@@ -828,7 +859,7 @@ extension CrashRecoveryAcrossLaunchesTests {
 
     /// The usual case: delivered live, so the next launch only drops the native report it left.
     func test_aFatalDeliveredLive_dropsItsNativeReport_andIsNotSentAgain() throws {
-        for data in [try reactNativeFatalReportData(sessionId: "S1", description: "Unhandled JS Exception: \(jsMessage)"),
+        for data in [try reactNativeFatalReportData(sessionId: "S1", description: jsFatalDescription),
                      try bridgelessFatalReportData(sessionId: "S1")] {
             let store = CrashDeliveryStore.temporary()
             self.store(try heldFatal(liveDelivered: true), in: store)
@@ -851,7 +882,7 @@ extension CrashRecoveryAcrossLaunchesTests {
         self.store(try heldFatal(liveDelivered: true), in: store)
         let locked = store.copiesDirectory.appendingPathComponent("locked.plcrash")
         try FileManager.default.createDirectory(at: store.copiesDirectory, withIntermediateDirectories: true)
-        try reactNativeFatalReportData(sessionId: "S1", description: "Unhandled JS Exception: \(jsMessage)").write(to: locked)
+        try reactNativeFatalReportData(sessionId: "S1", description: jsFatalDescription).write(to: locked)
         try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: locked.path)
 
         let first = SwitchableUploader()
@@ -910,7 +941,7 @@ extension CrashRecoveryAcrossLaunchesTests {
         let fatal = try heldFatal()
         self.store(fatal, in: store)
         try leaveCrash(in: store, data: try reactNativeFatalReportData(sessionId: "S1",
-                                                                         description: "Unhandled JS Exception: \(jsMessage)"))
+                                                                         description: jsFatalDescription))
 
         let uploader = SwitchableUploader()
         try launch(store: store, lastSession: sessionRecord(of: "S1"), uploader: uploader,
@@ -955,7 +986,7 @@ extension CrashRecoveryAcrossLaunchesTests {
     func test_aReportItsProcessDidNotLeaveAsAJsFatal_isSentAlongside() throws {
         let otherStart = try XCTUnwrap(thisProcess).startSecond - 1
         let reports: [(String, Data, HeldJsFatal)] = [
-            ("another process", try reactNativeFatalReportData(sessionId: "S1", description: "Unhandled JS Exception: x"),
+            ("another process", try reactNativeFatalReportData(sessionId: "S1", description: jsFatalDescription),
              try heldFatal(process: ProcessIdentity(pid: getpid(), startSecond: otherStart))),
             ("a signal", try liveReportData(sessionId: "S1"), try heldFatal()),
             ("another C++ exception", try bridgelessFatalReportData(sessionId: "S1", cxxType: "St13runtime_error"),
@@ -970,6 +1001,78 @@ extension CrashRecoveryAcrossLaunchesTests {
             try launch(store: store, lastSession: sessionRecord(of: "S1"), uploader: uploader)
 
             XCTAssertEqual(uploader.crashes.count, 2, name)
+            XCTAssertTrue(store.copies().isEmpty, name)
+            XCTAssertTrue(store.jsFatals().isEmpty, name)
+        }
+    }
+
+    /// Every shape React Native gives the description, on the bridge and bridgeless, names the fatal.
+    func test_aFatalsNativeReport_isRecognisedInEveryShapeReactNativeGivesIt() throws {
+        let long = String(repeating: "a long message ", count: 20)
+        let hebrew = String(repeating: "הזמנה נכשלה ", count: 20)
+        let reports: [(String, String, Data)] = [
+            ("JS engine and stack", jsMessage, try reactNativeFatalReportData(sessionId: "S1", description: jsFatalDescription)),
+            ("component stack", jsMessage, try reactNativeFatalReportData(
+                sessionId: "S1", description: "Unhandled JS Exception: TypeError: \(jsMessage)\n\nThis error is located at:\n    in App, stack:\nx@1:1")),
+            ("a message that already starts with its name", "TypeError: \(jsMessage)", try reactNativeFatalReportData(
+                sessionId: "S1", description: jsFatalDescription)),
+            ("cut at 175 characters", long, try reactNativeFatalReportData(
+                sessionId: "S1", description: reactNativeReason(name: "TypeError", message: long))),
+            ("bridgeless", jsMessage, try bridgelessFatalReportData(sessionId: "S1")),
+            ("bridgeless, cut at 175 characters", long, try bridgelessFatalReportData(
+                sessionId: "S1", what: bridgelessWhat(reason: reactNativeReason(name: "TypeError", message: long)))),
+            ("bridgeless, cut by the bytes kept", hebrew, try bridgelessFatalReportData(
+                sessionId: "S1", what: bridgelessWhat(reason: reactNativeReason(name: "Error", message: hebrew)))),
+        ]
+        for (name, heldMessage, data) in reports {
+            let store = CrashDeliveryStore.temporary()
+            self.store(try heldFatal(liveDelivered: true, message: heldMessage,
+                                     errorType: name.contains("bytes") ? "Error" : "TypeError"), in: store)
+            try leaveCrash(in: store, data: data)
+
+            let uploader = SwitchableUploader()
+            try launch(store: store, lastSession: sessionRecord(of: "S1"), uploader: uploader)
+
+            XCTAssertTrue(uploader.crashes.isEmpty, name)
+            XCTAssertTrue(store.copies().isEmpty, name)
+            XCTAssertTrue(store.jsFatals().isEmpty, name)
+        }
+    }
+
+    /// A fatal delivered live whose process survived it, then ended in a native report of another
+    /// error: that report is sent, never taken for the fatal's.
+    func test_aReportOfAnotherErrorFromTheFatalsProcess_isSent() throws {
+        let long = String(repeating: "a long message ", count: 20)
+        let reports: [(String, HeldJsFatal, Data, String)] = [
+            ("a native RCTFatal", try heldFatal(liveDelivered: true), try reactNativeFatalReportData(
+                sessionId: "S1", description: "Invariant Violation: No view found for tag 12"), "RCTFatalException: Invariant"),
+            ("another JS fatal", try heldFatal(liveDelivered: true), try reactNativeFatalReportData(
+                sessionId: "S1", description: "Unhandled JS Exception: ReferenceError: cart is not defined, stack:\nx@1:1"),
+             "RCTFatalException: Unhandled JS Exception: ReferenceError"),
+            ("a message the fatal's only starts", try heldFatal(liveDelivered: true), try reactNativeFatalReportData(
+                sessionId: "S1", description: "Unhandled JS Exception: TypeError: \(jsMessage)ality, stack:\nx@1:1"),
+             "RCTFatalException: Unhandled JS Exception: TypeError"),
+            ("a bridge message the fatal's only continues", try heldFatal(liveDelivered: true, message: long), try reactNativeFatalReportData(
+                sessionId: "S1", description: "Unhandled JS Exception: TypeError: \(long.prefix(60))"),
+             "RCTFatalException: Unhandled JS Exception: TypeError"),
+            ("a bridgeless app's other JS fatal", try heldFatal(liveDelivered: true), try bridgelessFatalReportData(
+                sessionId: "S1", what: bridgelessWhat(reason: reactNativeReason(name: "ReferenceError", message: "cart"))),
+             "facebook::jsi::JSError: Exception in HostFunction"),
+            ("a fatal with no message", try heldFatal(liveDelivered: true, message: ""), try reactNativeFatalReportData(
+                sessionId: "S1", description: "Unhandled JS Exception: TypeError: , stack:\nx@1:1"),
+             "RCTFatalException: Unhandled JS Exception: TypeError"),
+        ]
+        for (name, fatal, data, sentMessage) in reports {
+            let store = CrashDeliveryStore.temporary()
+            self.store(fatal, in: store)
+            try leaveCrash(in: store, data: data)
+
+            let uploader = SwitchableUploader()
+            try launch(store: store, lastSession: sessionRecord(of: "S1"), uploader: uploader)
+
+            XCTAssertEqual(uploader.crashes.count, 1, name)
+            let sent = try XCTUnwrap(uploader.crashes.first.flatMap { value($0, .errorContext, .errorMessage) as? String }, name)
+            XCTAssertTrue(sent.hasPrefix(sentMessage), "\(name): sent \(sent)")
             XCTAssertTrue(store.copies().isEmpty, name)
             XCTAssertTrue(store.jsFatals().isEmpty, name)
         }
@@ -1001,7 +1104,7 @@ extension CrashRecoveryAcrossLaunchesTests {
     func test_aReportThatCannotBeReadYet_doesNotDelayAFatalWhoseReportWasFound() throws {
         let store = CrashDeliveryStore.temporary()
         self.store(try heldFatal(), in: store)
-        try leaveCrash(in: store, data: try reactNativeFatalReportData(sessionId: "S1", description: "Unhandled JS Exception: x"))
+        try leaveCrash(in: store, data: try reactNativeFatalReportData(sessionId: "S1", description: jsFatalDescription))
         let locked = store.copiesDirectory.appendingPathComponent("locked.plcrash")
         try liveReportData(sessionId: "S0").write(to: locked)
         try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: locked.path)
@@ -1023,7 +1126,7 @@ extension CrashRecoveryAcrossLaunchesTests {
         try launch(store: store, lastSession: sessionRecord(of: "S1"), uploader: failing)
         XCTAssertEqual(store.jsFatals().count, 1)
 
-        try leaveCrash(in: store, data: try reactNativeFatalReportData(sessionId: "S1", description: "Unhandled JS Exception: x"))
+        try leaveCrash(in: store, data: try reactNativeFatalReportData(sessionId: "S1", description: jsFatalDescription))
         let uploader = SwitchableUploader()
         try launch(store: store, lastSession: sessionRecord(of: "S2"), uploader: uploader)
         XCTAssertEqual(uploader.crashes.map { value($0, .errorContext, .errorMessage) as? String }, [jsMessage])
@@ -1034,7 +1137,7 @@ extension CrashRecoveryAcrossLaunchesTests {
     func test_anUndeliveredHeldFatal_isSentByALaterLaunch_andItsReportNever() throws {
         let store = CrashDeliveryStore.temporary()
         self.store(try heldFatal(), in: store)
-        try leaveCrash(in: store, data: try reactNativeFatalReportData(sessionId: "S1", description: "Unhandled JS Exception: x"))
+        try leaveCrash(in: store, data: try reactNativeFatalReportData(sessionId: "S1", description: jsFatalDescription))
 
         let failing = SwitchableUploader()
         failing.result = SwitchableUploader.serverError
@@ -1057,7 +1160,7 @@ extension CrashRecoveryAcrossLaunchesTests {
                                 crashTime: Date(), session: .init(id: "never-adopted", creationDate: nil, sampledIn: true),
                                 fields: ErrorFields(domain: "", message: jsMessage, isCrash: true))
         self.store(fatal, in: store)
-        try leaveCrash(in: store, data: try reactNativeFatalReportData(sessionId: "S1", description: "Unhandled JS Exception: x"))
+        try leaveCrash(in: store, data: try reactNativeFatalReportData(sessionId: "S1", description: jsFatalDescription))
 
         let uploader = SwitchableUploader()
         try launch(store: store, lastSession: sessionRecord(of: "S1"), uploader: uploader)
@@ -1087,6 +1190,61 @@ extension CrashRecoveryAcrossLaunchesTests {
 
         XCTAssertEqual(uploader.crashes.count, CrashDeliveryStore.maxPerKind)
         XCTAssertTrue(store.jsFatals().isEmpty)
+    }
+}
+
+// MARK: - Telling a JS fatal's native report apart
+
+final class JsFatalNamingTests: XCTestCase {
+
+    private let head = "TypeError: " + String(repeating: "x", count: 40)
+
+    private func starts(_ described: String, mayEndCut: Bool = false) -> Bool {
+        HeldJsFatal.head(head, startsDescription: described, mayEndCut: mayEndCut)
+    }
+
+    func test_theWholeHead_isFollowedByWhatReactNativeAppends_orItsCut() {
+        XCTAssertTrue(starts(head))
+        XCTAssertTrue(starts(head + ", js engine: hermes, stack:\nx@1:1"))
+        XCTAssertTrue(starts(head + "\n\nThis error is located at:"))
+        XCTAssertTrue(starts(head + "..., stack:\nx@1:1"))
+        XCTAssertFalse(starts(head + "y, stack:\nx@1:1"), "another message the head only starts")
+        XCTAssertFalse(starts(head + " and more"), "another message the head only starts")
+    }
+
+    func test_aDescriptionCutInsideTheHead_namesIt_whenItKeepsEnough() {
+        let shared = HeldJsFatal.minimumCutHead
+        let kept = String(head.unicodeScalars.prefix(shared))
+        let tooLittle = String(head.unicodeScalars.prefix(shared - 1))
+        XCTAssertTrue(starts(kept + "..., stack:\nx@1:1"))
+        XCTAssertFalse(starts(tooLittle + "..., stack:\nx@1:1"))
+        XCTAssertFalse(starts(kept + "y, stack:\nx@1:1"), "shares enough, then goes another way")
+    }
+
+    func test_aDescriptionEndingInsideTheHead_namesIt_onlyWhereBytesCanCutIt() {
+        let kept = String(head.unicodeScalars.prefix(HeldJsFatal.minimumCutHead + 4))
+        XCTAssertTrue(starts(kept, mayEndCut: true), "a C++ exception's message, kept to a number of bytes")
+        XCTAssertFalse(starts(kept, mayEndCut: false), "the bridge's reason always goes on: another, shorter error")
+    }
+
+    func test_isNamedBy_triesTheMessage_andTheNameWithIt_neverAnEmptyMessage() {
+        func fatal(_ message: String, _ type: String?) -> HeldJsFatal {
+            HeldJsFatal(crashId: "jsfatal-1", process: .init(pid: 1, startSecond: 1), crashTime: Date(),
+                        session: .init(id: "S1", creationDate: nil, sampledIn: true),
+                        fields: ErrorFields(domain: "", message: message, isCrash: true, errorType: type))
+        }
+        func report(_ described: String?) -> MappedCrash {
+            MappedCrash(crashId: "c", crashTime: nil, kind: .rnFatal, exceptionType: "SIGABRT", errorMessage: "",
+                        processName: nil, applicationIdentifier: nil, pid: 1, threadsJSON: "[]",
+                        triggeredByThread: nil, baseAddress: nil, arch: nil, context: nil, jsFatalDescription: described)
+        }
+        let described = "TypeError: boom, stack:\nx@1:1"
+        XCTAssertTrue(fatal("boom", "TypeError").isNamed(by: report(described)))
+        XCTAssertTrue(fatal("TypeError: boom", "TypeError").isNamed(by: report(described)))
+        XCTAssertTrue(fatal("boom, stack", "").isNamed(by: report("boom, stack, stack:\nx@1:1")), "no name")
+        XCTAssertFalse(fatal("boom", nil).isNamed(by: report(described)), "RN put a name the fatal does not carry")
+        XCTAssertFalse(fatal("", "TypeError").isNamed(by: report("TypeError: , stack:\nx@1:1")))
+        XCTAssertFalse(fatal("boom", "TypeError").isNamed(by: report(nil)), "not a JS fatal's report")
     }
 }
 

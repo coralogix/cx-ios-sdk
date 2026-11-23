@@ -6,8 +6,8 @@
 //  `RCTFatalException` (the bridge) or terminates on `facebook::jsi::JSError` (bridgeless), and
 //  PLCrashReporter records it. The fatal handler's error is sent at once, as on Android, and kept
 //  on disk with the process it came from. The next launch, the first that can read the native
-//  report, drops the report that process left, and sends the JS error again only if it was never
-//  delivered.
+//  report, drops the report that process left naming that error, and sends the JS error again
+//  only if it was never delivered.
 //
 
 import Foundation
@@ -49,6 +49,41 @@ struct HeldJsFatal: Codable, Equatable {
     static func isHeld(crashId: String) -> Bool {
         crashId.hasPrefix(crashIdPrefix)
     }
+
+    /// Whether `crash` is the native report React Native ended the process with for this error, as
+    /// Android tells its `JavascriptException` apart. React Native describes it as `<message>` or
+    /// `<name>: <message>`, followed by a comma or a line break (its JS engine, component stack or
+    /// JS stack), or cut short: at 175 characters ending in "...", or — bridgeless only — by the
+    /// bytes a C++ exception's message is kept to. A native `RCTFatal`, or another JS fatal of this
+    /// process, does not name it, and is sent as well: two events, never none. Neither does any
+    /// report for a fatal with no message, which would tell nothing apart, nor one whose cut split
+    /// a character, which leaves React Native's report without its message.
+    func isNamed(by crash: MappedCrash) -> Bool {
+        guard !fields.message.isEmpty, let described = crash.jsFatalDescription else { return false }
+        let named = fields.errorType.flatMap { $0.isEmpty ? nil : "\($0): \(fields.message)" }
+        // The bridge's reason always goes on after the description, so only a C++ exception's
+        // message, kept to a number of bytes, can end inside it.
+        let mayEndCut = crash.kind == .cxx
+        return [fields.message, named].compactMap { $0 }.contains {
+            Self.head($0, startsDescription: described, mayEndCut: mayEndCut)
+        }
+    }
+
+    /// The shortest part of the head a description cut short must carry; a cut leaves far more.
+    static let minimumCutHead = 32
+
+    static func head(_ head: String, startsDescription described: String, mayEndCut: Bool) -> Bool {
+        let head = Array(head.unicodeScalars)
+        let described = Array(described.unicodeScalars)
+        let shared = zip(head, described).prefix { $0 == $1 }.count
+        let rest = described[shared...]
+        let cut = Array("...".unicodeScalars)
+        if shared == head.count {
+            guard let next = rest.first else { return true }
+            return next == "," || next == "\n" || rest.starts(with: cut)
+        }
+        return shared >= minimumCutHead && ((mayEndCut && rest.isEmpty) || rest.starts(with: cut))
+    }
 }
 
 extension CoralogixRum {
@@ -83,13 +118,9 @@ extension CoralogixRum {
         return true
     }
 
-    /// Whether `crash` is the native report a React Native JS fatal leaves.
-    static func isReactNativeFatal(_ crash: MappedCrash) -> Bool {
-        crash.kind == .rnFatal || (crash.kind == .cxx && crash.context?.cxx?.type == jsErrorCxxType)
-    }
-
-    /// Takes the native report each kept React Native fatal's process left out of `readable`, and
-    /// lines up the fatals whose live send was never delivered, to send again.
+    /// Takes the native report naming each kept React Native fatal that its process left out of
+    /// `readable` (`HeldJsFatal.isNamed(by:)`), and lines up the fatals whose live send was never
+    /// delivered, to send again.
     ///
     /// A fatal is settled — its native report forgotten, and it either deleted, delivered, or given
     /// a delivery record — on the first launch that reads it. A report already being sent from an
@@ -133,7 +164,7 @@ extension CoralogixRum {
         }
         var lined: [CrashDeliveryScheduler.Item] = []
         for (file, fatal) in newest.prefix(CrashDeliveryStore.maxPerKind) {
-            let nativeIndex = readable.firstIndex { fatal.process.wrote($0.crash) && Self.isReactNativeFatal($0.crash) }
+            let nativeIndex = readable.firstIndex { fatal.process.wrote($0.crash) && fatal.isNamed(by: $0.crash) }
             if nativeIndex == nil, nativeMayBePending {
                 unsettled = true
                 continue
