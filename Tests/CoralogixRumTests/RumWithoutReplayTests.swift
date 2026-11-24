@@ -15,7 +15,9 @@
 //    - `CoralogixRum.getSessionID()`, `getSessionCreationTimestamp()`, `getApplication()`,
 //      `getCoralogixDomain()`, `getPublicKey()`, `getProxyUrl()`, `isDebug()`, `isIdle()`,
 //      `isSessionSampledIn()` — the session getters, kept as plain public `CoralogixRum` methods
-//      with today's behaviour.
+//      with today's behaviour (their `public` is pinned separately by `KeptPublicGettersTests`).
+//    - `CoralogixRum.reportError(message:stackTrace:errorType:isCrash:)` — a hybrid live crash,
+//      whose span must still be flushed once it ends.
 //  Every test here is a GUARD: it passes before the removal and must still pass after it.
 //
 
@@ -245,6 +247,31 @@ final class RumWithoutReplayTests: XCTestCase {
         assertEndedWithoutScreenshot(spans(of: .navigation), "navigation")
     }
 
+    /// A live crash is force-flushed once its span ends, rather than waiting out the batch
+    /// processor's schedule delay — the process may be about to die.
+    func testHybridLiveCrash_isFlushedImmediately_notHeldForTheBatchDelay() throws {
+        let rum = CoralogixRum(options: makeSamplingOptions(sampleRate: 100, exclude: []),
+                               sdkFramework: .flutter(version: "1.0.0"))
+        self.rum = rum
+        let exporter = try XCTUnwrap(rum.coralogixExporter)
+        let uploader = CapturingSpanUploader()
+        exporter.spanUploader = uploader
+        XCTAssertGreaterThan(Double(Global.BatchSpan.scheduleDelay.rawValue), 1,
+                             "the 1 s window below only proves a flush while the batch delay is longer")
+
+        rum.reportError(message: "live-crash", stackTrace: [], errorType: "Error", isCrash: true)
+
+        let isCrash: ([String: Any]) -> Bool = {
+            (($0[Keys.errorContext.rawValue] as? [String: Any])?[Keys.isCrash.rawValue] as? Bool) == true
+        }
+        let deadline = Date().addingTimeInterval(1)
+        while !uploader.cxRumPayloads().contains(where: isCrash) && Date() < deadline {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.02))
+        }
+        XCTAssertTrue(uploader.cxRumPayloads().contains(where: isCrash),
+                      "the crash must be uploaded within 1 s, well inside the batch schedule delay")
+    }
+
     // MARK: - 3 + 4. Wire payload: screenshot_context kept (D4), hasRecording false (D6)
 
     private func exportAndCapture(_ spans: [SpanData]) throws -> [[String: Any]] {
@@ -319,6 +346,15 @@ final class RumWithoutReplayTests: XCTestCase {
         XCTAssertEqual(rum.isIdle(), sessionManager.isIdle)
         XCTAssertFalse(rum.isIdle(), "a just-started session is not idle")
         XCTAssertTrue(rum.isSessionSampledIn(), "sample rate 100 samples the session in")
+    }
+
+    func testIsIdle_isTrue_afterFifteenMinutesWithoutActivity() throws {
+        let rum = makeRum()
+        let sessionManager = try XCTUnwrap(rum.coralogixExporter?.getSessionManager())
+
+        sessionManager.lastActivity = Date().addingTimeInterval(-16 * 60)
+
+        XCTAssertTrue(rum.isIdle())
     }
 
     func testKeptGetters_defaults_whenUnset() {
