@@ -273,8 +273,7 @@ The team's review and coding rules live in `coralogix/internal-rum-infra-claude-
 2. Edit the skill that owns the rule: `rum-infra:platform-ios` for this repo, or a shared skill if the rule applies to every SDK. Keep it generic: no ticket IDs, customer data, internal URLs or secrets.
 3. Add an entry under **Unreleased** in the plugin's `CHANGELOG.md`.
 4. Branch `rum-infra/<repo>-<topic>`, commit, push, then open the PR:
-   `gh pr create --repo coralogix/internal-rum-infra-claude-plugins --reviewer stas-rudevitsky --title "<type>(rum-infra): <what changed>" --body "<rule, why, link to the change in this repo>"`
-   Tag `@stas-rudevitsky` in the body as well.
+   `gh pr create --repo coralogix/internal-rum-infra-claude-plugins --title "<type>(rum-infra): <what changed>" --body "<rule, why, link to the change in this repo>"`
 5. Do not merge it. Do not commit the plugin change to this repo's branch.
 6. Put the plugin PR link in the final message.
 
