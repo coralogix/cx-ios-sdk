@@ -16,7 +16,8 @@ public struct SessionWithErrorConfig {
     public static let maxAllowedRumEvents = 20_000
 
     /// Holds every sampled-in session until an error happens in it. A session `sessionSampleRate`
-    /// leaves out is still dropped, unless `alwaysTrackSessionsWithErrors` is also on.
+    /// leaves out behaves as before (see `excludeFromSampling`), unless
+    /// `alwaysTrackSessionsWithErrors` is also on.
     public let enable: Bool
 
     /// How many events a session holds while it waits for an error. Past this, what it held is

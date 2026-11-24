@@ -348,8 +348,8 @@ of the session is reported as it happens. A session that ends without an error s
 counts too: the events from before the crash are sent with it on the next launch.
 
 To hold every sampled-in session this way too, set `onlyWithErrorConfig` to
-`SessionWithErrorConfig(enable: true)`. Sessions that `sessionSampleRate` leaves out are still dropped
-unless `alwaysTrackSessionsWithErrors` is also on.
+`SessionWithErrorConfig(enable: true)`. Sessions that `sessionSampleRate` leaves out behave as
+before (see `excludeFromSampling`) unless `alwaysTrackSessionsWithErrors` is also on.
 
 ```swift
 let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
@@ -367,7 +367,7 @@ let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
 
 | Field | Type | Description |
 | --- | --- | --- |
-| enable | Bool | Holds every sampled-in session until an error. Sessions that `sessionSampleRate` leaves out are dropped unless `alwaysTrackSessionsWithErrors` is also on. Defaults to `false`. |
+| enable | Bool | Holds every sampled-in session until an error. Sessions that `sessionSampleRate` leaves out behave as before unless `alwaysTrackSessionsWithErrors` is also on. Defaults to `false`. |
 | maxRumEvents | Int | How many events a session keeps while it waits for an error. Past this, what it kept is discarded and it starts again. Defaults to `5000`; at most `20000`, and `0` or less uses the default. |
 | instrumentationsToSend | `Set<ExcludableInstrumentation>` | Categories sent at once instead of being held. Accepts `errors`, `logs`, `network`, `userInteractions`, `mobileVitals`, `customSpan`, `customMeasurement`, `navigation` and `lifecycle`. Defaults to empty: a held session sends nothing until it has an error. |
 
