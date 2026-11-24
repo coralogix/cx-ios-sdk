@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import CoralogixInternal
 #if canImport(UIKit)
 import UIKit
 #endif

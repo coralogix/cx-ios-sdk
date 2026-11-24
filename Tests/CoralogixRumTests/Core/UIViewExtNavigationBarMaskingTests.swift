@@ -1,11 +1,11 @@
 //
 //  UIViewExtNavigationBarMaskingTests.swift
-//  CoralogixInternalTests
+//  CoralogixRumTests
 //
 
 import XCTest
+@testable import Coralogix
 import UIKit
-@testable import CoralogixInternal
 
 final class UIViewExtNavigationBarMaskingTests: XCTestCase {
 

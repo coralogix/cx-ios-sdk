@@ -16,7 +16,6 @@
 //
 
 import XCTest
-import CoralogixInternal
 @testable import Coralogix
 
 private final class PropagationTestURLProtocol: URLProtocol {

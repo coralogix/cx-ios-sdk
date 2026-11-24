@@ -5,7 +5,6 @@
 //
 
 import Foundation
-import CoralogixInternal
 
 struct SessionContext {
     var sessionId: String

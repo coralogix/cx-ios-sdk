@@ -4,7 +4,6 @@
 //
 
 import Foundation
-import CoralogixInternal
 
 /// How the SDK masks secrets in the URLs it reports. Masking is always on: these options can only
 /// add to the built-in rules, never remove one.

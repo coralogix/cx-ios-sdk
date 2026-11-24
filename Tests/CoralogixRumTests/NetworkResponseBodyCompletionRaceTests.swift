@@ -10,7 +10,6 @@
 //
 
 import XCTest
-import CoralogixInternal
 @testable import Coralogix
 
 /// Data task whose outcome (`error` / `response`) the tests control. Every completion path reads the

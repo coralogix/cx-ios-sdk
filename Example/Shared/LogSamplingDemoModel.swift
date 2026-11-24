@@ -11,7 +11,6 @@
 import Foundation
 import Combine
 import Coralogix
-import CoralogixInternal
 
 struct CapturedSpan: Identifiable {
     let id = UUID()

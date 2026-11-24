@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import CoralogixInternal
 
 extension CoralogixRum {
     /// Startup's `init`, stamped with whichever session is live once the tracer exists. A rotation

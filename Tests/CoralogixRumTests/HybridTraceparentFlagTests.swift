@@ -12,7 +12,6 @@
 //
 
 import XCTest
-import CoralogixInternal
 @testable import Coralogix
 
 /// One exported `network-request` event: its URL, the session it was exported under and its view.

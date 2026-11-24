@@ -46,8 +46,6 @@ public enum Keys: String {
     case prevSessionId
     case prevPid
     case userAgent = "user_agent"
-    case browser
-    case browserVersion
     case operatingSystem = "os"
     case osVersion
     case device
@@ -69,24 +67,14 @@ public enum Keys: String {
     case applicationName
     case subsystemName
     case logs
-    case locationHref = "location_href"
     case eventType = "event_type"
-    case applicationContext = "application_context"
     case userContext = "user_context"
     case deviceState = "device_state"
     case deviceContext = "device_context"
     case viewContext = "view_context"
-    case viewController
-    case country
-    case cxLog = "cx_log"
     case customLabels = "custom_labels"
-    case interactionEventName = "interaction_event_name"
-    case elementInnerText = "element_inner_text"
-    case elementInnerHtml = "element_inner_html"
     case elementClasses =  "element_classes"
-    case targetXpath = "target_xpath"
     case targetElement = "target_element"
-    case targetElementType = "target_element_type"
     case targetElementInnerText = "target_element_inner_text"
     // Wire value, not a key: what a redacted `target_element_inner_text` reads as. Matches the
     // Android SDK so the same masked tap looks the same whichever platform sent it.
@@ -119,7 +107,6 @@ public enum Keys: String {
     case spanId
     case traceparentSampled
     case traceparentSessionId
-    case callStackSymbols = "call_stack_symbols"
     case console
     case code
     case domain
@@ -175,7 +162,6 @@ public enum Keys: String {
     case errorCount
     case viewCount
     case actionCount
-    case isViewUnique
     case isSnapshotEvent
     // CX-44687: product-analytics fields at the cx_rum top level.
     // Per-field naming chosen to match Browser's wire shape (Daniel, 2026-06-08):
@@ -213,7 +199,6 @@ public enum Keys: String {
     case internalContext = "internal_context"
     case elementId = "element_id"
     case eventName = "event_name"
-    case elementType = "element_type"
     case click
     case errorMessage = "error_message"
     case isCrash = "is_crash"
@@ -237,13 +222,11 @@ public enum Keys: String {
     case mobileVitalsValue
     case mobileVitalsUnits = "units"
     case value
-    case anrString = "application_not_responding"
     case skipEnrichmentWithIp = "skip_enrichment_with_ip"
     case appDidFinishLaunching
     case appDidBecomeActiveNotification
     case appDidEnterBackgroundNotification
     case appWillTerminateNotification
-    case applicationDidReceiveMemoryWarning
     case appDidReceiveMemoryWarningNotification
     case positionX = "x"
     case positionY = "y"
@@ -251,30 +234,15 @@ public enum Keys: String {
     case keyStackTrace = "stack_trace"
     case application
     case segmentIndex
-    case segmentSize
     case segmentTimestamp
-    case keySessionCreationDate = "sessionCreationDate"
-    case subIndex
-    case metaData
     case events
-    case chunk
     case hasRecording
-    case snapshotId
-    case snapshotCreationTime
     case screenshotId
     case page
-    case screenshotData
-    case containsSwiftUIContent
-    case maskRects
-    case nativeMaskRects
     /// The view id handed to `flutterViewBitmapProvider`. The same string Android passes; the
     /// plugin ignores it on both platforms and routes every capture to Flutter's implicit view.
-    case flutterImplicitViewId = "cx_flutter_implicit_view"
     case screenshotContext = "screenshot_context"
     case queueExporter = "com.coralogix.exporter.queue"
-    case queueFileOperations = "com.coralogix.fileoperations"
-    case queueUrlProcessing = "com.coralogix.urlProcessing"
-    case queueMediaInput = "com.coralogix.mediainput"
     case queueSpanProcessingQueue = "com.coralogix.spanProcessingQueue"
     case queueViewManagerQueue = "com.coralogix.viewManagerQueue"
     case queueSessionRecordQueue = "com.coralogix.sessionRecordQueue"
@@ -291,8 +259,6 @@ public enum Keys: String {
     case customTraceId
     case customSpanId
     case isManual
-    case metricKitLog = "metricKit log"
-    case idle
     case active
     case fps
     case cold
@@ -318,7 +284,6 @@ public enum Keys: String {
     case event
     case initKey = "init"
     case image
-    case video
     case version
     case instrumentations
     case ignoreUrls

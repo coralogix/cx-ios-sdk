@@ -4,7 +4,6 @@
  */
 
 import Foundation
-import CoralogixInternal
 
 class BoundHistogramMetricSdkBase<T>: BoundHistogramMetric<T> {
     override init(explicitBoundaries: Array<T>? = nil) {

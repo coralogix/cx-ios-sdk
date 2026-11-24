@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import CoralogixInternal
 
 protocol SpanDataProtocol {
     func getAttribute(forKey: String) -> Any?

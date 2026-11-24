@@ -154,12 +154,6 @@ public class Log {
         }
     }
 
-    public static func disableTestLogging() {
-        testLogQueue.sync {
-            isTestLoggingEnabled = false
-        }
-    }
-
     public static func testLog(_ message: String) {
         testLogQueue.async {
             // Read flag under queue protection to avoid race with enable/disable
@@ -180,17 +174,5 @@ public class Log {
         }
     }
 
-    public static func getTestLogs() -> String {
-        // Synchronize with testLogQueue to ensure all pending writes complete before reading
-        return testLogQueue.sync {
-            return (try? String(contentsOf: testLogFileURL, encoding: .utf8)) ?? ""
-        }
-    }
-
-    public static func clearTestLogs() {
-        testLogQueue.sync {
-            try? "".write(to: testLogFileURL, atomically: true, encoding: .utf8)
-        }
-    }
     #endif
 }

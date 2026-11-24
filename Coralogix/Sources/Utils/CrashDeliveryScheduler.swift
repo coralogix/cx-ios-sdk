@@ -4,7 +4,6 @@
 //
 
 import Foundation
-import CoralogixInternal
 
 /// The time the scheduler reads and waits on. Injected so tests can step through the retry slots.
 protocol DeliveryClock: AnyObject {

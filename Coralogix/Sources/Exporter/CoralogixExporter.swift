@@ -5,7 +5,6 @@
 //
 
 import Foundation
-import CoralogixInternal
 
 public class CoralogixExporter: SpanExporter {
     // Written from the caller's thread (set(labels:), setUserContext, setApplicationContext) and

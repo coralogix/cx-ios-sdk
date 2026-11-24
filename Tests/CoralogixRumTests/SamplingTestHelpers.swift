@@ -10,7 +10,6 @@
 
 import Foundation
 import XCTest
-import CoralogixInternal
 @testable import Coralogix
 
 /// Thread-safe append-only collector for `event_type` strings observed by either the

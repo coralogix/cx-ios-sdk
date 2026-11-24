@@ -3,7 +3,6 @@
 //
 
 import Foundation
-import CoralogixInternal
 
 /// The value written to `cx_rum.event_context.source`.
 ///

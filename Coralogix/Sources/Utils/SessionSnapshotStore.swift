@@ -4,7 +4,6 @@
 //
 
 import Foundation
-import CoralogixInternal
 
 /// One session as a crash in it must report it: its counters, the view it was on, and the app
 /// and OS it ran under. The context fields are optional so records written by earlier versions,

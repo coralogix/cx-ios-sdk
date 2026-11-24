@@ -9,7 +9,6 @@
 //
 
 import XCTest
-import CoralogixInternal
 @testable import Coralogix
 
 final class SessionSamplingFlagTests: XCTestCase {

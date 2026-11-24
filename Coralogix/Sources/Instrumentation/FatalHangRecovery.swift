@@ -7,7 +7,6 @@
 //
 
 import Foundation
-import CoralogixInternal
 
 /// What the watchdog leaves on disk while the main thread is hung: enough to report the hang on
 /// the next launch if the process never answers again.

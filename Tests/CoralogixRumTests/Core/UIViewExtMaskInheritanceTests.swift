@@ -1,11 +1,11 @@
 //
 //  UIViewExtMaskInheritanceTests.swift
-//  CoralogixInternalTests
+//  CoralogixRumTests
 //
 
 import XCTest
+@testable import Coralogix
 import UIKit
-@testable import CoralogixInternal
 
 /// Masking is inherited downward — everything inside a masked view is masked — and the rects the
 /// capture pass paints are the single definition of "masked" that the tap check reuses.

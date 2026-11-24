@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import CoralogixInternal
 
 /// Production `EventReporter` impl. Turns a `TelemetryEvent` into an
 /// error span via the orchestrator's `makeSpan`. Today only

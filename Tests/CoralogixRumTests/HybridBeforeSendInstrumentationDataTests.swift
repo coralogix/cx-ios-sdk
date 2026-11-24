@@ -9,7 +9,6 @@
 //
 
 import XCTest
-import CoralogixInternal
 import Foundation
 
 @testable import Coralogix

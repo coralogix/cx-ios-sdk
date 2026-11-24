@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import CoralogixInternal
 
 struct ErrorContext {
     let domain: String

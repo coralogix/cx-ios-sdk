@@ -9,7 +9,6 @@ import Foundation
 #if canImport(UIKit)
 import UIKit
 #endif
-import CoralogixInternal
 
 class ViewHelper {
     static func cxElementForView(view: UIView?) -> [String: Any]? {

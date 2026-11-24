@@ -8,7 +8,6 @@
 import Foundation
 import Darwin.Mach
 import UIKit
-import CoralogixInternal
 
 /// CPU usage of *your app* as a % of total device CPU (all cores).
 /// Formula normalizes by cpuCount, so 100% = all cores fully saturated.

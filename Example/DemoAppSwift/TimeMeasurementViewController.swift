@@ -11,7 +11,6 @@
 import UIKit
 import Combine
 import Coralogix
-import CoralogixInternal
 
 final class TimeMeasurementViewController: UIViewController {
 

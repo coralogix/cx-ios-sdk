@@ -17,7 +17,6 @@
 //  Spans are grouped by resource into resource_spans, then by instrumentation scope into scope_spans.
 
 import Foundation
-import CoralogixInternal
 
 /// Converts SpanData to OTLP JSON format.
 struct SpanDataToOtlpConverter {

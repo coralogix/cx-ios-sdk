@@ -6,7 +6,6 @@
 //
 
 import UIKit
-import CoralogixInternal
 
 class FPSMonitor {
     private var displayLink: CADisplayLink?

@@ -15,7 +15,6 @@
 import Foundation
 import Combine
 import Coralogix
-import CoralogixInternal
 
 struct CapturedTimeMeasurement: Identifiable {
     let id = UUID()

@@ -7,7 +7,6 @@
 //
 
 import XCTest
-import CoralogixInternal
 @testable import Coralogix
 
 final class UserActionsDecouplingTests: XCTestCase {

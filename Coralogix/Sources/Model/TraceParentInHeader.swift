@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import CoralogixInternal
 
 internal struct TraceParentInHeader {
     var enable: Bool = false

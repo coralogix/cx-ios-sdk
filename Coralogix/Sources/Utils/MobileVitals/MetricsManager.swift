@@ -12,7 +12,6 @@ import UIKit
 #if os(iOS)
 import MetricKit
 #endif
-import CoralogixInternal
 
 public class MetricsManager {
     var coldDetector: ColdDetector?

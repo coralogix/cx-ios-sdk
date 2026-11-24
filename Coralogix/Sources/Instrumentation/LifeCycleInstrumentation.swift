@@ -8,7 +8,6 @@
 #if canImport(UIKit)
 import UIKit
 #endif
-import CoralogixInternal
 
 extension CoralogixRum {
     public func initializeLifeCycleInstrumentation() {

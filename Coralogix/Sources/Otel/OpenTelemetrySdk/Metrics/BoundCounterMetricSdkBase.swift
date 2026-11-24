@@ -4,7 +4,6 @@
  */
 
 import Foundation
-import CoralogixInternal
 
 class BoundCounterMetricSdkBase<T>: BoundCounterMetric<T> {
     internal var status: RecordStatus

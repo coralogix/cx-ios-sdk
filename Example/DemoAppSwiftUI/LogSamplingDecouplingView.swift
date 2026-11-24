@@ -9,7 +9,6 @@
 
 import SwiftUI
 import Coralogix
-import CoralogixInternal
 
 struct LogSamplingDecouplingView: View {
 

@@ -5,7 +5,6 @@
 //  Created by Coralogix DEV TEAM on 23/07/2024.
 //
 
-import CoralogixInternal
 import UIKit
 #if canImport(SwiftUI)
 import SwiftUI

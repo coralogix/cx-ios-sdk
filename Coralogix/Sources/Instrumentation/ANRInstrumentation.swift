@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import CoralogixInternal
 
 extension CoralogixRum {
     /// Initializes ANR (Application Not Responding) detection.

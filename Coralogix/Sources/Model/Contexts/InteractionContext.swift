@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import CoralogixInternal
 
 struct InteractionContext {
     var eventName: InteractionEventName // .click | .scroll | .swipe

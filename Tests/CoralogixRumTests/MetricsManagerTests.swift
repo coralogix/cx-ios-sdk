@@ -7,7 +7,6 @@
 
 import XCTest
 import MetricKit
-import CoralogixInternal
 @testable import Coralogix
 
 final class MetricsManagerTests: XCTestCase {

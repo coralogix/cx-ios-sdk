@@ -15,13 +15,6 @@
     {
       "target" : {
         "containerPath" : "container:",
-        "identifier" : "CoralogixInternalTests",
-        "name" : "CoralogixInternalTests"
-      }
-    },
-    {
-      "target" : {
-        "containerPath" : "container:",
         "identifier" : "CoralogixRumTests",
         "name" : "CoralogixRumTests"
       }

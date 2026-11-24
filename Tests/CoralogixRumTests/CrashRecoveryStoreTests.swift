@@ -9,7 +9,6 @@
 
 import XCTest
 import CrashReporter
-import CoralogixInternal
 #if canImport(CoralogixBootstrap)
 import CoralogixBootstrap
 #endif

@@ -11,7 +11,6 @@
 
 import Foundation
 import Coralogix
-import CoralogixInternal
 
 /// One preset value of a setting. JSON-shaped, so the driver can write it.
 enum CrashLabValue: Equatable, CustomStringConvertible {
@@ -217,15 +216,15 @@ final class CrashLabSettings {
     }
 
     private func crashBeforeSend(_ event: [String: Any]) -> [String: Any]? {
-        guard var error = event[CoralogixInternal.Keys.errorContext.rawValue] as? [String: Any],
-              error[CoralogixInternal.Keys.isCrash.rawValue] as? Bool == true else { return event }
+        guard var error = event[Coralogix.Keys.errorContext.rawValue] as? [String: Any],
+              error[Coralogix.Keys.isCrash.rawValue] as? Bool == true else { return event }
         switch string(.crashBeforeSend) {
         case "drop":
             return nil
         case "edit":
-            error[CoralogixInternal.Keys.errorMessage.rawValue] = Self.editedMessage
+            error[Coralogix.Keys.errorMessage.rawValue] = Self.editedMessage
             var edited = event
-            edited[CoralogixInternal.Keys.errorContext.rawValue] = error
+            edited[Coralogix.Keys.errorContext.rawValue] = error
             return edited
         default:
             return event

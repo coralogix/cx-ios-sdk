@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import CoralogixInternal
 
 struct ErrorEvent: TelemetryEvent {
     let id: UUID

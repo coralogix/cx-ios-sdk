@@ -6,7 +6,6 @@
 //
 
 import XCTest
-import CoralogixInternal
 @testable import Coralogix
 
 /// Hybrid (Flutter/React Native) network requests inject the `traceparent` on the wire from an upper

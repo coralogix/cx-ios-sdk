@@ -11,7 +11,6 @@
 //
 
 import Foundation
-import CoralogixInternal
 
 /// A process as PLCrashReporter names it in its report: the pid, and the whole second the kernel
 /// started it. PLCrashReporter writes `p_starttime.tv_sec`, so the two compare exactly.

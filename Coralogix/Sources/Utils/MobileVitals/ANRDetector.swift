@@ -10,7 +10,6 @@ import Foundation
 import UIKit
 #endif
 import CrashReporter
-import CoralogixInternal
 
 /// Reports the main thread blocked for `threshold`, once per hang, the way the Android SDK's
 /// watchdog does.

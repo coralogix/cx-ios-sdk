@@ -6,7 +6,6 @@
 //
 
 import XCTest
-import CoralogixInternal
 @testable import Coralogix
 
 class SessionManagerTests: XCTestCase {

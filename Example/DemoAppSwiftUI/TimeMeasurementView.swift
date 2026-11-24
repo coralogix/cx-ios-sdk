@@ -10,7 +10,6 @@
 
 import SwiftUI
 import Coralogix
-import CoralogixInternal
 
 struct TimeMeasurementView: View {
 

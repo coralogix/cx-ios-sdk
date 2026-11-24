@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import CoralogixInternal
 
 extension CoralogixRum {
     private static let exporterQueue = DispatchQueue(label: Keys.queueExporter.rawValue)

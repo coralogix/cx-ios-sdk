@@ -14,7 +14,6 @@
 //
 
 import XCTest
-import CoralogixInternal
 @testable import Coralogix
 
 // MARK: - URLProtocol stub

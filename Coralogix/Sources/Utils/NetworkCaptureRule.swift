@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import CoralogixInternal
 
 private extension Array where Element: Hashable {
     /// Returns array with duplicates removed, preserving the order of first occurrences.

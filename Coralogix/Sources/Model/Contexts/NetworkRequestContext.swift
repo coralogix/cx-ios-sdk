@@ -5,7 +5,6 @@
 //
 
 import Foundation
-import CoralogixInternal
 
 struct NetworkRequestContext {
     let method: String

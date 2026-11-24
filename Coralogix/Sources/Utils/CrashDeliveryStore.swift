@@ -4,7 +4,6 @@
 //
 
 import Foundation
-import CoralogixInternal
 #if canImport(CoralogixBootstrap)
 import CoralogixBootstrap
 #endif

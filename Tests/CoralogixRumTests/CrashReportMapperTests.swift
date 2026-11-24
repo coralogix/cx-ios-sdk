@@ -8,7 +8,6 @@
 
 import XCTest
 import CrashReporter
-import CoralogixInternal
 
 @testable import Coralogix
 

@@ -4,7 +4,6 @@
  */
 
 import Foundation
-import CoralogixInternal
 
 class CounterMetricSdkBase<T>: CounterMetric {
     let bindUnbindLock = Lock()

@@ -4,7 +4,6 @@
 //
 
 import Foundation
-import CoralogixInternal
 
 /// Keeps the live session's record current, so a crash at any moment finds the counters, view
 /// and versions its session had. Written eagerly — at the first session, on rotation, and on

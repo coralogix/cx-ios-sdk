@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import CoralogixInternal
 
 struct MobileVitalsEvent: TelemetryEvent {
     let id: UUID

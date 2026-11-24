@@ -5,7 +5,6 @@
 
 import XCTest
 import UIKit
-import CoralogixInternal
 @testable import Coralogix
 
 /// A hybrid-reported interaction (`setUserInteraction`) is redacted and flagged on the same

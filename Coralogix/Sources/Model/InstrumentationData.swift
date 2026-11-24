@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import CoralogixInternal
 
 struct InstrumentationData {
     let otelSpan: OtelSpan

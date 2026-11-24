@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import CoralogixInternal
 
 // ANR (Application Not Responding) is delivered on the wire as an `error`
 // event with a fixed `errorType` discriminator ("ANR"). Keeping it as its

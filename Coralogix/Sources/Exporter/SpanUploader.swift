@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import CoralogixInternal
 
 /// What became of one upload, in the terms crash delivery needs: whether the copy on disk can
 /// be deleted, retried, or left untouched for a later launch.

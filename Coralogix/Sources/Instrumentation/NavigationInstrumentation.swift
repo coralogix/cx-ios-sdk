@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import CoralogixInternal
 
 extension CoralogixRum {
     public func initializeNavigationInstrumentation() {

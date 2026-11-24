@@ -6,7 +6,7 @@
 //
 
 import XCTest
-@testable import CoralogixInternal
+@testable import Coralogix
 
 final class GlobalTests: XCTestCase {
     override func setUp() {

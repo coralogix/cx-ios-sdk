@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import CoralogixInternal
 
 typealias EventType = CoralogixEventType
 

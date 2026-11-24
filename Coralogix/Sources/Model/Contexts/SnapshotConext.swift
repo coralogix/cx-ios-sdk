@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import CoralogixInternal
 
 public struct SnapshotContext {
     let timestamp: TimeInterval

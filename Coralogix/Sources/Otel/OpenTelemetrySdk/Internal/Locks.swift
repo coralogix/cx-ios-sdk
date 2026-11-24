@@ -36,7 +36,6 @@ import Darwin
 #else
 import Glibc
 #endif
-import CoralogixInternal
 
 /// A threading lock based on `libpthread` instead of `libdispatch`.
 ///

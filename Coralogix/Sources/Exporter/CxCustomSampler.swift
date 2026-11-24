@@ -5,7 +5,6 @@
 //
 
 import Foundation
-import CoralogixInternal
 
 /// Decides the `traceparent` sampled flag for outgoing requests.
 ///

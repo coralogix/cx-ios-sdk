@@ -7,7 +7,6 @@
 
 import XCTest
 @testable import Coralogix
-import CoralogixInternal
 
 
 final class UserContextTests: XCTestCase {

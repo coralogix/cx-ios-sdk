@@ -26,7 +26,6 @@
 //  values (which depend on live stats and would be flaky).
 
 import XCTest
-import CoralogixInternal
 @testable import Coralogix
 
 final class WireFormatTests: XCTestCase {

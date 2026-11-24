@@ -10,11 +10,6 @@ import UIKit
 #endif
 
 
-public enum ImageFormat {
-    case png
-    case jpeg(compressionQuality: CGFloat)
-}
-
 public enum Global: String {
     case sdk = "3.0.0"
     case swiftVersion = "5.9"
@@ -49,42 +44,8 @@ public enum Global: String {
         }
     }
     
-    public static func appVersionInfo(indludeBuild: Bool = true) -> String {
-        let dictionary = Bundle.main.infoDictionary!
-        if let version = dictionary["CFBundleShortVersionString"] as? String,
-           let build = dictionary["CFBundleVersion"] as? String {
-            return indludeBuild ? version + " (" + build + ")" : version
-        }
-        return ""
-    }
-    
     public static func getOs() -> String {
         return UIDevice.current.systemName.lowercased()
-    }
-    
-    public static func appName() -> String {
-        return ProcessInfo.processInfo.processName
-    }
-    
-    public static func getKeyWindow(connectedScenes: Set<UIScene> = UIApplication.shared.connectedScenes) -> UIWindow? {
-        guard let windowScene = connectedScenes
-                .first(where: { $0.activationState == .foregroundActive }) as? UIWindowScene else {
-            Log.e("No active window scene found")
-            return nil
-        }
-        return windowScene.windows.first(where: { $0.isKeyWindow })
-    }
-    
-    public static func cgImage(from data: Data) -> CGImage? {
-        // Create a CGImageSource from the data
-        guard let imageSource = CGImageSourceCreateWithData(data as CFData, nil) else {
-            Log.e("Failed to create image source.")
-            return nil
-        }
-        
-        // Create CGImage from the source
-        let cgImage = CGImageSourceCreateImageAtIndex(imageSource, 0, nil)
-        return cgImage
     }
     
     public static func osVersionInfo() -> String {
@@ -93,14 +54,6 @@ public enum Global: String {
     
     public static func getDeviceModel() -> String {
         return UIDevice.current.model
-    }
-    
-    public static func modelIdentifier() -> String {
-        var sysinfo = utsname()
-        uname(&sysinfo) // Loads the underlying hardware info into sysinfo
-        let data = Data(bytes: &sysinfo.machine, count: Int(_SYS_NAMELEN))
-        let identifier = String(bytes: data, encoding: .ascii)?.trimmingCharacters(in: .controlCharacters) ?? "unknown"
-        return identifier
     }
     
     public static var identifier: String = {
@@ -114,25 +67,6 @@ public enum Global: String {
         }
         return identifier
     }()
-    
-    public static func ciImageToData(_ ciImage: CIImage, format: ImageFormat = .png, context: CIContext = CIContext()) -> Data? {
-        guard let cgImage = context.createCGImage(ciImage, from: ciImage.extent) else {
-            return nil
-        }
-
-        let uiImage = UIImage(cgImage: cgImage)
-        switch format {
-        case .png:
-            return uiImage.pngData()
-        case .jpeg(let compressionQuality):
-            return uiImage.jpegData(compressionQuality: compressionQuality)
-        }
-    }
-    
-    public static func rounded(_ x: Double, places: Int) -> Double {
-        let p = pow(10.0, Double(places))
-        return (x * p).rounded() / p
-    }
     
     public static func durationToMilliseconds(duration: [UInt64]) -> UInt64 {
         guard duration.count == 2 else { return 0 }
@@ -159,35 +93,6 @@ public enum Global: String {
         (Double(value) * 100).rounded() / 100
     }
     
-    public static func rects(from regions: [[String: Any]]) -> [CGRect] {
-        var results: [CGRect] = []
-        
-        for region in regions {
-            let x = (region["x"] as? CGFloat)
-                ?? (region["x"] as? Double).map { CGFloat($0) }
-                ?? (region["x"] as? Int).map { CGFloat($0) }
-            
-            let y = (region["y"] as? CGFloat)
-                ?? (region["y"] as? Double).map { CGFloat($0) }
-                ?? (region["y"] as? Int).map { CGFloat($0) }
-            
-            let width = (region["width"] as? CGFloat)
-                ?? (region["width"] as? Double).map { CGFloat($0) }
-                ?? (region["width"] as? Int).map { CGFloat($0) }
-            
-            let height = (region["height"] as? CGFloat)
-                ?? (region["height"] as? Double).map { CGFloat($0) }
-                ?? (region["height"] as? Int).map { CGFloat($0) }
-
-            // Only append if valid
-            if let x = x, let y = y, let width = width, let height = height {
-                results.append(CGRect(x: x, y: y, width: width, height: height))
-            }
-        }
-        
-        return results
-    }
-
     /// Whether the caller asked the SDK to leave `url` alone through `ignoreUrls`.
     ///
     /// Shared by the export filter and the `traceparent` injection gate: an ignored URL must get
@@ -218,10 +123,6 @@ public enum Global: String {
         }
 
         return false
-    }
-    
-    public static func format(_ v: Double) -> String {
-         String(format: "%.2f", locale: Locale(identifier: "en_US_POSIX"), v)
     }
     
     public static func isEmulator() -> Bool {
@@ -332,27 +233,4 @@ public enum CoralogixDomain: String {
     case AP2 = "https://ingress.ap2.rum-ingress-coralogix.com" // ap-southeast-1 (Singapore)
     case AP3 = "https://ingress.ap3.rum-ingress-coralogix.com" // ap-southeast-3 (Jakarta)
     case STG = "https://ingress.staging.rum-ingress-coralogix.com"
-
-    func stringValue() -> String {
-        switch self {
-        case .EU1:
-            return "EU1"
-        case .EU2:
-            return "EU2"
-        case .US1:
-            return "US1"
-        case .US2:
-            return "US2"
-        case .US3:
-            return "US3"
-        case .AP1:
-            return "AP1"
-        case .AP2:
-            return "AP2"
-        case .AP3:
-            return "AP3"
-        case .STG:
-            return "STG"
-        }
-    }
 }

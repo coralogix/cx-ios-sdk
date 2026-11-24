@@ -6,14 +6,13 @@
 //
 
 import Coralogix
-import CoralogixInternal
 import Foundation
 import UIKit
 //import os
 
 // The demo target has its own `Keys` enum (UI labels), which shadows the SDK's wire-key
 // registry — alias the registry so payload keys stay typo-proof against the SDK schema.
-private typealias WireKeys = CoralogixInternal.Keys
+private typealias WireKeys = Coralogix.Keys
 
 final class CoralogixRumManager {
     static let shared = CoralogixRumManager()

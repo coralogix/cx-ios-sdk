@@ -1,5 +1,4 @@
 import Foundation
-@_exported import CoralogixInternal
 
 #if canImport(UIKit)
 import UIKit

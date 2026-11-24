@@ -13,7 +13,6 @@
 //
 
 import XCTest
-import CoralogixInternal
 @testable import Coralogix
 
 // MARK: - URLProtocol stub for capturing outgoing requests

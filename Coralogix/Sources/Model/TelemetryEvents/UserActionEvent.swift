@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import CoralogixInternal
 
 struct UserActionEvent: TelemetryEvent {
     let id: UUID

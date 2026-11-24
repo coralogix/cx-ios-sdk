@@ -5,7 +5,6 @@
 //  Created by Tomer Har Yoffi on 30/08/2025.
 //
 import Foundation
-import CoralogixInternal
 #if os(iOS)
 import WebKit
 #endif

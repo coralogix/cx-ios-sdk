@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import CoralogixInternal
 
 /// Production `MetricsCollector` impl. Aggregates the incoming
 /// `[VitalsMetric]` back into the `[String: Any]` shape the backend reads

@@ -6,7 +6,6 @@
 //
 
 import XCTest
-import CoralogixInternal
 @testable import Coralogix
 
 /// Hybrid layers (Flutter/React Native) measure network requests themselves and report `duration`

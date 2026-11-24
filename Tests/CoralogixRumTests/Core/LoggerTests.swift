@@ -1,10 +1,10 @@
 //
 //  LoggerTests.swift
-//  CoralogixInternal
+//  CoralogixRumTests
 //
 
 import XCTest
-@testable import CoralogixInternal
+@testable import Coralogix
 
 final class LoggerTests: XCTestCase {
 

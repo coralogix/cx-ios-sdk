@@ -11,7 +11,6 @@ import Foundation
 #if canImport(UIKit)
 import UIKit
 #endif
-import CoralogixInternal
 @testable import Coralogix
 
 /// Records reported events from any thread.

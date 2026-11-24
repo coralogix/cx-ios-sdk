@@ -11,7 +11,6 @@
 //
 
 import Foundation
-import CoralogixInternal
 
 final class TimeMeasurementTracker {
     private struct Entry {

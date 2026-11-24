@@ -4,7 +4,6 @@
  */
 
 import Foundation
-import CoralogixInternal
 
 class BoundMeasureMetricSdkBase<T>: BoundMeasureMetric<T> {
     override init() {

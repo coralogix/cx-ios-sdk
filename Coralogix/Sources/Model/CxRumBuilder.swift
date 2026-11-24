@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import CoralogixInternal
 
 class CxRumBuilder {
     private let otel: SpanDataProtocol

@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import CoralogixInternal
 
 // MARK: - Global span registry (CX-35952, Browser `window.__globalSpan__` equivalent)
 

@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import CoralogixInternal
 
 /// Logical representation of a network-request RUM event.
 ///

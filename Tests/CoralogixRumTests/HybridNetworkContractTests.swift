@@ -6,7 +6,6 @@
 //
 
 import XCTest
-import CoralogixInternal
 @testable import Coralogix
 
 /// Pins the full hybrid network bridge contract: every key the Flutter/React Native plugins send

@@ -5,7 +5,6 @@
 
 
 import Foundation
-import CoralogixInternal
 
 class BoundRawHistogramMetricSdkBase<T> : BoundRawHistogramMetric<T> {
     internal var status : RecordStatus

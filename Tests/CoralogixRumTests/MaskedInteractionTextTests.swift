@@ -5,7 +5,6 @@
 
 import XCTest
 import UIKit
-import CoralogixInternal
 @testable import Coralogix
 
 /// Interaction events for anything inside a masked area must report `***` rather than the real

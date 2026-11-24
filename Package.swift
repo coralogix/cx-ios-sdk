@@ -10,8 +10,7 @@ let package = Package(
         .tvOS(.v14)
     ],
     products: [
-        .library(name: "Coralogix", targets: ["Coralogix"]),
-        .library(name: "CoralogixInternal", targets: ["CoralogixInternal"])
+        .library(name: "Coralogix", targets: ["Coralogix"])
     ],
     dependencies: [
         .package(
@@ -20,10 +19,6 @@ let package = Package(
         )
     ],
     targets: [
-        .target(
-            name: "CoralogixInternal",
-            path: "CoralogixInternal/Sources/"
-        ),
         .target(
             name: "CoralogixBootstrap",
             dependencies: [
@@ -35,7 +30,6 @@ let package = Package(
         .target(
             name: "Coralogix",
             dependencies: [
-                .target(name: "CoralogixInternal"),
                 .target(name: "CoralogixBootstrap"),
                 .product(name: "CrashReporter", package: "plcrashreporter")
             ],
@@ -47,11 +41,6 @@ let package = Package(
             path: "Tests/CoralogixRumTests/",
             // Golden files read through #filePath, not bundled: CocoaPods' test_spec has no resources.
             exclude: ["WireSnapshots"]
-        ),
-        .testTarget(
-            name: "CoralogixInternalTests",
-            dependencies: ["CoralogixInternal"],
-            path: "Tests/CoralogixInternalTests/"
         )
     ]
 )

@@ -7,7 +7,6 @@
 
 import Foundation
 import CrashReporter
-import CoralogixInternal
 #if canImport(CoralogixBootstrap)
 // SPM builds the bootstrap as its own module; under CocoaPods it is part of this pod.
 import CoralogixBootstrap

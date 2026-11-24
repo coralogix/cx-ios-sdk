@@ -7,7 +7,6 @@
 
 import XCTest
 import UIKit
-import CoralogixInternal
 @testable import Coralogix
 
 final class UserInteractionSpanTests: XCTestCase {

@@ -17,7 +17,7 @@
 //      CX_WIRE_SNAPSHOT_RECORD=1 swift test --filter NetworkWireSnapshotTests
 //
 //      # Xcode / simulator — xcodebuild forwards TEST_RUNNER_-prefixed variables to the test process
-//      TEST_RUNNER_CX_WIRE_SNAPSHOT_RECORD=1 xcodebuild test -scheme Coralogix-Package \
+//      TEST_RUNNER_CX_WIRE_SNAPSHOT_RECORD=1 xcodebuild test -scheme Coralogix \
 //        -destination "platform=iOS Simulator,name=iPhone 16" \
 //        -only-testing:CoralogixRumTests/NetworkWireSnapshotTests
 //
@@ -30,7 +30,6 @@
 //
 
 import XCTest
-import CoralogixInternal
 @testable import Coralogix
 
 // MARK: - URLProtocol stub

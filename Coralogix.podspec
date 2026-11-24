@@ -33,7 +33,6 @@ Pod::Spec.new do |spec|
   # The C++ terminate handler (CoralogixBootstrap) needs libc++; not left to PLCrashReporter's pod.
   spec.libraries = 'c++'
   spec.dependency 'PLCrashReporter', '~> 1.12'
-  spec.dependency 'CoralogixInternal', '3.0.0'
 
   spec.test_spec 'Tests' do |test|
     test.source_files = 'Tests/CoralogixRumTests/**/*.swift'
