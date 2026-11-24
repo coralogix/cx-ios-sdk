@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Release-mechanics commits (version bumps, podspec/script tweaks, README edits) are
 omitted; the focus here is user-facing behavior changes.
 
+## [3.0.0] - Unreleased
+
+### ⚠️ Breaking changes
+- Session replay is removed from this SDK; a separate session replay library replaces it.
+- The `SessionReplay` package product and CocoaPods pod are gone. Remove them from your dependencies.
+- Error, crash and ANR events no longer attach a screenshot.
+- The `CoralogixRum` session replay methods are removed: `startRecording`, `stopRecording`, `captureEvent`, `isSRRecording`, `isSRInitialized`, `update(sessionId:)` and the screenshot counter methods.
+
 ## [2.24.4] - 2026-11-22
 
 ### Fixed
