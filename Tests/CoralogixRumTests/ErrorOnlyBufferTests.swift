@@ -476,6 +476,49 @@ final class ErrorOnlyBufferTests: XCTestCase {
                        "No file is left for a restart to send a second time.")
     }
 
+    func testUnsavedCursorAfterTheLastChunk_deletesTheBufferAtOnce_soAKillBeforeTheNextRequestSendsNothingAgain() throws {
+        let writer = FlakyMetadataWriter()
+        let buffer = makeBuffer(writer: writer)
+        (0..<3).forEach { buffer.hold(event($0), sessionId: "s") }
+        buffer.trigger("s")
+        writer.failing = true
+
+        let uploader = ScriptedUploads()
+        let clock = ManualDeliveryClock()
+        let drain = makeDrain(buffer, clock: clock, uploader: uploader)
+        drain.start(["s"])
+        drain.waitUntilSettled()
+
+        XCTAssertEqual(uploader.requests.map { $0.map(index) }, [[0, 1, 2]])
+        XCTAssertEqual(makeBuffer().adoptLeftovers { $0.triggered }, [],
+                       "The drain still waits out its gap: a restart now must find nothing to send again.")
+    }
+
+    func testUnsavedCursorBeforeMemoryEvents_deletesTheSentFile_andTheMemoryEventsStillGo() throws {
+        let writer = FlakyMetadataWriter()
+        let buffer = makeBuffer(writer: writer)
+        (0..<2).forEach { buffer.hold(event($0), sessionId: "s") }
+        writer.failingAppends = true
+        buffer.hold(event(2), sessionId: "s")
+        buffer.trigger("s")
+        writer.failing = true
+
+        let uploader = ScriptedUploads()
+        let clock = ManualDeliveryClock()
+        let drain = makeDrain(buffer, clock: clock, uploader: uploader)
+        drain.start(["s"])
+        drain.waitUntilSettled()
+        XCTAssertEqual(makeBuffer().adoptLeftovers { $0.triggered }, [],
+                       "The sent file is gone before the memory request: a restart sends it no second time.")
+
+        clock.advance(to: clock.now().addingTimeInterval(1))
+        drain.waitUntilSettled()
+        XCTAssertEqual(uploader.requests.map { $0.map(index) }, [[0, 1], [2]])
+        clock.advance(to: clock.now().addingTimeInterval(1))
+        drain.waitUntilSettled()
+        XCTAssertNil(buffer.metadata(of: "s"), "Done with.")
+    }
+
     func testUnsavedFailureCount_keepsTheSession_andTheDrainGoesOn() throws {
         let writer = FlakyMetadataWriter()
         let buffer = makeBuffer(writer: writer)

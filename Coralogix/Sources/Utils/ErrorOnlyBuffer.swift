@@ -316,9 +316,7 @@ final class ErrorOnlyBuffer {
     /// time: the disk records the trigger but an older cursor, and the next request comes from
     /// the file. While the disk still reads as a session without an error, a restart deletes it,
     /// so a full disk does not stop the drain; nor does a failure count it could not save. Nor
-    /// does a cursor past the end of a file this instance wrote: what comes next is from memory,
-    /// or nothing does, and the drain then deletes the files rather than leave them for a restart
-    /// to send again.
+    /// does a file fully sent: `commit` already deleted it, and what comes next is from memory.
     func maySend(of sessionId: String) -> Bool {
         lock.lock()
         defer { lock.unlock() }
@@ -326,10 +324,13 @@ final class ErrorOnlyBuffer {
         persistMetadataLocked(&session)
         sessions[sessionId] = session
         guard session.metadataUnsaved, let saved = session.saved, saved.triggered else { return true }
-        // `fileLength` counts only what this instance appended: an adopted file's length is unknown.
+        return saved.sentOffset == session.metadata.sentOffset || isFileSentLocked(session)
+    }
+
+    /// `fileLength` counts only what this instance appended: an adopted file's length is unknown.
+    private func isFileSentLocked(_ session: Session) -> Bool {
         let knowsFileLength = session.diskFailed || session.metadata.owner == owner
-        let fileSent = knowsFileLength && session.metadata.sentOffset >= session.fileLength
-        return saved.sentOffset == session.metadata.sentOffset || fileSent
+        return knowsFileLength && session.metadata.sentOffset >= session.fileLength
     }
 
     /// Writes the metadata, trying once more on failure, and records whether it reached disk.
@@ -478,7 +479,10 @@ final class ErrorOnlyBuffer {
         return (lines, session.metadata.sentOffset + UInt64(consumed))
     }
 
-    /// The chunk was delivered or refused for good: it is never sent again.
+    /// The chunk was delivered or refused for good: it is never sent again. A file fully sent
+    /// whose cursor could not be saved is deleted now: left for the drain's next request, an
+    /// offline spell, a suspension or a kill before it would leave a restart the older cursor,
+    /// sending the last chunk again.
     func commit(_ chunk: Chunk) {
         lock.lock()
         defer { lock.unlock() }
@@ -486,6 +490,13 @@ final class ErrorOnlyBuffer {
         if let end = chunk.fileEndOffset {
             session.metadata.sentOffset = end
             persistMetadataLocked(&session)
+            if session.metadataUnsaved && isFileSentLocked(session) {
+                guard !session.memory.isEmpty else {
+                    removeLocked(chunk.sessionId)
+                    return
+                }
+                deleteFilesLocked(chunk.sessionId)
+            }
         } else {
             let removed = session.memory.prefix(chunk.memoryCount)
             session.memoryBytes -= removed.reduce(0) { $0 + $1.count }
