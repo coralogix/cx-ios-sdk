@@ -262,7 +262,7 @@ public class CoralogixRum {
     /// Most instrumentations follow the plain rule on `CoralogixExporterOptions`. Two cannot, because
     /// they are installed for reasons the caller's on/off switch does not describe:
     ///
-    /// - `.userActions` also drives session replay in hybrid, so the touch swizzles go in regardless
+    /// - `.userActions` also feeds touches to hybrid wrappers, so the touch swizzles go in regardless
     ///   of the option and of sampling. Whether a tap becomes a span is decided separately by
     ///   `Helper.shouldEmitUserActionSpan` and the exporter's sampling filter.
     /// - `.network` also injects the `traceparent` header, so it goes in when either the events will
@@ -624,7 +624,7 @@ public class CoralogixRum {
     /// e.g. on user logout — without a full `shutdown()` + `init()`. Behaves
     /// exactly like the automatic idle / max-age rotation: a new session ID is
     /// issued and the per-session state (error/click counters, snapshot
-    /// throttle, Session Replay, view counter) resets. The current view is
+    /// throttle, view counter) resets. The current view is
     /// carried into the new session as view #0, so its events keep their view
     /// context automatically — no follow-up call needed.
     public func createNewSession() {
@@ -714,7 +714,7 @@ public class CoralogixRum {
     /// - `attributes` (`[String: Any]`, optional) — custom attributes
     /// - `is_masked` (`Bool`, optional) — authoritative masking verdict from a wrapper that
     ///   owns its own masking (Flutter). When present it overrides the SDK's own resolution
-    ///   of the coordinates against the frame's mask geometry; the outcome is reported as
+    ///   of the coordinates against the deliberate-masking geometry; the outcome is reported as
     ///   `interaction_context.is_masked_element` and drives inner-text redaction.
     ///
     /// May be called from any thread; off-main calls are processed asynchronously on the

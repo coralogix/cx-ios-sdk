@@ -216,7 +216,7 @@ extension UIApplication {
                 guard let view = touch.view else { continue }
                 ScrollTracker.shared.recordBegan(touch, view: view)
                 // Nothing is classified yet, so the finger-down goes out as a click in the `.began`
-                // phase: session replay wants its frame this early, a span never does.
+                // phase: a span never wants it this early.
                 if isSingleTouch {
                     NotificationCenter.default.post(
                         name: .cxRumNotificationUserActions,

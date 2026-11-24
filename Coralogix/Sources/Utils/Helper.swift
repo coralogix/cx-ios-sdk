@@ -360,7 +360,7 @@ class Helper {
         return mergedLabels.isEmpty ? nil : mergedLabels
     }
 
-    // MARK: - User actions / session replay decoupling
+    // MARK: - User actions instrumentation gates
 
     /// Resolves whether user actions instrumentation is enabled from optional exporter options.
     /// Used to avoid repeating optional chaining and default in multiple call sites.
@@ -375,7 +375,7 @@ class Helper {
         isUserActionsEnabled(options: options) && sdkFramework.isNative
     }
 
-    /// Returns whether touch swizzles should be installed (for native spans and/or session replay in hybrid).
+    /// Returns whether touch swizzles should be installed (for native spans and/or hybrid wrappers).
     internal static func shouldInstallTouchSwizzles(options: CoralogixExporterOptions?, sdkFramework: SdkFramework) -> Bool {
         isUserActionsEnabled(options: options) || !sdkFramework.isNative
     }

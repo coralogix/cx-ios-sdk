@@ -13,7 +13,7 @@ import CoralogixInternal
 extension CoralogixRum {
     public func initializeUserActionsInstrumentation() {
         // Installed when userActions is enabled or the app is hybrid (`Helper.shouldInstallTouchSwizzles`):
-        // the swizzles feed session replay as well as spans. No-ops if called more than once
+        // the swizzles feed touches to the instrumentation. No-ops if called more than once
         // (static let guarantees single execution).
         UIApplication.swizzleTouchesEnded
         UIApplication.swizzleSendEvent
@@ -150,7 +150,7 @@ extension CoralogixRum {
 
         // A hybrid-reported interaction is redacted on the same terms as a native one: the
         // bridge payload's text is copied verbatim above, so a masked element's real text
-        // would otherwise ship (the swizzles feed session replay in hybrid mode, but the span
+        // would otherwise ship (in hybrid mode the span
         // comes from here and never passes through TapDataExtractor). nil = unresolvable →
         // the documented `false` default: the flag under-reports rather than over-reports.
         let isMaskedElement = Self.resolveHybridMasking(dictionary, maskRects: maskRects)
@@ -168,7 +168,7 @@ extension CoralogixRum {
     /// Precedence: the wrapper's own verdict (`is_masked` in the bridge dictionary) —
     /// authoritative for hybrids that own their masking (Flutter sets it; React Native does
     /// not) — then the payload's coordinates tested against the deliberate-masking geometry
-    /// (`UIView.deliberateMaskRects`), which excludes the replay's pixel policy. Hybrid
+    /// (`UIView.deliberateMaskRects`) (`cxMask` only). Hybrid
     /// coordinates and iOS mask rects are both in points — no unit conversion, unlike Android
     /// where the payload is dp and the rects are px.
     ///

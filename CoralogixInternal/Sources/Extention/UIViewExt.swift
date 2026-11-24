@@ -17,7 +17,7 @@ private let _flutterViewClass: AnyClass? =
     ?? NSClassFromString("FlutterImageView")
 
 public extension UIView {
-    /// When true, this view will be masked (redacted) in captured session frames.
+    /// When true, this view will be masked (redacted).
     var cxMask: Bool {
         get { (objc_getAssociatedObject(self, &kCxMaskKey) as? Bool) ?? false }
         set { objc_setAssociatedObject(self, &kCxMaskKey, newValue, .OBJC_ASSOCIATION_RETAIN_NONATOMIC) }
@@ -187,9 +187,8 @@ public extension UIView {
     /// navigation-bar titles, maskAllImages, and `cxMask` views — offset to screen
     /// coordinates.
     ///
-    /// The capture pass passes the replay's pixel policy through here; the interaction path
-    /// calls `deliberateMaskRects()` instead, which leaves the policy off. Both share this
-    /// one walk, so the geometry itself cannot drift between them — only the inputs differ.
+    /// The interaction path calls `deliberateMaskRects()`, which passes no text patterns and
+    /// leaves `maskAllImages` off, so only `cxMask` views contribute.
     func collectNativeMaskRects(in win: UIWindow,
                                 maskText: [String]?,
                                 maskAllImages: Bool) -> [CGRect] {
@@ -206,11 +205,9 @@ public extension UIView {
         return rects.map { $0.offsetBy(dx: origin.x, dy: origin.y) }
     }
 
-    /// The mask rects a frame captured at this moment would paint for native content, across
-    /// all visible windows of the active scene, in screen points. Windows hosting a
-    /// FlutterView are skipped, — their masking arrives
-    /// pre-painted in the Dart bitmap, with geometry reported per-frame in
-    /// `FlutterViewBitmap.maskRects` rather than derivable from the view tree.
+    /// The mask rects for native content, across all visible windows of the active scene, in
+    /// screen points. Windows hosting a FlutterView are skipped — their masking is reported by
+    /// the wrapper rather than derivable from the view tree.
     ///
     /// Returns nil when there is nothing to walk (off the main thread, or no active
     /// foreground scene) — "don't know", which callers must not read as "nothing masked".
@@ -235,18 +232,12 @@ public extension UIView {
     /// `cxMask`, whether set directly, inherited from an ancestor, or applied to SwiftUI
     /// content via the `.cxMask()` overlay.
     ///
-    /// The replay's pixel policy (`maskText`, `maskAllImages`) is deliberately absent. That
-    /// policy answers "should these pixels be hidden in this frame", which is not the question
-    /// "may this text leave the device" — and answering the second with the first over-masks
-    /// severely on defaults, since a wrapper shipping `maskAllTexts` marks every text tap.
-    /// Android and Flutter resolve the verdict from deliberate masking alone; this matches them.
+    /// Text patterns (`maskText`) and `maskAllImages` are deliberately absent: they answer
+    /// "should these pixels be hidden", which is not the question "may this text leave the
+    /// device". Android and Flutter resolve the verdict from deliberate masking alone; this
+    /// matches them.
     ///
-    /// Consequence, and intended: for content masked only by the pixel policy, the replay still
-    /// suppresses its tap marker (that test uses the rects the capture pass actually painted)
-    /// while the interaction reports `is_masked_element: false`. Flag and marker may disagree.
-    ///
-    /// Needs no session replay options, so unlike the capture pass this resolves whether or not
-    /// session replay is initialized. The production path delegates to `collectScreenMaskRects`
+    /// The production path delegates to `collectScreenMaskRects`
     /// rather than restating its guards, so the conditions under which this returns nil are
     /// defined in one place and cannot drift as they are added to.
     /// - Parameter windows: Test seam. nil (production) resolves the active foreground scene;

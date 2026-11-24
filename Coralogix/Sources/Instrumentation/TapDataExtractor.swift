@@ -252,8 +252,8 @@ final class ScrollTracker {
 /// This is the single place that knows how to map UIKit view metadata
 /// to the interaction_context schema.
 enum TapDataExtractor {
-    /// What a session replay capture reads from a touch, and nothing more: the event name and the
-    /// position the marker is painted at. Nothing is read from the view, so no view walk is paid
+    /// What the finger-down touch carries, and nothing more: the event name and the
+    /// position of the touch. Nothing is read from the view, so no view walk is paid
     /// and the customer's `shouldSendText` and `resolveTargetName` are not consulted — they are
     /// consulted once per interaction, by `extract`, at finger-up.
     static func captureProperties(from event: TouchEvent) -> [String: Any] {
@@ -272,8 +272,7 @@ enum TapDataExtractor {
     ///   When provided, its return value replaces the UIKit class name in `target_element`.
     ///   Returning `nil` falls back to the resolved class name.
     /// - Parameter maskRects: The deliberate-masking geometry (screen points) from
-    ///   `UIView.deliberateMaskRects` — `cxMask` only, with the replay's pixel policy
-    ///   excluded. The caller resolves it, and decides whether the walk is worth paying for
+    ///   `UIView.deliberateMaskRects` — `cxMask` only. The caller resolves it, and decides whether the walk is worth paying for
     ///   at all (see `handleInteractionNotification`). nil when unresolvable or skipped —
     ///   geometry then contributes nothing to the masking decision.
     static func extract(from event: TouchEvent,
@@ -288,10 +287,7 @@ enum TapDataExtractor {
         // still answers when no geometry is available, and the PII traits, which cover secure
         // fields that paint no rect.
         //
-        // The replay's pixel policy (maskText / maskAllImages) is deliberately not an input:
-        // it answers whether pixels should be hidden in a frame, not whether text may leave
-        // the device. So this flag and the replay's tap-marker suppression can legitimately
-        // disagree for policy-masked content — matching Android and Flutter.
+        // Deliberate masking only — matching Android and Flutter.
         let isMaskedElement = (maskRects.map { pointIsMasked(event.location, in: $0) } ?? false)
             || view.isInsideMaskedSubtree
             || hasSensitivePIIProperties(view)
@@ -318,7 +314,7 @@ enum TapDataExtractor {
         // content, or when the caller's shouldSendText delegate rejects it. The delegate is
         // consulted last and only for text that is not already redacted — a password must not
         // reach the customer's closure. The delegate's rejection redacts the text but does not
-        // set `is_masked_element`: the flag records what session replay masked, not what the
+        // set `is_masked_element`: the flag records what is masked, not what the
         // customer's reporting gate withheld.
         if !isContainerView(resolvedClassName),
            let innerText = rawInnerText(from: view),
@@ -353,9 +349,8 @@ enum TapDataExtractor {
     }
 
     /// Whether a tap at `point` (screen points) landed inside one of the given masked regions.
-    /// Same test mechanics as the replay's tap-marker suppression (`ScannerPipeline.containsTap`),
-    /// including failing closed on overlapping windows — but applied to different geometry: the
-    /// marker tests the rects the frame actually painted, this tests deliberate masking only.
+    /// Fails closed on overlapping windows: any rect containing the point counts. The rects are
+    /// deliberate masking only.
     static func pointIsMasked(_ point: CGPoint, in maskRects: [CGRect]) -> Bool {
         maskRects.contains { $0.contains(point) }
     }

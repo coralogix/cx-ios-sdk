@@ -150,8 +150,7 @@ extension CoralogixRum {
             flushCrash?()
             return
         }
-        // Sequenced on the span having ended, since a live crash waits for its screenshot. Nothing
-        // is kept on disk: as on Android, any other hybrid crash whose upload fails is not re-sent.
+        // Sequenced on the span having ended. Nothing is kept on disk: as on Android, any other hybrid crash whose upload fails is not re-sent.
         self.writeError(source: source, fields: fields, then: flushCrash)
     }
 

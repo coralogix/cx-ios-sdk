@@ -98,7 +98,7 @@ extension CoralogixRum {
         }
     }
 
-    /// Sends React Native's fatal now, as a crash with no screenshot, and keeps it for the next
+    /// Sends React Native's fatal now, as a crash, and keeps it for the next
     /// launch. Returns false, leaving it to the usual live path and its native report to be sent
     /// as well, when this process or its session is unknown or the file cannot be written.
     ///

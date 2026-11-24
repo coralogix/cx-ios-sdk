@@ -376,8 +376,8 @@ public class CoralogixExporter: SpanExporter {
         }
 
         // Per-session sampling: a span stamped sampled-out proceeds only if its event_type is
-        // opted into options.excludeFromSampling, or it is `internal` (other than
-        // session_replay_init) and that list is non-empty (see `passesSessionSampling`). Paired with the
+        // opted into options.excludeFromSampling, or it is `internal`
+        // and that list is non-empty (see `passesSessionSampling`). Paired with the
         // propagate-only network check, which catches the case sampling cannot. Placed above
         // URL/error filters and the tracesExporter callback so hybrid + external OTLP consumers
         // inherit the same behavior.
@@ -622,7 +622,7 @@ public class CoralogixExporter: SpanExporter {
     /// Returns `true` if the span should proceed past the per-session sampling filter.
     /// When the span's own `is_session_sampled_in` stamp is true, every span passes. When it is
     /// false, only spans whose `event_type` matches an opt-in entry in `options.excludeFromSampling`
-    /// pass, plus the SDK's own `internal` events (except `session_replay_init`) when that list is
+    /// pass, plus the SDK's own `internal` events when that list is
     /// non-empty. Spans missing an `event_type` attribute are dropped when stamped sampled-out.
     /// Internal (rather than private per the ticket) so unit tests can exercise it directly.
     internal func passesSessionSampling(_ span: SpanDataProtocol) -> Bool {
