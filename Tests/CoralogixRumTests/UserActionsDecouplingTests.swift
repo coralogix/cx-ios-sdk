@@ -1,8 +1,8 @@
 //
-//  SessionReplayUserActionsDecouplingTests.swift
+//  UserActionsDecouplingTests.swift
 //
-//  Unit tests for decoupling session replay from user actions instrumentation:
-//  - Native touch swizzles are installed in hybrid mode so session replay can capture clicks.
+//  Unit tests for the user actions instrumentation gate:
+//  - Native touch swizzles are installed in hybrid mode.
 //  - RUM user_interaction spans are only emitted when userActions is enabled AND SDK is native.
 //
 
@@ -10,7 +10,7 @@ import XCTest
 import CoralogixInternal
 @testable import Coralogix
 
-final class SessionReplayUserActionsDecouplingTests: XCTestCase {
+final class UserActionsDecouplingTests: XCTestCase {
 
     // MARK: - shouldEmitUserActionSpan: native + userActions on/off
 
@@ -55,7 +55,7 @@ final class SessionReplayUserActionsDecouplingTests: XCTestCase {
         defer { rum.shutdown() }
 
         XCTAssertFalse(rum.shouldEmitUserActionSpan,
-                       "Native SDK with userActions disabled must not emit user action spans (session replay still gets events via swizzles)")
+                       "Native SDK with userActions disabled must not emit user action spans")
     }
 
     func testShouldEmitUserActionSpan_native_instrumentationsNil_returnsTrue() {
@@ -126,12 +126,12 @@ final class SessionReplayUserActionsDecouplingTests: XCTestCase {
                        "Hybrid (React Native) with userActions off must not emit native spans")
     }
 
-    // MARK: - Initialization: hybrid still gets touch swizzles (session replay)
+    // MARK: - Initialization: hybrid still gets touch swizzles
 
-    /// In hybrid mode we now call initializeUserActionsInstrumentation so that session replay
-    /// receives native touch events. This test only verifies the SDK initializes without crashing
+    /// In hybrid mode we now call initializeUserActionsInstrumentation so that native touch
+    /// events are observed. This test only verifies the SDK initializes without crashing
     /// when in hybrid mode (swizzles are installed); shouldEmitUserActionSpan is false so no duplicate spans.
-    func testHybridMode_initializesUserActionsInstrumentation_forSessionReplay() {
+    func testHybridMode_initializesUserActionsInstrumentation() {
         let options = CoralogixExporterOptions(
             coralogixDomain: .US2,
             userContext: nil,

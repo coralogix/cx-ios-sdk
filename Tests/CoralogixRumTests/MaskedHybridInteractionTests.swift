@@ -37,7 +37,6 @@ final class MaskedHybridInteractionTests: XCTestCase {
     }
 
     override func tearDownWithError() throws {
-        SdkManager.shared.register(sessionReplayInterface: nil)
         coralogixRum?.shutdown()
         coralogixRum = nil
     }

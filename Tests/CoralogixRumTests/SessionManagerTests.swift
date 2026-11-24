@@ -158,7 +158,7 @@ class SessionManagerTests: XCTestCase {
     //   1. `getSessionMetadata` must rotate stale sessions even when idle
     //      (rotation is purely time-based; idle gates *export*, not rotation).
     //   2. The rotation must fire `sessionEndedCallback` AND `sessionChangedCallback`
-    //      so SessionReplay and sampling listeners observe the transition.
+    //      so sampling and session listeners observe the transition.
     //   3. `lastSnapshotEventTime` must reset on rotation so a fresh session can
     //      emit its first snapshot immediately.
     //   4. A stale rotation must carry the dropped session id forward as
@@ -196,7 +196,7 @@ class SessionManagerTests: XCTestCase {
     }
 
     /// Callback wiring contract: the rotation that recovers a stale idle session
-    /// must notify listeners (SessionReplay, sampling re-roll) via both
+    /// must notify listeners (sampling re-roll) via both
     /// `sessionEndedCallback` and `sessionChangedCallback`. Regression guard for
     /// the case where the rotation branch fired but the listeners were skipped.
     func testHourPassed_whileIdle_firesSessionCallbacks() {

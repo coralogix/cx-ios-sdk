@@ -1,8 +1,8 @@
 //
-//  SessionReplayTapCaptureTimingTests.swift
+//  UserInteractionSpanTests.swift
 //  Coralogix-Rum-Tests
 //
-//  Pins the touch contract stated on `handleInteractionNotification`, for every framework.
+//  Pins the touch contract of `handleInteractionNotification` for every framework: finger-down opens no span, the classified gesture at finger-up is one interaction span.
 //
 
 import XCTest
@@ -10,9 +10,8 @@ import UIKit
 import CoralogixInternal
 @testable import Coralogix
 
-final class SessionReplayTapCaptureTimingTests: XCTestCase {
+final class UserInteractionSpanTests: XCTestCase {
 
-    private var sessionReplay: MockSessionReplay!
     private var tracer: MockTracer!
     private var rum: CoralogixRum?
 
@@ -21,8 +20,6 @@ final class SessionReplayTapCaptureTimingTests: XCTestCase {
 
     override func tearDown() {
         shutDownRum()
-        SdkManager.shared.register(sessionReplayInterface: nil)
-        sessionReplay = nil
         tracer = nil
         super.tearDown()
     }
@@ -35,7 +32,6 @@ final class SessionReplayTapCaptureTimingTests: XCTestCase {
                          shouldSendText: ((UIView, String) -> Bool)? = nil,
                          resolveTargetName: ((UIView) -> String?)? = nil) -> CoralogixRum {
         shutDownRum()
-        sessionReplay = MockSessionReplay()
         tracer = MockTracer()
         let options = CoralogixExporterOptions(
             coralogixDomain: .US2,
@@ -54,9 +50,8 @@ final class SessionReplayTapCaptureTimingTests: XCTestCase {
             debug: false
         )
         let rum = CoralogixRum(options: options, sdkFramework: framework)
-        // Wired up only once init is over, so nothing init does reaches the doubles and every
-        // capture and span the tests see comes from the touch or bridge call under test.
-        SdkManager.shared.register(sessionReplayInterface: sessionReplay)
+        // Wired up only once init is over, so every span the tests see comes from the touch or
+        // bridge call under test.
         let tracer: MockTracer = self.tracer
         rum.tracerProvider = { tracer }
         self.rum = rum
@@ -99,7 +94,6 @@ final class SessionReplayTapCaptureTimingTests: XCTestCase {
     }
 
     private var userInteractionSpans: [MockSpan] { spans(of: .userInteraction) }
-    private var screenshotSpans: [MockSpan] { spans(of: .screenshot) }
 
     private func spans(of type: CoralogixEventType) -> [MockSpan] {
         tracer.mockSpanBuilder.startedSpans.filter {
@@ -116,18 +110,15 @@ final class SessionReplayTapCaptureTimingTests: XCTestCase {
 
     private func assertSpanOnly(_ span: MockSpan, _ framework: SdkFramework,
                                 file: StaticString = #filePath, line: UInt = #line) throws {
-        XCTAssertTrue(span.didEnd, "\(framework): the span must close without waiting on a capture",
+        XCTAssertTrue(span.didEnd, "\(framework): the span must close",
                       file: file, line: line)
         let payload = try XCTUnwrap(tapObject(on: span), "\(framework): the payload must be serialised onto the span",
                                     file: file, line: line)
         XCTAssertEqual(payload[Keys.eventName.rawValue] as? String, InteractionEventName.click.rawValue,
                        file: file, line: line)
         XCTAssertEqual(payload[Keys.positionX.rawValue] as? Double, 120, file: file, line: line)
-        // `testScreenshotSpan_isEmittedOnlyWhenAFrameShipped` proves `recordScreenshotForSpan`
-        // stamps both attributes on a MockSpan in this same setup, so their absence here is the
-        // interaction path never recording a capture on its span.
         XCTAssertNil(span.recordedAttributes[Keys.screenshotId.rawValue],
-                     "\(framework): an interaction span carries no screenshot (Android parity)",
+                     "\(framework): an interaction span carries no screenshot",
                      file: file, line: line)
         XCTAssertNil(span.recordedAttributes[Keys.page.rawValue], file: file, line: line)
     }
@@ -143,115 +134,20 @@ final class SessionReplayTapCaptureTimingTests: XCTestCase {
                        .began)
     }
 
-    // MARK: - Finger-down: one frame, for every framework
+    // MARK: - Finger-down: no span, for every framework
 
-    func testFingerDown_requestsOneFrameWithTheTapPositionAndAReservedSlot_forEveryFramework() throws {
+    func testFingerDown_opensNoSpan_forEveryFramework() {
         for framework in frameworks {
             let rum = makeRum(framework)
 
             rum.handleInteractionNotification(notification: fingerDown())
 
-            XCTAssertEqual(sessionReplay.captureEventCallCount, 1,
-                           "\(framework): finger-down must request exactly one frame")
-            let properties = try XCTUnwrap(sessionReplay.captureEventCalledWith)
-            XCTAssertEqual(properties[Keys.eventName.rawValue] as? String, InteractionEventName.click.rawValue)
-            XCTAssertEqual(properties[Keys.positionX.rawValue] as? Double, 120,
-                           "\(framework): the marker is painted from the top-level x")
-            XCTAssertEqual(properties[Keys.positionY.rawValue] as? Double, 340,
-                           "\(framework): the marker is painted from the top-level y")
-            XCTAssertEqual(properties[Keys.segmentIndex.rawValue] as? Int, 1,
-                           "\(framework): the capture must reserve a screenshot slot, so it is deduplicated like any SDK capture rather than treated as manual")
-            XCTAssertEqual(properties[Keys.page.rawValue] as? Int, 0)
-            XCTAssertNotNil(properties[Keys.screenshotId.rawValue] as? String)
-            XCTAssertTrue(userInteractionSpans.isEmpty,
-                          "\(framework): finger-down must never become an interaction span — it may still turn into a scroll")
-
-            // The frame is findable from the event stream: one `screenshot` event points at it,
-            // as Android exports one for every tap frame. It carries the frame and nothing else.
-            XCTAssertEqual(screenshotSpans.count, 1, "\(framework): one shipped tap frame is one screenshot event")
-            let shot = try XCTUnwrap(screenshotSpans.first)
-            XCTAssertTrue(shot.didEnd, "\(framework): the screenshot event is reported once the frame shipped")
-            XCTAssertEqual(shot.recordedAttributes[Keys.screenshotId.rawValue],
-                           .string(try XCTUnwrap(properties[Keys.screenshotId.rawValue] as? String)),
-                           "\(framework): the event points at the slot the capture reserved")
-            XCTAssertEqual(shot.recordedAttributes[Keys.page.rawValue], .int(0))
-            XCTAssertNil(shot.recordedAttributes[Keys.tapObject.rawValue],
-                         "\(framework): a screenshot event carries no interaction payload")
-            XCTAssertNil(shot.recordedAttributes[Keys.isManual.rawValue],
-                         "\(framework): a tap frame is not a manual capture")
+            XCTAssertTrue(tracer.mockSpanBuilder.startedSpans.isEmpty,
+                          "\(framework): finger-down must not start any span")
         }
     }
 
-    /// The event exists only to point at a frame, so a capture the model drops — a duplicate, or a
-    /// Flutter provider answering nil — reports nothing, and the reserved slot is handed back by
-    /// the model. Android's rule: the screenshot log is reported only for a frame that shipped.
-    func testFingerDown_droppedFrame_reportsNoScreenshotEvent() throws {
-        let rum = makeRum(.flutter(version: "1.0.0"))
-        sessionReplay.captureEventResult = .failure(.skippingEvent)
-
-        rum.handleInteractionNotification(notification: fingerDown())
-
-        XCTAssertEqual(sessionReplay.captureEventCallCount, 1, "The frame was still requested")
-        let shot = try XCTUnwrap(screenshotSpans.first, "The span is opened before the outcome is known")
-        XCTAssertFalse(shot.didEnd, "A dropped frame must leave the screenshot event unreported")
-        XCTAssertNil(shot.recordedAttributes[Keys.screenshotId.rawValue])
-    }
-
-    /// An app without session replay pays nothing per touch: no capture, and no span opened that
-    /// would never end. The test above is the positive counterpart with a replay registered.
-    func testFingerDown_withoutSessionReplay_opensNoSpan() {
-        let rum = makeRum(.swift)
-        SdkManager.shared.register(sessionReplayInterface: nil)
-
-        rum.handleInteractionNotification(notification: fingerDown())
-
-        XCTAssertEqual(sessionReplay.captureEventCallCount, 0)
-        XCTAssertTrue(tracer.mockSpanBuilder.startedSpans.isEmpty,
-                      "Finger-down without a replay must not start any span")
-    }
-
-    /// Replay initialised but not recording — `autoStartSessionRecording: false` before the host
-    /// starts it, or after `stopRecording()` — is the common idle state, and it must cost a touch
-    /// nothing: no span, no slot reserved and handed back, no capture the module would only reject.
-    func testFingerDown_whileReplayIsNotRecording_opensNoSpanAndRequestsNoFrame() {
-        let rum = makeRum(.flutter(version: "1.0.0"))
-        sessionReplay.recording = false
-
-        rum.handleInteractionNotification(notification: fingerDown())
-
-        XCTAssertEqual(sessionReplay.captureEventCallCount, 0,
-                       "A stopped replay must not be asked for a frame it will reject")
-        XCTAssertTrue(tracer.mockSpanBuilder.startedSpans.isEmpty,
-                      "Finger-down while not recording must not start any span")
-        XCTAssertEqual(rum.coralogixExporter?.getScreenshotManager().screenshotCount, 0,
-                       "No screenshot slot may be reserved for a capture that cannot ship")
-    }
-
-    func testFingerDown_reachesTheCaptureThroughTheNotification() {
-        _ = makeRum(.swift)
-
-        NotificationCenter.default.post(fingerDown())
-
-        // Other tests may leave instances observing the same notification, so the count is
-        // a floor: zero here means a finger-down never reaches the capture through the observer.
-        XCTAssertGreaterThanOrEqual(sessionReplay.captureEventCallCount, 1,
-                                    "The user-actions observer must act on a `.began` event")
-    }
-
-    // MARK: - Finger-up: no frame, for every framework
-
-    func testFingerUp_requestsNoFrame_forEveryFrameworkAndGesture() {
-        for framework in frameworks {
-            for gesture in [fingerUpTap(), fingerUpScroll()] {
-                let rum = makeRum(framework)
-
-                rum.handleInteractionNotification(notification: gesture)
-
-                XCTAssertEqual(sessionReplay.captureEventCallCount, 0,
-                               "\(framework): the frame was requested at finger-down; the classified gesture must not request another")
-            }
-        }
-    }
+    // MARK: - Finger-up: one span
 
     func testNative_fingerUpTap_emitsASpanWithNoScreenshot() throws {
         let rum = makeRum(.swift)
@@ -276,7 +172,6 @@ final class SessionReplayTapCaptureTimingTests: XCTestCase {
         XCTAssertEqual(payload[Keys.scrollDirection.rawValue] as? String, ScrollDirection.up.rawValue)
         XCTAssertNil(span.recordedAttributes[Keys.screenshotId.rawValue],
                      "A scroll span carries no screenshot either")
-        XCTAssertEqual(sessionReplay.captureEventCallCount, 0, "A scroll adds no frame of its own")
     }
 
     /// Finger-down reads nothing from the view, so the customer's delegates are consulted once
@@ -293,7 +188,6 @@ final class SessionReplayTapCaptureTimingTests: XCTestCase {
 
         rum.handleInteractionNotification(notification: fingerDown(on: label))
 
-        XCTAssertEqual(sessionReplay.captureEventCallCount, 1, "The finger-down still captures")
         XCTAssertEqual(shouldSendTextCalls, 0, "Nothing is read from the view at finger-down")
         XCTAssertEqual(resolveTargetNameCalls, 0)
 
@@ -316,7 +210,7 @@ final class SessionReplayTapCaptureTimingTests: XCTestCase {
 
     // MARK: - Bridge: span-only, for both hybrids
 
-    func testHybrid_bridgeTap_endsASpanWithThePayloadAndNoScreenshot_andRequestsNoFrame() throws {
+    func testHybrid_bridgeTap_endsASpanWithThePayloadAndNoScreenshot() throws {
         for framework in hybrids {
             let rum = makeRum(framework)
 
@@ -327,8 +221,6 @@ final class SessionReplayTapCaptureTimingTests: XCTestCase {
             let span = try XCTUnwrap(spans.first)
             try assertSpanOnly(span, framework)
             XCTAssertEqual(tapObject(on: span)?[Keys.targetElement.rawValue] as? String, "ElevatedButton")
-            XCTAssertEqual(sessionReplay.captureEventCallCount, 0,
-                           "\(framework): the bridge span must not request a frame")
         }
     }
 }

@@ -428,26 +428,6 @@ final class CrashDeliveryTests: XCTestCase {
 
     // MARK: - Screenshots on the crash path
 
-    /// `isCrash` is a caller-supplied flag on a public entry point, and the documented hybrid
-    /// path — an RN or Flutter host reporting a JS or Dart fatal — passes it while the native
-    /// process carries on. The frame from the moment of failure is the most useful artifact
-    /// there is for those, so a live crash report captures one like any other error.
-    func test_reportCrash_live_capturesAScreenshot() {
-        coralogixRum = CoralogixRum(options: makeSamplingOptions(sampleRate: 100, exclude: []))
-        coralogixRum.coralogixExporter?.spanUploader = StubUploader()
-        let mockSessionReplay = MockSessionReplay()
-        SdkManager.shared.register(sessionReplayInterface: mockSessionReplay)
-        defer { SdkManager.shared.register(sessionReplayInterface: nil) }
-
-        coralogixRum.reportError(message: "fatal-js-error",
-                                 stackTrace: [],
-                                 errorType: "Error",
-                                 isCrash: true)
-
-        XCTAssertTrue(waitUntil { mockSessionReplay.captureEventCalledWith != nil },
-                      "a live crash report must capture the screen it crashed on")
-    }
-
 }
 
 /// A live upload that stays on the network until released.

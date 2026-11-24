@@ -97,7 +97,7 @@ final class SessionContextTests: XCTestCase {
         XCTAssertNil(dictionary[Keys.accountName.rawValue])
     }
 
-    func testHasSessionReplay() {
+    func testHasRecording() {
         guard let context = SessionContext(otel: mockSpanData,
                                           userMetadata: ["role": "admin"],
                                           hasRecording: true) else {

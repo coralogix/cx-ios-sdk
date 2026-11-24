@@ -26,11 +26,10 @@ final class SampledOutExportTests: XCTestCase {
         defer { rum.shutdown() }
 
         _ = exporter.export(spans: [makeSamplingSpan(eventType: .internalKey, sampledIn: false),
-                                    makeSessionReplayInitSpan(sampledIn: false),
                                     makeSamplingSpan(eventType: .log, sampledIn: false)],
                             explicitTimeout: nil)
         XCTAssertTrue(uploader.cxRumPayloads().isEmpty,
-                      "A sampled-out session with nothing excluded must upload nothing, init and session_replay_init included.")
+                      "A sampled-out session with nothing excluded must upload nothing, init included.")
 
         // Control through the same exporter and uploader, so the empty capture above is the
         // filter's doing and not a capture path that records nothing.
@@ -50,8 +49,7 @@ final class SampledOutExportTests: XCTestCase {
         XCTAssertEqual(sdkInit[Keys.isSnapshotEvent.rawValue] as? Bool, true,
                        "The session's first uploaded event must still be promoted to a snapshot.")
 
-        _ = exporter.export(spans: [makeSessionReplayInitSpan(sampledIn: false),
-                                    makeSamplingSpan(eventType: .error, sampledIn: false),
+        _ = exporter.export(spans: [makeSamplingSpan(eventType: .error, sampledIn: false),
                                     makeSamplingSpan(eventType: .log, sampledIn: false)],
                             explicitTimeout: nil)
 
@@ -59,14 +57,6 @@ final class SampledOutExportTests: XCTestCase {
         let types = payloads.compactMap(eventType)
         XCTAssertTrue(types.contains(CoralogixEventType.error.rawValue), "The excluded category must upload.")
         XCTAssertFalse(types.contains(CoralogixEventType.log.rawValue), "A category not excluded must still drop.")
-        XCTAssertFalse(payloads.contains { internalEventName($0) == Keys.sessionReplayInit.rawValue },
-                       "Session Replay records nothing in a sampled-out session, so its init must not upload even with an exclusion.")
-
-        // Control: the same span stamped sampled in must upload through this exporter, so the drop
-        // above is the filter's doing and not a payload that never encodes the event name.
-        _ = exporter.export(spans: [makeSessionReplayInitSpan(sampledIn: true)], explicitTimeout: nil)
-        XCTAssertTrue(uploader.cxRumPayloads().contains { internalEventName($0) == Keys.sessionReplayInit.rawValue },
-                      "A sampled-in session_replay_init must upload.")
     }
 
     func testRotationFromSampledOutToSampledIn_firstEventIsSnapshot() throws {
@@ -250,13 +240,6 @@ final class SampledOutExportTests: XCTestCase {
         Thread.sleep(forTimeInterval: 0.3)
         (OpenTelemetry.instance.tracerProvider as? TracerProviderSdk)?.forceFlush(timeout: 3)
         Thread.sleep(forTimeInterval: 0.5)
-    }
-
-    private func makeSessionReplayInitSpan(sampledIn: Bool) -> SpanData {
-        makeSamplingSpan(eventType: .internalKey, sampledIn: sampledIn, extraAttributes: [
-            Keys.internalEventType.rawValue: AttributeValue(Keys.sessionReplayInit.rawValue),
-            Keys.internalEventData.rawValue: AttributeValue(Helper.convertDictionaryToJsonString(dict: ["maskAllTexts": true]))
-        ])
     }
 
     private func eventType(_ cxRum: [String: Any]) -> String? {

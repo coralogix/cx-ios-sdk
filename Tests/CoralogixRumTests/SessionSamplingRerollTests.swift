@@ -6,8 +6,7 @@
 //      holds, so network instrumentation stays alive to propagate trace context.
 //   2. The exporter's per-session sampling decision is seeded at init.
 //   3. Session rotation invokes the reroll callback through `samplingReevaluationCallback`,
-//      keeping the exporter's flag in sync — without clobbering `sessionChangedCallback`,
-//      which SessionReplay owns.
+//      keeping the exporter's flag in sync — without clobbering `sessionChangedCallback`.
 //
 
 import XCTest
@@ -87,7 +86,7 @@ final class SessionSamplingRerollTests: XCTestCase {
                        "After rotation the reroll path must run; with sampleRate=0 the flag stays false.")
     }
 
-    // MARK: - No-clobber regression for SessionReplay's sessionChangedCallback
+    // MARK: - No-clobber regression for sessionChangedCallback
 
     func testSessionRotation_firesBothSamplingReevaluationAndSessionChangedCallbacks() {
         let rum = CoralogixRum(options: makeOptions(sampleRate: 100, exclude: []))
@@ -101,7 +100,7 @@ final class SessionSamplingRerollTests: XCTestCase {
                         "CoralogixRum.startup must install samplingReevaluationCallback.")
 
         // CoralogixRum.startup installs samplingReevaluationCallback; attach a sessionChangedCallback
-        // here to mimic what SessionReplayInstrumentation does. Callbacks fire synchronously inside
+        // here. Callbacks fire synchronously inside
         // setupSessionMetadata, so a Bool flag is enough — no async wait needed.
         var sessionChangedFired = false
         sessionManager.sessionChangedCallback = { _ in sessionChangedFired = true }
