@@ -80,7 +80,8 @@ final class NetworkResponseBodyCompletionRaceTests: XCTestCase {
             // A provider of its own, so ended spans never reach an exporter another test installed.
             tracer: TracerProviderSdk().get(instrumentationName: "NetworkResponseBodyCompletionRaceTests")
         )
-        instrumentation = URLSessionInstrumentation(configuration: configuration)
+        // The process's one instance: swizzling is bound to whichever instance is created first.
+        instrumentation = CoralogixRum.installURLSessionInstrumentation(configuration: configuration)
     }
 
     override func tearDownWithError() throws {

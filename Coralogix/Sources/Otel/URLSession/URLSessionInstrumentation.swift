@@ -42,22 +42,17 @@ public class URLSessionInstrumentation {
     private static let maxNativeHeadersEntries = 100
     
     private var _configuration: URLSessionInstrumentationConfiguration
+    /// Swizzling happens once per process and every swizzle is bound to the instance that installed it,
+    /// so the SDK keeps that one instance and replaces its configuration on re-initialization.
+    /// Delegate classes a new configuration names are instrumented then; none is ever un-instrumented.
     public var configuration: URLSessionInstrumentationConfiguration {
         get { configurationQueue.sync { _configuration } }
-    }
-    
-    /// Shared instance used by swizzled methods. Updated on each SDK initialization so
-    /// configuration callbacks (e.g. `shouldCollectResponsePayload`) reflect the latest options.
-    /// This avoids swizzled closures referencing stale instrumentation instances when the SDK
-    /// is reinitialized (e.g. during unit tests with different `networkExtraConfig`).
-    private static var sharedInstance: URLSessionInstrumentation?
-    private static let sharedInstanceLock = NSLock()
-    
-    /// Returns the current shared instance for use in swizzled callbacks.
-    internal static var shared: URLSessionInstrumentation? {
-        sharedInstanceLock.lock()
-        defer { sharedInstanceLock.unlock() }
-        return sharedInstance
+        set {
+            configurationQueue.sync { _configuration = newValue }
+            Self.swizzleLock.withLockVoid {
+                self.instrumentDelegateClasses(newValue.delegateClassesToInstrument)
+            }
+        }
     }
     
     private let queue = DispatchQueue(label: "io.opentelemetry.ddnetworkinstrumentation", attributes: .concurrent)
@@ -170,23 +165,14 @@ public class URLSessionInstrumentation {
     }
 
     /// Whether response payload should be buffered for this task. Uses request when available, else response URL (rule resolution consistent with receivedResponse).
-    /// Uses the **shared** instance's configuration so swizzled closures always see the latest options (CX-37986 fix).
     private func shouldBufferResponsePayload(request: URLRequest?, responseURL: URL?) -> Bool {
         let candidate = request ?? responseURL.map { URLRequest(url: $0) }
         guard let candidate else { return false }
-        // Prefer `shared` (latest init) when present; `init` assigns `shared` before any swizzled code runs, so `self` is a safe fallback.
-        let currentConfig = (Self.shared ?? self).configuration
-        return currentConfig.shouldCollectResponsePayload?(candidate) == true
+        return configuration.shouldCollectResponsePayload?(candidate) == true
     }
 
     public init(configuration: URLSessionInstrumentationConfiguration) {
         self._configuration = configuration
-        
-        // Update shared instance so swizzled closures use the latest configuration (CX-37986).
-        // This supports SDK reinitialization with different options (e.g. unit tests with varying networkExtraConfig).
-        Self.sharedInstanceLock.lock()
-        Self.sharedInstance = self
-        Self.sharedInstanceLock.unlock()
         
         // Perform swizzling with thread-safety protection
         // CRITICAL: All swizzling must be thread-safe to prevent host app crashes
@@ -199,17 +185,10 @@ public class URLSessionInstrumentation {
         // CRITICAL: All swizzling operations are wrapped in error handling
         // to prevent SDK from crashing the host app
         
-        // Only swizzle delegate classes if explicitly provided
-        if let explicitClasses = configuration.delegateClassesToInstrument, !explicitClasses.isEmpty {
-            Log.d("[URLSessionInstrumentation] Swizzling \(explicitClasses.count) explicitly provided delegate classes")
-            safeSwizzle(operation: "delegate classes") {
-                swizzleExplicitDelegateClasses(explicitClasses)
-            }
-        }
+        instrumentDelegateClasses(configuration.delegateClassesToInstrument)
         
         // Swizzle URLSession class methods only once. Subsequent SDK
-        // re-initializations update the shared instance instead so the
-        // existing swizzled closures pick up the latest configuration.
+        // re-initializations set `configuration` on the instance that installed them.
         guard !Self.urlSessionClassesSwizzled else { return }
         Self.urlSessionClassesSwizzled = true
         
@@ -237,6 +216,16 @@ public class URLSessionInstrumentation {
         
         safeSwizzle(operation: "URLSessionTask setState: (hybrid approach)") {
             injectIntoNSURLSessionTaskSetState()
+        }
+    }
+    
+    /// Only explicitly provided classes are swizzled; a class already swizzled is skipped.
+    /// Callers hold `swizzleLock`.
+    private func instrumentDelegateClasses(_ classes: [AnyClass]?) {
+        guard let classes, !classes.isEmpty else { return }
+        Log.d("[URLSessionInstrumentation] Swizzling \(classes.count) explicitly provided delegate classes")
+        safeSwizzle(operation: "delegate classes") {
+            swizzleExplicitDelegateClasses(classes)
         }
     }
     
@@ -402,8 +391,7 @@ public class URLSessionInstrumentation {
     }
 
     private func shouldInject(for request: URLRequest) -> Bool {
-        let currentConfig = (Self.shared ?? self).configuration
-        return currentConfig.shouldInjectTracingHeaders?(request) ?? true
+        configuration.shouldInjectTracingHeaders?(request) ?? true
     }
 
     /// Centralized request capture and logging for all swizzled URLSession request paths. Caller must pass the returned request to the original IMP, then call `setIdKey(value:sessionTaskId, for: task)` and `storeRequest(requestToUse, forTaskId: sessionTaskId)`.

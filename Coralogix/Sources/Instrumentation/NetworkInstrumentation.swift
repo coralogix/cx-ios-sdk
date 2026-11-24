@@ -20,6 +20,29 @@ extension CoralogixRum {
     /// Updated on each SDK initialization so swizzled closures can access session metadata.
     private static weak var currentInstance: CoralogixRum?
     
+    /// The one URLSession instrumentation in the process. Swizzling is global and installed once, bound
+    /// to the instance that installed it, so a later init reconfigures this instance instead of
+    /// creating another. A lock of its own, not `exporterQueue`: creating the instance swizzles and
+    /// starts a probe task, whose swizzled path reads `getCurrentNetworkOptions()` on this thread.
+    private static var urlSessionInstrumentation: URLSessionInstrumentation?
+    private static let urlSessionInstrumentationLock = NSLock()
+
+    /// Creates the process's URLSession instrumentation on first use; afterwards sets `configuration`
+    /// on that same instance and returns it.
+    internal static func installURLSessionInstrumentation(
+        configuration: URLSessionInstrumentationConfiguration
+    ) -> URLSessionInstrumentation {
+        urlSessionInstrumentationLock.lock()
+        defer { urlSessionInstrumentationLock.unlock() }
+        if let installed = urlSessionInstrumentation {
+            installed.configuration = configuration
+            return installed
+        }
+        let created = URLSessionInstrumentation(configuration: configuration)
+        urlSessionInstrumentation = created
+        return created
+    }
+
     /// Returns the current network options for use in instrumentation callbacks.
     /// Thread-safe access via `exporterQueue`.
     internal static func getCurrentNetworkOptions() -> CoralogixExporterOptions? {
@@ -84,6 +107,8 @@ extension CoralogixRum {
             Self.currentInstance = self
         }
         
+        let tracer = ownTracerProvider.get(instrumentationName: Self.urlSessionInstrumentationName,
+                                   instrumentationVersion: Self.urlSessionInstrumentationVersion)
         let configuration = URLSessionInstrumentationConfiguration(
             spanCustomization: Self.spanCustomizationStatic,
             shouldInjectTracingHeaders: { request in
@@ -102,11 +127,16 @@ extension CoralogixRum {
                 return Self.shouldCollectRequestPayload(for: request, options: currentOptions)
             },
             receivedResponse: Self.handleReceivedResponse(response:data:span:request:),
-            delegateClassesToInstrument: Self.urlSessionDelegateClassesForReactNative()
+            delegateClassesToInstrument: Self.urlSessionDelegateClassesForReactNative(),
+            tracer: tracer
         )
-        self.sessionInstrumentation = URLSessionInstrumentation(configuration: configuration)
+        self.sessionInstrumentation = Self.installURLSessionInstrumentation(configuration: configuration)
     }
     
+    /// The instrumentation scope network spans have always been exported under.
+    static let urlSessionInstrumentationName = "NSURLSession"
+    static let urlSessionInstrumentationVersion = "0.0.1"
+
     /// React Native uses `RCTHTTPRequestHandler` as its `NSURLSessionDataDelegate` and does not use the
     /// completion-handler API, so response body is only available if this delegate class is instrumented.
     /// Returns the class in an array when present at runtime, and an empty array otherwise.

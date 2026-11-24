@@ -12,6 +12,8 @@ omitted; the focus here is user-facing behavior changes.
 
 ### Fixed
 - In React Native apps, a fatal JavaScript error is now reported once instead of twice, with its JavaScript message and stack.
+- Events are no longer lost when the app registers its own OpenTelemetry tracer provider after initializing the SDK.
+- In React Native and Flutter apps, network requests reported after the SDK is initialized again keep the `traceparent` header in their request headers.
 
 ## [2.24.3] - 2026-11-19
 
