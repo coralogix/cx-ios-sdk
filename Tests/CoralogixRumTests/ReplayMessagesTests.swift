@@ -105,8 +105,10 @@ final class ReplayMessagesTests: XCTestCase {
         CoralogixRum.publish(.screenshotTaken(screenshotId: "after-shutdown", sessionId: sessionId, timestamp: Self.nowMs()))
         CoralogixRum.drainBus()
 
-        let (rum, uploader) = try start(sm: sm)
-        CoralogixRum.publish(.screenshotTaken(screenshotId: "after-reinit", sessionId: sessionId, timestamp: Self.nowMs()))
+        // A re-init builds a fresh session manager, as the app's own re-init does; the shut-down one is blank.
+        let (rum, uploader) = try start()
+        let newSessionId = try XCTUnwrap(rum.sessionManager?.currentSessionId)
+        CoralogixRum.publish(.screenshotTaken(screenshotId: "after-reinit", sessionId: newSessionId, timestamp: Self.nowMs()))
         CoralogixRum.drainBus()
 
         _ = try awaitEvent(rum, uploader, "screenshot after re-init") { Self.screenshotId(of: $0) == "after-reinit" }
