@@ -170,65 +170,12 @@ extension CoralogixRum {
         if let data = data {
             span.setAttribute(key: Keys.data.rawValue, value: Helper.convertDictionaryToJsonString(dict: data))
         }
-                
-        guard severity == .error else {
-            span.end()
-            return
-        }
-        self.recordScreenshotForSpan(on: span) { _ in span.end() }
+
+        span.end()
     }
     
-    // MARK: - Helpers
-
-    /// Captures a session-replay frame for `span`, stamps `screenshotId`/`page` onto it only if a
-    /// frame actually shipped, and then calls `finish` — with `true` when the span now points at a
-    /// real frame. `finish` runs exactly once, including when session replay is not initialised, so
-    /// it is where the caller ends the span.
-    ///
-    /// Asynchronous because that is when the outcome is known: the native path encodes off the main
-    /// thread, and the Flutter path waits for Dart to answer. Stamping before the answer arrives is
-    /// what let a span advertise a screenshot for a frame that was dropped — and whose index was
-    /// handed back to the next capture, so the attributes pointed at a different frame entirely.
-    ///
-    /// `extraProperties` carries per-event capture metadata (a tap's coordinates, for instance);
-    /// the minted screenshot location wins on any key collision.
-    internal func recordScreenshotForSpan(on span: any Span,
-                                          extraProperties: [String: Any] = [:],
-                                          then finish: @escaping (Bool) -> Void) {
-        guard let sessionReplay = SdkManager.shared.getSessionReplay(),
-              let coralogixExporter = self.coralogixExporter else {
-            Log.d("[SessionReplay] not initialized — span carries no screenshot attributes")
-            finish(false)
-            return
-        }
-        let screenshotLocation = coralogixExporter.getScreenshotManager().nextScreenshotLocation
-        let properties = buildMetadata(properties: extraProperties, screenshotLocation: screenshotLocation)
-        sessionReplay.captureEvent(properties: properties) { [weak self] result in
-            // `true` has to mean the span really carries the attributes. If this instance went
-            // away between the request and the answer — shutdown, re-init — the stamp is skipped,
-            // and reporting success anyway would end a screenshot span pointing at nothing.
-            guard let self = self, case .success = result else {
-                finish(false)
-                return
-            }
-            self.applyScreenshotAttributes(screenshotLocation, to: span)
-            finish(true)
-        }
-    }
-
-    @available(*, deprecated, message: "Use applyScreenshotAttributes(_:to:) taking a non-inout `any Span`. Span is a class-bound protocol, so the inout achieves nothing.")
-    public func applyScreenshotAttributes(_ location: ScreenshotLocation, to span: inout any Span) {
-        applyScreenshotAttributes(location, to: span as any Span)
-    }
-
-    internal func applyScreenshotAttributes(_ location: ScreenshotLocation, to span: any Span) {
-        span.setAttribute(key: Keys.screenshotId.rawValue, value: location.screenshotId)
-        span.setAttribute(key: Keys.page.rawValue,         value: location.page)
-    }
-    
-    /// `then` fires once the span has ended, which for a live error is after its screenshot
-    /// resolves. The crash force-flush is sequenced on it: a span that ends after the flush
-    /// misses the batch it was written for.
+    /// `then` fires once the span has ended. The crash force-flush is sequenced on it: a span that
+    /// ends after the flush misses the batch it was written for.
     private func writeError(source: EventSource,
                             domain: String, code: Int? = nil, message: String,
                             userInfo: [String: Any]? = nil,
@@ -259,10 +206,8 @@ extension CoralogixRum {
     private func writeError(source: EventSource, fields: ErrorFields, then: (() -> Void)? = nil) {
         let span = makeSpan(event: .error, source: source, severity: .error)
         fields.apply(to: span)
-        recordScreenshotForSpan(on: span) { _ in
-            span.end()
-            then?()
-        }
+        span.end()
+        then?()
     }
 }
 

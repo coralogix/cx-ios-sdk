@@ -271,9 +271,7 @@ public enum Keys: String {
     /// plugin ignores it on both platforms and routes every capture to Flutter's implicit view.
     case flutterImplicitViewId = "cx_flutter_implicit_view"
     case screenshotContext = "screenshot_context"
-    case queueScreenshotManager = "com.coralogix.screenshotmanager.queue"
     case queueExporter = "com.coralogix.exporter.queue"
-    case queueSdkManager = "com.coralogix.sdkmanager.queue"
     case queueFileOperations = "com.coralogix.fileoperations"
     case queueUrlProcessing = "com.coralogix.urlProcessing"
     case queueMediaInput = "com.coralogix.mediainput"
@@ -319,25 +317,6 @@ public enum Keys: String {
     case fingerPrint
     case event
     case initKey = "init"
-    case sessionReplayInit = "session_replay_init"
-    // Span attributes carrying an internal event's sub-type and its JSON payload, decoded back
-    // into `internal_context` at export. The SDK-init log omits these — its payload is
-    // reconstructed from the live exporter options instead (see CxRumBuilder.buildInternalContext).
-    case internalEventType = "internal_event_type"
-    case internalEventData = "internal_event_data"
-    // SessionReplayOptions init-log snapshot fields (CX-44984). camelCase rawValues deliberately
-    // match the Android (CX-44992) payload keys so the backend ingests one cross-platform schema.
-    case srRecordingType = "recordingType"
-    case srCaptureScale = "captureScale"
-    case srCaptureCompressQuality = "captureCompressQuality"
-    case srSessionRecordingSampleRate = "sessionRecordingSampleRate"
-    case srAutoStartSessionRecording = "autoStartSessionRecording"
-    case srTextsToMask = "textsToMask"
-    case srMaskAllImages = "maskAllImages"
-    case srMaskOnlyCreditCards = "maskOnlyCreditCards"
-    case srMaskFaces = "maskFaces"
-    case srCreditCardPredicate = "creditCardPredicate"
-    case srHasFlutterViewBitmapProvider = "hasFlutterViewBitmapProvider"
     case image
     case video
     case version

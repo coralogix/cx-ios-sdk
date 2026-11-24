@@ -25,7 +25,6 @@ public class CoralogixExporter: SpanExporter {
     private var sessionManager: SessionManager
     private var networkManager: NetworkProtocol
     private var metricsManager: MetricsManager
-    private var screenshotManager = ScreenshotManager()
     /// Set by `CoralogixRum` to its `NetworkManager`; read from the upload thread. Nil means
     /// unknown, treated as online, so a failed upload still counts.
     private weak var _reachability: NetworkReachability?
@@ -201,7 +200,6 @@ public class CoralogixExporter: SpanExporter {
             self?.recordEndedSession()
             self?.viewManager.reset()
             self?.sessionManager.reset()
-            self?.screenshotManager.reset()
         }
         self.sessionManager.countersChanged = { [weak self] in
             self?.recordLiveSession()
@@ -259,10 +257,6 @@ public class CoralogixExporter: SpanExporter {
     
     public func getViewManager() -> ViewManager {
         return self.viewManager
-    }
-    
-    public func getScreenshotManager() -> ScreenshotManager {
-        return self.screenshotManager
     }
     
     public func getSessionManager() -> SessionManager {
@@ -647,7 +641,7 @@ public class CoralogixExporter: SpanExporter {
         let excludeFromSampling = getOptions().excludeFromSampling
 
         // Matches the browser SDK: with nothing excluded a sampled-out session exports nothing at
-        // all, its own init and session_replay_init included — otherwise those arrive as snapshot
+        // all, its own init included — otherwise those arrive as snapshot
         // events and the session shows up in session lists. Once anything is excluded the session
         // is reporting anyway, so the SDK's own events go with it.
         //
@@ -657,12 +651,8 @@ public class CoralogixExporter: SpanExporter {
         // position that semantic fields are the caller's responsibility while identity and counters
         // are defended — the only cost here is the caller's own sampling savings, on their own data.
         // Requiring an SDK-private marker alongside the type would close it if that ever changes.
-        //
-        // session_replay_init is the exception: Session Replay records nothing in a sampled-out
-        // session, so announcing a recording there is wrong whatever is excluded.
         if eventType == CoralogixEventType.internalKey.rawValue {
             return !excludeFromSampling.isEmpty
-                && attributeStringValue(forKey: Keys.internalEventType.rawValue, span: span) != Keys.sessionReplayInit.rawValue
         }
 
         return excludeFromSampling.contains { $0.eventType.rawValue == eventType }

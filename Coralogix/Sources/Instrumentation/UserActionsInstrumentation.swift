@@ -36,19 +36,14 @@ extension CoralogixRum {
             return
         }
 
-        // Android's touch contract, for every framework: the replay frame is captured at finger-down
-        // (`GestureDetector.onDown`), reported as a `screenshot` event only if it ships
-        // (`CaptureEvent.Tap.shouldExportLog()`), and the interaction span at finger-up carries the
-        // payload and no screenshot. Finger-down is never an interaction span — the same touch may
-        // still turn into a scroll.
+        // Finger-down is never an interaction span — the same touch may still turn into a scroll.
         switch touchEvent.phase {
         case .began:
-            captureSessionReplayEventIfNeeded(for: touchEvent)
+            break
         case .ended:
             // The classified gesture becomes a span only where native touches report spans at
             // all; hybrid spans come from the bridge. The deliberate-masking walk is paid here
-            // because this dictionary ships — the geometry is `cxMask`, which is ours, so it runs
-            // whether or not session replay is in use. Taps are human-paced, so one walk per tap
+            // because this dictionary ships. Taps are human-paced, so one walk per tap
             // is not a hot enough path to warrant caching or a global "any mask set" flag.
             guard shouldEmitUserActionSpan else { return }
             reportUserInteraction(interactionProperties(from: touchEvent, maskRects: UIView.deliberateMaskRects()))
@@ -64,35 +59,19 @@ extension CoralogixRum {
 
     /// When true, native touch events produce RUM user_interaction spans.
     /// When false, no span comes from a native touch: hybrids report theirs through
-    /// `setUserInteraction` while their swizzles keep feeding session replay, and a native app with
-    /// `instrumentations[.userActions] == false` installs no touch swizzles at all.
+    /// `setUserInteraction`, and a native app with `instrumentations[.userActions] == false`
+    /// installs no touch swizzles at all.
     /// - Note: `internal` for unit testing.
     internal var shouldEmitUserActionSpan: Bool {
         Helper.shouldEmitUserActionSpan(options: coralogixExporter?.getOptions(), sdkFramework: CoralogixRum.mobileSDK.sdkFramework)
     }
 
-    /// The finger-down frame and its `screenshot` event (contract: `handleInteractionNotification`).
-    /// Guarded on *recording*, not on a replay module being registered: initialised-but-stopped
-    /// replay would otherwise open a span, reserve and revert a slot and log an error per touch.
-    private func captureSessionReplayEventIfNeeded(for touchEvent: TouchEvent) {
-        guard SdkManager.shared.getSessionReplay()?.isRecording() == true else { return }
-        reportScreenshot(properties: TapDataExtractor.captureProperties(from: touchEvent))
-    }
-
-    /// One `user_interaction` span per interaction, native or bridge-reported: the payload and no
-    /// screenshot (contract: `handleInteractionNotification`).
+    /// One `user_interaction` span per interaction, native or bridge-reported.
     internal func reportUserInteraction(_ properties: [String: Any]) {
         let span = makeSpan(event: .userInteraction, source: nil, severity: .info)
         span.setAttribute(key: Keys.tapObject.rawValue,
                           value: Helper.convertDictionaryToJsonString(dict: properties))
         span.end()
-    }
-    
-    internal func buildMetadata(properties: [String: Any],
-                                screenshotLocation: ScreenshotLocation) -> [String: Any] {
-        var metadata = screenshotLocation.toProperties()
-        metadata.merge(properties) { current, _ in current } // keep SDK value
-        return metadata
     }
 
     // MARK: - Hybrid User Interaction API
@@ -125,8 +104,6 @@ extension CoralogixRum {
     /// - Parameter maskRects: Deliberate-masking geometry for the masking resolution; nil
     ///   (the production default) resolves it from the view hierarchy via
     ///   `UIView.deliberateMaskRects`, and only once the payload is known to need it.
-    ///   Session replay is not consulted — the geometry is `cxMask`, not the replay's
-    ///   pixel policy.
     internal func validateHybridInteraction(_ dictionary: [String: Any],
                                             maskRects: [CGRect]? = nil) -> [String: Any]? {
         // event_name is required and must be a known InteractionEventName value.

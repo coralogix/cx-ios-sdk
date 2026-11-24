@@ -37,23 +37,11 @@ extension CoralogixRum {
 
                 coralogixExporter?.set(cxView: cxView)
 
-                let span = makeSpan(event: .navigation, source: nil, severity: .info)
-                handleAppearStateIfNeeded(cxView: cxView, span: span) { span.end() }
+                makeSpan(event: .navigation, source: nil, severity: .info).end()
                 return
             }
         }
         coralogixExporter?.set(cxView: cxView)
     }
-    
-    /// Attaches a session-replay frame to an appear-navigation span. `finish` runs exactly once —
-    /// including for a disappear event, which captures nothing — and is where the caller ends the
-    /// span; the capture resolves asynchronously.
-    internal func handleAppearStateIfNeeded(cxView: CXView, span: any Span,
-                                           then finish: @escaping () -> Void) {
-        guard cxView.state == .notifyOnAppear else {
-            finish()
-            return
-        }
-        recordScreenshotForSpan(on: span) { _ in finish() }
-    }
+
 }

@@ -155,8 +155,8 @@ public class SessionManager {
     public var sessionChangedCallback: ((String) -> Void)?
     public var sessionEndedCallback: (() -> Void)?
     /// Fired alongside `sessionChangedCallback` on every session rotation. Kept as a separate
-    /// property so the sampling-reroll path cannot accidentally clobber the existing
-    /// SessionReplay listener that owns `sessionChangedCallback`. Internal-only — host apps
+    /// property so the sampling-reroll path cannot accidentally clobber a listener that owns
+    /// `sessionChangedCallback`. Internal-only — host apps
     /// have no use for setting this, and a public slot would invite accidental clobber.
     /// Receives the new session id and **that rotation's own** sampling decision. The decision is
     /// passed rather than re-read: reading `isSessionSampledIn` when the callback runs would pick up
@@ -702,7 +702,7 @@ public class SessionManager {
     /// caller must NOT hold `sessionLock`. `NSRecursiveLock` protects same-thread
     /// re-entry into `SessionManager`, but does NOT protect against lock-ordering
     /// deadlocks when a callback synchronously hops to another queue/thread
-    /// (e.g., a SessionReplay listener) that takes its own lock and then waits on
+    /// (e.g., a session listener) that takes its own lock and then waits on
     /// `sessionLock`. Firing outside the lock removes that vector.
     private func fireRotationCallbacks(_ pending: RotationPendingCallbacks) {
         // The "ended" callback only fires when we're rotating an existing

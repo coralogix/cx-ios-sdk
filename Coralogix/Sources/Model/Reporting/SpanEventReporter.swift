@@ -17,17 +17,13 @@ import CoralogixInternal
 /// the drop list. Prevents silent mis-routing as the event taxonomy
 /// grows.
 ///
-/// `createSpan` and `recordScreenshot` are injected closures — they let
-/// this struct stay decoupled from `CoralogixRum`'s API surface while
-/// using its internal `makeSpan` / `recordScreenshotForSpan` methods.
+/// `createErrorSpan` is an injected closure — it lets this struct stay decoupled from
+/// `CoralogixRum`'s API surface while using its internal `makeSpan` method.
 final class SpanEventReporter: EventReporter {
     private let createErrorSpan: () -> (any Span)?
-    private let recordScreenshot: (any Span, @escaping () -> Void) -> Void
 
-    init(createErrorSpan: @escaping () -> (any Span)?,
-         recordScreenshot: @escaping (any Span, @escaping () -> Void) -> Void) {
+    init(createErrorSpan: @escaping () -> (any Span)?) {
         self.createErrorSpan = createErrorSpan
-        self.recordScreenshot = recordScreenshot
     }
 
     func report(_ event: TelemetryEvent) {
@@ -43,8 +39,7 @@ final class SpanEventReporter: EventReporter {
             if let threads = anr.threads {
                 span.setAttribute(key: Keys.threads.rawValue, value: threads)
             }
-            // The span closes when the capture resolves — see recordScreenshotForSpan.
-            recordScreenshot(span) { span.end() }
+            span.end()
 
         // These event types do not flow through the EventReporter
         // protocol path today — they emit spans via other code paths.

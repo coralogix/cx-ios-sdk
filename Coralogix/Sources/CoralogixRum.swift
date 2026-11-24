@@ -333,7 +333,6 @@ public class CoralogixRum {
     }
     
     private func setupCoreModules() {
-        self.initializeSessionReplay()
         self.initializeNavigationInstrumentation()
         // Getting the batch out before suspension is delivery, not telemetry, so it does not follow
         // the sampling roll — see initializeBackgroundFlush.

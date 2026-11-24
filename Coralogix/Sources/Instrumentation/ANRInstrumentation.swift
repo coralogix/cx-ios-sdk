@@ -22,13 +22,6 @@ extension CoralogixRum {
                     self.fatalHangWatch.awaitDelivery(ofSpan: span.context.spanId.hexString, through: exporter)
                 }
                 return span
-            },
-            recordScreenshot: { [weak self] span, finish in
-                guard let self = self else {
-                    finish()
-                    return
-                }
-                self.recordScreenshotForSpan(on: span) { _ in finish() }
             }
         )
         self.metricsManager.startANRMonitoring(hangObserver: self.fatalHangWatch)
