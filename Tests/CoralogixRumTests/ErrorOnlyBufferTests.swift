@@ -399,26 +399,64 @@ final class ErrorOnlyBufferTests: XCTestCase {
         XCTAssertNil(buffer.metadata(of: "s"))
     }
 
-    func testUnsavedTrigger_holdsTheDrain_untilItIsWritten_andSurvivesARestart() throws {
+    func testUnsavedTrigger_doesNotStopTheDrain() throws {
         let writer = FlakyMetadataWriter()
         let buffer = makeBuffer(writer: writer)
         (0..<3).forEach { buffer.hold(event($0), sessionId: "s") }
         writer.failing = true
         buffer.trigger("s")
-
-        let clock = ManualDeliveryClock()
-        let uploader = ScriptedUploads()
-        let drain = makeDrain(buffer, clock: clock, uploader: uploader)
-        drain.start(["s"])
-        drain.waitUntilSettled()
-        XCTAssertTrue(uploader.requests.isEmpty, "Nothing goes past a trigger the disk does not record.")
         XCTAssertEqual(try savedMetadata("s").triggered, false,
                        "Precondition: on disk the session still reads as one without an error.")
 
-        writer.failing = false
+        let uploader = ScriptedUploads()
+        let drain = makeDrain(buffer, clock: ManualDeliveryClock(), uploader: uploader)
+        drain.start(["s"])
+        drain.waitUntilSettled()
+        XCTAssertEqual(uploader.requests.map { $0.map(index) }, [[0, 1, 2]],
+                       "Safe to send: a restart deletes a session the disk records without an error.")
+    }
+
+    func testDiskFull_eventsHeldInMemory_areSent_thoughTheTriggerCannotBeSaved() throws {
+        let writer = FlakyMetadataWriter()
+        let buffer = makeBuffer(writer: writer)
+        (0..<2).forEach { buffer.hold(event($0), sessionId: "s") }
+        writer.failing = true
+        writer.failingAppends = true
+        (2..<4).forEach { buffer.hold(event($0), sessionId: "s") }
+        buffer.trigger("s")
+
+        let uploader = ScriptedUploads()
+        let clock = ManualDeliveryClock()
+        let drain = makeDrain(buffer, clock: clock, uploader: uploader)
+        drain.start(["s"])
+        drain.waitUntilSettled()
+        clock.advance(to: clock.now().addingTimeInterval(1))
+        drain.waitUntilSettled()
+        clock.advance(to: clock.now().addingTimeInterval(1))
+        drain.waitUntilSettled()
+        XCTAssertEqual(uploader.requests.map { $0.map(index) }, [[0, 1], [2, 3]], "The disk part, then memory.")
+        XCTAssertNil(buffer.metadata(of: "s"), "Done with.")
+    }
+
+    func testUnsavedFailureCount_keepsTheSession_andTheDrainGoesOn() throws {
+        let writer = FlakyMetadataWriter()
+        let buffer = makeBuffer(writer: writer)
+        buffer.hold(event(0), sessionId: "s")
+        buffer.trigger("s")
+        writer.failing = true
+
+        let serverError = SpanUploadResult(disposition: .retryable, httpStatus: 503, retryAfter: nil, countsAsFailedUpload: true)
+        let uploader = ScriptedUploads(script: [serverError])
+        let clock = ManualDeliveryClock()
+        let drain = makeDrain(buffer, clock: clock, uploader: uploader)
+        drain.start(["s"])
+        drain.waitUntilSettled()
+        XCTAssertEqual(buffer.metadata(of: "s")?.failedUploads, 1, "Counted, though the disk could not record it.")
+
         clock.advance(to: clock.now().addingTimeInterval(30))
         drain.waitUntilSettled()
-        XCTAssertEqual(uploader.requests.map { $0.map(index) }, [[0, 1, 2]], "Sent once the trigger is saved.")
+        XCTAssertEqual(uploader.requests.map { $0.map(index) }, [[0], [0]],
+                       "Retried on the next slot while the count is still unsaved, not given up.")
     }
 
     private func savedMetadata(_ sessionId: String) throws -> ErrorOnlyBuffer.Metadata {
@@ -433,7 +471,7 @@ final class ErrorOnlyBufferTests: XCTestCase {
         writer.failing = true
         buffer.trigger("s")
         writer.failing = false
-        XCTAssertTrue(buffer.ensureMetadataSaved(of: "s"))
+        XCTAssertTrue(buffer.maySend(of: "s"))
 
         XCTAssertEqual(makeBuffer().adoptLeftovers { $0.triggered }, ["s"],
                        "After a restart the session is still known to have had its error.")
@@ -626,17 +664,26 @@ private final class FailingWriter: ErrorOnlyFileWriting {
     }
 }
 
-/// Fails every metadata write while `failing` is set, as a full disk would.
+/// Fails every metadata write while `failing` is set, and every append while `failingAppends` is,
+/// as a full disk would.
 private final class FlakyMetadataWriter: ErrorOnlyFileWriting {
     private let lock = NSLock()
     private var _failing = false
+    private var _failingAppends = false
     private let real = PosixFileWriter()
     var failing: Bool {
         get { lock.lock(); defer { lock.unlock() }; return _failing }
         set { lock.lock(); defer { lock.unlock() }; _failing = newValue }
     }
+    var failingAppends: Bool {
+        get { lock.lock(); defer { lock.unlock() }; return _failingAppends }
+        set { lock.lock(); defer { lock.unlock() }; _failingAppends = newValue }
+    }
 
-    func append(_ data: Data, to url: URL) throws { try real.append(data, to: url) }
+    func append(_ data: Data, to url: URL) throws {
+        if failingAppends { throw POSIXError(.ENOSPC) }
+        try real.append(data, to: url)
+    }
     func truncate(_ url: URL, to length: UInt64) { real.truncate(url, to: length) }
     func replace(_ url: URL, with data: Data) throws {
         if failing && url.lastPathComponent.hasSuffix(".meta.json") { throw POSIXError(.ENOSPC) }

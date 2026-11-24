@@ -102,10 +102,10 @@ final class ErrorOnlyBuffer {
         /// without asking the file system.
         var fileLength: UInt64 = 0
         var fileCreated = false
-        /// Set while the metadata on disk is behind: a trigger or a delivered request it does not
-        /// record yet. No request goes until it is written, or a restart would take the session
-        /// for one without an error, or send a delivered request again.
+        /// Set while the metadata on disk is behind `metadata`.
         var metadataUnsaved = false
+        /// What the disk last recorded; nil while it records nothing.
+        var saved: Metadata?
         /// Set once a write failed: the rest of the session is held in memory.
         var diskFailed = false
         var memory: [Data] = []
@@ -210,6 +210,7 @@ final class ErrorOnlyBuffer {
                 try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
                 try writer.replace(fileURL, with: Data())
                 try writeMetadataLocked(session.metadata)
+                session.saved = session.metadata
                 session.fileCreated = true
             }
             let line = event + Self.newline
@@ -310,16 +311,20 @@ final class ErrorOnlyBuffer {
         return true
     }
 
-    /// Whether `sessionId`'s metadata on disk is current, writing it again if it was not. The drain
-    /// sends nothing for a session until it is. A session that never had a file has nothing on
-    /// disk to fall behind.
-    func ensureMetadataSaved(of sessionId: String) -> Bool {
+    /// Whether the drain may send `sessionId`'s next request, writing its metadata again first if
+    /// the disk is behind. It may unless a restart could send a request delivered now a second
+    /// time: the disk records the trigger but an older cursor, and the next request comes from
+    /// the file. While the disk still reads as a session without an error, a restart deletes it,
+    /// so a full disk does not stop the drain; nor does a failure count it could not save.
+    func maySend(of sessionId: String) -> Bool {
         lock.lock()
         defer { lock.unlock() }
         guard var session = sessions[sessionId], session.metadataUnsaved else { return true }
         persistMetadataLocked(&session)
         sessions[sessionId] = session
-        return !session.metadataUnsaved
+        guard session.metadataUnsaved, let saved = session.saved, saved.triggered else { return true }
+        let onlyMemoryLeft = session.diskFailed && session.metadata.sentOffset >= session.fileLength
+        return saved.sentOffset == session.metadata.sentOffset || onlyMemoryLeft
     }
 
     /// Writes the metadata, trying once more on failure, and records whether it reached disk.
@@ -328,8 +333,10 @@ final class ErrorOnlyBuffer {
         guard hasFile else { return }
         let saved = (try? writeMetadataLocked(session.metadata)) != nil
             || (try? writeMetadataLocked(session.metadata)) != nil
-        if !saved {
-            Log.e("[ErrorOnlyBuffer] could not save the state of session \(session.metadata.sessionId) — its drain waits")
+        if saved {
+            session.saved = session.metadata
+        } else {
+            Log.e("[ErrorOnlyBuffer] could not save the state of session \(session.metadata.sessionId)")
         }
         session.metadataUnsaved = !saved
     }
@@ -505,7 +512,7 @@ final class ErrorOnlyBuffer {
                 deleteFilesLocked(metadata.sessionId)
                 continue
             }
-            sessions[metadata.sessionId] = Session(metadata: metadata)
+            sessions[metadata.sessionId] = Session(metadata: metadata, saved: metadata)
             adopted.append(metadata)
         }
         // Events files whose metadata is gone can never be attributed.
