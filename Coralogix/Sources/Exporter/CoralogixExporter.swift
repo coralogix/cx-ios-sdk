@@ -411,7 +411,7 @@ public class CoralogixExporter: SpanExporter {
     }
     
     internal func sendBeforeSendData(data: [[String: Any]]) {
-        let rebuilt = data.map { self.rebuildOtelSpanAttributes(in: self.restoringErrorOnlyMode(in: $0)) }
+        let rebuilt = data.compactMap(restoringErrorOnlyMode).map(rebuildOtelSpanAttributes)
         self.uploadLive(self.routeErrorOnly(rebuilt))
     }
 

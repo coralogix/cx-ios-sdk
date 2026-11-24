@@ -563,13 +563,13 @@ public class SessionManager {
     }
 
     /// Whether `sessionId` — the live session or one of the last few that ended — is held until an
-    /// error. A plain read, without the rotation check: asking about an exported event must not
-    /// itself rotate the session.
-    func isErrorOnlySession(_ sessionId: String) -> Bool {
+    /// error; nil for a session it does not know. A plain read, without the rotation check: asking
+    /// about an exported event must not itself rotate the session.
+    func errorOnlyMode(of sessionId: String) -> Bool? {
         sessionLock.lock()
         defer { sessionLock.unlock() }
         if sessionMetadata?.sessionId == sessionId { return _isSessionErrorOnly }
-        return endedSessions.last { $0.sessionId == sessionId }?.errorOnly ?? false
+        return endedSessions.last { $0.sessionId == sessionId }?.errorOnly
     }
 
     /// PRECONDITION: caller holds `sessionLock`.

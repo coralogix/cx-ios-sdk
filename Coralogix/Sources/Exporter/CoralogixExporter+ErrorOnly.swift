@@ -129,14 +129,24 @@ extension CoralogixExporter {
     /// are put back on every event, feature on or off: the mode the event was encoded with, and
     /// no `hasError` (stamped only after this, by routing). An event the SDK did not hand out
     /// falls back to what it knows of the session.
-    func restoringErrorOnlyMode(in event: [String: Any]) -> [String: Any] {
-        let spanId = Self.cxRum(of: event)?[Keys.spanId.rawValue] as? String
+    ///
+    /// Returns nil, dropping the event, when sessions can be held and the event could belong to
+    /// one that routing cannot reach: its mode is unknown, or it is held until an error but its
+    /// session context or id was removed. Sent as it is, it would leak live, as on Android.
+    func restoringErrorOnlyMode(in event: [String: Any]) -> [String: Any]? {
+        let cxRum = Self.cxRum(of: event)
+        let spanId = cxRum?[Keys.spanId.rawValue] as? String
         let remembered = spanId.flatMap(takeRememberedMode)
-        let sessionManager = getSessionManager()
+        let sessionId = (cxRum?[Keys.sessionContext.rawValue] as? [String: Any])?[Keys.sessionId.rawValue] as? String
+        let errorOnly = remembered ?? sessionId.flatMap(getSessionManager().errorOnlyMode)
+        if getOptions().holdsSessionsForErrors {
+            guard let errorOnly, !errorOnly || sessionId != nil else {
+                Log.d("[CoralogixExporter] an event handed back by beforeSend cannot be placed in its session — dropped")
+                return nil
+            }
+        }
         return Self.updatingSessionContext(of: event) { session in
-            let sessionId = session[Keys.sessionId.rawValue] as? String
-            session[Keys.onlyWithErrorMode.rawValue] = remembered
-                ?? sessionId.map(sessionManager.isErrorOnlySession) ?? false
+            session[Keys.onlyWithErrorMode.rawValue] = errorOnly ?? false
             session[Keys.hasError.rawValue] = nil
         }
     }

@@ -352,6 +352,55 @@ final class ErrorOnlyExportTests: XCTestCase {
                      "The event was handed out error-only; it is never sent live as a full session's.")
     }
 
+    func testHybrid_removingTheSessionContextOrId_ofAHeldEvent_dropsIt() throws {
+        let (exporter, uploader, js) = try startHybrid(makeErrorOnlyOptions(sampleRate: 0, alwaysTrack: true))
+        export(exporter, .log, message: "no-context")
+        export(exporter, .log, message: "no-id")
+        let returned = js.events.compactMap { event -> [String: Any]? in
+            guard var cxRum = CoralogixExporter.cxRum(of: event) else { return nil }
+            if message(cxRum) == "no-context" {
+                cxRum[Keys.sessionContext.rawValue] = nil
+            } else {
+                var session = self.session(cxRum)
+                session[Keys.sessionId.rawValue] = nil
+                cxRum[Keys.sessionContext.rawValue] = session
+            }
+            var result = event
+            result[Keys.text.rawValue] = [Keys.cxRum.rawValue: cxRum]
+            return result
+        }
+        XCTAssertEqual(returned.count, 2, "Precondition: both were handed to JS.")
+        exporter.sendBeforeSendData(data: returned)
+        XCTAssertNil(payload(uploader, message: "no-context"), "Held until an error: never sent live.")
+        XCTAssertNil(payload(uploader, message: "no-id"), "Held until an error: never sent live.")
+    }
+
+    func testHybrid_anEventOfAnUnknownSessionAndMode_isDropped_onlyWhileSessionsCanBeHeld() throws {
+        let (exporter, uploader, _) = try startHybrid(makeErrorOnlyOptions(sampleRate: 0, alwaysTrack: true))
+        let unknown = makeHybridEvent(message: "unknown", sessionId: "a-session-the-sdk-does-not-know")
+        exporter.sendBeforeSendData(data: [unknown])
+        XCTAssertNil(payload(uploader, message: "unknown"), "It may belong to a held session.")
+
+        rum?.shutdown()
+        let (offExporter, offUploader, _) = try startHybrid(makeErrorOnlyOptions(sampleRate: 100))
+        offExporter.sendBeforeSendData(data: [makeHybridEvent(message: "feature-off", sessionId: "another-unknown-session")])
+        XCTAssertNotNil(payload(offUploader, message: "feature-off"), "With the feature off nothing is held: sent as before.")
+    }
+
+    func testHybrid_aFullSessionsEventWithoutItsSessionContext_isStillSent() throws {
+        let (exporter, uploader, js) = try startHybrid(makeErrorOnlyOptions(sampleRate: 100, alwaysTrack: true))
+        export(exporter, .log, message: "full")
+        let returned = js.events.filter { message(cxRum($0)) == "full" }.map { event -> [String: Any] in
+            var cxRum = self.cxRum(event)
+            cxRum[Keys.sessionContext.rawValue] = nil
+            var result = event
+            result[Keys.text.rawValue] = [Keys.cxRum.rawValue: cxRum]
+            return result
+        }
+        exporter.sendBeforeSendData(data: returned)
+        XCTAssertNotNil(payload(uploader, message: "full"), "Its mode is known from when it was handed out.")
+    }
+
     // MARK: - Crash on the next launch
 
     func testRecoveredCrash_sendsTheCrash_thenWhatItsSessionHeld() throws {
@@ -543,6 +592,30 @@ final class ErrorOnlyExportTests: XCTestCase {
         label(span, message)
         if awaitsDelivery { exporter.awaitLiveDelivery(spanId: span.spanId.hexString) { _ in } }
         _ = exporter.export(spans: [span], explicitTimeout: nil)
+    }
+
+    private func startHybrid(_ options: CoralogixExporterOptions) throws -> (CoralogixExporter, CapturingSpanUploader, HandedToJS) {
+        var options = options
+        let js = HandedToJS()
+        options.beforeSendCallBack = { js.append($0) }
+        let rum = CoralogixRum(options: options, sdkFramework: .flutter(version: "1.0.0"))
+        self.rum = rum
+        let exporter = try XCTUnwrap(rum.coralogixExporter)
+        let uploader = CapturingSpanUploader()
+        exporter.spanUploader = uploader
+        return (exporter, uploader, js)
+    }
+
+    /// An event as a hybrid callback could hand back one the SDK never handed out.
+    private func makeHybridEvent(message text: String, sessionId: String) -> [String: Any] {
+        let cxRum: [String: Any] = [
+            Keys.spanId.rawValue: UUID().uuidString,
+            Keys.logContext.rawValue: [Keys.message.rawValue: text],
+            Keys.eventContext.rawValue: [Keys.type.rawValue: CoralogixEventType.log.rawValue,
+                                         Keys.severity.rawValue: CoralogixLogSeverity.info.rawValue],
+            Keys.sessionContext.rawValue: [Keys.sessionId.rawValue: sessionId]
+        ]
+        return [Keys.text.rawValue: [Keys.cxRum.rawValue: cxRum]]
     }
 
     private func startRecordingRequests() throws -> (CoralogixExporter, RequestRecorder) {
