@@ -64,7 +64,7 @@ final class ReplayMessagesTests: XCTestCase {
 
     // MARK: - Before init / after shutdown / live instance
 
-    /// RED-now. A screenshot published before RUM starts is dropped, not replayed at init; one after init is handled.
+    /// RED-now. A screenshot published before RUM starts is not buffered and not exported at init; one after init is.
     func testScreenshotBeforeInit_isDropped_afterInit_isHandled() throws {
         let sm = Self.sessionManager()
         let sessionId = try XCTUnwrap(sm.currentSessionId)
@@ -80,7 +80,7 @@ final class ReplayMessagesTests: XCTestCase {
                       "a message published before init was handled")
     }
 
-    /// RED-now. RecordingStarted before init leaves no trace once RUM starts on that session.
+    /// RED-now. RecordingStarted before init is not buffered: no trace once RUM starts on that session.
     func testRecordingStartedBeforeInit_isDropped() throws {
         let sm = Self.sessionManager()
         let sessionId = try XCTUnwrap(sm.currentSessionId)
@@ -96,7 +96,7 @@ final class ReplayMessagesTests: XCTestCase {
         XCTAssertEqual(try exportedHasRecording(sessionId, rum, uploader), true)
     }
 
-    /// RED-now. A screenshot published after shutdown is dropped: a later init on the same session never reports it.
+    /// RED-now. A screenshot published after shutdown is not buffered and not exported by a later init on the same session.
     func testScreenshotAfterShutdown_isDropped() throws {
         let sm = Self.sessionManager()
         let sessionId = try XCTUnwrap(sm.currentSessionId)
@@ -128,6 +128,41 @@ final class ReplayMessagesTests: XCTestCase {
         newer.flush()
         let all = screenshots(olderUploader) + screenshots(newerUploader)
         XCTAssertEqual(all.filter { Self.screenshotId(of: $0) == "live-only" }.count, 1, "handled by more than one instance")
+    }
+
+    /// RED-now. A screenshot naming the older, superseded instance's session is not RUM's current session: nothing.
+    func testOlderInstancesSession_screenshotIsNotHandled() throws {
+        let (older, olderUploader) = try start()
+        let olderSession = try XCTUnwrap(older.sessionManager?.currentSessionId)
+        let (newer, newerUploader) = try start()
+        let newerSession = try XCTUnwrap(newer.sessionManager?.currentSessionId)
+        XCTAssertNotEqual(olderSession, newerSession, "fixture: two sessions")
+
+        CoralogixRum.publish(.screenshotTaken(screenshotId: "older-session", sessionId: olderSession, timestamp: Self.nowMs()))
+        CoralogixRum.publish(.screenshotTaken(screenshotId: "newer-session", sessionId: newerSession, timestamp: Self.nowMs()))
+        CoralogixRum.drainBus()
+
+        _ = try awaitEvent(newer, newerUploader, "marker screenshot") { Self.screenshotId(of: $0) == "newer-session" }
+        older.flush()
+        newer.flush()
+        let all = screenshots(olderUploader) + screenshots(newerUploader)
+        XCTAssertFalse(all.contains { Self.screenshotId(of: $0) == "older-session" }, "a superseded instance handled it")
+    }
+
+    /// RED-now. With two instances started, ReplaySettings is reported once, by the newer (live) instance.
+    func testReplaySettings_twoInstances_reportedOnceByTheLiveOne() throws {
+        let (older, olderUploader) = try start()
+        let (newer, newerUploader) = try start()
+
+        CoralogixRum.publish(.replaySettings(settings: ["mode": .string("two-instances")]))
+        CoralogixRum.drainBus()
+
+        _ = try awaitEvent(newer, newerUploader, "replay_settings") { Self.internalEventName(of: $0) == "replay_settings" }
+        older.flush()
+        newer.flush()
+        let isSettings: ([String: Any]) -> Bool = { Self.internalEventName(of: $0) == "replay_settings" }
+        XCTAssertEqual(olderUploader.cxRumPayloads().filter(isSettings).count, 0, "the superseded instance reported it")
+        XCTAssertEqual(newerUploader.cxRumPayloads().filter(isSettings).count, 1, "reported once")
     }
 
     // MARK: - hasRecording
@@ -632,15 +667,22 @@ final class ReplayInternalHeaderTests: XCTestCase {
             rum.setNetworkRequestContext(dictionary: Self.hybrid(url: "\(base)/\(path)",
                                                                  rawHeaders: #"{"Accept":"*/*","\#(name)":"1"}"#))
         }
+        rum.setNetworkRequestContext(dictionary: Self.hybrid(url: "\(base)/internal-spaced",
+                                                             rawHeaders: #"{ "X-Coralogix-Internal": "1" }"#))
         rum.setNetworkRequestContext(dictionary: Self.hybrid(url: "\(base)/unparsable",
                                                              rawHeaders: "X-Coralogix-Internal: 1 {not json"))
+        // Carries the quoted pair but does not parse: a substring match would wrongly drop it.
+        rum.setNetworkRequestContext(dictionary: Self.hybrid(url: "\(base)/unparsable-pair",
+                                                             rawHeaders: #"{"X-Coralogix-Internal":"1""#))
         rum.setNetworkRequestContext(dictionary: Self.hybrid(url: "\(base)/plain", rawHeaders: #"{"Accept":"*/*"}"#))
 
         awaitNetworkSpan(urlContains: "hybrid-string.replay.test/plain")
         let urls = networkUrls()
         XCTAssertEqual(urls.filter { $0.contains("/internal-") }, [], "an internal request was instrumented")
-        XCTAssertTrue(urls.contains { $0.contains("hybrid-string.replay.test/unparsable") },
-                      "a header string that does not parse carries no internal header: \(urls)")
+        for path in ["unparsable", "unparsable-pair"] {
+            XCTAssertTrue(urls.contains { $0.hasSuffix("hybrid-string.replay.test/\(path)") },
+                          "a header string that does not parse carries no internal header (\(path)): \(urls)")
+        }
     }
 
     private func perform(_ url: String, headers: [String: String] = [:]) {
