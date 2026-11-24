@@ -55,8 +55,10 @@ struct PosixFileWriter: ErrorOnlyFileWriting {
 /// buffer, as the browser SDK clears its cache past `maxRumEvents`.
 final class ErrorOnlyBuffer {
     static let maxEventBytes = 1_024 * 1_024
-    static let maxBufferBytes = 50 * 1_024 * 1_024
-    static let bytesPerEvent = 4 * 1_024
+    /// The byte cap is this per event of `maxRumEvents`: several times an ordinary event, so with
+    /// ordinary events `maxRumEvents` is always reached first, and the cap only bounds the disk
+    /// a session of abnormally large events takes (at most 320 MB, at 20000 events).
+    static let bytesPerEvent = 16 * 1_024
     static let maxMemoryEvents = 1_000
     static let maxMemoryBytes = 4 * 1_024 * 1_024
     /// Sessions that had their error, remembered so their later events are sent as they happen;
@@ -160,7 +162,7 @@ final class ErrorOnlyBuffer {
          clock: DeliveryClock = ErrorOnlyBuffer.defaultClock) {
         self.directory = directory
         self.maxEvents = maxRumEvents
-        self.maxBytes = min(maxRumEvents * Self.bytesPerEvent, Self.maxBufferBytes)
+        self.maxBytes = maxRumEvents * Self.bytesPerEvent
         self.writer = writer
         self.clock = clock
     }

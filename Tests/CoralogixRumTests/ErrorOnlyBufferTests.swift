@@ -73,12 +73,22 @@ final class ErrorOnlyBufferTests: XCTestCase {
         XCTAssertEqual(chunk.events.map(index), [10], "It holds again after the clear.")
     }
 
-    func testByteCap_is4KBPerEvent_capped50MB() {
-        XCTAssertEqual(makeBuffer(maxRumEvents: 5_000).maxBytes, 5_000 * 4_096)
-        XCTAssertEqual(makeBuffer(maxRumEvents: 20_000).maxBytes, 50 * 1_024 * 1_024)
-        let buffer = makeBuffer(maxRumEvents: 2)
-        buffer.hold(event(0, padding: 9_000), sessionId: "s")
-        XCTAssertNil(buffer.metadata(of: "s"), "An event past the byte cap clears the buffer too.")
+    /// Ordinary events run a few KB; at the 20000 maximum a fixed total would bite well below that.
+    func testByteCap_isReachedOnlyByEventsAveragingOver16KB() throws {
+        XCTAssertEqual(makeBuffer(maxRumEvents: SessionWithErrorConfig.maxAllowedRumEvents).maxBytes,
+                       SessionWithErrorConfig.maxAllowedRumEvents * 16 * 1_024,
+                       "No lower total: at the maximum setting, ordinary events still reach maxRumEvents first.")
+
+        let ordinary = makeBuffer(maxRumEvents: 3)
+        (0..<3).forEach { ordinary.hold(event($0, padding: 10_000), sessionId: "s") }
+        ordinary.trigger("s")
+        let chunk = try XCTUnwrap(ordinary.nextChunk(of: "s", maxEvents: 500, maxBytes: ErrorOnlyDrain.maxBytesPerRequest),
+                                  "10 KB events, larger than most, are kept up to maxRumEvents.")
+        XCTAssertEqual(chunk.events.map(index), [0, 1, 2])
+
+        let large = makeBuffer(maxRumEvents: 3)
+        large.hold(event(0, padding: 3 * 16 * 1_024), sessionId: "s")
+        XCTAssertNil(large.metadata(of: "s"), "Events averaging over 16 KB clear the buffer before maxRumEvents.")
     }
 
     func testDiskFull_truncatesToLastRecord_thenHoldsInMemory_andDrainsBothInOrder() throws {

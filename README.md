@@ -368,7 +368,7 @@ let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
 | Field | Type | Description |
 | --- | --- | --- |
 | enable | Bool | Holds every sampled-in session until an error. Sessions that `sessionSampleRate` leaves out behave as before unless `alwaysTrackSessionsWithErrors` is also on. Defaults to `false`. |
-| maxRumEvents | Int | How many events a session keeps while it waits for an error. Past this, what it kept is discarded and it starts again. Defaults to `5000`; at most `20000`, and `0` or less uses the default. |
+| maxRumEvents | Int | How many events a session keeps while it waits for an error. Past this, what it kept is discarded and it starts again; a session whose events average over 16 KB is discarded sooner. Defaults to `5000`; at most `20000`, and `0` or less uses the default. |
 | instrumentationsToSend | `Set<ExcludableInstrumentation>` | Categories sent at once instead of being held. Accepts `errors`, `logs`, `network`, `userInteractions`, `mobileVitals`, `customSpan`, `customMeasurement`, `navigation` and `lifecycle`. Defaults to empty: a held session sends nothing until it has an error. |
 
 What to expect:
