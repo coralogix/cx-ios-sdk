@@ -11,8 +11,7 @@ let package = Package(
     ],
     products: [
         .library(name: "Coralogix", targets: ["Coralogix"]),
-        .library(name: "CoralogixInternal", targets: ["CoralogixInternal"]),
-        .library(name: "SessionReplay", targets: ["SessionReplay"])
+        .library(name: "CoralogixInternal", targets: ["CoralogixInternal"])
     ],
     dependencies: [
         .package(
@@ -42,13 +41,6 @@ let package = Package(
             ],
             path: "Coralogix/Sources/"
         ),
-        .target(
-            name: "SessionReplay",
-            dependencies: [
-                .target(name: "CoralogixInternal")
-            ],
-            path: "SessionReplay/Sources/"
-        ),
         .testTarget(
             name: "CoralogixRumTests",
             dependencies: ["Coralogix", "CoralogixBootstrap"],
@@ -60,14 +52,6 @@ let package = Package(
             name: "CoralogixInternalTests",
             dependencies: ["CoralogixInternal"],
             path: "Tests/CoralogixInternalTests/"
-        ),
-        .testTarget(
-            name: "SessionReplayTests",
-            dependencies: ["SessionReplay"],
-            path: "Tests/SessionReplayTests",
-            resources: [
-                .process("Resources")
-            ]
         )
     ]
 )
