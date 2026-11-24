@@ -11,8 +11,9 @@ import CoralogixInternal
 ///
 /// One request at a time, oldest events first, each closed at 500 events or 1.5 MB; the next goes
 /// a second after the previous one is answered. A request is removed from the buffer only once it
-/// is delivered or refused for good, so a drain cut short — background, kill, crash — resumes
-/// where it stopped on a later foreground or launch, without sending anything twice.
+/// is delivered or refused for good, so a drain cut short — background, kill, crash, offline —
+/// resumes where it stopped on a later foreground or launch, or when the network comes back,
+/// without sending anything twice.
 ///
 /// Failures follow the stored-crash rules (`CrashDeliveryScheduler`): 408, 429, 5xx and transport
 /// errors are retried at +30 s and +2 min from the first failure, honouring `Retry-After`; after

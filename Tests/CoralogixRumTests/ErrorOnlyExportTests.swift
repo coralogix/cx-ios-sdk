@@ -183,6 +183,36 @@ final class ErrorOnlyExportTests: XCTestCase {
         XCTAssertTrue(uploader.requests.contains { $0.kind == .storedCrash && labels(of: $0.events).contains("held") })
     }
 
+    func testADrainStoppedOffline_startsAgainWhenTheNetworkComesBack() throws {
+        let (exporter, uploader) = try startRecordingRequests()
+        let network = FakeReachability()
+        network.isOnline = false
+        exporter.reachability = network
+        export(exporter, .log, message: "held")
+        export(exporter, .error, severity: .error, message: "the-error")
+        exporter.errorOnlyDrain.waitUntilSettled()
+        XCTAssertFalse(uploader.requests.contains { $0.kind == .storedCrash }, "Offline: nothing is sent.")
+
+        network.isOnline = true
+        network.onReconnect?()
+        exporter.errorOnlyDrain.waitUntilSettled()
+        let drained = uploader.requests.filter { $0.kind == .storedCrash }.flatMap { labels(of: $0.events) }
+        XCTAssertEqual(drained.filter { ["held", "the-error"].contains($0) }, ["held", "the-error"],
+                       "Sent once the network is back, without waiting for a foreground or a new error.")
+    }
+
+    func testNetworkManager_reportsAReconnect_onlyAfterASpellOffline() {
+        let manager = NetworkManager()
+        let calls = SentCount()
+        manager.onReconnect = { calls.add() }
+        manager.pathChanged(satisfied: true)
+        XCTAssertEqual(calls.value, 0, "Online from the start: nothing came back.")
+        manager.pathChanged(satisfied: false)
+        manager.pathChanged(satisfied: true)
+        manager.pathChanged(satisfied: true)
+        XCTAssertEqual(calls.value, 1, "Once, when the network came back.")
+    }
+
     // MARK: - Rotation and shutdown
 
     func testLateErrorWithinTheGrace_triggersTheEndedSession_andSendsWhatItHeld() throws {
@@ -776,5 +806,28 @@ private final class RequestRecorder: SpanUploading {
         lock.lock(); defer { lock.unlock() }
         _requests.append((kind, spans))
         return kind == .storedCrash ? _heldResult : .delivered
+    }
+}
+
+private final class FakeReachability: NetworkReachability {
+    private let lock = NSLock()
+    private var _isOnline = true
+    var isOnline: Bool {
+        get { lock.lock(); defer { lock.unlock() }; return _isOnline }
+        set { lock.lock(); defer { lock.unlock() }; _isOnline = newValue }
+    }
+    var onReconnect: (() -> Void)?
+}
+
+private final class SentCount {
+    private let lock = NSLock()
+    private var count = 0
+    var value: Int {
+        lock.lock(); defer { lock.unlock() }
+        return count
+    }
+    func add() {
+        lock.lock(); defer { lock.unlock() }
+        count += 1
     }
 }

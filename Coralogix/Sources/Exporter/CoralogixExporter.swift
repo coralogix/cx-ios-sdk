@@ -28,12 +28,17 @@ public class CoralogixExporter: SpanExporter {
     private var metricsManager: MetricsManager
     private var screenshotManager = ScreenshotManager()
     /// Set by `CoralogixRum` to its `NetworkManager`; read from the upload thread. Nil means
-    /// unknown, treated as online, so a failed upload still counts.
+    /// unknown, treated as online, so a failed upload still counts. A drain that stopped while
+    /// offline starts again when the network comes back.
     private weak var _reachability: NetworkReachability?
     private let reachabilityLock = NSLock()
     internal var reachability: NetworkReachability? {
         get { reachabilityLock.lock(); defer { reachabilityLock.unlock() }; return _reachability }
-        set { reachabilityLock.lock(); defer { reachabilityLock.unlock() }; _reachability = newValue }
+        set {
+            newValue?.onReconnect = { [weak self] in self?.resumeErrorOnlyDrains() }
+            reachabilityLock.lock(); defer { reachabilityLock.unlock() }
+            _reachability = newValue
+        }
     }
     /// Built in `init`: the export thread, the error-only drain and the shutdown path all read it,
     /// and must all reach one instance. Replaced only by tests.
