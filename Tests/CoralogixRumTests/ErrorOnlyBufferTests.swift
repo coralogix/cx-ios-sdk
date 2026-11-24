@@ -73,11 +73,8 @@ final class ErrorOnlyBufferTests: XCTestCase {
         XCTAssertEqual(chunk.events.map(index), [10], "It holds again after the clear.")
     }
 
-    /// Ordinary events run a few KB; at the 20000 maximum a fixed total would bite well below that.
+    /// Ordinary events run a few KB; the per-session cap must not bite on them before maxRumEvents.
     func testByteCap_isReachedOnlyByEventsAveragingOver16KB() throws {
-        XCTAssertEqual(makeBuffer(maxRumEvents: SessionWithErrorConfig.maxAllowedRumEvents).maxBytes,
-                       SessionWithErrorConfig.maxAllowedRumEvents * 16 * 1_024,
-                       "No lower total: at the maximum setting, ordinary events still reach maxRumEvents first.")
 
         let ordinary = makeBuffer(maxRumEvents: 3)
         (0..<3).forEach { ordinary.hold(event($0, padding: 10_000), sessionId: "s") }
@@ -89,6 +86,24 @@ final class ErrorOnlyBufferTests: XCTestCase {
         let large = makeBuffer(maxRumEvents: 3)
         large.hold(event(0, padding: 3 * 16 * 1_024), sessionId: "s")
         XCTAssertNil(large.metadata(of: "s"), "Events averaging over 16 KB clear the buffer before maxRumEvents.")
+    }
+
+    /// Every held session counts toward one disk total: past it, the session still waiting for
+    /// its error is cleared, and the ones that had theirs stay.
+    func testHeldSessionsTogether_stayWithinTheDiskTotal_theWaitingSessionIsCleared() throws {
+        let buffer = makeBuffer(maxTotalBytes: 30_000)
+        buffer.hold(event(0, padding: 20_000), sessionId: "triggered")
+        buffer.trigger("triggered")
+
+        buffer.hold(event(1, padding: 5_000), sessionId: "waiting")
+        XCTAssertNotNil(buffer.metadata(of: "waiting"), "Precondition: within the total it is held.")
+        buffer.hold(event(2, padding: 5_000), sessionId: "waiting")
+        XCTAssertNil(buffer.metadata(of: "waiting"), "Past the total, the waiting session is cleared.")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: directory.appendingPathComponent("waiting.jsonl").path))
+
+        let chunk = try XCTUnwrap(buffer.nextChunk(of: "triggered", maxEvents: 500, maxBytes: ErrorOnlyDrain.maxBytesPerRequest),
+                                  "The session that had its error is kept.")
+        XCTAssertEqual(chunk.events.map(index), [0])
     }
 
     func testDiskFull_truncatesToLastRecord_thenHoldsInMemory_andDrainsBothInOrder() throws {
@@ -282,6 +297,25 @@ final class ErrorOnlyBufferTests: XCTestCase {
         XCTAssertNil(pastTheLimit.metadata(of: "waiting"))
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: directory.path), [],
                        "Both sessions' files are deleted.")
+    }
+
+    /// Sessions left offline by several launches are bounded together: the newest are kept up to
+    /// the total and the oldest deleted.
+    func testLeftoversPastTheDiskTotal_oldestAreDeleted_newestKept() throws {
+        let earlier = makeBuffer()
+        for id in ["oldest", "middle", "newest"] {
+            earlier.hold(event(0, padding: 12_000), sessionId: id)
+            earlier.trigger(id)
+        }
+
+        let relaunch = makeBuffer(maxTotalBytes: 30_000)
+        XCTAssertEqual(relaunch.adoptLeftovers { _ in true }, ["middle", "newest"], "Two 12 KB buffers fit 30 KB.")
+        XCTAssertNil(relaunch.metadata(of: "oldest"))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: directory.appendingPathComponent("oldest.jsonl").path),
+                       "The oldest one's files are deleted.")
+
+        relaunch.hold(event(1, padding: 7_000), sessionId: "own")
+        XCTAssertNil(relaunch.metadata(of: "own"), "Adopted buffers count toward the total this launch holds within.")
     }
 
     func testLeftovers_triggeredDrain_crashedWait_restDeleted() {
@@ -639,8 +673,10 @@ final class ErrorOnlyBufferTests: XCTestCase {
     // MARK: - Helpers
 
     private func makeBuffer(maxRumEvents: Int = 5_000, writer: ErrorOnlyFileWriting = PosixFileWriter(),
-                            clock: DeliveryClock = SystemDeliveryClock()) -> ErrorOnlyBuffer {
-        ErrorOnlyBuffer(maxRumEvents: maxRumEvents, directory: directory, writer: writer, clock: clock)
+                            clock: DeliveryClock = SystemDeliveryClock(),
+                            maxTotalBytes: Int = ErrorOnlyBuffer.maxTotalBytes) -> ErrorOnlyBuffer {
+        ErrorOnlyBuffer(maxRumEvents: maxRumEvents, directory: directory, writer: writer, clock: clock,
+                        maxTotalBytes: maxTotalBytes)
     }
 
     private func makeDrain(_ buffer: ErrorOnlyBuffer, clock: ManualDeliveryClock, uploader: ScriptedUploads) -> ErrorOnlyDrain {

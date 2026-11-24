@@ -55,10 +55,13 @@ struct PosixFileWriter: ErrorOnlyFileWriting {
 /// buffer, as the browser SDK clears its cache past `maxRumEvents`.
 final class ErrorOnlyBuffer {
     static let maxEventBytes = 1_024 * 1_024
-    /// The byte cap is this per event of `maxRumEvents`: several times an ordinary event, so with
-    /// ordinary events `maxRumEvents` is always reached first, and the cap only bounds the disk
-    /// a session of abnormally large events takes (at most 320 MB, at 20000 events).
+    /// A session's byte cap is this per event of `maxRumEvents`: several times an ordinary event,
+    /// so with ordinary events `maxRumEvents` is reached first.
     static let bytesPerEvent = 16 * 1_024
+    /// What all held sessions together may take, this launch's and those earlier launches left:
+    /// the disk bound, whatever `maxRumEvents` is and however many sessions wait offline. At the
+    /// 20000 maximum it bites on events averaging over 6.5 KB, still twice an ordinary one.
+    static let maxTotalBytes = 128 * 1_024 * 1_024
     static let maxMemoryEvents = 1_000
     static let maxMemoryBytes = 4 * 1_024 * 1_024
     /// Sessions that had their error, remembered so their later events are sent as they happen;
@@ -144,6 +147,7 @@ final class ErrorOnlyBuffer {
     let directory: URL
     let maxEvents: Int
     let maxBytes: Int
+    let maxTotalBytes: Int
     let owner = UUID().uuidString.lowercased()
     private let writer: ErrorOnlyFileWriting
     private let lock = NSLock()
@@ -159,10 +163,12 @@ final class ErrorOnlyBuffer {
     init(maxRumEvents: Int,
          directory: URL = ErrorOnlyBuffer.defaultDirectory,
          writer: ErrorOnlyFileWriting = PosixFileWriter(),
-         clock: DeliveryClock = ErrorOnlyBuffer.defaultClock) {
+         clock: DeliveryClock = ErrorOnlyBuffer.defaultClock,
+         maxTotalBytes: Int = ErrorOnlyBuffer.maxTotalBytes) {
         self.directory = directory
         self.maxEvents = maxRumEvents
         self.maxBytes = maxRumEvents * Self.bytesPerEvent
+        self.maxTotalBytes = maxTotalBytes
         self.writer = writer
         self.clock = clock
     }
@@ -197,8 +203,11 @@ final class ErrorOnlyBuffer {
         session.eventCount += 1
         session.byteCount += event.count + 1
 
+        // Past the total it is the session still waiting that goes: the others already had their
+        // error or wait on a crash.
         let overflowed = session.eventCount > maxEvents
             || session.byteCount > maxBytes
+            || session.byteCount + heldBytesLocked(except: sessionId) > maxTotalBytes
             || session.memory.count > Self.maxMemoryEvents
             || session.memoryBytes > Self.maxMemoryBytes
         guard !overflowed else {
@@ -208,6 +217,10 @@ final class ErrorOnlyBuffer {
         }
         sessions[sessionId] = session
         return true
+    }
+
+    private func heldBytesLocked(except sessionId: String? = nil) -> Int {
+        sessions.reduce(0) { $0 + ($1.key == sessionId ? 0 : $1.value.byteCount) }
     }
 
     /// Returns whether the write reached disk. A failed one is cut back to the last whole event.
@@ -533,14 +546,15 @@ final class ErrorOnlyBuffer {
 
     /// Adopts what earlier launches (or SDK instances) left: `keep` decides, from its metadata,
     /// whether a leftover is kept; the rest is deleted, and so is an expired one, whatever `keep`
-    /// says — a buffer waiting on a crash that is never sent would otherwise stay forever. Returns
-    /// the kept ones that already had their error, oldest first, to drain now.
+    /// says — a buffer waiting on a crash that is never sent would otherwise stay forever. Past
+    /// `maxTotalBytes` the oldest go first. Returns the kept ones that already had their error,
+    /// oldest first, to drain now.
     func adoptLeftovers(keep: (Metadata) -> Bool) -> [String] {
         lock.lock()
         defer { lock.unlock() }
         let files = (try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? []
         let now = clock.now()
-        var adopted: [Metadata] = []
+        var candidates: [(metadata: Metadata, bytes: Int)] = []
         for url in files where url.lastPathComponent.hasSuffix(Self.metadataSuffix) {
             guard let data = try? Data(contentsOf: url) else { continue }
             guard let metadata = try? JSONDecoder().decode(Metadata.self, from: data) else {
@@ -548,14 +562,27 @@ final class ErrorOnlyBuffer {
                 continue
             }
             guard metadata.owner != owner, sessions[metadata.sessionId] == nil else { continue }
+            let attributes = try? FileManager.default.attributesOfItem(atPath: eventsURL(of: metadata.sessionId).path)
             // An offset no file can have is a corrupt buffer.
             guard Int(exactly: metadata.sentOffset) != nil, !metadata.isExpired(at: now), keep(metadata),
-                  FileManager.default.fileExists(atPath: eventsURL(of: metadata.sessionId).path) else {
+                  let bytes = (attributes?[.size] as? NSNumber)?.intValue else {
                 deleteFilesLocked(metadata.sessionId)
                 continue
             }
-            sessions[metadata.sessionId] = Session(metadata: metadata, saved: metadata)
-            adopted.append(metadata)
+            candidates.append((metadata, bytes))
+        }
+        var heldBytes = heldBytesLocked()
+        var adopted: [Metadata] = []
+        for candidate in candidates.sorted(by: { $0.metadata.createdAt > $1.metadata.createdAt }) {
+            let id = candidate.metadata.sessionId
+            guard heldBytes + candidate.bytes <= maxTotalBytes else {
+                Log.e("[ErrorOnlyBuffer] the held events of session \(id) are past the disk limit — deleted")
+                deleteFilesLocked(id)
+                continue
+            }
+            heldBytes += candidate.bytes
+            sessions[id] = Session(metadata: candidate.metadata, byteCount: candidate.bytes, saved: candidate.metadata)
+            adopted.append(candidate.metadata)
         }
         // Events files whose metadata is gone can never be attributed.
         for url in files where url.pathExtension == Self.eventsExtension {
