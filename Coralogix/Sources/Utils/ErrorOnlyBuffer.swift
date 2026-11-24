@@ -407,7 +407,8 @@ final class ErrorOnlyBuffer {
 
     /// The next request of `sessionId`'s events, oldest first: whole events only, at most
     /// `maxEvents` of them and `maxBytes` in all. The file comes first, then what is held in
-    /// memory. nil when nothing is left, in which case the session's files are deleted.
+    /// memory. nil when nothing is left, in which case the session's files are deleted, or when
+    /// the file cannot be read right now, in which case they are kept.
     func nextChunk(of sessionId: String, maxEvents: Int, maxBytes: Int) -> Chunk? {
         // Lines are taken under the lock and decoded after it, so `hold` on the export path does
         // not wait on JSON parsing.
@@ -421,7 +422,14 @@ final class ErrorOnlyBuffer {
         lock.lock()
         defer { lock.unlock() }
         guard let session = sessions[sessionId] else { return nil }
-        if let file = fileLinesLocked(session, maxEvents: maxEvents, maxBytes: maxBytes) {
+        let file: (lines: [Data], endOffset: UInt64)?
+        do {
+            file = try fileLinesLocked(session, maxEvents: maxEvents, maxBytes: maxBytes)
+        } catch {
+            Log.e("[ErrorOnlyBuffer] the held events of session \(sessionId) could not be read (\(error)) — kept for a later attempt")
+            return nil
+        }
+        if let file {
             return (file.lines, file.endOffset, 0)
         }
         var taken = 0
@@ -439,9 +447,16 @@ final class ErrorOnlyBuffer {
     }
 
     /// A missing or short file is a normal case (the OS may purge the folder): what is there goes.
-    private func fileLinesLocked(_ session: Session, maxEvents: Int, maxBytes: Int) -> (lines: [Data], endOffset: UInt64)? {
+    /// A file that is there but cannot be read now throws: it is not taken for a deleted one.
+    private func fileLinesLocked(_ session: Session, maxEvents: Int, maxBytes: Int) throws -> (lines: [Data], endOffset: UInt64)? {
         let fileURL = eventsURL(of: session.metadata.sessionId)
-        guard let data = try? Data(contentsOf: fileURL, options: .mappedIfSafe) else { return nil }
+        let data: Data
+        do {
+            data = try Data(contentsOf: fileURL, options: .mappedIfSafe)
+        } catch {
+            guard FileManager.default.fileExists(atPath: fileURL.path) else { return nil }
+            throw error
+        }
         guard let start = Int(exactly: session.metadata.sentOffset), start < data.count else { return nil }
         let window = data[start..<min(data.count, start + maxBytes + 1)]
         var lines: [Data] = []

@@ -138,6 +138,22 @@ final class ErrorOnlyBufferTests: XCTestCase {
         XCTAssertTrue(buffer.isTriggered("s"))
     }
 
+    func testAFileThatCannotBeReadNow_isKept_notTakenForADeletedOne() throws {
+        let buffer = makeBuffer()
+        buffer.hold(event(0), sessionId: "s")
+        buffer.trigger("s")
+        let file = directory.appendingPathComponent("s.jsonl")
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: file.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: file.path) }
+
+        XCTAssertNil(buffer.nextChunk(of: "s", maxEvents: 500, maxBytes: ErrorOnlyDrain.maxBytesPerRequest))
+        XCTAssertNotNil(buffer.metadata(of: "s"), "A session that had its error is not deleted for a failed read.")
+
+        try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: file.path)
+        let chunk = try XCTUnwrap(buffer.nextChunk(of: "s", maxEvents: 500, maxBytes: ErrorOnlyDrain.maxBytesPerRequest))
+        XCTAssertEqual(chunk.events.map(index), [0], "Read on a later attempt.")
+    }
+
     func testDiscard_removesAnUntriggeredSession_butNotATriggeredOne() {
         let buffer = makeBuffer()
         buffer.hold(event(0), sessionId: "a")
