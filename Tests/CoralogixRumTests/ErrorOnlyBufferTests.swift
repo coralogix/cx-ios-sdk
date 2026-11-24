@@ -255,6 +255,25 @@ final class ErrorOnlyBufferTests: XCTestCase {
         XCTAssertNil(relaunch.metadata(of: "own"), "This instance's own untriggered buffer goes.")
     }
 
+    /// A buffer waiting on a crash that is never sent (a fatal hang with ANR reporting off) is only
+    /// ever looked at here, so the age limit must apply here too.
+    func testLeftoverPastTheAgeLimit_isDeletedAtLaunch_evenWhileWaitingForItsCrash() throws {
+        let earlier = makeBuffer()
+        earlier.hold(event(0), sessionId: "waiting")
+        earlier.hold(event(0), sessionId: "triggered")
+        earlier.trigger("triggered")
+
+        let dayBeforeTheLimit = makeBuffer(clock: ManualDeliveryClock(start: Date().addingTimeInterval(CrashDeliveryScheduler.maxAge - 86_400)))
+        _ = dayBeforeTheLimit.adoptLeftovers { _ in true }
+        XCTAssertNotNil(dayBeforeTheLimit.metadata(of: "waiting"), "Precondition: within 7 days it is kept for its crash.")
+
+        let pastTheLimit = makeBuffer(clock: ManualDeliveryClock(start: Date().addingTimeInterval(CrashDeliveryScheduler.maxAge + 60)))
+        XCTAssertEqual(pastTheLimit.adoptLeftovers { _ in true }, [], "Past 7 days nothing is drained.")
+        XCTAssertNil(pastTheLimit.metadata(of: "waiting"))
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: directory.path), [],
+                       "Both sessions' files are deleted.")
+    }
+
     func testLeftovers_triggeredDrain_crashedWait_restDeleted() {
         let earlier = makeBuffer()
         ["triggered", "crashed", "plain"].forEach { earlier.hold(event(0), sessionId: $0) }
@@ -609,8 +628,9 @@ final class ErrorOnlyBufferTests: XCTestCase {
 
     // MARK: - Helpers
 
-    private func makeBuffer(maxRumEvents: Int = 5_000, writer: ErrorOnlyFileWriting = PosixFileWriter()) -> ErrorOnlyBuffer {
-        ErrorOnlyBuffer(maxRumEvents: maxRumEvents, directory: directory, writer: writer)
+    private func makeBuffer(maxRumEvents: Int = 5_000, writer: ErrorOnlyFileWriting = PosixFileWriter(),
+                            clock: DeliveryClock = SystemDeliveryClock()) -> ErrorOnlyBuffer {
+        ErrorOnlyBuffer(maxRumEvents: maxRumEvents, directory: directory, writer: writer, clock: clock)
     }
 
     private func makeDrain(_ buffer: ErrorOnlyBuffer, clock: ManualDeliveryClock, uploader: ScriptedUploads) -> ErrorOnlyDrain {

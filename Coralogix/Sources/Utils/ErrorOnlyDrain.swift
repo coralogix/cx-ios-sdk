@@ -132,7 +132,7 @@ final class ErrorOnlyDrain {
             finish(pass)
             return
         }
-        if isExpired(metadata) {
+        if metadata.isExpired(at: clock.now()) {
             Log.w("[ErrorOnlyDrain] giving up on the held events of session \(pass.sessionId)")
             buffer.remove(pass.sessionId)
             finish(pass)
@@ -222,10 +222,5 @@ final class ErrorOnlyDrain {
         self.pass = nil
         pass.timer?.cancel()
         pass.task?.end()
-    }
-
-    private func isExpired(_ metadata: ErrorOnlyBuffer.Metadata) -> Bool {
-        metadata.failedUploads >= CrashDeliveryScheduler.maxFailedUploads
-            || clock.now().timeIntervalSince(metadata.createdAt) > CrashDeliveryScheduler.maxAge
     }
 }

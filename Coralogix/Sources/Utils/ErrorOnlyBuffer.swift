@@ -82,6 +82,12 @@ final class ErrorOnlyBuffer {
         /// Bytes of the events file already delivered or refused for good.
         var sentOffset: UInt64
         var failedUploads: Int
+
+        /// Given up on, as a stored crash is: after 16 counted failures or 7 days.
+        func isExpired(at now: Date) -> Bool {
+            failedUploads >= CrashDeliveryScheduler.maxFailedUploads
+                || now.timeIntervalSince(createdAt) > CrashDeliveryScheduler.maxAge
+        }
     }
 
     /// Up to one request of a session's events, oldest first.
@@ -524,12 +530,14 @@ final class ErrorOnlyBuffer {
     // MARK: - Earlier launches
 
     /// Adopts what earlier launches (or SDK instances) left: `keep` decides, from its metadata,
-    /// whether a leftover is kept; the rest is deleted. Returns the kept ones that already had
-    /// their error, oldest first, to drain now.
+    /// whether a leftover is kept; the rest is deleted, and so is an expired one, whatever `keep`
+    /// says — a buffer waiting on a crash that is never sent would otherwise stay forever. Returns
+    /// the kept ones that already had their error, oldest first, to drain now.
     func adoptLeftovers(keep: (Metadata) -> Bool) -> [String] {
         lock.lock()
         defer { lock.unlock() }
         let files = (try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? []
+        let now = clock.now()
         var adopted: [Metadata] = []
         for url in files where url.lastPathComponent.hasSuffix(Self.metadataSuffix) {
             guard let data = try? Data(contentsOf: url) else { continue }
@@ -539,7 +547,8 @@ final class ErrorOnlyBuffer {
             }
             guard metadata.owner != owner, sessions[metadata.sessionId] == nil else { continue }
             // An offset no file can have is a corrupt buffer.
-            guard Int(exactly: metadata.sentOffset) != nil, keep(metadata), FileManager.default.fileExists(atPath: eventsURL(of: metadata.sessionId).path) else {
+            guard Int(exactly: metadata.sentOffset) != nil, !metadata.isExpired(at: now), keep(metadata),
+                  FileManager.default.fileExists(atPath: eventsURL(of: metadata.sessionId).path) else {
                 deleteFilesLocked(metadata.sessionId)
                 continue
             }
