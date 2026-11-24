@@ -50,6 +50,7 @@
 //
 
 import XCTest
+import CrashReporter
 #if canImport(UIKit)
 import UIKit
 #endif
@@ -889,4 +890,110 @@ private final class Flag: @unchecked Sendable {
     private var flag = false
     func set() { lock.lock(); flag = true; lock.unlock() }
     var value: Bool { lock.lock(); defer { lock.unlock() }; return flag }
+}
+
+// MARK: - Internal flushes and cancel on a queued message
+
+extension RumBusTests {
+
+    /// GUARD. Recovering a stored crash, a stored fatal hang and a held React Native fatal each force an
+    /// internal flush; none of them is the app's flush, so none publishes Flushing.
+    func testCrashAndFatalRecoveryFlushes_publishNoFlushing() throws {
+        let store = CrashDeliveryStore.temporary()
+        let session = StoredCrashRecord.Session(id: "S1", creationDate: 1_700_000_000, sampledIn: true)
+        // A stored native crash in S1.
+        let reporter = try XCTUnwrap(PLCrashReporter(configuration: PLCrashReporterConfig(signalHandlerType: .BSD,
+                                                                                         symbolicationStrategy: [])))
+        reporter.customData = Data(#"{"v":1,"session":{"session_id":"S1","session_creation_time":1700000000000,"is_session_sampled_in":true}}"#.utf8)
+        let report = try ANRThreads.withLiveReportLock { try reporter.generateLiveReportAndReturnError() }
+        let crash = CrashReportMapper.map(PLCrashReportReader(report: try PLCrashReport(data: report)))
+        try FileManager.default.createDirectory(at: store.copiesDirectory, withIntermediateDirectories: true)
+        try report.write(to: store.copiesDirectory.appendingPathComponent("\(crash.crashId).plcrash"))
+        // A fatal hang in S1, of an earlier launch.
+        store.writeHangMarker(HangMarker(detectedAt: Date(timeIntervalSinceNow: -60), pid: 4242, processStartTime: nil,
+                                         session: session,
+                                         threads: CrashReportMapper.watchdogThreadsJSON([CrashThread(number: 0, crashed: true, frames: [])]),
+                                         liveDelivered: false))
+        // A React Native fatal held by an earlier process, never delivered live.
+        XCTAssertTrue(store.storeJsFatal(HeldJsFatal(crashId: HeldJsFatal.crashIdPrefix + UUID().uuidString,
+                                                     process: ProcessIdentity(pid: 2, startSecond: 2),
+                                                     crashTime: Date(timeIntervalSinceNow: -60),
+                                                     session: session,
+                                                     fields: ErrorFields(domain: "", message: "undefined is not a function",
+                                                                         isCrash: true, errorType: "TypeError"),
+                                                     liveDelivered: nil)))
+
+        let manager = SessionManager(snapshotStore: .relaunched(after: SessionSnapshotRecord(
+            sessionId: "S1", errorCount: 0, viewCount: 1, actionCount: 0, hasRecording: false, viewName: "Home",
+            viewNumber: 0, appName: "TestApp", appVersion: "1.0", osVersion: "17.0")))
+        manager.lastLaunchSession = nil
+        let rum = CoralogixRum(options: makeSamplingOptions(sampleRate: 100, exclude: []), sessionManager: manager)
+        defer { rum.shutdown() }
+        let uploader = RecordingUploader()
+        rum.crashDeliveryStore = store
+        rum.ownProcess = ProcessIdentity(pid: 1, startSecond: 1)
+        try XCTUnwrap(rum.coralogixExporter).spanUploader = uploader
+        let clock = ManualDeliveryClock()
+        let scheduler = CrashDeliveryScheduler(store: store, sender: rum, clock: clock,
+                                               backgroundTasks: FakeBackgroundTasks(), isOnline: { true })
+        rum.crashDeliveryScheduler = scheduler
+        let rec = subscribeAndSkipCurrentState()
+
+        rum.recoverPendingCrashes()
+        let recovered = expectation(description: "recovery complete")
+        rum.completeCrashRecovery { recovered.fulfill() }
+        scheduler.waitUntilAnswered()
+        while let next = clock.nextDate {
+            clock.advance(to: next)
+            scheduler.waitUntilAnswered()
+        }
+        wait(for: [recovered], timeout: 10)
+        CoralogixRum.drainBus()
+
+        XCTAssertEqual(uploader.crashCount, 3, "fixture: the crash, the hang and the JS fatal were each sent")
+        XCTAssertFalse(rec.messages.contains(.flushing), "an internal flush published Flushing: \(rec.messages)")
+    }
+
+    /// GUARD. A message already queued for a subscription is not delivered once it is cancelled.
+    func testCancel_dropsAMessageAlreadyQueued() {
+        let rum = CoralogixRum(options: Self.options())
+        defer { rum.shutdown() }
+        let entered = DispatchSemaphore(value: 0)
+        let release = DispatchSemaphore(value: 0)
+        subscriptions.append(CoralogixRum.subscribe { message in
+            guard message == .viewChanged(screen: "Hold") else { return }
+            entered.signal()
+            _ = release.wait(timeout: .now() + 5)
+        })
+        let second = Recorder()
+        let secondSub = CoralogixRum.subscribe { second.record($0) }
+        subscriptions.append(secondSub)
+        CoralogixRum.drainBus()
+        second.clear()
+
+        rum.setView(name: "Hold")      // the first subscription's handler now holds the bus queue
+        XCTAssertEqual(entered.wait(timeout: .now() + 5), .success, "fixture: the bus queue is held")
+        rum.setView(name: "Queued")    // queued behind it, for both subscriptions
+        secondSub.cancel()
+        release.signal()
+        CoralogixRum.drainBus()
+
+        XCTAssertEqual(second.messages, [], "a cancelled subscription got a message queued before cancel()")
+    }
+}
+
+/// Counts the crash events RUM sends; answers every request as delivered.
+private final class RecordingUploader: SpanUploading, @unchecked Sendable {
+    private let lock = NSLock()
+    private var crashes = 0
+    var crashCount: Int { lock.lock(); defer { lock.unlock() }; return crashes }
+
+    func upload(_ spans: [[String: Any]], endPoint: String, kind: SpanUploadKind) -> SpanUploadResult {
+        let sent = spans.filter { event in
+            let cxRum = (event[Keys.text.rawValue] as? [String: Any])?[Keys.cxRum.rawValue] as? [String: Any]
+            return (cxRum?[Keys.errorContext.rawValue] as? [String: Any])?[Keys.isCrash.rawValue] as? Bool == true
+        }.count
+        lock.lock(); crashes += sent; lock.unlock()
+        return .delivered
+    }
 }
