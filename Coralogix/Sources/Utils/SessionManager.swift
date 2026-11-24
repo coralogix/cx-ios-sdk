@@ -354,6 +354,73 @@ public class SessionManager {
         let timeSinceLastActivity = Date().timeIntervalSince(self.lastActivity)
         return timeSinceLastActivity > idleInterval
     }
+
+    /// What the RUM bus reports about the live session.
+    struct BusSession: Equatable {
+        let sessionId: String
+        let creationDate: TimeInterval
+        let kept: Bool
+        let idle: Bool
+    }
+
+    /// Arms the one-shot idle check `delay` seconds ahead; `check` runs it. The default is a real timer
+    /// that fires on its own, so an idle onset is reported without waiting for the next event.
+    internal lazy var scheduleIdleCheck: (TimeInterval, @escaping () -> Void) -> Void = { [idleTimer = self.idleTimer] delay, check in
+        idleTimer.arm(after: delay, check)
+    }
+    private let idleTimer = IdleTimer()
+    /// Both guarded by `sessionLock`. Nil while no bus is attached.
+    private var busChanged: ((BusSession) -> Void)?
+    private var lastBusSession: BusSession?
+
+    /// Starts reporting this manager's session changes to `changed`, and hands the session as it stands to
+    /// `initial` first. Both run under `sessionLock`, so no change can come between them or out of order.
+    func attachBus(initial: (BusSession) -> Void, changed: @escaping (BusSession) -> Void) {
+        sessionLock.lock()
+        defer { sessionLock.unlock() }
+        busChanged = changed
+        lastBusSession = busSessionLocked()
+        if let current = lastBusSession { initial(current) }
+        armIdleCheckLocked()
+    }
+
+    func detachBus() {
+        sessionLock.lock()
+        busChanged = nil
+        lastBusSession = nil
+        sessionLock.unlock()
+        idleTimer.cancel()
+    }
+
+    /// PRECONDITION: caller holds `sessionLock`.
+    private func busSessionLocked() -> BusSession? {
+        guard let current = sessionMetadata, !current.sessionId.isEmpty else { return nil }
+        return BusSession(sessionId: current.sessionId,
+                          creationDate: current.sessionCreationDate,
+                          kept: _isSessionSampledIn,
+                          idle: isIdle)
+    }
+
+    /// Reports the session if it differs from what the bus last heard. PRECONDITION: caller holds `sessionLock`.
+    private func publishBusSessionLocked() {
+        guard let changed = busChanged, let current = busSessionLocked(), current != lastBusSession else { return }
+        lastBusSession = current
+        changed(current)
+    }
+
+    /// Arms the idle check at `lastActivity + timeout`. PRECONDITION: caller holds `sessionLock`.
+    private func armIdleCheckLocked() {
+        guard busChanged != nil else { return }
+        let delay = max(0, lastActivity.addingTimeInterval(idleInterval).timeIntervalSinceNow)
+        scheduleIdleCheck(delay) { [weak self] in self?.runIdleCheck() }
+    }
+
+    private func runIdleCheck() {
+        sessionLock.lock()
+        defer { sessionLock.unlock() }
+        guard busChanged != nil else { return }
+        if isIdle { publishBusSessionLocked() } else { armIdleCheckLocked() }
+    }
     
     public convenience init() {
         self.init(snapshotStore: SessionSnapshotStore())
@@ -560,6 +627,8 @@ public class SessionManager {
         if let creationDate = self.sessionMetadata?.sessionCreationDate,
            self.hasAnHourPassed(since: creationDate) {
             pending = performRotationLocked()
+            publishBusSessionLocked()
+            armIdleCheckLocked()
         }
         let result = self.sessionMetadata
         sessionLock.unlock()
@@ -719,6 +788,8 @@ public class SessionManager {
     internal func setupSessionMetadata() {
         sessionLock.lock()
         let pending = performRotationLocked()
+        publishBusSessionLocked()
+        armIdleCheckLocked()
         sessionLock.unlock()
 
         fireRotationCallbacks(pending)
@@ -741,6 +812,8 @@ public class SessionManager {
             pending = performRotationLocked()
         }
         lastActivity = Date()
+        publishBusSessionLocked()
+        armIdleCheckLocked()
         sessionLock.unlock()
 
         if let pending {
@@ -774,5 +847,27 @@ extension LastLaunchSession {
         guard let sessionId = metadata.oldSessionId,
               let creationDate = metadata.oldSessionTimeInterval else { return nil }
         self.init(sessionId: sessionId, creationDate: creationDate, sampledIn: metadata.oldSessionSampledIn)
+    }
+}
+
+/// A one-shot timer: arming it again cancels the one before, so taps do not pile timers up.
+private final class IdleTimer {
+    private let lock = NSLock()
+    private var pending: DispatchWorkItem?
+
+    func arm(after delay: TimeInterval, _ check: @escaping () -> Void) {
+        let item = DispatchWorkItem(block: check)
+        lock.lock()
+        pending?.cancel()
+        pending = item
+        lock.unlock()
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + delay, execute: item)
+    }
+
+    func cancel() {
+        lock.lock()
+        pending?.cancel()
+        pending = nil
+        lock.unlock()
     }
 }

@@ -244,7 +244,7 @@ extension CoralogixRum {
         case .readable(let fatal):
             exporter.awaitCrashUpload(id: record.crashId, completion)
             self.emitRecoveredJsFatal(fatal, as: record)
-            self.flush()
+            self.flushSpans()
         case .notReadableYet:
             completion(CrashUploadAnswer(outcome: .notAttempted))
         case .corrupt:

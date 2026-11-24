@@ -20,11 +20,13 @@ extension CoralogixRum {
     }
     
     internal func trackNavigation(for cxView: CXView) {
+        let rawName = cxView.name
         // Hybrid apps report routes as view names, and a route can carry a query. The raw name is
         // kept to decide whether the view changed: two routes that mask alike are still two views.
         let cxView = CXView(state: cxView.state,
                             name: UrlMasker.Masker(options?.urlMasking ?? UrlMaskingOptions()).maskViewName(cxView.name),
                             rawName: cxView.identity)
+        if cxView.state == .notifyOnAppear { self.publishViewToBus(raw: rawName, masked: cxView.name) }
         if cxView.state == .notifyOnAppear,
            let viewManager = coralogixExporter?.getViewManager() {
             if viewManager.isUniqueView(name: cxView.identity) {

@@ -382,7 +382,7 @@ extension CoralogixRum: StoredCrashSending {
         case .readable(let crash):
             exporter.awaitCrashUpload(id: crash.crashId, completion)
             self.emitRecoveredCrash(crash, as: record)
-            self.flush()
+            self.flushSpans()
         case .notReadableYet:
             completion(CrashUploadAnswer(outcome: .notAttempted))
         case .corrupt:
@@ -399,7 +399,7 @@ extension CoralogixRum: StoredCrashSending {
         case .readable(let marker):
             exporter.awaitCrashUpload(id: record.crashId, completion)
             self.emitRecoveredHang(marker, as: record)
-            self.flush()
+            self.flushSpans()
         case .notReadableYet:
             completion(CrashUploadAnswer(outcome: .notAttempted))
         case .corrupt:

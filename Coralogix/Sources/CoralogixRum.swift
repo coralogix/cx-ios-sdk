@@ -66,6 +66,13 @@ public class CoralogixRum {
     static var isInitialized = false
     static var mobileSDK: MobileSDK = MobileSDK()
 
+    /// The most recently initialized instance, the only one that publishes to the RUM bus.
+    internal static weak var liveInstance: CoralogixRum?
+    internal static let liveInstanceLock = NSLock()
+    /// The raw name of the last view the bus announced; dedup is on the raw name, the message carries the masked one.
+    internal var busScreenRaw: String?
+    internal let busScreenLock = NSLock()
+
     /// CX-35956: `getCustomTracer()` may succeed only once per SDK lifecycle (`shutdown()` clears).
     private static var customTracerIssued = false
     /// Serializes check-and-set for `customTracerIssued` so concurrent `getCustomTracer()` calls cannot both succeed.
@@ -183,6 +190,7 @@ public class CoralogixRum {
         self.emitStartupInitSpan()
 
         CoralogixRum.isInitialized = true
+        self.attachBus(to: sessionManager)
 
         // Must run after isInitialized flips: SpanUploader rejects uploads and
         // flush() no-ops before that, so crash recovery could never be confirmed.
@@ -543,6 +551,12 @@ public class CoralogixRum {
     /// flush attempt (successful or not) finishes. Called automatically when a crash
     /// is reported; hybrid bridges call it before a fatal error terminates the process.
     public func flush(completion: (() -> Void)? = nil) {
+        if CoralogixRum.isInitialized { self.publishToBus(.flushing) }
+        self.flushSpans(completion: completion)
+    }
+
+    /// The export `flush` performs, for RUM's own flushes (background, crash): those are not the app's.
+    internal func flushSpans(completion: (() -> Void)? = nil) {
         guard CoralogixRum.isInitialized, let tracerProviderSdk = self.tracerProviderSdk else {
             completion?()
             return
@@ -585,6 +599,8 @@ public class CoralogixRum {
         hasShutDown = true
         shutdownLock.unlock()
         guard !alreadyShutDown else { return }
+        self.publishToBus(.shuttingDown)
+        self.detachBus()
         // Before the batch processor is stopped: a stop that outlasts its bound, or a later init
         // reopening the process-wide gate, must not let this instance's exporter send anything.
         self.coralogixExporter?.retire()

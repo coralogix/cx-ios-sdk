@@ -140,7 +140,7 @@ extension CoralogixRum {
                                  labelsJson: Helper.jsonAttributeString(dict: labels))
         // A crash report may precede process death, so what the batch queue holds (up to 2s) is
         // flushed rather than left to die with the process.
-        let flushCrash: (() -> Void)? = isCrash ? { [weak self] in self?.flush() } : nil
+        let flushCrash: (() -> Void)? = isCrash ? { [weak self] in self?.flushSpans() } : nil
         // React Native's own fatal handler: the same process is about to end in a native crash
         // report of this error. The error is sent now and kept on disk, and the next launch drops
         // that report (`JsFatalRecovery`). One that cannot be kept goes the usual way below.

@@ -61,7 +61,7 @@ extension CoralogixRum {
 
         // Background time so the flush completes before the app is suspended.
         let task = self.backgroundTasks.begin(name: "CoralogixFlush", expiration: {})
-        self.flush { task.end() }
+        self.flushSpans { task.end() }
     }
     
     @objc private func appWillTerminateNotification(notification: Notification) {
