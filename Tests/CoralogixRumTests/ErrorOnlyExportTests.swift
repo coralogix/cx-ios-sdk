@@ -198,7 +198,10 @@ final class ErrorOnlyExportTests: XCTestCase {
     }
 
     func testTheHangWatch_marksAHeldANRDelivered_soTheNextLaunchDoesNotReportItAgain() throws {
-        let (exporter, _) = try startRecordingRequests()
+        let (exporter, uploader) = try startRecordingRequests()
+        // Sent live instead, the ANR would be answered by this failure and stay unreported.
+        uploader.liveResult = SpanUploadResult(disposition: .retryable, httpStatus: 503, retryAfter: nil,
+                                               countsAsFailedUpload: true)
         let store = CrashDeliveryStore(directory: directory.appendingPathComponent("crashes", isDirectory: true))
         let watch = FatalHangWatch(store: store, session: { nil })
         watch.hangDetected(at: Date(), threads: nil)
@@ -207,8 +210,37 @@ final class ErrorOnlyExportTests: XCTestCase {
             watch.awaitDelivery(ofSpan: spanId, through: exporter)
         }
         exporter.errorOnlyDrain.waitUntilSettled()
+
+        XCTAssertTrue(uploader.requests.contains { $0.kind == .storedCrash && labels(of: $0.events).suffix(2) == ["held", "anr"] },
+                      "Sent with its session's held events.")
         XCTAssertEqual(store.hangMarker()?.liveDelivered, true,
                        "Kept with its session's events: a launch ending in the hang has nothing to add.")
+    }
+
+    /// A full disk: the ANR goes out live, and its stored copy stays its only retry.
+    func testAnANRTheBufferCannotKeep_isSentLive_andIsMarkedDeliveredOnlyByItsOwnAnswer() throws {
+        let (exporter, uploader) = try startRecordingRequests()
+        uploader.liveResult = SpanUploadResult(disposition: .retryable, httpStatus: 503, retryAfter: nil,
+                                               countsAsFailedUpload: true)
+        let crashes = directory.deletingLastPathComponent().appendingPathComponent(directory.lastPathComponent + "-crashes")
+        addTeardownBlock { try? FileManager.default.removeItem(at: crashes) }
+        let store = CrashDeliveryStore(directory: crashes)
+        let watch = FatalHangWatch(store: store, session: { nil })
+        watch.hangDetected(at: Date(), threads: nil)
+        // A file where the buffer's folder goes: no held event or trigger reaches disk.
+        try? FileManager.default.removeItem(at: directory)
+        try Data().write(to: directory)
+
+        export(exporter, .log, message: "held")
+        export(exporter, .error, severity: .error, message: "anr") { spanId in
+            watch.awaitDelivery(ofSpan: spanId, through: exporter)
+        }
+        exporter.errorOnlyDrain.waitUntilSettled()
+
+        XCTAssertTrue(uploader.requests.contains { $0.kind == .live && labels(of: $0.events).contains("anr") },
+                      "Not kept, so sent live.")
+        XCTAssertEqual(store.hangMarker()?.liveDelivered, false,
+                       "Its live request failed: the next launch must still report the hang if this one ends in it.")
     }
 
     func testADrainStoppedOffline_startsAgainWhenTheNetworkComesBack() throws {
@@ -814,15 +846,21 @@ private final class CrashResultUploader: SpanUploading {
     }
 }
 
-/// Records every request with its kind; answers the drain's with `heldResult`.
+/// Records every request with its kind; answers the drain's with `heldResult`, the rest with `liveResult`.
 private final class RequestRecorder: SpanUploading {
     private let lock = NSLock()
     private var _heldResult = SpanUploadResult.delivered
+    private var _liveResult = SpanUploadResult.delivered
     private var _requests: [(kind: SpanUploadKind, events: [[String: Any]])] = []
 
     var heldResult: SpanUploadResult {
         get { lock.lock(); defer { lock.unlock() }; return _heldResult }
         set { lock.lock(); defer { lock.unlock() }; _heldResult = newValue }
+    }
+
+    var liveResult: SpanUploadResult {
+        get { lock.lock(); defer { lock.unlock() }; return _liveResult }
+        set { lock.lock(); defer { lock.unlock() }; _liveResult = newValue }
     }
 
     var requests: [(kind: SpanUploadKind, events: [[String: Any]])] {
@@ -833,7 +871,7 @@ private final class RequestRecorder: SpanUploading {
     func upload(_ spans: [[String: Any]], endPoint: String, kind: SpanUploadKind) -> SpanUploadResult {
         lock.lock(); defer { lock.unlock() }
         _requests.append((kind, spans))
-        return kind == .storedCrash ? _heldResult : .delivered
+        return kind == .storedCrash ? _heldResult : _liveResult
     }
 }
 
