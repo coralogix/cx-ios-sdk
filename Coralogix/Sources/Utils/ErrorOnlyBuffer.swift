@@ -52,7 +52,8 @@ struct PosixFileWriter: ErrorOnlyFileWriting {
 ///
 /// Best effort: a write that fails is cut back to the last whole event and the rest of the session
 /// is held in memory, within smaller caps. Passing any cap before an error clears the session's
-/// buffer, as the browser SDK clears its cache past `maxRumEvents`.
+/// buffer and it starts again: what it keeps is always its most recent stretch, never one cut off
+/// in the middle.
 final class ErrorOnlyBuffer {
     static let maxEventBytes = 1_024 * 1_024
     /// A session's byte cap is this per event of `maxRumEvents`: several times an ordinary event,
@@ -68,7 +69,7 @@ final class ErrorOnlyBuffer {
     /// and sessions whose buffer was discarded at rotation, so a late event cannot start it again.
     static let triggeredSessionsKept = 32
     static let discardedSessionsKept = 32
-    /// How long an ended session that had no error keeps its buffer, as on Android: an error
+    /// How long an ended session that had no error keeps its buffer: an error
     /// reported just before the session changed can still be in the batch processor or on a
     /// hybrid `beforeSend` round trip, and must still trigger it.
     static let endedSessionGrace: TimeInterval = 30

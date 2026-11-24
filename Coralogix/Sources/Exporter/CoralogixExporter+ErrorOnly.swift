@@ -11,8 +11,7 @@ final class WeakExporter {
     weak var exporter: CoralogixExporter?
 }
 
-/// Sessions held until an error (`SessionMode.errorOnly`), as the browser SDK's
-/// `handleSessionWithError` does it: every final event — after URL masking and every `beforeSend`,
+/// Sessions held until an error (`SessionMode.errorOnly`): every final event — after URL masking and every `beforeSend`,
 /// native and hybrid — of such a session is held in `errorOnlyBuffer`, unless its category is in
 /// `instrumentationsToSend`. The first event with error severity triggers the session: it is held
 /// last, and what was held is drained, error included, in paced requests (`ErrorOnlyDrain`);
@@ -73,8 +72,8 @@ extension CoralogixExporter {
     }
 
     /// Triggers the event's session, keeping the error with what the session held, so it is sent
-    /// in the same requests and shares their retries and their survival of a restart, as the
-    /// browser SDK sends it. Returns false when it could not be kept: the error is then sent live.
+    /// in the same requests and shares their retries and their survival of a restart: the backend
+    /// gets the session in the order it happened. Returns false when it could not be kept: the error is then sent live.
     ///
     /// An error whose delivery is awaited (an ANR or a React Native fatal, whose stored copy is
     /// sent by the next launch unless it is delivered) is kept the same way: an ANR's copy exists
@@ -137,7 +136,7 @@ extension CoralogixExporter {
     ///
     /// Returns nil, dropping the event, when sessions can be held and the event could belong to
     /// one that routing cannot reach: its mode is unknown, or it is held until an error but its
-    /// session context or id was removed. Sent as it is, it would leak live, as on Android.
+    /// session context or id was removed. Sent as it is, it would leak a held session live.
     func restoringErrorOnlyMode(in event: [String: Any]) -> [String: Any]? {
         let cxRum = Self.cxRum(of: event)
         let spanId = cxRum?[Keys.spanId.rawValue] as? String

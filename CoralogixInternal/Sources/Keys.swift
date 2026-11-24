@@ -45,7 +45,7 @@ public enum Keys: String {
     // Span attribute stamped at creation alongside is_session_sampled_in: whether the session is
     // held until an error. Also the field crash context and stored crash records keep it under.
     case spanSessionOnlyWithErrorMode = "only_with_error_mode"
-    // session_context payload keys, camelCase like isSessionSampledIn (browser parity).
+    // session_context payload keys, camelCase like isSessionSampledIn: the field names the backend reads.
     case onlyWithErrorMode
     case hasError
     case prevSessionCreationDate

@@ -381,8 +381,8 @@ What to expect:
 - Session recording does not record in a held session.
 - `tracesExporter` receives a held session's spans only for events sent as they happen: from the error on,
   or listed in `instrumentationsToSend`.
-- Requests from a held session carry the `traceparent` flag `01`, so your backend keeps their traces even
-  when the session's events are never sent.
+- With `traceParentInHeader` enabled, network requests from a held session are always traced, even if the
+  session is never sent.
 - Every event carries `session_context.onlyWithErrorMode` (read-only), `true` in a held session. Events
   sent from the error on also carry `session_context.hasError: true`.
 
