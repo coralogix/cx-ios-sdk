@@ -465,6 +465,25 @@ final class ErrorOnlyExportTests: XCTestCase {
         XCTAssertNil(payload(uploader, message: "no-id"), "Held until an error: never sent live.")
     }
 
+    func testHybrid_aHeldEventHandedBackUnderAnotherSession_isDropped() throws {
+        let (exporter, uploader, js) = try startHybrid(makeErrorOnlyOptions(sampleRate: 0, alwaysTrack: true))
+        let oldId = try XCTUnwrap(exporter.getSessionManager().getSessionMetadata()?.sessionId)
+        export(exporter, .log, message: "old-held")
+        exporter.sendBeforeSendData(data: js.events.filter { message(cxRum($0)) == "old-held" })
+
+        // The ended session is in its grace, so an error routed under its id would still trigger it.
+        rum?.createNewSession()
+        export(exporter, .error, severity: .error, message: "new-error")
+        let moved = forging(js.events.filter { message(cxRum($0)) == "new-error" }, onlyWithErrorMode: true,
+                            sessionId: oldId)
+        XCTAssertEqual(moved.count, 1, "Precondition: the error was handed to JS.")
+        exporter.sendBeforeSendData(data: moved)
+        exporter.errorOnlyDrain.waitUntilSettled()
+
+        XCTAssertNil(payload(uploader, message: "new-error"), "Not placed in a session it was not handed out under.")
+        XCTAssertNil(payload(uploader, message: "old-held"), "The ended session had no error of its own.")
+    }
+
     func testHybrid_anEventOfAnUnknownSessionAndMode_isDropped_onlyWhileSessionsCanBeHeld() throws {
         let (exporter, uploader, _) = try startHybrid(makeErrorOnlyOptions(sampleRate: 0, alwaysTrack: true))
         let unknown = makeHybridEvent(message: "unknown", sessionId: "a-session-the-sdk-does-not-know")

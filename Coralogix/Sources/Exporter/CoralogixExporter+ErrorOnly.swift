@@ -114,12 +114,19 @@ extension CoralogixExporter {
         return encoded.map(OtelSpan.markingSessionHasError)
     }
 
+    /// The mode and session an event is handed to a hybrid `beforeSend` with.
+    struct HandedMode {
+        let errorOnly: Bool
+        let sessionId: String?
+    }
+
     /// Records the mode each event is handed to a hybrid `beforeSend` with.
     func rememberErrorOnlyModes(of events: [[String: Any]]) {
-        let modes = events.compactMap { event -> (spanId: String, errorOnly: Bool)? in
+        let modes = events.compactMap { event -> (spanId: String, mode: HandedMode)? in
             guard let cxRum = Self.cxRum(of: event), let spanId = cxRum[Keys.spanId.rawValue] as? String else { return nil }
             let session = cxRum[Keys.sessionContext.rawValue] as? [String: Any]
-            return (spanId, session?[Keys.onlyWithErrorMode.rawValue] as? Bool ?? false)
+            return (spanId, HandedMode(errorOnly: session?[Keys.onlyWithErrorMode.rawValue] as? Bool ?? false,
+                                       sessionId: session?[Keys.sessionId.rawValue] as? String))
         }
         hybridModesLock.lock()
         defer { hybridModesLock.unlock() }
@@ -136,15 +143,18 @@ extension CoralogixExporter {
     ///
     /// Returns nil, dropping the event, when sessions can be held and the event could belong to
     /// one that routing cannot reach: its mode is unknown, or it is held until an error but its
-    /// session context or id was removed. Sent as it is, it would leak a held session live.
+    /// session context or id was removed. Sent as it is, it would leak a held session live. So is
+    /// a held event handed back under another session id: routed under it, its error would send
+    /// that session's held events, or it would be held for a session it never belonged to.
     func restoringErrorOnlyMode(in event: [String: Any]) -> [String: Any]? {
         let cxRum = Self.cxRum(of: event)
         let spanId = cxRum?[Keys.spanId.rawValue] as? String
         let remembered = spanId.flatMap(takeRememberedMode)
         let sessionId = (cxRum?[Keys.sessionContext.rawValue] as? [String: Any])?[Keys.sessionId.rawValue] as? String
-        let errorOnly = remembered ?? sessionId.flatMap(getSessionManager().errorOnlyMode)
+        let errorOnly = remembered?.errorOnly ?? sessionId.flatMap(getSessionManager().errorOnlyMode)
         if getOptions().holdsSessionsForErrors {
-            guard let errorOnly, !errorOnly || sessionId != nil else {
+            let keepsItsSession = remembered.map { !$0.errorOnly || $0.sessionId == sessionId } ?? true
+            guard let errorOnly, !errorOnly || sessionId != nil, keepsItsSession else {
                 Log.d("[CoralogixExporter] an event handed back by beforeSend cannot be placed in its session — dropped")
                 return nil
             }
@@ -155,11 +165,11 @@ extension CoralogixExporter {
         }
     }
 
-    private func takeRememberedMode(_ spanId: String) -> Bool? {
+    private func takeRememberedMode(_ spanId: String) -> HandedMode? {
         hybridModesLock.lock()
         defer { hybridModesLock.unlock() }
         guard let index = hybridModes.firstIndex(where: { $0.spanId == spanId }) else { return nil }
-        return hybridModes.remove(at: index).errorOnly
+        return hybridModes.remove(at: index).mode
     }
 
     /// `event` with its `text.cx_rum.session_context` changed by `change`; unchanged when it has none.

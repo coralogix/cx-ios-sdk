@@ -88,9 +88,9 @@ public class CoralogixExporter: SpanExporter {
     var heldTraceSpans: [(spanId: String, span: SpanData)] = []
     let heldTraceSpansLock = NSLock()
     static let maxHeldTraceSpans = 1_000
-    /// Each span's `onlyWithErrorMode` as it was encoded, by span id, for the events handed to a
-    /// hybrid `beforeSend`: the mode is put back from here when they return. Oldest first.
-    var hybridModes: [(spanId: String, errorOnly: Bool)] = []
+    /// Each span's `onlyWithErrorMode` and session id as it was encoded, by span id, for the events
+    /// handed to a hybrid `beforeSend`: the mode is put back from here when they return. Oldest first.
+    var hybridModes: [(spanId: String, mode: HandedMode)] = []
     let hybridModesLock = NSLock()
     /// Crashes go before the held events of their session. No drain starts until this launch's
     /// stored-crash pass is over (`errorOnlyDrainsReleased`), and a session with a stored crash
