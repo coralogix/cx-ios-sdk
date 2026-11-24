@@ -119,7 +119,7 @@ final class UserInteractionSpanTests: XCTestCase {
         XCTAssertNil(span.recordedAttributes[Keys.screenshotId.rawValue],
                      "\(framework): an interaction span carries no screenshot",
                      file: file, line: line)
-        XCTAssertNil(span.recordedAttributes[Keys.page.rawValue], file: file, line: line)
+        XCTAssertNil(span.recordedAttributes["page"], file: file, line: line)
     }
 
     // MARK: - The phase every existing producer reports

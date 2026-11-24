@@ -204,9 +204,9 @@ final class RumWithoutReplayTests: XCTestCase {
         XCTAssertEqual(spans.count, 1, "\(what): one span", file: file, line: line)
         guard let span = spans.first else { return }
         XCTAssertTrue(span.didEnd, "\(what): the span ends with no replay present", file: file, line: line)
-        for key in [Keys.screenshotId, Keys.page, Keys.segmentIndex] {
-            XCTAssertNil(span.recordedAttributes[key.rawValue],
-                         "\(what): carries no \(key.rawValue)", file: file, line: line)
+        for key in [Keys.screenshotId.rawValue, "page", Keys.segmentIndex.rawValue] {
+            XCTAssertNil(span.recordedAttributes[key],
+                         "\(what): carries no \(key)", file: file, line: line)
         }
     }
 
@@ -291,7 +291,7 @@ final class RumWithoutReplayTests: XCTestCase {
         let before = Date().timeIntervalSince1970
         let span = makeSamplingSpan(eventType: .screenshot, extraAttributes: [
             Keys.screenshotId.rawValue: AttributeValue("shot-1"),
-            Keys.page.rawValue: AttributeValue("3"),
+            "page": AttributeValue("3"), // a stored attribute, no longer sent
             Keys.isManual.rawValue: AttributeValue("true")
         ])
 
@@ -302,7 +302,7 @@ final class RumWithoutReplayTests: XCTestCase {
         let context = try XCTUnwrap(cxRum[Keys.screenshotContext.rawValue] as? [String: Any],
                                     "screenshot_context is still encoded")
         XCTAssertEqual(context[Keys.screenshotId.rawValue] as? String, "shot-1")
-        XCTAssertEqual(context[Keys.page.rawValue] as? Int, 3)
+        XCTAssertNil(context["page"], "no page is sent")
         XCTAssertEqual(context[Keys.isManual.rawValue] as? Bool, true)
         let segment = try XCTUnwrap(context[Keys.segmentTimestamp.rawValue] as? Int, "segment timestamp in ms")
         XCTAssertEqual(Double(segment) / 1000, before, accuracy: 5, "the span's start time, in milliseconds")

@@ -12,7 +12,7 @@ final class ScreenshotContextTests: XCTestCase {
     func testInitializationWithValidAttributes() {
         let attributes: [String: Any] = [
             Keys.screenshotId.rawValue: AttributeValue("screenshot_123"),
-            Keys.page.rawValue: AttributeValue("5"),
+            "page": AttributeValue("5"),
             Keys.isManual.rawValue: AttributeValue(true)
         ]
         let startTime = Date(timeIntervalSince1970: 1234567890)
@@ -21,7 +21,6 @@ final class ScreenshotContextTests: XCTestCase {
         let context = ScreenshotContext(otel: mockData)
         
         XCTAssertEqual(context.screenshotId, "screenshot_123")
-        XCTAssertEqual(context.page, 5)
         XCTAssertEqual(context.segmentTimestamp, 1234567890)
         XCTAssertTrue(context.isManual)
     }
@@ -33,25 +32,26 @@ final class ScreenshotContextTests: XCTestCase {
         let context = ScreenshotContext(otel: mockData)
         
         XCTAssertEqual(context.screenshotId, Keys.undefined.rawValue)
-        XCTAssertEqual(context.page, 0)
         XCTAssertFalse(context.isManual)
     }
     
-    func testInitializationWithInvalidPage() {
+    func testInitializationWithInvalidStoredPage_isIgnored() {
         let attributes: [String: Any] = [
-            Keys.page.rawValue: "invalid_number"
+            Keys.screenshotId.rawValue: AttributeValue("abc"),
+            "page": "invalid_number"
         ]
         let mockData = MockSpanData(attributes: attributes)
         
         let context = ScreenshotContext(otel: mockData)
         
-        XCTAssertEqual(context.page, 0)
+        XCTAssertTrue(context.isValid())
+        XCTAssertNil(context.getDictionary()["page"])
     }
     
     func testGetDictionaryOutput() {
         let attributes: [String: Any] = [
             Keys.screenshotId.rawValue: AttributeValue("abc"),
-            Keys.page.rawValue: AttributeValue("3"),
+            "page": AttributeValue("3"),
             Keys.isManual.rawValue: AttributeValue(false)
         ]
         let startTime = Date(timeIntervalSince1970: 1234567890)
@@ -61,7 +61,7 @@ final class ScreenshotContextTests: XCTestCase {
         let dict = context.getDictionary()
         
         XCTAssertEqual(dict[Keys.screenshotId.rawValue] as? String, "abc")
-        XCTAssertEqual(dict[Keys.page.rawValue] as? Int, 3)
+        XCTAssertNil(dict["page"], "no page is sent")
         XCTAssertEqual(dict[Keys.isManual.rawValue] as? Bool, false)
         
         let segmentTimestampMs = Int(startTime.timeIntervalSince1970 * 1000)
