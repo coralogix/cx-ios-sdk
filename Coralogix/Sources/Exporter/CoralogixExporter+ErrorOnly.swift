@@ -74,17 +74,22 @@ extension CoralogixExporter {
 
     /// Triggers the event's session, keeping the error with what the session held, so it is sent
     /// in the same requests and shares their retries and their survival of a restart, as the
-    /// browser SDK sends it. Returns false when the error is to be sent live: it could not be
-    /// kept, or it already has a durable path of its own (a fatal hang or a React Native fatal,
-    /// stored for the next launch until its live delivery is confirmed).
+    /// browser SDK sends it. Returns false when it could not be kept: the error is then sent live.
+    ///
+    /// An error whose delivery is awaited (an ANR or a React Native fatal, whose stored copy is
+    /// sent by the next launch unless it is delivered) is kept the same way: an ANR's copy exists
+    /// only while its hang lasts, so live would leave a recovered hang nothing to retry it. Its
+    /// waiter is answered as delivered once it is kept, since the buffer now carries it: answered
+    /// only when its request lands, a launch ending first would send it twice.
     private func holdTrigger(_ error: [String: Any], of route: ErrorOnlyRoute) -> Bool {
-        let hasOwnPath = route.spanId.map(isAwaitingLiveDelivery) ?? false
-        guard !hasOwnPath, JSONSerialization.isValidJSONObject(error),
+        guard JSONSerialization.isValidJSONObject(error),
               let data = try? JSONSerialization.data(withJSONObject: error) else {
             errorOnlyBuffer.trigger(route.sessionId)
             return false
         }
-        return errorOnlyBuffer.triggerHolding(data, sessionId: route.sessionId)
+        guard errorOnlyBuffer.triggerHolding(data, sessionId: route.sessionId) else { return false }
+        if let spanId = route.spanId { handOverLiveDelivery(of: spanId) }
+        return true
     }
 
     /// Returns false when the session turned out to have had its error: the event is not held.

@@ -170,11 +170,13 @@ public class CoralogixExporter: SpanExporter {
         liveDeliveryWaiters[spanId] = handler
     }
 
-    /// Whether something waits on the delivery of the live event whose span id is `spanId`.
-    func isAwaitingLiveDelivery(_ spanId: String) -> Bool {
+    /// The event whose span id is `spanId` was kept on disk with its held session, which sends it
+    /// and retries it from now on: whoever waits on its delivery is answered as delivered.
+    func handOverLiveDelivery(of spanId: String) {
         crashUploadLock.lock()
-        defer { crashUploadLock.unlock() }
-        return liveDeliveryWaiters[spanId] != nil
+        let waiter = liveDeliveryWaiters.removeValue(forKey: spanId)
+        crashUploadLock.unlock()
+        waiter?(true)
     }
 
     private func resolveLiveDeliveries(of events: [[String: Any]], result: SpanUploadResult) {

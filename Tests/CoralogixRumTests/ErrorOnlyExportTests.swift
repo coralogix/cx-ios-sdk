@@ -172,15 +172,43 @@ final class ErrorOnlyExportTests: XCTestCase {
         XCTAssertEqual(chunk.events.map(cxRum).compactMap(message).last, "the-error", "And the error is kept with it.")
     }
 
-    func testAnErrorWithItsOwnDeliveryRecord_isSentLive_andStillTriggers() throws {
+    /// An ANR whose hang recovered has no stored copy left: its first upload failing must not lose it.
+    func testAnErrorAwaitingItsDelivery_isKeptWithTheHeldEvents_andAnsweredAsDelivered() throws {
         let (exporter, uploader) = try startRecordingRequests()
+        uploader.heldResult = SpanUploadResult(disposition: .retryable, httpStatus: 503, retryAfter: nil,
+                                               countsAsFailedUpload: true)
+        let answers = SentCount()
         export(exporter, .log, message: "held")
-        export(exporter, .error, severity: .error, message: "fatal-hang", awaitsDelivery: true)
+        export(exporter, .error, severity: .error, message: "anr") { spanId in
+            exporter.awaitLiveDelivery(spanId: spanId) { delivered in
+                if delivered { answers.add() }
+            }
+        }
         exporter.errorOnlyDrain.waitUntilSettled()
 
-        let carrying = uploader.requests.filter { labels(of: $0.events).contains("fatal-hang") }
-        XCTAssertEqual(carrying.map(\.kind), [.live], "Its stored record already resends it on a later launch.")
-        XCTAssertTrue(uploader.requests.contains { $0.kind == .storedCrash && labels(of: $0.events).contains("held") })
+        XCTAssertFalse(uploader.requests.contains { $0.kind == .live && labels(of: $0.events).contains("anr") },
+                       "Not sent live, where nothing would retry it.")
+        XCTAssertEqual(answers.value, 1, "Its stored copy is told it needs no second send.")
+        let sessionId = try XCTUnwrap(exporter.getSessionManager().currentSessionId)
+        let nextLaunch = ErrorOnlyBuffer(maxRumEvents: 5_000, directory: directory)
+        XCTAssertEqual(nextLaunch.adoptLeftovers { $0.triggered }, [sessionId])
+        let chunk = try XCTUnwrap(nextLaunch.nextChunk(of: sessionId, maxEvents: 500, maxBytes: ErrorOnlyDrain.maxBytesPerRequest))
+        XCTAssertEqual(chunk.events.map(cxRum).compactMap(message).suffix(2), ["held", "anr"],
+                       "Kept on disk after the held event, for the retries and the next launch.")
+    }
+
+    func testTheHangWatch_marksAHeldANRDelivered_soTheNextLaunchDoesNotReportItAgain() throws {
+        let (exporter, _) = try startRecordingRequests()
+        let store = CrashDeliveryStore(directory: directory.appendingPathComponent("crashes", isDirectory: true))
+        let watch = FatalHangWatch(store: store, session: { nil })
+        watch.hangDetected(at: Date(), threads: nil)
+        export(exporter, .log, message: "held")
+        export(exporter, .error, severity: .error, message: "anr") { spanId in
+            watch.awaitDelivery(ofSpan: spanId, through: exporter)
+        }
+        exporter.errorOnlyDrain.waitUntilSettled()
+        XCTAssertEqual(store.hangMarker()?.liveDelivered, true,
+                       "Kept with its session's events: a launch ending in the hang has nothing to add.")
     }
 
     func testADrainStoppedOffline_startsAgainWhenTheNetworkComesBack() throws {
@@ -611,7 +639,7 @@ final class ErrorOnlyExportTests: XCTestCase {
                         message: String,
                         errorMessage: String? = nil,
                         stamp: [(key: String, value: String)]? = nil,
-                        awaitsDelivery: Bool = false) {
+                        beforeExport: ((_ spanId: String) -> Void)? = nil) {
         var extra: [String: AttributeValue] = [Keys.severity.rawValue: .string(String(severity.rawValue)),
                                                Keys.message.rawValue: .string(message)]
         for (key, value) in stamp ?? exporter.getSessionManager().sessionSpanAttributes() {
@@ -620,7 +648,7 @@ final class ErrorOnlyExportTests: XCTestCase {
         if let errorMessage { extra[Keys.errorMessage.rawValue] = .string(errorMessage) }
         let span = makeSamplingSpan(eventType: type, extraAttributes: extra)
         label(span, message)
-        if awaitsDelivery { exporter.awaitLiveDelivery(spanId: span.spanId.hexString) { _ in } }
+        beforeExport?(span.spanId.hexString)
         _ = exporter.export(spans: [span], explicitTimeout: nil)
     }
 
