@@ -361,6 +361,57 @@ final class RumBusTests: XCTestCase {
         Self.assertSessionChanged(rec.messages.first, sm: sm2, kept: true, idle: false)
     }
 
+    /// RED-now (the non-vacuous half: the newest instance does publish). D5 + driver ruling: the live instance is
+    /// the most recently initialized one; an older instance that was never shut down publishes nothing.
+    /// This is also what isolates these tests from instances other test classes leave running: `setUp`'s
+    /// init makes every such leftover older than the instance each test creates.
+    func testOlderNeverShutDownInstance_staysSilent() {
+        let sm1 = Self.sessionManager()
+        let rum1 = CoralogixRum(options: Self.options(), sessionManager: sm1)
+        let sm2 = Self.sessionManager()
+        let rum2 = CoralogixRum(options: Self.options(), sessionManager: sm2)
+        let rec = subscribeAndSkipCurrentState()
+        defer {
+            subscriptions.forEach { $0.cancel() }
+            rum2.shutdown()
+            rum1.shutdown()
+        }
+
+        sm1.setupSessionMetadata()   // rotation on the older manager
+        rum1.createNewSession()
+        rum1.setView(name: "Old")
+        rum1.flush()
+        CoralogixRum.drainBus()
+        XCTAssertEqual(rec.messages, [], "the older instance publishes nothing")
+
+        // Both instances observe the navigation notification; only the newest one publishes.
+        NotificationCenter.default.post(name: .cxRumNotification, object: CXView(state: .notifyOnAppear, name: "Shared"))
+        rum2.createNewSession()
+        CoralogixRum.drainBus()
+        guard rec.messages.count == 2 else { return XCTFail("one ViewChanged, one SessionChanged: \(rec.messages)") }
+        XCTAssertEqual(rec.messages[0], .viewChanged(screen: "Shared"))
+        Self.assertSessionChanged(rec.messages[1], sm: sm2, kept: true, idle: false)
+    }
+
+    /// RED-now (fixture half: ShuttingDown) + GUARD (nothing after it). Nothing is published while RUM is not initialized.
+    func testNothingPublishedWhileNotInitialized() {
+        let rec = subscribe() // setUp left RUM shut down
+        let rum = CoralogixRum(options: Self.options())
+        rum.shutdown()
+        CoralogixRum.drainBus()
+        XCTAssertEqual(rec.messages.last, .shuttingDown, "fixture: \(rec.messages)")
+        rec.clear()
+
+        rum.flush()
+        rum.setView(name: "AfterShutdown")
+        NotificationCenter.default.post(name: .cxRumNotification,
+                                        object: CXView(state: .notifyOnAppear, name: "AfterShutdownNav"))
+        rum.createNewSession()
+        CoralogixRum.drainBus()
+
+        XCTAssertEqual(rec.messages, [], "no Flushing, ViewChanged or SessionChanged while RUM is down")
+    }
+
     // MARK: - ViewChanged
 
     /// RED-now. Brief pin 4, D6: masked name on the wire, dedup on the raw name, empty name ignored.
