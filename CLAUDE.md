@@ -255,3 +255,27 @@ Block if the README doesn't reflect the current state of the SDK, or if it expla
 ## Distribution
 
 Three podspecs must be published in order (`CoralogixInternal` → `SessionReplay` + `Coralogix`) with CDN propagation waits between steps. The `lint_and_push_cocoapods.sh` script handles this interactively. Version numbers must be kept in sync across all three `.podspec` files and the `CoralogixRum` source constant (`Global.sdk` in `CoralogixInternal/Sources/Utils.swift`). `Package.swift` has no version string — SPM versioning is driven by git tags.
+
+## Keeping the team rules in sync
+
+The team's review and coding rules live in `coralogix/internal-rum-infra-claude-plugins` (`plugins/rum-infra/skills/`). Do not keep a copy of them here. When a change in this repo should change those rules, open the plugin PR in the same task, without waiting to be asked.
+
+**Open a plugin PR when the change:**
+- changes how code is reviewed or what a reviewer must check (review or PR checklists, `AGENTS.md`, `.claude/rules/`);
+- exposes a pitfall or a redundancy a reviewer should now catch, for example logic duplicated in a second place that already owns it;
+- changes a repo fact the plugin records: commands, version files, changelog or README format, PR title format, publish trigger, test or CI registration;
+- conflicts with a `rum-infra` skill, or a rule this repo relies on is missing from the plugin.
+
+**Do not** open one for a change that only affects this repo's own code, or for a rule the plugin already has. Check the skill first.
+
+**How:**
+1. Work in a separate clone or worktree of the plugin repo, branched from `origin/master`. Never use its checked-out feature branch.
+2. Edit the skill that owns the rule: `rum-infra:platform-ios` for this repo, or a shared skill if the rule applies to every SDK. Keep it generic: no ticket IDs, customer data, internal URLs or secrets.
+3. Add an entry under **Unreleased** in the plugin's `CHANGELOG.md`.
+4. Branch `rum-infra/<repo>-<topic>`, commit, push, then open the PR:
+   `gh pr create --repo coralogix/internal-rum-infra-claude-plugins --reviewer stas-rudevitsky --title "<type>(rum-infra): <what changed>" --body "<rule, why, link to the change in this repo>"`
+   Tag `@stas-rudevitsky` in the body as well.
+5. Do not merge it. Do not commit the plugin change to this repo's branch.
+6. Put the plugin PR link in the final message.
+
+If the plugin already has a rule that this file repeats, point to the plugin instead of keeping a copy in both places.
