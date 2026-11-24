@@ -45,12 +45,6 @@ final class MainViewController: UITableViewController {
             key: .userActionsInstumentation
         ),
         .init(
-            title: "Session replay",
-            subtitle: "Replay user sessions visually",
-            systemImageName: "film.stack",
-            key: .sessionReplay
-        ),
-        .init(
             title: "Clock",
             subtitle: "Timing, spans & scheduling",
             systemImageName: "clock",
@@ -298,8 +292,6 @@ final class MainViewController: UITableViewController {
             vc = CustomSpansViewController()
         case .userActionsInstumentation:
             vc = UserActionsViewController()
-        case .sessionReplay:
-            vc = SessionReplayViewController()
         case .clock:
             vc = ClockViewController()
         case .schemaValidation:

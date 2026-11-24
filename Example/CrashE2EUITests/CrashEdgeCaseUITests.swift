@@ -3,7 +3,7 @@
 //  CrashE2EUITests
 //
 //  The edges of what counts as one crash: when it happened, launches that end without one, two
-//  crashes in one launch or around init, and a crash while session replay records.
+//  crashes in one launch or around init.
 //
 
 import XCTest
@@ -61,20 +61,6 @@ final class CrashEdgeCaseUITests: CrashE2ETestCase {
         XCTAssertTrue(Self.nullWriteMessages.contains(message(crash) ?? ""), message(crash) ?? "nil")
         settle()
         XCTAssertEqual(endpoint.crashes.count, 1)
-    }
-
-    func testCrashWhileSessionReplayRecords_isSentOnce_inTheSessionItHappenedIn() throws {
-        crash("exception", before: ["error:while recording"], ["sessionReplay": true])
-        let live = try XCTUnwrap(endpoint.events.first { message($0) == "while recording" }, "the live error did not arrive")
-        // Not asserted: `hasRecording` turns true on the first captured frame, and CI's simulators
-        // give the app no Metal device, so they capture none. Replay is started either way.
-        relaunch(["sessionReplay": true])
-
-        let crash = awaitCrashes(1)[0]
-        XCTAssertEqual(message(crash), "NSInvalidArgumentException: crash e2e exception")
-        XCTAssertEqual(session(crash), session(live))
-        settle()
-        XCTAssertEqual(endpoint.crashes.count, 1, "sent once")
     }
 
     func testHybridCrashThenRCTFatalException_inOneLaunch_areOneCrashEvent() {

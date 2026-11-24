@@ -33,8 +33,6 @@ struct Scenario: Codable {
     /// The hybrid beforeSend replaces every error message it sees with `hybridEditedMessage`.
     var hybridEdit: Bool = false
     var globalSpan: Bool = false
-    /// Session replay is set up with the SDK and records from the first screen.
-    var sessionReplay: Bool = false
     /// Applied to the SDK's files before init: `reset`, `setFailedUploads:<n>`,
     /// `ageCrashesBySeconds:<s>`, `seedLegacyHybridStore`, `lockCrashCopies`, `unlockCrashCopies`.
     var hooks: [String] = []
@@ -88,7 +86,6 @@ struct Scenario: Codable {
         hybridBeforeSend = try c.decodeIfPresent(Bool.self, forKey: .hybridBeforeSend) ?? hybridBeforeSend
         hybridEdit = try c.decodeIfPresent(Bool.self, forKey: .hybridEdit) ?? hybridEdit
         globalSpan = try c.decodeIfPresent(Bool.self, forKey: .globalSpan) ?? globalSpan
-        sessionReplay = try c.decodeIfPresent(Bool.self, forKey: .sessionReplay) ?? sessionReplay
         hooks = try c.decodeIfPresent([String].self, forKey: .hooks) ?? hooks
     }
 }

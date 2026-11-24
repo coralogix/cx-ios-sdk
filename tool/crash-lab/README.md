@@ -41,7 +41,7 @@ The lab's settings are a JSON file the app reads at launch: `Library/Application
 | `sessionSampleRate`, `errorInstrumentation`, `anrInstrumentation` | 100/0, on/off, on/off |
 | `ignoreErrors` | `"SIGSEGV.*"`, `"NSInvalidArgumentException:.*"`, `"ANR"` |
 | `crashBeforeSend` | `"keep"`, `"drop"`, `"edit"` |
-| `tracesExporter`, `sessionReplay`, `globalSpan`, `hybridBeforeSend` | on/off |
+| `tracesExporter`, `globalSpan`, `hybridBeforeSend` | on/off |
 | `appVersion` | `null` (the build's), `"crashlab-old"`, `"crashlab-new"` |
 | `endpoint` | `null`, `"mock"` (see [Mock endpoint](#mock-endpoint)) |
 

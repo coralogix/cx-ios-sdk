@@ -10,7 +10,6 @@
 import UIKit
 // The scheduler's test hook tells when recovery's first delivery pass is over.
 @testable import Coralogix
-import SessionReplay
 
 @main
 final class AppDelegate: UIResponder, UIApplicationDelegate {
@@ -105,11 +104,6 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
                                sdkFramework: scenario.hybridBeforeSend ? .reactNative(version: "e2e") : .swift)
         if scenario.globalSpan {
             globalSpan = sdk.getCustomTracer()?.startGlobalSpan(name: "crash-e2e-global-span")
-        }
-        if scenario.sessionReplay {
-            SessionReplay.initializeWithOptions(sessionReplayOptions: SessionReplayOptions(
-                recordingType: .image, captureScale: 1, captureCompressionQuality: 0.5,
-                maskText: nil, maskOnlyCreditCards: false, maskAllImages: false, autoStartSessionRecording: true))
         }
         return sdk
     }

@@ -293,38 +293,15 @@
   "source": "RN B2"
  },
  {
-  "id": "J3",
-  "section": "jvm",
-  "title": "Main-thread exception while session replay records",
-  "expect": [
-   "Message 'NSInternalInconsistencyException: crash lab: crash while session replay records'",
-   "The crash event arrives on the relaunch, in the crashed launch's session",
-   "The session has a replay covering the seconds before the crash",
-   "The crash event carries no session replay screenshot"
-  ],
-  "steps": [
-   "Set sessionReplay = true",
-   "Relaunch the app",
-   "Wait 10 s while replay records",
-   "Tap J3",
-   "Relaunch the app",
-   "Wait 30 s"
-  ],
-  "trigger": "J3",
-  "source": "crash lost while session replay records"
- },
- {
   "id": "J4",
   "section": "jvm",
-  "title": "Main-thread exception during a session rotation, replay on",
+  "title": "Main-thread exception during a session rotation",
   "expect": [
    "Message 'NSInternalInconsistencyException: crash lab: crash during a session rotation'",
    "The crash arrives on the relaunch; the app does not hang before dying",
    "Filed under the session current when it crashed (the one the rotation started), not the relaunch's"
   ],
   "steps": [
-   "Set sessionReplay = true",
-   "Relaunch the app",
    "Tap J4",
    "Relaunch the app",
    "Wait 30 s"

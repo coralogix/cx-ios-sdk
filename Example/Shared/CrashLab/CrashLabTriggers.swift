@@ -10,7 +10,6 @@
 
 import Foundation
 import Coralogix
-import SessionReplay
 
 enum CrashLabTriggers {
     /// Runs case `id`. Returns a line to show when the case does not end the process.
@@ -61,19 +60,12 @@ enum CrashLabTriggers {
             _ = crashed.wait(timeout: .now() + 5)
             return nil
         },
-        "J3": {
-            SessionReplay.shared?.startRecording()
-            // Long enough for replay to be capturing when the crash comes.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 3) { raise("crash lab: crash while session replay records") }
-            return "Recording; crashing in 3 s"
-        },
         "J4": {
-            SessionReplay.shared?.startRecording()
             DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
                 CoralogixRumManager.shared.sdk.createNewSession()
                 raise("crash lab: crash during a session rotation")
             }
-            return "Recording; rotating the session and crashing in 3 s"
+            return "Rotating the session and crashing in 3 s"
         },
         "J11": {
             // 100 threads parked deep in their stacks, so the crash has a large set of threads to take.

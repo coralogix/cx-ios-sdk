@@ -45,12 +45,6 @@ struct ContentView: View {
                 destination: AnyView(UserActionsView())
             ),
             MenuItem(
-                title: "Session replay",
-                subtitle: "Replay user sessions visually",
-                icon: "film.stack",
-                destination: AnyView(SessionReplayView())
-            ),
-            MenuItem(
                 title: "Clock",
                 subtitle: "Timing, spans & scheduling",
                 icon: "clock",

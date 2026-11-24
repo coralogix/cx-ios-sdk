@@ -12,7 +12,6 @@
 import Foundation
 import Coralogix
 import CoralogixInternal
-import SessionReplay
 
 /// One preset value of a setting. JSON-shaped, so the driver can write it.
 enum CrashLabValue: Equatable, CustomStringConvertible {
@@ -52,7 +51,7 @@ enum CrashLabValue: Equatable, CustomStringConvertible {
 enum CrashLabSetting: String, CaseIterable {
     case coralogixEnv, sdkDebug, crashBeforeInit, launchAction, launchActionCount, sessionSampleRate
     case errorInstrumentation, anrInstrumentation, ignoreErrors, crashBeforeSend, tracesExporter
-    case appVersion, endpoint, sessionReplay, globalSpan, hybridBeforeSend
+    case appVersion, endpoint, globalSpan, hybridBeforeSend
 
     var key: String { rawValue }
 
@@ -71,7 +70,6 @@ enum CrashLabSetting: String, CaseIterable {
         case .tracesExporter: return "tracesExporter (logs each forwarded span)"
         case .appVersion: return "App version reported (— : the demo app's)"
         case .endpoint: return "Endpoint (mock: http://127.0.0.1:<mockPort>)"
-        case .sessionReplay: return "Start session recording at launch"
         case .globalSpan: return "Start a global span at launch"
         case .hybridBeforeSend: return "Hybrid SDK with a beforeSend round trip"
         }
@@ -80,7 +78,7 @@ enum CrashLabSetting: String, CaseIterable {
     var values: [CrashLabValue] {
         switch self {
         case .coralogixEnv: return [.none, .string(CrashLabSettings.eu1CrashLab)]
-        case .sdkDebug, .tracesExporter, .sessionReplay, .globalSpan, .hybridBeforeSend: return [.bool(false), .bool(true)]
+        case .sdkDebug, .tracesExporter, .globalSpan, .hybridBeforeSend: return [.bool(false), .bool(true)]
         case .crashBeforeInit: return [.none, .string("exception"), .string("signal")]
         case .launchAction: return [.none, .string("exception"), .string("signal"), .string("cxx"), .string("hang")]
         case .launchActionCount: return [.int(1), .int(3), .int(12)]
@@ -238,10 +236,6 @@ final class CrashLabSettings {
     func afterInit(sdk: CoralogixRum) {
         // The driver script reads this to know which session each launch is.
         NSLog("[CrashLab] launch session=%@", sdk.getSessionId ?? "none")
-        if flag(.sessionReplay) {
-            // Next turn: the demo apps initialize session replay after the SDK.
-            DispatchQueue.main.async { SessionReplay.shared?.startRecording() }
-        }
         if flag(.globalSpan) {
             CrashLabTriggers.keep(sdk.getCustomTracer()?.startGlobalSpan(name: "crash-lab-global-span"))
         }

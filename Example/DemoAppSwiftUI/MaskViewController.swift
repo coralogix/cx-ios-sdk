@@ -59,13 +59,12 @@ struct MaskDemoView: View {
 
                 // Keypads — mirrors the UIKit demo's masked/unmasked pair.
                 //
-                // `.cxMask()` overlays a masked UIView on top of this container, so the replay
-                // blacks the keypad out and draws no tap marker over it. Unlike the UIKit
+                // `.cxMask()` overlays a masked UIView on top of this container. Unlike the UIKit
                 // `cxMask`, the overlay is not an ancestor of the keys, so their interaction
                 // events still report the digit. Masking a SwiftUI control's interaction text is
-                // not supported yet — see the SessionReplay README.
+                // not supported yet.
                 Text("Keypads: the left one is masked at the container. "
-                     + "Tap both and compare them in the replay.")
+                     + "Tap both and compare the reported interactions.")
                     .font(.system(size: 13))
                     .foregroundColor(.secondary)
 
