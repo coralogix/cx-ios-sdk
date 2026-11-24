@@ -21,6 +21,8 @@ extension CoralogixRum {
         busScreenLock.lock()
         busScreenRaw = nil
         busScreenLock.unlock()
+        // Installed before CurrentState goes out, so a reply to it finds the handler; the handler checks liveness itself.
+        RumBus.shared.setRumHandler { [weak self] message in self?.handleReplayMessage(message) }
         sessionManager.attachBus(initial: { [weak self] session in
             guard let self else { return }
             Self.liveInstanceLock.lock()
@@ -38,7 +40,6 @@ extension CoralogixRum {
                                                kept: session.kept,
                                                idle: session.idle))
         })
-        RumBus.shared.setRumHandler { [weak self] message in self?.handleReplayMessage(message) }
     }
 
     /// Announces ShuttingDown and silences the bus. RUM is down for the whole process once any instance shuts
