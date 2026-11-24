@@ -8,7 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Release-mechanics commits (version bumps, podspec/script tweaks, README edits) are
 omitted; the focus here is user-facing behavior changes.
 
-## [2.24.4] - 2026-11-22
+## [2.24.4] - 2026-11-23
+
+### Changed
+- The bundled `URLSessionInstrumentationConfiguration` no longer has `shouldCollectRequestPayload`, and its `receivedResponse` callback now takes three arguments. The four-argument form, with the request, is now `receivedResponseWithRequest`. This only affects code that builds this configuration directly, whose network spans also no longer follow a span opened with `startGlobalSpan`; the SDK's own network events are unchanged.
 
 ### Fixed
 - In React Native apps, a fatal JavaScript error is now reported once instead of twice, with its JavaScript message and stack.

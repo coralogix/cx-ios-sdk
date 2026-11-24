@@ -59,7 +59,14 @@ public class URLSessionInstrumentation {
         defer { sharedInstanceLock.unlock() }
         return sharedInstance
     }
-    
+
+    /// Lets a test that builds its own instance hand `shared` back to the one it found.
+    internal static func restoreSharedForTesting(_ instance: URLSessionInstrumentation?) {
+        sharedInstanceLock.lock()
+        defer { sharedInstanceLock.unlock() }
+        sharedInstance = instance
+    }
+
     private let queue = DispatchQueue(label: "io.opentelemetry.ddnetworkinstrumentation", attributes: .concurrent)
     /// Serial queue for response body interception store (CX-33234).
     private let captureQueue = DispatchQueue(label: "com.coralogix.network-capture")
@@ -408,34 +415,19 @@ public class URLSessionInstrumentation {
 
     /// Centralized request capture and logging for all swizzled URLSession request paths. Caller must pass the returned request to the original IMP, then call `setIdKey(value:sessionTaskId, for: task)` and `storeRequest(requestToUse, forTaskId: sessionTaskId)`.
     /// Pass `existingSessionTaskId` when the task id is already in scope (e.g. async path where the completion wrapper closes over it); otherwise a new id is generated.
-    /// Captures request body via readRequestBody before any consumption; passes preCapturedBody so processAndLogRequest can set request_payload even when request.httpBody is nil later.
     private func prepareAndLogRequest(_ request: URLRequest, injectHeaders: Bool, existingSessionTaskId: String? = nil) -> (sessionTaskId: String, requestToUse: URLRequest) {
         let sessionTaskId = existingSessionTaskId ?? UUID().uuidString
-        let (preCapturedBody, requestForSending) = NetworkCaptureRule.readRequestBody(from: request)
-        let instrumentedRequest = URLSessionLogger.processAndLogRequest(
-            requestForSending,
-            sessionTaskId: sessionTaskId,
-            instrumentation: self,
-            shouldInjectHeaders: injectHeaders,
-            preCapturedRequestBody: preCapturedBody
-        )
-        let requestToUse = instrumentedRequest ?? requestForSending
-        return (sessionTaskId, requestToUse)
+        let instrumentedRequest = instrumentRequest(request, sessionTaskId: sessionTaskId, injectHeaders: injectHeaders)
+        return (sessionTaskId, instrumentedRequest ?? request)
     }
 
     @discardableResult
-    private func instrumentRequest(
-        _ request: URLRequest,
-        sessionTaskId: String,
-        injectHeaders: Bool,
-        preCapturedRequestBody: Data? = nil
-    ) -> URLRequest? {
+    private func instrumentRequest(_ request: URLRequest, sessionTaskId: String, injectHeaders: Bool) -> URLRequest? {
         URLSessionLogger.processAndLogRequest(
             request,
             sessionTaskId: sessionTaskId,
             instrumentation: self,
-            shouldInjectHeaders: injectHeaders,
-            preCapturedRequestBody: preCapturedRequestBody
+            shouldInjectHeaders: injectHeaders
         )
     }
     
