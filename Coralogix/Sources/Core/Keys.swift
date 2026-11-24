@@ -239,8 +239,6 @@ public enum Keys: String {
     case hasRecording
     case screenshotId
     case page
-    /// The view id handed to `flutterViewBitmapProvider`. The same string Android passes; the
-    /// plugin ignores it on both platforms and routes every capture to Flutter's implicit view.
     case screenshotContext = "screenshot_context"
     case queueExporter = "com.coralogix.exporter.queue"
     case queueSpanProcessingQueue = "com.coralogix.spanProcessingQueue"

@@ -139,7 +139,7 @@ Invoke via `Skill` tool (or the user's `/<name>` slash command). Use the right t
 | `/fix-issues` | Work through PR-review findings one at a time, stopping for approval between each |
 | `/commitAndNext` | Inside `/fix-issues`, commit the current fix and advance to the next finding |
 | `/verify` | Verify a change by actually running the demo app + observing behaviour. Use after a substantive change, before declaring "done" |
-| `/bump-version` | Bump SDK version using the project's existing script (keeps the two `.podspec` files and `Global.sdk` in sync — do NOT hand-edit) |
+| `/bump-version` | Bump SDK version using the project's existing script (keeps `Coralogix.podspec` and `Global.sdk` in sync — do NOT hand-edit) |
 | `/release-notes-sdk` | Summarise what changed between two version tags, formatted for a Slack post |
 | `/Clean-After-Merged` | After a branch is merged: switch to `master`, pull, delete the local branch |
 

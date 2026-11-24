@@ -20,7 +20,7 @@ Read these in order. Section 1 (Versioning) is always checked first. Section 4 (
 
 > **Example violation:** PR has `feat: add user tracking` but bumps 2.0.0 → 3.0.0. This is WRONG — should be 2.1.0. Flag immediately.
 
-> **Example violation:** Both podspecs say `2.8.0` but `Global.sdk` still says `2.7.0`. The SDK will report its own version incorrectly. Flag immediately.
+> **Example violation:** `Coralogix.podspec` says `2.8.0` but `Global.sdk` still says `2.7.0`. The SDK will report its own version incorrectly. Flag immediately.
 
 **Conventional Commits:** `feat:`, `feat!:`, `fix:`, `docs:`, `style:`, `refactor:`, `perf:`, `test:`, `build:`, `ci:`, `chore:`, `revert:`, `update:`
 
@@ -181,4 +181,4 @@ When the diff matches one of these patterns, the PR author should use the regist
 | Manually verifying a change end-to-end | `/verify` (runs the demo app, observes behaviour, not just tests) |
 | Generating release notes for a tag range | `/release-notes-sdk` |
 
-Flag PRs that hand-edit versions in the three podspec/source files individually — that's the exact thing `/bump-version` exists to prevent.
+Flag PRs that hand-edit versions in the two version files (`Coralogix.podspec`, `Global.sdk`) individually — that's the exact thing `/bump-version` exists to prevent.
