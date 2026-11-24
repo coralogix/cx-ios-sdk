@@ -670,6 +670,25 @@ final class ErrorOnlyBufferTests: XCTestCase {
         XCTAssertEqual(buffer.metadata(of: "s")?.failedUploads, 0, "Offline is not counted.")
     }
 
+    // MARK: - Test hooks
+
+    /// Unlocked, a read racing a write over-releases the clock it loads and crashes the process.
+    func testTestHooks_concurrentReadsAndWrites_doNotRace() {
+        DispatchQueue.concurrentPerform(iterations: 20_000) { index in
+            if index.isMultiple(of: 2) {
+                ErrorOnlyBuffer.testClock = ManualDeliveryClock()
+                ErrorOnlyBuffer.testDirectory = URL(fileURLWithPath: "/hooks/\(index)")
+            } else {
+                _ = ErrorOnlyBuffer.defaultClock.now()
+                _ = ErrorOnlyBuffer.defaultDirectory.path
+            }
+        }
+        ErrorOnlyBuffer.testClock = nil
+        ErrorOnlyBuffer.testDirectory = nil
+        XCTAssertTrue(ErrorOnlyBuffer.defaultClock is SystemDeliveryClock)
+        XCTAssertEqual(ErrorOnlyBuffer.defaultDirectory.lastPathComponent, "error-only")
+    }
+
     // MARK: - Helpers
 
     private func makeBuffer(maxRumEvents: Int = 5_000, writer: ErrorOnlyFileWriting = PosixFileWriter(),

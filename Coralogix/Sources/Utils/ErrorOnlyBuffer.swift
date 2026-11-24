@@ -126,9 +126,21 @@ final class ErrorOnlyBuffer {
 
     #if DEBUG
     /// Tests only: where an SDK instance keeps its buffers instead of the app's folder, and the
-    /// clock its grace periods run on. Not compiled in Release.
-    static var testDirectory: URL?
-    static var testClock: DeliveryClock?
+    /// clock its grace periods run on. Not compiled in Release. Locked: a test sets them while an
+    /// SDK instance from an earlier test may still be building a buffer on another thread.
+    private static let testHooksLock = NSLock()
+    private static var _testDirectory: URL?
+    private static var _testClock: DeliveryClock?
+
+    static var testDirectory: URL? {
+        get { testHooksLock.lock(); defer { testHooksLock.unlock() }; return _testDirectory }
+        set { testHooksLock.lock(); defer { testHooksLock.unlock() }; _testDirectory = newValue }
+    }
+
+    static var testClock: DeliveryClock? {
+        get { testHooksLock.lock(); defer { testHooksLock.unlock() }; return _testClock }
+        set { testHooksLock.lock(); defer { testHooksLock.unlock() }; _testClock = newValue }
+    }
     #endif
 
     static var defaultClock: DeliveryClock {
