@@ -8,7 +8,7 @@
 //  SANCTIONED SYMBOLS (the implementation may create exactly these; tests use nothing else new):
 //
 //  In module `Coralogix`, each declared `@_spi(RumBus) public` (never plain `public`), cases,
-//  labels and shapes verbatim from the reference dummy bus:
+//  labels and shapes exactly as below:
 //    enum RumBusScalar: Sendable, Equatable { case string(String), number(Double), bool(Bool), null }
 //    enum RumToReplay: Sendable, Equatable {
 //        case currentState(sessionId: String, sessionStartTime: Int, kept: Bool, idle: Bool,
@@ -35,10 +35,14 @@
 //        Test seam for the timed idle onset. Called every time the idle check is armed, with
 //        delay = (lastActivity + idle timeout) - now, in seconds; `check` runs the check. Armed on
 //        every rotation, on every activity (`updateActivityTime`) and when a check runs before the
-//        session is idle (strict `>`, as `isIdle`). Default: a real timer.
+//        session is idle (strict `>`, as `isIdle`). Default: a real one-shot timer that fires after
+//        `delay` on its own, without activity (main or background queue).
 //
 //  `CurrentState.maskTag` is the constant "cxMask". `sessionStartTime` is epoch milliseconds.
 //  `kept` is the session's sampling decision (`SessionManager.isSessionSampledIn`).
+//  The live instance is the most recently initialized one; any other instance publishes nothing, and
+//  nothing is published while RUM is not initialized. Flushing comes only from the app's own `flush()`;
+//  RUM's internal flushes (background, crash report) go through a path that does not publish.
 //
 //  Every test is marked RED-now (fails until the bus is implemented) or GUARD (states a property the
 //  implementation must not break). With no bus types in the module the whole file fails to compile:
@@ -73,7 +77,7 @@ final class RumBusTests: XCTestCase {
 
     // MARK: - CurrentState (sticky, first)
 
-    /// RED-now. Brief pin 1, D4.
+    /// RED-now. A subscriber after init gets the live session's CurrentState first.
     func testSubscribeAfterInit_firstMessageIsCurrentStateOfTheLiveSession() {
         let sm = Self.sessionManager()
         let rum = CoralogixRum(options: Self.options(), sessionManager: sm)
@@ -95,7 +99,7 @@ final class RumBusTests: XCTestCase {
         XCTAssertEqual(maskTag, "cxMask")
     }
 
-    /// RED-now. Brief pin 1 + 4, D4, D6: CurrentState carries the same url-masked name ViewChanged does.
+    /// RED-now. CurrentState carries the same url-masked name ViewChanged does.
     func testSubscribeAfterSetView_currentStateCarriesTheMaskedScreen() {
         let rum = CoralogixRum(options: Self.options())
         defer { rum.shutdown() }
@@ -113,7 +117,7 @@ final class RumBusTests: XCTestCase {
         XCTAssertEqual(screen, masked)
     }
 
-    /// RED-now. Brief pin 2, D2, D4: replay can subscribe before RUM starts.
+    /// RED-now. Replay can subscribe before RUM starts.
     func testSubscribeBeforeInit_getsNothingUntilInit_thenCurrentStateFirst() {
         let rec = subscribe()
         CoralogixRum.drainBus()
@@ -132,7 +136,7 @@ final class RumBusTests: XCTestCase {
         XCTAssertEqual(maskTag, "cxMask")
     }
 
-    /// RED-now (passes vacuously against a bus that never delivers; paired with the test above). Brief pin 2, D4.
+    /// RED-now. Nothing reaches a subscriber while RUM is shut down; the same subscriber gets CurrentState on re-init.
     func testSubscribeAfterShutdown_getsNothing() {
         let rum = CoralogixRum(options: Self.options())
         rum.shutdown()
@@ -150,9 +154,65 @@ final class RumBusTests: XCTestCase {
         }
     }
 
+    /// RED-now. A late subscriber's CurrentState carries the session as it stands now: the rotated id and
+    /// start time, then a sampled-out session gone idle.
+    func testLateSubscriber_currentStateFollowsRotationSamplingAndIdle() {
+        let (rum, sm, arms) = Self.rumWithIdleArms()
+        defer { rum.shutdown() }
+        let firstId = sm.currentSessionId
+
+        rum.createNewSession()
+        XCTAssertNotEqual(sm.currentSessionId, firstId, "fixture: rotated")
+        let late1 = subscribe()
+        CoralogixRum.drainBus()
+        XCTAssertEqual(late1.messages.count, 1, "\(late1.messages)")
+        guard case let .currentState(id1, start1, kept1, idle1, _, _)? = late1.messages.first else {
+            return XCTFail("expected CurrentState, got \(late1.messages)")
+        }
+        XCTAssertEqual(id1, sm.currentSessionId)
+        Self.assertStartTime(start1, of: sm)
+        XCTAssertTrue(kept1)
+        XCTAssertFalse(idle1)
+
+        sm.samplingRoller = { false }
+        rum.createNewSession()
+        sm.lastActivity = Date().addingTimeInterval(-(16 * 60))
+        arms.last?.check()
+        let late2 = subscribe()
+        CoralogixRum.drainBus()
+        XCTAssertEqual(late2.messages.count, 1, "\(late2.messages)")
+        guard case let .currentState(id2, start2, kept2, idle2, _, _)? = late2.messages.first else {
+            return XCTFail("expected CurrentState, got \(late2.messages)")
+        }
+        XCTAssertEqual(id2, sm.currentSessionId)
+        XCTAssertNotEqual(id2, id1)
+        Self.assertStartTime(start2, of: sm)
+        XCTAssertFalse(kept2, "the sampled-out session")
+        XCTAssertTrue(idle2, "the idle onset")
+    }
+
+    /// RED-now. Subscribing never rotates the session, even one past max age.
+    func testSubscribe_neverRotatesTheSession() {
+        let sm = Self.sessionManager()
+        let rum = CoralogixRum(options: Self.options(), sessionManager: sm)
+        defer { rum.shutdown() }
+        Self.expire(sm)
+        let id = sm.currentSessionId
+
+        let rec = subscribe()
+        CoralogixRum.drainBus()
+
+        XCTAssertEqual(sm.currentSessionId, id, "subscribing must not rotate")
+        XCTAssertEqual(rec.messages.count, 1, "exactly one CurrentState: \(rec.messages)")
+        guard case let .currentState(sid, _, _, _, _, _)? = rec.messages.first else {
+            return XCTFail("expected CurrentState, got \(rec.messages)")
+        }
+        XCTAssertEqual(sid, id)
+    }
+
     // MARK: - SessionChanged
 
-    /// RED-now. Brief pin 3 (reset), D5.
+    /// RED-now. A session reset publishes one SessionChanged.
     func testCreateNewSession_publishesOneSessionChangedForTheNewSession() {
         let sm = Self.sessionManager()
         let rum = CoralogixRum(options: Self.options(), sessionManager: sm)
@@ -168,7 +228,7 @@ final class RumBusTests: XCTestCase {
         XCTAssertNotEqual(sm.currentSessionId, oldId)
     }
 
-    /// RED-now. Brief pin 3 (forced expiry), D5: RUM's own max-age rotation publishes.
+    /// RED-now. RUM's own max-age rotation publishes.
     func testMaxAgeExpiry_publishesSessionChangedWhenRumRotates() {
         let sm = Self.sessionManager()
         let rum = CoralogixRum(options: Self.options(), sessionManager: sm)
@@ -185,7 +245,7 @@ final class RumBusTests: XCTestCase {
         Self.assertSessionChanged(rec.messages.first, sm: sm, kept: true, idle: false)
     }
 
-    /// RED-now. Brief pin 3 (sampled-out), D5: sampled-out sessions publish too, with kept = the session's roll.
+    /// RED-now. Sampled-out sessions publish too, with kept = the session's roll.
     func testSampling_keptFollowsEachSessionsRoll() {
         let sm = Self.sessionManager()
         let rum = CoralogixRum(options: Self.options(sampleRate: 0), sessionManager: sm)
@@ -213,7 +273,7 @@ final class RumBusTests: XCTestCase {
         Self.assertSessionChanged(rec.messages.first, sm: sm, kept: false, idle: false)
     }
 
-    /// RED-now. Brief pin 3 (idle onset by the timer), D5: idle is lazy in RUM, so a timed check
+    /// RED-now. Idle is lazy in RUM, so a timed check
     /// publishes `idle: true` with no further activity, same session id.
     func testIdleOnsetByTimer_publishesIdleTrueWithoutFurtherActivity() {
         let (rum, sm, arms) = Self.rumWithIdleArms()
@@ -231,7 +291,7 @@ final class RumBusTests: XCTestCase {
         Self.assertSessionChanged(rec.messages.first, sm: sm, kept: true, idle: true)
     }
 
-    /// RED-now. D5: the check is armed at lastActivity + timeout, re-armed on activity and on every rotation.
+    /// RED-now. The idle check is armed at lastActivity + timeout, re-armed on activity and on every rotation.
     func testIdleCheck_isArmedAtLastActivityPlusTimeout_onActivityAndOnRotation() {
         let (rum, sm, arms) = Self.rumWithIdleArms()
         defer { rum.shutdown() }
@@ -249,7 +309,7 @@ final class RumBusTests: XCTestCase {
         XCTAssertEqual(arms.last?.delay ?? -1, 15 * 60, accuracy: 2)
     }
 
-    /// RED-now (the re-arm half). D5: a check that runs before the session is idle publishes nothing and re-arms.
+    /// RED-now (the re-arm half). A check that runs before the session is idle publishes nothing and re-arms.
     func testIdleCheckRunningEarly_publishesNothing_andReArms() {
         let (rum, sm, arms) = Self.rumWithIdleArms()
         defer { rum.shutdown() }
@@ -265,7 +325,7 @@ final class RumBusTests: XCTestCase {
         XCTAssertEqual(arms.last?.delay ?? -1, 15 * 60 - 60, accuracy: 2)
     }
 
-    /// RED-now. Brief pin 3 (resume), D5: activity after idle starts a new session — one SessionChanged, idle false.
+    /// RED-now. Activity after idle starts a new session — one SessionChanged, idle false.
     func testResumeAfterIdle_publishesOneSessionChangedForTheNewSession() {
         let (rum, sm, arms) = Self.rumWithIdleArms()
         defer { rum.shutdown() }
@@ -285,7 +345,7 @@ final class RumBusTests: XCTestCase {
         Self.assertSessionChanged(rec.messages.first, sm: sm, kept: true, idle: false)
     }
 
-    /// RED-now. D5 "bus reads never rotate": an idle check on a session past max age reports that
+    /// RED-now. Bus reads never rotate: an idle check on a session past max age reports that
     /// session going idle; it does not rotate it.
     func testIdleCheckOnAnExpiredSession_doesNotRotate() {
         let (rum, sm, arms) = Self.rumWithIdleArms()
@@ -307,7 +367,34 @@ final class RumBusTests: XCTestCase {
         XCTAssertTrue(idle)
     }
 
-    /// RED-now. D5: no SessionChanged (and no duplicate) when nothing changed.
+    /// RED-now. The default `scheduleIdleCheck` really fires: with the idle timeout 0.2 s away, a rotation
+    /// re-arms the real check and `idle: true` arrives with no further activity. The expectation wait spins
+    /// the main run loop, so a default timer on the main queue or on a background queue both fire.
+    func testDefaultIdleTimer_publishesIdleOnsetOnItsOwn() {
+        let sm = Self.sessionManager()
+        let rum = CoralogixRum(options: Self.options(), sessionManager: sm)
+        defer { rum.shutdown() }
+        let wentIdle = expectation(description: "SessionChanged idle: true")
+        wentIdle.assertForOverFulfill = false
+        let rec = Recorder()
+        subscriptions.append(CoralogixRum.subscribe { message in
+            rec.record(message)
+            if case .sessionChanged(_, _, _, true) = message { wentIdle.fulfill() }
+        })
+
+        sm.lastActivity = Date().addingTimeInterval(-(15 * 60 - 0.2))
+        rum.createNewSession() // re-arms the real check ~0.2 s ahead
+        let id = sm.currentSessionId
+        wait(for: [wentIdle], timeout: 5)
+
+        guard case let .sessionChanged(sid, _, _, idle)? = rec.messages.last else {
+            return XCTFail("expected SessionChanged, got \(rec.messages)")
+        }
+        XCTAssertEqual(sid, id, "idle onset keeps the session")
+        XCTAssertTrue(idle)
+    }
+
+    /// RED-now. No SessionChanged (and no duplicate) when nothing changed.
     func testNothingChanged_publishesNothing() {
         let (rum, sm, arms) = Self.rumWithIdleArms()
         defer { rum.shutdown() }
@@ -330,7 +417,7 @@ final class RumBusTests: XCTestCase {
         XCTAssertEqual(rec.messages.count, 1, "idle onset is published once: \(rec.messages)")
     }
 
-    /// RED-now (the non-vacuous half: the live manager does publish). D5: only the live session manager publishes.
+    /// RED-now (the non-vacuous half: the live manager does publish). Only the live session manager publishes.
     func testShutDownSessionManager_staysSilent() {
         let (rum, sm, arms) = Self.rumWithIdleArms()
         let rec = subscribe()
@@ -361,7 +448,7 @@ final class RumBusTests: XCTestCase {
         Self.assertSessionChanged(rec.messages.first, sm: sm2, kept: true, idle: false)
     }
 
-    /// RED-now (the non-vacuous half: the newest instance does publish). D5 + driver ruling: the live instance is
+    /// RED-now (the non-vacuous half: the newest instance does publish). The live instance is
     /// the most recently initialized one; an older instance that was never shut down publishes nothing.
     /// This is also what isolates these tests from instances other test classes leave running: `setUp`'s
     /// init makes every such leftover older than the instance each test creates.
@@ -393,6 +480,24 @@ final class RumBusTests: XCTestCase {
         Self.assertSessionChanged(rec.messages[1], sm: sm2, kept: true, idle: false)
     }
 
+    /// RED-now. A newer init while an older instance still runs gives an existing subscriber exactly one
+    /// SessionChanged for the new instance's session, and no ShuttingDown.
+    func testNewerInitOverARunningInstance_givesExistingSubscriberOneSessionChanged() {
+        let rum1 = CoralogixRum(options: Self.options())
+        let rec = subscribeAndSkipCurrentState()
+        let sm2 = Self.sessionManager()
+        let rum2 = CoralogixRum(options: Self.options(), sessionManager: sm2)
+        defer {
+            subscriptions.forEach { $0.cancel() }
+            rum2.shutdown()
+            rum1.shutdown()
+        }
+        CoralogixRum.drainBus()
+
+        XCTAssertEqual(rec.messages.count, 1, "\(rec.messages)")
+        Self.assertSessionChanged(rec.messages.first, sm: sm2, kept: true, idle: false)
+    }
+
     /// RED-now (fixture half: ShuttingDown) + GUARD (nothing after it). Nothing is published while RUM is not initialized.
     func testNothingPublishedWhileNotInitialized() {
         let rec = subscribe() // setUp left RUM shut down
@@ -414,7 +519,7 @@ final class RumBusTests: XCTestCase {
 
     // MARK: - ViewChanged
 
-    /// RED-now. Brief pin 4, D6: masked name on the wire, dedup on the raw name, empty name ignored.
+    /// RED-now. Masked name on the wire, dedup on the raw name, empty name ignored.
     func testSetView_publishesMaskedName_dedupsOnRawName_ignoresEmpty() {
         let rum = CoralogixRum(options: Self.options())
         defer { rum.shutdown() }
@@ -440,7 +545,7 @@ final class RumBusTests: XCTestCase {
         XCTAssertEqual(screen, masked, "the empty name left the sticky screen unchanged")
     }
 
-    /// RED-now. Brief pin 4, D6: automatic navigation (the screen notification UIKit/SwiftUI post) publishes too.
+    /// RED-now. Automatic navigation (the screen notification UIKit/SwiftUI post) publishes too.
     func testNavigationNotification_publishesMaskedViewChanged() {
         let rum = CoralogixRum(options: Self.options())
         defer { rum.shutdown() }
@@ -456,7 +561,7 @@ final class RumBusTests: XCTestCase {
 
     // MARK: - ShuttingDown, Flushing
 
-    /// RED-now. Brief pin 5, D4, D7: ShuttingDown once, nothing from the teardown, sticky cleared.
+    /// RED-now. ShuttingDown once, nothing from the teardown, sticky cleared.
     func testShutdown_publishesShuttingDownOnce_andClearsTheStickyState() {
         let rum = CoralogixRum(options: Self.options())
         let rec = subscribeAndSkipCurrentState()
@@ -471,7 +576,7 @@ final class RumBusTests: XCTestCase {
         XCTAssertEqual(late.messages, [])
     }
 
-    /// RED-now (flush half) + GUARD (background half). Brief pin 5, D8.
+    /// RED-now. Only the app's own flush() publishes Flushing; RUM's internal flushes (background, crash report) do not.
     func testFlushing_onAppFlushOnly() {
         let rum = CoralogixRum(options: Self.options())
         defer { rum.shutdown() }
@@ -479,7 +584,12 @@ final class RumBusTests: XCTestCase {
 
         NotificationCenter.default.post(name: UIApplication.didEnterBackgroundNotification, object: nil)
         CoralogixRum.drainBus()
-        XCTAssertEqual(rec.messages, [], "a background export is not the app's flush")
+        XCTAssertEqual(rec.messages, [], "the background flush is RUM's own, not the app's")
+
+        // A hybrid crash report flushes the batch queue internally.
+        rum.reportError(message: "boom", stackTrace: [], errorType: "Fatal", isCrash: true)
+        CoralogixRum.drainBus()
+        XCTAssertEqual(rec.messages, [], "the crash-report flush is RUM's own, not the app's")
 
         rum.flush()
         CoralogixRum.drainBus()
@@ -488,7 +598,7 @@ final class RumBusTests: XCTestCase {
 
     // MARK: - Delivery
 
-    /// RED-now. Brief pin 6, D2: one queue, publish order.
+    /// RED-now. One queue, publish order.
     func testMessagesArriveInPublishOrder() {
         let sm = Self.sessionManager()
         let rum = CoralogixRum(options: Self.options(), sessionManager: sm)
@@ -509,7 +619,7 @@ final class RumBusTests: XCTestCase {
         XCTAssertEqual(rec.messages[4], .flushing)
     }
 
-    /// RED-now. Brief pin 6, D3: a blocked handler does not block RUM's caller (fire-and-forget).
+    /// RED-now. A blocked handler does not block RUM's caller (fire-and-forget).
     func testBlockedHandler_doesNotBlockRumsCaller() {
         let rum = CoralogixRum(options: Self.options())
         defer { rum.shutdown() }
@@ -534,7 +644,7 @@ final class RumBusTests: XCTestCase {
         XCTAssertFalse(callerWasBlocked.value, "RUM waited on a subscriber's handler")
     }
 
-    /// RED-now. Brief pin 6, D3: a handler that re-enters the bus and reads RUM's session does not deadlock.
+    /// RED-now. A handler that re-enters the bus and reads RUM's session does not deadlock.
     func testReentrantHandler_doesNotDeadlock() {
         let sm = Self.sessionManager()
         let rum = CoralogixRum(options: Self.options(), sessionManager: sm)
@@ -556,7 +666,7 @@ final class RumBusTests: XCTestCase {
         drainWithTimeout()
     }
 
-    /// RED-now. D3 lock order (session → bus): handlers reading the session lock while RUM rotates do not deadlock.
+    /// RED-now. Lock order (session → bus): handlers reading the session lock while RUM rotates do not deadlock.
     func testHandlersReadingTheSessionWhileRumRotates_doNotDeadlock() {
         let sm = Self.sessionManager()
         let rum = CoralogixRum(options: Self.options(), sessionManager: sm)
@@ -581,7 +691,7 @@ final class RumBusTests: XCTestCase {
                        rotations, "every rotation delivered once")
     }
 
-    /// RED-now. Brief pin 7: cancel() stops delivery of anything queued after it.
+    /// RED-now. cancel() stops delivery of anything queued after it.
     func testCancel_stopsDeliveryOfLaterMessages() {
         let rum = CoralogixRum(options: Self.options())
         defer { rum.shutdown() }
@@ -599,7 +709,7 @@ final class RumBusTests: XCTestCase {
         XCTAssertEqual(rec.messages.count, 1, "nothing after cancel(): \(rec.messages)")
     }
 
-    /// RED-now. Brief pin 7, D4: an existing subscriber gets SessionChanged on re-init, a new one gets CurrentState.
+    /// RED-now. An existing subscriber gets SessionChanged on re-init, a new one gets CurrentState.
     func testReinitAfterShutdown_existingSubscriberGetsSessionChanged() {
         let rec = subscribe()
         let sm1 = Self.sessionManager()
@@ -623,7 +733,7 @@ final class RumBusTests: XCTestCase {
         XCTAssertEqual(id, sm2.currentSessionId)
     }
 
-    /// GUARD (RED-now by compile only). Brief pin 8, D9: replay → RUM with no RUM handler is dropped.
+    /// GUARD (RED-now by compile only). Replay → RUM with no RUM handler is dropped.
     func testPublishWithNoRumHandler_isDroppedWithoutCrashing() {
         let messages: [ReplayToRum] = [
             .recordingStarted(sessionId: "s"),
@@ -644,7 +754,7 @@ final class RumBusTests: XCTestCase {
 
     // MARK: - Real rotation on the simulator
 
-    /// RED-now. Brief pin 9: a subscriber records a real session rotation driven through RUM's own
+    /// RED-now. A subscriber records a real session rotation driven through RUM's own
     /// SessionManager (the launch manager, the tap notification RUM observes).
     func testRealSessionRotation_fromATapAfterIdle_isRecordedBySubscriber() {
         let rum = CoralogixRum(options: Self.options())
@@ -659,6 +769,8 @@ final class RumBusTests: XCTestCase {
 
         let newId = sm.currentSessionId
         XCTAssertNotEqual(newId, oldId, "fixture: the tap after idle rotated the session")
+        // The idle check never fired, so resume publishes only the new session (no idle: true first).
+        XCTAssertEqual(rec.messages.count, 1, "\(rec.messages)")
         guard case let .sessionChanged(id, _, kept, idle)? = rec.messages.last else {
             return XCTFail("expected a SessionChanged, got \(rec.messages)")
         }
