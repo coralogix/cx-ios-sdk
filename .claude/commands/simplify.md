@@ -47,7 +47,7 @@ If multiple candidates touch the same file, batch them in one `Edit` per file wh
 
 After all fixes are applied:
 ```bash
-xcodebuild test -scheme Coralogix-Package -destination "platform=iOS Simulator,name=iPhone 17" 2>&1 | grep -E "^Test Suite|Executed [0-9]+ tests|failed|error:" | tail -10
+xcodebuild test -scheme Coralogix -destination "platform=iOS Simulator,name=iPhone 17" 2>&1 | grep -E "^Test Suite|Executed [0-9]+ tests|failed|error:" | tail -10
 ```
 
 Use the affected test target where possible (e.g. `-only-testing:CoralogixRumTests/<ClassName>`) for speed.

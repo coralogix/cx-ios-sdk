@@ -19,11 +19,10 @@ swift build
 swift test
 
 # Run tests via Xcode (matches CI)
-xcodebuild test -scheme Coralogix-Package -destination "platform=iOS Simulator,name=iPhone 16,OS=18.0"
+xcodebuild test -scheme Coralogix -destination "platform=iOS Simulator,name=iPhone 16,OS=18.0"
 
-# Lint CocoaPods specs (order matters)
-pod lib lint CoralogixInternal.podspec
-pod lib lint Coralogix.podspec --include-podspecs=CoralogixInternal.podspec
+# Lint the CocoaPods spec
+pod lib lint Coralogix.podspec
 
 # Build xcframeworks for distribution
 ./build.sh
@@ -34,7 +33,7 @@ pod lib lint Coralogix.podspec --include-podspecs=CoralogixInternal.podspec
 
 Toolchains are pinned per workflow, not shared: tests and the demo-app build run
 on macOS 15 with Xcode 16.4, podspec lint included (GitHub retired the macOS 14 runners).
-Two SPM test targets: `CoralogixRumTests`, `CoralogixInternalTests`.
+One SPM test target: `CoralogixRumTests`.
 
 `ci.yml` is the single entry point; the checks under it are reusable workflows
 and the shared steps are composite actions in `.github/actions/`. XCUITests are
@@ -49,14 +48,12 @@ rejected — read it before adding a test or touching a workflow.
 
 ## Architecture
 
-### Two Targets
+### Targets
 
 | Target | Role |
 |--------|------|
 | `Coralogix/Sources/` | Main public SDK — all instrumentation, export, and public API |
-| `CoralogixInternal/Sources/` | Shared base library — `Keys`, `Log`, utilities |
-
-`CoralogixInternal` is a dependency of `Coralogix`.
+| `Coralogix/Sources/Core/` | Shared base — `Keys`, `Log`, utilities (inside the `Coralogix` module) |
 
 ### Core Flow
 
@@ -81,7 +78,7 @@ Each instrumentation file is an `extension CoralogixRum` with a single `initiali
 
 ### Span Attribute Keys
 
-All span attribute key strings live in `CoralogixInternal/Sources/Keys.swift`. When adding new attributes, define the key there.
+All span attribute key strings live in `Coralogix/Sources/Core/Keys.swift`. When adding new attributes, define the key there.
 
 ### Context Model
 
@@ -101,7 +98,7 @@ The review rules in `AGENTS.md` apply **while writing code**, not only at PR tim
 
 - **The SDK also builds for tvOS 14+ (SPM).** Wrap iOS-only API (WebKit, MetricKit, CoreTelephony, `UINavigationItem.prompt`, touch-count and paging properties, …) in `#if os(iOS)`; the `tvOS Build` CI job compiles for device and simulator and fails the PR otherwise.
 
-- **All span attribute key strings belong in `CoralogixInternal/Sources/Keys.swift`.** No inline string literals for attribute keys anywhere else.
+- **All span attribute key strings belong in `Coralogix/Sources/Core/Keys.swift`.** No inline string literals for attribute keys anywhere else.
 
 - **Protect all shared mutable state with `NSLock` or a serial `DispatchQueue`.** Follow the existing pattern — don't introduce unguarded shared state.
 
@@ -184,9 +181,9 @@ Block if the changes don't match the ticket.
 ### 3. Test coverage
 
 Review what changed in this branch and verify:
-- New public functions / classes have corresponding unit tests in the appropriate test target (`CoralogixRumTests`, `CoralogixInternalTests`)
+- New public functions / classes have corresponding unit tests in the appropriate test target (`CoralogixRumTests`)
 - New SDK behaviours have integration tests where appropriate
-- All affected suites pass: `xcodebuild test -scheme Coralogix-Package -destination "platform=iOS Simulator,name=iPhone 17"` (or the currently-installed simulator)
+- All affected suites pass: `xcodebuild test -scheme Coralogix -destination "platform=iOS Simulator,name=iPhone 17"` (or the currently-installed simulator)
 
 Block if meaningful new code has no test coverage.
 
@@ -194,11 +191,10 @@ Block if meaningful new code has no test coverage.
 
 ### 4. Version sync
 
-iOS distributes through CocoaPods AND has an in-source SDK-version constant — **three files must move together**:
+iOS distributes through CocoaPods AND has an in-source SDK-version constant — **two files must move together**:
 
 - `Coralogix.podspec`
-- `CoralogixInternal.podspec`
-- `CoralogixInternal/Sources/Utils.swift` (`Global.sdk` enum case)
+- `Coralogix/Sources/Core/Utils.swift` (`Global.sdk` enum case)
 
 Classify the changes on this branch:
 
@@ -211,7 +207,7 @@ Use `/bump-version` — do **not** hand-edit. Block if:
 - The version was not incremented at all for a non-trivial change
 - A new feature was merged without at least a minor bump
 - A breaking change was merged without a major bump
-- The three files disagree on the version string
+- The two files disagree on the version string
 
 ---
 
@@ -247,4 +243,4 @@ Block if the README doesn't reflect the current state of the SDK, or if it expla
 
 ## Distribution
 
-Two podspecs must be published in order (`CoralogixInternal` → `Coralogix`) with CDN propagation waits between steps. The `lint_and_push_cocoapods.sh` script handles this interactively. Version numbers must be kept in sync across both `.podspec` files and the `CoralogixRum` source constant (`Global.sdk` in `CoralogixInternal/Sources/Utils.swift`). `Package.swift` has no version string — SPM versioning is driven by git tags.
+One podspec is published. The `lint_and_push_cocoapods.sh` script handles this interactively. The version number must be kept in sync between `Coralogix.podspec` and the `CoralogixRum` source constant (`Global.sdk` in `Coralogix/Sources/Core/Utils.swift`). `Package.swift` has no version string — SPM versioning is driven by git tags.

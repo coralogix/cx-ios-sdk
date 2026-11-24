@@ -4,7 +4,7 @@ Read these in order. Section 1 (Versioning) is always checked first. Section 4 (
 
 ## 1. Versioning (CRITICAL — check first)
 
-**When reviewing PRs that modify `*.podspec`, `Package.swift`, `CoralogixInternal/Sources/Utils.swift` (the `Global.sdk` constant), or `CHANGELOG.md`:**
+**When reviewing PRs that modify `*.podspec`, `Package.swift`, `Coralogix/Sources/Core/Utils.swift` (the `Global.sdk` constant), or `CHANGELOG.md`:**
 
 1. Extract the version bump (e.g., 3.9.0 → 4.0.0)
 2. Check all commit messages in the PR for change types:
@@ -16,7 +16,7 @@ Read these in order. Section 1 (Versioning) is always checked first. Section 4 (
    - Major version bump without `feat!:` or `BREAKING CHANGE:` in commits
    - Minor version bump without any `feat:` commits
    - Version not bumped but changes warrant it
-   - **Version is bumped in one file but not the others.** iOS distributes through CocoaPods AND has an in-source SDK version constant. Three files must move together: `Coralogix.podspec`, `CoralogixInternal.podspec`, and `Global.sdk` in `CoralogixInternal/Sources/Utils.swift`. Any disagreement is a blocker.
+   - **Version is bumped in one file but not the others.** iOS distributes through CocoaPods AND has an in-source SDK version constant. Two files must move together: `Coralogix.podspec` and `Global.sdk` in `Coralogix/Sources/Core/Utils.swift`. Any disagreement is a blocker.
 
 > **Example violation:** PR has `feat: add user tracking` but bumps 2.0.0 → 3.0.0. This is WRONG — should be 2.1.0. Flag immediately.
 
@@ -55,7 +55,7 @@ These rules are specific to this codebase. Violations should fail review regardl
 
 ### 4.1 Never crash the host app
 
-The SDK runs inside a customer's process. Any of these in `Coralogix/Sources/`, `CoralogixInternal/Sources/` is a hard block:
+The SDK runs inside a customer's process. Any of these in `Coralogix/Sources/` is a hard block:
 
 - `fatalError(…)`, `precondition(…)`, `assert(…)`, `assertionFailure(…)`
 - Force-unwrap (`!`) on a value that could be nil at runtime — including dictionary lookups, casts (`as!`), and `try!`
@@ -75,7 +75,7 @@ Flag an unguarded shared `var` as a blocker. Mention which existing pattern it s
 
 ### 4.3 Wire-key ownership
 
-All span attribute keys, JSON cx_rum keys, keychain account names, and any string that appears in an outgoing payload must be defined as a `case` in `CoralogixInternal/Sources/Keys.swift`. Inline `"snake_case"` / `"camelCase"` string literals for these are a regression — typos won't fail at compile time and downstream queries break silently.
+All span attribute keys, JSON cx_rum keys, keychain account names, and any string that appears in an outgoing payload must be defined as a `case` in `Coralogix/Sources/Core/Keys.swift`. Inline `"snake_case"` / `"camelCase"` string literals for these are a regression — typos won't fail at compile time and downstream queries break silently.
 
 Grep the diff for any new attribute-shaped string literals (`*.setAttribute(key: "…")`, `result["…"] = …`, `keychain.*From*(service: …, key: "…")`). If they're not coming from `Keys.swift`, flag it.
 
@@ -175,7 +175,7 @@ When the diff matches one of these patterns, the PR author should use the regist
 
 | If the PR is… | Expected skill |
 |---|---|
-| Bumping the SDK version (any `.podspec` or `Global.sdk` change) | `/bump-version` (runs the project's script to keep the three files in sync) |
+| Bumping the SDK version (any `.podspec` or `Global.sdk` change) | `/bump-version` (runs the project's script to keep the two files in sync) |
 | Fixing review comments from an earlier round | `/fix-issues` (handles findings one at a time, stopping for approval) |
 | Implementing a new Jira ticket | `/implement` (fetches ticket, branches, plans, stops before commit) |
 | Manually verifying a change end-to-end | `/verify` (runs the demo app, observes behaviour, not just tests) |

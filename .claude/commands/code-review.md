@@ -115,4 +115,4 @@ If the target is not a PR, print findings to the terminal and note that `--comme
 
 ## Applying fixes (--fix)
 
-If `--fix` was passed, after producing the findings list, apply each fix as a direct edit to the file. Only apply when the fix is unambiguous and safe. Skip findings where the correct fix is unclear. After applying, run `xcodebuild test -scheme Coralogix-Package -destination "platform=iOS Simulator,name=iPhone 17" -only-testing:CoralogixRumTests` (or the affected test target) to confirm nothing broke.
+If `--fix` was passed, after producing the findings list, apply each fix as a direct edit to the file. Only apply when the fix is unambiguous and safe. Skip findings where the correct fix is unclear. After applying, run `xcodebuild test -scheme Coralogix -destination "platform=iOS Simulator,name=iPhone 17" -only-testing:CoralogixRumTests` (or the affected test target) to confirm nothing broke.

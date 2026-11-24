@@ -13,6 +13,7 @@ omitted; the focus here is user-facing behavior changes.
 ### ⚠️ Breaking changes
 - Session replay is removed from this SDK; a separate session replay library replaces it.
 - The `SessionReplay` package product and CocoaPods pod are gone. Remove them from your dependencies.
+- The `CoralogixInternal` package product and CocoaPods pod are gone. `import Coralogix` gives you the same types; remove any `import CoralogixInternal`.
 - Error, crash and ANR events no longer attach a screenshot.
 - The `CoralogixRum` session replay methods are removed: `startRecording`, `stopRecording`, `captureEvent`, `isSRRecording`, `isSRInitialized`, `update(sessionId:)` and the screenshot counter methods.
 

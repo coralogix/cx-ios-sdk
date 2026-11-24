@@ -8,7 +8,7 @@ Read this before adding a test, changing a workflow, or trying to make CI faster
 
 | The test… | Target | Runs in |
 |---|---|---|
-| exercises SDK logic in-process | `Tests/CoralogixRumTests`, `Tests/CoralogixInternalTests` | `component · unit` |
+| exercises SDK logic in-process | `Tests/CoralogixRumTests` | `component · unit` |
 | drives the demo app and asserts one feature | `Example/DemoAppUITests` | a `component` UI shard |
 | drives a path joining several features (interaction + session + export + schema) | `Example/DemoAppUITests` | a `smoke` shard |
 
@@ -27,7 +27,7 @@ must land in both demo apps.
 3. **Run it locally** before pushing:
    ```bash
    # one unit test target
-   xcodebuild test -scheme Coralogix-Package \
+   xcodebuild test -scheme Coralogix \
      -destination "platform=iOS Simulator,name=iPhone 16" \
      -only-testing:CoralogixRumTests
 

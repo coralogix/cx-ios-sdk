@@ -162,7 +162,7 @@ struct InternalContext: Codable {
 
 The SDK runs inside a customer's process. A crash in our code crashes their app.
 
-**Forbidden in SDK code (`Coralogix/Sources/`, `CoralogixInternal/Sources/`):**
+**Forbidden in SDK code (`Coralogix/Sources/`):**
 
 - `fatalError(…)`
 - `precondition(…)`
@@ -270,7 +270,7 @@ Method swizzling is global process state. The standard rules:
 
 ---
 
-## All wire-key strings live in `CoralogixInternal/Sources/Keys.swift`
+## All wire-key strings live in `Coralogix/Sources/Core/Keys.swift`
 
 Span-attribute keys, JSON keys in the cx_rum payload, and keychain account names all live in the `Keys` enum. Inline `"snake_case"` or `"camelCase"` string literals for these elsewhere are a regression — typos won't fail at compile time, and downstream queries break silently.
 
