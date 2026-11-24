@@ -88,8 +88,9 @@ final class OneModuleSurfaceTests: XCTestCase {
             .obfuscated, .parentSpanId, .proxyUrl, .sessionId, .severity, .spanId,
             .stackTraceType, .swift, .traceParentInHeader, .url, .userContext, .userEmail, .userId,
             .userMetadata, .userName, .value, .version, .virt,
+            .source, .traceparentSampled, .traceparentSessionId,
         ]
-        XCTAssertEqual(pluginKeys.count, 43)
+        XCTAssertEqual(pluginKeys.count, 46)
         let _: WireValues = .anrErrorType
 
         let _: String = Global.sdk.rawValue
