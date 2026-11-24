@@ -40,7 +40,7 @@ import Foundation
     }
 
     /// Nothing queued after this call is delivered.
-    public func cancel() { bus?.cancel(self) }
+    @_spi(RumBus) public func cancel() { bus?.cancel(self) }
 }
 
 /// The process-wide bus: it outlives RUM init, shutdown and re-init, so a subscriber hears RUM's state across them.
