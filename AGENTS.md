@@ -175,10 +175,10 @@ When the diff matches one of these patterns, the PR author should use the regist
 
 | If the PR is… | Expected skill |
 |---|---|
-| Bumping the SDK version (any `.podspec` or `Global.sdk` change) | `/bump-version` (runs the project's script to keep the four files in sync) |
+| Bumping the SDK version (any `.podspec` or `Global.sdk` change) | `/bump-version` (runs the project's script to keep the three files in sync) |
 | Fixing review comments from an earlier round | `/fix-issues` (handles findings one at a time, stopping for approval) |
 | Implementing a new Jira ticket | `/implement` (fetches ticket, branches, plans, stops before commit) |
 | Manually verifying a change end-to-end | `/verify` (runs the demo app, observes behaviour, not just tests) |
 | Generating release notes for a tag range | `/release-notes-sdk` |
 
-Flag PRs that hand-edit versions in the four podspec/source files individually — that's the exact thing `/bump-version` exists to prevent.
+Flag PRs that hand-edit versions in the three podspec/source files individually — that's the exact thing `/bump-version` exists to prevent.

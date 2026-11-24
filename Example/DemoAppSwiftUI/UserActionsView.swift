@@ -197,7 +197,7 @@ struct PageCarouselView: View {
 
     private let pages: [(title: String, subtitle: String, icon: String, color: Color)] = [
         ("Overview", "Total sessions & key metrics for your app", "chart.bar.fill", .indigo),
-        ("Sessions", "Recent user sessions and replay data", "person.2.fill", .teal),
+        ("Sessions", "Recent user sessions", "person.2.fill", .teal),
         ("Performance", "FPS, CPU & memory vitals", "gauge.medium", .orange)
     ]
 

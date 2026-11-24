@@ -126,7 +126,7 @@ class MaskViewController: UIViewController {
     private let keypadCaption: UILabel = {
         let label = UILabel()
         label.text = "Keypads: the left one is masked at the container. "
-            + "Tap both and compare them in the replay."
+            + "Tap both and compare the reported interactions."
         label.font = .systemFont(ofSize: 13)
         label.textColor = .secondaryLabel
         label.numberOfLines = 0
@@ -134,7 +134,7 @@ class MaskViewController: UIViewController {
     }()
 
     /// Masking is applied to the container only — the keys inside carry no `cxMask` of their own.
-    /// They still inherit it: the replay draws no tap marker over them and their interaction
+    /// They still inherit it: their interaction
     /// events report `***` instead of the digit.
     ///
     /// The keys deliberately share one identifier. `element_id` comes from
@@ -147,7 +147,7 @@ class MaskViewController: UIViewController {
         return keypad
     }()
 
-    /// The same keypad without masking — its digits appear in the replay and in the interaction
+    /// The same keypad without masking — its digits appear in the interaction
     /// events, which is what makes the masked one's behaviour visible as a difference.
     private lazy var unmaskedKeypad: UIView = makeKeypad(tint: .systemBlue) { "keypad_key_\($0)" }
 
