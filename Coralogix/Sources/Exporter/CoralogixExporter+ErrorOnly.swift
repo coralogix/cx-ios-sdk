@@ -29,7 +29,9 @@ extension CoralogixExporter {
     /// neither trigger the live one nor land in its buffer. Within `ErrorOnlyBuffer.endedSessionGrace`
     /// of its end it is still held for, and triggers, its own session; after that it is sent only
     /// if that session had its error, and dropped otherwise.
-    func routeErrorOnly(_ events: [[String: Any]]) -> [[String: Any]] {
+    ///
+    /// Releases the kept-back `tracesExporter` spans of every event it is handed, and of `released`.
+    func routeErrorOnly(_ events: [[String: Any]], releasing released: Set<String> = []) -> [[String: Any]] {
         let options = getOptions()
         guard options.holdsSessionsForErrors else { return events }
         let sendsBeforeError = Set(options.onlyWithErrorConfig.instrumentationsToSend.map(\.eventType.rawValue))
@@ -66,7 +68,7 @@ extension CoralogixExporter {
             }
             if let spanId = route.spanId { settled[spanId] = sends }
         }
-        forwardErrorOnlyTraces(settled)
+        forwardErrorOnlyTraces(settled, releasing: released.union(events.compactMap(Self.spanId)))
         startErrorOnlyDrains(triggered)
         return live
     }
@@ -261,14 +263,57 @@ extension CoralogixExporter {
         return forwarded
     }
 
-    /// Forwards the kept-back spans whose events were sent, and forgets the ones held or dropped.
-    private func forwardErrorOnlyTraces(_ settled: [String: Bool]) {
-        guard !settled.isEmpty else { return }
+    /// Forwards the kept-back spans whose events were sent, and forgets the ones held or dropped,
+    /// and `released`: spans whose events left the batch without being routed.
+    private func forwardErrorOnlyTraces(_ settled: [String: Bool], releasing released: Set<String>) {
         heldTraceSpansLock.lock()
+        guard !heldTraceSpans.isEmpty else { heldTraceSpansLock.unlock(); return }
         let sent = heldTraceSpans.filter { settled[$0.spanId] == true }.map(\.span)
-        heldTraceSpans.removeAll { settled[$0.spanId] != nil }
+        heldTraceSpans.removeAll { settled[$0.spanId] != nil || released.contains($0.spanId) }
         heldTraceSpansLock.unlock()
         forwardTraces(sent)
+    }
+
+    /// Forgets the kept-back spans of `spans` that encoding dropped: the native `beforeSend`
+    /// removed them, or they could not be encoded. They never reach routing.
+    func releaseErrorOnlyTraces(droppedFrom spans: [SpanData], encoded: [[String: Any]]) {
+        guard spans.count > encoded.count, hasHeldTraceSpans else { return }
+        let encodedIds = Set(encoded.compactMap(Self.spanId))
+        let dropped = Set(spans.map { Helper.getTraceAndSpanId(otel: $0).spanId }).subtracting(encodedIds)
+        forwardErrorOnlyTraces([:], releasing: dropped)
+    }
+
+    private var hasHeldTraceSpans: Bool {
+        heldTraceSpansLock.lock()
+        defer { heldTraceSpansLock.unlock() }
+        return !heldTraceSpans.isEmpty
+    }
+
+    /// Records the span ids of a batch handed to a hybrid `beforeSend`, while spans are kept back.
+    func recordHandedTraceBatch(_ events: [[String: Any]]) {
+        guard getOptions().tracesExporter != nil, getOptions().holdsSessionsForErrors else { return }
+        let ids = Set(events.compactMap(Self.spanId))
+        guard !ids.isEmpty else { return }
+        heldTraceSpansLock.lock()
+        defer { heldTraceSpansLock.unlock() }
+        handedTraceBatches.append(ids)
+        if handedTraceBatches.count > Self.maxHandedTraceBatches {
+            handedTraceBatches.removeFirst(handedTraceBatches.count - Self.maxHandedTraceBatches)
+        }
+    }
+
+    /// Takes the handed batches any of `returnedIds` came back from: all their span ids.
+    func takeHandedTraceBatches(_ returnedIds: Set<String>) -> Set<String> {
+        heldTraceSpansLock.lock()
+        defer { heldTraceSpansLock.unlock() }
+        let returned = handedTraceBatches.filter { !$0.isDisjoint(with: returnedIds) }
+        handedTraceBatches.removeAll { !$0.isDisjoint(with: returnedIds) }
+        return returned.reduce(into: Set<String>()) { $0.formUnion($1) }
+    }
+
+    /// The `span_id` of an encoded event.
+    static func spanId(of event: [String: Any]) -> String? {
+        cxRum(of: event)?[Keys.spanId.rawValue] as? String
     }
 }
 

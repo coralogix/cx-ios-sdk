@@ -86,8 +86,13 @@ public class CoralogixExporter: SpanExporter {
     /// Spans of error-only sessions waiting to learn whether they are sent now, by span id, for
     /// `tracesExporter`: it sees only what is sent (see `forwardErrorOnlyTraces`). Oldest first.
     var heldTraceSpans: [(spanId: String, span: SpanData)] = []
+    /// The span ids of each batch handed to a hybrid `beforeSend` and not back yet, so what the
+    /// callback drops is released when the rest returns. Oldest first; under `heldTraceSpansLock`.
+    var handedTraceBatches: [Set<String>] = []
     let heldTraceSpansLock = NSLock()
+    /// Every batch releases its own spans, so these only bound batches a callback never hands back.
     static let maxHeldTraceSpans = 1_000
+    static let maxHandedTraceBatches = 64
     /// Each span's `onlyWithErrorMode` and session id as it was encoded, by span id, for the events
     /// handed to a hybrid `beforeSend`: the mode is put back from here when they return. Oldest first.
     var hybridModes: [(spanId: String, mode: HandedMode)] = []
@@ -419,7 +424,9 @@ public class CoralogixExporter: SpanExporter {
     
     internal func sendBeforeSendData(data: [[String: Any]]) {
         let rebuilt = data.compactMap(restoringErrorOnlyMode).map(rebuildOtelSpanAttributes)
-        self.uploadLive(self.routeErrorOnly(rebuilt))
+        // What the callback dropped from the batches these came back from is released with them.
+        let returnedIds = Set(data.compactMap(Self.spanId))
+        self.uploadLive(self.routeErrorOnly(rebuilt, releasing: returnedIds.union(takeHandedTraceBatches(returnedIds))))
     }
 
     /// Hybrid (`beforeSendCallBack`) path: spans are encoded *before* the JS edit and the
@@ -603,6 +610,7 @@ public class CoralogixExporter: SpanExporter {
             encodeSpans(spans: spans)
         }
         Log.d("[CoralogixExporter] encodeSpans: \(spans.count) in, \(cxSpansDictionary.count) encoded")
+        releaseErrorOnlyTraces(droppedFrom: spans, encoded: cxSpansDictionary)
         if cxSpansDictionary.isEmpty {
             return .success
         }
@@ -632,6 +640,7 @@ public class CoralogixExporter: SpanExporter {
         }
         if !editableSpans.isEmpty {
             rememberErrorOnlyModes(of: editableSpans)
+            recordHandedTraceBatch(editableSpans)
             callback(editableSpans.deepCopy())
         }
         return result

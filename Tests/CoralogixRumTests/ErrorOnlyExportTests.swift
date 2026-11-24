@@ -661,6 +661,67 @@ final class ErrorOnlyExportTests: XCTestCase {
         XCTAssertTrue(capture.eventTypes.contains(CoralogixEventType.error.rawValue), "The sent trigger is forwarded.")
     }
 
+    /// More events than `maxHeldTraceSpans` dropped in between must not evict a span still on
+    /// its hybrid round trip: every event that leaves a batch unrouted releases its span.
+    func testTracesExporter_eventsDroppedByTheNativeBeforeSend_doNotEvictASpanStillInFlight() throws {
+        let capture = EventTypeCapture()
+        let options = makeErrorOnlyOptions(sampleRate: 0, alwaysTrack: true, beforeSend: { cxRum in
+            let message = (cxRum[Keys.logContext.rawValue] as? [String: Any])?[Keys.message.rawValue] as? String
+            return message?.hasPrefix("dropped") == true ? nil : cxRum
+        }, tracesExporter: capture.tracesExporterCallback())
+        let (exporter, _, js) = try startHybrid(options)
+        export(exporter, .log, message: "in-flight")
+        for index in 0...CoralogixExporter.maxHeldTraceSpans {
+            export(exporter, .log, message: "dropped-\(index)")
+        }
+        XCTAssertFalse(js.events.contains { message(cxRum($0))?.hasPrefix("dropped") == true },
+                       "Precondition: the native beforeSend dropped them before JS.")
+
+        try returnTheErrorThenTheEventInFlight(exporter, js)
+        XCTAssertTrue(capture.eventTypes.contains(CoralogixEventType.log.rawValue),
+                      "The event in flight is sent after the error, so its span is forwarded.")
+    }
+
+    func testTracesExporter_eventsTheHybridBeforeSendDrops_doNotEvictASpanStillInFlight() throws {
+        let capture = EventTypeCapture()
+        let (exporter, _, js) = try startHybrid(makeErrorOnlyOptions(sampleRate: 0, alwaysTrack: true,
+                                                                    tracesExporter: capture.tracesExporterCallback()))
+        export(exporter, .log, message: "in-flight")
+        let batchSize = 100
+        for batch in 0...(CoralogixExporter.maxHeldTraceSpans / batchSize) {
+            let spans = (0..<batchSize).map { index -> SpanData in
+                let span = makeSamplingSpan(eventType: .log, extraAttributes: stamped(exporter, message: "batch-\(batch)-\(index)"))
+                label(span, "batch-\(batch)-\(index)")
+                return span
+            }
+            _ = exporter.export(spans: spans, explicitTimeout: nil)
+            // JS hands back one event of the batch and drops the rest.
+            exporter.sendBeforeSendData(data: js.events.filter { message(cxRum($0)) == "batch-\(batch)-0" })
+        }
+
+        try returnTheErrorThenTheEventInFlight(exporter, js)
+        XCTAssertTrue(capture.eventTypes.contains(CoralogixEventType.log.rawValue),
+                      "The event in flight is sent after the error, so its span is forwarded.")
+    }
+
+    /// Hands back the error first, so the event in flight, returned after it, is sent live.
+    private func returnTheErrorThenTheEventInFlight(_ exporter: CoralogixExporter, _ js: HandedToJS) throws {
+        export(exporter, .error, severity: .error, message: "boom")
+        let boom = try XCTUnwrap(js.events.first { message(cxRum($0)) == "boom" })
+        let inFlight = try XCTUnwrap(js.events.first { message(cxRum($0)) == "in-flight" })
+        exporter.sendBeforeSendData(data: [boom, inFlight])
+        exporter.errorOnlyDrain.waitUntilSettled()
+    }
+
+    private func stamped(_ exporter: CoralogixExporter, message: String) -> [String: AttributeValue] {
+        var attributes: [String: AttributeValue] = [Keys.severity.rawValue: .string(String(CoralogixLogSeverity.info.rawValue)),
+                                                    Keys.message.rawValue: .string(message)]
+        for (key, value) in exporter.getSessionManager().sessionSpanAttributes() {
+            attributes[key] = .string(value)
+        }
+        return attributes
+    }
+
     // MARK: - Helpers
 
     /// What a hybrid callback hands back after rewriting the read-only session fields.
