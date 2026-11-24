@@ -2,7 +2,8 @@
 //  CoralogixRum+Bus.swift
 //
 //  What RUM publishes to the bus. Only the most recently initialized instance publishes: an older
-//  instance that was never shut down, and any instance after its shutdown, stays silent.
+//  instance that was never shut down, and any instance after its shutdown, stays silent. Checking
+//  liveness and publishing are one hold of `liveInstanceLock`, so nothing follows ShuttingDown.
 
 import Foundation
 
@@ -10,25 +11,26 @@ extension CoralogixRum {
     private var isLive: Bool {
         Self.liveInstanceLock.lock()
         defer { Self.liveInstanceLock.unlock() }
-        return Self.liveInstance === self
+        return CoralogixRum.isInitialized && Self.liveInstance === self
     }
 
-    /// Makes this the live instance and starts reporting `sessionManager`'s session. The first report is the
-    /// sticky CurrentState, so a subscriber that arrives later still hears the session as it stands.
+    /// Starts reporting `sessionManager`'s session. The first report is the sticky CurrentState, and this
+    /// instance becomes the live one in the same step, so no message can reach a subscriber before it.
     internal func attachBus(to sessionManager: SessionManager) {
-        Self.liveInstanceLock.lock()
-        Self.liveInstance = self
-        Self.liveInstanceLock.unlock()
         busScreenLock.lock()
         busScreenRaw = nil
         busScreenLock.unlock()
         sessionManager.attachBus(initial: { [weak self] session in
-            self?.publishToBus(.currentState(sessionId: session.sessionId,
-                                             sessionStartTime: Self.epochMillis(session.creationDate),
-                                             kept: session.kept,
-                                             idle: session.idle,
-                                             currentScreen: nil,
-                                             maskTag: RumBus.maskTag))
+            guard let self else { return }
+            Self.liveInstanceLock.lock()
+            defer { Self.liveInstanceLock.unlock() }
+            Self.liveInstance = self
+            RumBus.shared.rumPublish(.currentState(sessionId: session.sessionId,
+                                                   sessionStartTime: Self.epochMillis(session.creationDate),
+                                                   kept: session.kept,
+                                                   idle: session.idle,
+                                                   currentScreen: nil,
+                                                   maskTag: RumBus.maskTag))
         }, changed: { [weak self] session in
             self?.publishToBus(.sessionChanged(sessionId: session.sessionId,
                                                sessionStartTime: Self.epochMillis(session.creationDate),
@@ -37,16 +39,26 @@ extension CoralogixRum {
         })
     }
 
-    internal func detachBus() {
+    /// Announces ShuttingDown and silences the bus. RUM is down for the whole process once any instance shuts
+    /// down (`isInitialized` is process-wide), so the live instance, whichever it is, is told to stop too.
+    internal func shutDownBus() {
         sessionManager?.detachBus()
         Self.liveInstanceLock.lock()
-        if Self.liveInstance === self { Self.liveInstance = nil }
+        let live = Self.liveInstance
         Self.liveInstanceLock.unlock()
+        if live !== self { live?.sessionManager?.detachBus() }
+        Self.liveInstanceLock.lock()
+        defer { Self.liveInstanceLock.unlock() }
+        guard Self.liveInstance != nil else { return }
+        RumBus.shared.rumPublish(.shuttingDown)
+        Self.liveInstance = nil
     }
 
     /// Enqueues `message` for subscribers when this is the live instance. Never waits on a subscriber.
     internal func publishToBus(_ message: RumToReplay) {
-        guard isLive else { return }
+        Self.liveInstanceLock.lock()
+        defer { Self.liveInstanceLock.unlock() }
+        guard CoralogixRum.isInitialized, Self.liveInstance === self else { return }
         RumBus.shared.rumPublish(message)
     }
 

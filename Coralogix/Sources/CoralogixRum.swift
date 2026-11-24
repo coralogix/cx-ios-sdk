@@ -599,8 +599,7 @@ public class CoralogixRum {
         hasShutDown = true
         shutdownLock.unlock()
         guard !alreadyShutDown else { return }
-        self.publishToBus(.shuttingDown)
-        self.detachBus()
+        self.shutDownBus()
         // Before the batch processor is stopped: a stop that outlasts its bound, or a later init
         // reopening the process-wide gate, must not let this instance's exporter send anything.
         self.coralogixExporter?.retire()
