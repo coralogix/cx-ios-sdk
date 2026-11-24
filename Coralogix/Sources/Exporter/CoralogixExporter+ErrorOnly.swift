@@ -14,8 +14,9 @@ final class WeakExporter {
 /// Sessions held until an error (`SessionMode.errorOnly`), as the browser SDK's
 /// `handleSessionWithError` does it: every final event — after URL masking and every `beforeSend`,
 /// native and hybrid — of such a session is held in `errorOnlyBuffer`, unless its category is in
-/// `instrumentationsToSend`. The first event with error severity triggers the session: it is sent,
-/// with everything after it, and what was held is drained in paced requests (`ErrorOnlyDrain`).
+/// `instrumentationsToSend`. The first event with error severity triggers the session: it is held
+/// last, and what was held is drained, error included, in paced requests (`ErrorOnlyDrain`);
+/// everything after it is sent as it happens.
 extension CoralogixExporter {
 
     /// Whether `span` belongs to a session held until an error, from its creation-time stamp.
@@ -50,9 +51,9 @@ extension CoralogixExporter {
                 Log.d("[CoralogixExporter] event of ended session \(route.sessionId) held for an error — dropped")
                 sends = false
             } else if route.isError {
-                errorOnlyBuffer.trigger(route.sessionId)
+                let error = OtelSpan.markingSessionHasError(event)
+                if !holdTrigger(error, of: route) { live.append(error) }
                 triggered.append(route.sessionId)
-                live.append(OtelSpan.markingSessionHasError(event))
                 sends = true
             } else if sendsBeforeError.contains(route.eventType ?? "") {
                 live.append(event)
@@ -69,6 +70,21 @@ extension CoralogixExporter {
         forwardErrorOnlyTraces(settled)
         startErrorOnlyDrains(triggered)
         return live
+    }
+
+    /// Triggers the event's session, keeping the error with what the session held, so it is sent
+    /// in the same requests and shares their retries and their survival of a restart, as the
+    /// browser SDK sends it. Returns false when the error is to be sent live: it could not be
+    /// kept, or it already has a durable path of its own (a fatal hang or a React Native fatal,
+    /// stored for the next launch until its live delivery is confirmed).
+    private func holdTrigger(_ error: [String: Any], of route: ErrorOnlyRoute) -> Bool {
+        let hasOwnPath = route.spanId.map(isAwaitingLiveDelivery) ?? false
+        guard !hasOwnPath, JSONSerialization.isValidJSONObject(error),
+              let data = try? JSONSerialization.data(withJSONObject: error) else {
+            errorOnlyBuffer.trigger(route.sessionId)
+            return false
+        }
+        return errorOnlyBuffer.triggerHolding(data, sessionId: route.sessionId)
     }
 
     /// Returns false when the session turned out to have had its error: the event is not held.

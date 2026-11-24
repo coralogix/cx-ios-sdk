@@ -100,6 +100,44 @@ final class ErrorOnlyBufferTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: file.path), "Files go once everything is sent.")
     }
 
+    // MARK: - The error that triggers a session
+
+    func testTriggerHolding_keepsTheErrorLast_andRecordsTheTriggerOnDisk() throws {
+        let buffer = makeBuffer()
+        (0..<2).forEach { buffer.hold(event($0), sessionId: "s") }
+        XCTAssertTrue(buffer.triggerHolding(event(99), sessionId: "s"))
+        XCTAssertTrue(try savedMetadata("s").triggered)
+        let chunk = try XCTUnwrap(buffer.nextChunk(of: "s", maxEvents: 500, maxBytes: ErrorOnlyDrain.maxBytesPerRequest))
+        XCTAssertEqual(chunk.events.map(index), [0, 1, 99])
+    }
+
+    func testTriggerHolding_pastTheCap_stillKeepsEverything() throws {
+        let buffer = makeBuffer(maxRumEvents: 2)
+        (0..<2).forEach { buffer.hold(event($0), sessionId: "s") }
+        XCTAssertTrue(buffer.triggerHolding(event(99), sessionId: "s"), "The error never clears what it triggers.")
+        let chunk = try XCTUnwrap(buffer.nextChunk(of: "s", maxEvents: 500, maxBytes: ErrorOnlyDrain.maxBytesPerRequest))
+        XCTAssertEqual(chunk.events.map(index), [0, 1, 99])
+    }
+
+    func testTriggerHolding_whenTheTriggerCannotBeSaved_takesTheErrorBackOut() throws {
+        let writer = FlakyMetadataWriter()
+        let buffer = makeBuffer(writer: writer)
+        (0..<2).forEach { buffer.hold(event($0), sessionId: "s") }
+        writer.failing = true
+        XCTAssertFalse(buffer.triggerHolding(event(99), sessionId: "s"),
+                       "A restart would delete it with the session: the caller sends it live.")
+        XCTAssertTrue(buffer.isTriggered("s"))
+        let onDisk = try String(contentsOf: directory.appendingPathComponent("s.jsonl")).split(separator: "\n")
+        XCTAssertEqual(onDisk.count, 2, "Not sent a second time by the drain.")
+    }
+
+    func testTriggerHolding_afterAWriteFailed_isSentLive() {
+        let buffer = makeBuffer(writer: FailingWriter(failAfter: 1))
+        (0..<2).forEach { buffer.hold(event($0), sessionId: "s") }
+        XCTAssertFalse(buffer.triggerHolding(event(99), sessionId: "s"), "The disk is full: sent live.")
+        XCTAssertTrue(buffer.isTriggered("s"))
+    }
+
     func testDiscard_removesAnUntriggeredSession_butNotATriggeredOne() {
         let buffer = makeBuffer()
         buffer.hold(event(0), sessionId: "a")

@@ -138,6 +138,51 @@ final class ErrorOnlyExportTests: XCTestCase {
         XCTAssertNotNil(payload(uploader, message: "demoted"), "And the demoted event was held and drained.")
     }
 
+    // MARK: - The error travels with what its session held
+
+    func testTheError_goesInTheDrainsRequest_afterWhatItsSessionHeld() throws {
+        let (exporter, uploader) = try startRecordingRequests()
+        export(exporter, .log, message: "held-1")
+        export(exporter, .log, message: "held-2")
+        export(exporter, .error, severity: .error, message: "the-error")
+        exporter.errorOnlyDrain.waitUntilSettled()
+
+        let carrying = uploader.requests.filter { labels(of: $0.events).contains("the-error") }
+        XCTAssertEqual(carrying.map(\.kind), [.storedCrash], "Sent once, by the drain, not live.")
+        XCTAssertEqual(labels(of: carrying.first?.events ?? []).filter { $0.hasPrefix("held") || $0 == "the-error" },
+                       ["held-1", "held-2", "the-error"], "In the same request as what was held, last.")
+        let error = try XCTUnwrap(carrying.first?.events.map(cxRum).first { message($0) == "the-error" })
+        XCTAssertEqual(session(error)[Keys.hasError.rawValue] as? Bool, true)
+    }
+
+    func testAFailedDrainRequest_keepsTheErrorOnDisk_forALaterLaunch() throws {
+        let (exporter, uploader) = try startRecordingRequests()
+        uploader.heldResult = SpanUploadResult(disposition: .retryable, httpStatus: 503, retryAfter: nil,
+                                               countsAsFailedUpload: true)
+        export(exporter, .log, message: "held")
+        export(exporter, .error, severity: .error, message: "the-error")
+        exporter.errorOnlyDrain.waitUntilSettled()
+        XCTAssertFalse(uploader.requests.contains { $0.kind == .live && labels(of: $0.events).contains("the-error") },
+                       "The error is not sent live, where nothing would retry it.")
+
+        let sessionId = try XCTUnwrap(exporter.getSessionManager().currentSessionId)
+        let nextLaunch = ErrorOnlyBuffer(maxRumEvents: 5_000, directory: directory)
+        XCTAssertEqual(nextLaunch.adoptLeftovers { $0.triggered }, [sessionId], "On disk, the session had its error.")
+        let chunk = try XCTUnwrap(nextLaunch.nextChunk(of: sessionId, maxEvents: 500, maxBytes: ErrorOnlyDrain.maxBytesPerRequest))
+        XCTAssertEqual(chunk.events.map(cxRum).compactMap(message).last, "the-error", "And the error is kept with it.")
+    }
+
+    func testAnErrorWithItsOwnDeliveryRecord_isSentLive_andStillTriggers() throws {
+        let (exporter, uploader) = try startRecordingRequests()
+        export(exporter, .log, message: "held")
+        export(exporter, .error, severity: .error, message: "fatal-hang", awaitsDelivery: true)
+        exporter.errorOnlyDrain.waitUntilSettled()
+
+        let carrying = uploader.requests.filter { labels(of: $0.events).contains("fatal-hang") }
+        XCTAssertEqual(carrying.map(\.kind), [.live], "Its stored record already resends it on a later launch.")
+        XCTAssertTrue(uploader.requests.contains { $0.kind == .storedCrash && labels(of: $0.events).contains("held") })
+    }
+
     // MARK: - Rotation and shutdown
 
     func testLateErrorWithinTheGrace_triggersTheEndedSession_andSendsWhatItHeld() throws {
@@ -486,7 +531,8 @@ final class ErrorOnlyExportTests: XCTestCase {
                         severity: CoralogixLogSeverity = .info,
                         message: String,
                         errorMessage: String? = nil,
-                        stamp: [(key: String, value: String)]? = nil) {
+                        stamp: [(key: String, value: String)]? = nil,
+                        awaitsDelivery: Bool = false) {
         var extra: [String: AttributeValue] = [Keys.severity.rawValue: .string(String(severity.rawValue)),
                                                Keys.message.rawValue: .string(message)]
         for (key, value) in stamp ?? exporter.getSessionManager().sessionSpanAttributes() {
@@ -495,7 +541,21 @@ final class ErrorOnlyExportTests: XCTestCase {
         if let errorMessage { extra[Keys.errorMessage.rawValue] = .string(errorMessage) }
         let span = makeSamplingSpan(eventType: type, extraAttributes: extra)
         label(span, message)
+        if awaitsDelivery { exporter.awaitLiveDelivery(spanId: span.spanId.hexString) { _ in } }
         _ = exporter.export(spans: [span], explicitTimeout: nil)
+    }
+
+    private func startRecordingRequests() throws -> (CoralogixExporter, RequestRecorder) {
+        let rum = CoralogixRum(options: makeErrorOnlyOptions(sampleRate: 0, alwaysTrack: true))
+        self.rum = rum
+        let exporter = try XCTUnwrap(rum.coralogixExporter)
+        let uploader = RequestRecorder()
+        exporter.spanUploader = uploader
+        return (exporter, uploader)
+    }
+
+    private func labels(of events: [[String: Any]]) -> [String] {
+        events.map(cxRum).compactMap(message)
     }
 
     private func label(_ span: SpanData, _ text: String) {
@@ -620,5 +680,28 @@ private final class CrashResultUploader: SpanUploading {
 
     func labels(using message: ([String: Any]) -> String?) -> [String?] {
         cxRumPayloads().map(message)
+    }
+}
+
+/// Records every request with its kind; answers the drain's with `heldResult`.
+private final class RequestRecorder: SpanUploading {
+    private let lock = NSLock()
+    private var _heldResult = SpanUploadResult.delivered
+    private var _requests: [(kind: SpanUploadKind, events: [[String: Any]])] = []
+
+    var heldResult: SpanUploadResult {
+        get { lock.lock(); defer { lock.unlock() }; return _heldResult }
+        set { lock.lock(); defer { lock.unlock() }; _heldResult = newValue }
+    }
+
+    var requests: [(kind: SpanUploadKind, events: [[String: Any]])] {
+        lock.lock(); defer { lock.unlock() }
+        return _requests
+    }
+
+    func upload(_ spans: [[String: Any]], endPoint: String, kind: SpanUploadKind) -> SpanUploadResult {
+        lock.lock(); defer { lock.unlock() }
+        _requests.append((kind, spans))
+        return kind == .storedCrash ? _heldResult : .delivered
     }
 }

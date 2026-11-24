@@ -241,6 +241,58 @@ final class ErrorOnlyBuffer {
     func trigger(_ sessionId: String) -> Bool {
         lock.lock()
         defer { lock.unlock() }
+        return triggerLocked(sessionId)
+    }
+
+    /// Records that `sessionId` had its error, holding `error`, the event that is that error, as
+    /// its last event: the error then goes out in the drain's requests, with what came before it,
+    /// and is retried and kept across a restart like them. Returns false, holding nothing, when
+    /// it could not be kept so: the caller sends it as it happens. The session has had its error
+    /// either way.
+    func triggerHolding(_ error: Data, sessionId: String) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !isTriggeredLocked(sessionId) else { return false }
+        let held = appendTriggerLocked(error, sessionId: sessionId)
+        triggerLocked(sessionId)
+        guard held, var session = sessions[sessionId] else { return false }
+        guard session.metadataUnsaved else { return true }
+        // On disk the session still reads as one without an error, so a restart would delete the
+        // error with it: the error is taken back out and sent live.
+        let line = error.count + 1
+        session.fileLength -= UInt64(line)
+        writer.truncate(eventsURL(of: sessionId), to: session.fileLength)
+        session.eventCount -= 1
+        session.byteCount -= line
+        sessions[sessionId] = session
+        return false
+    }
+
+    /// Appends the error that triggers `sessionId` to its events file. Past the caps on purpose:
+    /// it is what the session waited for, and the session drains next.
+    private func appendTriggerLocked(_ error: Data, sessionId: String) -> Bool {
+        guard error.count <= Self.maxEventBytes, !discardedSessionIds.contains(sessionId) else { return false }
+        let existing = sessions[sessionId]
+        var session = existing ?? Session(metadata: Metadata(sessionId: sessionId, owner: owner,
+                                                             createdAt: Date(), triggered: false,
+                                                             sentOffset: 0, failedUploads: 0))
+        // Behind what is held in memory, or in a file an earlier launch left, it would not be last.
+        guard !session.diskFailed, session.metadata.owner == owner else { return false }
+        guard appendLocked(error, to: &session) else {
+            if existing != nil {
+                session.diskFailed = true
+                sessions[sessionId] = session
+            }
+            return false
+        }
+        session.eventCount += 1
+        session.byteCount += error.count + 1
+        sessions[sessionId] = session
+        return true
+    }
+
+    @discardableResult
+    private func triggerLocked(_ sessionId: String) -> Bool {
         // A session in its grace that has its error is drained like any other.
         endingSessions.removeValue(forKey: sessionId)?.cancel()
         if !triggeredSessionIds.contains(sessionId) {

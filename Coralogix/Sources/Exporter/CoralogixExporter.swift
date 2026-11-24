@@ -165,6 +165,13 @@ public class CoralogixExporter: SpanExporter {
         liveDeliveryWaiters[spanId] = handler
     }
 
+    /// Whether something waits on the delivery of the live event whose span id is `spanId`.
+    func isAwaitingLiveDelivery(_ spanId: String) -> Bool {
+        crashUploadLock.lock()
+        defer { crashUploadLock.unlock() }
+        return liveDeliveryWaiters[spanId] != nil
+    }
+
     private func resolveLiveDeliveries(of events: [[String: Any]], result: SpanUploadResult) {
         crashUploadLock.lock()
         guard !liveDeliveryWaiters.isEmpty else {
