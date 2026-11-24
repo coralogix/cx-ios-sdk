@@ -238,7 +238,8 @@ public enum Keys: String {
     case events
     case hasRecording
     case screenshotId
-    case page
+    case internalEventName = "internal_event_name"
+    case internalEventData = "internal_event_data"
     case screenshotContext = "screenshot_context"
     case queueExporter = "com.coralogix.exporter.queue"
     case queueSpanProcessingQueue = "com.coralogix.spanProcessingQueue"

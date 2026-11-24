@@ -456,6 +456,33 @@ public class SessionManager {
     public func doesSessionHasRecording() -> Bool {
         return self.hasRecording
     }
+
+    /// The latest recorded sessions, oldest first; only the current and the previous one matter.
+    private var recordedSessions: [String] = []
+
+    /// Replay recorded `sessionId`. The latest two stay remembered so a late event of the previous session still reports it.
+    func markRecorded(_ sessionId: String) {
+        countersLock.lock()
+        recordedSessions.removeAll { $0 == sessionId }
+        recordedSessions.append(sessionId)
+        if recordedSessions.count > 2 { recordedSessions.removeFirst(recordedSessions.count - 2) }
+        countersLock.unlock()
+        if sessionId == currentSessionId { hasRecording = true }
+    }
+
+    /// Whether an event of `sessionId` reports a recording. Asked against the event's own session, not the live one.
+    func hasRecording(forSession sessionId: String) -> Bool {
+        countersLock.lock()
+        defer { countersLock.unlock() }
+        return recordedSessions.contains(sessionId)
+    }
+
+    func forgetRecordedSessions() {
+        countersLock.lock()
+        recordedSessions = []
+        countersLock.unlock()
+        hasRecording = false
+    }
     
     public func incrementErrorCounter() {
         countersLock.lock()

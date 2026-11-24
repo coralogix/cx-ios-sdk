@@ -17,6 +17,9 @@ omitted; the focus here is user-facing behavior changes.
 - Error, crash and ANR events no longer attach a screenshot.
 - The `CoralogixRum` session replay methods are removed: `startRecording`, `stopRecording`, `captureEvent`, `isSRRecording`, `isSRInitialized`, `update(sessionId:)` and the screenshot counter methods.
 
+### Added
+- `CoralogixRum.getConfig()` returns the options the SDK is running with, or `nil` before initialization and after `shutdown()`.
+
 ## [2.24.4] - 2026-11-22
 
 ### Fixed

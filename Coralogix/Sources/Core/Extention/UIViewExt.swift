@@ -18,7 +18,7 @@ private let _flutterViewClass: AnyClass? =
 
 public extension UIView {
     /// When true, this view will be masked (redacted).
-    var cxMask: Bool {
+    @objc var cxMask: Bool {
         get { (objc_getAssociatedObject(self, &kCxMaskKey) as? Bool) ?? false }
         set { objc_setAssociatedObject(self, &kCxMaskKey, newValue, .OBJC_ASSOCIATION_RETAIN_NONATOMIC) }
     }

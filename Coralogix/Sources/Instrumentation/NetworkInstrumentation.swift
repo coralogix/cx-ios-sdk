@@ -84,6 +84,7 @@ extension CoralogixRum {
         }
         
         let configuration = URLSessionInstrumentationConfiguration(
+            shouldInstrument: { request in !Self.carriesInternalHeader([:], request: request) },
             spanCustomization: Self.spanCustomizationStatic,
             shouldInjectTracingHeaders: { request in
                 // Use static options to support SDK reinitialization with different tracing config (CX-37986)
@@ -298,9 +299,26 @@ extension CoralogixRum {
         return ("", "")
     }
 
+    private static let internalHeaderName = "x-coralogix-internal"
+
+    /// Hybrid `request_headers` arrive as a dictionary or as a JSON string; a string that does not parse has no headers.
+    private static func headerDictionary(_ raw: Any?) -> [String: Any] {
+        if let dictionary = raw as? [String: Any] { return dictionary }
+        guard let string = raw as? String, let data = string.data(using: .utf8) else { return [:] }
+        return (try? JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
+    }
+
+    /// True when the request is one of the SDK's own (`X-Coralogix-Internal: 1`, name matched case-insensitively).
+    internal static func carriesInternalHeader(_ headers: [String: Any], request: URLRequest? = nil) -> Bool {
+        if request?.value(forHTTPHeaderField: internalHeaderName) == "1" { return true }
+        return headers.contains { $0.key.lowercased() == internalHeaderName && "\($0.value)" == "1" }
+    }
+
     /// Implementation called by `CoralogixRum.setNetworkRequestContext(dictionary:)`.
     internal func reportHybridNetworkRequest(_ dictionary: [String: Any]) {
         guard validateHybridNetworkRequest(dictionary) else { return }
+        // Replay's own uploads are never reported as network calls.
+        if Self.carriesInternalHeader(Self.headerDictionary(dictionary[Keys.requestHeaders.rawValue])) { return }
 
         // The wrapper sent `00` for this request, so no event may exist for it, whatever the session
         // says now: that covers a session that rotated in mid-request, a request started before

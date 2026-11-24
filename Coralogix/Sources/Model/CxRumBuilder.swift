@@ -40,7 +40,6 @@ class CxRumBuilder {
         let userMetadata = options.userContext?.userMetadata
         let accountId = options.userContext?.accountId
         let accountName = options.userContext?.accountName
-        let hasRecording = sessionManager.doesSessionHasRecording()
         var timeStamp = otel.getStartTime() ?? Date().timeIntervalSince1970
         var prevSessionContext: SessionContext? = nil
         
@@ -48,11 +47,11 @@ class CxRumBuilder {
         guard var sessionContext = SessionContext(otel: otel,
                                                   userMetadata: userMetadata,
                                                   accountId: accountId,
-                                                  accountName: accountName,
-                                                  hasRecording: hasRecording) else {
+                                                  accountName: accountName) else {
             Log.w("[CxRumBuilder] Dropping span due to missing session attributes")
             return nil
         }
+        sessionContext.hasRecording = sessionManager.hasRecording(forSession: sessionContext.sessionId)
 
         // SessionManager's counters and snapshot throttle describe the live session only.
         let isLiveSession = sessionManager.isLiveSession(sessionContext.sessionId)
@@ -105,7 +104,7 @@ class CxRumBuilder {
                                                 userMetadata: userMetadata,
                                                 accountId: accountId,
                                                 accountName: accountName,
-                                                hasRecording: hasRecording)
+                                                hasRecording: sessionContext.hasRecording)
         }
         
         // Patch, in case of session creation date is bigger that log timeStamp
@@ -169,6 +168,12 @@ class CxRumBuilder {
     private func buildInternalContext(for eventContext: EventContext) -> InternalContext? {
         guard eventContext.type == .internalKey else { return nil }
 
+        if let name = otel.getAttribute(forKey: Keys.internalEventName.rawValue) as? String {
+            let data = (otel.getAttribute(forKey: Keys.internalEventData.rawValue) as? String)
+                .flatMap { $0.data(using: .utf8) }
+                .flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+            return InternalContext(eventName: name, data: data ?? [:])
+        }
         return InternalContext(eventName: Keys.initKey.rawValue, data: options.getInitData())
     }
     

@@ -853,6 +853,15 @@ public class CoralogixRum {
         return CoralogixCustomTracer(rum: self, ignoredInstruments: ignoredInstruments)
     }
     
+    /// The options the SDK is running with: the most recently initialized instance's, including later
+    /// changes such as `setApplicationContext`. `nil` before initialization and after `shutdown()`.
+    public static func getConfig() -> CoralogixExporterOptions? {
+        liveInstanceLock.lock()
+        let live = isInitialized ? liveInstance : nil
+        liveInstanceLock.unlock()
+        return live?.options
+    }
+
     // MARK: - Spans & Attributes
     internal var options: CoralogixExporterOptions? { return self.coralogixExporter?.getOptions() }
     
