@@ -12,7 +12,7 @@ omitted; the focus here is user-facing behavior changes.
 
 ### Added
 - `alwaysTrackSessionsWithErrors` option: a session that `sessionSampleRate` leaves out is kept on the device and sent whole if an error or crash happens in it. Off by default.
-- `onlyWithErrorConfig` option (`SessionWithErrorConfig`): `enable` holds every session until an error, `maxRumEvents` caps what a session keeps (default 5000, at most 20000), and `instrumentationsToSend` lists categories sent before an error.
+- `onlyWithErrorConfig` option (`SessionWithErrorConfig`): `enable` holds every sampled-in session until an error, `maxRumEvents` caps what a session keeps (default 5000, at most 20000), and `instrumentationsToSend` lists categories sent before an error.
 - Every event carries `session_context.onlyWithErrorMode`; events sent from a session's error on carry `session_context.hasError`.
 
 ### Changed

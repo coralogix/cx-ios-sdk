@@ -15,14 +15,16 @@ public struct SessionWithErrorConfig {
     public static let defaultMaxRumEvents = 5_000
     public static let maxAllowedRumEvents = 20_000
 
-    /// Holds every session until an error happens in it, whatever `sessionSampleRate` decided.
+    /// Holds every sampled-in session until an error happens in it. A session `sessionSampleRate`
+    /// leaves out is still dropped, unless `alwaysTrackSessionsWithErrors` is also on.
     public let enable: Bool
 
     /// How many events a session holds while it waits for an error. Past this, what it held is
     /// discarded and it starts holding again. 5000 by default, at most 20000.
     public let maxRumEvents: Int
 
-    /// Event categories sent at once even before an error, instead of being held.
+    /// Event categories sent at once even before an error, instead of being held. Empty by
+    /// default: a held session sends nothing until it has an error.
     public let instrumentationsToSend: Set<ExcludableInstrumentation>
 
     /// - Parameters:
