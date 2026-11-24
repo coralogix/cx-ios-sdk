@@ -1,11 +1,6 @@
 name: Podspec Lint
 
-# Reusable. Lints the two podspecs as parallel matrix jobs.
-#
-# Publishing them is strictly ordered (CoralogixInternal must reach trunk before
-# Coralogix, which depends on it), but LINTING is not: --include-podspecs resolves the
-# dependency from the local file, so each lint is self-contained. See
-# lint_and_push_cocoapods.sh for the ordered publish path.
+# Reusable. Lints the podspec. See lint_and_push_cocoapods.sh for the publish path.
 #
 # --skip-tests: Coralogix.podspec declares test_specs, so lint would also build
 # and run the unit tests. Those tests already run in ci-component-unit.yml, and they
@@ -38,10 +33,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - podspec: CoralogixInternal
-            include-podspecs: ''
           - podspec: Coralogix
-            include-podspecs: '--include-podspecs=CoralogixInternal.podspec'
     steps:
       - uses: actions/checkout@v4
 
@@ -86,7 +78,6 @@ jobs:
           set +e
           # shellcheck disable=SC2086
           pod lib lint ${{ matrix.podspec }}.podspec \
-            ${{ matrix.include-podspecs }} \
             --platforms=iOS \
             --use-static-frameworks \
             --allow-warnings \

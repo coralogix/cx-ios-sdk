@@ -23,7 +23,7 @@ TAG="${TAG_RAW#v}"
 
 echo "Release tag: $TAG"
 
-SPECS=(CoralogixInternal.podspec Coralogix.podspec)
+SPECS=(Coralogix.podspec)
 
 for SPEC in "${SPECS[@]}"; do
   echo "Checking $SPEC..."

@@ -50,22 +50,6 @@ update_version_in_c_podspec() {
   sed -i '' "s/spec.version.*=.*\"[0-9]*\.[0-9]*\.[0-9]*\"/spec.version      = \"$new_version\"/" "$podspec_c_file"
 }
 
-# Function to update version in the coralogix podspec file
-update_version_in_ci_podspec() {
-  local new_version=$1
-  local podspec_ci_file=$2
-  echo "Updating podspec file: $podspec_ci_file"
-  sed -i '' "s/spec.version.*=.*\"[0-9]*\.[0-9]*\.[0-9]*\"/spec.version      = \"$new_version\"/" "$podspec_ci_file"
-}
-
-# Function to update CoralogixInternal dependency version in a podspec file
-update_internal_dependency_version() {
-  local new_version=$1
-  local podspec_file=$2
-  echo "Updating dependency version in: $podspec_file"
-  sed -i '' "s/\(spec.dependency 'CoralogixInternal', '\)[0-9]*\.[0-9]*\.[0-9]*\('\)/\1$new_version\2/" "$podspec_file"
-}
-
 # Main script logic
 if [ $# -eq 1 ]; then
   part=$1
@@ -96,9 +80,8 @@ fi
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 # Combine the script directory with the relative path to get the absolute path of the Swift file
-swift_file="$script_dir/CoralogixInternal/Sources/Utils.swift"
+swift_file="$script_dir/Coralogix/Sources/Core/Utils.swift"
 podspec_c_file="$script_dir/Coralogix.podspec"
-podspec_ci_file="$script_dir/CoralogixInternal.podspec"
 
 if [ ! -f "$swift_file" ]; then
   echo "File not found: $swift_file"
@@ -107,11 +90,6 @@ fi
 
 if [ ! -f "$podspec_c_file" ]; then
   echo "File not found: $podspec_c_file"
-  exit 1
-fi
-
-if [ ! -f "$podspec_ci_file" ]; then
-  echo "File not found: $podspec_ci_file"
   exit 1
 fi
 
@@ -136,15 +114,6 @@ swift_result=$?
 update_version_in_c_podspec "$new_version" "$podspec_c_file"
 c_result=$?
 
-# Update the version in the coralogix-internal podspec file
-update_version_in_ci_podspec "$new_version" "$podspec_ci_file"
-ci_result=$?
-
-# Update CoralogixInternal dependency version in Coralogix.podspec
-update_internal_dependency_version "$new_version" "$podspec_c_file";
-dep_c_result=$?
-
-
 # Check if the sed command was successful for the Swift file
 if [ $swift_result -eq 0 ]; then
     echo "✅ Version updated successfully to $new_version in $swift_file"
@@ -158,21 +127,5 @@ if [ $c_result -eq 0 ]; then
     echo "✅ Version updated successfully to $new_version in $podspec_c_file"
 else
     echo "❌ Failed to update the version in $podspec_c_file"
-    exit 1
-fi
-
-# Check if the sed command was successful for the podspec file
-if [ $ci_result -eq 0 ]; then
-    echo "✅ Version updated successfully to $new_version in $podspec_ci_file"
-else
-    echo "❌ Failed to update the version in $podspec_ci_file"
-    exit 1
-fi
-
-# Check if the sed command was successful for the podspec file
-if [ $dep_c_result -eq 0 ]; then
-    echo "✅ Dependency version updated in Coralogix.podspec"
-else
-    echo "❌ Failed to update dependency in Coralogix.podspec"
     exit 1
 fi

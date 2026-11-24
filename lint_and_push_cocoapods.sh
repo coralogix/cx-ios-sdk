@@ -3,59 +3,16 @@
 set -e
 
 # Podspecs
-INTERNAL="CoralogixInternal.podspec"
 MAIN="Coralogix.podspec"
 
 # Ask if user wants to run lint
-read -p "🟡 Do you want to run lint on all podspecs? (y/n): " run_lint
+read -p "🟡 Do you want to run lint on the podspec? (y/n): " run_lint
 if [[ "$run_lint" =~ ^[Yy]$ ]]; then
-  # Lint all podspecs (INTERNAL, MAIN)
-  echo "🔍 Linting $INTERNAL..."
-  pod lib lint "$INTERNAL" --verbose --no-clean --allow-warnings
-  echo "✅ $INTERNAL passed lint."
-
-  echo "🔍 Linting $MAIN with dependency on $INTERNAL..."
-  pod lib lint "$MAIN" --include-podspecs="$INTERNAL" --verbose --no-clean --allow-warnings
+  echo "🔍 Linting $MAIN..."
+  pod lib lint "$MAIN" --verbose --no-clean --allow-warnings
   echo "✅ $MAIN passed lint."
 else
   echo "⏭️ Skipping lint, proceeding to upload phase."
-fi
-
-# Push INTERNAL
-read -p "🟡 Do you want to push $INTERNAL to CocoaPods trunk? (y/n): " push_internal
-if [[ "$push_internal" =~ ^[Yy]$ ]]; then
-  echo "🚀 Pushing $INTERNAL..."
-  set +e
-  push_output=$(pod trunk push "$INTERNAL" --allow-warnings --verbose 2>&1)
-  push_exit_code=$?
-  set -e
-  
-  if [ $push_exit_code -eq 0 ]; then
-    echo "✅ $INTERNAL pushed!"
-    
-    # Wait for CoralogixInternal to be visible on trunk, then refresh local CDN cache.
-    # pod trunk info queries trunk directly (authoritative); pod repo update syncs
-    # the local CDN cache so dependent podspecs can resolve the new version during validation.
-    VERSION=$(grep "spec.version" "$INTERNAL" | head -1 | sed "s/.*'\(.*\)'.*/\1/")
-    echo "⏳ Waiting for $INTERNAL $VERSION to appear on trunk..."
-    until pod trunk info CoralogixInternal | grep -q "$VERSION"; do
-      echo "⏳ $INTERNAL $VERSION not yet on trunk, waiting 30 seconds..."
-      sleep 30
-    done
-    echo "✅ $INTERNAL $VERSION is on trunk. Updating local CDN cache..."
-    pod repo update
-    echo "✅ Local CDN cache updated."
-  else
-    if echo "$push_output" | grep -q "Unable to accept duplicate entry"; then
-      echo "⚠️ Duplicate entry detected for $INTERNAL, skipping to next phase..."
-    else
-      echo "❌ Error pushing $INTERNAL:"
-      echo "$push_output"
-      exit 1
-    fi
-  fi
-else
-  echo "⏭️ Skipping $INTERNAL push."
 fi
 
 # Push MAIN

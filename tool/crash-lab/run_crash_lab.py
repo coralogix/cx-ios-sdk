@@ -32,7 +32,7 @@ from urllib.parse import urlparse
 
 REPO = Path(__file__).resolve().parents[2]
 CASES = REPO / "Example/Shared/Resources/crash-lab/cases.json"
-SDK_VERSION_FILE = REPO / "CoralogixInternal/Sources/Utils.swift"
+SDK_VERSION_FILE = REPO / "Coralogix/Sources/Core/Utils.swift"
 APPS = {  # --app: bundle id and Xcode scheme (workspace Example/DemoApp.xcworkspace)
     "swift": {"bundle": "com.coralogix.DemoAppSwift", "scheme": "DemoAppSwift"},
     "swiftui": {"bundle": "com.coralogix.DemoAppSwiftUI", "scheme": "DemoAppSwiftUI"},
