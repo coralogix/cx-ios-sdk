@@ -105,34 +105,3 @@ final class SessionReplayInitLogTests: XCTestCase {
                         hasEnded: true)
     }
 }
-
-/// Test-only `SpanUploading` that captures the encoded wire dicts so tests can assert on the
-/// final `text.cx_rum.*` payload (the actual ingest shape), without network I/O.
-final class CapturingSpanUploader: SpanUploading {
-    private let lock = NSLock()
-    private var uploaded: [[String: Any]] = []
-
-    func upload(_ spans: [[String: Any]], endPoint: String, kind: SpanUploadKind) -> SpanUploadResult {
-        lock.lock(); defer { lock.unlock() }
-        uploaded.append(contentsOf: spans)
-        return .delivered
-    }
-
-    /// Every uploaded wire dict, in upload order.
-    var uploadedSpans: [[String: Any]] {
-        lock.lock(); defer { lock.unlock() }
-        return uploaded
-    }
-
-    /// The `text.cx_rum` dict of every uploaded span, in upload order.
-    func cxRumPayloads() -> [[String: Any]] {
-        lock.lock(); defer { lock.unlock() }
-        return uploaded.compactMap { span in
-            (span[Keys.text.rawValue] as? [String: Any])?[Keys.cxRum.rawValue] as? [String: Any]
-        }
-    }
-
-    func firstInternalContext() -> [String: Any]? {
-        cxRumPayloads().lazy.compactMap { $0[Keys.internalContext.rawValue] as? [String: Any] }.first
-    }
-}
