@@ -1,21 +1,18 @@
 name: Podspec Lint
 
-# Reusable. Lints the three podspecs as parallel matrix jobs.
+# Reusable. Lints the two podspecs as parallel matrix jobs.
 #
 # Publishing them is strictly ordered (CoralogixInternal must reach trunk before
-# the two that depend on it), but LINTING is not: --include-podspecs resolves the
-# dependency from the local file, so each lint is self-contained. Run serially
-# they cost 44s + 253s + 343s = 10.5 min; in parallel the slowest one is the
-# whole job. See lint_and_push_cocoapods.sh for the ordered publish path.
+# Coralogix, which depends on it), but LINTING is not: --include-podspecs resolves the
+# dependency from the local file, so each lint is self-contained. See
+# lint_and_push_cocoapods.sh for the ordered publish path.
 #
-# --skip-tests: Coralogix.podspec and SessionReplay.podspec declare test_specs,
-# so lint was also building and running 1081 unit tests — the whole difference
-# between CoralogixInternal's 0.6 min and the other two's 5-10. Those tests
-# already run in ci-component-unit.yml, over all three targets rather than two
-# (CoralogixInternal.podspec has no test_spec), and they test SDK logic, which
-# does not change with the distribution channel. What lint uniquely proves is
-# that the pod BUILDS as a consumer integrates it — static frameworks, complete
-# source_files globs, declared dependencies — and --skip-tests keeps all of it.
+# --skip-tests: Coralogix.podspec declares test_specs, so lint would also build
+# and run the unit tests. Those tests already run in ci-component-unit.yml, and they
+# test SDK logic, which does not change with the distribution channel. What lint
+# uniquely proves is that the pod BUILDS as a consumer integrates it — static
+# frameworks, complete source_files globs, declared dependencies — and --skip-tests
+# keeps all of it.
 
 on:
   workflow_call:
@@ -43,8 +40,6 @@ jobs:
         include:
           - podspec: CoralogixInternal
             include-podspecs: ''
-          - podspec: SessionReplay
-            include-podspecs: '--include-podspecs=CoralogixInternal.podspec'
           - podspec: Coralogix
             include-podspecs: '--include-podspecs=CoralogixInternal.podspec'
     steps:
@@ -62,7 +57,7 @@ jobs:
           bundler-cache: false
 
       # Saves re-fetching the trunk CDN metadata and any already-downloaded pod
-      # sources on every one of the three parallel jobs.
+      # sources on every one of the parallel jobs.
       - name: Cache CocoaPods state
         uses: actions/cache@v4
         with:

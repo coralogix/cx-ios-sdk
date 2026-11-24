@@ -33,7 +33,6 @@ For the iOS SDK, the runtime surfaces are:
 | UI instrumentation (taps, gestures, swizzling) | Demo app UI | Tap / scroll / navigate in the simulator |
 | ANR / crash / lifecycle | Demo app process state | Force-quit, background, send memory warning via `xcrun simctl notify_post booted Memory:1` |
 | Network instrumentation | Demo app's network calls | Trigger the "Network instrumentation" demo screen, observe outgoing spans |
-| SessionReplay | Demo app's rendered UI | Enable SR in options, drive through screens, observe SR payloads in console |
 
 If the change is library-only (e.g. an internal helper with no observable surface), say so and **SKIP** rather than running tests as a substitute.
 

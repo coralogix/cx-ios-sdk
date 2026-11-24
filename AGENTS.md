@@ -16,11 +16,11 @@ Read these in order. Section 1 (Versioning) is always checked first. Section 4 (
    - Major version bump without `feat!:` or `BREAKING CHANGE:` in commits
    - Minor version bump without any `feat:` commits
    - Version not bumped but changes warrant it
-   - **Version is bumped in one file but not the others.** iOS distributes through CocoaPods AND has an in-source SDK version constant. Four files must move together: `Coralogix.podspec`, `CoralogixInternal.podspec`, `SessionReplay.podspec`, and `Global.sdk` in `CoralogixInternal/Sources/Utils.swift`. Any disagreement is a blocker.
+   - **Version is bumped in one file but not the others.** iOS distributes through CocoaPods AND has an in-source SDK version constant. Three files must move together: `Coralogix.podspec`, `CoralogixInternal.podspec`, and `Global.sdk` in `CoralogixInternal/Sources/Utils.swift`. Any disagreement is a blocker.
 
 > **Example violation:** PR has `feat: add user tracking` but bumps 2.0.0 → 3.0.0. This is WRONG — should be 2.1.0. Flag immediately.
 
-> **Example violation:** Three podspecs say `2.8.0` but `Global.sdk` still says `2.7.0`. The SDK will report its own version incorrectly. Flag immediately.
+> **Example violation:** Both podspecs say `2.8.0` but `Global.sdk` still says `2.7.0`. The SDK will report its own version incorrectly. Flag immediately.
 
 **Conventional Commits:** `feat:`, `feat!:`, `fix:`, `docs:`, `style:`, `refactor:`, `perf:`, `test:`, `build:`, `ci:`, `chore:`, `revert:`, `update:`
 
@@ -55,7 +55,7 @@ These rules are specific to this codebase. Violations should fail review regardl
 
 ### 4.1 Never crash the host app
 
-The SDK runs inside a customer's process. Any of these in `Coralogix/Sources/`, `CoralogixInternal/Sources/`, `SessionReplay/Sources/` is a hard block:
+The SDK runs inside a customer's process. Any of these in `Coralogix/Sources/`, `CoralogixInternal/Sources/` is a hard block:
 
 - `fatalError(…)`, `precondition(…)`, `assert(…)`, `assertionFailure(…)`
 - Force-unwrap (`!`) on a value that could be nil at runtime — including dictionary lookups, casts (`as!`), and `try!`

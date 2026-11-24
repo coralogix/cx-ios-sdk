@@ -95,7 +95,7 @@ jobs:
           # A tier typo drops the shard from every run with no error, and since
           # `quarantine` is a legitimate never-runs tier, a typo is otherwise
           # indistinguishable from an intentional quarantine.
-          VALID_TIERS='["component","smoke","soak","quarantine"]'
+          VALID_TIERS='["component","smoke","quarantine"]'
           BAD_TIER=$(jq -r --argjson v "$VALID_TIERS" \
             '.shards[] | select(.tier as $t | $v | index($t) | not) | "\(.id) (tier: \(.tier))"' \
             .github/ci/ui-suites.json)
@@ -112,16 +112,6 @@ jobs:
           if [ -n "$EMPTY" ]; then
             echo "::error::these shards name no tests, so xcodebuild would run the entire scheme:"
             echo "$EMPTY" | awk '{print "  " $0}'
-            exit 1
-          fi
-
-          # Truthiness, not equality: "harness": "true" as a JSON string would
-          # evade `== true` here yet still take the harness branch at runtime,
-          # where only the first test is used.
-          BAD_HARNESS=$(jq -r '.shards[] | select((.harness // false) != false and (.tests|length) != 1) | .id' .github/ci/ui-suites.json)
-          if [ -n "$BAD_HARNESS" ]; then
-            echo "::error::harness shards take a single -only-testing filter, so they must hold exactly one test:"
-            echo "$BAD_HARNESS" | awk '{print "  " $0}'
             exit 1
           fi
 
@@ -170,7 +160,7 @@ jobs:
           TIERS: ${{ inputs.tiers }}
         run: |
           set -euo pipefail
-          BAD_REQ=$(jq -r --argjson v '["component","smoke","soak","quarantine"]' \
+          BAD_REQ=$(jq -r --argjson v '["component","smoke","quarantine"]' \
             --argjson t "$TIERS" '$t - $v | .[]' <<<'null')
           if [ -n "$BAD_REQ" ]; then
             echo "::error::caller requested unknown tier(s): $(echo "$BAD_REQ" | tr '\n' ' ')"
@@ -180,8 +170,6 @@ jobs:
           SHARDS=$(jq -c --argjson tiers "$TIERS" \
             '[.shards[] | select(.tier as $t | $tiers | index($t))
               | {id, name, scheme, tier,
-                 harness: ((.harness // false) != false),
-                 test_id: .tests[0],
                  only: ([.tests[] | "-only-testing:" + .] | join(" "))}]' \
             .github/ci/ui-suites.json)
 
@@ -377,8 +365,6 @@ jobs:
         env:
           SCHEME: ${{ matrix.scheme }}
           ONLY_TESTING: ${{ matrix.only }}
-          IS_HARNESS: ${{ matrix.harness }}
-          TEST_ID: ${{ matrix.test_id }}
         run: |
           set -euo pipefail
 
@@ -399,37 +385,24 @@ jobs:
 
           START=$(date +%s)
           set +e
-          if [ "$IS_HARNESS" = "true" ]; then
-            # The leak tests assert only that the screen appeared; the actual
-            # check is a pixel scan of frames captured by the harness's mock
-            # upload server, so running them bare would prove nothing. Point the
-            # harness at the shared build so it does not rebuild the workspace.
-            CX_IOS_XCTESTRUN="$PWD/$XCTESTRUN" \
-            CX_IOS_ONLY_TESTING="$TEST_ID" \
-            CX_IOS_SIM_UDID="$SIM_UDID" \
-              tool/run_leak_harness.sh 2>&1 | tee test-output.log
-            EXIT=${PIPESTATUS[0]}
-          else
-            # These tests round-trip through a live schema-validator, so a single
-            # retry absorbs a transient network failure without hiding a real one:
-            # a genuinely broken assertion fails both attempts.
-            # shellcheck disable=SC2086
-            xcodebuild test-without-building \
-              -xctestrun "$XCTESTRUN" \
-              -destination "$SIM_DESTINATION" \
-              -resultBundlePath TestResults.xcresult \
-              -parallel-testing-enabled NO \
-              -retry-tests-on-failure -test-iterations 2 \
-              $ONLY_TESTING \
-              2>&1 | tee test-output.log | xcpretty
-            EXIT=${PIPESTATUS[0]}
-          fi
+          # These tests round-trip through a live schema-validator, so a single
+          # retry absorbs a transient network failure without hiding a real one:
+          # a genuinely broken assertion fails both attempts.
+          # shellcheck disable=SC2086
+          xcodebuild test-without-building \
+            -xctestrun "$XCTESTRUN" \
+            -destination "$SIM_DESTINATION" \
+            -resultBundlePath TestResults.xcresult \
+            -parallel-testing-enabled NO \
+            -retry-tests-on-failure -test-iterations 2 \
+            $ONLY_TESTING \
+            2>&1 | tee test-output.log | xcpretty
+          EXIT=${PIPESTATUS[0]}
           set -e
           TOTAL=$(( $(date +%s) - START ))
 
           EXECUTED=$(grep -oE "Executed [0-9]+ tests?" test-output.log | tail -1 || echo "Executed 0 tests")
           RETRIED=$(grep -cE "Test Case .* failed \(" test-output.log || true)
-          FRAMES=$(grep -oE "captured [0-9]+ frame" test-output.log | tail -1 || true)
 
           {
             echo "### ${{ matrix.name }}"
@@ -441,29 +414,11 @@ jobs:
               echo ""
               echo "> ${RETRIED} test attempt(s) failed and were retried — check for flakiness."
             fi
-            if [ -n "${FRAMES:-}" ]; then
-              echo ""
-              echo "> leak harness ${FRAMES}(s) scanned for unmasked sentinels."
-            fi
           } >> "$GITHUB_STEP_SUMMARY"
 
-          # Status first: a harness exit 2 (infra failure) produces no
-          # "Executed ..." line, and checking for that first would relabel it as
-          # "no tests executed" and discard the infrastructure diagnostic.
           if [ "$EXIT" -ne 0 ]; then
-            if [ "$IS_HARNESS" = "true" ]; then
-              # run_leak_harness.sh: 1 = a captured frame showed an unmasked
-              # sentinel, 2 = the harness could not produce samples at all.
-              case "$EXIT" in
-                1) echo "::error::${{ matrix.name }}: session-replay leak detected — a captured frame contained unmasked sentinel pixels." ;;
-                2) echo "::error::${{ matrix.name }}: harness infrastructure failure (mock server, no frames, or test run) — this is not a leak verdict." ;;
-                *) echo "::error::${{ matrix.name }} failed (exit $EXIT)" ;;
-              esac
-              grep -iE "\[leak-harness\]|error:|failed" test-output.log | tail -40 || true
-            else
-              echo "::error::${{ matrix.name }} failed"
-              grep -iE "error:|failed|XCTAssert" test-output.log | tail -40 || true
-            fi
+            echo "::error::${{ matrix.name }} failed"
+            grep -iE "error:|failed|XCTAssert" test-output.log | tail -40 || true
             exit "$EXIT"
           fi
 
@@ -475,14 +430,6 @@ jobs:
           fi
           echo "${{ matrix.name }} passed in ${TOTAL}s"
 
-      - name: Collect leak-harness logs
-        if: failure() && matrix.harness
-        run: |
-          set -uo pipefail
-          mkdir -p harness-logs
-          cp "${TMPDIR:-/tmp}"/cx-leak-harness-ios-*.log harness-logs/ 2>/dev/null || true
-          ls -la harness-logs || true
-
       - name: Upload failure diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
@@ -491,6 +438,5 @@ jobs:
           path: |
             test-output.log
             TestResults.xcresult
-            harness-logs
           if-no-files-found: ignore
           retention-days: 5

@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-Coralogix RUM SDK for iOS — an OpenTelemetry-based Real User Monitoring SDK that auto-instruments iOS apps (network, errors, user actions, crashes, ANR, mobile vitals, session replay). Distributed via SPM and CocoaPods. Min iOS 13.0, Swift 5.9.
+Coralogix RUM SDK for iOS — an OpenTelemetry-based Real User Monitoring SDK that auto-instruments iOS apps (network, errors, user actions, crashes, ANR, mobile vitals). Distributed via SPM and CocoaPods. Min iOS 13.0, Swift 5.9.
 
 ## Build & Test Commands
 
@@ -23,7 +23,6 @@ xcodebuild test -scheme Coralogix-Package -destination "platform=iOS Simulator,n
 
 # Lint CocoaPods specs (order matters)
 pod lib lint CoralogixInternal.podspec
-pod lib lint SessionReplay.podspec --include-podspecs=CoralogixInternal.podspec
 pod lib lint Coralogix.podspec --include-podspecs=CoralogixInternal.podspec
 
 # Build xcframeworks for distribution
@@ -35,31 +34,29 @@ pod lib lint Coralogix.podspec --include-podspecs=CoralogixInternal.podspec
 
 Toolchains are pinned per workflow, not shared: tests and the demo-app build run
 on macOS 15 with Xcode 16.4, podspec lint included (GitHub retired the macOS 14 runners).
-Three SPM test targets: `CoralogixRumTests`, `CoralogixInternalTests`,
-`SessionReplayTests`.
+Two SPM test targets: `CoralogixRumTests`, `CoralogixInternalTests`.
 
 `ci.yml` is the single entry point; the checks under it are reusable workflows
 and the shared steps are composite actions in `.github/actions/`. XCUITests are
-split into `component`, `smoke` and `soak` tiers and sharded across parallel
+split into `component` and `smoke` tiers and sharded across parallel
 jobs — **a new UI test must be added to `.github/ci/ui-suites.json` or CI fails
 the build for leaving it unrun.**
 
 `.claude/rules/TESTING_AND_CI.md` covers where a test belongs, how shards are
-packed, what the leak harness does, and which optimisations were measured and
+packed, and which optimisations were measured and
 rejected — read it before adding a test or touching a workflow.
 `.github/ci/README.md` is the same ground for human readers.
 
 ## Architecture
 
-### Three Targets
+### Two Targets
 
 | Target | Role |
 |--------|------|
 | `Coralogix/Sources/` | Main public SDK — all instrumentation, export, and public API |
-| `CoralogixInternal/Sources/` | Shared base library — `SdkManager` singleton, `Keys`, `Log`, utilities |
-| `SessionReplay/Sources/` | Optional screen recording module with privacy scanning pipeline |
+| `CoralogixInternal/Sources/` | Shared base library — `Keys`, `Log`, utilities |
 
-`CoralogixInternal` is a dependency of both `Coralogix` and `SessionReplay`. Both products register themselves with `SdkManager` on init so they can coordinate.
+`CoralogixInternal` is a dependency of `Coralogix`.
 
 ### Core Flow
 
@@ -77,7 +74,6 @@ rejected — read it before adding a test or touching a workflow.
 - **`NetworkManager`** — network reachability state (not HTTP requests)
 - **`MetricsManager`** — aggregates mobile vitals (FPS via `CADisplayLink`, CPU, memory)
 - **`CoralogixCustomGlobalSpanRegistry`** — global span context for custom spans (mirrors browser SDK's `window.__globalSpan__`)
-- **`SdkManager`** (singleton in `CoralogixInternal`) — registry shared by both products
 
 ### Instrumentation Pattern
 
@@ -109,9 +105,7 @@ The review rules in `AGENTS.md` apply **while writing code**, not only at PR tim
 
 - **Protect all shared mutable state with `NSLock` or a serial `DispatchQueue`.** Follow the existing pattern — don't introduce unguarded shared state.
 
-- **Any change to user-interaction capture, reporting, or redaction must also verify the hybrid path** (`CoralogixRum.setUserInteraction` → `UserActionsInstrumentation.reportHybridUserInteraction` / `validateHybridInteraction`). In hybrid mode the native swizzles feed session replay but emit no span — the span comes from the bridge payload and does not pass through `TapDataExtractor`. A change touching redaction or attribute reporting is not complete until the hybrid path is checked and covered by a test.
-
-- **A new masking source must state which of the two channels it feeds:** geometry to the capture pass (the UIKit walk and Dart-reported rects do — these suppress tap markers and set `is_masked_element`), or pixels only (OCR/Vision do — these can never suppress a marker or set the flag). Record the answer in the masking table in `SessionReplay/Sources/Docs/README.md`.
+- **Any change to user-interaction capture, reporting, or redaction must also verify the hybrid path** (`CoralogixRum.setUserInteraction` → `UserActionsInstrumentation.reportHybridUserInteraction` / `validateHybridInteraction`). In hybrid mode the native swizzles emit no span — the span comes from the bridge payload and does not pass through `TapDataExtractor`. A change touching redaction or attribute reporting is not complete until the hybrid path is checked and covered by a test.
 
 - **Write `CHANGELOG.md` and the READMEs for a customer, not for a reviewer.** These are the only
   two things on this branch a customer reads — the READMEs are mirrored to coralogix.com/docs.
@@ -190,7 +184,7 @@ Block if the changes don't match the ticket.
 ### 3. Test coverage
 
 Review what changed in this branch and verify:
-- New public functions / classes have corresponding unit tests in the appropriate test target (`CoralogixRumTests`, `CoralogixInternalTests`, `SessionReplayTests`)
+- New public functions / classes have corresponding unit tests in the appropriate test target (`CoralogixRumTests`, `CoralogixInternalTests`)
 - New SDK behaviours have integration tests where appropriate
 - All affected suites pass: `xcodebuild test -scheme Coralogix-Package -destination "platform=iOS Simulator,name=iPhone 17"` (or the currently-installed simulator)
 
@@ -200,11 +194,10 @@ Block if meaningful new code has no test coverage.
 
 ### 4. Version sync
 
-iOS distributes through CocoaPods AND has an in-source SDK-version constant — **four files must move together**:
+iOS distributes through CocoaPods AND has an in-source SDK-version constant — **three files must move together**:
 
 - `Coralogix.podspec`
 - `CoralogixInternal.podspec`
-- `SessionReplay.podspec`
 - `CoralogixInternal/Sources/Utils.swift` (`Global.sdk` enum case)
 
 Classify the changes on this branch:
@@ -240,7 +233,7 @@ Block if `CHANGELOG.md` is missing the version entry or the entry doesn't reflec
 
 ### 6. README
 
-For `README.md` at the repo root, and `SessionReplay/Sources/Docs/README.md` — both are mirrored
+For `README.md` at the repo root — it is mirrored
 to coralogix.com/docs:
 
 - Customer-facing public API is documented; API that exists to wire our own modules or plugins
@@ -254,4 +247,4 @@ Block if the README doesn't reflect the current state of the SDK, or if it expla
 
 ## Distribution
 
-Three podspecs must be published in order (`CoralogixInternal` → `SessionReplay` + `Coralogix`) with CDN propagation waits between steps. The `lint_and_push_cocoapods.sh` script handles this interactively. Version numbers must be kept in sync across all three `.podspec` files and the `CoralogixRum` source constant (`Global.sdk` in `CoralogixInternal/Sources/Utils.swift`). `Package.swift` has no version string — SPM versioning is driven by git tags.
+Two podspecs must be published in order (`CoralogixInternal` → `Coralogix`) with CDN propagation waits between steps. The `lint_and_push_cocoapods.sh` script handles this interactively. Version numbers must be kept in sync across both `.podspec` files and the `CoralogixRum` source constant (`Global.sdk` in `CoralogixInternal/Sources/Utils.swift`). `Package.swift` has no version string — SPM versioning is driven by git tags.

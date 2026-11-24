@@ -34,7 +34,6 @@ Add the Coralogix pod to your `Podfile`:
 
 ```ruby
 pod 'Coralogix'
-pod 'SessionReplay'  # Only if you use Session Replay
 ```
 
 Then run `pod install` from your project root.
@@ -129,7 +128,7 @@ The fields accepted by `CoralogixExporterOptions`. Each one is described in deta
 | enableSwizzling | Bool | Method swizzling for `URLSession` instrumentation. Defaults to `true`. | No |
 | instrumentations | `[InstrumentationType: Bool]?` | Switches individual instrumentations off. All are active by default. Read once while the SDK initializes, so a later change takes effect only after `shutdown()` and a fresh `CoralogixRum(options:)`. | No |
 | mobileVitals | `[MobileVitalsType: Bool]?` | Switches individual mobile vitals detectors off. All are active by default. Read at initialization only, the same as `instrumentations`. | No |
-| shouldSendText | `((UIView, String) -> Bool)?` | Called before recording tapped text. Return `false` to redact it: the field is still sent, carrying `***` instead of the text. Taps on a deliberately masked view (`cxMask`, SwiftUI `.cxMask()`), inside a masked subtree, or on a field carrying sensitive traits are redacted without consulting this closure. Text masked only by the replay's pixel policy (`maskText`, `maskAllImages`) still reaches it, so use this closure for anything you need kept out of events. | No |
+| shouldSendText | `((UIView, String) -> Bool)?` | Called before recording tapped text. Return `false` to redact it: the field is still sent, carrying `***` instead of the text. Taps on a deliberately masked view (`cxMask`, SwiftUI `.cxMask()`), inside a masked subtree, or on a field carrying sensitive traits are redacted without consulting this closure. Use this closure for anything else you need kept out of events. | No |
 | resolveTargetName | `((UIView) -> String?)?` | Returns a human-readable name for a tapped view, used as `target_element`. Return `nil` to fall back to the class name. Runs on the main thread on every tap, so keep it fast. | No |
 
 > [!NOTE]
@@ -237,9 +236,7 @@ Number between 0 and 100 as a percentage of sessions that report the full event 
 
 A sampled-out session still starts. Network instrumentation stays installed so outgoing requests keep
 carrying `traceparent` and your backend traces stay correlated across the whole population; the events
-that would otherwise be reported are dropped before they leave the device. Session recording follows the
-same decision: a session that is not sampled in records no frames, and recording resumes with the next
-session that is sampled in. `excludeFromSampling` does not apply to session recording.
+that would otherwise be reported are dropped before they leave the device.
 ```swift
 let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
                                         environment: "ENVIRONMENT",
@@ -400,12 +397,7 @@ let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
 #### Masked interactions in `beforeSend` (`is_masked_element`)
 Every user-interaction event carries `interaction_context.is_masked_element` — the SDK's own observation that the interaction targeted **deliberately masked** content: a `cxMask` view, anything inside one, a SwiftUI `.cxMask()`, or a sensitive field. By default (matching the Browser SDK) only `target_element_inner_text` is redacted to `***` on a masked interaction; identity fields and coordinates are reported as-is. Anything stricter is yours to express here, where it stays auditable in your own code.
 
-Session replay's pixel policy (`maskText`, `maskAllImages`) deliberately does **not** set this flag — it decides which pixels a frame hides, not whether text may leave the device, and treating it as the latter marks nearly every text tap as masked. So a tap on a `maskText`-matched label draws no replay marker yet reports `is_masked_element: false` with its real text. This matches the Android and Flutter SDKs. Use [`shouldSendText`](#user-action-text-redaction-shouldsendtext) if you want the pixel policy to withhold interaction text as well — note it applies to native interactions only, clicks, scrolls and swipes alike, since hybrid text arrives pre-resolved in the bridge payload; redact those in `beforeSend` or have the wrapper send `is_masked`.
-
-> [!NOTE]
-> This applies from version 2.17.0. On earlier versions the pixel policy did set `is_masked_element` and redact the text for **UIKit** views, so a tap on a `maskText`-matched label reported `true` with `***`. Text inside SwiftUI content is masked by the OCR and Vision stages, which report no geometry, so it never set the flag on any version.
-
-The flag is always present. `false` also covers "could not resolve" — a hybrid payload with no coordinates (React Native scroll/swipe), or no view hierarchy to walk (off the main thread, or no active foreground scene) — so it under-reports rather than over-reports when the SDK has no answer. Resolving it does **not** require session replay to be running.
+The flag is always present. `false` also covers "could not resolve" — a hybrid payload with no coordinates (React Native scroll/swipe), or no view hierarchy to walk (off the main thread, or no active foreground scene) — so it under-reports rather than over-reports when the SDK has no answer.
 
 Drop masked interaction events entirely:
 ```swift
@@ -532,7 +524,7 @@ let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
 ### User Action Text Redaction (`shouldSendText`)
 Called before `target_element_inner_text` is recorded for a tapped view. Return `false` to redact text for sensitive views (e.g. fields showing account numbers or personal data) without disabling text capture globally.
 
-Redacted text is reported as `***` rather than omitted, so a redacted tap stays distinguishable from a tap on an element that had no text at all. Views that are already masked — a view inside a [masked subtree](SessionReplay/Sources/Docs/README.md#masking-a-specific-view-cxmask), a tap landing on a SwiftUI `.cxMask()` overlay, a password field, or a field with a sensitive `textContentType` — report `***` without consulting this closure, so their text is never passed to your code. Text masked only by session replay's pixel policy (`maskText`, `maskAllImages`) *is* passed to this closure, since that policy does not set `is_masked_element` — this closure is the lever for withholding it.
+Redacted text is reported as `***` rather than omitted, so a redacted tap stays distinguishable from a tap on an element that had no text at all. Views that are already masked — a view inside a masked subtree, a tap landing on a SwiftUI `.cxMask()` overlay, a password field, or a field with a sensitive `textContentType` — report `***` without consulting this closure, so their text is never passed to your code.
 
 Interactions reported through the hybrid bridge (`setUserInteraction` — React Native, Flutter) are redacted on the same terms as native ones: the payload's coordinates are tested against the same mask geometry, and a masked tap's inner text is replaced with `***`.
 
@@ -574,9 +566,6 @@ let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
 
 <!-- /split -->
 <!-- split title="Sessions and user context" path="features/sessions-and-user-context.md" -->
-### Session Recording
-See the [Session Recording Guide](SessionReplay/Sources/Docs/README.md) for installation steps and examples.
-
 ### Error Reporting
 Report handled errors, caught exceptions, or custom error messages manually — this is separate from the automatic crash / unhandled-exception capture. Each call produces an error event in RUM.
 ```swift
@@ -618,7 +607,7 @@ coralogixRum.setUserContext(
 Each call — including a clear — also promotes the next exported event to a snapshot event carrying the new identity, so session-level user information in Coralogix refreshes immediately instead of waiting for the next error, navigation, or one-minute snapshot.
 
 ### New Session on Logout
-Force-start a fresh RUM session on demand — typically on user logout — without a full `shutdown()` + `init()`. A new session ID is issued and the per-session state (views, error/click counters, snapshot throttle, Session Replay) resets, exactly like the automatic idle / max-age rotation.
+Force-start a fresh RUM session on demand — typically on user logout — without a full `shutdown()` + `init()`. A new session ID is issued and the per-session state (views, error/click counters, snapshot throttle) resets, exactly like the automatic idle / max-age rotation.
 ```swift
 // e.g. when the user logs out
 coralogixRum.createNewSession()
@@ -757,7 +746,7 @@ The repository includes two fully-featured demo apps under `Example/`:
 | `DemoAppSwift` | UIKit | Reference implementation — all instrumentation scenarios |
 | `DemoAppSwiftUI` | SwiftUI | SwiftUI port — same scenarios, native SwiftUI patterns |
 
-Both apps cover: Network instrumentation, Error instrumentation, SDK functions, Custom spans, User Actions (tap/scroll/swipe), Session Replay, Traces Exporter, Schema Validation, Mask UI, and Clock.
+Both apps cover: Network instrumentation, Error instrumentation, SDK functions, Custom spans, User Actions (tap/scroll/swipe), Traces Exporter, Schema Validation, Mask UI, and Clock.
 
 **To run locally:**
 1. Open `Example/DemoApp.xcworkspace` in Xcode.

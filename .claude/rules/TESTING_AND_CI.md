@@ -8,10 +8,9 @@ Read this before adding a test, changing a workflow, or trying to make CI faster
 
 | The test… | Target | Runs in |
 |---|---|---|
-| exercises SDK logic in-process | `Tests/CoralogixRumTests`, `Tests/CoralogixInternalTests`, `Tests/SessionReplayTests` | `component · unit` |
+| exercises SDK logic in-process | `Tests/CoralogixRumTests`, `Tests/CoralogixInternalTests` | `component · unit` |
 | drives the demo app and asserts one feature | `Example/DemoAppUITests` | a `component` UI shard |
 | drives a path joining several features (interaction + session + export + schema) | `Example/DemoAppUITests` | a `smoke` shard |
-| probes for leaks or performance | `Example/DemoAppUITests/SessionReplayLeakUITests` | a `soak` shard, **via the harness** |
 
 A SwiftUI-side UI test goes in `Example/DemoAppSwiftUIUITests` against the
 `DemoAppSwiftUI` scheme. Demo-app parity still applies: a new screen or control
@@ -36,9 +35,6 @@ must land in both demo apps.
    xcodebuild test -workspace Example/DemoApp.xcworkspace -scheme DemoAppSwift \
      -destination "platform=iOS Simulator,name=iPhone 16" \
      -only-testing:DemoAppUITests/UserInteractionUITests/testMyNewThing
-
-   # the leak harness, end to end (builds, captures frames, scans them)
-   tool/run_leak_harness.sh
    ```
 4. **UI tests only — register it** in `.github/ci/ui-suites.json`: add the
    identifier to an existing shard, or add a shard if the nearest one is already
@@ -70,7 +66,6 @@ anyone noticing.
 - a test in the source but in no shard
 - a declared identifier matching no test (its shard would run nothing)
 - a shard with an empty `tests` array (no `-only-testing` filter runs the *whole* bundle)
-- a harness shard holding more than one test (only the first would run)
 - a shard naming a scheme with no shared `.xcscheme`, or one that does not build
   the target its tests live in
 
@@ -91,31 +86,11 @@ So:
 
 - **Don't create a shard for less than ~2 minutes of tests.** It will spend more
   on setup than it saves.
-- **Do split a shard that dominates the critical path.** The two leak tests were
-  split one-per-shard and measured 6.4-7.3m each running in parallel. (They were
-  never run paired as a single shard, so the saving is inferred, not measured —
-  the point stands, the figure does not exist.)
+- **Do split a shard that dominates the critical path.**
 - Record measured runtime in `seconds` so the next repack is a data decision.
 - Shard wall-clock varies enormously run to run for identical tests: one smoke
   shard measured **3.9m and 10.0m on the same commit**, a 2.5x swing. Never tune
   packing from a single run, and never quote a single run as "the" number.
-
----
-
-## Harness shards (`"harness": true`)
-
-`SessionReplayLeakUITests` asserts only that a screen appeared. The leak check is
-a pixel scan for unmasked sentinels performed by `tool/run_leak_harness.sh` over
-frames captured by its mock upload server. **Running those tests without the
-harness proves nothing.**
-
-- A harness shard holds **exactly one test** — the harness takes a single
-  `-only-testing` filter. `plan` enforces this.
-- CI passes `CX_IOS_XCTESTRUN` (reuse the shared build, don't rebuild) and
-  `CX_IOS_ONLY_TESTING` (one scenario per shard). Both default to standalone
-  behaviour, so `tool/run_leak_harness.sh` still works locally with no arguments.
-- Exit codes are meaningful: **1 = a real leak, 2 = infrastructure failure and
-  not a verdict.** Keep them distinguishable in any error reporting you touch.
 
 ---
 
@@ -129,18 +104,6 @@ Use it for a test that is **working correctly and reporting a defect nobody has
 scheduled**. The alternative, letting it run and go red without blocking, is
 worse: a red check that does not block still reads as broken CI, and people learn
 to ignore the colour. Better to not run it and carry a ticket.
-
-`soak-replay-navigation` is quarantined today. It reliably detects the iOS 18.5
-navigation-transition leak — 1 of 61 captured frames showed unmasked sentinel
-pixels — which is a real defect tracked separately, not a test problem.
-
-Move it back to `soak` when the leak is fixed.
-
-`soak-replay-scroll` is quarantined too, as a deliberate exception to the rule
-below: the harness currently captures no frames at all, so the shard fails every
-PR without reaching a leak verdict. While both are quarantined no session replay
-leak probe gates PRs — restore it to `soak` as soon as the harness captures
-frames again.
 
 **Quarantine is not for flaky tests.** A flake means the test or the environment
 is wrong: fix it or delete it. Quarantine is for a correct test whose finding is
@@ -177,10 +140,9 @@ job, pinning `ARCHS` to a single slice, and not running the unit tests twice.
 
 ## Things that will bite you
 
-- **`pod lib lint` runs the unit tests.** `Coralogix.podspec` and
-  `SessionReplay.podspec` declare `test_spec` blocks. Lint passes `--skip-tests`
-  because `component · unit` already covers them, over all three targets rather
-  than two. If you add a `test_spec` expecting CI to run it, it won't.
+- **`pod lib lint` runs the unit tests.** `Coralogix.podspec`
+  declares a `test_spec` block. Lint passes `--skip-tests`
+  because `component · unit` already covers it. If you add a `test_spec` expecting CI to run it, it won't.
 - **Build and test runners must share a CPU architecture.** Shards execute the
   build job's simulator binaries. GitHub's `-large` macOS runners are Intel;
   `macos-15` and `-xlarge` are Apple Silicon. A `lipo` check fails loudly if this

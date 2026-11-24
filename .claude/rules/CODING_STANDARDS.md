@@ -140,8 +140,8 @@ struct InitInternalContext: InternalContext {
     let data: [String: Any]
 }
 
-struct SessionReplayInitInternalContext: InternalContext {  // same shape, different default string
-    let event: String = "session_replay_init"
+struct ConfigChangedInternalContext: InternalContext {  // same shape, different default string
+    let event: String = "config_changed"
     let data: [String: Any]
 }
 // Plus: polymorphic decoder, registration in two places…
@@ -162,7 +162,7 @@ struct InternalContext: Codable {
 
 The SDK runs inside a customer's process. A crash in our code crashes their app.
 
-**Forbidden in SDK code (`Coralogix/Sources/`, `CoralogixInternal/Sources/`, `SessionReplay/Sources/`):**
+**Forbidden in SDK code (`Coralogix/Sources/`, `CoralogixInternal/Sources/`):**
 
 - `fatalError(…)`
 - `precondition(…)`

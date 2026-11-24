@@ -6,9 +6,9 @@ dispatch.
 
 ```
 ci.yml ─┬─ ci-component-unit.yml   SPM unit tests
-        ├─ ci-ui-tests.yml         XCUITest, tiers: component + smoke + soak
+        ├─ ci-ui-tests.yml         XCUITest, tiers: component + smoke
         │                          (a `quarantine` tier exists and never runs)
-        ├─ ci-podspec-lint.yml     the three podspecs, in parallel
+        ├─ ci-podspec-lint.yml     the two podspecs, in parallel
         ├─ ci-tvos-build.yml       tvOS: library build (device + simulator) and
         │                          DemoAppTvOS smoke against the schema-validator
         └─ ci-passed               the required status check
@@ -24,8 +24,7 @@ and the `plan` job fails the build for it.
 ## The rules live in one place
 
 **`.claude/rules/TESTING_AND_CI.md`** — where a test belongs, how to add one,
-how shards are packed, what the leak harness actually verifies, which
-optimisations were measured and rejected, and the traps in this setup.
+how shards are packed, which optimisations were measured and rejected, and the traps in this setup.
 
 That file is the source of truth so the guidance cannot drift between two
 copies. Read it before adding a test or changing a workflow.

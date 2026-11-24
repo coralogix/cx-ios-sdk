@@ -21,7 +21,7 @@ the exact files it mirrors in `external_repos.json`:
 | `coralogix-browser-sdk` | `libs/browser/README.md` |
 | `cx-react-native-plugin` | `libs/cx-plugin/README.md` |
 | `android-sdk` | `Coralogix-Development/`, `Coralogix-Compose/`, `Coralogix-Gradle-Plugin/` |
-| `cx-ios-sdk` | root, plus `SessionReplay/Sources/Docs/README.md` |
+| `cx-ios-sdk` | root `README.md` |
 | `cx-flutter-plugin` | root `README.md` |
 | `rum-cli` | root `README.md` |
 | `coralogix-javascript-bundler-plugins` | `packages/*/README.md` |

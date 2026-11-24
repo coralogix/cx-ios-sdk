@@ -38,7 +38,6 @@ import sys
 # silently stops being checked, and one that drifts there silently stops syncing.
 SYNCED = [
     "README.md",
-    "SessionReplay/Sources/Docs/README.md",
 ]
 
 SKILL = "rum-readme-authoring"
