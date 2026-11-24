@@ -19,6 +19,7 @@ public enum Global: String {
     case sdk = "3.0.0"
     case swiftVersion = "5.9"
     case coralogixPath = "/browser/v1beta/logs"
+    case sessionReplayPath = "/browser/alpha/sessionrecording"
 
     public enum BatchSpan: Int {
         case maxExportBatchSize = 50
@@ -29,7 +30,8 @@ public enum Global: String {
     }
     
     static let monitoredPaths: Set<String> = [
-        Global.coralogixPath.rawValue
+        Global.coralogixPath.rawValue,
+        Global.sessionReplayPath.rawValue
     ]
 
     /// CX-44687: per-process unique identifier, generated exactly once per process
