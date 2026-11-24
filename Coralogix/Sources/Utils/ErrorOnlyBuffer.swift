@@ -315,7 +315,10 @@ final class ErrorOnlyBuffer {
     /// the disk is behind. It may unless a restart could send a request delivered now a second
     /// time: the disk records the trigger but an older cursor, and the next request comes from
     /// the file. While the disk still reads as a session without an error, a restart deletes it,
-    /// so a full disk does not stop the drain; nor does a failure count it could not save.
+    /// so a full disk does not stop the drain; nor does a failure count it could not save. Nor
+    /// does a cursor past the end of a file this instance wrote: what comes next is from memory,
+    /// or nothing does, and the drain then deletes the files rather than leave them for a restart
+    /// to send again.
     func maySend(of sessionId: String) -> Bool {
         lock.lock()
         defer { lock.unlock() }
@@ -323,8 +326,10 @@ final class ErrorOnlyBuffer {
         persistMetadataLocked(&session)
         sessions[sessionId] = session
         guard session.metadataUnsaved, let saved = session.saved, saved.triggered else { return true }
-        let onlyMemoryLeft = session.diskFailed && session.metadata.sentOffset >= session.fileLength
-        return saved.sentOffset == session.metadata.sentOffset || onlyMemoryLeft
+        // `fileLength` counts only what this instance appended: an adopted file's length is unknown.
+        let knowsFileLength = session.diskFailed || session.metadata.owner == owner
+        let fileSent = knowsFileLength && session.metadata.sentOffset >= session.fileLength
+        return saved.sentOffset == session.metadata.sentOffset || fileSent
     }
 
     /// Writes the metadata, trying once more on failure, and records whether it reached disk.

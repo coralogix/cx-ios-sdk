@@ -454,6 +454,28 @@ final class ErrorOnlyBufferTests: XCTestCase {
         XCTAssertNil(buffer.metadata(of: "s"), "Done with.")
     }
 
+    func testUnsavedCursorAfterTheLastChunk_stillDeletesTheBuffer_soARestartSendsNothingAgain() throws {
+        let writer = FlakyMetadataWriter()
+        let buffer = makeBuffer(writer: writer)
+        (0..<3).forEach { buffer.hold(event($0), sessionId: "s") }
+        buffer.trigger("s")
+        XCTAssertEqual(try savedMetadata("s").sentOffset, 0, "Precondition: the trigger reached disk.")
+        writer.failing = true
+
+        let uploader = ScriptedUploads()
+        let clock = ManualDeliveryClock()
+        let drain = makeDrain(buffer, clock: clock, uploader: uploader)
+        drain.start(["s"])
+        drain.waitUntilSettled()
+        clock.advance(to: clock.now().addingTimeInterval(1))
+        drain.waitUntilSettled()
+
+        XCTAssertEqual(uploader.requests.map { $0.map(index) }, [[0, 1, 2]])
+        XCTAssertNil(buffer.metadata(of: "s"), "Everything was sent: the session is done with.")
+        XCTAssertEqual(makeBuffer().adoptLeftovers { $0.triggered }, [],
+                       "No file is left for a restart to send a second time.")
+    }
+
     func testUnsavedFailureCount_keepsTheSession_andTheDrainGoesOn() throws {
         let writer = FlakyMetadataWriter()
         let buffer = makeBuffer(writer: writer)
