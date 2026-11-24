@@ -27,7 +27,8 @@
 //        `internal_context.data` is the flat settings map (string -> String, number -> Double,
 //        bool -> Bool, null -> NSNull). The startup event keeps `internal_context.event == "init"`.
 //    hasRecording: `session_context.hasRecording`, read against the event's own session id.
-//    internal header: `X-Coralogix-Internal: 1`, name matched case-insensitively.
+//    internal header: `X-Coralogix-Internal: 1`, name matched case-insensitively; hybrid `request_headers`
+//        checked as a dictionary and as a JSON string (a string that does not parse carries no header).
 //
 //  Every test is marked RED-now (fails until implemented) or GUARD (must stay true).
 //
@@ -621,6 +622,27 @@ final class ReplayInternalHeaderTests: XCTestCase {
         XCTAssertEqual(networkUrls().filter { $0.contains("/internal-") }, [], "an internal request was instrumented")
     }
 
+    /// RED-now. Hybrid headers sent as a JSON string: carrying the internal header (any name case) gives no span; one
+    /// without it, and one that does not parse (treated as no header), still give a span.
+    func testHybridRequest_internalHeaderInJsonString_isNotInstrumented() throws {
+        let rum = try XCTUnwrap(rum)
+        let base = "https://hybrid-string.replay.test"
+        for (path, name) in [("internal-canonical", "X-Coralogix-Internal"), ("internal-lower", "x-coralogix-internal"),
+                             ("internal-upper", "X-CORALOGIX-INTERNAL")] {
+            rum.setNetworkRequestContext(dictionary: Self.hybrid(url: "\(base)/\(path)",
+                                                                 rawHeaders: #"{"Accept":"*/*","\#(name)":"1"}"#))
+        }
+        rum.setNetworkRequestContext(dictionary: Self.hybrid(url: "\(base)/unparsable",
+                                                             rawHeaders: "X-Coralogix-Internal: 1 {not json"))
+        rum.setNetworkRequestContext(dictionary: Self.hybrid(url: "\(base)/plain", rawHeaders: #"{"Accept":"*/*"}"#))
+
+        awaitNetworkSpan(urlContains: "hybrid-string.replay.test/plain")
+        let urls = networkUrls()
+        XCTAssertEqual(urls.filter { $0.contains("/internal-") }, [], "an internal request was instrumented")
+        XCTAssertTrue(urls.contains { $0.contains("hybrid-string.replay.test/unparsable") },
+                      "a header string that does not parse carries no internal header: \(urls)")
+    }
+
     private func perform(_ url: String, headers: [String: String] = [:]) {
         var request = URLRequest(url: URL(string: url)!)
         headers.forEach { request.setValue($1, forHTTPHeaderField: $0) }
@@ -650,6 +672,12 @@ final class ReplayInternalHeaderTests: XCTestCase {
     private static func hybrid(url: String, headers: [String: String]) -> [String: Any] {
         [Keys.url.rawValue: url, Keys.host.rawValue: "hybrid.replay.test", Keys.method.rawValue: "POST",
          Keys.statusCode.rawValue: 200, Keys.schema.rawValue: "https", Keys.requestHeaders.rawValue: headers]
+    }
+
+    /// The headers as some bridges send them: one JSON string.
+    private static func hybrid(url: String, rawHeaders: String) -> [String: Any] {
+        [Keys.url.rawValue: url, Keys.host.rawValue: "hybrid-string.replay.test", Keys.method.rawValue: "POST",
+         Keys.statusCode.rawValue: 200, Keys.schema.rawValue: "https", Keys.requestHeaders.rawValue: rawHeaders]
     }
 }
 

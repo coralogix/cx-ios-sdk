@@ -2,12 +2,13 @@
 //  ReplayGetConfigTests.swift
 //
 //  The public getter the session-replay wrapper reads its upload settings from on every upload.
+//  The wrapper holds no RUM instance, so the getter is static, like the bus entry points.
 //
 //  SANCTIONED SYMBOL (the only new one this file needs):
-//    public func CoralogixRum.getConfig() -> CoralogixExporterOptions?
-//        The LIVE options (domain, public key, proxy, application and the rest, including later
-//        changes such as `setApplicationContext`); nil while this instance is not initialized:
-//        before its startup completed and after `shutdown()`.
+//    public static func CoralogixRum.getConfig() -> CoralogixExporterOptions?
+//        The LIVE instance's options — the most recently initialized instance — read under the
+//        live-instance lock. Live: later changes such as `setApplicationContext` are reflected.
+//        nil before any init and after shutdown. No instance variant.
 //
 //  Until the symbol exists this file does not compile: that is its RED state. Every test is RED-now
 //  (compile); with a bare stub returning nil, all but the before-init test fail by assertion.
@@ -23,6 +24,8 @@ final class ReplayGetConfigTests: XCTestCase {
     override func setUp() {
         super.setUp()
         CoralogixRum.isInitialized = false
+        // An instance another test left running would still be the live one: one init + shutdown clears it.
+        CoralogixRum(options: Self.options(application: "Reset")).shutdown()
     }
 
     override func tearDown() {
@@ -32,55 +35,65 @@ final class ReplayGetConfigTests: XCTestCase {
         super.tearDown()
     }
 
-    /// RED-now. An instance whose startup never ran (no session manager) has no config.
+    /// RED-now. Before any init there is no config.
     func testGetConfig_beforeInit_isNil() {
-        let rum = CoralogixRum(options: Self.options(application: "Never"), sessionManager: nil)
-        rums.append(rum)
         XCTAssertFalse(CoralogixRum.isInitialized, "fixture: not initialized")
-        XCTAssertNil(rum.getConfig())
+        XCTAssertNil(CoralogixRum.getConfig())
     }
 
     /// RED-now. After init: the options RUM was started with.
     func testGetConfig_afterInit_returnsTheInitOptions() throws {
-        let rum = start(Self.options(application: "First", key: "key-1", domain: .EU2, proxy: "https://proxy.one"))
-        let config = try XCTUnwrap(rum.getConfig())
+        start(Self.options(application: "First", key: "key-1", domain: .EU2, proxy: "https://proxy.one"))
+        let config = try XCTUnwrap(CoralogixRum.getConfig())
         XCTAssertEqual(config.application, "First")
         XCTAssertEqual(config.publicKey, "key-1")
         XCTAssertEqual(config.coralogixDomain, .EU2)
         XCTAssertEqual(config.proxyUrl, "https://proxy.one")
     }
 
-    /// RED-now. A re-init is reflected: the new instance answers with the new options.
-    func testGetConfig_afterReinit_returnsTheNewOptions() throws {
-        let first = start(Self.options(application: "First", key: "key-1", domain: .EU2, proxy: nil))
-        first.shutdown()
-        let second = start(Self.options(application: "Second", key: "key-2", domain: .US2, proxy: "https://proxy.two"))
-        let config = try XCTUnwrap(second.getConfig())
-        XCTAssertEqual(config.application, "Second")
-        XCTAssertEqual(config.publicKey, "key-2")
-        XCTAssertEqual(config.coralogixDomain, .US2)
-        XCTAssertEqual(config.proxyUrl, "https://proxy.two")
+    /// RED-now. A re-init after shutdown is reflected.
+    func testGetConfig_afterReinitWithShutdown_returnsTheNewOptions() throws {
+        start(Self.options(application: "First", key: "key-1", domain: .EU2)).shutdown()
+        start(Self.options(application: "Second", key: "key-2", domain: .US2, proxy: "https://proxy.two"))
+        try Self.assertSecond(CoralogixRum.getConfig())
+    }
+
+    /// RED-now. A re-init over a running instance supersedes it: the newest instance's options.
+    func testGetConfig_afterReinitWithoutShutdown_returnsTheNewOptions() throws {
+        start(Self.options(application: "First", key: "key-1", domain: .EU2))
+        start(Self.options(application: "Second", key: "key-2", domain: .US2, proxy: "https://proxy.two"))
+        try Self.assertSecond(CoralogixRum.getConfig())
     }
 
     /// RED-now. Live, not a copy taken at init: a later application change is reflected.
     func testGetConfig_reflectsALaterApplicationChange() throws {
-        let rum = start(Self.options(application: "First", key: "key-1", domain: .EU2, proxy: nil))
+        let rum = start(Self.options(application: "First", key: "key-1", domain: .EU2))
         rum.setApplicationContext(application: "Renamed", version: "2.0")
-        XCTAssertEqual(try XCTUnwrap(rum.getConfig()).application, "Renamed")
+        XCTAssertEqual(try XCTUnwrap(CoralogixRum.getConfig()).application, "Renamed")
     }
 
     /// RED-now. After shutdown there is no config.
     func testGetConfig_afterShutdown_isNil() {
-        let rum = start(Self.options(application: "First", key: "key-1", domain: .EU2, proxy: nil))
-        XCTAssertNotNil(rum.getConfig(), "fixture: initialized")
+        let rum = start(Self.options(application: "First", key: "key-1", domain: .EU2))
+        XCTAssertNotNil(CoralogixRum.getConfig(), "fixture: initialized")
         rum.shutdown()
-        XCTAssertNil(rum.getConfig())
+        XCTAssertNil(CoralogixRum.getConfig())
     }
 
+    @discardableResult
     private func start(_ options: CoralogixExporterOptions) -> CoralogixRum {
         let rum = CoralogixRum(options: options, sessionManager: SessionManager(snapshotStore: SessionSnapshotStore()))
         rums.append(rum)
         return rum
+    }
+
+    private static func assertSecond(_ config: CoralogixExporterOptions?,
+                                     file: StaticString = #filePath, line: UInt = #line) throws {
+        let config = try XCTUnwrap(config, file: file, line: line)
+        XCTAssertEqual(config.application, "Second", file: file, line: line)
+        XCTAssertEqual(config.publicKey, "key-2", file: file, line: line)
+        XCTAssertEqual(config.coralogixDomain, .US2, file: file, line: line)
+        XCTAssertEqual(config.proxyUrl, "https://proxy.two", file: file, line: line)
     }
 
     private static func options(application: String, key: String = "test-key",
