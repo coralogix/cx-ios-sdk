@@ -13,8 +13,8 @@ enum AwaitedCopy {
     /// Gone once its hang recovers (an ANR): a session held for an error keeps the event, which
     /// is then its only copy.
     case untilTheHangEnds
-    /// Kept on disk until delivered (a React Native fatal): the event goes live, ahead of what its
-    /// session held, and the next launch sends the copy if it was not delivered.
+    /// Kept on disk until delivered (a React Native fatal): the event goes live as it happens, not
+    /// at the end of its session's drain, and the next launch sends the copy if it was not delivered.
     case untilDelivered
 }
 

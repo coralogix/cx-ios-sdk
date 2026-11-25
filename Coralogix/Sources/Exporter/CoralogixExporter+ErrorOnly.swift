@@ -82,9 +82,10 @@ extension CoralogixExporter {
     /// as delivered once it is kept, since the buffer now carries it: answered only when its
     /// request lands, a launch ending first would send it twice.
     ///
-    /// A React Native fatal is not kept: its copy stays on disk until delivered, so it goes live
-    /// first, as a stored crash goes before what its session held, and its waiter is answered when
-    /// its request lands. A launch ending first leaves the copy to the next launch's crash pass.
+    /// A React Native fatal is not kept: its copy stays on disk until delivered, so it goes live as
+    /// it happens, as on Android, not at the end of the drain, which starts beside it with no order
+    /// between them. Its waiter is answered when its request lands; a launch ending first leaves the
+    /// copy to the next launch's crash pass.
     private func holdTrigger(_ error: [String: Any], of route: ErrorOnlyRoute) -> Bool {
         let awaitedCopy = route.spanId.flatMap(awaitedCopy(of:))
         guard awaitedCopy != .untilDelivered,

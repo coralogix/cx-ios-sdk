@@ -202,19 +202,11 @@ final class ErrorOnlyExportTests: XCTestCase {
                        "Kept on disk after the held event, for the retries and the next launch.")
     }
 
-    /// A React Native fatal's stored copy lasts until it is delivered: it goes live, ahead of what
-    /// its session held, and only its own upload answers its waiter.
-    func testAReactNativeFatalAwaitingItsDelivery_isSentLive_andItsSessionDrains() throws {
-        let (exporter, uploader) = try startRecordingRequests()
-        let failed = SpanUploadResult(disposition: .retryable, httpStatus: 503, retryAfter: nil, countsAsFailedUpload: true)
-        uploader.liveResult = failed
-        uploader.heldResult = failed
-        let answers = DeliveryAnswers()
-        export(exporter, .log, message: "held")
-        export(exporter, .error, severity: .error, message: "rn-fatal") { spanId in
-            exporter.awaitLiveDelivery(spanId: spanId, copy: .untilDelivered) { answers.add($0) }
-        }
-        exporter.errorOnlyDrain.waitUntilSettled()
+    /// A React Native fatal's stored copy lasts until it is delivered: it goes live as it happens,
+    /// as on Android, not at the end of its session's drain, and only its own upload answers its
+    /// waiter.
+    func testAReactNativeFatalAwaitingItsDelivery_isSentLive() throws {
+        let (exporter, uploader, answers) = try exportReactNativeFatalAfterAHeldEvent()
 
         let live = try XCTUnwrap(uploader.requests.first { $0.kind == .live && labels(of: $0.events).contains("rn-fatal") },
                                  "Sent live.")
@@ -222,11 +214,17 @@ final class ErrorOnlyExportTests: XCTestCase {
         XCTAssertEqual(session(fatal)[Keys.hasError.rawValue] as? Bool, true)
         XCTAssertEqual(answers.values, [false],
                        "Answered by its own failed upload, not as delivered when its session took it: its stored copy is still to send.")
+        let sessionId = try XCTUnwrap(exporter.getSessionManager().currentSessionId)
+        XCTAssertTrue(exporter.errorOnlyBuffer.isTriggered(sessionId), "It is its session's error.")
+    }
+
+    /// Its stored copy is what retries it, so the session's buffer keeps only what it held.
+    func testAReactNativeFatalAwaitingItsDelivery_isLeftOutOfItsSessionsHeldEvents() throws {
+        let (exporter, uploader, _) = try exportReactNativeFatalAfterAHeldEvent()
+
         XCTAssertTrue(uploader.requests.contains { $0.kind == .storedCrash && labels(of: $0.events) == ["held"] },
                       "Its session had its error: what it held drains, without the fatal.")
-
         let sessionId = try XCTUnwrap(exporter.getSessionManager().currentSessionId)
-        XCTAssertTrue(exporter.errorOnlyBuffer.isTriggered(sessionId))
         let nextLaunch = ErrorOnlyBuffer(maxRumEvents: 5_000, directory: directory)
         XCTAssertEqual(nextLaunch.adoptLeftovers(crashedSessionIds: [sessionId]), [sessionId])
         let chunk = try XCTUnwrap(nextLaunch.nextChunk(of: sessionId, maxEvents: 500, maxBytes: ErrorOnlyDrain.maxBytesPerRequest))
@@ -883,6 +881,22 @@ final class ErrorOnlyExportTests: XCTestCase {
             Keys.sessionContext.rawValue: [Keys.sessionId.rawValue: sessionId]
         ]
         return [Keys.text.rawValue: [Keys.cxRum.rawValue: cxRum]]
+    }
+
+    /// A held event, then a React Native fatal awaiting its delivery, every upload failing: the
+    /// session's file stays on disk for a later launch to read.
+    private func exportReactNativeFatalAfterAHeldEvent() throws -> (CoralogixExporter, RequestRecorder, DeliveryAnswers) {
+        let (exporter, uploader) = try startRecordingRequests()
+        let failed = SpanUploadResult(disposition: .retryable, httpStatus: 503, retryAfter: nil, countsAsFailedUpload: true)
+        uploader.liveResult = failed
+        uploader.heldResult = failed
+        let answers = DeliveryAnswers()
+        export(exporter, .log, message: "held")
+        export(exporter, .error, severity: .error, message: "rn-fatal") { spanId in
+            exporter.awaitLiveDelivery(spanId: spanId, copy: .untilDelivered) { answers.add($0) }
+        }
+        exporter.errorOnlyDrain.waitUntilSettled()
+        return (exporter, uploader, answers)
     }
 
     private func startRecordingRequests() throws -> (CoralogixExporter, RequestRecorder) {
