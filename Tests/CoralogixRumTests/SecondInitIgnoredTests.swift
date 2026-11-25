@@ -22,8 +22,8 @@
 //         defer { liveInstanceLock.lock(); initClaimed = false; liveInstanceLock.unlock() }
 //     with `private static var initClaimed = false` (guarded by `liveInstanceLock`). The claim is released by the
 //     `defer`, i.e. after `attachBus` has set `liveInstance`, and also when startup returns early. No lock is held
-//     across startup; `getConfig()` and `shutdown()` are unchanged (shutdown is not serialized). The racer that
-//     loses is inert at once — it never waits.
+//     across startup for the claim; `getConfig()` is unchanged; init and `shutdown()` are serialized by the
+//     lifecycle lock (item 5). Racing inits take the lifecycle lock in turn; the losers are inert.
 //     Nothing before the guard runs: no `mobileSDK` write, no `Log.isDebug` write, no session manager, exporter,
 //     tracer provider, swizzle, instrumentation, crash recovery, bus handler or `liveInstance` change. The warning
 //     is gated by the live `Log.isDebug`, as Android's is by the live debug flag.
@@ -321,8 +321,8 @@ final class SecondInitIgnoredTests: XCTestCase {
         }
     }
 
-    /// GUARD (passes now): `shutdown()` on a background queue racing an init on main finishes. Shutdown is not
-    /// serialized with init (driver ruling), so only completion is pinned here, not which side ends up live.
+    /// GUARD (passes now): `shutdown()` on a background queue racing an init on main finishes. init and shutdown
+    /// are serialized (human ruling); this pins that the race still finishes.
     func testBackgroundShutdownRacingAMainInit_finishes() {
         for round in 0..<5 {
             let old = start(Self.options(application: "Old-\(round)"))

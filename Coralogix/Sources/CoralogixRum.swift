@@ -73,6 +73,8 @@ public class CoralogixRum {
     /// The most recently initialized instance, the only one that publishes to the RUM bus.
     internal static weak var liveInstance: CoralogixRum?
     internal static let liveInstanceLock = NSLock()
+    /// Serialises init and shutdown like Android's synchronized initialize/shutdown; recursive so a re-entrant call cannot deadlock.
+    private static let lifecycleLock = NSRecursiveLock()
     /// The raw name of the last view the bus announced; dedup is on the raw name, the message carries the masked one.
     internal var busScreenRaw: String?
     internal let busScreenLock = NSLock()
@@ -110,6 +112,7 @@ public class CoralogixRum {
         sdkFramework: SdkFramework = .swift,
         sessionManager: @autoclosure () -> SessionManager? = SessionManager.forLaunch()
     ){
+        CoralogixRum.lifecycleLock.lock(); defer { CoralogixRum.lifecycleLock.unlock() }
         // One SDK per process: check-and-claim in one hold so racing inits cannot both start (not via getConfig(): NSLock is not reentrant).
         CoralogixRum.liveInstanceLock.lock()
         let busy = CoralogixRum.initClaimed || (CoralogixRum.isInitialized && CoralogixRum.liveInstance != nil)
@@ -614,6 +617,7 @@ public class CoralogixRum {
     private var hasShutDown = false
 
     public func shutdown() {
+        CoralogixRum.lifecycleLock.lock(); defer { CoralogixRum.lifecycleLock.unlock() }
         shutdownLock.lock()
         let alreadyShutDown = hasShutDown
         hasShutDown = true
