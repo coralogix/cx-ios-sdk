@@ -20,6 +20,8 @@ struct CrashContextEnvelope: Equatable {
         /// Epoch milliseconds. Absent when the session was seeded before the SDK initialized.
         let creationTimeMillis: Int64?
         let sampledIn: Bool?
+        /// nil in a report written before the mode was recorded.
+        var errorOnly: Bool? = nil
     }
 
     struct Cxx: Equatable {
@@ -44,7 +46,8 @@ struct CrashContextEnvelope: Equatable {
         guard let id = json[Keys.sessionId.rawValue] as? String, !id.isEmpty else { return nil }
         return Session(id: id,
                        creationTimeMillis: (json[Keys.crashContextSessionCreationTime.rawValue] as? NSNumber)?.int64Value,
-                       sampledIn: (json[Keys.spanSessionSampledIn.rawValue] as? NSNumber)?.boolValue)
+                       sampledIn: (json[Keys.spanSessionSampledIn.rawValue] as? NSNumber)?.boolValue,
+                       errorOnly: (json[Keys.spanSessionOnlyWithErrorMode.rawValue] as? NSNumber)?.boolValue)
     }
 
     private static func cxx(_ json: [String: Any]) -> Cxx? {
@@ -61,7 +64,8 @@ enum CrashContextSession {
         CRXCrashContext.setSection(Keys.crashContextSession.rawValue, value: [
             Keys.sessionId.rawValue: stamp.sessionId,
             Keys.crashContextSessionCreationTime.rawValue: Int64(stamp.creationDate.milliseconds),
-            Keys.spanSessionSampledIn.rawValue: stamp.sampledIn
+            Keys.spanSessionSampledIn.rawValue: stamp.sampledIn,
+            Keys.spanSessionOnlyWithErrorMode.rawValue: stamp.errorOnly
         ])
     }
 }

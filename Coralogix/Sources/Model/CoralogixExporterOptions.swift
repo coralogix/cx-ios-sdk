@@ -68,6 +68,13 @@ public struct CoralogixExporterOptions {
     /// sampling decision. Empty by default (all event types follow the session sample rate).
     var excludeFromSampling: Set<ExcludableInstrumentation>
 
+    /// Holds a session that `sessionSampleRate` left out instead of dropping it, and sends it
+    /// whole if an error happens in it. Off by default.
+    let alwaysTrackSessionsWithErrors: Bool
+
+    /// How sessions that are sent only with an error behave (see `SessionWithErrorConfig`).
+    let onlyWithErrorConfig: SessionWithErrorConfig
+
     /// A list of instruments that you wish to switch off during runtime. all instrumentations are active by default.
     var instrumentations: [InstrumentationType: Bool]?
     
@@ -178,6 +185,8 @@ public struct CoralogixExporterOptions {
                 labels: [String: Any]? = nil,
                 sessionSampleRate: Int = 100, // percent (0–100)
                 excludeFromSampling: Set<ExcludableInstrumentation> = [],
+                alwaysTrackSessionsWithErrors: Bool = false,
+                onlyWithErrorConfig: SessionWithErrorConfig? = nil,
                 instrumentations: [InstrumentationType: Bool]? = nil,
                 collectIPData: Bool = true,
                 beforeSend: (([String: Any]) -> [String: Any]?)? = nil,
@@ -203,6 +212,8 @@ public struct CoralogixExporterOptions {
         self.labels = labels
         self.sdkSampler = SDKSampler(sampleRate: sessionSampleRate)
         self.excludeFromSampling = excludeFromSampling
+        self.alwaysTrackSessionsWithErrors = alwaysTrackSessionsWithErrors
+        self.onlyWithErrorConfig = onlyWithErrorConfig ?? SessionWithErrorConfig()
         self.instrumentations = instrumentations
         self.collectIPData = collectIPData
         self.beforeSend = beforeSend
@@ -234,6 +245,21 @@ public struct CoralogixExporterOptions {
         return sampledIn || self.isExcludedFromSampling(instrumentation)
     }
 
+    /// How a session with this sampling roll is reported. A sampled-in session is held until an
+    /// error when `onlyWithErrorConfig.enable` is set; a sampled-out one is held instead of dropped
+    /// when `alwaysTrackSessionsWithErrors` is set.
+    internal func sessionMode(sampledIn: Bool) -> SessionMode {
+        if sampledIn {
+            return onlyWithErrorConfig.enable ? .errorOnly : .full
+        }
+        return alwaysTrackSessionsWithErrors ? .errorOnly : .dropped
+    }
+
+    /// Whether any session can be held until an error.
+    internal var holdsSessionsForErrors: Bool {
+        alwaysTrackSessionsWithErrors || onlyWithErrorConfig.enable
+    }
+
     /// Whether `excludeFromSampling` requires `instrumentation` to keep running on a sampled-out session.
     internal func isExcludedFromSampling(_ instrumentation: InstrumentationType) -> Bool {
         self.excludeFromSampling.contains { $0.instrumentationTypes.contains(instrumentation) }
@@ -254,6 +280,8 @@ public struct CoralogixExporterOptions {
         initData[Keys.labels.rawValue] = self.labels
         initData[Keys.sessionSampleRate.rawValue] = self.sdkSampler.sampleRate
         initData[Keys.excludeFromSampling.rawValue] = self.excludeFromSampling.map(\.rawValue).sorted()
+        initData[Keys.alwaysTrackSessionsWithErrors.rawValue] = self.alwaysTrackSessionsWithErrors
+        initData[Keys.onlyWithErrorConfig.rawValue] = self.onlyWithErrorConfig.initData
         initData[Keys.instrumentations.rawValue] = self.getStatesAsDictionary(from: self.instrumentations)
         initData[Keys.collectIPData.rawValue] = self.collectIPData
         initData[Keys.enableSwizzling.rawValue] = self.enableSwizzling

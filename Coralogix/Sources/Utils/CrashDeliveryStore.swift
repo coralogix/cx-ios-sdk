@@ -25,6 +25,8 @@ struct StoredCrashRecord: Codable, Equatable {
         /// nil for a session seeded at image load that the SDK never adopted.
         let creationDate: TimeInterval?
         let sampledIn: Bool?
+        /// Whether the session was held until an error; nil in a record written before it was kept.
+        var errorOnly: Bool? = nil
     }
 
     let crashId: String
@@ -249,6 +251,14 @@ final class CrashDeliveryStore {
         Self.lock.lock()
         defer { Self.lock.unlock() }
         return readLocked().map { Set($0.keys) }
+    }
+
+    /// The session of each crash and hang that has a delivery record, by crash id; nil when the
+    /// records file cannot be read yet.
+    func recordedCrashSessions() -> [String: String]? {
+        Self.lock.lock()
+        defer { Self.lock.unlock() }
+        return readLocked().map { $0.mapValues(\.session.id) }
     }
 
     /// Returns whether the record reached disk.

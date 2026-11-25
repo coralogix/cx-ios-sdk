@@ -94,7 +94,8 @@ extension CoralogixRum {
     /// The live session as a crash record names it; nil before the SDK has one.
     var liveCrashSession: StoredCrashRecord.Session? {
         sessionManager?.lastPublishedCrashStamp.map {
-            StoredCrashRecord.Session(id: $0.sessionId, creationDate: $0.creationDate, sampledIn: $0.sampledIn)
+            StoredCrashRecord.Session(id: $0.sessionId, creationDate: $0.creationDate, sampledIn: $0.sampledIn,
+                                      errorOnly: $0.errorOnly)
         }
     }
 
@@ -113,7 +114,7 @@ extension CoralogixRum {
         guard store.storeJsFatal(held) else { return false }
         let span = makeSpan(event: .error, source: .crash, severity: .error)
         // Before the span ends, so the answer cannot come ahead of its listener.
-        coralogixExporter?.awaitLiveDelivery(spanId: span.context.spanId.hexString) { delivered in
+        coralogixExporter?.awaitLiveDelivery(spanId: span.context.spanId.hexString, copy: .untilDelivered) { delivered in
             // Delivered only: one refused or dropped never reached the product.
             if delivered { store.markJsFatalDelivered(crashId: held.crashId) }
         }

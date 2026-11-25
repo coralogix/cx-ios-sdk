@@ -31,6 +31,7 @@
             "cx_rum.session_context.device" : "<volatile>",
             "cx_rum.session_context.hasRecording" : false,
             "cx_rum.session_context.isSessionSampledIn" : true,
+            "cx_rum.session_context.onlyWithErrorMode" : false,
             "cx_rum.session_context.os" : "ios",
             "cx_rum.session_context.osVersion" : "<volatile>",
             "cx_rum.session_context.session_creation_date" : "<volatile>",
@@ -105,6 +106,7 @@
           "session_context" : {
             "hasRecording" : false,
             "isSessionSampledIn" : true,
+            "onlyWithErrorMode" : false,
             "session_creation_date" : "<volatile>",
             "session_id" : "<volatile>",
             "user_email" : "wire@example.com",
@@ -238,6 +240,12 @@
             "value" : "<connection_type>"
           },
           {
+            "key" : "only_with_error_mode",
+            "value" : {
+              "string_value" : "false"
+            }
+          },
+          {
             "key" : "session_creation_date",
             "value" : "<volatile>"
           },
@@ -320,6 +328,7 @@
             "cx_rum.session_context.device" : "<volatile>",
             "cx_rum.session_context.hasRecording" : false,
             "cx_rum.session_context.isSessionSampledIn" : true,
+            "cx_rum.session_context.onlyWithErrorMode" : false,
             "cx_rum.session_context.os" : "ios",
             "cx_rum.session_context.osVersion" : "<volatile>",
             "cx_rum.session_context.session_creation_date" : "<volatile>",
@@ -394,6 +403,7 @@
           "session_context" : {
             "hasRecording" : false,
             "isSessionSampledIn" : true,
+            "onlyWithErrorMode" : false,
             "session_creation_date" : "<volatile>",
             "session_id" : "<volatile>",
             "user_email" : "wire@example.com",
@@ -527,6 +537,12 @@
             "value" : "<connection_type>"
           },
           {
+            "key" : "only_with_error_mode",
+            "value" : {
+              "string_value" : "false"
+            }
+          },
+          {
             "key" : "session_creation_date",
             "value" : "<volatile>"
           },
@@ -609,6 +625,7 @@
             "cx_rum.session_context.device" : "<volatile>",
             "cx_rum.session_context.hasRecording" : false,
             "cx_rum.session_context.isSessionSampledIn" : true,
+            "cx_rum.session_context.onlyWithErrorMode" : false,
             "cx_rum.session_context.os" : "ios",
             "cx_rum.session_context.osVersion" : "<volatile>",
             "cx_rum.session_context.session_creation_date" : "<volatile>",
@@ -683,6 +700,7 @@
           "session_context" : {
             "hasRecording" : false,
             "isSessionSampledIn" : true,
+            "onlyWithErrorMode" : false,
             "session_creation_date" : "<volatile>",
             "session_id" : "<volatile>",
             "user_email" : "wire@example.com",
@@ -816,6 +834,12 @@
             "value" : "<connection_type>"
           },
           {
+            "key" : "only_with_error_mode",
+            "value" : {
+              "string_value" : "false"
+            }
+          },
+          {
             "key" : "session_creation_date",
             "value" : "<volatile>"
           },
@@ -898,6 +922,7 @@
             "cx_rum.session_context.device" : "<volatile>",
             "cx_rum.session_context.hasRecording" : false,
             "cx_rum.session_context.isSessionSampledIn" : true,
+            "cx_rum.session_context.onlyWithErrorMode" : false,
             "cx_rum.session_context.os" : "ios",
             "cx_rum.session_context.osVersion" : "<volatile>",
             "cx_rum.session_context.session_creation_date" : "<volatile>",
@@ -971,6 +996,7 @@
           "session_context" : {
             "hasRecording" : false,
             "isSessionSampledIn" : true,
+            "onlyWithErrorMode" : false,
             "session_creation_date" : "<volatile>",
             "session_id" : "<volatile>",
             "user_email" : "wire@example.com",
@@ -1112,6 +1138,12 @@
             }
           },
           {
+            "key" : "only_with_error_mode",
+            "value" : {
+              "string_value" : "false"
+            }
+          },
+          {
             "key" : "session_creation_date",
             "value" : "<volatile>"
           },
@@ -1201,6 +1233,7 @@
             "cx_rum.session_context.device" : "<volatile>",
             "cx_rum.session_context.hasRecording" : false,
             "cx_rum.session_context.isSessionSampledIn" : true,
+            "cx_rum.session_context.onlyWithErrorMode" : false,
             "cx_rum.session_context.os" : "ios",
             "cx_rum.session_context.osVersion" : "<volatile>",
             "cx_rum.session_context.session_creation_date" : "<volatile>",
@@ -1275,6 +1308,7 @@
           "session_context" : {
             "hasRecording" : false,
             "isSessionSampledIn" : true,
+            "onlyWithErrorMode" : false,
             "session_creation_date" : "<volatile>",
             "session_id" : "<volatile>",
             "user_email" : "wire@example.com",
@@ -1408,6 +1442,12 @@
             "value" : "<connection_type>"
           },
           {
+            "key" : "only_with_error_mode",
+            "value" : {
+              "string_value" : "false"
+            }
+          },
+          {
             "key" : "session_creation_date",
             "value" : "<volatile>"
           },
@@ -1490,6 +1530,7 @@
             "cx_rum.session_context.device" : "<volatile>",
             "cx_rum.session_context.hasRecording" : false,
             "cx_rum.session_context.isSessionSampledIn" : true,
+            "cx_rum.session_context.onlyWithErrorMode" : false,
             "cx_rum.session_context.os" : "ios",
             "cx_rum.session_context.osVersion" : "<volatile>",
             "cx_rum.session_context.session_creation_date" : "<volatile>",
@@ -1564,6 +1605,7 @@
           "session_context" : {
             "hasRecording" : false,
             "isSessionSampledIn" : true,
+            "onlyWithErrorMode" : false,
             "session_creation_date" : "<volatile>",
             "session_id" : "<volatile>",
             "user_email" : "wire@example.com",
@@ -1697,6 +1739,12 @@
             "value" : "<connection_type>"
           },
           {
+            "key" : "only_with_error_mode",
+            "value" : {
+              "string_value" : "false"
+            }
+          },
+          {
             "key" : "session_creation_date",
             "value" : "<volatile>"
           },
@@ -1779,6 +1827,7 @@
             "cx_rum.session_context.device" : "<volatile>",
             "cx_rum.session_context.hasRecording" : false,
             "cx_rum.session_context.isSessionSampledIn" : true,
+            "cx_rum.session_context.onlyWithErrorMode" : false,
             "cx_rum.session_context.os" : "ios",
             "cx_rum.session_context.osVersion" : "<volatile>",
             "cx_rum.session_context.session_creation_date" : "<volatile>",
@@ -1853,6 +1902,7 @@
           "session_context" : {
             "hasRecording" : false,
             "isSessionSampledIn" : true,
+            "onlyWithErrorMode" : false,
             "session_creation_date" : "<volatile>",
             "session_id" : "<volatile>",
             "user_email" : "wire@example.com",
@@ -1984,6 +2034,12 @@
           {
             "key" : "network.connection.type",
             "value" : "<connection_type>"
+          },
+          {
+            "key" : "only_with_error_mode",
+            "value" : {
+              "string_value" : "false"
+            }
           },
           {
             "key" : "session_creation_date",

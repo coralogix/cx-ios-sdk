@@ -20,6 +20,8 @@ public protocol NetworkProtocol {
 /// have conformers outside the SDK.
 protocol NetworkReachability: AnyObject {
     var isOnline: Bool { get }
+    /// Called when the network comes back after the device was offline.
+    var onReconnect: (() -> Void)? { get set }
 }
 
 public class NetworkManager: NetworkProtocol, NetworkReachability {
@@ -39,6 +41,25 @@ public class NetworkManager: NetworkProtocol, NetworkReachability {
     /// Whether the monitor has evaluated a path yet. Until it has, `currentPath` reads
     /// unsatisfied whatever the network is.
     private var hasPath = false
+    private var wasOnline = true
+    private var _onReconnect: (() -> Void)?
+
+    var onReconnect: (() -> Void)? {
+        get { pathLock.lock(); defer { pathLock.unlock() }; return _onReconnect }
+        set { pathLock.lock(); defer { pathLock.unlock() }; _onReconnect = newValue }
+    }
+
+    /// Records a path evaluation; calls `onReconnect` when it ends a spell offline. The first
+    /// evaluation ends none: until then the network counted as online.
+    func pathChanged(satisfied: Bool) {
+        pathLock.lock()
+        let reconnected = !wasOnline && satisfied
+        hasPath = true
+        wasOnline = satisfied
+        let handler = reconnected ? _onReconnect : nil
+        pathLock.unlock()
+        handler?()
+    }
 
     /// `currentPath` is safe to read from any thread once the monitor has started. Before its
     /// first evaluation the network is unknown, which counts as online, as when there is no monitor.
@@ -51,9 +72,7 @@ public class NetworkManager: NetworkProtocol, NetworkReachability {
     
     private func checkConnectionType() {
         self.monitor.pathUpdateHandler = { path in
-            self.pathLock.lock()
-            self.hasPath = true
-            self.pathLock.unlock()
+            self.pathChanged(satisfied: path.status == .satisfied)
             if path.usesInterfaceType(.wifi) {
                 self.networkType = "WiFi"
             } else if path.usesInterfaceType(.cellular) {

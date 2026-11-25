@@ -33,6 +33,16 @@ struct LogSamplingDecouplingView: View {
                 }
             }
 
+            Section("Sessions with errors") {
+                Toggle("alwaysTrackSessionsWithErrors", isOn: $model.alwaysTrackSessionsWithErrors)
+                    .accessibilityIdentifier("alwaysTrackSessionsWithErrorsToggle")
+                Toggle("onlyWithErrorConfig.enable", isOn: $model.onlyWithErrorEnable)
+                    .accessibilityIdentifier("onlyWithErrorEnableToggle")
+                Text(LogSamplingDemoModel.sessionsWithErrorsNote)
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
+
             Section {
                 statusText
                 Button {

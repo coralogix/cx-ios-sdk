@@ -153,6 +153,8 @@ public class CoralogixRum {
         // re-reading the live flag would let a concurrent rotation hide a sampled-in transition
         // from the callback meant to act on it.
         sessionManager.attachCrashStampObserverIfNeeded(CrashContextSession.write)
+        // Before the decision is seeded, so the first session's mode is derived with it.
+        sessionManager.setErrorOnlyPolicy { options.sessionMode(sampledIn: $0) == .errorOnly }
         sessionManager.setSessionSampledIn(initialSampledIn)
         // The first record of this launch: written at adoption, whatever the sampling decision,
         // so a crash in a sampled-out session that still reports errors finds its session.
@@ -173,14 +175,16 @@ public class CoralogixRum {
             // Fires outside `sessionLock` (see `SessionManager.fireRotationCallbacks`), on whichever
             // thread rotated — so the install itself is hopped to main rather than run there. See
             // `topUpInstrumentations`.
-            self.topUpInstrumentations(using: options, sampledIn: sampledIn)
+            self.topUpInstrumentations(using: options, sampledIn: options.sessionMode(sampledIn: sampledIn).reports)
         }
 
         self.setupTracer(applicationName: options.application)
         self.swizzle()
         // Whatever the options: the copies made at image load are cleaned up even when nothing is sent.
         self.recoverPendingCrashes()
-        self.installEligibleInstrumentations(using: options, sampledIn: initialSampledIn)
+        // A session held until an error installs everything a sampled-in one does, crash capture included.
+        self.installEligibleInstrumentations(using: options,
+                                             sampledIn: options.sessionMode(sampledIn: initialSampledIn).reports)
         self.emitStartupInitSpan()
 
         CoralogixRum.isInitialized = true
@@ -691,7 +695,8 @@ public class CoralogixRum {
             return NetworkRequestSampling(isSampled: false, sessionId: nil)
         }
         let isSampled = options.shouldInitInstrumentation(instrumentation: .network)
-            && CxCustomSampler.exportsNetworkEvent(sampledIn: live.sampledIn, excludeFromSampling: options.excludeFromSampling)
+            && CxCustomSampler.exportsNetworkEvent(sampledIn: live.sampledIn || live.errorOnly,
+                                                   excludeFromSampling: options.excludeFromSampling)
         return NetworkRequestSampling(isSampled: isSampled, sessionId: live.sessionId)
     }
 

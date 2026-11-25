@@ -126,6 +126,8 @@ The fields accepted by `CoralogixExporterOptions`. Each one is described in deta
 | collectIPData | Bool | Sends the client IP for region detection. Defaults to `true`. | No |
 | sessionSampleRate | Int | Percentage of overall sessions tracked, 0–100. Defaults to `100`. | No |
 | excludeFromSampling | `Set<ExcludableInstrumentation>` | Instrumentations that bypass the `sessionSampleRate` gate, so their events are sent even from sessions that are not sampled in. Accepts `errors`, `logs`, `network`, `userInteractions`, `mobileVitals`, `customSpan`, `customMeasurement`, `navigation` and `lifecycle`. Defaults to empty. | No |
+| alwaysTrackSessionsWithErrors | Bool | Keeps a session that `sessionSampleRate` leaves out on the device, and sends it whole if an error happens in it. Defaults to `false`. See "Sessions with errors". | No |
+| onlyWithErrorConfig | `SessionWithErrorConfig?` | Settings for sessions sent only when they have an error. See "Sessions with errors". | No |
 | enableSwizzling | Bool | Method swizzling for `URLSession` instrumentation. Defaults to `true`. | No |
 | instrumentations | `[InstrumentationType: Bool]?` | Switches individual instrumentations off. All are active by default. Read once while the SDK initializes, so a later change takes effect only after `shutdown()` and a fresh `CoralogixRum(options:)`. | No |
 | mobileVitals | `[MobileVitalsType: Bool]?` | Switches individual mobile vitals detectors off. All are active by default. Read at initialization only, the same as `instrumentations`. | No |
@@ -336,6 +338,53 @@ beforeSend: { cxRum in
     return cxRum
 }
 ```
+
+### Sessions with errors
+Available in 2.25.0 and later. Keep a low `sessionSampleRate` and still get every session in which an error happens.
+
+With `alwaysTrackSessionsWithErrors: true`, a session that is not sampled in is not dropped. Its events
+are kept on the device until an error is reported in it. Then everything it kept is sent, and the rest
+of the session is reported as it happens. A session that ends without an error sends nothing. A crash
+counts too: the events from before the crash are sent with it on the next launch.
+
+To hold every sampled-in session this way too, set `onlyWithErrorConfig` to
+`SessionWithErrorConfig(enable: true)`. Sessions that `sessionSampleRate` leaves out behave as
+before (see `excludeFromSampling`) unless `alwaysTrackSessionsWithErrors` is also on.
+
+```swift
+let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
+                                        environment: "ENVIRONMENT",
+                                        application: "APP-NAME",
+                                        version: "APP-VERSION",
+                                        publicKey: "API-KEY",
+                                        sessionSampleRate: 10,
+                                        alwaysTrackSessionsWithErrors: true,
+                                        onlyWithErrorConfig: SessionWithErrorConfig(maxRumEvents: 5_000,
+                                                                                    instrumentationsToSend: [.mobileVitals]))
+```
+
+`SessionWithErrorConfig` fields:
+
+| Field | Type | Description |
+| --- | --- | --- |
+| enable | Bool | Holds every sampled-in session until an error. Sessions that `sessionSampleRate` leaves out behave as before unless `alwaysTrackSessionsWithErrors` is also on. Defaults to `false`. |
+| maxRumEvents | Int | How many events a session keeps while it waits for an error. Past this, what it kept is discarded and it starts again; a session whose events average over 16 KB, or take over 100 MB, is discarded sooner. Defaults to `5000`; at most `20000`, and `0` or less uses the default. |
+| instrumentationsToSend | `Set<ExcludableInstrumentation>` | Categories sent at once instead of being held. Accepts `errors`, `logs`, `network`, `userInteractions`, `mobileVitals`, `customSpan`, `customMeasurement`, `navigation` and `lifecycle`. Defaults to empty: a held session sends nothing until it has an error. |
+
+What to expect:
+- An event with error severity triggers the session, including a network request that failed with an HTTP
+  error status. A critical event does not. `ignoreErrors` and `beforeSend` apply first, so an error they
+  drop or change to another severity does not trigger it.
+- An error reported right before the session changes, for example just before `createNewSession()`,
+  still counts for the session it was reported in.
+- While a session is held, `excludeFromSampling` sends nothing early. Use `instrumentationsToSend` for that.
+- Session recording does not record in a held session.
+- `tracesExporter` receives a held session's spans only for events sent as they happen: from the error on,
+  or listed in `instrumentationsToSend`.
+- With `traceParentInHeader` enabled, network requests from a held session are always traced, even if the
+  session is never sent.
+- Every event carries `session_context.onlyWithErrorMode` (read-only), `true` in a held session. Events
+  sent from the error on also carry `session_context.hasError: true`.
 
 ### Trace Exporter
 Forward span data to your own collector or backend by configuring a trace exporter callback. The callback receives each batch on its way out, in OTLP-compatible shape, and spans continue to flow to Coralogix when it is set.

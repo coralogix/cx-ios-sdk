@@ -419,6 +419,37 @@ extension SessionReplayTests {
                        "the caller's screenshot index is handed back like every other pre-model rejection")
     }
 
+    func testCaptureEventSkippedWhenSessionIsErrorOnly_evenWhenSampledIn() {
+        let mockCoralogix = MockCoralogix()
+        mockCoralogix.idle = false
+        mockCoralogix.sessionSampledIn = true
+        mockCoralogix.sessionErrorOnly = true
+        SdkManager.shared.register(coralogixInterface: mockCoralogix)
+
+        let options = SessionReplayOptions(recordingType: .image)
+        let model = makeRecordingModel(options)
+        SessionReplay.initializeWithOptions(sessionReplayOptions: options)
+        SessionReplay.shared.sessionReplayModel = model
+        SessionReplay.shared.isDummyInstance = false
+
+        let result = SessionReplay.shared.captureEvent(
+            properties: [Keys.segmentIndex.rawValue: 3, Keys.page.rawValue: 0]
+        )
+
+        if case .failure(let error) = result {
+            XCTAssertEqual(error, .sessionErrorOnly)
+        } else {
+            XCTFail("Expected .failure(.sessionErrorOnly) but got success")
+        }
+        XCTAssertEqual(model.captureImageCallCount, 0,
+                       "a session held until an error must not record: its events may never be sent")
+
+        // Control: the same sampled-in session in full mode reaches the model.
+        mockCoralogix.sessionErrorOnly = false
+        _ = SessionReplay.shared.captureEvent(properties: ["key": "value"])
+        XCTAssertEqual(model.captureImageCallCount, 1, "a full session records as before")
+    }
+
     /// The decision is read on every capture, not latched at init: a session that rotates from
     /// sampled out to sampled in starts recording again with nothing restarted.
     func testCaptureEventResumesWhenTheSessionRotatesIntoSampledIn() {

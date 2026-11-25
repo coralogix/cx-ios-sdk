@@ -95,6 +95,10 @@ public class CxSpan {
                         mergedSession[Keys.sessionId.rawValue] = originalSession[Keys.sessionId.rawValue]
                         mergedSession[Keys.sessionCreationDate.rawValue] = originalSession[Keys.sessionCreationDate.rawValue]
                         mergedSession[Keys.isSessionSampledIn.rawValue] = originalSession[Keys.isSessionSampledIn.rawValue]
+                        // Visible and read-only like isSessionSampledIn. hasError is stamped only
+                        // after beforeSend, so the original never has it and a forged one goes.
+                        mergedSession[Keys.onlyWithErrorMode.rawValue] = originalSession[Keys.onlyWithErrorMode.rawValue]
+                        mergedSession[Keys.hasError.rawValue] = originalSession[Keys.hasError.rawValue]
                         mergedDict[Keys.sessionContext.rawValue] = mergedSession
                     } else {
                         mergedDict[Keys.sessionContext.rawValue] = originalSession
@@ -363,6 +367,9 @@ public struct SessionMetadata {
     /// since a recovered crash misclassified as sampled-out could be dropped by a
     /// customer's beforeSend filter.
     var oldSessionSampledIn: Bool?
+    /// Whether the previous launch's session was held until an error; nil when that launch
+    /// predates the persisted value.
+    var oldSessionErrorOnly: Bool?
     
     init(sessionId: String, sessionCreationDate: TimeInterval, using keychain: KeyChainProtocol) {
         self.sessionId = sessionId
@@ -390,6 +397,9 @@ public struct SessionMetadata {
             // persisted decision have no entry; SessionManager defaults those to true.
             self.oldSessionSampledIn = keychain.readStringFromKeychain(service: Keys.service.rawValue,
                                                                        key: Keys.keySessionSampledIn.rawValue)
+                .map { $0 == "true" }
+            self.oldSessionErrorOnly = keychain.readStringFromKeychain(service: Keys.service.rawValue,
+                                                                       key: Keys.keySessionOnlyWithErrorMode.rawValue)
                 .map { $0 == "true" }
         }
         

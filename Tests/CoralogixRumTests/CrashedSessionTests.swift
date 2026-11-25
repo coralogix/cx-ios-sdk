@@ -76,10 +76,12 @@ final class LaunchSessionTests: XCTestCase {
             CRXCrashContext.setSection(Keys.crashContextSession.rawValue,
                                        value: saved[Keys.crashContextSession.rawValue] as? [String: Any])
         }
-        CrashContextSession.write(.init(sessionId: "live-session", creationDate: 1_700_000_000.5, sampledIn: false))
+        CrashContextSession.write(.init(sessionId: "live-session", creationDate: 1_700_000_000.5, sampledIn: false,
+                                        errorOnly: true))
 
         let session = try XCTUnwrap(CrashContextEnvelope(data: CrashContextTests.liveReport().customData)?.session)
-        XCTAssertEqual(session, .init(id: "live-session", creationTimeMillis: 1_700_000_000_500, sampledIn: false))
+        XCTAssertEqual(session, .init(id: "live-session", creationTimeMillis: 1_700_000_000_500, sampledIn: false,
+                                      errorOnly: true))
     }
 }
 
@@ -299,6 +301,35 @@ final class CrashedSessionRecoveryTests: XCTestCase {
 
         XCTAssertEqual(attributes[Keys.sessionId.rawValue]?.description, "S2")
         XCTAssertEqual(attributes[Keys.sessionCreationDate.rawValue]?.description, "1600000000")
+    }
+
+    /// A report that names no session falls back to the keychain, and the error-only flag must come
+    /// with it: otherwise a crash of a sampled-out error-only session is dropped as sampled out.
+    func test_anOldReport_withoutContext_takesTheErrorOnlyFlagFromTheKeychain() throws {
+        let keychain = MockKeyschainManager()
+        keychain.pid = "1"
+        keychain.sessionId = "S2"
+        keychain.sessionTimeInterval = "1600000000"
+        keychain.sessionSampledIn = "false"
+        keychain.sessionOnlyWithErrorMode = "true"
+        let previous = try XCTUnwrap(LastLaunchSession(previousOf: SessionMetadata(sessionId: "new",
+                                                                                     sessionCreationDate: 1,
+                                                                                     using: keychain)))
+        XCTAssertEqual(previous.errorOnly, true)
+        XCTAssertEqual(previous.sampledIn, false)
+
+        let keychainRecord = SessionSnapshotRecord(sessionId: "S2", errorCount: 1, viewCount: 1, actionCount: 1,
+                                                   hasRecording: false)
+        let sdk = try relaunch(after: keychainRecord, keychainSession: "S2")
+        sdk.sessionManager?.lastLaunchSession = previous
+        let crash = CrashReportMapper.map(Report.naming(nil))
+
+        XCTAssertEqual(sdk.firstRecord(of: crash)?.session.errorOnly, true)
+        let attributes = try attributes(of: crash, in: sdk)
+        XCTAssertEqual(attributes[Keys.spanSessionOnlyWithErrorMode.rawValue]?.description, "true")
+        XCTAssertEqual(attributes[Keys.spanSessionSampledIn.rawValue]?.description, "false")
+        XCTAssertTrue(try XCTUnwrap(sdk.coralogixExporter).isErrorOnly(MockSpanData(attributes: attributes)),
+                      "The export filter must let it through as error-only, not drop it as sampled out.")
     }
 
     func test_aCrashBeforeTheFirstView_hasAnEmptyView_andNoViewNumber() throws {

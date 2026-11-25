@@ -83,7 +83,7 @@ final class FatalHangWatch: HangObserving {
         let hangId = currentHangId
         lock.unlock()
         guard let hangId else { return }
-        exporter.awaitLiveDelivery(spanId: spanId) { [store] delivered in
+        exporter.awaitLiveDelivery(spanId: spanId, copy: .untilTheHangEnds) { [store] delivered in
             // Delivered only: an event that was refused or dropped never reached the product.
             if delivered {
                 store.markHangDelivered(crashId: hangId)
