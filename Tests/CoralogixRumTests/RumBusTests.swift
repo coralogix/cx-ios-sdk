@@ -456,6 +456,7 @@ final class RumBusTests: XCTestCase {
     func testOlderNeverShutDownInstance_staysSilent() {
         let sm1 = Self.sessionManager()
         let rum1 = CoralogixRum(options: Self.options(), sessionManager: sm1)
+        CoralogixRum.isInitialized = false // CX-71257: stands for an instance another test left running; a real second init is ignored
         let sm2 = Self.sessionManager()
         let rum2 = CoralogixRum(options: Self.options(), sessionManager: sm2)
         let rec = subscribeAndSkipCurrentState()
@@ -486,6 +487,7 @@ final class RumBusTests: XCTestCase {
     func testNewerInitOverARunningInstance_givesExistingSubscriberOneSessionChanged() {
         let rum1 = CoralogixRum(options: Self.options())
         let rec = subscribeAndSkipCurrentState()
+        CoralogixRum.isInitialized = false // CX-71257: stands for an instance another test left running; a real second init is ignored
         let sm2 = Self.sessionManager()
         let rum2 = CoralogixRum(options: Self.options(), sessionManager: sm2)
         defer {

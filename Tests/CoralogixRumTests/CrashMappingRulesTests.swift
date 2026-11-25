@@ -249,6 +249,7 @@ final class IgnoreErrorsMatchingTests: XCTestCase {
     }
 
     private func exporter(ignoring patterns: [String]) throws -> CoralogixExporter {
+        rum?.shutdown() // CX-71257: a second init while one runs is ignored
         let sdk = CoralogixRum(options: makeSamplingOptions(sampleRate: 100, exclude: [], ignoreErrors: patterns))
         rum = sdk
         return try XCTUnwrap(sdk.coralogixExporter)

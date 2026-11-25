@@ -6,7 +6,7 @@
 //
 //  SANCTIONED SYMBOL (the only new one this file needs):
 //    public static func CoralogixRum.getConfig() -> CoralogixExporterOptions?
-//        The LIVE instance's options — the most recently initialized instance — read under the
+//        The LIVE instance's options — the instance initialized while none was live (CX-71257) — read under the
 //        live-instance lock. Live: later changes such as `setApplicationContext` are reflected.
 //        nil before any init and after shutdown. No instance variant.
 //
@@ -58,11 +58,16 @@ final class ReplayGetConfigTests: XCTestCase {
         try Self.assertSecond(CoralogixRum.getConfig())
     }
 
-    /// RED-now. A re-init over a running instance supersedes it: the newest instance's options.
-    func testGetConfig_afterReinitWithoutShutdown_returnsTheNewOptions() throws {
+    /// CX-71257 (reverses the CX-71255 assertion, human ruling 2026-11-25): a re-init over a running
+    /// instance is ignored, as on Android — the first instance's options stay.
+    func testGetConfig_afterReinitWithoutShutdown_keepsTheFirstOptions() throws {
         start(Self.options(application: "First", key: "key-1", domain: .EU2))
         start(Self.options(application: "Second", key: "key-2", domain: .US2, proxy: "https://proxy.two"))
-        try Self.assertSecond(CoralogixRum.getConfig())
+        let config = try XCTUnwrap(CoralogixRum.getConfig())
+        XCTAssertEqual(config.application, "First")
+        XCTAssertEqual(config.publicKey, "key-1")
+        XCTAssertEqual(config.coralogixDomain, .EU2)
+        XCTAssertNil(config.proxyUrl)
     }
 
     /// RED-now. Live, not a copy taken at init: a later application change is reflected.

@@ -141,6 +141,7 @@ final class CrashRecoveryAcrossLaunchesTests: XCTestCase {
                                           ignoreErrors: ignoreErrors)
         options.version = version
         options.beforeSend = beforeSend
+        launches.last?.shutdown() // CX-71257: the launch before has ended; a second init while it runs is ignored
         let sdk = CoralogixRum(options: options, sdkFramework: framework, sessionManager: manager)
         launches.append(sdk)
         sdk.crashDeliveryStore = store
