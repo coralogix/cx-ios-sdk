@@ -386,12 +386,12 @@ public class CoralogixRum {
     // MARK: - Public API
     
     public var labels: [String: Any]? {
-        guard CoralogixRum.isInitialized else { return nil }
+        guard self.isInitialized else { return nil }
         return self.options?.labels
     }
     
     public var userContext: UserContext? {
-        guard CoralogixRum.isInitialized else { return nil }
+        guard self.isInitialized else { return nil }
         return self.options?.userContext
     }
 
@@ -410,7 +410,7 @@ public class CoralogixRum {
     ///
     /// - Parameter userContext: The new user context to associate with telemetry, or `nil` to clear it.
     public func setUserContext(userContext: UserContext?) {
-        guard CoralogixRum.isInitialized else { return }
+        guard self.isInitialized else { return }
         // Store the context before arming the snapshot trigger: if a span races in
         // between, the worst case is one non-snapshot event with the new user data —
         // the reverse order could promote a snapshot still carrying the old user.
@@ -424,33 +424,33 @@ public class CoralogixRum {
     }
     
     public func set(labels: [String: Any]) {
-        guard CoralogixRum.isInitialized else { return }
+        guard self.isInitialized else { return }
         self.coralogixExporter?.update(labels: labels)
     }
     
     public func reportError(exception: NSException,
                             data: [String: Any]? = nil,
                             labels: [String: Any]? = nil) {
-        guard CoralogixRum.isInitialized else { return }
+        guard self.isInitialized else { return }
         self.reportErrorWith(exception: exception, data: data, labels: labels)
     }
 
     public func reportError(error: NSError,
                             data: [String: Any]? = nil,
                             labels: [String: Any]? = nil) {
-        guard CoralogixRum.isInitialized else { return }
+        guard self.isInitialized else { return }
         self.reportErrorWith(error: error, data: data, labels: labels)
     }
 
     public func reportError(error: Error,
                             data: [String: Any]? = nil,
                             labels: [String: Any]? = nil) {
-        guard CoralogixRum.isInitialized else { return }
+        guard self.isInitialized else { return }
         self.reportErrorWith(error: error, data: data, labels: labels)
     }
 
     public func reportError(message: String, data: [String: Any]? = nil, labels: [String: Any]? = nil) {
-        guard CoralogixRum.isInitialized else { return }
+        guard self.isInitialized else { return }
         self.reportErrorWith(message: message, data: data, labels: labels)
     }
     
@@ -464,7 +464,7 @@ public class CoralogixRum {
                             customAttributes: [String: Any]? = nil,
                             labels: [String: Any]? = nil,
                             source: String? = nil) {
-        guard CoralogixRum.isInitialized else { return }
+        guard self.isInitialized else { return }
         self.reportErrorWith(message: message,
                              stackTrace: stackTrace,
                              errorType: errorType,
@@ -501,7 +501,7 @@ public class CoralogixRum {
                             labels: [String: Any]? = nil,
                             isCrash: Bool = false,
                             source: String? = nil) {
-        guard CoralogixRum.isInitialized else { return }
+        guard self.isInitialized else { return }
         self.reportErrorWith(message: message,
                              obfuscatedStackTrace: obfuscatedStackTrace,
                              arch: arch,
@@ -514,7 +514,7 @@ public class CoralogixRum {
     }
     
     public func reportMobileVitalsMeasurement(type: String, metrics: [HybridMetric]) {
-        guard CoralogixRum.isInitialized else { return }
+        guard self.isInitialized else { return }
         if (CoralogixRum.mobileSDK.sdkFramework.isNative) { return }
 
         var vitalArray = [[String: Any]]()
@@ -537,7 +537,7 @@ public class CoralogixRum {
     }
 
     public func reportMobileVitalsMeasurement(type: String, value: Double, units: String) {
-        guard CoralogixRum.isInitialized else { return }
+        guard self.isInitialized else { return }
         if (CoralogixRum.mobileSDK.sdkFramework.isNative) { return }
 
         let payload: [String: Any] = [
@@ -552,7 +552,7 @@ public class CoralogixRum {
     }
     
     public func setView(name: String) {
-        guard CoralogixRum.isInitialized else { return }
+        guard self.isInitialized else { return }
         let cxView = CXView(state: .notifyOnAppear, name: name)
         self.trackNavigation(for: cxView)
     }
@@ -561,7 +561,7 @@ public class CoralogixRum {
                     message: String,
                     data: [String: Any]? = nil,
                     labels: [String: Any]? = nil) {
-        guard CoralogixRum.isInitialized else { return }
+        guard self.isInitialized else { return }
         self.logWith(severity: severity, message: message, data: data, labels: labels)
     }
     
@@ -571,13 +571,13 @@ public class CoralogixRum {
     /// flush attempt (successful or not) finishes. Called automatically when a crash
     /// is reported; hybrid bridges call it before a fatal error terminates the process.
     public func flush(completion: (() -> Void)? = nil) {
-        if CoralogixRum.isInitialized { self.publishToBus(.flushing) }
+        if self.isInitialized { self.publishToBus(.flushing) }
         self.flushSpans(completion: completion)
     }
 
     /// The export `flush` performs, for RUM's own flushes (background, crash): those are not the app's.
     internal func flushSpans(completion: (() -> Void)? = nil) {
-        guard CoralogixRum.isInitialized, let tracerProviderSdk = self.tracerProviderSdk else {
+        guard self.isInitialized, let tracerProviderSdk = self.tracerProviderSdk else {
             completion?()
             return
         }
@@ -662,12 +662,12 @@ public class CoralogixRum {
     /// carried into the new session as view #0, so its events keep their view
     /// context automatically — no follow-up call needed.
     public func createNewSession() {
-        guard CoralogixRum.isInitialized else { return }
+        guard self.isInitialized else { return }
         self.sessionManager?.setupSessionMetadata()
     }
     
     public func setApplicationContext(application: String, version: String) {
-        guard CoralogixRum.isInitialized else { return }
+        guard self.isInitialized else { return }
         self.coralogixExporter?.update(application: application, version: version)
     }
 
@@ -699,7 +699,7 @@ public class CoralogixRum {
     /// Sub-millisecond durations are floored to 1 ms by the export pipeline, as for every
     /// other event type.
     public func setNetworkRequestContext(dictionary: [String: Any]) {
-        guard CoralogixRum.isInitialized else { return }
+        guard self.isInitialized else { return }
         reportHybridNetworkRequest(dictionary)
     }
 
@@ -718,7 +718,7 @@ public class CoralogixRum {
     public func networkRequestSampling() -> NetworkRequestSampling {
         // Reads the session the way a native network span does (`sessionSpanAttributes`), so a rotation
         // that is due happens first and the answer belongs to the session the request starts in.
-        guard CoralogixRum.isInitialized,
+        guard self.isInitialized,
               let options = self.options,
               let live = self.sessionManager?.liveSessionSampling() else {
             return NetworkRequestSampling(isSampled: false, sessionId: nil)
@@ -754,17 +754,17 @@ public class CoralogixRum {
     /// May be called from any thread; off-main calls are processed asynchronously on the
     /// main thread, where masking is resolved.
     public func setUserInteraction(_ dictionary: [String: Any]) {
-        guard CoralogixRum.isInitialized else { return }
+        guard self.isInitialized else { return }
         reportHybridUserInteraction(dictionary)
     }
     
     public func sendBeforeSendData(_ data: [[String: Any]]) {
-        guard CoralogixRum.isInitialized else { return }
+        guard self.isInitialized else { return }
         self.coralogixExporter?.sendBeforeSendData(data: data)
     }
     
     public func sendCustomMeasurement(name: String, value: Double) {
-        guard CoralogixRum.isInitialized else { return }
+        guard self.isInitialized else { return }
         let span = self.makeSpan(event: .customMeasurement, source: nil, severity: .info)
         span.setAttribute(key: Keys.name.rawValue, value: name)
         span.setAttribute(key: Keys.value.rawValue, value: value)
@@ -790,7 +790,7 @@ public class CoralogixRum {
     ///     labels at `end` (start labels win on key collision); encoded into
     ///     `custom_labels`.
     public func startTimeMeasure(name: String, labels: [String: Any]? = nil) {
-        guard CoralogixRum.isInitialized else {
+        guard self.isInitialized else {
             Log.w("CoralogixRum not initialized — startTimeMeasure ignored")
             return
         }
@@ -807,7 +807,7 @@ public class CoralogixRum {
     ///   `endTimeMeasure(name:)`. Leaked starts persist in memory until the
     ///   session goes idle.
     public func endTimeMeasure(name: String) {
-        guard CoralogixRum.isInitialized else {
+        guard self.isInitialized else {
             Log.w("CoralogixRum not initialized — endTimeMeasure ignored")
             return
         }
@@ -846,7 +846,7 @@ public class CoralogixRum {
     ///
     /// - Parameter ignoredInstruments: When starting a global span via this tracer, listed instruments do not inherit that global trace (CX-35955); auto spans for those types use `setNoParent()`.
     public func getCustomTracer(ignoredInstruments: Set<CoralogixIgnoredInstrument> = []) -> CoralogixCustomTracer? {
-        guard CoralogixRum.isInitialized else {
+        guard self.isInitialized else {
             Log.w("Coralogix RUM is not initialized — getCustomTracer unavailable")
             return nil
         }
