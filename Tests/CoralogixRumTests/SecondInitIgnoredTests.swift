@@ -12,24 +12,36 @@
 //     initializes. Why: evaluating `SessionManager.forLaunch()` mints a session and rewrites the crash
 //     context's session to it (probed: the live id was replaced by the orphan's), so a default argument
 //     evaluated before the guard would misfile the live session's crashes. Call sites stay source-compatible.
-//  2. The guard is the FIRST statement of `init`: when an instance is live — exactly when
-//     `CoralogixRum.getConfig() != nil`, i.e. `isInitialized && liveInstance != nil` — the init logs
-//     `Log.w("CoralogixRum is already initialized!")` and returns. Nothing before it runs: no
-//     `mobileSDK` write, no `Log.isDebug` write, no session manager, exporter, tracer provider, swizzle,
-//     instrumentation, crash recovery, bus handler or `liveInstance` change. The warning is gated by the
-//     live `Log.isDebug`, as Android's is by the live debug flag.
-//     "Live" includes the weak `liveInstance`: an instance the host dropped without `shutdown()` is
-//     deallocated (probed) and can no longer be shut down, so a later init is NOT ignored (today's behaviour).
-//  3. `private var isInert = false`, set on the ignored path. Exactly two members read it:
+//  2. The guard is the FIRST statement of `init` (N1 + N4). Check and claim are ONE hold of the existing
+//     `liveInstanceLock` (not a call to `getConfig()`, which takes the same non-reentrant lock):
+//         liveInstanceLock.lock()
+//         let busy = (isInitialized && liveInstance != nil) || initClaimed
+//         if !busy { initClaimed = true }
+//         liveInstanceLock.unlock()
+//         guard !busy else { isInert = true; Log.w("CoralogixRum is already initialized!"); return }
+//         defer { liveInstanceLock.lock(); initClaimed = false; liveInstanceLock.unlock() }
+//     with `private static var initClaimed = false` (guarded by `liveInstanceLock`). The claim is released by the
+//     `defer`, i.e. after `attachBus` has set `liveInstance`, and also when startup returns early. No lock is held
+//     across startup; `getConfig()` and `shutdown()` are unchanged (shutdown is not serialized). The racer that
+//     loses is inert at once — it never waits.
+//     Nothing before the guard runs: no `mobileSDK` write, no `Log.isDebug` write, no session manager, exporter,
+//     tracer provider, swizzle, instrumentation, crash recovery, bus handler or `liveInstance` change. The warning
+//     is gated by the live `Log.isDebug`, as Android's is by the live debug flag.
+//     "Live" includes the weak `liveInstance`: an instance the host dropped without `shutdown()` is deallocated
+//     (probed) and can no longer be shut down, so a later init is NOT ignored (today's behaviour).
+//  3. `private var isInert = false`, set on the ignored path.
 //       - `public var isInitialized: Bool` → `!isInert && CoralogixRum.isInitialized` (the inert instance says false);
+//       - every `guard CoralogixRum.isInitialized` in an INSTANCE method becomes `guard self.isInitialized`, so that
+//         property is the one choke point (`flush`'s `if CoralogixRum.isInitialized` likewise). Without it,
+//         `sendCustomMeasurement`, `setUserInteraction` and `setNetworkRequestContext` reach `makeSpan` through the
+//         live global tracer provider and the host's exporter receives session-less spans (4b finding).
+//         Not inside escaping `[weak self]` closures (the `topUpInstrumentations` hop keeps its static check);
 //       - `shutdown()` returns at once when `isInert` (today any instance's shutdown flips the process-wide flag,
 //         retires the bus and silences the live instance).
-//     Every other public instance method is already a no-op on the inert instance because it holds no exporter,
-//     options, session manager or tracer provider (probed: with only 1–3 in place, every test here is green, and
-//     an inert `reportError` reaches no uploader). No per-method guard rewrite, no forwarding to the live instance.
+//     No forwarding to the live instance.
 //  4. Unchanged: `shutdown()` on the live instance, then a new init → a fully live SDK with the new options.
 //
-//  No new symbol: every test compiles today; all but the two marked GUARD fail by assertion (reason on each).
+//  No new symbol: every test compiles today; all but those marked GUARD fail by assertion (reason on each).
 //
 
 import XCTest
@@ -63,6 +75,8 @@ final class SecondInitIgnoredTests: XCTestCase {
         CoralogixRum.isInitialized = false
         Log.shared = savedLogger
         Log.isDebug = savedDebug
+        CoralogixExporter.testExportCallback = nil
+        CoralogixRum.mobileSDK = MobileSDK(sdkFramework: .swift)
         super.tearDown()
     }
 
@@ -171,6 +185,14 @@ final class SecondInitIgnoredTests: XCTestCase {
         inert.setView(name: "InertScreen")
         inert.createNewSession()
         inert.log(severity: .info, message: "inert-log")
+        inert.reportMobileVitalsMeasurement(type: "cpu", value: 1, units: "%")
+        inert.reportMobileVitalsMeasurement(type: "cpu", metrics: [HybridMetric(name: "inert-vital", value: 1, units: "%")])
+        inert.startTimeMeasure(name: "inert-measure")
+        inert.endTimeMeasure(name: "inert-measure")
+        XCTAssertNil(inert.getCustomTracer())
+        inert.sendBeforeSendData([["inert": true]])
+        XCTAssertEqual(inert.networkRequestSampling(), NetworkRequestSampling(isSampled: false, sessionId: nil),
+                       "the inert instance has no session to sample")
         inert.flush()
         inert.shutdown()
         CoralogixRum.drainBus()
@@ -201,6 +223,116 @@ final class SecondInitIgnoredTests: XCTestCase {
         XCTAssertTrue(waitUntil { uploader.errorMessages.contains("from-live") },
                       "the live instance reports: \(uploader.errorMessages)")
         XCTAssertFalse(uploader.errorMessages.contains("from-inert"), "\(uploader.errorMessages)")
+    }
+
+    /// RED-now (4b): these three reach `makeSpan` through the global tracer provider — the LIVE one — unless
+    /// the inert instance's own `isInitialized` stops them, so the host's exporter would receive spans with no
+    /// session. The live instance makes the same calls (the non-vacuous half: they do export).
+    func testInertMeasurementAndHybridCalls_exportNoSpan() {
+        let exported = ExportedTexts()
+        CoralogixExporter.testExportCallback = { spans in exported.add(spans.map { "\($0.name) \($0.attributes)" }) }
+        // A hybrid framework, so the live instance accepts hybrid interactions.
+        let first = start(makeSamplingOptions(sampleRate: 100, exclude: []), framework: .flutter(version: "1.0.0"))
+        first.coralogixExporter?.spanUploader = StubUploader()
+        let inert = start(Self.options(application: "Second"))
+
+        for (rum, tag) in [(inert, "inert"), (first, "live")] {
+            rum.sendCustomMeasurement(name: "\(tag)-measure", value: 1)
+            rum.setUserInteraction([Keys.eventName.rawValue: "click", Keys.targetElement.rawValue: "\(tag)-button"])
+            rum.setNetworkRequestContext(dictionary: [Keys.url.rawValue: "https://\(tag).example.com/x",
+                                                      Keys.method.rawValue: "GET", Keys.statusCode.rawValue: 200])
+        }
+        first.flush()
+
+        let liveMarkers = ["live-measure", "live-button", "live.example.com"]
+        XCTAssertTrue(waitUntil { liveMarkers.allSatisfy { m in exported.texts.contains { $0.contains(m) } } },
+                      "the live calls export: \(exported.texts)")
+        XCTAssertEqual(exported.texts.filter { $0.contains("inert") }, [], "no span from the inert instance")
+    }
+
+    // MARK: - Racing inits (N4)
+
+    /// RED-now: today every racer runs a full startup (8 exporters, 8 sessions, the last one live). After the
+    /// change exactly one wins and the rest are inert. 10 rounds, the winner shut down between them.
+    func testRacingInits_exactlyOneIsLive_theRestAreInert() {
+        let n = 8
+        for round in 0..<10 {
+            Log.isDebug = true // the racers warn before the winner's own `debug: true` may have landed
+            let logger = RecordingLogger()
+            Log.shared = logger
+            let rec = BusRecorder()
+            let subscription = CoralogixRum.subscribe { rec.record($0) }
+            let racers = racingInits(n, round: round)
+            CoralogixRum.drainBus()
+            subscription.cancel()
+
+            let live = racers.filter { $0.isInitialized && $0.coralogixExporter != nil && $0.sessionManager != nil }
+            guard live.count == 1, let winner = live.first else {
+                XCTFail("round \(round): \(live.count) of \(n) racers are live")
+                racers.forEach { $0.shutdown() }
+                continue
+            }
+            for racer in racers where racer !== winner {
+                XCTAssertFalse(racer.isInitialized, "round \(round)")
+                XCTAssertNil(racer.coralogixExporter, "round \(round)")
+                XCTAssertNil(racer.sessionManager, "round \(round)")
+            }
+            XCTAssertTrue(CoralogixRum.liveInstance === winner, "round \(round)")
+            XCTAssertEqual(CoralogixRum.getConfig()?.application, winner.options?.application, "round \(round)")
+            XCTAssertTrue((OpenTelemetry.instance.tracerProvider as AnyObject) === winner.tracerProviderSdk, "round \(round)")
+            XCTAssertEqual(logger.entries.filter { $0.message == Self.warning }.count, n - 1, "round \(round)")
+            XCTAssertEqual(rec.messages.filter { if case .currentState = $0 { return true }; return false }.count, 1,
+                           "round \(round): \(rec.messages)")
+            XCTAssertEqual(rec.messages.filter { if case .sessionChanged = $0 { return true }; return false }.count, 0,
+                           "round \(round): \(rec.messages)")
+            winner.shutdown()
+        }
+    }
+
+    /// RED-now (one live) + GUARD (no deadlock): an init on the main thread racing one on a background queue,
+    /// with swizzling on — the background init hops network swizzling to main and waits up to 0.5 s for it.
+    func testMainInitRacingABackgroundInit_finishesWithOneLive() {
+        for round in 0..<5 {
+            let gate = DispatchSemaphore(value: 0)
+            let box = RumBox()
+            let done = expectation(description: "background init \(round)")
+            DispatchQueue.global(qos: .userInitiated).async {
+                gate.wait()
+                box.rum = CoralogixRum(options: Self.options(application: "Background-\(round)"))
+                done.fulfill()
+            }
+            let started = Date()
+            gate.signal()
+            let onMain = CoralogixRum(options: Self.options(application: "Main-\(round)"))
+            wait(for: [done], timeout: 10)
+            XCTAssertLessThan(Date().timeIntervalSince(started), 10, "round \(round)")
+            let both = [onMain] + (box.rum.map { [$0] } ?? [])
+            rums.append(contentsOf: both)
+            XCTAssertEqual(both.filter { $0.isInitialized }.count, 1, "round \(round)")
+            both.forEach { $0.shutdown() }
+        }
+    }
+
+    /// GUARD (passes now): `shutdown()` on a background queue racing an init on main finishes. Shutdown is not
+    /// serialized with init (driver ruling), so only completion is pinned here, not which side ends up live.
+    func testBackgroundShutdownRacingAMainInit_finishes() {
+        for round in 0..<5 {
+            let old = start(Self.options(application: "Old-\(round)"))
+            let gate = DispatchSemaphore(value: 0)
+            let done = expectation(description: "background shutdown \(round)")
+            DispatchQueue.global(qos: .userInitiated).async {
+                gate.wait()
+                old.shutdown()
+                done.fulfill()
+            }
+            let started = Date()
+            gate.signal()
+            let next = start(Self.options(application: "Next-\(round)"))
+            wait(for: [done], timeout: 10)
+            XCTAssertLessThan(Date().timeIntervalSince(started), 10, "round \(round)")
+            next.shutdown()
+            CoralogixRum.isInitialized = false // whichever way the race went, the next round starts from nothing
+        }
     }
 
     // MARK: - Shutdown, then init
@@ -252,9 +384,34 @@ final class SecondInitIgnoredTests: XCTestCase {
         return rum
     }
 
-    private static func options(application: String, key: String = "test-key", debug: Bool = false) -> CoralogixExporterOptions {
+    private static func options(application: String, key: String = "test-key", swizzling: Bool = true,
+                                debug: Bool = false) -> CoralogixExporterOptions {
         CoralogixExporterOptions(coralogixDomain: .US2, environment: "test", application: application,
-                                 version: "1.0", publicKey: key, debug: debug)
+                                 version: "1.0", publicKey: key, enableSwizzling: swizzling, debug: debug)
+    }
+
+    /// `n` inits released together from background queues; waits with an expectation so the main run loop turns.
+    private func racingInits(_ n: Int, round: Int) -> [CoralogixRum] {
+        let gate = DispatchSemaphore(value: 0)
+        let lock = NSLock()
+        var made: [CoralogixRum] = []
+        let done = expectation(description: "racers \(round)")
+        done.expectedFulfillmentCount = n
+        for i in 0..<n {
+            DispatchQueue.global(qos: .userInitiated).async {
+                gate.wait()
+                let rum = CoralogixRum(options: Self.options(application: "Racer-\(round)-\(i)", swizzling: false, debug: true),
+                                       sessionManager: SessionManager(snapshotStore: SessionSnapshotStore()))
+                lock.lock(); made.append(rum); lock.unlock()
+                done.fulfill()
+            }
+        }
+        for _ in 0..<n { gate.signal() }
+        wait(for: [done], timeout: 30)
+        lock.lock()
+        defer { lock.unlock() }
+        rums.append(contentsOf: made)
+        return made
     }
 
     private static func crashContextSessionId() -> String? {
@@ -279,6 +436,17 @@ final class SecondInitIgnoredTests: XCTestCase {
         }
         return condition()
     }
+}
+
+private final class RumBox: @unchecked Sendable {
+    var rum: CoralogixRum?
+}
+
+private final class ExportedTexts: @unchecked Sendable {
+    private let lock = NSLock()
+    private var recorded: [String] = []
+    func add(_ texts: [String]) { lock.lock(); recorded.append(contentsOf: texts); lock.unlock() }
+    var texts: [String] { lock.lock(); defer { lock.unlock() }; return recorded }
 }
 
 private final class BusRecorder: @unchecked Sendable {

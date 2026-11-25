@@ -119,7 +119,7 @@ final class ReplayMessagesTests: XCTestCase {
     /// RED-now. With an older instance never shut down, only the live (newest) instance handles: one event, not two.
     func testOnlyTheLiveInstanceHandles() throws {
         let (older, olderUploader) = try start()
-        CoralogixRum.isInitialized = false // CX-71257: stands for an instance another test left running; a real second init is ignored
+        CoralogixRum.isInitialized = false // CX-71257: forces a second live instance (otherwise unreachable) so the bus's live-instance check stays covered
         let (newer, newerUploader) = try start()
         let sessionId = try XCTUnwrap(newer.sessionManager?.currentSessionId)
 
@@ -137,7 +137,7 @@ final class ReplayMessagesTests: XCTestCase {
     func testOlderInstancesSession_screenshotIsNotHandled() throws {
         let (older, olderUploader) = try start()
         let olderSession = try XCTUnwrap(older.sessionManager?.currentSessionId)
-        CoralogixRum.isInitialized = false // CX-71257: stands for an instance another test left running; a real second init is ignored
+        CoralogixRum.isInitialized = false // CX-71257: forces a second live instance (otherwise unreachable) so the bus's live-instance check stays covered
         let (newer, newerUploader) = try start()
         let newerSession = try XCTUnwrap(newer.sessionManager?.currentSessionId)
         XCTAssertNotEqual(olderSession, newerSession, "fixture: two sessions")
@@ -156,7 +156,7 @@ final class ReplayMessagesTests: XCTestCase {
     /// RED-now. With two instances started, ReplaySettings is reported once, by the newer (live) instance.
     func testReplaySettings_twoInstances_reportedOnceByTheLiveOne() throws {
         let (older, olderUploader) = try start()
-        CoralogixRum.isInitialized = false // CX-71257: stands for an instance another test left running; a real second init is ignored
+        CoralogixRum.isInitialized = false // CX-71257: forces a second live instance (otherwise unreachable) so the bus's live-instance check stays covered
         let (newer, newerUploader) = try start()
 
         CoralogixRum.publish(.replaySettings(settings: ["mode": .string("two-instances")]))
