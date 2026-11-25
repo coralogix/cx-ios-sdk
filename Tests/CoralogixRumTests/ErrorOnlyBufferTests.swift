@@ -489,6 +489,19 @@ final class ErrorOnlyBufferTests: XCTestCase {
                        "With no crash to come, the mark is deleted.")
     }
 
+    /// A mark written over events still on disk would, after a kill before they go, have the next
+    /// launch send them again from offset 0.
+    func testLeftoverBudget_deletesTheEventsBeforeWritingTheMark() throws {
+        leaveLeftover("crashed", triggered: true)
+        let writer = EventsPresenceRecordingWriter(directory: directory)
+
+        let relaunch = makeBuffer(writer: writer, maxLeftoverBytes: 500)
+        _ = relaunch.adoptLeftovers(crashedSessionIds: ["crashed"])
+        XCTAssertTrue(try savedMetadata("crashed").triggered, "Precondition: the mark was written.")
+        XCTAssertEqual(writer.eventsPresentAtMetadataWrite("crashed"), [false],
+                       "Its events were already gone when the mark was written.")
+    }
+
     func testLeftovers_pastTheCount_aTriggeredSessionWaitingOnItsCrash_isNotCounted() {
         leaveLeftover("crashed", triggered: true)
         let ids = (0..<ErrorOnlyBuffer.maxLeftoverSessions).map { "triggered-\($0)" }
@@ -1041,6 +1054,33 @@ private final class FailingWriter: ErrorOnlyFileWriting {
 
 /// Fails every metadata write while `failing` is set, and every append while `failingAppends` is,
 /// as a full disk would.
+/// Records, for each metadata write, whether that session's events file was still on disk.
+private final class EventsPresenceRecordingWriter: ErrorOnlyFileWriting {
+    private let lock = NSLock()
+    private let directory: URL
+    private let real = PosixFileWriter()
+    private var presence: [String: [Bool]] = [:]
+
+    init(directory: URL) { self.directory = directory }
+
+    func eventsPresentAtMetadataWrite(_ sessionId: String) -> [Bool] {
+        lock.lock(); defer { lock.unlock() }
+        return presence[sessionId] ?? []
+    }
+
+    func append(_ data: Data, to url: URL) throws { try real.append(data, to: url) }
+    func truncate(_ url: URL, to length: UInt64) { real.truncate(url, to: length) }
+    func replace(_ url: URL, with data: Data) throws {
+        let name = url.lastPathComponent
+        if name.hasSuffix(".meta.json") {
+            let sessionId = String(name.dropLast(".meta.json".count))
+            let present = FileManager.default.fileExists(atPath: directory.appendingPathComponent("\(sessionId).jsonl").path)
+            lock.lock(); presence[sessionId, default: []].append(present); lock.unlock()
+        }
+        try real.replace(url, with: data)
+    }
+}
+
 private final class FlakyMetadataWriter: ErrorOnlyFileWriting {
     private let lock = NSLock()
     private var _failing = false

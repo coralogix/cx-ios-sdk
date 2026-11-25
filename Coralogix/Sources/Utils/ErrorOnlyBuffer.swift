@@ -687,10 +687,12 @@ final class ErrorOnlyBuffer {
 
     /// Deletes the events of a session that had its error but keeps that mark, as a session that
     /// sent everything keeps it: its crash, still to come, then goes with hasError even when
-    /// `beforeSend` lowered its severity. The mark is written first, so no moment has the events
-    /// gone and the mark not yet there; if it cannot be written, the earlier metadata, which also
-    /// records the trigger, stays.
+    /// `beforeSend` lowered its severity. The events go first: a mark, whose offset is 0, written
+    /// over a file still there would have the next launch send that file again from its start. A
+    /// kill in between, or a mark that cannot be written, leaves the earlier metadata, which also
+    /// records the trigger and serves as the mark.
     private func reduceToTriggeredMarkLocked(_ metadata: Metadata) -> Metadata {
+        try? FileManager.default.removeItem(at: eventsURL(of: metadata.sessionId))
         let mark = Metadata(sessionId: metadata.sessionId, owner: metadata.owner, createdAt: metadata.createdAt,
                             triggered: true, sentOffset: 0, failedUploads: 0)
         do {
@@ -698,7 +700,6 @@ final class ErrorOnlyBuffer {
         } catch {
             Log.e("[ErrorOnlyBuffer] could not save that session \(metadata.sessionId) had its error (\(error)) — its earlier record is kept")
         }
-        try? FileManager.default.removeItem(at: eventsURL(of: metadata.sessionId))
         return mark
     }
 
