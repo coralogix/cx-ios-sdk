@@ -44,16 +44,16 @@ public struct CoralogixExporterOptions {
     let ignoreErrors: [String]?
     
     /// Coralogix account domain
-    let coralogixDomain: CoralogixDomain
+    public let coralogixDomain: CoralogixDomain
     
     /// Coralogix token
-    var publicKey: String
+    public internal(set) var publicKey: String
     
     /// Environment
     let environment: String
     
     /// Application name
-    var application: String
+    public internal(set) var application: String
     
     /// Appliaction version
     var version: String

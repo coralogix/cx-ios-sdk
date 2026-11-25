@@ -19,6 +19,7 @@ omitted; the focus here is user-facing behavior changes.
 
 ### Added
 - `CoralogixRum.getConfig()` returns the options the SDK is running with, or `nil` before initialization and after `shutdown()`.
+- `CoralogixExporterOptions.coralogixDomain`, `publicKey` and `application` are now readable (read-only) from outside the SDK, alongside `proxyUrl`.
 
 ## [2.24.4] - 2026-11-22
 
