@@ -580,8 +580,10 @@ final class ErrorOnlyBuffer {
 
     /// Adopts what earlier launches (or SDK instances) left. One that had its error is kept to
     /// send; one whose session has a crash still to report waits for that crash, its trigger; the
-    /// rest is deleted. `crashedSessionIds` nil means the crash records could not be read, so any
-    /// session may have a crash to come. An expired leftover is deleted whatever its crash — a
+    /// rest is deleted. `crashedSessionIds` is nil until every crash earlier launches left is
+    /// accounted for: then any session may have a crash to come, so none is deleted for lacking
+    /// one or counted toward `maxLeftoverSessions`, and only `maxLeftoverBytes` bounds them. An
+    /// expired leftover is deleted whatever its crash — a
     /// buffer waiting on a crash that is never sent would otherwise stay forever. Of the ones that
     /// had their error and wait on no crash, the newest `maxLeftoverSessions` are kept and the older
     /// deleted; one holding a delivered error's only copy is counted only against others like it,

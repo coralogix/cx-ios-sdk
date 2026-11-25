@@ -195,9 +195,9 @@ extension CoralogixExporter {
 
     /// Takes over what earlier launches left: a buffer that had its error is kept for
     /// `resumeErrorOnlyDrains`; one whose session has a stored crash waits for that crash, its
-    /// trigger; the rest is deleted. `crashedSessionIds` nil means the crash records could not be
-    /// read yet: no session is deleted for having no crash to come, but the count and byte bounds
-    /// on what earlier launches keep still apply.
+    /// trigger; the rest is deleted. `crashedSessionIds` is nil until every crash earlier launches
+    /// left is accounted for: then any session may have a crash to come, so none is deleted for
+    /// lacking one or counted toward the session limit, and only the byte budget bounds them.
     func recoverErrorOnlyLeftovers(crashedSessionIds: Set<String>?) {
         _ = errorOnlyBuffer.adoptLeftovers(crashedSessionIds: crashedSessionIds)
     }
