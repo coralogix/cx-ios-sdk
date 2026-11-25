@@ -64,6 +64,10 @@ public class CoralogixRum {
     }
     
     static var isInitialized = false
+    /// Set when this init was ignored because another instance was live.
+    private var isInert = false
+    /// An init is between its claim and the end of startup. Guarded by `liveInstanceLock`.
+    private static var initClaimed = false
     static var mobileSDK: MobileSDK = MobileSDK()
 
     /// The most recently initialized instance, the only one that publishes to the RUM bus.
@@ -104,11 +108,27 @@ public class CoralogixRum {
     public init(
         options: CoralogixExporterOptions,
         sdkFramework: SdkFramework = .swift,
-        sessionManager: SessionManager? = SessionManager.forLaunch()
+        sessionManager: @autoclosure () -> SessionManager? = SessionManager.forLaunch()
     ){
+        // One SDK per process: check-and-claim in one hold so racing inits cannot both start (not via getConfig(): NSLock is not reentrant).
+        CoralogixRum.liveInstanceLock.lock()
+        let busy = CoralogixRum.initClaimed || (CoralogixRum.isInitialized && CoralogixRum.liveInstance != nil)
+        if !busy { CoralogixRum.initClaimed = true }
+        CoralogixRum.liveInstanceLock.unlock()
+        guard !busy else {
+            self.isInert = true
+            Log.w("CoralogixRum is already initialized!")
+            return
+        }
+        // Released after attachBus has set liveInstance, or on any early startup return.
+        defer {
+            CoralogixRum.liveInstanceLock.lock()
+            CoralogixRum.initClaimed = false
+            CoralogixRum.liveInstanceLock.unlock()
+        }
         CoralogixRum.mobileSDK = MobileSDK(sdkFramework: sdkFramework)
         Log.isDebug = options.debug
-        self.sessionManager = sessionManager
+        self.sessionManager = sessionManager()
         self.displayCoralogixWord()
         
         // Startup is unconditional, including for a sampled-out session. Network instrumentation
@@ -598,7 +618,7 @@ public class CoralogixRum {
         let alreadyShutDown = hasShutDown
         hasShutDown = true
         shutdownLock.unlock()
-        guard !alreadyShutDown else { return }
+        guard !alreadyShutDown, !isInert else { return }
         self.shutDownBus()
         // Before the batch processor is stopped: a stop that outlasts its bound, or a later init
         // reopening the process-wide gate, must not let this instance's exporter send anything.
@@ -630,7 +650,7 @@ public class CoralogixRum {
         self.sessionManager?.detachCrashStampObserver()
     }
     
-    public var isInitialized: Bool { return CoralogixRum.isInitialized }
+    public var isInitialized: Bool { return !isInert && CoralogixRum.isInitialized }
     
     public var getSessionId: String? { return self.sessionManager?.getSessionMetadata()?.sessionId }
 
