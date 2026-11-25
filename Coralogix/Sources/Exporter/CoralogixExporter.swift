@@ -8,6 +8,16 @@ import Foundation
 import CoralogixInternal
 import UIKit
 
+/// How long the stored copy of an event awaited live outlasts it.
+enum AwaitedCopy {
+    /// Gone once its hang recovers (an ANR): a session held for an error keeps the event, which
+    /// is then its only copy.
+    case untilTheHangEnds
+    /// Kept on disk until delivered (a React Native fatal): the event goes live, ahead of what its
+    /// session held, and the next launch sends the copy if it was not delivered.
+    case untilDelivered
+}
+
 public class CoralogixExporter: SpanExporter {
     // Written from the caller's thread (set(labels:), setUserContext, setApplicationContext) and
     // read on the span-processing queue and main thread. Copying the struct while another thread
@@ -71,7 +81,7 @@ public class CoralogixExporter: SpanExporter {
     private var crashUploadWaiters: [String: (CrashUploadAnswer) -> Void] = [:]
     /// Handlers waiting on a live event's delivery, by its `span_id`: read-only in `beforeSend`,
     /// so it is the one id an event keeps through a hybrid round trip.
-    private var liveDeliveryWaiters: [String: (Bool) -> Void] = [:]
+    private var liveDeliveryWaiters: [String: (copy: AwaitedCopy, handler: (Bool) -> Void)] = [:]
     private let crashUploadLock = NSLock()
 
     /// Set when the SDK instance that owns this exporter shuts down. The upload gate is the
@@ -168,17 +178,19 @@ public class CoralogixExporter: SpanExporter {
 
     /// Calls `handler` once the live event whose span id is `spanId` has been uploaded, with whether
     /// it was delivered. An event dropped before upload (sampling, `ignoreErrors`, `beforeSend`)
-    /// never answers.
-    func awaitLiveDelivery(spanId: String, _ handler: @escaping (Bool) -> Void) {
+    /// never answers. `copy` says how long the event's stored copy lasts, which decides whether a
+    /// session held for an error keeps the event or sends it live.
+    func awaitLiveDelivery(spanId: String, copy: AwaitedCopy, _ handler: @escaping (Bool) -> Void) {
         crashUploadLock.lock()
         defer { crashUploadLock.unlock() }
-        liveDeliveryWaiters[spanId] = handler
+        liveDeliveryWaiters[spanId] = (copy, handler)
     }
 
-    func isAwaitingLiveDelivery(spanId: String) -> Bool {
+    /// The stored copy of the awaited event whose span id is `spanId`; nil when nobody awaits it.
+    func awaitedCopy(of spanId: String) -> AwaitedCopy? {
         crashUploadLock.lock()
         defer { crashUploadLock.unlock() }
-        return liveDeliveryWaiters[spanId] != nil
+        return liveDeliveryWaiters[spanId]?.copy
     }
 
     /// The event whose span id is `spanId` was kept on disk with its held session, which sends it
@@ -187,7 +199,7 @@ public class CoralogixExporter: SpanExporter {
         crashUploadLock.lock()
         let waiter = liveDeliveryWaiters.removeValue(forKey: spanId)
         crashUploadLock.unlock()
-        waiter?(true)
+        waiter?.handler(true)
     }
 
     private func resolveLiveDeliveries(of events: [[String: Any]], result: SpanUploadResult) {
@@ -200,7 +212,7 @@ public class CoralogixExporter: SpanExporter {
         let waiters = spanIds.compactMap { liveDeliveryWaiters.removeValue(forKey: $0) }
         crashUploadLock.unlock()
         let delivered = result.disposition == .delivered
-        waiters.forEach { $0(delivered) }
+        waiters.forEach { $0.handler(delivered) }
     }
 
     /// Uploads live events and answers whoever waits on their delivery.

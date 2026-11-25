@@ -1349,7 +1349,7 @@ final class FatalHangWatchTests: XCTestCase {
             span.setAttribute(key: Keys.errorMessage.rawValue, value: "Application Not Responding for at least 1000 ms.")
             let answered = expectation(description: "answered")
             watch.awaitDelivery(ofSpan: span.context.spanId.hexString, through: exporter)
-            exporter.awaitLiveDelivery(spanId: "unrelated") { _ in }
+            exporter.awaitLiveDelivery(spanId: "unrelated", copy: .untilDelivered) { _ in }
             span.end()
             sdk.flush { answered.fulfill() }
             wait(for: [answered], timeout: 10)

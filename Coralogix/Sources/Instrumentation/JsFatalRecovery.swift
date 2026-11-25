@@ -114,7 +114,7 @@ extension CoralogixRum {
         guard store.storeJsFatal(held) else { return false }
         let span = makeSpan(event: .error, source: .crash, severity: .error)
         // Before the span ends, so the answer cannot come ahead of its listener.
-        coralogixExporter?.awaitLiveDelivery(spanId: span.context.spanId.hexString) { delivered in
+        coralogixExporter?.awaitLiveDelivery(spanId: span.context.spanId.hexString, copy: .untilDelivered) { delivered in
             // Delivered only: one refused or dropped never reached the product.
             if delivered { store.markJsFatalDelivered(crashId: held.crashId) }
         }

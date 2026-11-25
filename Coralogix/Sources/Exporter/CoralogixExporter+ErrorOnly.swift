@@ -77,18 +77,23 @@ extension CoralogixExporter {
     /// in the same requests and shares their retries and their survival of a restart: the backend
     /// gets the session in the order it happened. Returns false when it could not be kept: the error is then sent live.
     ///
-    /// An error whose delivery is awaited (an ANR or a React Native fatal, whose stored copy is
-    /// sent by the next launch unless it is delivered) is kept the same way: an ANR's copy exists
-    /// only while its hang lasts, so live would leave a recovered hang nothing to retry it. Its
-    /// waiter is answered as delivered once it is kept, since the buffer now carries it: answered
-    /// only when its request lands, a launch ending first would send it twice.
+    /// An ANR whose delivery is awaited is kept the same way: its stored copy exists only while its
+    /// hang lasts, so live would leave a recovered hang nothing to retry it. Its waiter is answered
+    /// as delivered once it is kept, since the buffer now carries it: answered only when its
+    /// request lands, a launch ending first would send it twice.
+    ///
+    /// A React Native fatal is not kept: its copy stays on disk until delivered, so it goes live
+    /// first, as a stored crash goes before what its session held, and its waiter is answered when
+    /// its request lands. A launch ending first leaves the copy to the next launch's crash pass.
     private func holdTrigger(_ error: [String: Any], of route: ErrorOnlyRoute) -> Bool {
-        guard JSONSerialization.isValidJSONObject(error),
+        let awaitedCopy = route.spanId.flatMap(awaitedCopy(of:))
+        guard awaitedCopy != .untilDelivered,
+              JSONSerialization.isValidJSONObject(error),
               let data = try? JSONSerialization.data(withJSONObject: error) else {
             errorOnlyBuffer.trigger(route.sessionId)
             return false
         }
-        let isAwaited = route.spanId.map(isAwaitingLiveDelivery) ?? false
+        let isAwaited = awaitedCopy == .untilTheHangEnds
         guard errorOnlyBuffer.triggerHolding(data, sessionId: route.sessionId, isAwaited: isAwaited) else { return false }
         if let spanId = route.spanId { handOverLiveDelivery(of: spanId) }
         return true

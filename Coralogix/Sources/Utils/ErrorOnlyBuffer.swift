@@ -95,7 +95,7 @@ final class ErrorOnlyBuffer {
         var sentOffset: UInt64
         var failedUploads: Int
         /// Its error is one whose stored copy was answered as delivered once it was held (an ANR
-        /// or a React Native fatal): this file is that error's only copy. Optional so a file
+        /// whose hang recovered): this file is that error's only copy. Optional so a file
         /// written without it still decodes.
         var holdsDeliveredError: Bool?
 
@@ -300,8 +300,8 @@ final class ErrorOnlyBuffer {
     /// its last event: the error then goes out in the drain's requests, with what came before it,
     /// and is retried and kept across a restart like them. Returns false, holding nothing, when
     /// it could not be kept so: the caller sends it as it happens. The session has had its error
-    /// either way. `isAwaited`: the caller answers the error's waiter as delivered once it is held,
-    /// which makes the held file its only copy.
+    /// either way. `isAwaited`: the error is an ANR whose waiter the caller answers as delivered
+    /// once it is held, which makes the held file its only copy.
     func triggerHolding(_ error: Data, sessionId: String, isAwaited: Bool = false) -> Bool {
         lock.lock()
         defer { lock.unlock() }
@@ -583,11 +583,10 @@ final class ErrorOnlyBuffer {
     /// rest is deleted. `crashedSessionIds` is nil until every crash earlier launches left is
     /// accounted for: then any session may have a crash to come, so none is deleted for lacking
     /// one or counted toward `maxLeftoverSessions`, and only `maxLeftoverBytes` bounds them. An
-    /// expired leftover is deleted whatever its crash — a
-    /// buffer waiting on a crash that is never sent would otherwise stay forever. Of the ones that
-    /// had their error and wait on no crash, the newest `maxLeftoverSessions` are kept and the older
-    /// deleted; one holding a delivered error's only copy is counted only against others like it,
-    /// as a stored ANR is against other ANRs. One whose crash is still to come is not counted: the
+    /// expired leftover is deleted whatever its crash — a buffer waiting on a crash that is never
+    /// sent would otherwise stay forever. Of the ones that had their error and wait on no crash,
+    /// the newest `maxLeftoverSessions` are kept and the older deleted; one holding an ANR's only
+    /// copy is counted only against others like it, as a stored ANR is against other ANRs. One whose crash is still to come is not counted: the
     /// crash would arrive without what its session held, and there are no more of those than
     /// stored crashes. Then, past `maxLeftoverBytes` together, whole sessions are deleted until the
     /// rest fit (`keepWithinLeftoverBudgetLocked`). Returns the kept ones that already had their
@@ -659,8 +658,8 @@ final class ErrorOnlyBuffer {
         // Expired leftovers never get here: they were deleted on reading. With the crashed sessions
         // unknown, an untriggered session goes first: it is sent only if a crash turns up for it,
         // which seldom happens. Then a triggered session's events alone; then a session whose crash
-        // is known to be coming, which then arrives without what came before it; last, a delivered
-        // error's only copy, which nothing else would ever send. A triggered session is not ranked
+        // is known to be coming, which then arrives without what came before it; last, an ANR's
+        // only copy, which nothing else would ever send. A triggered session is not ranked
         // as crash-pending on a guess, or it would outlast an older triggered one whose events are
         // as certain to be sent.
         func cost(_ metadata: Metadata) -> Int {
