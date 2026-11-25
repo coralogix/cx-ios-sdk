@@ -64,6 +64,11 @@ final class ErrorOnlyBuffer {
     /// Earlier launches' sessions that had their error, kept at launch to send: the newest, as
     /// many as stored crashes of a kind. An offline device leaves one per launch with an error.
     static let maxLeftoverSessions = CrashDeliveryStore.maxPerKind
+    /// What earlier launches' sessions may keep on disk together, counting what is still to send.
+    /// Within the count bound, and with sessions waiting on their crash not counted by it, an
+    /// offline device could otherwise keep over a gigabyte. This launch's sessions are left out:
+    /// the live session is never cleared for what earlier launches left.
+    static let maxLeftoverBytes = 100 * 1_024 * 1_024
     static let maxMemoryEvents = 1_000
     static let maxMemoryBytes = 4 * 1_024 * 1_024
     /// Sessions that had their error, remembered so their later events are sent as they happen;
@@ -89,6 +94,10 @@ final class ErrorOnlyBuffer {
         /// Bytes of the events file already delivered or refused for good.
         var sentOffset: UInt64
         var failedUploads: Int
+        /// Its error is one whose stored copy was answered as delivered once it was held (an ANR
+        /// or a React Native fatal): this file is that error's only copy. Optional so a file
+        /// written without it still decodes.
+        var holdsDeliveredError: Bool?
 
         /// Given up on, as a stored crash is: after 16 counted failures or 7 days.
         func isExpired(at now: Date) -> Bool {
@@ -132,6 +141,7 @@ final class ErrorOnlyBuffer {
     private static let testHooksLock = NSLock()
     private static var _testDirectory: URL?
     private static var _testClock: DeliveryClock?
+    private static var _testMaxLeftoverBytes: Int?
 
     static var testDirectory: URL? {
         get { testHooksLock.lock(); defer { testHooksLock.unlock() }; return _testDirectory }
@@ -142,7 +152,20 @@ final class ErrorOnlyBuffer {
         get { testHooksLock.lock(); defer { testHooksLock.unlock() }; return _testClock }
         set { testHooksLock.lock(); defer { testHooksLock.unlock() }; _testClock = newValue }
     }
+
+    /// Tests only: the budget of earlier launches' sessions, so a test needs no 100 MB of files.
+    static var testMaxLeftoverBytes: Int? {
+        get { testHooksLock.lock(); defer { testHooksLock.unlock() }; return _testMaxLeftoverBytes }
+        set { testHooksLock.lock(); defer { testHooksLock.unlock() }; _testMaxLeftoverBytes = newValue }
+    }
     #endif
+
+    static var defaultMaxLeftoverBytes: Int {
+        #if DEBUG
+        if let testMaxLeftoverBytes { return testMaxLeftoverBytes }
+        #endif
+        return maxLeftoverBytes
+    }
 
     static var defaultClock: DeliveryClock {
         #if DEBUG
@@ -161,6 +184,7 @@ final class ErrorOnlyBuffer {
     let directory: URL
     let maxEvents: Int
     let maxBytes: Int
+    let maxLeftoverBytes: Int
     let owner = UUID().uuidString.lowercased()
     private let writer: ErrorOnlyFileWriting
     private let lock = NSLock()
@@ -176,10 +200,12 @@ final class ErrorOnlyBuffer {
     init(maxRumEvents: Int,
          directory: URL = ErrorOnlyBuffer.defaultDirectory,
          writer: ErrorOnlyFileWriting = PosixFileWriter(),
-         clock: DeliveryClock = ErrorOnlyBuffer.defaultClock) {
+         clock: DeliveryClock = ErrorOnlyBuffer.defaultClock,
+         maxLeftoverBytes: Int = ErrorOnlyBuffer.defaultMaxLeftoverBytes) {
         self.directory = directory
         self.maxEvents = maxRumEvents
         self.maxBytes = min(maxRumEvents * Self.bytesPerEvent, Self.maxSessionBytes)
+        self.maxLeftoverBytes = maxLeftoverBytes
         self.writer = writer
         self.clock = clock
     }
@@ -274,12 +300,15 @@ final class ErrorOnlyBuffer {
     /// its last event: the error then goes out in the drain's requests, with what came before it,
     /// and is retried and kept across a restart like them. Returns false, holding nothing, when
     /// it could not be kept so: the caller sends it as it happens. The session has had its error
-    /// either way.
-    func triggerHolding(_ error: Data, sessionId: String) -> Bool {
+    /// either way. `isAwaited`: the caller answers the error's waiter as delivered once it is held,
+    /// which makes the held file its only copy.
+    func triggerHolding(_ error: Data, sessionId: String, isAwaited: Bool = false) -> Bool {
         lock.lock()
         defer { lock.unlock() }
         guard !isTriggeredLocked(sessionId) else { return false }
         let held = appendTriggerLocked(error, sessionId: sessionId)
+        // Set before `triggerLocked` saves the metadata, so the trigger and the mark reach disk together.
+        if held { sessions[sessionId]?.metadata.holdsDeliveredError = isAwaited }
         triggerLocked(sessionId)
         guard held, var session = sessions[sessionId] else { return false }
         guard session.metadataUnsaved else { return true }
@@ -290,6 +319,7 @@ final class ErrorOnlyBuffer {
         writer.truncate(eventsURL(of: sessionId), to: session.fileLength)
         session.eventCount -= 1
         session.byteCount -= line
+        session.metadata.holdsDeliveredError = nil
         sessions[sessionId] = session
         return false
     }
@@ -548,17 +578,24 @@ final class ErrorOnlyBuffer {
 
     // MARK: - Earlier launches
 
-    /// Adopts what earlier launches (or SDK instances) left: `keep` decides, from its metadata,
-    /// whether a leftover is kept; the rest is deleted, and so is an expired one, whatever `keep`
-    /// says — a buffer waiting on a crash that is never sent would otherwise stay forever. Of the
-    /// ones that had their error, the newest `maxLeftoverSessions` are kept and the older deleted;
-    /// one waiting on its crash is not counted. Returns the kept ones that already had their
+    /// Adopts what earlier launches (or SDK instances) left. One that had its error is kept to
+    /// send; one whose session has a crash still to report waits for that crash, its trigger; the
+    /// rest is deleted. `crashedSessionIds` nil means the crash records could not be read, so any
+    /// session may have a crash to come. An expired leftover is deleted whatever its crash — a
+    /// buffer waiting on a crash that is never sent would otherwise stay forever. Of the ones that
+    /// had their error and wait on no crash, the newest `maxLeftoverSessions` are kept and the older
+    /// deleted; one holding a delivered error's only copy is counted only against others like it,
+    /// as a stored ANR is against other ANRs. One whose crash is still to come is not counted: the
+    /// crash would arrive without what its session held, and there are no more of those than
+    /// stored crashes. Then, past `maxLeftoverBytes` together, whole sessions are deleted until the
+    /// rest fit (`keepWithinLeftoverBudgetLocked`). Returns the kept ones that already had their
     /// error, oldest first, to drain now.
-    func adoptLeftovers(keep: (Metadata) -> Bool) -> [String] {
+    func adoptLeftovers(crashedSessionIds: Set<String>?) -> [String] {
         lock.lock()
         defer { lock.unlock() }
         let files = (try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? []
         let now = clock.now()
+        let crashToCome = { (sessionId: String) in crashedSessionIds?.contains(sessionId) ?? true }
         var candidates: [Metadata] = []
         for url in files where url.lastPathComponent.hasSuffix(Self.metadataSuffix) {
             guard let data = try? Data(contentsOf: url) else { continue }
@@ -567,27 +604,37 @@ final class ErrorOnlyBuffer {
                 continue
             }
             guard metadata.owner != owner, sessions[metadata.sessionId] == nil else { continue }
+            let waitsForCrash = crashToCome(metadata.sessionId)
+            // A session that had its error and waits on its crash is kept even with nothing left to
+            // send: it is the mark that sends that crash with hasError. With no crash to come, one
+            // that sent everything is done with.
+            let hasWork = metadata.triggered
+                ? waitsForCrash || unsentBytesLocked(metadata) > 0
+                : waitsForCrash && FileManager.default.fileExists(atPath: eventsURL(of: metadata.sessionId).path)
             // An offset no file can have is a corrupt buffer.
-            guard Int(exactly: metadata.sentOffset) != nil, !metadata.isExpired(at: now), keep(metadata),
-                  FileManager.default.fileExists(atPath: eventsURL(of: metadata.sessionId).path) else {
+            guard Int(exactly: metadata.sentOffset) != nil, !metadata.isExpired(at: now), hasWork else {
                 deleteFilesLocked(metadata.sessionId)
                 continue
             }
             candidates.append(metadata)
         }
-        var triggeredKept = 0
-        var adopted: [Metadata] = []
+        var keptPerKind: [Bool: Int] = [:]
+        var withinCount: [Metadata] = []
         for metadata in candidates.sorted(by: { $0.createdAt > $1.createdAt }) {
-            if metadata.triggered {
-                triggeredKept += 1
-                guard triggeredKept <= Self.maxLeftoverSessions else {
+            if metadata.triggered && !crashToCome(metadata.sessionId) {
+                let holdsDeliveredError = metadata.holdsDeliveredError == true
+                keptPerKind[holdsDeliveredError, default: 0] += 1
+                guard keptPerKind[holdsDeliveredError, default: 0] <= Self.maxLeftoverSessions else {
                     Log.e("[ErrorOnlyBuffer] the held events of session \(metadata.sessionId) are past the \(Self.maxLeftoverSessions) sessions kept to send — deleted")
                     deleteFilesLocked(metadata.sessionId)
                     continue
                 }
             }
+            withinCount.append(metadata)
+        }
+        let adopted = keepWithinLeftoverBudgetLocked(withinCount, crashedSessionIds: crashedSessionIds)
+        for metadata in adopted {
             sessions[metadata.sessionId] = Session(metadata: metadata, saved: metadata)
-            adopted.append(metadata)
         }
         // Events files whose metadata is gone can never be attributed.
         for url in files where url.pathExtension == Self.eventsExtension {
@@ -597,6 +644,67 @@ final class ErrorOnlyBuffer {
             }
         }
         return adopted.filter(\.triggered).sorted { $0.createdAt < $1.createdAt }.map(\.sessionId)
+    }
+
+    /// Keeps `leftovers` within `maxLeftoverBytes` of what they still have to send, deleting whole
+    /// sessions, those whose loss costs least first and the oldest first within each. One with
+    /// nothing left to send is skipped: deleting it frees nothing. Returns what is kept, a session
+    /// that had its error and whose crash is still to come reduced to the mark that it had it.
+    private func keepWithinLeftoverBudgetLocked(_ leftovers: [Metadata], crashedSessionIds: Set<String>?) -> [Metadata] {
+        let sized = leftovers.map { (metadata: $0, bytes: unsentBytesLocked($0)) }
+        var total = sized.reduce(0) { $0 + $1.bytes }
+        guard total > maxLeftoverBytes else { return leftovers }
+        // Expired leftovers never get here: they were deleted on reading. With the crashed sessions
+        // unknown, an untriggered session goes first: it is sent only if a crash turns up for it,
+        // which seldom happens. Then a triggered session's events alone; then a session whose crash
+        // is known to be coming, which then arrives without what came before it; last, a delivered
+        // error's only copy, which nothing else would ever send. A triggered session is not ranked
+        // as crash-pending on a guess, or it would outlast an older triggered one whose events are
+        // as certain to be sent.
+        func cost(_ metadata: Metadata) -> Int {
+            if metadata.holdsDeliveredError == true { return 4 }
+            if crashedSessionIds?.contains(metadata.sessionId) == true { return 3 }
+            return metadata.triggered ? 2 : 1
+        }
+        let order = sized.sorted { (cost($0.metadata), $0.metadata.createdAt) < (cost($1.metadata), $1.metadata.createdAt) }
+        var deleted: Set<String> = []
+        var marks: [String: Metadata] = [:]
+        for leftover in order where total > maxLeftoverBytes && leftover.bytes > 0 {
+            let metadata = leftover.metadata
+            Log.e("[ErrorOnlyBuffer] the held events of session \(metadata.sessionId) are past the \(maxLeftoverBytes) bytes earlier launches may keep — deleted")
+            total -= leftover.bytes
+            guard metadata.triggered, crashedSessionIds?.contains(metadata.sessionId) ?? true else {
+                deleteFilesLocked(metadata.sessionId)
+                deleted.insert(metadata.sessionId)
+                continue
+            }
+            marks[metadata.sessionId] = reduceToTriggeredMarkLocked(metadata)
+        }
+        return leftovers.compactMap { deleted.contains($0.sessionId) ? nil : marks[$0.sessionId] ?? $0 }
+    }
+
+    /// Deletes the events of a session that had its error but keeps that mark, as a session that
+    /// sent everything keeps it: its crash, still to come, then goes with hasError even when
+    /// `beforeSend` lowered its severity. The mark is written first, so no moment has the events
+    /// gone and the mark not yet there; if it cannot be written, the earlier metadata, which also
+    /// records the trigger, stays.
+    private func reduceToTriggeredMarkLocked(_ metadata: Metadata) -> Metadata {
+        let mark = Metadata(sessionId: metadata.sessionId, owner: metadata.owner, createdAt: metadata.createdAt,
+                            triggered: true, sentOffset: 0, failedUploads: 0)
+        do {
+            try writeMetadataLocked(mark)
+        } catch {
+            Log.e("[ErrorOnlyBuffer] could not save that session \(metadata.sessionId) had its error (\(error)) — its earlier record is kept")
+        }
+        try? FileManager.default.removeItem(at: eventsURL(of: metadata.sessionId))
+        return mark
+    }
+
+    /// What the drain has yet to send: a mostly delivered file takes little of the budget.
+    private func unsentBytesLocked(_ metadata: Metadata) -> Int {
+        let attributes = try? FileManager.default.attributesOfItem(atPath: eventsURL(of: metadata.sessionId).path)
+        let fileBytes = (attributes?[.size] as? NSNumber)?.intValue ?? 0
+        return max(0, fileBytes - (Int(exactly: metadata.sentOffset) ?? fileBytes))
     }
 
     // MARK: - Files

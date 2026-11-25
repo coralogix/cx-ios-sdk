@@ -88,7 +88,8 @@ extension CoralogixExporter {
             errorOnlyBuffer.trigger(route.sessionId)
             return false
         }
-        guard errorOnlyBuffer.triggerHolding(data, sessionId: route.sessionId) else { return false }
+        let isAwaited = route.spanId.map(isAwaitingLiveDelivery) ?? false
+        guard errorOnlyBuffer.triggerHolding(data, sessionId: route.sessionId, isAwaited: isAwaited) else { return false }
         if let spanId = route.spanId { handOverLiveDelivery(of: spanId) }
         return true
     }
@@ -195,11 +196,10 @@ extension CoralogixExporter {
     /// Takes over what earlier launches left: a buffer that had its error is kept for
     /// `resumeErrorOnlyDrains`; one whose session has a stored crash waits for that crash, its
     /// trigger; the rest is deleted. `crashedSessionIds` nil means the crash records could not be
-    /// read yet, so nothing is deleted.
+    /// read yet: no session is deleted for having no crash to come, but the count and byte bounds
+    /// on what earlier launches keep still apply.
     func recoverErrorOnlyLeftovers(crashedSessionIds: Set<String>?) {
-        _ = errorOnlyBuffer.adoptLeftovers { metadata in
-            metadata.triggered || crashedSessionIds?.contains(metadata.sessionId) ?? true
-        }
+        _ = errorOnlyBuffer.adoptLeftovers(crashedSessionIds: crashedSessionIds)
     }
 
     /// Resumes drains a launch, background or offline spell cut short. Does nothing until the

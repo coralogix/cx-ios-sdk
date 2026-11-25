@@ -29,6 +29,7 @@ final class ErrorOnlyExportTests: XCTestCase {
         rum?.shutdown()
         rum = nil
         ErrorOnlyBuffer.testDirectory = nil
+        ErrorOnlyBuffer.testMaxLeftoverBytes = nil
         try? FileManager.default.removeItem(at: directory)
         super.tearDown()
     }
@@ -167,7 +168,9 @@ final class ErrorOnlyExportTests: XCTestCase {
 
         let sessionId = try XCTUnwrap(exporter.getSessionManager().currentSessionId)
         let nextLaunch = ErrorOnlyBuffer(maxRumEvents: 5_000, directory: directory)
-        XCTAssertEqual(nextLaunch.adoptLeftovers { $0.triggered }, [sessionId], "On disk, the session had its error.")
+        XCTAssertEqual(nextLaunch.adoptLeftovers(crashedSessionIds: []), [sessionId], "On disk, the session had its error.")
+        XCTAssertEqual(nextLaunch.metadata(of: sessionId)?.holdsDeliveredError, false,
+                       "Nobody awaited its delivery: deleted for the leftover budget as any session that had its error.")
         let chunk = try XCTUnwrap(nextLaunch.nextChunk(of: sessionId, maxEvents: 500, maxBytes: ErrorOnlyDrain.maxBytesPerRequest))
         XCTAssertEqual(chunk.events.map(cxRum).compactMap(message).last, "the-error", "And the error is kept with it.")
     }
@@ -191,7 +194,9 @@ final class ErrorOnlyExportTests: XCTestCase {
         XCTAssertEqual(answers.value, 1, "Its stored copy is told it needs no second send.")
         let sessionId = try XCTUnwrap(exporter.getSessionManager().currentSessionId)
         let nextLaunch = ErrorOnlyBuffer(maxRumEvents: 5_000, directory: directory)
-        XCTAssertEqual(nextLaunch.adoptLeftovers { $0.triggered }, [sessionId])
+        XCTAssertEqual(nextLaunch.adoptLeftovers(crashedSessionIds: []), [sessionId])
+        XCTAssertEqual(nextLaunch.metadata(of: sessionId)?.holdsDeliveredError, true,
+                       "Marked as the error's only copy, so the leftover budget deletes it last.")
         let chunk = try XCTUnwrap(nextLaunch.nextChunk(of: sessionId, maxEvents: 500, maxBytes: ErrorOnlyDrain.maxBytesPerRequest))
         XCTAssertEqual(chunk.events.map(cxRum).compactMap(message).suffix(2), ["held", "anr"],
                        "Kept on disk after the held event, for the retries and the next launch.")
@@ -637,6 +642,66 @@ final class ErrorOnlyExportTests: XCTestCase {
 
         XCTAssertNotNil(store.record(for: "hang-h"), "Precondition: the hang is kept, not sent.")
         XCTAssertNotNil(payload(uploader, message: "held-h"), "Its session's buffer, which had its error, drains.")
+    }
+
+    /// A session waiting on its crash whose held events were deleted for the leftover budget: the
+    /// crash is still its session's error, sent without them.
+    func testRecoveredCrash_ofASessionDeletedForTheLeftoverBudget_isStillSentWithHasError() throws {
+        ErrorOnlyBuffer.testMaxLeftoverBytes = 0
+        let (exporter, uploader) = try startWithCrashUploader()
+        try leaveHeldEvents(["held-a"], of: "a")
+        exporter.awaitStoredCrashes(["crash-a": "a"])
+        exporter.recoverErrorOnlyLeftovers(crashedSessionIds: ["a"])
+        XCTAssertNil(exporter.errorOnlyBuffer.metadata(of: "a"), "Precondition: its held events were deleted.")
+        XCTAssertFalse(try files().contains { $0.hasPrefix("a.") }, "Precondition: and their files.")
+
+        _ = exporter.export(spans: [makeCrashSpan(sessionId: "a", crashId: "crash-a")], explicitTimeout: nil)
+        exporter.waitForStoredCrashUploads()
+        exporter.releaseErrorOnlyDrains()
+        exporter.errorOnlyDrain.waitUntilSettled()
+
+        let crash = try XCTUnwrap(labelled(uploader, "the-crash"))
+        XCTAssertEqual(session(crash)[Keys.onlyWithErrorMode.rawValue] as? Bool, true)
+        XCTAssertEqual(session(crash)[Keys.hasError.rawValue] as? Bool, true)
+        XCTAssertEqual(exporter.crashUploadOutcome(id: "crash-a"), .delivered)
+        XCTAssertNil(labelled(uploader, "held-a"))
+    }
+
+    /// A session that had its error, deleted for the leftover budget while its crash is still to
+    /// come: the crash goes with hasError even though `beforeSend` lowered its severity.
+    func testRecoveredCrash_ofATriggeredSessionDeletedForTheLeftoverBudget_keepsHasError_whenBeforeSendDemotesIt() throws {
+        ErrorOnlyBuffer.testMaxLeftoverBytes = 0
+        let demoteCrashes: ([String: Any]) -> [String: Any]? = { cxRum in
+            guard (cxRum[Keys.errorContext.rawValue] as? [String: Any])?[Keys.isCrash.rawValue] as? Bool == true,
+                  var context = cxRum[Keys.eventContext.rawValue] as? [String: Any] else { return cxRum }
+            context[Keys.severity.rawValue] = CoralogixLogSeverity.info.rawValue
+            var edited = cxRum
+            edited[Keys.eventContext.rawValue] = context
+            return edited
+        }
+        let rum = CoralogixRum(options: makeErrorOnlyOptions(sampleRate: 0, alwaysTrack: true, beforeSend: demoteCrashes))
+        self.rum = rum
+        let exporter = try XCTUnwrap(rum.coralogixExporter)
+        let uploader = CrashResultUploader()
+        exporter.spanUploader = uploader
+        let earlier = ErrorOnlyBuffer(maxRumEvents: 5_000, directory: directory)
+        let held: [String: Any] = [Keys.text.rawValue: [Keys.cxRum.rawValue: [Keys.logContext.rawValue: [Keys.message.rawValue: "held-a"]]]]
+        earlier.hold(try JSONSerialization.data(withJSONObject: held), sessionId: "a")
+        earlier.trigger("a")
+        exporter.awaitStoredCrashes(["crash-a": "a"])
+        exporter.recoverErrorOnlyLeftovers(crashedSessionIds: ["a"])
+        XCTAssertFalse(try files().contains("a.jsonl"), "Precondition: its held events were deleted.")
+        XCTAssertTrue(exporter.errorOnlyBuffer.isTriggered("a"), "Precondition: the mark is kept.")
+
+        _ = exporter.export(spans: [makeCrashSpan(sessionId: "a", crashId: "crash-a")], explicitTimeout: nil)
+        exporter.waitForStoredCrashUploads()
+        exporter.releaseErrorOnlyDrains()
+        exporter.errorOnlyDrain.waitUntilSettled()
+
+        let crash = try XCTUnwrap(labelled(uploader, "the-crash"))
+        XCTAssertEqual(session(crash)[Keys.hasError.rawValue] as? Bool, true)
+        XCTAssertEqual(exporter.crashUploadOutcome(id: "crash-a"), .delivered)
+        XCTAssertNil(labelled(uploader, "held-a"))
     }
 
     func testLeftoverWithoutCrashOrError_isDeletedAtLaunch() throws {

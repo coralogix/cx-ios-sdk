@@ -261,7 +261,7 @@ final class ErrorOnlyBufferTests: XCTestCase {
         try JSONSerialization.data(withJSONObject: json).write(to: metaURL)
 
         let relaunch = makeBuffer()
-        XCTAssertEqual(relaunch.adoptLeftovers { _ in true }, [], "Not drained: it would trap converting the offset.")
+        XCTAssertEqual(relaunch.adoptLeftovers(crashedSessionIds: nil), [], "Not drained: it would trap converting the offset.")
         XCTAssertFalse(FileManager.default.fileExists(atPath: metaURL.path), "Deleted as corrupt.")
     }
 
@@ -269,7 +269,7 @@ final class ErrorOnlyBufferTests: XCTestCase {
         let earlier = makeBuffer()
         earlier.hold(event(0), sessionId: "crashed")
         let relaunch = makeBuffer()
-        _ = relaunch.adoptLeftovers { _ in true }
+        _ = relaunch.adoptLeftovers(crashedSessionIds: nil)
         relaunch.hold(event(1), sessionId: "own")
 
         relaunch.discardAllUntriggered()
@@ -286,11 +286,11 @@ final class ErrorOnlyBufferTests: XCTestCase {
         earlier.trigger("triggered")
 
         let dayBeforeTheLimit = makeBuffer(clock: ManualDeliveryClock(start: Date().addingTimeInterval(CrashDeliveryScheduler.maxAge - 86_400)))
-        _ = dayBeforeTheLimit.adoptLeftovers { _ in true }
+        _ = dayBeforeTheLimit.adoptLeftovers(crashedSessionIds: nil)
         XCTAssertNotNil(dayBeforeTheLimit.metadata(of: "waiting"), "Precondition: within 7 days it is kept for its crash.")
 
         let pastTheLimit = makeBuffer(clock: ManualDeliveryClock(start: Date().addingTimeInterval(CrashDeliveryScheduler.maxAge + 60)))
-        XCTAssertEqual(pastTheLimit.adoptLeftovers { _ in true }, [], "Past 7 days nothing is drained.")
+        XCTAssertEqual(pastTheLimit.adoptLeftovers(crashedSessionIds: nil), [], "Past 7 days nothing is drained.")
         XCTAssertNil(pastTheLimit.metadata(of: "waiting"))
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: directory.path), [],
                        "Both sessions' files are deleted.")
@@ -309,12 +309,23 @@ final class ErrorOnlyBufferTests: XCTestCase {
         earlier.hold(event(0), sessionId: "crashed")
 
         let relaunch = makeBuffer()
-        XCTAssertEqual(relaunch.adoptLeftovers { $0.triggered || $0.sessionId == "crashed" }, Array(ids.dropFirst()),
+        XCTAssertEqual(relaunch.adoptLeftovers(crashedSessionIds: ["crashed"]), Array(ids.dropFirst()),
                        "The newest 10, oldest first.")
         XCTAssertNil(relaunch.metadata(of: ids[0]))
         XCTAssertFalse(FileManager.default.fileExists(atPath: directory.appendingPathComponent("\(ids[0]).jsonl").path),
                        "The oldest one's files are deleted.")
         XCTAssertNotNil(relaunch.metadata(of: "crashed"), "Waiting on its crash: not counted, kept.")
+    }
+
+    /// A session holding a delivered error's only copy is counted only against others like it.
+    func testLeftovers_aSessionHoldingADeliveredError_isNotCountedAgainstTheOthers() {
+        leaveDeliveredErrorLeftover("anr")
+        let ids = (0..<ErrorOnlyBuffer.maxLeftoverSessions).map { "triggered-\($0)" }
+        ids.forEach { leaveLeftover($0, triggered: true) }
+
+        let relaunch = makeBuffer()
+        XCTAssertEqual(relaunch.adoptLeftovers(crashedSessionIds: []), ["anr"] + ids,
+                       "The oldest, yet kept beside the newest 10 that had their error.")
     }
 
     func testLeftovers_triggeredDrain_crashedWait_restDeleted() {
@@ -323,7 +334,7 @@ final class ErrorOnlyBufferTests: XCTestCase {
         earlier.trigger("triggered")
 
         let relaunch = makeBuffer()
-        let toDrain = relaunch.adoptLeftovers { $0.triggered || ["crashed"].contains($0.sessionId) }
+        let toDrain = relaunch.adoptLeftovers(crashedSessionIds: ["crashed"])
         XCTAssertEqual(toDrain, ["triggered"])
         XCTAssertTrue(relaunch.isTriggered("triggered"), "An adopted buffer that had its error is known as triggered.")
         XCTAssertFalse(relaunch.hold(event(1), sessionId: "triggered"), "Nothing more is held for it.")
@@ -331,6 +342,171 @@ final class ErrorOnlyBufferTests: XCTestCase {
         XCTAssertNil(relaunch.metadata(of: "plain"))
         XCTAssertFalse(FileManager.default.fileExists(atPath: directory.appendingPathComponent("plain.jsonl").path),
                        "A session that ended without an error leaves nothing behind.")
+    }
+
+    // MARK: - Leftover byte budget
+
+    /// Each leftover below holds one event of about 1 KB, so a budget of 2_500 fits two of them.
+    func testLeftoverBudget_underIt_nothingIsDeleted() {
+        ["t1", "t2", "t3"].forEach { leaveLeftover($0, triggered: true) }
+
+        let relaunch = makeBuffer(maxLeftoverBytes: 10_000)
+        XCTAssertEqual(relaunch.adoptLeftovers(crashedSessionIds: []), ["t1", "t2", "t3"])
+        XCTAssertEqual(leftoverFiles(), ["t1", "t2", "t3"])
+    }
+
+    func testLeftoverBudget_overIt_theOldestThatHadItsErrorGoesFirst() {
+        ["t1", "t2", "t3"].forEach { leaveLeftover($0, triggered: true) }
+
+        let relaunch = makeBuffer(maxLeftoverBytes: 2_500)
+        XCTAssertEqual(relaunch.adoptLeftovers(crashedSessionIds: []), ["t2", "t3"])
+        XCTAssertNil(relaunch.metadata(of: "t1"))
+        XCTAssertEqual(leftoverFiles(), ["t2", "t3"], "The oldest one's files are deleted.")
+    }
+
+    /// Older than the session that had its error, a session waiting on its crash still goes only
+    /// after it; then the oldest of those waiting goes first.
+    func testLeftoverBudget_sessionsWaitingOnTheirCrash_goAfterThoseThatHadTheirError() {
+        leaveLeftover("crashed-1", triggered: false)
+        leaveLeftover("crashed-2", triggered: false)
+        leaveLeftover("triggered", triggered: true)
+
+        let relaunch = makeBuffer(maxLeftoverBytes: 1_500)
+        XCTAssertEqual(relaunch.adoptLeftovers(crashedSessionIds: ["crashed-1", "crashed-2"]), [], "The one that had its error is deleted.")
+        XCTAssertNil(relaunch.metadata(of: "crashed-1"), "Then the oldest one waiting on its crash.")
+        XCTAssertNotNil(relaunch.metadata(of: "crashed-2"))
+        XCTAssertEqual(leftoverFiles(), ["crashed-2"])
+    }
+
+    /// Older than all of them, a session holding a delivered error's only copy goes last: past
+    /// those that had their error, past those waiting on their crash.
+    func testLeftoverBudget_aSessionHoldingADeliveredError_goesLast() throws {
+        leaveDeliveredErrorLeftover("anr")
+        leaveLeftover("triggered", triggered: true)
+        leaveLeftover("crashed", triggered: false)
+
+        let relaunch = makeBuffer(maxLeftoverBytes: 1_500)
+        XCTAssertEqual(relaunch.adoptLeftovers(crashedSessionIds: ["crashed"]), ["anr"])
+        XCTAssertNil(relaunch.metadata(of: "triggered"))
+        XCTAssertNil(relaunch.metadata(of: "crashed"))
+        XCTAssertEqual(leftoverFiles(), ["anr"])
+        let chunk = try XCTUnwrap(relaunch.nextChunk(of: "anr", maxEvents: 500, maxBytes: ErrorOnlyDrain.maxBytesPerRequest))
+        XCTAssertEqual(chunk.events.map(index), [0, 1], "It still sends its events and the error.")
+    }
+
+    func testLeftoverBudget_neverCountsNorDeletesTheLiveSession() throws {
+        let relaunch = makeBuffer(maxLeftoverBytes: 2_500)
+        relaunch.hold(event(0, padding: 900_000), sessionId: "live")
+        ["t1", "t2"].forEach { leaveLeftover($0, triggered: true) }
+
+        XCTAssertEqual(relaunch.adoptLeftovers(crashedSessionIds: []), ["t1", "t2"],
+                       "Over 900 KB live, yet both leftovers fit: the live session is not counted.")
+        relaunch.trigger("live")
+        let chunk = try XCTUnwrap(relaunch.nextChunk(of: "live", maxEvents: 500, maxBytes: ErrorOnlyDrain.maxBytesPerRequest))
+        XCTAssertEqual(chunk.events.map(index), [0], "The live session keeps what it held.")
+    }
+
+    func testLeftoverBudget_countsOnlyWhatIsStillToSend() throws {
+        let earlier = makeBuffer()
+        (0..<3).forEach { earlier.hold(event($0, padding: 1_000), sessionId: "mostly-sent") }
+        earlier.trigger("mostly-sent")
+        earlier.commit(try XCTUnwrap(earlier.nextChunk(of: "mostly-sent", maxEvents: 2,
+                                                       maxBytes: ErrorOnlyDrain.maxBytesPerRequest)))
+        Thread.sleep(forTimeInterval: 0.002)  // createdAt orders them
+        leaveLeftover("unsent", triggered: true)
+
+        let relaunch = makeBuffer(maxLeftoverBytes: 2_500)
+        XCTAssertEqual(relaunch.adoptLeftovers(crashedSessionIds: []), ["mostly-sent", "unsent"],
+                       "About 4 KB on disk, but only about 2 KB still to send: both fit.")
+    }
+
+    /// With the crashed sessions unknown, an untriggered session is sent only if a crash turns up
+    /// for it: it goes before an older one that had its error.
+    func testLeftoverBudget_crashedSessionsUnknown_anUntriggeredSessionGoesBeforeAnOlderTriggeredOne() {
+        leaveLeftover("triggered", triggered: true)
+        leaveLeftover("untriggered", triggered: false)
+
+        let relaunch = makeBuffer(maxLeftoverBytes: 1_500)
+        XCTAssertEqual(relaunch.adoptLeftovers(crashedSessionIds: nil), ["triggered"])
+        XCTAssertNil(relaunch.metadata(of: "untriggered"))
+        XCTAssertEqual(leftoverFiles(), ["triggered"])
+    }
+
+    func testLeftoverBudget_aTriggeredSessionWaitingOnItsCrash_outlastsANewerTriggeredOne() {
+        leaveLeftover("crashed", triggered: true)
+        leaveLeftover("ordinary", triggered: true)
+
+        let relaunch = makeBuffer(maxLeftoverBytes: 1_500)
+        XCTAssertEqual(relaunch.adoptLeftovers(crashedSessionIds: ["crashed"]), ["crashed"])
+        XCTAssertNil(relaunch.metadata(of: "ordinary"))
+        XCTAssertEqual(leftoverFiles(), ["crashed"])
+    }
+
+    func testLeftoverBudget_anUntriggeredSessionWaitingOnItsCrash_outlastsANewerTriggeredOne() {
+        leaveLeftover("crashed", triggered: false)
+        leaveLeftover("ordinary", triggered: true)
+
+        let relaunch = makeBuffer(maxLeftoverBytes: 1_500)
+        XCTAssertEqual(relaunch.adoptLeftovers(crashedSessionIds: ["crashed"]), [])
+        XCTAssertNotNil(relaunch.metadata(of: "crashed"))
+        XCTAssertNil(relaunch.metadata(of: "ordinary"))
+        XCTAssertEqual(leftoverFiles(), ["crashed"])
+    }
+
+    /// Deleting a session with nothing left to send frees nothing: the next one goes instead.
+    func testLeftoverBudget_aSessionWithNothingLeftToSend_isNotDeletedForIt() throws {
+        leaveLeftover("sent", triggered: false)
+        try markFullySent("sent")
+        leaveLeftover("u1", triggered: false)
+        leaveLeftover("u2", triggered: false)
+
+        let relaunch = makeBuffer(maxLeftoverBytes: 1_500)
+        XCTAssertEqual(relaunch.adoptLeftovers(crashedSessionIds: nil), [])
+        XCTAssertNotNil(relaunch.metadata(of: "sent"), "The oldest, but deleting it frees nothing.")
+        XCTAssertNil(relaunch.metadata(of: "u1"))
+        XCTAssertEqual(leftoverFiles(), ["sent", "u2"])
+    }
+
+    /// Its crash, still to come, must still go with hasError: the session keeps the mark that it
+    /// had its error until a launch finds no crash to come for it.
+    func testLeftoverBudget_aTriggeredSessionWaitingOnItsCrash_keepsItsMarkWhenDeleted() throws {
+        leaveLeftover("crashed", triggered: true)
+
+        let relaunch = makeBuffer(maxLeftoverBytes: 500)
+        _ = relaunch.adoptLeftovers(crashedSessionIds: ["crashed"])
+        XCTAssertEqual(leftoverFiles(), [], "Its held events are deleted.")
+        XCTAssertTrue(try savedMetadata("crashed").triggered, "The mark is on disk.")
+        XCTAssertTrue(relaunch.isTriggered("crashed"))
+
+        let crashStillToCome = makeBuffer(maxLeftoverBytes: 500)
+        _ = crashStillToCome.adoptLeftovers(crashedSessionIds: ["crashed"])
+        XCTAssertTrue(crashStillToCome.isTriggered("crashed"), "The mark outlives a relaunch while its crash is to come.")
+
+        let crashSent = makeBuffer(maxLeftoverBytes: 500)
+        _ = crashSent.adoptLeftovers(crashedSessionIds: [])
+        XCTAssertNil(crashSent.metadata(of: "crashed"))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: directory.appendingPathComponent("crashed.meta.json").path),
+                       "With no crash to come, the mark is deleted.")
+    }
+
+    func testLeftovers_pastTheCount_aTriggeredSessionWaitingOnItsCrash_isNotCounted() {
+        leaveLeftover("crashed", triggered: true)
+        let ids = (0..<ErrorOnlyBuffer.maxLeftoverSessions).map { "triggered-\($0)" }
+        ids.forEach { leaveLeftover($0, triggered: true) }
+
+        let relaunch = makeBuffer()
+        XCTAssertEqual(relaunch.adoptLeftovers(crashedSessionIds: ["crashed"]), ["crashed"] + ids,
+                       "The oldest, yet kept beside the newest 10 that had their error.")
+    }
+
+    func testLeftovers_aTriggeredSessionWithNothingLeftToSendAndNoCrashToCome_isDeletedOnRead() throws {
+        leaveLeftover("sent", triggered: true)
+        try markFullySent("sent")
+
+        let relaunch = makeBuffer()
+        XCTAssertEqual(relaunch.adoptLeftovers(crashedSessionIds: []), [])
+        XCTAssertNil(relaunch.metadata(of: "sent"))
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: directory.path), [])
     }
 
     // MARK: - Drain
@@ -424,7 +600,7 @@ final class ErrorOnlyBufferTests: XCTestCase {
 
         // The process is killed; the next launch adopts the buffer and sends only what is left.
         let relaunch = makeBuffer()
-        let toDrain = relaunch.adoptLeftovers { $0.triggered }
+        let toDrain = relaunch.adoptLeftovers(crashedSessionIds: [])
         let nextUploader = ScriptedUploads()
         let nextDrain = makeDrain(relaunch, clock: clock, uploader: nextUploader)
         nextDrain.start(toDrain)
@@ -534,7 +710,7 @@ final class ErrorOnlyBufferTests: XCTestCase {
 
         XCTAssertEqual(uploader.requests.map { $0.map(index) }, [[0, 1, 2]])
         XCTAssertNil(buffer.metadata(of: "s"), "Everything was sent: the session is done with.")
-        XCTAssertEqual(makeBuffer().adoptLeftovers { $0.triggered }, [],
+        XCTAssertEqual(makeBuffer().adoptLeftovers(crashedSessionIds: []), [],
                        "No file is left for a restart to send a second time.")
     }
 
@@ -552,7 +728,7 @@ final class ErrorOnlyBufferTests: XCTestCase {
         drain.waitUntilSettled()
 
         XCTAssertEqual(uploader.requests.map { $0.map(index) }, [[0, 1, 2]])
-        XCTAssertEqual(makeBuffer().adoptLeftovers { $0.triggered }, [],
+        XCTAssertEqual(makeBuffer().adoptLeftovers(crashedSessionIds: []), [],
                        "The drain still waits out its gap: a restart now must find nothing to send again.")
     }
 
@@ -570,7 +746,7 @@ final class ErrorOnlyBufferTests: XCTestCase {
         let drain = makeDrain(buffer, clock: clock, uploader: uploader)
         drain.start(["s"])
         drain.waitUntilSettled()
-        XCTAssertEqual(makeBuffer().adoptLeftovers { $0.triggered }, [],
+        XCTAssertEqual(makeBuffer().adoptLeftovers(crashedSessionIds: []), [],
                        "The sent file is gone before the memory request: a restart sends it no second time.")
 
         clock.advance(to: clock.now().addingTimeInterval(1))
@@ -616,7 +792,7 @@ final class ErrorOnlyBufferTests: XCTestCase {
         writer.failing = false
         XCTAssertTrue(buffer.maySend(of: "s"))
 
-        XCTAssertEqual(makeBuffer().adoptLeftovers { $0.triggered }, ["s"],
+        XCTAssertEqual(makeBuffer().adoptLeftovers(crashedSessionIds: []), ["s"],
                        "After a restart the session is still known to have had its error.")
     }
 
@@ -691,8 +867,44 @@ final class ErrorOnlyBufferTests: XCTestCase {
     // MARK: - Helpers
 
     private func makeBuffer(maxRumEvents: Int = 5_000, writer: ErrorOnlyFileWriting = PosixFileWriter(),
-                            clock: DeliveryClock = SystemDeliveryClock()) -> ErrorOnlyBuffer {
-        ErrorOnlyBuffer(maxRumEvents: maxRumEvents, directory: directory, writer: writer, clock: clock)
+                            clock: DeliveryClock = SystemDeliveryClock(),
+                            maxLeftoverBytes: Int = ErrorOnlyBuffer.maxLeftoverBytes) -> ErrorOnlyBuffer {
+        ErrorOnlyBuffer(maxRumEvents: maxRumEvents, directory: directory, writer: writer, clock: clock,
+                        maxLeftoverBytes: maxLeftoverBytes)
+    }
+
+    /// What an earlier launch left for `sessionId`: one event of about 1 KB.
+    private func leaveLeftover(_ sessionId: String, triggered: Bool) {
+        let earlier = makeBuffer()
+        earlier.hold(event(0, padding: 1_000), sessionId: sessionId)
+        if triggered { earlier.trigger(sessionId) }
+        Thread.sleep(forTimeInterval: 0.002)  // createdAt orders them
+    }
+
+    /// What an earlier launch left for `sessionId`: one event of about 1 KB, then an error whose
+    /// waiter was answered as delivered once held.
+    private func leaveDeliveredErrorLeftover(_ sessionId: String) {
+        let earlier = makeBuffer()
+        earlier.hold(event(0, padding: 1_000), sessionId: sessionId)
+        XCTAssertTrue(earlier.triggerHolding(event(1), sessionId: sessionId, isAwaited: true))
+        XCTAssertEqual(try savedMetadata(sessionId).holdsDeliveredError, true, "Precondition: recorded on disk.")
+        Thread.sleep(forTimeInterval: 0.002)  // createdAt orders them
+    }
+
+    /// Records everything in `sessionId`'s events file as already sent.
+    private func markFullySent(_ sessionId: String) throws {
+        let events = directory.appendingPathComponent("\(sessionId).jsonl")
+        let size = try XCTUnwrap(FileManager.default.attributesOfItem(atPath: events.path)[.size] as? NSNumber)
+        let metaURL = directory.appendingPathComponent("\(sessionId).meta.json")
+        var json = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: metaURL)) as? [String: Any])
+        json["sentOffset"] = size.uint64Value
+        try JSONSerialization.data(withJSONObject: json).write(to: metaURL)
+    }
+
+    /// The sessions with an events file on disk, sorted.
+    private func leftoverFiles() -> [String] {
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? []
+        return names.filter { $0.hasSuffix(".jsonl") }.map { String($0.dropLast(".jsonl".count)) }.sorted()
     }
 
     private func makeDrain(_ buffer: ErrorOnlyBuffer, clock: ManualDeliveryClock, uploader: ScriptedUploads) -> ErrorOnlyDrain {
