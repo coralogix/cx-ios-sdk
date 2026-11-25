@@ -40,6 +40,14 @@
 //         retires the bus and silences the live instance).
 //     No forwarding to the live instance.
 //  4. Unchanged: `shutdown()` on the live instance, then a new init → a fully live SDK with the new options.
+//  5. S1 (round 2, supersedes "shutdown is not serialized" in item 2): init and `shutdown()` are serialised like
+//     Android's `@Synchronized` initialize/shutdown. Sanctioned: ONE new `private static let` lock in
+//     `CoralogixRum.swift` (NSRecursiveLock — Android's `synchronized` is re-entrant), taken first and held across
+//     the WHOLE `init` body (inert return included) and the WHOLE `shutdown()` (its bounded 5 s wait included).
+//     Never taken by `getConfig()`; `liveInstanceLock`, `initClaimed` and the claim stay as they are. Whoever takes
+//     the lock first runs first: a shutdown racing an init waits for it and the SDK ends OFF; an init racing a
+//     shutdown runs after it and ends LIVE with its own options. Never the zombie: a non-inert instance whose
+//     `isInitialized` is false because a shutdown that started before it finished after it.
 //
 //  No new symbol: every test compiles today; all but those marked GUARD fail by assertion (reason on each).
 //
@@ -436,6 +444,208 @@ final class SecondInitIgnoredTests: XCTestCase {
         }
         return condition()
     }
+}
+
+// MARK: - S1: init and shutdown serialised (contract item 5)
+
+extension SecondInitIgnoredTests {
+
+    /// RED-now, deterministic: the shutdown is held at a point it reaches with `liveInstance` already cleared and the
+    /// process-wide flag still on (the registry teardown ending a test-registered global span). Today the init passes
+    /// the check in that gap, runs its whole startup, then the shutdown switches it off: the zombie. After the change
+    /// the init waits for the shutdown and ends LIVE with its own options.
+    func testInitDuringShutdown_waitsForIt_andEndsLiveWithItsOptions() throws {
+        for round in 0..<3 {
+            let old = start(Self.options(application: "Old-\(round)", swizzling: false))
+            let gate = SpanEndGate()
+            CoralogixCustomGlobalSpanRegistry.shared.registerGlobalSpan(gate.span, ignoredInstruments: [])
+            let shutdownDone = Flag()
+            DispatchQueue.global(qos: .userInitiated).async { old.shutdown(); shutdownDone.set() }
+            XCTAssertTrue(waitUntil { gate.entered.isSet }, "fixture round \(round): the shutdown reaches the registry teardown")
+
+            let box = RumBox()
+            let initDone = Flag()
+            DispatchQueue.global(qos: .userInitiated).async {
+                box.rum = CoralogixRum(options: Self.options(application: "New-\(round)", key: "key-\(round)", swizzling: false))
+                initDone.set()
+            }
+            let initFinishedMidShutdown = waitUntil(timeout: 1) { initDone.isSet }
+            gate.open()
+            XCTAssertTrue(waitUntil(timeout: 10) { initDone.isSet && shutdownDone.isSet }, "round \(round): both finish")
+            let new = try XCTUnwrap(box.rum)
+            rums.append(new)
+
+            XCTAssertFalse(initFinishedMidShutdown, "round \(round): the init must wait for the shutdown in progress")
+            XCTAssertTrue(new.isInitialized,
+                          "round \(round): zombie — non-inert (exporter: \(new.coralogixExporter != nil)) but switched off")
+            XCTAssertTrue(CoralogixRum.liveInstance === new, "round \(round)")
+            XCTAssertEqual(CoralogixRum.getConfig()?.application, "New-\(round)", "round \(round)")
+            XCTAssertEqual(CoralogixRum.getConfig()?.publicKey, "key-\(round)", "round \(round)")
+            new.shutdown()
+            CoralogixRum.isInitialized = false // a failed round must not leave the next one live
+        }
+    }
+
+    /// GUARD today (the free race rarely lands in the gap; the deterministic RED is the test above) — many rounds of
+    /// an init and a shutdown of the live instance released together, each on its own queue. The end state is one of
+    /// the two the order allows, never the zombie.
+    func testShutdownRacingInit_endsInOneOfTheTwoDefinedStates() {
+        var counts = (live: 0, off: 0)
+        for round in 0..<30 {
+            let old = start(Self.options(application: "Old-\(round)", swizzling: false))
+            let gate = DispatchSemaphore(value: 0)
+            let box = RumBox()
+            let done = expectation(description: "race \(round)")
+            done.expectedFulfillmentCount = 2
+            DispatchQueue.global(qos: .userInitiated).async {
+                gate.wait()
+                box.rum = CoralogixRum(options: Self.options(application: "New-\(round)", swizzling: false))
+                done.fulfill()
+            }
+            DispatchQueue.global(qos: .userInitiated).async {
+                gate.wait()
+                old.shutdown()
+                done.fulfill()
+            }
+            gate.signal(); gate.signal()
+            wait(for: [done], timeout: 10)
+            guard let new = box.rum else { XCTFail("round \(round): no instance"); continue }
+            rums.append(new)
+
+            // Shutdown first: the init runs after it and is live with its own options.
+            let live = new.isInitialized && CoralogixRum.liveInstance === new
+                && CoralogixRum.getConfig()?.application == "New-\(round)"
+            // Init first: it is ignored (inert), then the shutdown turns the SDK off.
+            let off = !new.isInitialized && new.coralogixExporter == nil && new.sessionManager == nil
+                && !CoralogixRum.isInitialized && CoralogixRum.liveInstance == nil && CoralogixRum.getConfig() == nil
+            if live { counts.live += 1 } else if off { counts.off += 1 }
+            XCTAssertTrue(live || off, "round \(round): undefined end state — new.isInitialized \(new.isInitialized), "
+                          + "inert \(new.coralogixExporter == nil), global \(CoralogixRum.isInitialized), "
+                          + "live is new \(CoralogixRum.liveInstance === new), config \(String(describing: CoralogixRum.getConfig()?.application))")
+            new.shutdown()
+            CoralogixRum.isInitialized = false
+        }
+        print("[CX-71257 S1] free race end states: live \(counts.live), off \(counts.off)")
+    }
+
+    /// GUARD (passes now). Through the public API a shutdown cannot overlap its own instance's init (the host has the
+    /// reference only when init returns) and any other instance's shutdown is a no-op (inert or already shut down) —
+    /// the overlapping case is the one above. The closest reachable case: no instance live, a thread inits A, another
+    /// shuts A down the moment `liveInstance` names it (mid-startup: after `attachBus`, before init returns). The SDK
+    /// ends OFF and, after the change, the shutdown returns only once the init has (it waits for it).
+    func testShutdownOfAnInFlightFirstInit_endsOff() {
+        for round in 0..<20 {
+            CoralogixRum.isInitialized = false
+            let box = RumBox()
+            let initDone = Flag()
+            let initReturnedFirst = Flag()
+            let done = expectation(description: "in-flight \(round)")
+            done.expectedFulfillmentCount = 2
+            DispatchQueue.global(qos: .userInitiated).async {
+                box.rum = CoralogixRum(options: Self.options(application: "A-\(round)", swizzling: false))
+                initDone.set()
+                done.fulfill()
+            }
+            DispatchQueue.global(qos: .userInitiated).async {
+                let deadline = Date().addingTimeInterval(10)
+                var target: CoralogixRum?
+                while target == nil && Date() < deadline {
+                    CoralogixRum.liveInstanceLock.lock()
+                    target = CoralogixRum.liveInstance
+                    CoralogixRum.liveInstanceLock.unlock()
+                }
+                target?.shutdown()
+                if initDone.isSet { initReturnedFirst.set() }
+                done.fulfill()
+            }
+            wait(for: [done], timeout: 15)
+            guard let a = box.rum else { XCTFail("round \(round): no instance"); continue }
+            rums.append(a)
+            XCTAssertFalse(a.isInitialized, "round \(round)")
+            XCTAssertFalse(CoralogixRum.isInitialized, "round \(round)")
+            XCTAssertNil(CoralogixRum.liveInstance, "round \(round)")
+            XCTAssertNil(CoralogixRum.getConfig(), "round \(round)")
+            XCTAssertTrue(initReturnedFirst.isSet, "round \(round): the shutdown returned before the init it raced")
+        }
+    }
+
+    /// GUARD (no deadlock): with swizzling on (an off-main init hops network swizzling to main and waits up to 0.5 s),
+    /// a main-thread init racing a background shutdown, then a background init racing a main-thread shutdown. Each
+    /// round finishes within 10 s; the main thread is never blocked by the test (expectations only). Stalls allowed.
+    func testMainAndBackgroundInitShutdownRaces_neverDeadlock() {
+        var worst: TimeInterval = 0
+        for round in 0..<4 {
+            // Main init, background shutdown.
+            var old = start(Self.options(application: "OldA-\(round)"))
+            var gate = DispatchSemaphore(value: 0)
+            var done = expectation(description: "background shutdown \(round)")
+            DispatchQueue.global(qos: .userInitiated).async { [old, gate, done] in gate.wait(); old.shutdown(); done.fulfill() }
+            var started = Date()
+            gate.signal()
+            start(Self.options(application: "MainInit-\(round)"))
+            wait(for: [done], timeout: 10)
+            var elapsed = Date().timeIntervalSince(started)
+            worst = max(worst, elapsed)
+            XCTAssertLessThan(elapsed, 10, "round \(round): main init / background shutdown")
+            rums.reversed().forEach { $0.shutdown() }
+            CoralogixRum.isInitialized = false
+
+            // Background init, main shutdown.
+            old = start(Self.options(application: "OldB-\(round)"))
+            gate = DispatchSemaphore(value: 0)
+            done = expectation(description: "background init \(round)")
+            let box = RumBox()
+            DispatchQueue.global(qos: .userInitiated).async { [gate, done] in
+                gate.wait()
+                box.rum = CoralogixRum(options: Self.options(application: "BackgroundInit-\(round)"))
+                done.fulfill()
+            }
+            started = Date()
+            gate.signal()
+            old.shutdown()
+            wait(for: [done], timeout: 10)
+            elapsed = Date().timeIntervalSince(started)
+            worst = max(worst, elapsed)
+            XCTAssertLessThan(elapsed, 10, "round \(round): background init / main shutdown")
+            if let rum = box.rum { rums.append(rum) }
+            rums.reversed().forEach { $0.shutdown() }
+            CoralogixRum.isInitialized = false
+        }
+        print("[CX-71257 S1] worst init/shutdown race wait: \(String(format: "%.3f", worst)) s")
+    }
+}
+
+/// A global span whose end blocks the thread ending it (the registry teardown in `shutdown()`) until `open()`.
+private final class SpanEndGate: SpanProcessor, @unchecked Sendable {
+    let entered = Flag()
+    private let released = DispatchSemaphore(value: 0)
+    private(set) var span: (any Span)!
+    private let provider = TracerProviderSdk()
+
+    init() {
+        provider.addSpanProcessor(self)
+        span = provider.get(instrumentationName: "cx-71257-gate").spanBuilder(spanName: "cx-71257-gate").startSpan()
+    }
+
+    func open() { released.signal() }
+
+    var isStartRequired: Bool { false }
+    var isEndRequired: Bool { true }
+    func onStart(parentContext: SpanContext?, span: any ReadableSpan) {}
+    func onEnd(span: any ReadableSpan) {
+        guard span.name == "cx-71257-gate" else { return }
+        entered.set()
+        _ = released.wait(timeout: .now() + 10) // bounded, so a failed round cannot hang the suite
+    }
+    func shutdown(explicitTimeout: TimeInterval?) {}
+    func forceFlush(timeout: TimeInterval?) {}
+}
+
+private final class Flag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = false
+    func set() { lock.lock(); value = true; lock.unlock() }
+    var isSet: Bool { lock.lock(); defer { lock.unlock() }; return value }
 }
 
 private final class RumBox: @unchecked Sendable {
