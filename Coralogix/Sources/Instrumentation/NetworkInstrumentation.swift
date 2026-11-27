@@ -187,9 +187,22 @@ extension CoralogixRum {
     }
     
     /// Static version for use in swizzled closures that persist across SDK reinitializations (CX-37986).
-    private static func spanCustomizationStatic(request: URLRequest, spanBuilder: SpanBuilder) {
+    internal static func spanCustomizationStatic(request: URLRequest, spanBuilder: SpanBuilder) {
         spanBuilder.setAttribute(key: Keys.eventType.rawValue, value: CoralogixEventType.networkRequest.rawValue)
         spanBuilder.setAttribute(key: Keys.source.rawValue, value: EventSource.fetch.rawValue)
+
+        // Freeze the user at request-start: the live one, since setUserContext does not update
+        // currentNetworkOptions, and the one that sent the request, even if it changes before the response.
+        // Without a live instance, keep the user from initialization. A cleared user stays cleared.
+        let userContext: UserContext?
+        if let instance = getCurrentInstance() {
+            userContext = instance.options?.userContext
+        } else {
+            userContext = getCurrentNetworkOptions()?.userContext
+        }
+        spanBuilder.setAttribute(key: Keys.userId.rawValue, value: userContext?.userId ?? "")
+        spanBuilder.setAttribute(key: Keys.userName.rawValue, value: userContext?.userName ?? "")
+        spanBuilder.setAttribute(key: Keys.userEmail.rawValue, value: userContext?.userEmail ?? "")
 
         // Network spans must share the same session as the rest of the SDK's events
         // (CX-37986). `sessionSpanAttributes()` routes through `getSessionMetadata()`
@@ -225,11 +238,6 @@ extension CoralogixRum {
             return
         }
         
-        let userContext = options.userContext
-
-        span.setAttribute(key: Keys.userId.rawValue, value: userContext?.userId ?? "")
-        span.setAttribute(key: Keys.userName.rawValue, value: userContext?.userName ?? "")
-        span.setAttribute(key: Keys.userEmail.rawValue, value: userContext?.userEmail ?? "")
         span.setAttribute(key: Keys.environment.rawValue, value: options.environment)
 
         // Network capture: allowlisted request/response headers when a rule matches (CX-33233)

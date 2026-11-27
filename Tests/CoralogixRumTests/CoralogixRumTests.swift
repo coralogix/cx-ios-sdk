@@ -91,6 +91,47 @@ final class CoralogixRumTests: XCTestCase {
         }
     }
     
+    func testSetUserContext_isUsedForNetworkSpans() throws {
+        var initOptions = try XCTUnwrap(options)
+        initOptions.userContext = UserContext(userId: "initial", userName: "", userEmail: "", userMetadata: [:])
+        let coralogixRum = CoralogixRum(options: initOptions)
+        XCTAssertTrue(CoralogixRum.getCurrentInstance() === coralogixRum)
+        let configuration = URLSessionInstrumentationConfiguration(
+            spanCustomization: CoralogixRum.spanCustomizationStatic,
+            shouldInjectTracingHeaders: { _ in false },
+            tracer: TracerProviderSdk().get(instrumentationName: "CoralogixRumTests")
+        )
+        let instrumentation = URLSessionInstrumentation(configuration: configuration)
+        let request = URLRequest(url: URL(string: "https://api.example.com/users")!)
+
+        func startRequest() -> String {
+            let taskId = UUID().uuidString
+            _ = URLSessionLogger.processAndLogRequest(request, sessionTaskId: taskId,
+                                                      instrumentation: instrumentation, shouldInjectHeaders: false)
+            return taskId
+        }
+        func userFields(ofRequest taskId: String) throws -> [String?] {
+            let span = URLSessionLogger.runningSpansQueue.sync { URLSessionLogger.runningSpans.removeValue(forKey: taskId) }
+            let attributes = try XCTUnwrap(span as? any ReadableSpan).toSpanData().attributes
+            return [Keys.userId, Keys.userName, Keys.userEmail].map { attributes[$0.rawValue]?.description }
+        }
+
+        coralogixRum.setUserContext(userContext: UserContext(userId: "1234",
+                                                             userName: "Daffy Duck",
+                                                             userEmail: "daffy.duck@coralogix.com",
+                                                             userMetadata: [:]))
+        XCTAssertEqual(try userFields(ofRequest: startRequest()), ["1234", "Daffy Duck", "daffy.duck@coralogix.com"],
+                       "Network spans must carry the user set after init, not the one captured at init")
+
+        let inFlight = startRequest()
+        coralogixRum.setUserContext(userContext: nil)
+        XCTAssertEqual(try userFields(ofRequest: inFlight), ["1234", "Daffy Duck", "daffy.duck@coralogix.com"],
+                       "A request in flight keeps the user that sent it")
+
+        XCTAssertEqual(try userFields(ofRequest: startRequest()), ["", "", ""],
+                       "Clearing the user must clear it on network spans too")
+    }
+
     func testSetLabels() {
         let coralogixRum = CoralogixRum(options: options!)
         if let labels = coralogixRum.coralogixExporter?.getOptions().labels {
