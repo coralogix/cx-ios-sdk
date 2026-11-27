@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Release-mechanics commits (version bumps, podspec/script tweaks, README edits) are
 omitted; the focus here is user-facing behavior changes.
 
-## [Unreleased]
+## [2.25.0] - 2026-11-27
 
 ### Added
 - `shouldInstrumentNetworkRequest` option: return `false` for a `URLSession` request to leave it uninstrumented, with no network event and no `traceparent` header. Use it to skip the internal request a custom `URLProtocol` makes, which is otherwise reported as a second network event.
