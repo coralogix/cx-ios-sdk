@@ -85,6 +85,9 @@ extension CoralogixRum {
         }
         
         let configuration = URLSessionInstrumentationConfiguration(
+            shouldInstrument: { request in
+                Self.shouldInstrument(request, options: Self.getCurrentNetworkOptions())
+            },
             spanCustomization: Self.spanCustomizationStatic,
             shouldInjectTracingHeaders: { request in
                 // Use static options to support SDK reinitialization with different tracing config (CX-37986)
@@ -182,6 +185,10 @@ extension CoralogixRum {
         return true
     }
     
+    internal static func shouldInstrument(_ request: URLRequest, options: CoralogixExporterOptions?) -> Bool {
+        options?.shouldInstrumentNetworkRequest?(request) ?? true
+    }
+
     private func spanCustomization(request: URLRequest, spanBuilder: SpanBuilder) {
         Self.spanCustomizationStatic(request: request, spanBuilder: spanBuilder)
     }

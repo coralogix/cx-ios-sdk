@@ -121,6 +121,7 @@ The fields accepted by `CoralogixExporterOptions`. Each one is described in deta
 | beforeSend | `(([String: Any]) -> [String: Any]?)?` | Callback to inspect, modify, or discard each event before it reaches Coralogix. Receives the event as a dictionary; return `nil` to drop it. | No |
 | tracesExporter | `TracesExporterCallback?`, i.e. `((CoralogixTraceExporterData) throws -> Void)?` | Callback invoked for each exported span batch, for forwarding spans to your own collector. | No |
 | networkExtraConfig | `[NetworkCaptureRule]?` | Per-URL rules for capturing request and response headers and payloads. Nothing is captured by default. Only allowlist URLs and header names you are comfortable logging, and note that bodies over 1024 characters are dropped rather than truncated. See "Swizzling and network capture" for the full rules. | No |
+| shouldInstrumentNetworkRequest | `((URLRequest) -> Bool)?` | Called before a `URLSession` request is instrumented. Return `false` to leave it untouched: no network event and no `traceparent` header. 2.25.0 and later. | No |
 | proxyUrl | String? | Routes all RUM data through a proxy URL. See the [Proxy URL guide](https://coralogix.com/docs/user-guides/rum/proxy-url/) for what the proxy must do. | No |
 | traceParentInHeader | \[String: Any\]? | Configures W3C `traceparent` header propagation for distributed tracing. | No |
 | collectIPData | Bool | Sends the client IP for region detection. Defaults to `true`. | No |
@@ -176,6 +177,19 @@ let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
 ```
 
 `ignoreUrls` matches the URL as your app sent it, before URL masking.
+
+To decide per request rather than by URL, use `shouldInstrumentNetworkRequest` (2.25.0 and later). A request it returns `false` for gets no network event and no `traceparent` header. For example, skip the second request a custom `URLProtocol` makes for each app request, so the request is reported once:
+
+```swift
+let options = CoralogixExporterOptions(coralogixDomain: CORALOGIX-DOMAIN,
+                                        environment: "ENVIRONMENT",
+                                        application: "APP-NAME",
+                                        version: "APP-VERSION",
+                                        publicKey: "API-KEY",
+                                        shouldInstrumentNetworkRequest: { request in
+                                            URLProtocol.property(forKey: "MyProtocolHandled", in: request) == nil
+                                        })
+```
 
 ### URL masking
 The SDK masks secrets in every URL it reports, including network request URLs, view names, URLs in error details, and URLs inside error and crash messages (only the URL changes; the rest of the message is kept). The value of a sensitive query or fragment parameter is replaced with `[REDACTED]` and the rest of the URL is kept, so `https://example.com/callback?code=abc&page=2#access_token=xyz` is reported as `https://example.com/callback?code=[REDACTED]&page=2#access_token=[REDACTED]`.
