@@ -134,6 +134,10 @@ public struct CoralogixExporterOptions {
     /// Per-URL rules for capturing request/response headers and payloads.
     /// `nil` (default) disables all header and payload capture.
     public var networkExtraConfig: [NetworkCaptureRule]?
+
+    /// Called before a `URLSession` request is instrumented. Return `false` to leave the request
+    /// untouched: no network event and no `traceparent` header. `nil` (default) instruments every request.
+    public let shouldInstrumentNetworkRequest: ((URLRequest) -> Bool)?
     
     /// Optional callback to receive OTLP-formatted trace data for external export.
     ///
@@ -186,6 +190,7 @@ public struct CoralogixExporterOptions {
                 traceParentInHeader: [String: Any]? = nil,
                 mobileVitals: [MobileVitalsType: Bool]? = nil,
                 networkExtraConfig: [NetworkCaptureRule]? = nil,
+                shouldInstrumentNetworkRequest: ((URLRequest) -> Bool)? = nil,
                 tracesExporter: TracesExporterCallback? = nil,
                 shouldSendText: ((UIView, String) -> Bool)? = nil,
                 resolveTargetName: ((UIView) -> String?)? = nil,
@@ -211,6 +216,7 @@ public struct CoralogixExporterOptions {
         self.traceParentInHeader = traceParentInHeader
         self.mobileVitals = mobileVitals
         self.networkExtraConfig = networkExtraConfig
+        self.shouldInstrumentNetworkRequest = shouldInstrumentNetworkRequest
         self.tracesExporter = tracesExporter
         self.shouldSendText = shouldSendText
         self.resolveTargetName = resolveTargetName
