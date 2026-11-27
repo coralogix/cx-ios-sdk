@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Release-mechanics commits (version bumps, podspec/script tweaks, README edits) are
 omitted; the focus here is user-facing behavior changes.
 
+## [Unreleased]
+
+### Fixed
+- Network events now carry the user set with `setUserContext` after the SDK starts, and no user once it is cleared; previously they kept the user from initialization.
+
 ## [2.24.4] - 2026-11-22
 
 ### Fixed

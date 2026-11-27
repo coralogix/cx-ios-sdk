@@ -91,6 +91,25 @@ final class CoralogixRumTests: XCTestCase {
         }
     }
     
+    func testSetUserContext_isUsedForNetworkSpans() throws {
+        var initOptions = try XCTUnwrap(options)
+        initOptions.userContext = UserContext(userId: "initial", userName: "", userEmail: "", userMetadata: [:])
+        let coralogixRum = CoralogixRum(options: initOptions)
+        XCTAssertTrue(CoralogixRum.getCurrentInstance() === coralogixRum)
+        let userContext = UserContext(userId: "1234",
+                                      userName: "Daffy Duck",
+                                      userEmail: "daffy.duck@coralogix.com",
+                                      userMetadata: [:])
+
+        coralogixRum.setUserContext(userContext: userContext)
+        XCTAssertEqual(CoralogixRum.networkUserContext(fallback: initOptions), userContext,
+                       "Network spans must carry the user set after init, not the one captured at init")
+
+        coralogixRum.setUserContext(userContext: nil)
+        XCTAssertNil(CoralogixRum.networkUserContext(fallback: initOptions),
+                     "Clearing the user must clear it on network spans too")
+    }
+
     func testSetLabels() {
         let coralogixRum = CoralogixRum(options: options!)
         if let labels = coralogixRum.coralogixExporter?.getOptions().labels {

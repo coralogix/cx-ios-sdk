@@ -35,6 +35,13 @@ extension CoralogixRum {
         return instance
     }
 
+    /// The user context to stamp on a network span. `setUserContext` updates the exporter's options, not the
+    /// copy in `currentNetworkOptions`, so read the live instance and fall back to `options` only without one.
+    internal static func networkUserContext(fallback options: CoralogixExporterOptions) -> UserContext? {
+        guard let liveOptions = getCurrentInstance()?.options else { return options.userContext }
+        return liveOptions.userContext
+    }
+
     public func initializeNetworkInstrumentation() {
         guard let options = self.options else {
             Log.e("[Coralogix] missing coralogix options")
@@ -225,7 +232,7 @@ extension CoralogixRum {
             return
         }
         
-        let userContext = options.userContext
+        let userContext = Self.networkUserContext(fallback: options)
 
         span.setAttribute(key: Keys.userId.rawValue, value: userContext?.userId ?? "")
         span.setAttribute(key: Keys.userName.rawValue, value: userContext?.userName ?? "")
