@@ -191,6 +191,19 @@ extension CoralogixRum {
         spanBuilder.setAttribute(key: Keys.eventType.rawValue, value: CoralogixEventType.networkRequest.rawValue)
         spanBuilder.setAttribute(key: Keys.source.rawValue, value: EventSource.fetch.rawValue)
 
+        // Freeze the user at request-start: the live one, since setUserContext does not update
+        // currentNetworkOptions, and the one that sent the request, even if it changes before the response.
+        // Without a live instance, keep the user from initialization. A cleared user stays cleared.
+        let userContext: UserContext?
+        if let instance = getCurrentInstance() {
+            userContext = instance.options?.userContext
+        } else {
+            userContext = getCurrentNetworkOptions()?.userContext
+        }
+        spanBuilder.setAttribute(key: Keys.userId.rawValue, value: userContext?.userId ?? "")
+        spanBuilder.setAttribute(key: Keys.userName.rawValue, value: userContext?.userName ?? "")
+        spanBuilder.setAttribute(key: Keys.userEmail.rawValue, value: userContext?.userEmail ?? "")
+
         // Network spans must share the same session as the rest of the SDK's events
         // (CX-37986). `sessionSpanAttributes()` routes through `getSessionMetadata()`
         // so the 1-hour rotation check fires at span-emission time and the prev-session
@@ -202,13 +215,6 @@ extension CoralogixRum {
         for attr in sessionManager.sessionSpanAttributes() {
             spanBuilder.setAttribute(key: attr.key, value: attr.value)
         }
-
-        // Freeze the user at request-start too: the live one, since setUserContext does not update
-        // currentNetworkOptions, and the one that sent the request, even if it changes before the response.
-        let userContext = instance.options?.userContext
-        spanBuilder.setAttribute(key: Keys.userId.rawValue, value: userContext?.userId ?? "")
-        spanBuilder.setAttribute(key: Keys.userName.rawValue, value: userContext?.userName ?? "")
-        spanBuilder.setAttribute(key: Keys.userEmail.rawValue, value: userContext?.userEmail ?? "")
 
         // Freeze the view at request-start (the screen that launched it). See addViewMetadata.
         if let viewManager = instance.coralogixExporter?.getViewManager() {
