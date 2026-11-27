@@ -104,32 +104,31 @@ final class CoralogixRumTests: XCTestCase {
         let instrumentation = URLSessionInstrumentation(configuration: configuration)
         let request = URLRequest(url: URL(string: "https://api.example.com/users")!)
 
-        func networkSpanUserId() throws -> String? {
+        func startRequest() -> String {
             let taskId = UUID().uuidString
             _ = URLSessionLogger.processAndLogRequest(request, sessionTaskId: taskId,
                                                       instrumentation: instrumentation, shouldInjectHeaders: false)
+            return taskId
+        }
+        func userFields(ofRequest taskId: String) throws -> [String?] {
             let span = URLSessionLogger.runningSpansQueue.sync { URLSessionLogger.runningSpans.removeValue(forKey: taskId) }
-            let readable = try XCTUnwrap(span as? any ReadableSpan)
-            return readable.toSpanData().attributes[Keys.userId.rawValue]?.description
+            let attributes = try XCTUnwrap(span as? any ReadableSpan).toSpanData().attributes
+            return [Keys.userId, Keys.userName, Keys.userEmail].map { attributes[$0.rawValue]?.description }
         }
 
         coralogixRum.setUserContext(userContext: UserContext(userId: "1234",
                                                              userName: "Daffy Duck",
                                                              userEmail: "daffy.duck@coralogix.com",
                                                              userMetadata: [:]))
-        XCTAssertEqual(try networkSpanUserId(), "1234",
+        XCTAssertEqual(try userFields(ofRequest: startRequest()), ["1234", "Daffy Duck", "daffy.duck@coralogix.com"],
                        "Network spans must carry the user set after init, not the one captured at init")
 
-        let taskId = UUID().uuidString
-        _ = URLSessionLogger.processAndLogRequest(request, sessionTaskId: taskId,
-                                                  instrumentation: instrumentation, shouldInjectHeaders: false)
+        let inFlight = startRequest()
         coralogixRum.setUserContext(userContext: nil)
-        let inFlight = URLSessionLogger.runningSpansQueue.sync { URLSessionLogger.runningSpans.removeValue(forKey: taskId) }
-        let inFlightData = try XCTUnwrap(inFlight as? any ReadableSpan).toSpanData()
-        XCTAssertEqual(inFlightData.attributes[Keys.userId.rawValue]?.description, "1234",
+        XCTAssertEqual(try userFields(ofRequest: inFlight), ["1234", "Daffy Duck", "daffy.duck@coralogix.com"],
                        "A request in flight keeps the user that sent it")
 
-        XCTAssertEqual(try networkSpanUserId(), "",
+        XCTAssertEqual(try userFields(ofRequest: startRequest()), ["", "", ""],
                        "Clearing the user must clear it on network spans too")
     }
 
