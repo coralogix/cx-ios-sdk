@@ -35,13 +35,6 @@ extension CoralogixRum {
         return instance
     }
 
-    /// The user context to stamp on a network span. `setUserContext` updates the exporter's options, not the
-    /// copy in `currentNetworkOptions`, so read the live instance and fall back to `options` only without one.
-    internal static func networkUserContext(fallback options: CoralogixExporterOptions) -> UserContext? {
-        guard let liveOptions = getCurrentInstance()?.options else { return options.userContext }
-        return liveOptions.userContext
-    }
-
     public func initializeNetworkInstrumentation() {
         guard let options = self.options else {
             Log.e("[Coralogix] missing coralogix options")
@@ -194,7 +187,7 @@ extension CoralogixRum {
     }
     
     /// Static version for use in swizzled closures that persist across SDK reinitializations (CX-37986).
-    private static func spanCustomizationStatic(request: URLRequest, spanBuilder: SpanBuilder) {
+    internal static func spanCustomizationStatic(request: URLRequest, spanBuilder: SpanBuilder) {
         spanBuilder.setAttribute(key: Keys.eventType.rawValue, value: CoralogixEventType.networkRequest.rawValue)
         spanBuilder.setAttribute(key: Keys.source.rawValue, value: EventSource.fetch.rawValue)
 
@@ -209,6 +202,13 @@ extension CoralogixRum {
         for attr in sessionManager.sessionSpanAttributes() {
             spanBuilder.setAttribute(key: attr.key, value: attr.value)
         }
+
+        // Freeze the user at request-start too: the live one, since setUserContext does not update
+        // currentNetworkOptions, and the one that sent the request, even if it changes before the response.
+        let userContext = instance.options?.userContext
+        spanBuilder.setAttribute(key: Keys.userId.rawValue, value: userContext?.userId ?? "")
+        spanBuilder.setAttribute(key: Keys.userName.rawValue, value: userContext?.userName ?? "")
+        spanBuilder.setAttribute(key: Keys.userEmail.rawValue, value: userContext?.userEmail ?? "")
 
         // Freeze the view at request-start (the screen that launched it). See addViewMetadata.
         if let viewManager = instance.coralogixExporter?.getViewManager() {
@@ -232,11 +232,6 @@ extension CoralogixRum {
             return
         }
         
-        let userContext = Self.networkUserContext(fallback: options)
-
-        span.setAttribute(key: Keys.userId.rawValue, value: userContext?.userId ?? "")
-        span.setAttribute(key: Keys.userName.rawValue, value: userContext?.userName ?? "")
-        span.setAttribute(key: Keys.userEmail.rawValue, value: userContext?.userEmail ?? "")
         span.setAttribute(key: Keys.environment.rawValue, value: options.environment)
 
         // Network capture: allowlisted request/response headers when a rule matches (CX-33233)

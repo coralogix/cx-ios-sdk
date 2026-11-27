@@ -96,18 +96,41 @@ final class CoralogixRumTests: XCTestCase {
         initOptions.userContext = UserContext(userId: "initial", userName: "", userEmail: "", userMetadata: [:])
         let coralogixRum = CoralogixRum(options: initOptions)
         XCTAssertTrue(CoralogixRum.getCurrentInstance() === coralogixRum)
-        let userContext = UserContext(userId: "1234",
-                                      userName: "Daffy Duck",
-                                      userEmail: "daffy.duck@coralogix.com",
-                                      userMetadata: [:])
+        let configuration = URLSessionInstrumentationConfiguration(
+            spanCustomization: CoralogixRum.spanCustomizationStatic,
+            shouldInjectTracingHeaders: { _ in false },
+            tracer: TracerProviderSdk().get(instrumentationName: "CoralogixRumTests")
+        )
+        let instrumentation = URLSessionInstrumentation(configuration: configuration)
+        let request = URLRequest(url: URL(string: "https://api.example.com/users")!)
 
-        coralogixRum.setUserContext(userContext: userContext)
-        XCTAssertEqual(CoralogixRum.networkUserContext(fallback: initOptions), userContext,
+        func networkSpanUserId() throws -> String? {
+            let taskId = UUID().uuidString
+            _ = URLSessionLogger.processAndLogRequest(request, sessionTaskId: taskId,
+                                                      instrumentation: instrumentation, shouldInjectHeaders: false)
+            let span = URLSessionLogger.runningSpansQueue.sync { URLSessionLogger.runningSpans.removeValue(forKey: taskId) }
+            let readable = try XCTUnwrap(span as? any ReadableSpan)
+            return readable.toSpanData().attributes[Keys.userId.rawValue]?.description
+        }
+
+        coralogixRum.setUserContext(userContext: UserContext(userId: "1234",
+                                                             userName: "Daffy Duck",
+                                                             userEmail: "daffy.duck@coralogix.com",
+                                                             userMetadata: [:]))
+        XCTAssertEqual(try networkSpanUserId(), "1234",
                        "Network spans must carry the user set after init, not the one captured at init")
 
+        let taskId = UUID().uuidString
+        _ = URLSessionLogger.processAndLogRequest(request, sessionTaskId: taskId,
+                                                  instrumentation: instrumentation, shouldInjectHeaders: false)
         coralogixRum.setUserContext(userContext: nil)
-        XCTAssertNil(CoralogixRum.networkUserContext(fallback: initOptions),
-                     "Clearing the user must clear it on network spans too")
+        let inFlight = URLSessionLogger.runningSpansQueue.sync { URLSessionLogger.runningSpans.removeValue(forKey: taskId) }
+        let inFlightData = try XCTUnwrap(inFlight as? any ReadableSpan).toSpanData()
+        XCTAssertEqual(inFlightData.attributes[Keys.userId.rawValue]?.description, "1234",
+                       "A request in flight keeps the user that sent it")
+
+        XCTAssertEqual(try networkSpanUserId(), "",
+                       "Clearing the user must clear it on network spans too")
     }
 
     func testSetLabels() {
